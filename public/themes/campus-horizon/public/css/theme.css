@@ -1,0 +1,29 @@
+.campus-site,
+.campus-fragment {
+    --campus-primary: #4f437f;
+    --campus-ink: #2e2d4e;
+    --campus-accent: #79513e;
+    --campus-paper: #faf9fd;
+    --campus-soft: #efedf8;
+    --campus-heading: 'Segoe UI', system-ui, sans-serif;
+}
+.campus-site h1,
+.campus-fragment h1 {
+    font-weight: 700;
+    letter-spacing: -0.055em;
+}
+.campus-hero-art > img {
+    border-radius: 48px 160px 48px 48px;
+}
+.campus-utility {
+    background: #34334f;
+}
+.campus-crest {
+    border-radius: 14px;
+}
+.campus-path-icon {
+    border-radius: 50%;
+}
+.campus-final-cta {
+    border-radius: 28px;
+}

@@ -1,0 +1,50 @@
+<section class="campus-section campus-container" aria-label="Campus news">
+    <div class="campus-section-heading">
+        <div>
+            <p class="campus-eyebrow">THE CONVERSATIONS. THE CONNECTIONS.</p>
+            <h2><?= $this->esc($newsHeading ?? 'Life, learning & everything in between.'); ?></h2>
+        </div>
+        <a class="campus-text-link" href="/portal/news/">
+            All campus updates
+            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+        </a>
+    </div>
+    <div class="campus-news-grid">
+        <?php foreach (array_slice($news ?? [], 0, $newsLimit ?? 3) as $index => $item): ?>
+            <article class="campus-news-card">
+                <a
+                    class="campus-news-art campus-news-art-<?= $index % 3; ?>"
+                    href="/portal/news/<?= $this->esc($item['code']); ?>/"
+                    tabindex="-1"
+                    aria-hidden="true"
+                >
+                    <i class="bi bi-<?= ['journal-richtext', 'chat-square-heart', 'lightbulb'][$index % 3]; ?>"></i>
+                    <span>AROUND CAMPUS</span>
+                </a>
+                <div class="campus-news-content">
+                    <p class="campus-eyebrow">CAMPUS UPDATE</p>
+                    <h3><a href="/portal/news/<?= $this->esc($item['code']); ?>/"><?= $this->esc($item['title']); ?></a></h3>
+                    <p><?= $this->esc(mb_strimwidth($item['content'], 0, 170, '…')); ?></p>
+                    <a
+                        class="campus-text-link"
+                        href="/portal/news/<?= $this->esc($item['code']); ?>/"
+                        aria-label="Read <?= $this->esc($item['title']); ?>"
+                    >
+                        Read the update
+                        <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                    </a>
+                </div>
+            </article>
+        <?php endforeach; ?>
+        <?php if (($news ?? []) === []): ?>
+            <div class="campus-empty">
+                <i class="bi bi-megaphone" aria-hidden="true"></i>
+                <h3>There’s a lot to look forward to.</h3>
+                <p>
+                    Published campus updates will appear here. In the meantime, explore your next course or get
+                    your application started.
+                </p>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>

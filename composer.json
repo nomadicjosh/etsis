@@ -1,0 +1,66 @@
+{
+    "name": "codefyphp/vihzhuo",
+    "type": "project",
+    "description": "Starter app that provides a simple and quick way to build websites in minutes.",
+    "keywords": ["codefy","codefyphp","codefy-php","routing","skeleton","vihzhuo"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Joshua Parker",
+            "email": "joshua@joshuaparker.dev",
+            "homepage": "https://joshuaparker.dev/",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=8.4",
+        "ext-pdo": "*",
+        "codefyphp/codefy": "^4",
+        "league/csv": "^9.0",
+        "nomadicjosh/vihzhuo": "^2",
+        "stripe/stripe-php": "^20.0"
+    },
+    "conflict": {
+        "squizlabs/php_codesniffer": "<3.13.6 || >=4.0,<4.0.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Application\\": "src/Application/",
+            "Domain\\": "src/Domain/",
+            "Database\\Seeders\\": "database/seeders/",
+            "Infrastructure\\": "src/Infrastructure/"
+        },
+        "files": [
+            "src/Application/Shared/Helpers/core.php"
+        ]
+    },
+    "scripts": {
+        "codestan": "phpstan analyse -l 8 src",
+        "cs-check": "phpcs",
+        "cs-fix": "phpcbf",
+        "setup-environment": "@php bootstrap/setup-environment.php",
+        "test": "vendor/bin/pest",
+        "post-create-project-cmd": [
+            "@setup-environment",
+            "@php codex generate:key:file"
+        ]
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "pestphp/pest-plugin": true
+        }
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3",
+        "qubus/qubus-coding-standard": "^2"
+    },
+    "suggest": {
+        "fenom/fenom": "Lightweight and fast template engine for PHP.",
+        "fenom/providers-collection": "Additional providers for Fenom template engine.",
+        "foil/foil": "Write simple, clean, and concise templates with nothing more than PHP.",
+        "phparkitect/phparkitect": "Helps you to keep your PHP codebase coherent and solid."
+    }
+}

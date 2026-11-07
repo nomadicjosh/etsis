@@ -1,0 +1,30 @@
+<?php declare(strict_types=1); ?>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title><?= $this->esc($title) ?> · etsis</title>
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
+        <link rel="stylesheet" href="/assets/css/workspace.css" />
+    </head>
+    <body>
+        <a class="skip-link" href="#request-error">Skip to request information</a>
+        <main class="account-shell" id="request-error">
+            <section class="surface p-4 p-md-5" aria-labelledby="request-error-title">
+                <p class="eyebrow">CAMPUS WORKSPACE · <?= $this->esc((string) $status) ?></p>
+                <h1 class="h2" id="request-error-title"><?= $this->esc($title) ?></h1>
+                <p class="mt-3"><?= $this->esc($message) ?></p>
+                <?php if ($errors !== []) : ?>
+                    <ul>
+                        <?php foreach ($errors as $error) : ?>
+                            <li><?= $this->esc($error['message']) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+                <p class="muted-text">Use your browser’s Back button to return to the form. Reload it if your session expired or the record changed, then try again.</p>
+                <a class="btn btn-primary" href="/portal/">Return to campus</a>
+            </section>
+        </main>
+    </body>
+</html>

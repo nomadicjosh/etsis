@@ -1,0 +1,45 @@
+<section class="campus-hero campus-container">
+    <div class="campus-hero-copy">
+        <p class="campus-eyebrow">
+            <span aria-hidden="true">✦</span>
+            ROOM TO GROW. SPACE TO BECOME.
+        </p>
+        <h1><?= $this->esc($headline ?? 'Your next chapter starts with curiosity.'); ?></h1>
+        <p class="campus-lead"><?= $this->esc($introduction ?? 'Find a course that sparks something. Make your next move. Stay connected to a community built around learning.'); ?></p>
+        <div class="campus-actions">
+            <a class="btn campus-button" href="/portal/courses/">
+                Explore what’s possible
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+            <a class="campus-text-link" href="/portal/apply/">
+                Ready to apply?
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+            </a>
+        </div>
+        <div class="campus-hero-note">
+            <span class="campus-note-icon" aria-hidden="true"><i class="bi bi-compass"></i></span>
+            <span>
+                From your first question to your next milestone.
+                <small>Your whole journey, a little more connected.</small>
+            </span>
+        </div>
+    </div>
+    <div class="campus-hero-art">
+        <img
+            src="/themes/campus-harbor/public/images/campus.svg"
+            alt="Illustrated academic courtyard with a library, trees, and a welcoming path"
+            width="760"
+            height="650"
+            fetchpriority="high"
+        />
+        <div class="campus-art-label">
+            <span aria-hidden="true">✦</span>
+            <span>
+                A WORLD OF POSSIBILITIES
+                <small>One place to begin.</small>
+            </span>
+        </div>
+        <span class="campus-orbit campus-orbit-one" aria-hidden="true"></span>
+        <span class="campus-orbit campus-orbit-two" aria-hidden="true"></span>
+    </div>
+</section>

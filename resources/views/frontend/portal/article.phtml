@@ -1,0 +1,9 @@
+<article class="campus-container campus-article">
+    <a class="campus-text-link" href="/portal/news/">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i>
+        Back to campus updates
+    </a>
+    <p class="campus-eyebrow mt-5">AROUND CAMPUS</p>
+    <h1><?= $this->esc($article['title']); ?></h1>
+    <div class="campus-article-body"><?= nl2br($this->esc($article['content'])); ?></div>
+</article>

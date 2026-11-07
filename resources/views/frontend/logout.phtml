@@ -1,0 +1,13 @@
+<?php
+$this->parent('framework::app-layout');
+$this->block('content', function () {
+?>
+<main class="container mx-auto px-6 py-16">
+    <form method="post" action="<?=$this->url('logout/');?>">
+        <?=csrf_field();?>
+        <button type="submit" class="py-2 px-4 bg-indigo-600 text-white rounded">
+            <?=$this->trans('Logout');?>
+        </button>
+    </form>
+</main>
+<?php }); ?>

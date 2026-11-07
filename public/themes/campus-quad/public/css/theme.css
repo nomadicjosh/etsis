@@ -1,0 +1,21 @@
+.campus-site,
+.campus-fragment {
+    --campus-primary: #285447;
+    --campus-ink: #243b32;
+    --campus-accent: #855a29;
+    --campus-paper: #fcfaf3;
+    --campus-soft: #eef0e3;
+}
+.campus-hero-art > img {
+    border-radius: 220px 220px 5px 5px;
+}
+.campus-header {
+    border-bottom: 3px double #b5c2ad;
+}
+.campus-program-card {
+    border-radius: 0;
+    border-top: 3px solid #8a9c74;
+}
+.campus-utility {
+    background: #264537;
+}

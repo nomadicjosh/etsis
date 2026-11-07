@@ -1,0 +1,52 @@
+<section data-panel="rules" hidden aria-labelledby="rules-heading">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">TURN COMPLEXITY INTO CLARITY</div>
+            <h1 id="rules-heading">A few rules. A lot of possibilities<span class="brand-dot">.</span></h1>
+            <p>Build reusable student audiences with clear, visual conditions.</p>
+        </div>
+    </div>
+    <div class="surface p-4">
+        <div class="row g-3 mb-4">
+            <div class="col-lg-7">
+                <label class="form-label" for="rule-name">Rule name</label>
+                <input
+                    id="rule-name"
+                    class="form-control"
+                    maxlength="191"
+                    placeholder="e.g. Active students entering this fall"
+                />
+            </div>
+            <div class="col-lg-5">
+                <label class="form-label" for="rule-saved">Open a saved rule</label>
+                <select id="rule-saved" class="form-select">
+                    <option value="">Start a new rule</option>
+                </select>
+            </div>
+        </div>
+        <p id="rule-builder-help" class="muted-text">
+            Choose a field, a comparison, and a value. Use “all” (AND) or “any” (OR) to combine conditions.
+        </p>
+        <div id="student-rule-builder" aria-describedby="rule-builder-help"></div>
+        <div class="d-flex flex-wrap gap-2 mt-4">
+            <button class="btn btn-outline-primary" type="button" id="rule-preview" data-requires="sis:rules:run">
+                <i class="bi bi-eye" aria-hidden="true"></i> Preview matches</button>
+                <button class="btn btn-primary" type="button" id="rule-save">
+                <i class="bi bi-bookmark-plus" aria-hidden="true"></i> Save this rule
+            </button>
+        </div>
+        <div class="rule-boundary">
+            <i class="bi bi-shield-check" aria-hidden="true"></i> Rules select an audience. They do not change records
+            or post financial transactions.
+        </div>
+    </div>
+    <section class="surface mt-4" id="rule-results-surface" hidden aria-labelledby="rule-results-heading">
+        <div class="surface-heading">
+            <div>
+                <h2 id="rule-results-heading">Matching students</h2>
+                <p id="rule-result-count"></p>
+            </div>
+        </div>
+        <div id="rule-results" class="table-responsive"></div>
+    </section>
+</section>

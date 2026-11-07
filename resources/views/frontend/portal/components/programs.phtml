@@ -1,0 +1,30 @@
+<section class="campus-section campus-program-section" aria-label="Academic programs">
+    <div class="campus-container">
+        <div class="campus-section-heading">
+            <div>
+                <p class="campus-eyebrow">LET YOUR INTEREST LEAD THE WAY</p>
+                <h2>A path with your name on it.</h2>
+                <p>Discover an academic program, then see how to make it yours.</p>
+            </div>
+            <a class="campus-text-link" href="/portal/apply/">
+                Explore applications
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        </div>
+        <div class="campus-program-grid">
+            <?php foreach (array_slice($programs ?? [], 0, 6) as $program): ?>
+                <a class="campus-program-card" href="/portal/apply/?program=<?= $this->esc($program['id']); ?>">
+                    <span class="campus-program-code"><?= $this->esc($program['code']); ?></span>
+                    <h3><?= $this->esc($program['title']); ?></h3>
+                    <span>
+                        <?= $program['form_id'] ? 'Application available' : 'Explore this program'; ?>
+                        <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                    </span>
+                </a>
+            <?php endforeach; ?>
+            <?php if (($programs ?? []) === []): ?>
+                <p class="campus-empty">Academic programs will appear here as the institution adds them.</p>
+            <?php endif; ?>
+        </div>
+    </div>
+</section>

@@ -1,0 +1,370 @@
+<?php
+
+declare(strict_types=1);
+
+$section = $section ?? 'overview';
+$permissions = $permissions ?? [];
+$displayName = $displayName ?? 'there';
+$can = static fn(string $permission): bool => in_array($permission, $permissions, true);
+$navigation = [
+    'YOUR CAMPUS' => [
+        ['overview', 'Overview', 'grid-1x2', ''],
+        ['people', 'People', 'people', 'sis:person:manage'],
+        ['applications', 'Admissions', 'inboxes', 'sis:admissions:manage'],
+        ['students', 'Students', 'mortarboard', 'sis:student:read'],
+        ['courses', 'Academic catalog', 'journal-bookmark', 'sis:catalog:manage'],
+    ],
+    'DAILY OPERATIONS' => [
+        ['teaching', 'My teaching', 'easel', ''],
+        ['institutions', 'Transfer credit', 'arrow-left-right', 'sis:transfer:manage'],
+        ['bookings', 'Spaces & scheduling', 'calendar3', 'sis:scheduling:manage'],
+        ['accounts', 'Student accounts', 'wallet2', 'sis:finance:read'],
+        ['employees', 'Team & timesheets', 'person-workspace', 'sis:hr:manage'],
+        ['campaigns', 'Communications', 'chat-square-text', 'sis:communications:manage'],
+        ['transcripts', 'Transcript requests', 'file-earmark-text', 'sis:transcript:manage'],
+        ['portal', 'Campus content', 'window', 'sis:portal:manage'],
+    ],
+    'BUILD & EXPLORE' => [
+        ['sharedreports', 'Shared reports', 'file-bar-graph', 'sis:reporting:run'],
+        ['reports', 'Reports', 'bar-chart-line', 'sis:reporting:manage'],
+        ['forms', 'Application forms', 'ui-checks', 'sis:forms:manage'],
+        ['imports', 'Import data', 'arrow-down-square', 'sis:import:manage'],
+        ['rules', 'Rules & audiences', 'sliders2', 'sis:rules:manage'],
+        ['access', 'Roles & access', 'shield-check', 'admin:access:manage'],
+        ['apply', 'Apply to a program', 'send', ''],
+    ],
+];
+$client = [
+    'section' => $section,
+    'permissions' => $permissions,
+    'name' => $displayName,
+    'login_url' => $loginUrl ?? '/login/',
+];
+?>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="referrer" content="same-origin" />
+        <title><?= $this->esc($title ?? 'etsis · Campus workspace') ?></title>
+        <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
+        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
+        <link rel="stylesheet" href="/assets/vendor/query-builder.min.css" />
+        <link rel="stylesheet" href="/assets/css/workspace.css" />
+        <script type="application/json" id="workspace-config">
+            <?= json_encode($client, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>
+        </script>
+        <script defer src="/assets/vendor/jquery.min.js"></script>
+        <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
+        <script defer src="/assets/vendor/chart.umd.js"></script>
+        <script defer src="/assets/vendor/query-builder.min.js"></script>
+        <script defer src="/assets/js/workspace-operations.js"></script>
+        <script defer src="/assets/js/workspace-access.js"></script>
+        <script defer src="/assets/js/workspace-people.js"></script>
+        <script defer src="/assets/js/workspace-teaching.js"></script>
+        <script defer src="/assets/js/workspace.js"></script>
+    </head>
+    <body>
+        <a class="skip-link" href="#workspace-main">Skip to main content</a>
+        <form id="csrf-store" hidden><?= $csrfMarkup ?? csrf_field() ?></form>
+        <div class="workspace-shell">
+            <aside
+                class="workspace-sidebar offcanvas-lg offcanvas-start"
+                tabindex="-1"
+                id="workspace-navigation"
+                aria-label="Main navigation">
+                <div class="brand-row">
+                    <a class="brand" href="/admin/" data-workspace="overview" aria-label="etsis overview">
+                        <span class="brand-mark" aria-hidden="true"><i class="bi bi-layers-fill"></i></span>
+                        <span>etsis<span class="brand-dot">.</span><small>CAMPUS WORKSPACE</small></span>
+                    </a>
+                    <button
+                        type="button"
+                        class="btn-close d-lg-none"
+                        data-bs-dismiss="offcanvas"
+                        data-bs-target="#workspace-navigation"
+                        aria-label="Close navigation"></button>
+                </div>
+                <div class="institution-switch">
+                    <span class="institution-icon" aria-hidden="true"><i class="bi bi-buildings"></i></span><span>Your institution<small>Student information system</small></span>
+                </div>
+                <nav class="workspace-menu" aria-label="Campus workspace">
+                    <?php foreach ($navigation as $group => $items) : ?>
+                        <?php $visible = array_filter($items, static fn(array $item): bool => $item[3] === '' || $can($item[3])); ?>
+                        <?php if ($visible !== []) : ?>
+                    <p class="nav-group-label"><?= $this->esc($group) ?></p>
+                            <?php foreach ($visible as [$key, $label, $icon, $permission]) : ?>
+                    <a
+                        href="<?= $key === 'overview' ? '/admin/' : '/admin/workspace/' . $this->esc($key) . '/' ?>"
+                        class="workspace-nav-link<?= $section === $key ? ' active' : '' ?>"
+                        data-workspace="<?= $this->esc($key) ?>"
+                                <?= $section === $key ? ' aria-current="page"' : '' ?>>
+                        <i class="bi bi-<?= $this->esc($icon) ?>" aria-hidden="true"></i><span><?= $this->esc($label) ?></span>
+                    </a>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                    <?php if ($can('vihzhuo:manage')) : ?>
+                        <a class="workspace-nav-link" href="/admin/manager">
+                            <i class="bi bi-layout-text-window-reverse" aria-hidden="true"></i>
+                            <span>Page builder</span>
+                        </a>
+                    <?php endif; ?>
+                </nav>
+                <div class="sidebar-footer">
+                    <span class="status-dot" aria-hidden="true"></span> Thoughtfully connected.<small>One person. A world of possibilities.</small>
+                </div>
+            </aside>
+            <div class="workspace-body">
+                <header class="workspace-topbar">
+                    <div class="topbar-context">
+                        <button
+                            class="icon-button d-lg-none"
+                            type="button"
+                            data-bs-toggle="offcanvas"
+                            data-bs-target="#workspace-navigation"
+                            aria-label="Open navigation">
+                            <i class="bi bi-list" aria-hidden="true"></i></button><span class="context-label">Workspace</span><i class="bi bi-chevron-right" aria-hidden="true"></i><strong id="topbar-page">Overview</strong>
+                    </div>
+                    <div class="topbar-actions">
+                        <?php if ($can('sis:person:manage')) : ?>
+                        <button class="search-launch" id="global-search-open" type="button" aria-label="Find a person">
+                            <i class="bi bi-search" aria-hidden="true"></i><span>Find a person…</span><kbd>Ctrl K</kbd>
+                        </button>
+                        <?php endif; ?>
+                        <div class="dropdown">
+                            <button
+                                class="profile-button dropdown-toggle"
+                                data-bs-toggle="dropdown"
+                                type="button"
+                                aria-expanded="false"
+                                aria-label="Account menu">
+                                <span class="avatar"><?= $this->esc(mb_strtoupper(mb_substr($displayName, 0, 1))) ?></span><span class="d-none d-md-inline"><?= $this->esc($displayName) ?></span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="/admin/profile/">My profile</a></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <form method="post" action="/logout/">
+                                        <?= $csrfMarkup ?? csrf_field() ?><button class="dropdown-item" type="submit">Sign out</button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </header>
+                <main id="workspace-main" class="workspace-main" tabindex="-1">
+                    <div id="workspace-alert" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>
+                    <noscript><div class="alert alert-info">
+                            Enable JavaScript to use the interactive campus workspace.
+                        </div></noscript>
+                    <section data-panel="overview" aria-labelledby="overview-heading">
+                        <div class="page-heading">
+                            <div>
+                                <div class="eyebrow"><span class="small-blue-line"></span> THE BIG PICTURE</div>
+                                <h1 id="overview-heading">
+                                    A good day starts with clarity<span class="brand-dot">.</span>
+                                </h1>
+                                <p>Your campus at a glance. Your next steps, all in one place.</p>
+                            </div>
+                            <span class="date-pill"><i class="bi bi-calendar4-week" aria-hidden="true"></i><?= $this->esc(date('D, M j, Y')) ?></span>
+                        </div>
+                        <div class="welcome-strip">
+                            <div>
+                                <span class="welcome-icon" aria-hidden="true">✦</span><span>Welcome back, <strong><?= $this->esc($displayName) ?></strong>. Let’s make today a little
+                                    easier.</span>
+                            </div>
+                            <a
+                                href="/admin/workspace/people/"
+                                data-workspace="people"
+                                class="text-link"
+                                data-requires="sis:person:manage">Open people workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                        </div>
+                        <div class="metric-grid" id="metric-grid" aria-live="polite">
+                            <div class="loading-card">
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Gathering your
+                                campus metrics…
+                            </div>
+                        </div>
+                        <div class="dashboard-grid">
+                            <section class="surface chart-surface" aria-labelledby="intake-title">
+                                <div class="surface-heading">
+                                    <div>
+                                        <p class="eyebrow">A GROWING COMMUNITY</p>
+                                        <h2 id="intake-title">Student intake</h2>
+                                        <p>Students grouped by entry term</p>
+                                    </div>
+                                    <button
+                                        class="quiet-button"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#intake-table"
+                                        aria-expanded="false"
+                                        aria-controls="intake-table">
+                                        <i class="bi bi-table" aria-hidden="true"></i> View data
+                                    </button>
+                                </div>
+                                <div class="chart-wrap">
+                                    <canvas
+                                        id="intake-chart"
+                                        role="img"
+                                        aria-label="Student intake by entry term. The values are available in the data table below."></canvas>
+                                    <p class="chart-empty" id="intake-empty" hidden>
+                                        When student records are added, their entry terms will appear here.
+                                    </p>
+                                </div>
+                                <div id="intake-table" class="collapse chart-table"></div>
+                            </section>
+                            <section class="surface pipeline-surface" aria-labelledby="pipeline-title">
+                                <div class="surface-heading">
+                                    <div>
+                                        <p class="eyebrow">FROM INTEREST TO ENROLLMENT</p>
+                                        <h2 id="pipeline-title">Admissions snapshot</h2>
+                                        <p>Every application has a next step</p>
+                                    </div>
+                                    <i class="bi bi-inboxes surface-symbol" aria-hidden="true"></i>
+                                </div>
+                                <div id="pipeline-bars" class="pipeline-bars"></div>
+                                <a
+                                    class="surface-footer-link"
+                                    href="/admin/workspace/applications/"
+                                    data-workspace="applications"
+                                    data-requires="sis:admissions:manage">Go to admissions <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+                            </section>
+                            <section class="surface" aria-labelledby="queue-title">
+                                <div class="surface-heading">
+                                    <div>
+                                        <p class="eyebrow">KEEP THINGS MOVING</p>
+                                        <h2 id="queue-title">Needs a little attention</h2>
+                                    </div>
+                                    <span class="icon-soft"><i class="bi bi-check2-square" aria-hidden="true"></i></span>
+                                </div>
+                                <div id="work-queue" class="work-queue"></div>
+                            </section>
+                            <section class="surface quick-actions" aria-labelledby="quick-title">
+                                <div class="surface-heading">
+                                    <div>
+                                        <p class="eyebrow">LESS CLICKING. MORE DOING.</p>
+                                        <h2 id="quick-title">A head start</h2>
+                                    </div>
+                                </div>
+                                <div class="quick-action-grid">
+                                    <button type="button" data-action="new-person" data-requires="sis:person:manage">
+                                        <i class="bi bi-person-plus" aria-hidden="true"></i><span>Add a person<small>Start with one connected profile</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></button><a
+                                        href="/admin/workspace/forms/"
+                                        data-workspace="forms"
+                                        data-requires="sis:forms:manage"><i class="bi bi-ui-checks" aria-hidden="true"></i><span>Build an application<small>A better welcome for every program</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></a><a
+                                        href="/admin/workspace/imports/"
+                                        data-workspace="imports"
+                                        data-requires="sis:import:manage"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i><span>Bring your data along<small>Map, preview, then import</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                                </div>
+                            </section>
+                        </div>
+                        <p class="page-footnote">
+                            <i class="bi bi-shield-check" aria-hidden="true"></i> Live institutional data. Only the
+                            metrics your access allows.
+                        </p>
+                    </section>
+                    <?php $this->insert('framework::backend/workspace/directory'); ?>
+                    <?php $this->insert('framework::backend/workspace/forms'); ?>
+                    <?php $this->insert('framework::backend/workspace/imports'); ?>
+                    <?php $this->insert('framework::backend/workspace/rules'); ?>
+                    <?php $this->insert('framework::backend/workspace/access'); ?>
+                    <section data-panel="apply" hidden aria-labelledby="apply-heading">
+                        <div class="page-heading">
+                            <div>
+                                <div class="eyebrow">YOUR NEXT CHAPTER</div>
+                                <h1 id="apply-heading">Start something great<span class="brand-dot">.</span></h1>
+                                <p>Choose your program and entry term to see its current application.</p>
+                            </div>
+                        </div>
+                        <div class="surface p-4">
+                            <form id="application-select-form" class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label" for="apply-program">Academic program</label>
+                                    <select class="form-select" id="apply-program" name="program_id" required></select>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label" for="apply-term">Entry term</label>
+                                    <select class="form-select" id="apply-term" name="entry_term_id" required></select>
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button class="btn btn-primary w-100" type="submit">
+                                        Continue <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                            </form>
+                            <div id="applicant-form" class="mt-4"></div>
+                        </div>
+                    </section>
+                </main>
+                <footer class="workspace-footer">
+                    <span>etsis <span aria-hidden="true">✦</span> A little more connected.</span><span>Designed around people.</span>
+                </footer>
+            </div>
+        </div>
+        <div
+            class="offcanvas offcanvas-end record-drawer"
+            tabindex="-1"
+            id="record-drawer"
+            aria-labelledby="drawer-title">
+            <div class="offcanvas-header">
+                <div>
+                    <p class="eyebrow" id="drawer-eyebrow">WORKSPACE</p>
+                    <h2 class="offcanvas-title" id="drawer-title">Record details</h2>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close record"></button>
+            </div>
+            <div class="offcanvas-body" id="drawer-body"></div>
+        </div>
+        <div class="modal fade" id="search-modal" tabindex="-1" aria-labelledby="search-title">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="search-title">Find your person</h2>
+                        <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close search"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="person-search-form">
+                            <label class="form-label" for="person-search">Name or institutional ID</label>
+                            <div class="input-group">
+                                <input
+                                    id="person-search"
+                                    class="form-control"
+                                    autocomplete="off"
+                                    maxlength="80"
+                                    placeholder="Start with a name or ID"
+                                /><button type="submit" class="btn btn-primary">Search</button>
+                            </div>
+                        </form>
+                        <div id="person-search-results" class="mt-3" aria-live="polite"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="leave-modal" tabindex="-1" aria-labelledby="leave-title">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="leave-title">Keep your changes?</h2>
+                    </div>
+                    <div class="modal-body">
+                        You have an unsaved application draft. Save it before leaving, or discard these changes.
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">
+                            Keep editing</button>
+                            <button class="btn btn-primary" type="button" id="discard-draft">Discard and leave</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="workspace-status" class="workspace-toast" role="status" aria-live="polite" hidden></div>
+    </body>
+</html>

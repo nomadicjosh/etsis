@@ -1,0 +1,36 @@
+<section data-panel="directory" hidden aria-labelledby="directory-heading">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow" id="directory-eyebrow">CONNECTED WORKSPACES</div>
+            <h1 id="directory-heading">People</h1>
+            <p id="directory-description">One person. One connected story.</p>
+        </div>
+        <button class="btn btn-primary" type="button" id="directory-create">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i> <span>Add a person</span>
+        </button>
+    </div>
+    <nav class="workspace-tabs" id="directory-tabs" aria-label="Related workspaces"></nav>
+    <section class="surface directory-surface" aria-labelledby="directory-list-title">
+        <div class="directory-toolbar">
+            <div>
+                <h2 id="directory-list-title">All records</h2>
+                <span id="record-count" class="muted-text">Loading…</span>
+            </div>
+            <form class="directory-search" id="directory-search-form" role="search">
+                <label class="visually-hidden" for="directory-search">Search this workspace</label><i class="bi bi-search" aria-hidden="true"></i><input
+                    id="directory-search"
+                    type="search"
+                    placeholder="Search this workspace…"
+                    maxlength="80"
+                    autocomplete="off"
+                /><button type="submit" class="btn btn-sm btn-outline-secondary">Search</button>
+            </form>
+        </div>
+        <div id="directory-results" aria-live="polite"></div>
+        <div class="directory-bottom">
+            <span class="muted-text">Open a record to keep working without leaving this page.</span><button class="quiet-button" type="button" id="directory-more" hidden>
+                Load more <i class="bi bi-arrow-down" aria-hidden="true"></i>
+            </button>
+        </div>
+    </section>
+</section>

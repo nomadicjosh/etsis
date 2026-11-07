@@ -1,0 +1,44 @@
+<header class="campus-container campus-page-heading">
+    <p class="campus-eyebrow">FOLLOW THAT SPARK</p>
+    <h1>What will you learn next?</h1>
+    <p class="campus-lead">
+        Explore the courses being offered. Find the right term, the right subject, and a little inspiration.
+    </p>
+</header>
+<section class="campus-container campus-catalog" aria-label="Course catalog">
+    <form id="campus-course-search" class="campus-catalog-filters" role="search">
+        <div>
+            <label class="form-label" for="campus-term">Academic term</label>
+            <select class="form-select" id="campus-term" name="term">
+                <option value="">All terms</option>
+                <?php foreach ($terms as $term): ?>
+                    <option value="<?= $this->esc($term['id']); ?>"><?= $this->esc($term['code']); ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="campus-search-field">
+            <label class="form-label" for="campus-course-query">Course code, title, or section</label>
+            <input
+                class="form-control"
+                type="search"
+                id="campus-course-query"
+                name="q"
+                maxlength="80"
+                placeholder="Try a subject or a course code, like MATH.101"
+            />
+        </div>
+        <button class="btn campus-button" type="submit">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            Find courses
+        </button>
+    </form>
+    <div id="campus-error" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>
+    <p id="campus-course-count" class="campus-muted" role="status">Finding your next possibility…</p>
+    <div id="campus-course-results" class="campus-course-grid" aria-live="polite"></div>
+    <button class="btn campus-button-outline mt-4" type="button" id="campus-course-more" hidden>
+        Show more courses
+    </button>
+    <noscript>
+        <p class="alert alert-info">Enable JavaScript to search available course sections.</p>
+    </noscript>
+</section>

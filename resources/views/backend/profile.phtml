@@ -1,0 +1,121 @@
+<?php
+
+declare(strict_types=1);
+
+use Codefy\Framework\Proxy\Codefy;
+
+use function Codefy\Framework\Helpers\method_field;
+
+$profile = $profile ?? [];
+$passwordLength = $passwordLength ?? 26;
+$backUrl = $backUrl ?? '/portal/student/';
+$csrfMarkup = $csrfMarkup ?? csrf_field();
+$methodMarkup = $methodMarkup ?? method_field('PUT');
+$flashMarkup = $flashMarkup ?? Codefy::$PHP->flash->display(print: false);
+?>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="referrer" content="same-origin" />
+        <title>My profile · etsis</title>
+        <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
+        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
+        <link rel="stylesheet" href="/assets/css/workspace.css" />
+        <script defer src="/assets/js/workspace-profile.js"></script>
+    </head>
+    <body>
+        <a class="skip-link" href="#account-main">Skip to my profile</a>
+        <div class="account-shell">
+            <header class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-5">
+                <a class="brand" href="<?= $this->esc($backUrl) ?>" aria-label="Return to your workspace">
+                    <span class="brand-mark" aria-hidden="true"><i class="bi bi-layers-fill"></i></span>
+                    <span>etsis<span class="brand-dot">.</span><small>YOUR CAMPUS. YOUR ACCOUNT.</small></span>
+                </a>
+                <a class="btn btn-outline-primary" href="<?= $this->esc($backUrl) ?>">
+                    <i class="bi bi-arrow-left me-2" aria-hidden="true"></i>Back to campus
+                </a>
+            </header>
+            <main id="account-main">
+                <p class="eyebrow">A LITTLE MORE YOU</p>
+                <h1 class="mb-3">My profile<span class="brand-dot">.</span></h1>
+                <p class="muted-text mb-4">Keep your sign-in details current and your account secure.</p>
+                <div role="status" aria-live="polite"><?= $flashMarkup ?></div>
+                <div class="row g-4 align-items-start">
+                    <section class="col-lg-7" aria-labelledby="profile-heading">
+                        <div class="surface p-4 p-md-5">
+                            <h2 id="profile-heading" class="h4 mb-2">Your details</h2>
+                            <p class="form-text mb-4">Your name stays connected to your person record across campus.</p>
+                            <form method="post" action="<?= $this->esc($url) ?>">
+                                <?= $csrfMarkup ?>
+                                <?= $methodMarkup ?>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-username">Username</label>
+                                    <input class="form-control" id="profile-username" type="text" readonly
+                                        autocomplete="username" value="<?= $this->esc($profile['username'] ?? '') ?>" />
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-first-name">Given name</label>
+                                    <input class="form-control" id="profile-first-name" name="first_name" type="text"
+                                        autocomplete="given-name" required maxlength="191"
+                                        value="<?= $this->esc($profile['first_name'] ?? '') ?>" />
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-middle-name">Middle name (optional)</label>
+                                    <input class="form-control" id="profile-middle-name" name="middle_name" type="text"
+                                        autocomplete="additional-name" maxlength="191"
+                                        value="<?= $this->esc($profile['middle_name'] ?? '') ?>" />
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-last-name">Family name</label>
+                                    <input class="form-control" id="profile-last-name" name="last_name" type="text"
+                                        autocomplete="family-name" required maxlength="191"
+                                        value="<?= $this->esc($profile['last_name'] ?? '') ?>" />
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-email">Email address</label>
+                                    <input class="form-control" id="profile-email" name="email" type="email"
+                                        autocomplete="email" required maxlength="191"
+                                        value="<?= $this->esc($profile['email'] ?? '') ?>" />
+                                </div>
+                                <button class="btn btn-primary" type="submit">Save my details</button>
+                            </form>
+                        </div>
+                    </section>
+                    <section class="col-lg-5" aria-labelledby="password-heading">
+                        <div class="surface p-4 p-md-5">
+                            <span class="avatar mb-3" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+                            <h2 id="password-heading" class="h4 mb-2">A fresh password</h2>
+                            <p class="form-text mb-4" id="profile-password-help">
+                                Use at least <?= $this->esc((string) $passwordLength) ?> characters.
+                                Saving signs out existing sessions; sign in again with your new password.
+                            </p>
+                            <form method="post" action="<?= $this->esc($url) ?>">
+                                <?= $csrfMarkup ?>
+                                <?= $methodMarkup ?>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-password">New password</label>
+                                    <input class="form-control" id="profile-password" name="password" type="password"
+                                        autocomplete="new-password" required maxlength="4096"
+                                        minlength="<?= $this->esc((string) $passwordLength) ?>"
+                                        aria-describedby="profile-password-help" />
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label" for="profile-confirm-password">Confirm new password</label>
+                                    <input class="form-control" id="profile-confirm-password" name="confirm_password"
+                                        type="password" autocomplete="new-password" required maxlength="4096"
+                                        aria-describedby="profile-password-error"
+                                        minlength="<?= $this->esc((string) $passwordLength) ?>" />
+                                </div>
+                                <p id="profile-password-error" class="text-danger" role="alert" hidden>The passwords must match.</p>
+                                <button class="btn btn-primary" type="submit">Save my password</button>
+                            </form>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+    </body>
+</html>

@@ -1,0 +1,149 @@
+<?php
+
+use Codefy\Framework\Proxy\Codefy;
+
+$this->parent('framework::app-layout');
+$this->block('content', function ($params) {
+
+$pageUrlParam = '';
+if (isset($params['page'])) {
+    $pageUrlParam = '&page=' . phpb_e($params['page']->getId());
+}
+
+$pageTranslations = $params['page'] ? $params['page']->getTranslations() : [];
+?>
+
+<main class="container mx-auto px-6 py-16 override-width">
+    <?=Codefy::$PHP->flash->display();?>
+    <div class="text-center mb-12">
+        <h2 class="text-4xl font-semibold text-slate-800 mb-3"><?= phpb_trans('website-manager.title') ?></h2>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <form method="post" action="<?= phpb_url('website_manager', ['route' => 'page_settings', 'action' => $params['action']]) ?><?= $pageUrlParam ?>">
+                <?=csrf_field();?>
+                <h3 class="mb-3 display-6">
+                    <?php
+                    if ($params['action'] === 'create'):
+                        echo phpb_trans('website-manager.add-new-page');
+                    else:
+                        echo phpb_trans('website-manager.edit-page');
+                    endif;
+                    ?>
+                </h3>
+
+                <div class="main-spacing">
+                    <div class="form-group required mb-4">
+                        <label for="name">
+                            <?= phpb_trans('website-manager.name') ?> *
+                            <span class="text-muted">(<?= phpb_trans('website-manager.visible-in-page-overview') ?>)</span>
+                        </label>
+                        <input type="text" class="form-control" id="name" name="name" value="<?= phpb_field_value('name', $params['page']) ?>" required>
+                    </div>
+
+                    <div class="row">
+                        <div class="form-group required mb-4 col">
+                            <label for="show-in-nav"><?= phpb_trans('website-manager.show-in-nav') ?> *</label>
+                            <select class="form-control form-select" id="show-in-nav" name="show_in_nav" required>
+                                <?php $value = phpb_field_value('show_in_nav', $params['page']); ?>
+                                <option value="">--------------------</option>
+                                <option value="yes" <?=$value === 'yes' ? 'selected' : '';?>>Yes</option>
+                                <option value="no" <?=$value === 'no' ? 'selected' : '';?>>No</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group required mb-4 col">
+                            <label for="nav-position"><?= phpb_trans('website-manager.nav-position') ?> *</label>
+                            <select class="form-control form-select" id="nav-position" name="nav_position" required>
+                                <?php $value = phpb_field_value('nav_position', $params['page']); ?>
+                                <?php $positions = 20; ?>
+                                <?php for ($i = 0; $i < $positions; $i++) : ?>
+                                    <option value="<?=$i;?>" <?=(int) $value === $i ? 'selected' : '';?>><?=$i;?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="form-group required mb-4 col">
+                            <label for="nav-type"><?= phpb_trans('website-manager.nav-type') ?> *</label>
+                            <select class="form-control form-select" id="nav-type" name="nav_type" required>
+                                <?php $value = phpb_field_value('nav_type', $params['page']); ?>
+                                <option value="">--------------------</option>
+                                <option value="primary" <?=$value === 'primary' ? 'selected' : '';?>>Primary</option>
+                                <option value="secondary" <?=$value === 'secondary' ? 'selected' : '';?>>Secondary</option>
+                                <option value="footer" <?=$value === 'footer' ? 'selected' : '';?>>Footer</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group required mb-4 col">
+                            <label for="layout"><?= phpb_trans('website-manager.layout') ?> *</label>
+                            <select class="form-control form-select" id="layout" name="layout" required>
+                                <?php
+                                $value = phpb_field_value('layout', $params['page']);
+                                foreach ($params['theme']->getThemeLayouts() as $layout):
+                                    if ($layout->getSlug() === $value):
+                                        echo '<option value="' . phpb_e($layout->getSlug()) . '" selected>' . phpb_e($layout->getTitle()) . '</option>';
+                                    else:
+                                        echo '<option value="' . phpb_e($layout->getSlug()) . '">' . phpb_e($layout->getTitle()) . '</option>';
+                                    endif;
+                                endforeach;
+                                ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <?php
+                    foreach (array_keys(phpb_active_languages()) as $languageCode):
+                        ?>
+
+                        <h4 class="pt-2 display-6"><?= phpb_trans('languages.' . $languageCode) ?></h4>
+
+                        <div class="pt-2 pl-3 pr-3">
+                            <div class="form-group required mb-4">
+                                <label for="page-title"><?= phpb_trans('website-manager.page-title') ?> *</label>
+                                <input type="text" class="form-control" id="page-title" name="title[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['title'] ?? '') ?>" required>
+                            </div>
+
+                            <div class="form-group mb-4">
+                                <label for="page-meta-title"><?= phpb_trans('website-manager.page-meta-title') ?></label>
+                                <input type="text" class="form-control" id="page-meta-title" name="meta_title[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['meta_title'] ?? '') ?>">
+                            </div>
+
+                            <div class="form-group mb-4">
+                                <label for="page-meta-description"><?= phpb_trans('website-manager.page-meta-description') ?></label>
+                                <textarea class="form-control" id="page-meta-description" name="meta_description[<?= phpb_e($languageCode) ?>]"><?= phpb_e($pageTranslations[$languageCode]['meta_description'] ?? '') ?></textarea>
+                            </div>
+
+                            <div class="form-group required mb-4">
+                                <label for="route"><?= phpb_trans('website-manager.route') ?> *</label>
+                                <input type="text" class="form-control" id="route" name="route[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['route'] ?? '') ?>" required>
+                            </div>
+                        </div>
+                    <?php
+                    endforeach;
+                    ?>
+                </div>
+
+                <hr class="mb-3">
+
+                <a href="<?= phpb_url('website_manager') ?>" class="inline-flex items-center py-2 px-6 bg-gradient-to-r from-indigo-700 to-pink-600 hover:bg-opacity-95 text-white rounded-md mr-2">
+                    <?= phpb_trans('website-manager.back') ?>
+                </a>
+                <button class="inline-flex items-center py-2 px-6 bg-gradient-to-r from-indigo-700 to-pink-600 hover:bg-opacity-95 text-white rounded-md">
+                    <?php
+                    if ($params['action'] === 'create'):
+                        echo phpb_trans('website-manager.add-new-page');
+                    else:
+                        echo phpb_trans('website-manager.save-changes');
+                    endif;
+                    ?>
+                </button>
+            </form>
+
+        </div>
+    </div>
+</main>
+
+<?php }); ?>

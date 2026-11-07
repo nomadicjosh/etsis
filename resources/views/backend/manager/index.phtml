@@ -1,0 +1,166 @@
+<?php
+
+use Codefy\Framework\Proxy\Codefy;
+
+use function Codefy\Framework\Helpers\trans;
+
+$this->parent('framework::app-layout');
+$this->block('content', function ($params) {
+
+$tab = \Vihzhuo\Core\HttpContext::request()->getQueryParams()['tab'] ?? 'pages';
+$pagesTabActive = $tab === 'pages' ? 'active' : '';
+$settingsTabActive = $tab === 'settings' ? 'active' : '';
+$setting = phpb_instance('setting');
+?>
+
+<main class="container mx-auto px-6 py-16 override-width">
+    <?=Codefy::$PHP->flash->display();?>
+    <div class="text-center mb-12">
+        <h2 class="text-4xl font-semibold text-slate-800 mb-3"><?=phpb_trans('website-manager.title');?></h2>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <a class="nav-link <?=phpb_e($pagesTabActive);?>" data-toggle="tab" href="#pages"><?=phpb_trans('website-manager.pages');?></a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?=phpb_e($settingsTabActive);?>" data-toggle="tab" href="#settings"><?=phpb_trans('website-manager.settings');?></a>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                <div id="pages" class="tab-pane <?=phpb_e($pagesTabActive);?>">
+                    <div class="main-spacing">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                <tr>
+                                    <th scope="col"><?=phpb_trans('website-manager.name');?></th>
+                                    <th scope="col"><?=phpb_trans('website-manager.route');?></th>
+                                    <th scope="col"><?=phpb_trans('website-manager.actions');?></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <?php
+                                foreach ($params['pages'] as $page):
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <?=phpb_e($page->getName());?>
+                                        </td>
+                                        <td>
+                                            <?=phpb_e($page->getRoute());?>
+                                        </td>
+                                        <td class="actions">
+                                            <a href="<?=phpb_e(phpb_full_url($page->getRoute()));?>" target="_blank" class="float-left mr-2 btn btn-light btn-sm">
+                                                <span><?=phpb_trans('website-manager.view');?></span> <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="<?=phpb_url('pagebuilder', ['page' => $page->getId()]);?>" class="float-left mr-2 btn btn-primary btn-sm">
+                                                <span><?=phpb_trans('website-manager.edit');?></span> <i class="fas fa-edit"></i>
+                                            </a>
+                                            <a href="<?=phpb_url('website_manager', ['route' => 'page_settings', 'action' => 'edit', 'page' => $page->getId()]);?>" class="float-left mr-2 btn btn-secondary btn-sm">
+                                                <span><?=phpb_trans('website-manager.settings');?></span> <i class="fas fa-cog"></i>
+                                            </a>
+
+                                            <div x-cloak id="delete<?=$page->getId();?>" x-data="{modalOpenDelete: false}" class="float-left">
+                                                <button
+                                                        @click="modalOpenDelete = true"
+                                                        class="btn btn-danger btn-sm"
+                                                >
+                                                    <span><?=phpb_trans('website-manager.remove');?></span> <i class="fas fa-trash"></i>
+                                                </button>
+                                                <div
+                                                        x-show="modalOpenDelete"
+                                                        class="fixed flex justify-center text-justify items-center top-0 right-0 bottom-0 left-0 z-10 bg-black/50"
+                                                >
+                                                    <div @click.outside="modalOpenDelete = false" id="page-delete-modal" x-show="modalOpenDelete" x-transition.delay.150ms class="w-[90%] md:w-1/3 bg-white rounded-lg w-[600px]">
+                                                        <div class="py-2 px-4 text-lg font-semibold bg-gray-100 rounded-t-lg flex items-center justify-between">
+                                                            <h2>Delete <?=phpb_e($page->getName());?></h2>
+                                                            <button @click="modalOpenDelete = false">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+
+                                                        <div class="p-4 mr-20 ml-20 items-center justify-center">
+                                                            <p>Are you sure you want to delete this page?</p>
+                                                        </div>
+
+                                                        <div class="py-2 px-4 text-lg flex justify-end font-semibold bg-gray-100 rounded-b-lg">
+                                                            <form method="post" action="<?=phpb_e(phpb_url('website_manager', ['route' => 'page_settings', 'action' => 'destroy', 'page' => $page->getId()]));?>">
+                                                                <?=csrf_field();?>
+                                                            <button
+                                                                type="submit"
+                                                                class="inline-flex items-center py-1 px-3 bg-emerald-500
+                                                                hover:bg-opacity-95 text-white rounded-md shadow mr-2"
+                                                            >
+                                                                <?=trans('Delete');?>
+                                                            </button>
+                                                            </form>
+                                                            <button
+                                                                @click="modalOpenDelete = false"
+                                                                class="inline-flex items-center py-1 px-3 bg-red-500
+                                                                hover:bg-opacity-95 text-white rounded-md shadow"
+                                                            >
+                                                                <?=trans('Cancel');?>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php
+                                endforeach;
+                                ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <hr class="mb-4">
+
+                    <a href="<?=phpb_url('website_manager', ['route' => 'page_settings', 'action' => 'create']);?>" class="inline-flex items-center py-2 px-6 bg-gradient-to-r from-indigo-700 to-pink-600 hover:bg-opacity-95 text-white rounded-md">
+                        <?=phpb_trans('website-manager.add-new-page');?>
+                    </a>
+                </div>
+
+                <div id="settings" class="tab-pane <?=phpb_e($settingsTabActive);?>">
+                    <form method="post" action="<?=phpb_url('website_manager', ['route' => 'settings', 'action' => 'update', 'tab' => 'settings']);?>">
+                        <?=csrf_field();?>
+                        <div class="main-spacing">
+                            <div class="form-group mb-4 mt-6">
+                                <label for="languages" class="mb-2">
+                                    <?=phpb_trans('website-manager.website-languages');?>
+                                    <span class="text-muted">(<?=trans('Use Ctrl/Cmd to select multiple.');?>)</span>
+                                </label>
+                                <select class="form-control" id="languages" name="languages[]" title="<?=phpb_trans('website-manager.languages-selector-placeholder');?>" required multiple>
+                                    <?php
+                                    foreach (phpb_trans('languages') as $locale => $localeText):
+                                        ?>
+                                        <option value="<?=phpb_e($locale);?>" <?= phpb_e($setting::has('languages', $locale)) !== '' && phpb_e($setting::has('languages', $locale)) !== '0' ? 'selected' : '' ?>><?= phpb_e($localeText) ?></option>
+                                    <?php
+                                    endforeach;
+                                    ?>
+                                </select>
+                            </div>
+
+                            <hr class="mb-4">
+
+                            <button class="inline-flex items-center py-2 px-6 bg-gradient-to-r from-indigo-700 to-pink-600 hover:bg-opacity-95 text-white rounded-md">
+                                <?=phpb_trans('website-manager.save-settings');?>
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<?php }); ?>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true" cacheDirectory="/tmp/etsis-phpunit-cache">
+    <testsuites>
+        <testsuite name="SIS foundation">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

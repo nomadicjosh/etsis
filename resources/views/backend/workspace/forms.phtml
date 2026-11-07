@@ -1,0 +1,93 @@
+<?php
+
+$fieldTypes = [
+    'text' => 'Short answer',
+    'textarea' => 'Long answer',
+    'email' => 'Email address',
+    'date' => 'Date',
+    'select' => 'Dropdown choice',
+    'number' => 'Whole number',
+    'checkbox' => 'Confirmation',
+];
+?>
+<section data-panel="forms" hidden aria-labelledby="forms-heading">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">A WARMER WELCOME</div>
+            <h1 id="forms-heading">Applications, your way<span class="brand-dot">.</span></h1>
+            <p>A different path for every program. A simpler start for every applicant.</p>
+        </div>
+        <button class="btn btn-primary" type="button" id="form-new">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i> New application form
+        </button>
+    </div>
+    <div class="forms-layout">
+        <aside class="surface form-library">
+            <div class="surface-heading">
+                <div>
+                    <h2>Your form library</h2>
+                    <p>Draft, preview, then publish.</p>
+                </div>
+            </div>
+            <div id="form-library-list" aria-live="polite"></div>
+        </aside>
+        <section class="surface form-designer" aria-labelledby="designer-title">
+            <div class="surface-heading">
+                <div>
+                    <p class="eyebrow">APPLICATION STUDIO</p>
+                    <h2 id="designer-title">Make a great first impression</h2>
+                </div>
+                <span class="status-badge" id="designer-state">New draft</span>
+            </div>
+            <form id="form-designer-meta" class="row g-3 px-4">
+                <div class="col-md-6">
+                    <label class="form-label" for="form-name">Form name</label>
+                    <input
+                        class="form-control"
+                        id="form-name"
+                        name="name"
+                        maxlength="191"
+                        placeholder="e.g. Undergraduate admission"
+                        required
+                    />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="form-program">Academic program</label>
+                    <select class="form-select" id="form-program" name="program_id" required></select>
+                </div>
+            </form>
+            <div class="designer-toolbar">
+                <span class="muted-text">Add fields. Use the arrows to set their order.</span>
+                <div class="dropdown">
+                    <button
+                        class="btn btn-sm btn-outline-primary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        id="add-field-menu"
+                        aria-expanded="false">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Add a field
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="add-field-menu">
+                        <?php foreach ($fieldTypes as $type => $label) : ?>
+                            <li>
+                                <button class="dropdown-item" type="button" data-add-field="<?= $this->esc($type) ?>">
+                            <?= $this->esc($label) ?>
+                                </button>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
+            <div id="designer-fields" class="designer-fields"></div>
+            <div class="designer-footer">
+                <span class="muted-text" id="designer-save-status">A draft is visible only to form administrators.</span>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-secondary" type="button" id="form-preview">Preview form</button><button class="btn btn-outline-primary" type="button" id="form-save">Save draft</button>
+                    <button class="btn btn-primary" type="button" id="form-publish" data-requires="sis:forms:publish">
+                        Publish for program <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+</section>

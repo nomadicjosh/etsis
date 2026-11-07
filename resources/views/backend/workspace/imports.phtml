@@ -1,0 +1,96 @@
+<section data-panel="imports" hidden aria-labelledby="imports-heading">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">A FRESH START, WITHOUT THE RE-TYPING</div>
+            <h1 id="imports-heading">Bring your data along<span class="brand-dot">.</span></h1>
+            <p>Match your columns, check the details, and import with confidence.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download><i class="bi bi-download" aria-hidden="true"></i> Sample CSV</a>
+    </div>
+    <ol class="import-steps" aria-label="Import progress">
+        <li class="active" data-import-step="1"><span>1</span> Choose a file</li>
+        <li data-import-step="2"><span>2</span> Match your fields</li>
+        <li data-import-step="3"><span>3</span> Review & import</li>
+        <li data-import-step="4"><span>4</span> All set</li>
+    </ol>
+    <div class="surface import-surface">
+        <div data-import-panel="1">
+            <div class="upload-illustration" aria-hidden="true">
+                <i class="bi bi-file-earmark-spreadsheet"></i><span>↑</span>
+            </div>
+            <h2>A little organization goes a long way.</h2>
+            <p class="muted-text">Start with a course catalog CSV. UTF-8, up to 1 MB and 1,000 rows.</p>
+            <div class="import-setup">
+                <div>
+                    <label class="form-label" for="import-source">Source name</label>
+                    <input
+                        class="form-control"
+                        id="import-source"
+                        maxlength="80"
+                        value="course-catalog"
+                        pattern="[A-Za-z0-9._-]{1,80}"
+                        required
+                    />
+                    <div class="form-text">Use the same source name when repeating an import.</div>
+                </div>
+                <div>
+                    <label class="form-label" for="import-delimiter">Columns separated by</label>
+                    <select id="import-delimiter" class="form-select">
+                        <option value=",">Comma (,)</option>
+                        <option value=";">Semicolon (;)</option>
+                        <option value="tab">Tab</option>
+                    </select>
+                </div>
+                <div class="full-width">
+                    <label class="form-label" for="import-file">Choose a CSV file</label>
+                    <input class="form-control" type="file" id="import-file" accept=".csv,text/csv" />
+                </div>
+            </div>
+            <button class="btn btn-primary mt-4" type="button" id="import-inspect">
+                Continue to field mapping <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div data-import-panel="2" hidden>
+            <p class="eyebrow">CONNECT THE DOTS</p>
+            <h2>Where should each column go?</h2>
+            <p class="muted-text">Your source columns are on the right. You can leave unrelated source columns out.</p>
+            <div id="import-mapping" class="mapping-list"></div>
+            <div class="d-flex gap-2 mt-4">
+                <button class="btn btn-outline-secondary" type="button" data-import-back="1">Back</button>
+                <button class="btn btn-primary" type="button" id="import-review">
+                    Check the preview <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+        <div data-import-panel="3" hidden>
+            <div class="review-heading">
+                <span class="icon-soft"><i class="bi bi-clipboard-check" aria-hidden="true"></i></span>
+                <div>
+                    <p class="eyebrow">ONE LAST LOOK</p>
+                    <h2 id="import-review-title">Ready when you are.</h2>
+                </div>
+            </div>
+            <div id="import-review-errors" role="alert"></div>
+            <div id="import-preview-table" class="table-responsive mt-4"></div>
+            <p class="muted-text mt-3">
+                Preview shows the first five source rows. Every row is validated before any data is saved. Repeated
+                identical rows from a previous import are skipped.
+            </p>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" type="button" data-import-back="2">Adjust mapping</button>
+                <button class="btn btn-primary" type="button" id="import-commit">
+                    Import courses <i class="bi bi-arrow-down-square" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+        <div data-import-panel="4" hidden>
+            <span class="completion-mark" aria-hidden="true"><i class="bi bi-check2"></i></span>
+            <p class="eyebrow">NICELY DONE</p>
+            <h2>Your catalog is a little more complete.</h2>
+            <p id="import-summary"></p>
+            <div class="d-flex gap-2 justify-content-center">
+                <button class="btn btn-outline-secondary" type="button" id="import-again">Import another file</button><a class="btn btn-primary" href="/admin/workspace/courses/" data-workspace="courses">See your courses <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+            </div>
+        </div>
+    </div>
+</section>

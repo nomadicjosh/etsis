@@ -1,0 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+use Qubus\Exception\Exception;
+use Qubus\Expressive\Migration\Migration;
+use Qubus\Expressive\Schema\CreateTable;
+
+class CreateUsersTable extends Migration
+{
+    /**
+     * Do the migration
+     * @throws Exception
+     */
+    public function up(): void
+    {
+        if (!$this->schema()->hasTable(table: 'users')) {
+            $this->schema()
+                ->create(table: 'users', callback: function (CreateTable $table) {
+                    $table->string(name: 'user_id', length: 36)
+                        ->primary()
+                        ->unique(name: 'userId');
+                    $table->string(name: 'username', length: 191)
+                        ->unique(name: 'username')
+                        ->notNull();
+                    $table->string(name: 'first_name', length: 191);
+                    $table->string(name: 'middle_name', length: 191);
+                    $table->string(name: 'last_name', length: 191);
+                    $table->string(name: 'email', length: 191)
+                        ->unique(name: 'email')
+                        ->notNull();
+                    $table->string(name: 'password', length: 191)
+                        ->notNull();
+                    $table->dateTime(name: 'created_on');
+                });
+        }
+    }
+
+    /**
+     * Undo the migration
+     */
+    public function down(): void
+    {
+        if ($this->schema()->hasTable(table: 'users')) {
+            $this->schema()->drop(table: 'users');
+        }
+    }
+}

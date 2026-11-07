@@ -1,0 +1,223 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Infrastructure\Persistence;
+
+use Codefy\Domain\Aggregate\AggregateId;
+use Codefy\Domain\EventSourcing\CorruptEventStreamException;
+use Codefy\Domain\EventSourcing\DomainEvent;
+use Codefy\Domain\EventSourcing\DomainEvents;
+use Codefy\Domain\EventSourcing\EventId;
+use Codefy\Domain\EventSourcing\EventStoreTransaction;
+use Codefy\Domain\EventSourcing\EventStream;
+use Codefy\Domain\EventSourcing\Transactional;
+use Codefy\Domain\EventSourcing\TransactionalEventStore;
+use Codefy\Domain\EventSourcing\TransactionId;
+use Codefy\Domain\Metadata;
+use DateMalformedStringException;
+use Exception as NativeException;
+use JsonException;
+use Qubus\Exception\Data\TypeException;
+use Qubus\Expressive\Database;
+use Qubus\Expressive\QueryBuilderException;
+use Throwable;
+
+final readonly class PdoTransactionalEventStore implements TransactionalEventStore
+{
+    public function __construct(private Database $db)
+    {
+    }
+
+    /**
+     * @inheritDoc
+     * @throws NativeException
+     * @throws Throwable
+     */
+    public function append(DomainEvent $event, TransactionId $transactionId): void
+    {
+        try {
+            \Infrastructure\Persistence\PortableTransactions::run(
+                db: $this->db,
+                callback: function () use ($event, $transactionId) {
+                    $this->db
+                    ->table(tableName: 'event_store')
+                    ->set([
+                        'event_id' => $event->eventId()->__toString(),
+                        'transaction_id' => $transactionId::fromString(transactionId: $transactionId->toNative()),
+                        'event_type' => $event->eventType(),
+                        'event_classname' => get_class($event),
+                        'payload' => json_encode(
+                            value: $event->payload(),
+                            flags: JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR
+                        ),
+                        'metadata' => json_encode(value: [
+                            '__aggregate_type' => $event->metaParam(name: Metadata::AGGREGATE_TYPE),
+                            '__aggregate_id' => (string) $event->aggregateId(),
+                            '__aggregate_playhead' => $event->playhead(),
+                            '__event_id' => (string) $event->eventId(),
+                            '__event_type' => $event->eventType(),
+                            '__recorded_at' => $event->recordedAt()->format('Y-m-d H:i:s'),
+                        ], flags: JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR),
+                        'aggregate_id' => $event->aggregateId()->__toString(),
+                        'aggregate_type' => $event->metadata()[Metadata::AGGREGATE_TYPE],
+                        'aggregate_playhead' => $event->playhead(),
+                        'recorded_at' => $event->recordedAt()->format('Y-m-d H:i:s'),
+                    ])
+                    ->save();
+                }
+            );
+        } catch (QueryBuilderException $e) {
+            throw new NativeException(message: $e->getMessage());
+        }
+    }
+
+    /**
+     * @inheritDoc
+     * @throws NativeException
+     * @throws Throwable
+     */
+    public function commit(DomainEvent ...$events): Transactional
+    {
+        $eventStream = DomainEvents::fromArray(events: $events);
+        $transactionId = new TransactionId();
+
+        if (count($events) === 0) {
+            return new EventStoreTransaction(
+                transactionId: $transactionId,
+                eventStream: $eventStream,
+                committedEvents: $events
+            );
+        }
+
+        \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use (
+            $events,
+            $transactionId
+): void {
+            foreach ($events as $event) {
+                $this->append(event: $event, transactionId: $transactionId);
+            }
+        });
+
+        return new EventStoreTransaction(
+            transactionId: $transactionId,
+            eventStream: $eventStream,
+            committedEvents: $events
+        );
+    }
+
+    /**
+     * @inheritDoc
+     * @throws TypeException
+     * @throws JsonException
+     * @throws DateMalformedStringException
+     */
+    public function getAggregateHistoryFor(AggregateId $aggregateId): EventStream
+    {
+        $stream = [];
+
+        $query = $this->db->table(tableName: 'event_store')
+        ->select(columns: '*')
+        ->where(condition: 'aggregate_id', parameters: (string) $aggregateId);
+
+        return $this->eventStream($query, $aggregateId, $stream);
+    }
+
+    /**
+     * @inheritDoc
+     * @throws TypeException
+     * @throws JsonException
+     * @throws DateMalformedStringException
+     */
+    public function loadFromPlayhead(AggregateId $aggregateId, int $playhead): EventStream
+    {
+        $stream = [];
+
+        $query = $this->db->table(tableName: 'event_store')
+            ->select(columns: '*')
+            ->where(condition: 'aggregate_id', parameters: (string) $aggregateId)
+            ->and()
+            ->where(condition: 'aggregate_playhead >= ?', parameters: $playhead);
+
+        return $this->eventStream($query, $aggregateId, $stream);
+    }
+
+    /**
+     * @param Database $query
+     * @param AggregateId $aggregateId
+     * @param array<DomainEvent> $stream
+     * @return EventStream
+     * @throws TypeException
+     * @throws CorruptEventStreamException
+     * @throws JsonException
+     * @throws DateMalformedStringException
+     */
+    private function eventStream(Database $query, AggregateId $aggregateId, array $stream): EventStream
+    {
+        $eventStream = iterator_to_array(iterator: $query->orderBy('aggregate_playhead', 'ASC')->find());
+
+        /** @var object{
+         *     'event_id':string,
+         *     'metadata': string,
+         *     'event_classname':string,
+         *     'aggregate_id':string,
+         *     'payload': string
+         * } $event
+         */
+        foreach ($eventStream as $event) {
+            /** @var array{
+             *     __aggregate_type: string,
+             *     __aggregate_id: string,
+             *     __aggregate_playhead: int,
+             *     __event_type: string,
+             *     __recorded_at: string
+             * } $metadata
+             */
+            $metadata = $this->decodeColumn($event->metadata);
+
+            if (!EventClassMap::allows($event->event_classname)) {
+                throw new CorruptEventStreamException('The stored event type is not registered.');
+            }
+
+            /** @var array<DomainEvent> $stream */
+            $stream[] = $event->event_classname::fromArray([
+                'aggregateId' => $aggregateId::fromString($event->aggregate_id),
+                'payload' => $this->decodeColumn($event->payload),
+                'metadata' => [
+                    Metadata::AGGREGATE_TYPE => $metadata['__aggregate_type'],
+                    Metadata::AGGREGATE_ID => $aggregateId::fromString($metadata['__aggregate_id']),
+                    Metadata::AGGREGATE_PLAYHEAD => $metadata['__aggregate_playhead'],
+                    Metadata::EVENT_ID => new EventId(value: $event->event_id),
+                    Metadata::EVENT_TYPE => $metadata['__event_type'],
+                    Metadata::RECORDED_AT => new \DateTimeImmutable(
+                        $metadata['__recorded_at'],
+                        new \DateTimeZone('UTC'),
+                    )
+                ],
+            ]);
+        }
+
+        return new EventStream(aggregateId: $aggregateId, events: $stream);
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     * @throws CorruptEventStreamException
+     * @throws JsonException
+     */
+    private function decodeColumn(mixed $value): array
+    {
+        if (is_resource($value)) {
+            $value = stream_get_contents($value);
+        }
+        if (!is_string($value)) {
+            throw new CorruptEventStreamException('A stored event column is not readable text.');
+        }
+        $decoded = json_decode($value, true, flags: JSON_THROW_ON_ERROR);
+        if (!is_array($decoded)) {
+            throw new CorruptEventStreamException('A stored event column does not contain an object or array.');
+        }
+
+        return $decoded;
+    }
+}

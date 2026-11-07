@@ -1,0 +1,7 @@
+<?php
+
+$public = \Codefy\Framework\Helpers\app()->make(\Domain\Portal\Service\CampusService::class)->publicData();
+?>
+<div class="campus-fragment"><?= \Codefy\Framework\Helpers\view('framework::frontend/portal/components/news', [
+        'news' => $public['news'], 'newsHeading' => $block->setting('heading', true),
+    ])->getBody(); ?></div>

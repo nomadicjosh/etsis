@@ -1,0 +1,39 @@
+<section data-panel="access" hidden aria-labelledby="access-heading">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">THE RIGHT ACCESS. FOR THE RIGHT PEOPLE.</div>
+            <h1 id="access-heading">A place for every role<span class="brand-dot">.</span></h1>
+            <p>Clear responsibilities, protected system roles, and room for your institution’s own teams.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" type="button" id="access-new-permission">New permission</button>
+            <button class="btn btn-primary" type="button" id="access-new-role">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> New role
+            </button>
+        </div>
+    </div>
+    <div class="access-layout">
+        <section class="surface">
+            <div class="surface-heading">
+                <div>
+                    <h2>Roles</h2>
+                    <p>Open a role to see its permissions.</p>
+                </div>
+                <i class="bi bi-shield-check surface-symbol" aria-hidden="true"></i>
+            </div>
+            <div id="access-roles" class="role-grid" aria-live="polite"></div>
+        </section>
+        <aside class="surface access-note">
+            <span class="icon-soft"><i class="bi bi-person-lock" aria-hidden="true"></i></span>
+            <h2>Flexible, with a few guardrails.</h2>
+            <p>
+                System roles and permissions stay protected. Create custom roles for your own teams, or give someone
+                additional permissions from their person record.
+            </p>
+            <p>
+                Super administrators can perform every action. Assigning that role requires another super administrator.
+            </p>
+            <a class="text-link" href="/admin/workspace/people/" data-workspace="people">Manage a person’s access <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        </aside>
+    </div>
+</section>

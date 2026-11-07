@@ -1,0 +1,12 @@
+<header class="campus-container campus-page-heading">
+    <p class="campus-eyebrow">GOOD THINGS HAPPEN WHEN WE CONNECT</p>
+    <h1>Around campus.</h1>
+    <p class="campus-lead">The updates, ideas and moments that bring our community together.</p>
+</header>
+<?php $this->insert('framework::frontend/portal/components/news', ['news' => $news, 'newsLimit' => 24, 'newsHeading' => 'The latest from your campus.']); ?>
+<?php if ($olderAfter ?? null): ?>
+    <nav class="campus-container pb-5" aria-label="News pages">
+        <a class="btn campus-button-outline" href="/portal/news/?after=<?= $this->esc($olderAfter); ?>">Older updates</a>
+        <a class="btn campus-text-link" href="/portal/news/">Latest updates</a>
+    </nav>
+<?php endif; ?>

@@ -1,0 +1,59 @@
+<?php
+
+$sections = [
+    'overview' => ['My campus', 'house-door'],
+    'applications' => ['Applications', 'send'],
+    'profile' => ['Personal information', 'person'],
+    'grades' => ['Grades & academic status', 'mortarboard'],
+    'registration' => ['Course registration', 'calendar2-plus'],
+    'accounts' => ['Student accounts', 'wallet2'],
+    'transcripts' => ['Transcripts', 'file-earmark-text'],
+    'updates' => ['Campus updates', 'chat-square-heart'],
+];
+$client = [
+    'section' => $section,
+    'signedIn' => $signedIn,
+    'applicationPage' => $applicationPage,
+    'programs' => $public['programs'],
+    'terms' => $public['terms'],
+    'loginUrl' => $loginUrl,
+];
+?>
+<script id="campus-config" type="application/json">
+    <?= json_encode($client, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR); ?>
+</script>
+<div class="campus-container campus-student-shell">
+    <?php if (!$applicationPage): ?>
+        <aside class="campus-student-sidebar">
+            <p class="campus-eyebrow">YOUR CAMPUS. YOUR JOURNEY.</p>
+            <nav aria-label="Student services">
+                <?php foreach ($sections as $key => [$label, $icon]): ?>
+                    <a href="/portal/student/<?= $key === 'overview' ? '' : $this->esc($key) . '/'; ?>" <?= $section === $key ? ' aria-current="page"' : ''; ?>>
+                        <i class="bi bi-<?= $this->esc($icon); ?>" aria-hidden="true"></i>
+                        <?= $this->esc($label); ?>
+                    </a>
+                <?php endforeach; ?>
+            </nav>
+            <a class="campus-text-link mt-4" href="/portal/courses/">
+                Explore the catalog
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+            </a>
+        </aside>
+    <?php endif; ?>
+    <section class="campus-student-main<?= $applicationPage ? ' campus-application-page' : ''; ?>" aria-labelledby="campus-service-title">
+        <p class="campus-eyebrow"><?= $applicationPage ? 'YOUR NEXT CHAPTER' : 'ONE PLACE FOR YOUR NEXT STEP'; ?></p>
+        <h1 id="campus-service-title"><?= $applicationPage ? 'Start something great.' : $this->esc($sections[$section][0]); ?></h1>
+        <p class="campus-lead" id="campus-service-intro"><?= $applicationPage ? 'A different path for every program. A simpler start for you.' : 'A little clarity. A little momentum. Your campus life, connected.'; ?></p>
+        <div id="campus-error" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>
+        <div id="campus-service-content" aria-live="polite">
+            <p class="campus-muted">Getting your next steps ready…</p>
+        </div>
+        <noscript>
+            <p class="alert alert-info">
+                Enable JavaScript to use student services. Your records stay private to your signed-in
+                account.
+            </p>
+        </noscript>
+    </section>
+</div>
+<form id="campus-csrf" hidden><?= $csrfMarkup ?? csrf_field(); ?></form>

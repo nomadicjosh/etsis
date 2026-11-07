@@ -1,0 +1,116 @@
+<?php
+
+$register = $mode === 'register';
+$logout = $mode === 'logout';
+?>
+<section class="campus-container campus-auth" aria-labelledby="campus-auth-title">
+    <div class="campus-auth-intro">
+        <p class="campus-eyebrow">A CAMPUS CONNECTED AROUND YOU</p>
+        <h1 id="campus-auth-title"><?= $logout ? 'See you soon.' : ($register ? 'Your next chapter starts with you.' : 'Good to have you back.'); ?></h1>
+        <p class="campus-lead"><?= $logout ? 'Ready to sign out of your campus account?' : 'Your applications, academic life, and next steps. All in one welcoming place.'; ?></p>
+        <img src="/themes/campus-harbor/public/images/campus.svg" alt="" width="640" height="480" />
+    </div>
+    <div class="campus-surface campus-auth-form">
+        <?= $flashMarkup ?? \Codefy\Framework\Proxy\Codefy::$PHP->flash->display(); ?>
+        <h2><?= $logout ? 'Sign out securely' : ($register ? 'Create your campus account' : 'Sign in to your campus'); ?></h2>
+        <?php if ($register): ?>
+            <p class="campus-muted">
+                Already have a campus account? Sign in to keep your person record and applications together.
+            </p>
+        <?php endif; ?>
+        <form method="post" action="<?= $this->esc($url); ?>">
+            <?= $csrfMarkup ?? csrf_field(); ?>
+            <?php if ($continue): ?>
+                <input type="hidden" name="continue" value="apply" />
+            <?php endif; ?>
+            <?php if (!$logout): ?>
+                <div class="mb-4">
+                    <label class="form-label" for="campus-email">Email address</label>
+                    <input
+                        class="form-control"
+                        id="campus-email"
+                        type="email"
+                        name="email"
+                        autocomplete="<?= $register ? 'email' : 'username'; ?>"
+                        maxlength="191"
+                        required
+                    />
+                </div>
+                <?php if ($register): ?>
+                    <div class="mb-4">
+                        <label class="form-label" for="campus-username">Username</label>
+                        <input
+                            class="form-control"
+                            id="campus-username"
+                            name="username"
+                            autocomplete="username"
+                            minlength="<?= $this->esc($usernameLength); ?>"
+                            maxlength="20"
+                            pattern="[a-z_-]+"
+                            aria-describedby="campus-username-help"
+                            required
+                        />
+                        <p class="form-text" id="campus-username-help">
+                            <?= $this->esc($usernameLength); ?>–20 lowercase letters, underscores, or hyphens.
+                        </p>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-6 mb-4">
+                            <label class="form-label" for="campus-first-name">Given name</label>
+                            <input
+                                class="form-control"
+                                id="campus-first-name"
+                                name="first_name"
+                                autocomplete="given-name"
+                                minlength="1"
+                                maxlength="191"
+                                required
+                            />
+                        </div>
+                        <div class="col-sm-6 mb-4">
+                            <label class="form-label" for="campus-last-name">Family name</label>
+                            <input
+                                class="form-control"
+                                id="campus-last-name"
+                                name="last_name"
+                                autocomplete="family-name"
+                                minlength="1"
+                                maxlength="191"
+                                required
+                            />
+                        </div>
+                    </div>
+                <?php endif; ?>
+                <div class="mb-4">
+                    <label class="form-label" for="campus-password">Password</label>
+                    <input
+                        class="form-control"
+                        id="campus-password"
+                        name="password"
+                        type="password"
+                        autocomplete="<?= $register ? 'new-password' : 'current-password'; ?>"
+                        <?= $register ? ' minlength="' . $this->esc($passwordLength) . '" aria-describedby="campus-password-help"' : ''; ?>
+                        required
+                    />
+                    <?php if ($register): ?>
+                        <p class="form-text" id="campus-password-help">
+                            Use at least <?= $this->esc($passwordLength); ?> characters. A memorable passphrase works well.
+                        </p>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <button class="btn campus-button w-100" type="submit"><?= $logout ? 'Sign out' : ($register ? 'Create account' : 'Sign in'); ?></button>
+        </form>
+        <p class="campus-muted mt-4 mb-0">
+            <?php if ($logout): ?>
+                <a href="/portal/student/">Return to my campus</a>
+            <?php elseif ($register): ?>
+                Have an account?
+                <a href="<?= $this->esc($loginUrl); ?>?continue=apply">Sign in to apply</a>
+            <?php else: ?>
+                New here?
+                <a href="/register/">Create your campus account</a>
+            <?php endif; ?>
+        </p>
+    </div>
+</section>

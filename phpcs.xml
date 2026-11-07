@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="etsis">
+    <description>eduTrac SIS PHP coding standard.</description>
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <file>src</file>
+    <rule ref="QubusCodingStandard"/>
+    <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
+        <exclude-pattern>database/migrations/*</exclude-pattern>
+    </rule>
+</ruleset>

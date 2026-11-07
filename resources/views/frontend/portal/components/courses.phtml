@@ -1,0 +1,28 @@
+<section class="campus-container campus-section" aria-label="Current course offerings">
+    <div class="campus-section-heading">
+        <div>
+            <p class="campus-eyebrow">MAKE ROOM FOR POSSIBILITY</p>
+            <h2><?= $this->esc($heading ?? 'Find your next spark.'); ?></h2>
+        </div>
+        <a class="campus-text-link" href="/portal/courses/">
+            Explore the catalog
+            <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+        </a>
+    </div>
+    <div class="campus-program-grid">
+        <?php foreach (array_slice($items, 0, 6) as $item): ?>
+            <article class="campus-program-card">
+                <p class="campus-eyebrow"><?= $this->esc($item['course_code']); ?> · <?= $this->esc($item['term_code']); ?></p>
+                <h3><?= $this->esc($item['title']); ?></h3>
+                <p><?= $this->esc((int) $item['credits_milli'] / 1000); ?> credits · Section <?= $this->esc($item['section_code']); ?></p>
+                <a href="/portal/courses/?term=<?= $this->esc($item['term_id']); ?>">
+                    See course offerings
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </a>
+            </article>
+        <?php endforeach; ?>
+        <?php if ($items === []): ?>
+            <p class="campus-muted">New course offerings will appear here when the academic schedule is ready.</p>
+        <?php endif; ?>
+    </div>
+</section>
