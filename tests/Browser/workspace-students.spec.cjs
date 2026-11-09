@@ -36,7 +36,12 @@ test('registrars manage programs and student activity in one accessible record',
         else if (path.endsWith('/programs/assign/')) { programs.unshift({ id: id(999), program_id: added, program_code: 'BA.ART',
             program_title: 'Fictional <b>Arts</b>', term_code: '26/FA', status: 'active' }); result = { id: id(999) }; }
         else if (path.endsWith('/primary-program/')) { primary = programs.find(row => row.id === data.assignment_id).program_id; version++; }
-        else if (path === `/sis/students/${student}/activity/`) { active = data.active; version++; }
+        else if (path.endsWith('/activity/history/')) result = { active, today: '2026-08-10', items: [
+            { active: true, effective_on: '2026-08-01', recorded_at: '2026-08-10T17:00:00Z', source: 'observed_existing' },
+            { active: false, effective_on: '2026-08-10', recorded_at: '2026-08-10T17:01:00Z', source: 'registrar' }], next_cursor: null };
+        else if (path.endsWith('/activity/review/')) result = { current_active: active, active_on_date: true,
+            requested_active: data.active, resulting_active: data.active, effective_on: data.effective_on, review_token: 'fictional-review-token' };
+        else if (path.endsWith('/activity/commit/')) { active = false; version++; }
         else if (path.includes('/programs/') && path.endsWith('/activity/')) {
             programs.find(row => row.id === path.split('/')[5]).status = data.active ? 'active' : 'closed';
         }
@@ -76,12 +81,22 @@ test('registrars manage programs and student activity in one accessible record',
     expect(calls.find(call => call.path.endsWith('/primary-program/'))?.data).toEqual({ assignment_id: id(999), revision: 'student-0' });
     await page.getByRole('button', { name: 'Change student activity' }).click();
     await page.getByLabel('Active student record').uncheck();
+    await page.getByLabel('Reason for this decision').fill('Fictional registrar decision.');
     await accessible();
-    await page.getByRole('button', { name: 'Save student activity' }).click();
+    await page.getByRole('button', { name: 'Review activity decision' }).click();
+    expect(calls.some(call => call.path.endsWith('/activity/commit/'))).toBe(false);
+    await expect(page.getByRole('heading', { name: 'Inactive from 2026-08-10' })).toBeFocused();
+    await accessible();
+    await page.getByRole('button', { name: 'Confirm activity decision' }).click();
     await expect(page.locator('#drawer-body')).toContainText('Inactive');
     await expect(page.getByRole('button', { name: 'Register for a section', exact: true })).toHaveCount(0);
-    expect(calls.find(call => call.path === `/sis/students/${student}/activity/`)?.data).toEqual({ active: false, revision: 'student-1' });
+    expect(calls.find(call => call.path.endsWith('/activity/review/'))?.data).toEqual({ active: false,
+        effective_on: '2026-08-10', reason: 'Fictional registrar decision.', revision: 'student-1' });
+    expect(calls.find(call => call.path.endsWith('/activity/commit/'))?.data).toEqual({ review_token: 'fictional-review-token' });
     await expect(page.locator('#drawer-body')).toContainText('26/FA');
+    await page.getByRole('button', { name: 'Activity history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Observed current status');
+    await expect(page.locator('#drawer-body')).not.toContainText('Fictional registrar decision.');
     await accessible();
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

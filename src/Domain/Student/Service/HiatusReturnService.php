@@ -34,6 +34,7 @@ final readonly class HiatusReturnService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private StudentActivityLedger $activity,
     ) {
     }
 
@@ -45,7 +46,10 @@ final readonly class HiatusReturnService
         return $this->transactions->run(function () use ($student, $hiatus, $on, $person): array {
             $current = $this->lock($student, $hiatus, $person);
             $context = $this->context($current, $on);
-            return $context + ["revision" => $this->revision($context), "operation_id" => EntityId::generate()->value];
+            return $context + [
+                "revision" => $this->revision($context),
+                "operation_id" => EntityId::generate()->value,
+            ];
         });
     }
 
@@ -75,7 +79,14 @@ final readonly class HiatusReturnService
             "note" => $note,
         ];
         $person = $this->admissions->student($student)->personId;
-        return $this->transactions->run(function () use ($student, $hiatus, $plan, $actor, $request, $person): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $hiatus,
+            $plan,
+            $actor,
+            $request,
+            $person,
+        ): array {
             $current = $this->lock($student, $hiatus, $person);
             $previous = $this->history->action($plan->operation);
             if ($previous !== null) {
@@ -85,7 +96,9 @@ final readonly class HiatusReturnService
                     $previous["actor_id"] !== $actor->value ||
                     $this->payload($previous)["request"] !== $request
                 ) {
-                    throw new ConcurrentModificationException("The operation belongs to another return request.");
+                    throw new ConcurrentModificationException(
+                        "The operation belongs to another return request.",
+                    );
                 }
                 return $this->receipt($previous);
             }
@@ -106,7 +119,20 @@ final readonly class HiatusReturnService
                 "financial_changes" => false,
             ];
             if ($result["activity_changed"]) {
-                $this->students->setActive($student, true);
+                $this->activity->decide(
+                    $this->admissions->student($student),
+                    true,
+                    $request["on"],
+                    "hiatus_return",
+                    $hiatus,
+                    \Domain\Gradebook\ValueObject\PublishedGradeId::forVersion(
+                        $plan->operation,
+                        "activity.hiatus_return",
+                    ),
+                    $actor,
+                    $request["note"],
+                    true,
+                );
                 $this->audit->record($actor, "student.activity_updated", $student);
             }
             $encrypted = $this->cipher->seal(
@@ -132,7 +158,11 @@ final readonly class HiatusReturnService
                     ->format(DATE_ATOM),
             );
             $this->audit->record($actor, "student.hiatus_returned", $hiatus);
-            return ["operation_id" => $plan->operation->value, "hiatus_id" => $hiatus->value, "result" => $result];
+            return [
+                "operation_id" => $plan->operation->value,
+                "hiatus_id" => $hiatus->value,
+                "result" => $result,
+            ];
         });
     }
 
@@ -154,6 +184,7 @@ final readonly class HiatusReturnService
         $this->registration->lockStudent($student);
         $this->registration->lockPerson($person);
         $this->history->lock($hiatus);
+        $this->access->requirePermission("sis:registration:manage");
         return $this->owned($student, $hiatus);
     }
 
@@ -190,11 +221,13 @@ final readonly class HiatusReturnService
             $end = $existingEnd;
         }
         $student = $this->admissions->student($hiatus->studentId);
+        $activityVersion = $this->activity->verify($student);
         $person = $this->admissions->person($student->personId);
         // Return review discloses hold effects, not private restriction codes or notes.
         $staff = $this->registration->blockingRestriction($person->id, $this->clock->now(), true);
         $self = $this->registration->blockingRestriction($person->id, $this->clock->now(), false);
         return [
+            "activity_version" => $activityVersion,
             "student" => [
                 "id" => $student->id->value,
                 "given_name" => $person->givenName,

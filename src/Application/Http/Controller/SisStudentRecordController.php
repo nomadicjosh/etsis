@@ -22,36 +22,27 @@ final readonly class SisStudentRecordController
         return new JsonResponse($this->service->view(new EntityId($id)));
     }
 
-    public function activity(ServerRequest $request, string $id): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        $this->service->activity(new EntityId($id), $f->requiredBoolean('active'), $f->text('revision', 64));
-
-        return new JsonResponse(['status' => 'saved']);
-    }
-
     public function programs(ServerRequest $request, string $id): ResponseInterface
     {
-        return new JsonResponse($this->service->programs(
-            new EntityId($id),
-            FormInput::from($request)->optionalId('after')
-        ));
+        return new JsonResponse(
+            $this->service->programs(new EntityId($id), FormInput::from($request)->optionalId("after")),
+        );
     }
 
     public function assign(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
-        $assigned = $this->service->assign(new EntityId($id), $f->id('program_id'), $f->id('entry_term_id'));
+        $assigned = $this->service->assign(new EntityId($id), $f->id("program_id"), $f->id("entry_term_id"));
 
-        return new JsonResponse(['id' => $assigned->value], 201);
+        return new JsonResponse(["id" => $assigned->value], 201);
     }
 
     public function primary(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->primary(new EntityId($id), $f->id('assignment_id'), $f->text('revision', 64));
+        $this->service->primary(new EntityId($id), $f->id("assignment_id"), $f->text("revision", 64));
 
-        return new JsonResponse(['status' => 'saved']);
+        return new JsonResponse(["status" => "saved"]);
     }
 
     public function programActivity(ServerRequest $request, string $id, string $assignment): ResponseInterface
@@ -60,10 +51,10 @@ final readonly class SisStudentRecordController
         $this->service->programActivity(
             new EntityId($id),
             new EntityId($assignment),
-            $f->requiredBoolean('active'),
-            $f->text('revision', 64)
+            $f->requiredBoolean("active"),
+            $f->text("revision", 64),
         );
 
-        return new JsonResponse(['status' => 'saved']);
+        return new JsonResponse(["status" => "saved"]);
     }
 }

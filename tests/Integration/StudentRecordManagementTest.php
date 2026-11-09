@@ -25,8 +25,28 @@ final class StudentRecordManagementTest extends TestCase
             $f->access,
             $f->transactions,
             $audit ?? $f->audit,
-            $f->catalogEnrollment()
+            $f->catalogEnrollment(),
+            $f->activityLedger()
         );
+    }
+
+    private function activity(
+        SisFixture $f,
+        EntityId $student,
+        bool $active,
+        string $revision,
+        ?AuditTrail $audit = null
+    ): void
+    {
+        $service = $f->activityService($audit);
+        $review = $service->review(
+            $student,
+            $active,
+            $f->clock->now()->format('Y-m-d'),
+            'Fictional registrar decision.',
+            $revision
+        );
+        $service->commit($student, $review['review_token']);
     }
 
     private function program(SisFixture $f, string $code = 'BA.ART'): EntityId
@@ -69,7 +89,7 @@ final class StudentRecordManagementTest extends TestCase
         self::assertSame($enrollment->id->value, $f->registration->enrollment($student->id, $section->id)->id->value);
         self::assertCount(2, array_filter($service->programs($student->id)['items'], fn ($row) => $row['status'] === 'active'));
         try {
-            $service->activity($student->id, false, $before['revision']);
+            $this->activity($f, $student->id, false, $before['revision']);
             self::fail('A stale student edit was accepted.');
         } catch (ConcurrentModificationException) {
             self::assertTrue($service->view($student->id)['active']);
@@ -116,7 +136,7 @@ final class StudentRecordManagementTest extends TestCase
         $service = $this->service($f);
         $section = $f->section(20, 0);
         $f->service->register($student->id, $section->id, true);
-        $service->activity($student->id, false, $service->view($student->id)['revision']);
+        $this->activity($f, $student->id, false, $service->view($student->id)['revision']);
         self::assertFalse($service->view($student->id)['active']);
         self::assertCount(1, $service->programs($student->id)['items']);
         $newSection = $f->section(20, 0);
@@ -127,7 +147,7 @@ final class StudentRecordManagementTest extends TestCase
             self::assertNull($f->registration->enrollment($student->id, $newSection->id));
         }
         self::assertTrue($f->registration->enrollment($student->id, $section->id)->status->isEnrolled());
-        $service->activity($student->id, true, $service->view($student->id)['revision']);
+        $this->activity($f, $student->id, true, $service->view($student->id)['revision']);
         self::assertSame($student->id->value, $f->service->register($student->id, $newSection->id, true)->studentId->value);
     }
 
@@ -141,7 +161,7 @@ final class StudentRecordManagementTest extends TestCase
         $f->access->staff = false;
         self::assertSame($student->id->value, $service->view($student->id)['id']);
         foreach (
-            [fn () => $service->activity($student->id, false, $revision),
+            [fn () => $this->activity($f, $student->id, false, $revision),
             fn () => $service->assign($student->id, $f->program, $f->term),
             fn () => $service->primary($student->id, new EntityId($row['id']), $revision),
             fn () => $service->programActivity($student->id, new EntityId($row['id']), false, $row['revision'])] as $write
@@ -238,7 +258,7 @@ final class StudentRecordManagementTest extends TestCase
         $service = $this->service($f, $audit);
         $before = $normal->view($student->id);
         foreach (
-            [fn () => $service->activity($student->id, false, $before['revision']),
+            [fn () => $this->activity($f, $student->id, false, $before['revision'], $audit),
             fn () => $service->primary($student->id, $assigned, $before['revision']),
             fn () => $service->assign($student->id, $this->program($f, 'MORE.' . bin2hex(random_bytes(2))), $f->term)] as $write
         ) {

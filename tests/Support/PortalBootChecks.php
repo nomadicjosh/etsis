@@ -399,17 +399,34 @@ if (
     throw new RuntimeException("The primary program route failed.");
 }
 $fresh = json_decode((string) $app->router->match($recordGet)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$activityDecision = static function (
+    bool $active,
+    string $revision
+) use (
+    $teachingPost,
+    $studentPath,
+    $sis,
+): int {
+    $review = $teachingPost($studentPath . "/activity/review/", [
+        "active" => $active,
+        "effective_on" => $sis->clock->now()->format("Y-m-d"),
+        "reason" => "Fictional activity smoke decision.",
+        "revision" => $revision,
+    ]);
+    if ($review->getStatusCode() !== 200) {
+        return $review->getStatusCode();
+    }
+    $preview = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    return $teachingPost($studentPath . "/activity/commit/", [
+        "review_token" => $preview["review_token"],
+    ])->getStatusCode();
+};
 if (
     $fresh["entry_term"] !== $studentRecord["entry_term"] ||
-    $teachingPost($studentPath . "/activity/", ["revision" => $fresh["revision"]])->getStatusCode() !== 422 ||
-    $teachingPost($studentPath . "/activity/", [
-        "active" => false,
-        "revision" => $studentRecord["revision"],
-    ])->getStatusCode() !== 409 ||
-    $teachingPost($studentPath . "/activity/", [
-        "active" => false,
-        "revision" => $fresh["revision"],
-    ])->getStatusCode() !== 200
+    $teachingPost($studentPath . "/activity/review/", ["revision" => $fresh["revision"]])->getStatusCode() !==
+        422 ||
+    $activityDecision(false, $studentRecord["revision"]) !== 409 ||
+    $activityDecision(false, $fresh["revision"]) !== 200
 ) {
     throw new RuntimeException("Student activity or entry-term protection failed.");
 }
@@ -418,12 +435,7 @@ $inactive = json_decode(
     true,
     flags: JSON_THROW_ON_ERROR,
 );
-if (
-    $teachingPost($studentPath . "/activity/", [
-        "active" => true,
-        "revision" => $inactive["revision"],
-    ])->getStatusCode() !== 200
-) {
+if ($activityDecision(true, $inactive["revision"]) !== 200) {
     throw new RuntimeException("Student reactivation failed.");
 }
 $fresh = json_decode((string) $app->router->match($recordGet)->getBody(), true, flags: JSON_THROW_ON_ERROR);

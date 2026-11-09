@@ -10,7 +10,6 @@ use Domain\Student\StudentProgram;
 interface StudentRecordRepository
 {
     public function lock(EntityId $student): void;
-    public function setActive(EntityId $student, bool $active): void;
     public function setPrimary(EntityId $student, EntityId $program): void;
     /** @return array{id: string, code: string, title: string} */
     public function program(EntityId $program): array;

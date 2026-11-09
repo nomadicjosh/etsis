@@ -176,6 +176,7 @@ final class SisFixture
             $this->drops,
             $this->academicCredits(),
             $this->enrollmentLedger(),
+            $this->activityLedger(),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -288,6 +289,37 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
             $history,
             $grades,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
+    public function activityLedger(): \Domain\Student\Service\StudentActivityLedger
+    {
+        return new \Domain\Student\Service\StudentActivityLedger(
+            new \Infrastructure\Persistence\Repository\SqlStudentActivityRepository($this->sql),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql,
+                $this->transactions,
+                $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder()),
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            ),
+            $this->access,
+            $this->clock,
+        );
+    }
+    public function activityService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Student\Service\StudentActivityService {
+        return new \Domain\Student\Service\StudentActivityService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+            $this->activityLedger(),
             $this->access,
             $this->transactions,
             $audit ?? $this->audit,

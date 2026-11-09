@@ -63,6 +63,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlTransferCatalogRepository::class,
             \Domain\Student\Repository\RestrictionRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRestrictionRepository::class,
+            \Domain\Student\Repository\StudentActivityRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlStudentActivityRepository::class,
             \Domain\Student\Repository\StudentRecordRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlStudentRecordRepository::class,
             \Domain\Scheduling\Repository\RoomRepository::class =>

@@ -122,3 +122,10 @@ The reusable [course group library](degree-audit-builder.md) requires `202611080
 Independent course-group schema 2 now supports credit-or-course quantity with an optional per-course grade-point floor. Earlier group-average-GPA publications are retained and never reinterpreted as per-course floors. Student substitution approvals now pin explicit replacement course publications within one pursuit and degree version, without creating earned credit. See [the builder](degree-audit-builder.md) and [student exceptions](student-degree-exceptions.md).
 
 `20261109000002_CreateSisVersionedGrades` consolidates grade definitions into immutable `sis_grades` rows keyed by publication, with ranges and grade-point/GPA/credit treatment. `sis_grading_scales` retains current scope/publication metadata; its obsolete JSON projection is removed after verified reconstruction from actual recorded events. Old grade IDs, event bytes and accepted receipts are preserved. The independent single-grade write API is removed. [Cutover and academic integration](grading-scale-setup.md#existing-database-cutover) distinguish completed definition versioning from the remaining attempt/award event-sourcing work. No working database migration was performed.
+
+
+### Student activity history (2026-11-09)
+
+Students now have a reviewed, reasoned activity decision and a private paginated timeline. Effective-date replay preserves later activation/deactivation decisions when an earlier period is corrected. Hiatus and return activity changes share that ledger, retaining existing case receipts and rolling back contradictory case/drop effects atomically. Registration eligibility and student record reads verify the current activity projection. See [student activity history](student-activity-history.md) for the workflow, observation limits and migration.
+
+Migration `20261109000006_CreateSisStudentActivity.php` adds one ULID checkpoint table; the authoritative journal remains unchanged. Full matriculation/program/standing and hiatus-case lifecycle conversion remains outstanding.

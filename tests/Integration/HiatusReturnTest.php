@@ -49,7 +49,7 @@ final class HiatusReturnTest extends TestCase
         $hiatus = $this->hiatus($h);
         $service = $h->returns();
         $academic = $f->sql->rows('sis_academic_credits');
-        $events = $f->sql->rows('sis_history_events');
+        $events = $f->financialEvents();
         $review = $service->review($hiatus->studentId, $hiatus->id, new DateTimeImmutable('2026-08-10'));
         self::assertSame('2026-08-09', $review['hiatus_ends_on']);
         self::assertSame('BSCS', $review['primary_program']['code']);
@@ -62,7 +62,7 @@ final class HiatusReturnTest extends TestCase
         self::assertSame($result, $service->commit($hiatus->studentId, $hiatus->id, $plan, $note));
         self::assertSame($result, $service->saved($hiatus->studentId, $hiatus->id, $plan->operation));
         self::assertCount(2, $f->sql->rows('sis_student_hiatus_actions'));
-        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        self::assertSame($events, $f->financialEvents());
         self::assertSame($academic, $f->sql->rows('sis_academic_credits'));
         self::assertStringNotContainsString($note, json_encode($f->sql->rows('sis_student_hiatus_actions')));
         self::assertStringNotContainsString($note, json_encode($f->sql->rows('sis_audit')));

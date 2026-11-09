@@ -304,6 +304,7 @@ final class RestrictionWorkflowTest extends TestCase
             $f->drops,
             $f->academicCredits(),
             $f->enrollmentLedger(),
+            $f->activityLedger(),
         );
         try {
             $service->register($student->id, $section->id, true);

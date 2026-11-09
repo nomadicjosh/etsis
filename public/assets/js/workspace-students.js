@@ -25,6 +25,66 @@ window.createWorkspaceStudents = function (ui) {
             table(headers, rows, caption),
         );
 
+    const status = value => value === null ? "Unknown" : value ? "Active" : "Inactive";
+    async function activity(record, back) {
+        const page = await request(`/sis/students/${record.id}/activity/history/`, "POST", {});
+        const body = openDrawer("Review student activity", "REGISTRAR DECISION");
+        body.append(button("Back to student", back), node("p", {},
+            "Record when the status takes effect and why. Inactive students cannot add registrations. Existing courses, credits, charges, sign-in and employment stay connected."));
+        const descriptors = [["active", "Active student record", "checkbox"],
+            ["effective_on", "Effective date", "date"], ["reason", "Reason for this decision", "textarea"]];
+        const form = await ui.buildForm(descriptors, { active: record.active, effective_on: page.today });
+        form.elements.effective_on.max = page.today;
+        form.elements.effective_on.required = true;
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review activity decision");
+        form.append(review);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = ui.formData(form, descriptors);
+                const preview = await request(`/sis/students/${record.id}/activity/review/`, "POST",
+                    { ...data, revision: record.revision });
+                const confirmBody = openDrawer("Confirm student activity", "REVIEWED DECISION");
+                confirmBody.append(button("Revise decision", () => activity(record, back)),
+                    node("h3", {}, `${status(preview.requested_active)} from ${preview.effective_on}`),
+                    node("dl", { class: "detail-list" },
+                        node("div", {}, node("dt", {}, "Previously known on that date"), node("dd", {}, status(preview.active_on_date))),
+                        node("div", {}, node("dt", {}, "Current status before"), node("dd", {}, status(preview.current_active))),
+                        node("div", {}, node("dt", {}, "Current status after"), node("dd", {}, status(preview.resulting_active)))));
+                if (preview.resulting_active !== preview.requested_active) confirmBody.append(node("p", { class: "alert alert-info" },
+                    "A later effective decision continues to control today's status. This decision changes the earlier period only."));
+                confirmBody.append(node("p", { class: "form-text" },
+                    "Earlier history before tracking began is unknown. This decision retains its effective date, recording time and protected reason; it does not drop courses or reverse charges."),
+                    button("Confirm activity decision", async () => {
+                        await request(`/sis/students/${record.id}/activity/commit/`, "POST", { review_token: preview.review_token });
+                        await back();
+                    }, "btn-primary"));
+                confirmBody.querySelector("h3").tabIndex = -1;
+                confirmBody.querySelector("h3").focus();
+            }, review);
+        });
+        body.append(form);
+    }
+    async function activityHistory(id, back, cursor = null, previous = []) {
+        const page = await request(`/sis/students/${id}/activity/history/`, "POST", cursor ? { cursor } : {});
+        const body = openDrawer("Activity history", "REGISTRAR RECORD");
+        body.append(button("Back to student", back), node("p", {}, `Current status: ${status(page.active)}`),
+            node("p", { class: "form-text" }, "This timeline lists decisions in recording order. Effective dates determine when each status applies. Earlier history is unknown; an observation records the status seen when tracking began. Protected reasons are not included here."));
+        const sources = { observed_existing: "Observed current status", registrar: "Registrar decision", hiatus: "Hiatus", hiatus_return: "Return from hiatus" };
+        body.append(page.items.length ? grid(["Status", "Effective date", "Recorded", "Source"], page.items.map(item =>
+            [status(item.active), item.effective_on, item.recorded_at, sources[item.source] || "Decision"]), "Student activity decisions")
+            : node("p", {}, "No activity decisions have been recorded yet."));
+        const controls = node("div", { class: "inline-actions" });
+        if (previous.length) controls.append(button("Previous activity page", () =>
+            activityHistory(id, back, previous[previous.length - 1], previous.slice(0, -1))));
+        if (page.next_cursor) controls.append(button("Next activity page", () =>
+            activityHistory(id, back, page.next_cursor, [...previous, cursor])));
+        body.append(controls);
+    }
+
     async function student(id) {
         const record = await request(`/sis/students/${id}/record/`);
         const body = openDrawer(`${record.given_name} ${record.family_name}`, "STUDENT RECORD");
@@ -111,21 +171,13 @@ window.createWorkspaceStudents = function (ui) {
                 }),
             );
         if (can("sis:registration:manage"))
-            actions.append(button("Hiatus history", () => ui.hiatus().page(id)));
+            actions.append(button("Registration history", () => ui.registrationHistory().history(id, back)));
         if (can("sis:registration:manage"))
-            actions.append(
-                button("Change student activity", () =>
-                    flow(
-                        "Save student activity",
-                        [["active", "Active student record", "checkbox"]],
-                        `/sis/students/${id}/activity/`,
-                        (data) => ({ ...data, revision: record.revision }),
-                        back,
-                        record,
-                        "Inactive students cannot add new registrations. Existing enrollments, academic credits, charges, sign-in and employment remain connected. Drop or withdraw sections separately when appropriate.",
-                    ),
-                ),
-            );
+            actions.append(button("Hiatus history", () => ui.hiatus().page(id)));
+        if (can("sis:registration:manage")) {
+            actions.append(button("Change student activity", () => activity(record, back)));
+            actions.append(button("Activity history", () => activityHistory(id, back)));
+        }
 
         const programs = node(
             "section",

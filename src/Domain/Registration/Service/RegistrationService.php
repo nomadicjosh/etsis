@@ -30,6 +30,7 @@ final readonly class RegistrationService
         private CourseDropService $drops,
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
         private EnrollmentLedger $enrollments,
+        private \Domain\Student\Service\StudentActivityLedger $activity,
     ) {
     }
 
@@ -67,6 +68,7 @@ final readonly class RegistrationService
             if ($byStaff) {
                 $this->access->requirePermission("sis:registration:manage");
             }
+            $this->activity->verify($student);
             $section = $this->repository->section($sectionId);
             $course = $this->repository->courseForSection($section);
             $window = $this->repository->window($section->termId);

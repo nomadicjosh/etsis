@@ -19,7 +19,6 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Enum\HiatusCode;
 use Domain\Student\Repository\HiatusImpactRepository;
 use Domain\Student\Repository\HiatusRepository;
-use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\StudentHiatus;
 use Domain\Student\ValueObject\HiatusImpact;
 use Domain\Student\ValueObject\HiatusPolicy;
@@ -31,7 +30,6 @@ final readonly class HiatusWorkflowService
         private HiatusRepository $history,
         private HiatusImpactRepository $impacts,
         private RegistrationRepository $registration,
-        private StudentRecordRepository $students,
         private AdmissionsRepository $admissions,
         private StudentAccess $access,
         private UnitOfWork $transactions,
@@ -40,6 +38,7 @@ final readonly class HiatusWorkflowService
         private HiatusPolicy $policy,
         private \Domain\Registration\Service\CourseDropService $drops,
         private \Domain\Registration\Service\DropPolicyService $dropPolicies,
+        private StudentActivityLedger $activity,
     ) {
     }
 
@@ -153,7 +152,20 @@ final readonly class HiatusWorkflowService
             );
             $this->hiatuses->create($hiatus, $note, $recorded);
             if ($result["student_activity_changed"]) {
-                $this->students->setActive($hiatus->studentId, false);
+                $this->activity->decide(
+                    $this->admissions->student($hiatus->studentId),
+                    false,
+                    $context["starts_on"],
+                    "hiatus",
+                    $hiatus->id,
+                    \Domain\Gradebook\ValueObject\PublishedGradeId::forVersion(
+                        $hiatus->id,
+                        "activity.hiatus",
+                    ),
+                    $actor,
+                    $note,
+                    true,
+                );
                 $this->audit->record($actor, "student.activity_updated", $hiatus->studentId);
             }
             return ["id" => $hiatus->id->value, "impact" => $result];
@@ -186,6 +198,7 @@ final readonly class HiatusWorkflowService
     {
         $this->registration->lockStudent($student);
         $this->registration->lockPerson($routing["person"]);
+        $this->access->requirePermission("sis:registration:manage");
         foreach (["section_id", "course_id", "term_id"] as $field) {
             $ids = array_unique(array_column($routing["rows"], $field));
             sort($ids, SORT_STRING);
@@ -208,6 +221,7 @@ final readonly class HiatusWorkflowService
     private function context(EntityId $studentId, HiatusCode $code, DateRange $dates, array $routing): array
     {
         $student = $this->admissions->student($studentId);
+        $activityVersion = $this->activity->verify($student);
         $person = $this->admissions->person($student->personId);
         $rows = $this->impacts->enrollments($studentId, $dates->start->format("Y-m-d"));
         $this->bounded($rows);
@@ -242,6 +256,7 @@ final readonly class HiatusWorkflowService
         }
         unset($row);
         return [
+            "activity_version" => $activityVersion,
             "student" => [
                 "id" => $studentId->value,
                 "given_name" => $person->givenName,

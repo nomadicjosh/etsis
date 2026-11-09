@@ -22,14 +22,13 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
         $this->sql->lock("sis_students", $student->value, "id");
     }
 
-    public function setActive(EntityId $student, bool $active): void
-    {
-        $this->sql->update("sis_students", ["active" => (int) $active], ["id" => $student->value]);
-    }
-
     public function setPrimary(EntityId $student, EntityId $program): void
     {
-        $this->sql->update("sis_students", ["primary_program_id" => $program->value], ["id" => $student->value]);
+        $this->sql->update(
+            "sis_students",
+            ["primary_program_id" => $program->value],
+            ["id" => $student->value],
+        );
     }
 
     public function program(EntityId $program): array
@@ -126,7 +125,8 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
                 throw new ValidationException([
                     [
                         "field" => "program_id",
-                        "message" => "This program and entry term already exist. Reopen the existing assignment.",
+                        "message" =>
+                            "This program and entry term already exist. Reopen the existing assignment.",
                     ],
                 ]);
             }
@@ -136,7 +136,11 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
 
     public function saveAssignment(StudentProgram $assignment): void
     {
-        $this->sql->update("sis_student_programs", ["status" => $assignment->status], ["id" => $assignment->id->value]);
+        $this->sql->update(
+            "sis_student_programs",
+            ["status" => $assignment->status],
+            ["id" => $assignment->id->value],
+        );
     }
 
     public function activeProgram(EntityId $student, EntityId $program, ?EntityId $excluding = null): bool

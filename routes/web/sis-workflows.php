@@ -419,8 +419,23 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/sis/students/{id}/record/", [SisStudentRecordController::class, "show"])
         ->name("sis.student.record");
     $router
-        ->map(["POST"], "/sis/students/{id}/activity/", [SisStudentRecordController::class, "activity"])
-        ->name("sis.student.activity");
+        ->map(["POST"], "/sis/students/{id}/activity/review/", [
+            \Application\Http\Controller\SisStudentActivityController::class,
+            "review",
+        ])
+        ->name("sis.student.activity.review");
+    $router
+        ->map(["POST"], "/sis/students/{id}/activity/commit/", [
+            \Application\Http\Controller\SisStudentActivityController::class,
+            "commit",
+        ])
+        ->name("sis.student.activity.commit");
+    $router
+        ->map(["POST"], "/sis/students/{id}/activity/history/", [
+            \Application\Http\Controller\SisStudentActivityController::class,
+            "history",
+        ])
+        ->name("sis.student.activity.history");
     $router
         ->map(["POST"], "/sis/students/{id}/programs/", [SisStudentRecordController::class, "programs"])
         ->name("sis.student.programs");
