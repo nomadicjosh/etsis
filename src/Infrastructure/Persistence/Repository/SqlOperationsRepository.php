@@ -26,8 +26,6 @@ final readonly class SqlOperationsRepository implements OperationsRepository
             'roster' => ['sis_enrollments', 'section_id', ['id', 'student_id', 'status']],
             'enrollments' => ['sis_enrollments', 'student_id', ['id', 'section_id', 'status', 'term_id']],
             'assignments' => ['sis_assignments', 'section_id', ['id', 'title', 'possible_hundredths', 'due_on']],
-            'restrictions' => ['sis_restrictions', 'person_id',
-                ['id', 'code', 'severity', 'starts_on', 'ends_on', 'blocks_staff']],
             'prerequisites' => ['sis_prerequisites', 'course_id', ['id', 'required_course_id']],
             'window' => ['sis_reg_windows', 'term_id', ['id', 'opens_at', 'closes_at', 'course_limit']],
             'audit' => ['sis_audit', 'subject_id', ['id', 'action', 'recorded_at', 'actor_id']],

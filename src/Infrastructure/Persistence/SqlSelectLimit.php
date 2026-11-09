@@ -9,6 +9,24 @@ use InvalidArgumentException;
 /** Bounds prepared SELECTs at the server, including PDO drivers that buffer result sets. */
 final class SqlSelectLimit
 {
+    public static function page(string $statement, string $driver, int $limit, int $offset): string
+    {
+        if ($offset < 0 || $offset > 2_000_000_000) {
+            throw new InvalidArgumentException('Use a valid result page offset.');
+        }
+        if ($offset === 0) {
+            return self::apply($statement, $driver, $limit);
+        }
+        self::apply($statement, $driver, $limit); // Validate the SELECT/limit before constructing the page window.
+        return match ($driver) {
+            'mysql', 'pgsql', 'sqlite' => $statement . ' LIMIT ' . $limit . ' OFFSET ' . $offset,
+            'oci' => 'SELECT * FROM (SELECT report_data.*, ROWNUM AS "report_page_row" FROM (' . $statement
+            . ') report_data WHERE ROWNUM <= ' . ($offset + $limit) . ') WHERE "report_page_row" > ' . $offset,
+            'sqlsrv' => $statement . ' OFFSET ' . $offset . ' ROWS FETCH NEXT ' . $limit . ' ROWS ONLY',
+            default => throw new InvalidArgumentException('Unsupported driver for paged SELECT.'),
+        };
+    }
+
     public static function apply(string $statement, string $driver, int $limit): string
     {
         if ($limit < 1 || $limit > 1000 || preg_match('/\ASELECT\s/i', $statement) !== 1) {

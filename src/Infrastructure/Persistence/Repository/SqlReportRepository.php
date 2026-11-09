@@ -22,6 +22,11 @@ final readonly class SqlReportRepository implements ReportRepository
             'active' => $report->active === null ? null : (int) $report->active]);
     }
 
+    public function isRelational(EntityId $id): bool
+    {
+        return $this->sql->rows('sis_report_queries', ['id' => $id->value], 1) !== [];
+    }
+
     public function get(EntityId $id): StudentReport
     {
         $r = $this->sql->one('sis_reports', ['id' => $id->value]);
@@ -75,7 +80,7 @@ final readonly class SqlReportRepository implements ReportRepository
         return $this->sql->rows('sis_report_shares', ['report_id' => $report->value, 'user_id' => $user->value]) !== [];
     }
 
-    public function run(StudentReport $report): array
+    public function run(StudentReport $report, ?EntityId $after, int $limit): array
     {
         $criteria = [];
         if ($report->programId !== null) {
@@ -92,14 +97,23 @@ final readonly class SqlReportRepository implements ReportRepository
         foreach (array_keys($criteria) as $column) {
             $where[] = 's.' . $q($column) . ' = ?';
         }
+        $parameters = array_values($criteria);
+        if ($after !== null) {
+            $where[] = 's.' . $q('id') . ' > ?';
+            $parameters[] = $after->value;
+        }
         $rows = $this->sql->fetch(
             'SELECT s.' . $q('id') . ' AS ' . $q('student_id') . ', i.'
             . $q('institutional_id') . ', s.' . $q('primary_program_id') . ' AS ' . $q('program_id')
-            . ', s.' . $q('entry_term_id') . ', s.' . $q('active') . ' FROM ' . $q('sis_students')
-            . ' s JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = s.' . $q('person_id')
+            . ', s.' . $q('entry_term_id') . ', s.' . $q('active')
+            . ', p.' . $q('code') . ' AS ' . $q('program_code')
+            . ', t.' . $q('code') . ' AS ' . $q('entry_term_code') . ' FROM ' . $q('sis_students')
+            . ' s JOIN ' . $q('sis_programs') . ' p ON p.' . $q('id') . ' = s.' . $q('primary_program_id')
+            . ' JOIN ' . $q('sis_terms') . ' t ON t.' . $q('id') . ' = s.' . $q('entry_term_id')
+            . ' JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = s.' . $q('person_id')
             . ($where === [] ? '' : ' WHERE ' . implode(' AND ', $where)) . ' ORDER BY s.' . $q('id'),
-            array_values($criteria),
-            500
+            $parameters,
+            $limit
         );
         foreach ($rows as &$row) {
             $row['active'] = (bool) $row['active'];
@@ -107,5 +121,24 @@ final readonly class SqlReportRepository implements ReportRepository
         unset($row);
 
         return $rows;
+    }
+
+    public function describe(EntityId $report): array
+    {
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch(
+            'SELECT r.' . $q('id') . ', r.' . $q('name') . ', r.' . $q('program_id')
+            . ', r.' . $q('term_id') . ', r.' . $q('active') . ', p.' . $q('code') . ' AS ' . $q('program_code')
+            . ', p.' . $q('title') . ' AS ' . $q('program_title') . ', t.' . $q('code') . ' AS ' . $q('entry_term_code')
+            . ' FROM ' . $q('sis_reports') . ' r LEFT JOIN ' . $q('sis_programs') . ' p ON p.' . $q('id')
+            . ' = r.' . $q('program_id') . ' LEFT JOIN ' . $q('sis_terms') . ' t ON t.' . $q('id')
+            . ' = r.' . $q('term_id') . ' WHERE r.' . $q('id') . ' = ?',
+            [$report->value],
+            1
+        );
+        $record = $rows[0] ?? throw new \Domain\Shared\Exception\RecordNotFoundException('Report not found.');
+        $record['active'] = $record['active'] === null ? null : (bool) $record['active'];
+
+        return $record + ['relational' => $this->isRelational($report)];
     }
 }

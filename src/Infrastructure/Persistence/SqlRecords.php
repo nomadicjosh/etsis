@@ -16,6 +16,16 @@ final readonly class SqlRecords
     {
     }
 
+    public function tableExists(string $table): bool
+    {
+        return $this->db->getConnection()->getSchema()->hasTable($table, clear: true);
+    }
+
+    public function driver(): string
+    {
+        return (string) $this->db->getConnection()->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    }
+
     public function quote(string $identifier): string
     {
         if (preg_match('/^[a-z][a-z0-9_]*$/D', $identifier) !== 1) {
@@ -95,6 +105,15 @@ final readonly class SqlRecords
  * @param list<scalar|null> $parameters
  * @return list<array<string, mixed>>
  */
+    public function fetchPage(string $statement, array $parameters, int $limit, int $offset): array
+    {
+        $driver = (string) $this->db->getConnection()->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        return $this->fetch(SqlSelectLimit::page($statement, $driver, $limit, $offset), $parameters);
+    }
+
+    /** @param list<scalar|null> $parameters
+     * @return list<array<string, mixed>>
+     */
     public function fetch(string $statement, array $parameters = [], ?int $limit = null): array
     {
         if ($limit !== null) {

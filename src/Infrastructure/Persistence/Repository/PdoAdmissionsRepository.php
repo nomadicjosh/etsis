@@ -15,6 +15,7 @@ use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Student;
+use Domain\Student\StudentProgram;
 use Infrastructure\Persistence\PortableTransactions;
 use Infrastructure\Persistence\SqlRecords;
 use PDO;
@@ -152,7 +153,7 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
         $this->transition($application, $expectedVersion, ApplicationStatus::Submitted, $application->status);
     }
 
-    public function matriculate(AdmissionApplication $application, Student $student): void
+    public function matriculate(AdmissionApplication $application, Student $student): StudentProgram
     {
         if (
             $application->status !== ApplicationStatus::Accepted
@@ -162,10 +163,10 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
         ) {
             throw new DomainException('The student must inherit the accepted application.');
         }
-        \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use (
+        return \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use (
             $application,
             $student
-): void {
+): StudentProgram {
             $this->transition(
                 $application,
                 $application->version,
@@ -179,13 +180,20 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
                 'active' => (int) $student->active,
                 'primary_program_id' => $student->programId->value,
             ]);
+            $assignment = new StudentProgram(
+                EntityId::generate(),
+                $student->id,
+                $student->programId,
+                $student->entryTermId
+            );
             $this->insert('sis_student_programs', [
-                'id' => EntityId::generate()->value,
+                'id' => $assignment->id->value,
                 'student_id' => $student->id->value,
                 'program_id' => $student->programId->value,
                 'entry_term_id' => $student->entryTermId->value,
                 'status' => 'active',
             ]);
+            return $assignment;
         });
     }
 

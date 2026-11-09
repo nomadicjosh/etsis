@@ -17,7 +17,17 @@ final class EventClassMap
 {
     public static function allows(string $class): bool
     {
-        return in_array($class, [
+        return in_array($class, self::registered(), true);
+    }
+
+    /** @return list<class-string<\Codefy\Domain\EventSourcing\AggregateChanged>> */
+    public static function registered(): array
+    {
+        return [
+            \Domain\DegreeAudit\Event\CourseGroupWasPublished::class,
+            \Domain\DegreeAudit\Event\RequirementsWerePublished::class,
+            \Domain\Registration\Event\SectionCourseVersionWasBound::class,
+            \Domain\Catalog\Event\CourseDefinitionWasPublished::class,
             \Domain\Finance\Event\BillingRuleWasDefined::class,
             \Domain\Finance\Event\BillingRuleWasRetired::class,
             \Domain\Finance\Event\AccountEntryWasReversed::class,
@@ -31,6 +41,6 @@ final class EventClassMap
             RoleWasChanged::class,
             StudentAccountWasOpened::class,
             AccountEntryWasPosted::class,
-        ], true);
+        ];
     }
 }

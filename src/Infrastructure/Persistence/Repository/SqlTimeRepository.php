@@ -14,6 +14,8 @@ use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
+use Domain\Shared\Exception\ValidationException;
+use PDOException;
 
 final readonly class SqlTimeRepository implements TimeRepository
 {
@@ -23,8 +25,16 @@ final readonly class SqlTimeRepository implements TimeRepository
 
     public function addEmployee(EntityId $id, EntityId $person, string $jobTitle): void
     {
-        $this->sql->insert('sis_employees', ['id' => $id->value, 'person_id' => $person->value,
-            'job_title' => $jobTitle, 'active' => 1]);
+        try {
+            $this->sql->insert('sis_employees', ['id' => $id->value, 'person_id' => $person->value,
+                'job_title' => $jobTitle, 'active' => 1]);
+        } catch (PDOException $error) {
+            if (in_array((string) $error->getCode(), ['23000', '23505'], true)) {
+                throw new ValidationException([['field' => 'person_id',
+                    'message' => 'This person already has employment. Open their existing record.']]);
+            }
+            throw $error;
+        }
     }
 
     public function employee(EntityId $id): Employee
@@ -42,6 +52,40 @@ final readonly class SqlTimeRepository implements TimeRepository
         }
 
         return new EntityId($row['person_id']);
+    }
+
+    public function saveEmployee(Employee $employee): void
+    {
+        $this->sql->update(
+            'sis_employees',
+            ['job_title' => $employee->jobTitle, 'active' => (int) $employee->active],
+            ['id' => $employee->id->value]
+        );
+    }
+
+    public function entries(EntityId $employee, ?EntityId $after, int $limit): array
+    {
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch(
+            'SELECT ' . implode(', ', array_map($q, [
+            'id', 'starts_at', 'ends_at', 'status', 'version',
+            ])) . ' FROM ' . $q('sis_timesheets') . ' WHERE ' . $q('employee_id') . ' = ?'
+            . ($after === null ? '' : ' AND ' . $q('id') . ' < ?') . ' ORDER BY ' . $q('id') . ' DESC',
+            $after === null ? [$employee->value] : [$employee->value, $after->value],
+            $limit
+        );
+        $utc = new DateTimeZone('UTC');
+        foreach ($rows as &$row) {
+            $start = new DateTimeImmutable($row['starts_at'], $utc);
+            $end = new DateTimeImmutable($row['ends_at'], $utc);
+            $row['starts_at'] = $start->format(DATE_ATOM);
+            $row['ends_at'] = $end->format(DATE_ATOM);
+            $row['duration_seconds'] = $end->getTimestamp() - $start->getTimestamp();
+            $row['version'] = (int) $row['version'];
+        }
+        unset($row);
+
+        return $rows;
     }
 
     public function lockEmployee(EntityId $employee): void
