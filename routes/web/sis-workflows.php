@@ -573,8 +573,23 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/assignments/{id}/scores/", [SisGradebookController::class, "score"])
         ->name("sis.gradebook.score");
     $router
-        ->map(["POST"], "/sis/sections/{id}/final-grades/", [SisGradebookController::class, "finalGrade"])
-        ->name("sis.gradebook.finalgrade");
+        ->map(["POST"], "/sis/sections/{id}/final-grades/review/", [
+            SisGradebookController::class,
+            "reviewFinalGrade",
+        ])
+        ->name("sis.gradebook.finalgrade.review");
+    $router
+        ->map(["POST"], "/sis/sections/{id}/final-grades/commit/", [
+            SisGradebookController::class,
+            "commitFinalGrade",
+        ])
+        ->name("sis.gradebook.finalgrade.commit");
+    $router
+        ->map(["POST"], "/sis/sections/{id}/students/{student}/grade-history/", [
+            SisGradebookController::class,
+            "gradeHistory",
+        ])
+        ->name("sis.gradebook.history");
     $router
         ->map(["POST"], "/sis/sections/{id}/attendance/", [SisGradebookController::class, "attendance"])
         ->name("sis.gradebook.attendance");
