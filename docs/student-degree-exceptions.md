@@ -1,0 +1,52 @@
+# Student waivers, substitutions and minimum exceptions
+
+A **course waiver belongs to one student-program pursuit**. It removes the requirement to take the course wherever it is required within that program, regardless of course group. A dual-degree pursuit needs its own approval. Waiving a course never creates an earned award, grade, GPA points, resident credit or a financial reversal.
+
+A **minimum exception** explicitly reduces a published credit/GPA threshold for that student. It is separate from a waiver and applies to the exact degree publication reviewed. Neither action changes the institution's published curriculum or another student's requirements.
+
+These controls retain approved inputs and show their effective thresholds. Course allocation/completion evaluation and specialization exclusions are subsequent stages; the controls do not award credentials or manufacture academic facts.
+
+## Setup and permissions
+
+Apply `20261109000000_CreateSisRequirementAdjustments` after `20261108000007_CreateSisStudentRequirements` and its dependencies. Development tooling has not applied it to a working database. The migration creates an active-projection table and registers the protected **`sis:degree-audit:adjust`** permission. It creates no second event table and backfills no approvals.
+
+Approvals and revocations require both `sis:degree-audit:adjust` and `sis:student:read`. Catalog, registration and requirement-assignment authority alone are insufficient. The new permission is independent of the broad `sis` permission, and the migration does not expand existing role/user grants. Super administrators retain their universal authority. An access administrator can grant it to a custom registrar role or as an additional user permission; protected system definitions remain uneditable.
+
+Owners and authorized student readers can inspect active approvals and curated history without approving or revoking them. No new faculty/advisor-wide student access is granted.
+
+## Staff workflow
+
+1. Open **Students → the student → Student programs → Degree requirements → Student exceptions** for the relevant program pursuit. Assign a reviewed degree publication first if none is selected. Resolve a closed program or pending cohort correction before changing approvals.
+2. Choose **Approve an exception**. The full-width workspace has searchable targets on the left and approval details on the right. The source displays at most 30 cards at a time and supports paging; it does not build thousands of DOM controls.
+3. For a **Course waiver**, choose the required course itself. There is no group selector. The review lists all groups where the course currently appears, as context. A waiver follows that stable course identity throughout this same pursuit if its selected degree version later changes. If the course is absent from the current requirements, the approval remains retained without adding a requirement or earned credit. It becomes relevant wherever the course is required again in that pursuit, until revoked.
+4. For a **Credit or GPA minimum**, choose a degree or group threshold and enter the **new required value**, not the amount to subtract. The review shows the published value and the proposed value. Supported degree fields are total credits, resident credits, cumulative GPA and overall GPA; current groups support their credit minimum; older schema-1 groups also retain their original average-GPA minimum. Course-count and per-course-point-floor individual exceptions are not yet supported. The earlier GPA exception never changes the new per-course threshold. A missing/no-minimum field cannot be reduced. Decimal values support up to three places and use integer thousandths in the domain/API.
+5. Enter a reason, choose **Review exception**, inspect its exact effect, then **Approve reviewed exception**. Returning with **Change review** preserves the selected target, amount and reason. Review alone changes nothing.
+6. Approving another exception for the same minimum replaces the active exception with a new decision and retains the earlier approval. The uniqueness boundary includes the degree version. A later degree publication does not inherit the old minimum reduction; it remains visible as outside the current requirements until explicitly reviewed/revoked. Course waivers use the pursuit/course identity instead of a group or degree-version key.
+7. **Review revocation → Prepare revocation → Revoke reviewed exception** requires its own reason and retains the original approval. Revoking a minimum exception restores the published threshold, subject to other active exceptions. Revoking a waiver restores the course requirement where applicable in that program.
+8. **Exception history** lists approvals, replacements and revocations in bounded pages. Approval labels resolve their original published course/group references, never today's mutable catalog titles. Ordinary history omits protected reasons and actor details; a revocation references its original approval.
+
+Resident-credit requirements cannot exceed total-credit requirements after applying exceptions. Reduce the resident minimum before approving a lower total that depends on it; restore the total before revoking a dependent resident exception. Published rules, unwaived course requirements and unrelated thresholds remain intact. Waivers never silently reduce credit-pool, choose-count or GPA requirements; the evaluator must apply the retained course-waiver policy explicitly when it is implemented.
+
+The **Degree requirements** screen identifies itself as the published baseline and links to **Student exceptions**, whose current minimums include approved reductions. This distinction prevents presenting an altered student requirement as an altered publication. Neither screen claims a completed student degree audit.
+
+## Course substitutions
+
+Choose **Course substitution**, select the original required course, then search for a replacement and explicitly choose one of its published versions. This is allowed before the student takes either course. Current catalog code/title are navigation aids only; approval and history retain the exact replacement publication and its title/credits. An unpublished catalog entry cannot be approved. The finder returns at most 20 catalog entries per page and ten publications per version page, with literal wildcard escaping.
+
+The substitution applies wherever the original is required within this one pursuit, bound to the degree publication reviewed. Another pursuit or another selected degree publication needs its own approval. It creates no completed attempt, earned credits, GPA points or charges. Actual earned work and the retained grading policy remain evaluator inputs.
+
+Approvals reject self-replacements, chains/cycles and active waivers overlapping either endpoint. If selecting an older degree publication later exposes a conflict, the read remains usable: the screen identifies the conflict, omits ambiguous substitutions from the effective map and allows reasoned revocation. It never invents an allocation or silently chooses an approval. Revocation retains the original decision. Authorized student readers can inspect substitutions; office authority is required for replacement searches and approval/revocation.
+
+## History, concurrency and privacy
+
+`RequirementAdjustmentWasGranted` and `RequirementAdjustmentWasRevoked` schema 1 use the existing authoritative `sis_history_events` table. The stream is keyed by the program-assignment ULID, with stable student/program ownership. Grants retain the selected requirement decision/template/version, the typed course/minimum target and predecessor approval reference. Revocations reference the approval and have their own operation identity. Substitution grants explicitly register approval schema 2, with exact replacement publication references; schema-1 grants and all existing receipts remain unchanged. Revocations keep their original schema-1 contract. Trusted actor, reason and effective/recorded context remain protected by the existing authenticated event envelopes.
+
+`sis_requirement_adjustments` contains only active query projections, with a unique assignment/target key. Replacement and revocation remove obsolete projection rows, while their authoritative events remain. It is not a parallel history table. Replayed active facts are compared to the projection with strict value types and without treating associative JSON key order as a fact. Changed facts, deleted rows, invalid keys and failed event verification fail closed. No automatic live rebuild or fabricated baseline history is introduced.
+
+Commands hold the existing student lock, verify current owner/office authority, replay bounded event pages and bind review to the selected degree decision and expected adjustment-stream version. A changed requirement decision, cohort/status change or competing approval invalidates an unaccepted review. An accepted exact retry returns its original receipt without reverting later approvals. Journal/head/receipt, active projection and audit commit or roll back together, including on late audit failure.
+
+Replay retains at most 500 active approvals per pursuit; history/approval-label reads use pages of ten. Old revoked/superseded payloads are not accumulated in aggregate state. Encrypted review tokens are capped at 32 KiB. Browser routes under `/sis/students/{student}/programs/{assignment}/degree-adjustments/` retain CSRF, private/no-store responses and debug suppression. Entered reasons and review tokens stay out of browser storage, logs and queues. Curated reads expose no raw event envelope.
+
+## Verification
+
+Fictional SQLite tests cover multiple groups, dual-degree isolation, waiver persistence within the same pursuit, version-bound minimums, GPA values, replacement/revocation, current requirement conflicts, invalid targets/values, owner/staff permissions, token/actor checks, exact retries, typed projection verification, Codefy replay/reconstructed projections, stable history paging and atomic rollback. The actual provider/router checks exercise CSRF, DI, private reads and independent approval authority. Browser checks cover target cards, preserved review fields, explicit confirmation, revocation, read-only access, literal text escaping, mobile reflow and automated accessibility scans. All 94 SIS table definitions compile for the five installed framework dialects; runtime database verification uses SQLite, not live institutional databases.

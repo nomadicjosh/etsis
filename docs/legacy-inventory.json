@@ -1,0 +1,6185 @@
+{
+  "docs": [
+    {
+      "path": "legacy/docs/add-drop-withdrawal.md",
+      "lines": 7,
+      "sha256": "bf573128c43cb6845f0c84386d95af6ed28f3b956df8da583d32ffcdf4bc6e49"
+    },
+    {
+      "path": "legacy/docs/assign-person-type.md",
+      "lines": 6,
+      "sha256": "e98753eb49d61ce9ea50e4fcfeb3a9b32374bd6ec875b9352fb986a2fff6405e"
+    },
+    {
+      "path": "legacy/docs/assign-user-roles.md",
+      "lines": 3,
+      "sha256": "c78b50ad43fd2b1cce5677e4a15b463fb7d06891e812372cd4d4b513e53d9802"
+    },
+    {
+      "path": "legacy/docs/auto-generated-password.md",
+      "lines": 9,
+      "sha256": "8cf8a97669111f40bed0ec916e742f32d270eb3fe0a1855015f6c4fe5d06612d"
+    },
+    {
+      "path": "legacy/docs/batch-fees.md",
+      "lines": 7,
+      "sha256": "5635ccd9e76937606ebc424d576d9c30d0fa8c2390c9afa15529a27abfeb66a2"
+    },
+    {
+      "path": "legacy/docs/batch-registration.md",
+      "lines": 1,
+      "sha256": "5d37d0926d8ec73a590b9853fa74f79f5b447eb03a7356cc9f58803805d5ebbd"
+    },
+    {
+      "path": "legacy/docs/billing-table.md",
+      "lines": 3,
+      "sha256": "b3531ef4b76a46a2a5748474db7d178e5aae0555c69e54715cbc0b699e82759a"
+    },
+    {
+      "path": "legacy/docs/business-rules.md",
+      "lines": 38,
+      "sha256": "d99bcd517113dc0a53e7dbe8c25d1b89236513de9362e672016c103897c1383f"
+    },
+    {
+      "path": "legacy/docs/classroom-scheduling.md",
+      "lines": 18,
+      "sha256": "eb066f2e1cfc18b352799d03253f223802ee2f0247ad5cd13c6c8e84633f3591"
+    },
+    {
+      "path": "legacy/docs/command-line.md",
+      "lines": 167,
+      "sha256": "b6eb99493a50d4599d3734308e1311336f79492cfb6f3d6b4239146cb0b00917"
+    },
+    {
+      "path": "legacy/docs/course-clone.md",
+      "lines": 1,
+      "sha256": "0959d24ec2c3e0dbf16ae1c57f3b4f8de23d6b818eaf122449a7e85089905a4c"
+    },
+    {
+      "path": "legacy/docs/course-vs-course-section.md",
+      "lines": 9,
+      "sha256": "ec28803632a2dad071a0ea40455cf374bc8dc9e67199c45e0a0a7db5c2e69cbc"
+    },
+    {
+      "path": "legacy/docs/csv-to-email-report.md",
+      "lines": 1,
+      "sha256": "39d42efb7590702c8c3bb2135e7ea2aaa20444e6ab2f29acf1debf7c59b5aaba"
+    },
+    {
+      "path": "legacy/docs/custom-fields.md",
+      "lines": 115,
+      "sha256": "3ee739f1a87b63c2d71fd8ac9ce281d8d1b3e6a217f3f290f4b87306a09683cc"
+    },
+    {
+      "path": "legacy/docs/custom-transcript.md",
+      "lines": 16,
+      "sha256": "38ad4ee5007e22bb32fdaba9d12d8442618261f068dfe17e1847c8631c6689b9"
+    },
+    {
+      "path": "legacy/docs/external-course.md",
+      "lines": 15,
+      "sha256": "9529f43c3014acf037222cec1a712979a349dc8ff6b8a3f3d8ad424e4b0a35f8"
+    },
+    {
+      "path": "legacy/docs/features.md",
+      "lines": 245,
+      "sha256": "63c1de67e41c9e11759c0d78f983b405c554914eefdfaececd7960a977babcff"
+    },
+    {
+      "path": "legacy/docs/ferpa.md",
+      "lines": 7,
+      "sha256": "15d4d29d3c1acc4eeae0e083e4b1fde5766e6093cbd008dea2acc9ac8835b174"
+    },
+    {
+      "path": "legacy/docs/getting-started.md",
+      "lines": 137,
+      "sha256": "262614517dcc4cb4415886396ea81c0f9b1f5fe85d2cb244268e94205077a47a"
+    },
+    {
+      "path": "legacy/docs/gradebook.md",
+      "lines": 18,
+      "sha256": "c318fd004e0326d64dd0549a03842a58ae6b29db983479446832f76fd8ccb488"
+    },
+    {
+      "path": "legacy/docs/issue-refund.md",
+      "lines": 18,
+      "sha256": "8729acfce94b8f4f5b00f45dbf95b862e2bc7e2192cd786bb0b91afe92c03a8b"
+    },
+    {
+      "path": "legacy/docs/modules.md",
+      "lines": 12,
+      "sha256": "379a6b7019a59e79ae61579ecd68ee8002e46ceb12cbeb0874b58cb827540835"
+    },
+    {
+      "path": "legacy/docs/person.md",
+      "lines": 1,
+      "sha256": "7b741b8a157354b9fe230101c92b6b66684386edf7ec75ecd4ebbc4b5393b03f"
+    },
+    {
+      "path": "legacy/docs/record-payment.md",
+      "lines": 20,
+      "sha256": "17a2e6ae72328ff9569949aec0be1e6f79162aae8192d358b71a19849d3f75a9"
+    },
+    {
+      "path": "legacy/docs/registration-status.md",
+      "lines": 1,
+      "sha256": "766b0db6e9c452ad7481424e12253d7046ed961e0984d93b2b7dad95465abfc6"
+    },
+    {
+      "path": "legacy/docs/screen-acronyms.md",
+      "lines": 49,
+      "sha256": "30e497ed53ee4d580d6febcded23ab4a279bb3eeb893a0d23c84ac897a9d6df7"
+    },
+    {
+      "path": "legacy/docs/sql-query/batch-registration.md",
+      "lines": 40,
+      "sha256": "37b4b2b52cf01a26470029c076cb320e010c41c68f60c7f278f5005b50dae37e"
+    },
+    {
+      "path": "legacy/docs/sql-query/concatenation.md",
+      "lines": 17,
+      "sha256": "51b7ee55109ee143510a27313da242da17a27ba58712ef3df9ad11c924144956"
+    },
+    {
+      "path": "legacy/docs/sql-query/email-active-students.md",
+      "lines": 8,
+      "sha256": "b86051b40707f2034d0b2041c892512a4946ec7faf0134350c3fbf3001927338"
+    },
+    {
+      "path": "legacy/docs/sql-query/filtering-selection-criteria.md",
+      "lines": 122,
+      "sha256": "fc25c5191dec6d89aef4432d1924d4949069e685f9ec68d4fd0b4bb4da8a9686"
+    },
+    {
+      "path": "legacy/docs/sql-query/final-grade-report.md",
+      "lines": 65,
+      "sha256": "2da2f5a9d9b9840a5591ee1d7abad64e67719b26e10f91f17a20b561e4287a18"
+    },
+    {
+      "path": "legacy/docs/sql-query/functions.md",
+      "lines": 63,
+      "sha256": "8fbce271f5798cb8135eb9bb6c177cae757d859a1de71b1278b5b994f6fc2a46"
+    },
+    {
+      "path": "legacy/docs/sql-query/graduating-students.md",
+      "lines": 13,
+      "sha256": "bc136a2f66a6343cbd0c0bcd891b5c786a53357754ad816769a7dbec20da7390"
+    },
+    {
+      "path": "legacy/docs/sql-query/less-than-12-report.md",
+      "lines": 16,
+      "sha256": "a2a6c0e16b9bc7d127b401478ebd140d1d90dd57b74250a88ba0fe2c1fed5e21"
+    },
+    {
+      "path": "legacy/docs/sql-query/mail-merge.md",
+      "lines": 12,
+      "sha256": "9990fb852f48374958585ba00f31bdb08142b965239063862179478b5492e893"
+    },
+    {
+      "path": "legacy/docs/sql-query/select-distinct.md",
+      "lines": 17,
+      "sha256": "938432b2771d923c166c4f5f9954d0d605df46a97a22861a6afacb980d58fbcc"
+    },
+    {
+      "path": "legacy/docs/sql-query/sql-statement-structure.md",
+      "lines": 43,
+      "sha256": "b866b4a662e482aad9bb1042bd16bf7997c0dccda0e9df4897cba53ce76e2daf"
+    },
+    {
+      "path": "legacy/docs/sql-query/stu-with-wrong-person-type.md",
+      "lines": 15,
+      "sha256": "e09b5d2299e5503f0cc50ba6553b5f1d5d3e606f4f0ac09c4da3805bcf25499c"
+    },
+    {
+      "path": "legacy/docs/sql-query/student-account-balance.md",
+      "lines": 43,
+      "sha256": "d8742e9a4ad3bdacef75a5f2bc304807965528b8f6e111bc002203b164c94a29"
+    },
+    {
+      "path": "legacy/docs/sql-query/student-load.md",
+      "lines": 11,
+      "sha256": "1a8d8f80099b8a5a6511627a2bdc828a5373cba59a94ec0b0b6166533d729bbd"
+    },
+    {
+      "path": "legacy/docs/sql-query/student-locator.md",
+      "lines": 73,
+      "sha256": "3418bdcf92635ab1d4ebd63d0b9f7fbaca865eb077607f84348817d4f66885c6"
+    },
+    {
+      "path": "legacy/docs/sql-query/understanding-joins.md",
+      "lines": 87,
+      "sha256": "4d6330ea5b59dac25a7ad5ce64c2f90414653ee544c530cfa9eeeedfbe1dfbef"
+    },
+    {
+      "path": "legacy/docs/sql-query/using-case.md",
+      "lines": 23,
+      "sha256": "73cd85d095fed168457d5383ecd22fb612a2ee1317da911c59190ed5557d9b1d"
+    },
+    {
+      "path": "legacy/docs/strudent-header.md",
+      "lines": 10,
+      "sha256": "edf599aa4387572f56eb7ffbeff902c6b040783a1f6741389e7c2aa0f693a870"
+    },
+    {
+      "path": "legacy/docs/student-acad-cred.md",
+      "lines": 15,
+      "sha256": "789bf652756e176e899c78d50e873837ca084acbdb401f37012ead2c4624c016"
+    },
+    {
+      "path": "legacy/docs/student-application.md",
+      "lines": 3,
+      "sha256": "83d57f5ca42a8e67ec1defc1f7b7df38912f97fe6cfb1b06283187350ec5fe60"
+    },
+    {
+      "path": "legacy/docs/student-bill.md",
+      "lines": 12,
+      "sha256": "327436b3e2cb164f59fdc3ea51eba32d93cbe727f2730bbe43b81424bf885de5"
+    },
+    {
+      "path": "legacy/docs/student-hiatus.md",
+      "lines": 3,
+      "sha256": "80ae30e67fbe7b3194d06d1eb4093b23817c1ee0184bfeb568a5701cff06727b"
+    },
+    {
+      "path": "legacy/docs/student-restrictions.md",
+      "lines": 21,
+      "sha256": "b0db35e96fddc55bbec242b4d00c27019e650b35f508ce6aca3fa5f4635561d7"
+    },
+    {
+      "path": "legacy/docs/transfer-course-equivalency.md",
+      "lines": 7,
+      "sha256": "cacce947ca3f543e9e1019f26e5bd7e0a67498ec7df9e618c4f5f9abaeb815b9"
+    },
+    {
+      "path": "legacy/docs/transfer-credit.md",
+      "lines": 5,
+      "sha256": "b771d9fbf01d4ab9ab0ab210291989980d16c0fd0330de9255154824db70d13e"
+    }
+  ],
+  "migrations": [
+    {
+      "path": "legacy/code/app/migrations/20160916002812_initial_schema.php",
+      "lines": 2564,
+      "sha256": "810bf5218a86b809a6b26743b3beaf0245e988efb1eb2f62b0980a4751315adc",
+      "tables": [
+        {
+          "name": "acad_program",
+          "columns": [
+            "id",
+            "acadProgCode",
+            "acadProgTitle",
+            "programDesc",
+            "currStatus",
+            "statusDate",
+            "deptCode",
+            "schoolCode",
+            "acadYearCode",
+            "startDate",
+            "endDate",
+            "degreeCode",
+            "ccdCode",
+            "majorCode",
+            "minorCode",
+            "specCode",
+            "acadLevelCode",
+            "cipCode",
+            "locationCode",
+            "approvedDate",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "acad_year",
+          "columns": [
+            "id",
+            "acadYearCode",
+            "acadYearDesc",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "aclv",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "grsc",
+            "ht_creds",
+            "ft_creds",
+            "ovr_creds",
+            "grad_level",
+            "comp_months"
+          ]
+        },
+        {
+          "name": "activity_log",
+          "columns": [
+            "id",
+            "action",
+            "process",
+            "record",
+            "uname",
+            "created_at",
+            "expires_at"
+          ]
+        },
+        {
+          "name": "address",
+          "columns": [
+            "id",
+            "personID",
+            "address1",
+            "address2",
+            "city",
+            "state",
+            "zip",
+            "country",
+            "addressType",
+            "startDate",
+            "endDate",
+            "addressStatus",
+            "phone1",
+            "phone2",
+            "ext1",
+            "ext2",
+            "phoneType1",
+            "phoneType2",
+            "email1",
+            "email2",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "application",
+          "columns": [
+            "id",
+            "personID",
+            "acadProgCode",
+            "startTerm",
+            "admitStatus",
+            "exam",
+            "PSAT_Verbal",
+            "PSAT_Math",
+            "SAT_Verbal",
+            "SAT_Math",
+            "ACT_English",
+            "ACT_Math",
+            "applStatus",
+            "applDate",
+            "appl_comments",
+            "staff_comments",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "assignment",
+          "columns": [
+            "id",
+            "courseSecID",
+            "facID",
+            "shortName",
+            "title",
+            "dueDate",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "billing_table",
+          "columns": [
+            "id",
+            "name",
+            "amount",
+            "type",
+            "termCode",
+            "rule",
+            "status",
+            "addDate"
+          ]
+        },
+        {
+          "name": "building",
+          "columns": [
+            "id",
+            "buildingCode",
+            "buildingName",
+            "locationCode"
+          ]
+        },
+        {
+          "name": "campaign",
+          "columns": [
+            "id",
+            "subject",
+            "from_name",
+            "from_email",
+            "html",
+            "text",
+            "footer",
+            "attachment",
+            "status",
+            "sendstart",
+            "sendfinish",
+            "recipients",
+            "viewed",
+            "bounces",
+            "archive",
+            "owner",
+            "deptCode",
+            "addDate",
+            "last_queued",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "campaign_list",
+          "columns": [
+            "id",
+            "cid",
+            "lid"
+          ]
+        },
+        {
+          "name": "ccd",
+          "columns": [
+            "id",
+            "ccdCode",
+            "ccdName",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "cip",
+          "columns": [
+            "id",
+            "cipCode",
+            "cipName",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "clas",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "acadLevelCode"
+          ]
+        },
+        {
+          "name": "country",
+          "columns": [
+            "id",
+            "iso2",
+            "short_name",
+            "long_name",
+            "iso3",
+            "numcode",
+            "un_member",
+            "calling_code",
+            "cctld"
+          ]
+        },
+        {
+          "name": "course",
+          "columns": [
+            "courseID",
+            "courseNumber",
+            "courseCode",
+            "subjectCode",
+            "deptCode",
+            "courseDesc",
+            "creditType",
+            "minCredit",
+            "maxCredit",
+            "increCredit",
+            "courseLevelCode",
+            "acadLevelCode",
+            "courseShortTitle",
+            "courseLongTitle",
+            "preReq",
+            "printText",
+            "rule",
+            "allowAudit",
+            "allowWaitlist",
+            "minEnroll",
+            "seatCap",
+            "startDate",
+            "endDate",
+            "currStatus",
+            "statusDate",
+            "approvedDate",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "course_sec",
+          "columns": [
+            "courseSecID",
+            "sectionNumber",
+            "courseSecCode",
+            "courseSection",
+            "buildingCode",
+            "roomCode",
+            "locationCode",
+            "courseLevelCode",
+            "acadLevelCode",
+            "deptCode",
+            "facID",
+            "termCode",
+            "courseID",
+            "courseCode",
+            "preReqs",
+            "secShortTitle",
+            "startDate",
+            "endDate",
+            "startTime",
+            "endTime",
+            "dotw",
+            "minCredit",
+            "maxCredit",
+            "increCredit",
+            "ceu",
+            "instructorMethod",
+            "instructorLoad",
+            "contactHours",
+            "webReg",
+            "courseFee",
+            "labFee",
+            "materialFee",
+            "secType",
+            "currStatus",
+            "statusDate",
+            "comment",
+            "approvedDate",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "crlv",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "status"
+          ]
+        },
+        {
+          "name": "degree",
+          "columns": [
+            "id",
+            "degreeCode",
+            "degreeName",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "department",
+          "columns": [
+            "id",
+            "deptTypeCode",
+            "deptCode",
+            "deptName",
+            "deptEmail",
+            "deptPhone",
+            "deptDesc",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "error",
+          "columns": [
+            "id",
+            "type",
+            "time",
+            "string",
+            "file",
+            "line",
+            "addDate"
+          ]
+        },
+        {
+          "name": "event",
+          "columns": [
+            "eventID",
+            "eventType",
+            "catID",
+            "requestor",
+            "roomCode",
+            "termCode",
+            "title",
+            "description",
+            "weekday",
+            "startDate",
+            "startTime",
+            "endTime",
+            "repeats",
+            "repeatFreq",
+            "status",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "event_category",
+          "columns": [
+            "catID",
+            "cat_name",
+            "bgcolor"
+          ]
+        },
+        {
+          "name": "event_meta",
+          "columns": [
+            "eventMetaID",
+            "eventID",
+            "roomCode",
+            "requestor",
+            "start",
+            "end",
+            "title",
+            "description",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "event_request",
+          "columns": [
+            "requestID",
+            "eventType",
+            "catID",
+            "requestor",
+            "roomCode",
+            "termCode",
+            "title",
+            "description",
+            "weekday",
+            "startDate",
+            "endDate",
+            "startTime",
+            "endTime",
+            "repeats",
+            "repeatFreq",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "external_course",
+          "columns": [
+            "id",
+            "courseTitle",
+            "instCode",
+            "courseName",
+            "term",
+            "credits",
+            "currStatus",
+            "statusDate",
+            "minGrade",
+            "comments",
+            "startDate",
+            "endDate",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "gl_account",
+          "columns": [
+            "glacctID",
+            "gl_acct_number",
+            "gl_acct_name",
+            "gl_acct_type",
+            "gl_acct_memo"
+          ]
+        },
+        {
+          "name": "gl_journal_entry",
+          "columns": [
+            "jeID",
+            "gl_jentry_date",
+            "gl_jentry_manual_id",
+            "gl_jentry_title",
+            "gl_jentry_description",
+            "gl_jentry_personID"
+          ]
+        },
+        {
+          "name": "gl_transaction",
+          "columns": [
+            "trID",
+            "jeID",
+            "accountID",
+            "gl_trans_date",
+            "gl_trans_memo",
+            "gl_trans_debit",
+            "gl_trans_credit"
+          ]
+        },
+        {
+          "name": "gradebook",
+          "columns": [
+            "id",
+            "assignID",
+            "courseSecID",
+            "facID",
+            "stuID",
+            "grade",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "grade_scale",
+          "columns": [
+            "id",
+            "grade",
+            "percent",
+            "points",
+            "count_in_gpa",
+            "status",
+            "description"
+          ]
+        },
+        {
+          "name": "graduation_hold",
+          "columns": [
+            "id",
+            "queryID",
+            "gradDate"
+          ]
+        },
+        {
+          "name": "hiatus",
+          "columns": [
+            "id",
+            "stuID",
+            "code",
+            "startDate",
+            "endDate",
+            "comment",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "institution",
+          "columns": [
+            "id",
+            "fice_ceeb",
+            "instType",
+            "instName",
+            "city",
+            "state",
+            "country"
+          ]
+        },
+        {
+          "name": "institution_attended",
+          "columns": [
+            "id",
+            "fice_ceeb",
+            "personID",
+            "fromDate",
+            "toDate",
+            "major",
+            "degree_awarded",
+            "degree_conferred_date",
+            "GPA",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "job",
+          "columns": [
+            "id",
+            "pay_grade",
+            "title",
+            "hourly_wage",
+            "weekly_hours",
+            "attachment",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "job_status",
+          "columns": [
+            "id",
+            "typeCode",
+            "type"
+          ]
+        },
+        {
+          "name": "last_login",
+          "columns": [
+            "id",
+            "personID",
+            "loginTimeStamp"
+          ]
+        },
+        {
+          "name": "list",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "description",
+            "rule",
+            "created",
+            "owner",
+            "deptCode",
+            "status",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "location",
+          "columns": [
+            "id",
+            "locationCode",
+            "locationName",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "major",
+          "columns": [
+            "id",
+            "majorCode",
+            "majorName",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "met_link",
+          "columns": [
+            "id",
+            "link_title",
+            "link_src",
+            "status",
+            "sort"
+          ]
+        },
+        {
+          "name": "met_news",
+          "columns": [
+            "id",
+            "news_title",
+            "news_slug",
+            "news_content",
+            "status",
+            "addedBy",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "met_page",
+          "columns": [
+            "id",
+            "page_title",
+            "page_slug",
+            "page_content",
+            "status",
+            "sort",
+            "addedBy",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "minor",
+          "columns": [
+            "id",
+            "minorCode",
+            "minorName",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "options_meta",
+          "columns": [
+            "meta_id",
+            "meta_key",
+            "meta_value"
+          ]
+        },
+        {
+          "name": "pay_grade",
+          "columns": [
+            "id",
+            "grade",
+            "minimum_salary",
+            "maximum_salary",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "payment",
+          "columns": [
+            "id",
+            "stuID",
+            "termCode",
+            "amount",
+            "checkNum",
+            "paypal_txnID",
+            "paypal_payment_status",
+            "paypal_txn_fee",
+            "paymentTypeID",
+            "comment",
+            "paymentDate",
+            "postedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "payment_type",
+          "columns": [
+            "id",
+            "type"
+          ]
+        },
+        {
+          "name": "permission",
+          "columns": [
+            "id",
+            "permKey",
+            "permName"
+          ]
+        },
+        {
+          "name": "perc",
+          "columns": [
+            "id",
+            "personID",
+            "code",
+            "severity",
+            "startDate",
+            "endDate",
+            "comment",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "person",
+          "columns": [
+            "personID",
+            "altID",
+            "uname",
+            "prefix",
+            "personType",
+            "fname",
+            "lname",
+            "mname",
+            "email",
+            "ssn",
+            "dob",
+            "veteran",
+            "ethnicity",
+            "gender",
+            "emergency_contact",
+            "emergency_contact_phone",
+            "photo",
+            "password",
+            "status",
+            "tags",
+            "auth_token",
+            "approvedDate",
+            "approvedBy",
+            "LastLogin",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "person_perms",
+          "columns": [
+            "id",
+            "personID",
+            "permission",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "person_roles",
+          "columns": [
+            "id",
+            "personID",
+            "roleID",
+            "addDate"
+          ]
+        },
+        {
+          "name": "plugin",
+          "columns": [
+            "id",
+            "location"
+          ]
+        },
+        {
+          "name": "refund",
+          "columns": [
+            "id",
+            "stuID",
+            "termCode",
+            "amount",
+            "comment",
+            "refundDate",
+            "postedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "rest",
+          "columns": [
+            "id",
+            "code",
+            "description",
+            "deptCode"
+          ]
+        },
+        {
+          "name": "role",
+          "columns": [
+            "id",
+            "roleName",
+            "permission"
+          ]
+        },
+        {
+          "name": "role_perms",
+          "columns": [
+            "id",
+            "roleID",
+            "permID",
+            "value",
+            "addDate"
+          ]
+        },
+        {
+          "name": "room",
+          "columns": [
+            "id",
+            "roomCode",
+            "buildingCode",
+            "roomNumber",
+            "roomCap"
+          ]
+        },
+        {
+          "name": "saved_query",
+          "columns": [
+            "id",
+            "personID",
+            "savedQueryName",
+            "savedQuery",
+            "purgeQuery",
+            "shared",
+            "createdDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "school",
+          "columns": [
+            "id",
+            "schoolCode",
+            "schoolName",
+            "buildingCode",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "semester",
+          "columns": [
+            "id",
+            "acadYearCode",
+            "semCode",
+            "semName",
+            "semStartDate",
+            "semEndDate",
+            "active"
+          ]
+        },
+        {
+          "name": "specialization",
+          "columns": [
+            "id",
+            "specCode",
+            "specName"
+          ]
+        },
+        {
+          "name": "staff",
+          "columns": [
+            "id",
+            "staffID",
+            "schoolCode",
+            "buildingCode",
+            "officeCode",
+            "office_phone",
+            "deptCode",
+            "status",
+            "tags",
+            "addDate",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "staff_meta",
+          "columns": [
+            "id",
+            "jobStatusCode",
+            "jobID",
+            "staffID",
+            "supervisorID",
+            "staffType",
+            "hireDate",
+            "startDate",
+            "endDate",
+            "addDate",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "state",
+          "columns": [
+            "id",
+            "code",
+            "name"
+          ]
+        },
+        {
+          "name": "stac",
+          "columns": [
+            "id",
+            "stuID",
+            "courseID",
+            "courseSecID",
+            "courseCode",
+            "courseSecCode",
+            "sectionNumber",
+            "courseSection",
+            "termCode",
+            "reportingTerm",
+            "subjectCode",
+            "deptCode",
+            "shortTitle",
+            "longTitle",
+            "compCred",
+            "gradePoints",
+            "attCred",
+            "ceu",
+            "status",
+            "statusDate",
+            "statusTime",
+            "acadLevelCode",
+            "courseLevelCode",
+            "grade",
+            "creditType",
+            "startDate",
+            "endDate",
+            "addedBy",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stal",
+          "columns": [
+            "id",
+            "stuID",
+            "acadProgCode",
+            "acadLevelCode",
+            "currentClassLevel",
+            "enrollmentStatus",
+            "acadStanding",
+            "gpa",
+            "startTerm",
+            "startDate",
+            "endDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stu_acct_bill",
+          "columns": [
+            "id",
+            "billID",
+            "stuID",
+            "termCode",
+            "authCode",
+            "stu_comments",
+            "staff_comments",
+            "balanceDue",
+            "postedBy",
+            "billingDate",
+            "billTimeStamp",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stu_acct_fee",
+          "columns": [
+            "id",
+            "billID",
+            "stuID",
+            "termCode",
+            "type",
+            "description",
+            "amount",
+            "feeDate",
+            "feeTimeStamp",
+            "postedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stu_acct_pp",
+          "columns": [
+            "id",
+            "stuID",
+            "termCode",
+            "payFrequency",
+            "amount",
+            "startDate",
+            "endDate",
+            "comments",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stu_acct_tuition",
+          "columns": [
+            "id",
+            "stuID",
+            "termCode",
+            "total",
+            "postedBy",
+            "tuitionTimeStamp",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stcs",
+          "columns": [
+            "id",
+            "stuID",
+            "courseSecID",
+            "courseSecCode",
+            "courseSection",
+            "termCode",
+            "courseCredits",
+            "ceu",
+            "regDate",
+            "regTime",
+            "status",
+            "statusDate",
+            "statusTime",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "sacp",
+          "columns": [
+            "id",
+            "stuID",
+            "advisorID",
+            "catYearCode",
+            "acadProgCode",
+            "currStatus",
+            "eligible_to_graduate",
+            "antGradDate",
+            "graduationDate",
+            "statusDate",
+            "startDate",
+            "endDate",
+            "comments",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stu_rgn_cart",
+          "columns": [
+            "id",
+            "stuID",
+            "courseSecID",
+            "deleteDate"
+          ]
+        },
+        {
+          "name": "sttr",
+          "columns": [
+            "id",
+            "stuID",
+            "termCode",
+            "acadLevelCode",
+            "attCred",
+            "compCred",
+            "gradePoints",
+            "stuLoad",
+            "gpa",
+            "created",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "student",
+          "columns": [
+            "id",
+            "stuID",
+            "status",
+            "tags",
+            "addDate",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "subject",
+          "columns": [
+            "id",
+            "subjectCode",
+            "subjectName",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "template",
+          "columns": [
+            "id",
+            "name",
+            "description",
+            "content",
+            "owner",
+            "deptCode",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "term",
+          "columns": [
+            "id",
+            "semCode",
+            "termCode",
+            "termName",
+            "reportingTerm",
+            "dropAddEndDate",
+            "termStartDate",
+            "termEndDate",
+            "active"
+          ]
+        },
+        {
+          "name": "timesheet",
+          "columns": [
+            "id",
+            "employeeID",
+            "jobID",
+            "workWeek",
+            "startDateTime",
+            "endDateTime",
+            "note",
+            "status",
+            "addDate",
+            "addedBy",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "tracking",
+          "columns": [
+            "id",
+            "cid",
+            "sid",
+            "first_open",
+            "viewed",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "tracking_link",
+          "columns": [
+            "id",
+            "cid",
+            "sid",
+            "source",
+            "medium",
+            "url",
+            "clicked",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "transfer_equivalent",
+          "columns": [
+            "id",
+            "extrID",
+            "courseID",
+            "startDate",
+            "endDate",
+            "grade",
+            "comment",
+            "addedBy",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "transfer_credit",
+          "columns": [
+            "id",
+            "equivID",
+            "stacID",
+            "addedBy",
+            "addDate"
+          ]
+        }
+      ],
+      "sql_changes": [
+        "\"CREATE VIEW v_stld AS",
+        "\"CREATE VIEW v_sttr AS",
+        "\"CREATE VIEW v_scrd AS",
+        "\"CREATE VIEW v_rgn AS",
+        "\"CREATE VIEW v_sacp AS"
+      ]
+    },
+    {
+      "path": "legacy/code/app/migrations/20160916035404_currency_table.php",
+      "lines": 145,
+      "sha256": "6726a6197d1a348a80d61122df8a2dcd2505ed53232a594600ba8208b8cb213a",
+      "tables": [
+        {
+          "name": "currency_code",
+          "columns": [
+            "id",
+            "country_currency",
+            "currency_code",
+            "code_2000",
+            "arial_unicode_ms",
+            "unicode_decimal",
+            "unicode_hex"
+          ]
+        }
+      ],
+      "sql_changes": []
+    },
+    {
+      "path": "legacy/code/app/migrations/20170706151405_db_schema_update.php",
+      "lines": 1188,
+      "sha256": "32b72f0a0b5e268c4d0d28860c9ee016924e295f89d1a8b0faf5ece223135bd7",
+      "tables": [
+        {
+          "name": "aclv",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "grsc",
+            "ht_creds",
+            "ft_creds",
+            "ovr_creds",
+            "grad_level",
+            "comp_months"
+          ]
+        },
+        {
+          "name": "clas",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "acadLevelCode"
+          ]
+        },
+        {
+          "name": "crlv",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "status"
+          ]
+        },
+        {
+          "name": "perc",
+          "columns": [
+            "id",
+            "personID",
+            "code",
+            "severity",
+            "startDate",
+            "endDate",
+            "comment",
+            "addDate",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "rest",
+          "columns": [
+            "id",
+            "code",
+            "description",
+            "deptCode"
+          ]
+        },
+        {
+          "name": "stac",
+          "columns": [
+            "id",
+            "stuID",
+            "courseID",
+            "courseSecID",
+            "courseCode",
+            "courseSecCode",
+            "sectionNumber",
+            "courseSection",
+            "termCode",
+            "reportingTerm",
+            "subjectCode",
+            "deptCode",
+            "shortTitle",
+            "longTitle",
+            "compCred",
+            "gradePoints",
+            "attCred",
+            "ceu",
+            "status",
+            "statusDate",
+            "statusTime",
+            "acadLevelCode",
+            "courseLevelCode",
+            "grade",
+            "creditType",
+            "startDate",
+            "endDate",
+            "addedBy",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stal",
+          "columns": [
+            "id",
+            "stuID",
+            "acadProgCode",
+            "acadLevelCode",
+            "currentClassLevel",
+            "enrollmentStatus",
+            "acadStanding",
+            "gpa",
+            "startTerm",
+            "startDate",
+            "endDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "stcs",
+          "columns": [
+            "id",
+            "stuID",
+            "courseSecID",
+            "courseSecCode",
+            "courseSection",
+            "termCode",
+            "courseCredits",
+            "ceu",
+            "regDate",
+            "regTime",
+            "status",
+            "statusDate",
+            "statusTime",
+            "addedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "sacp",
+          "columns": [
+            "id",
+            "stuID",
+            "advisorID",
+            "catYearCode",
+            "acadProgCode",
+            "currStatus",
+            "eligible_to_graduate",
+            "antGradDate",
+            "graduationDate",
+            "statusDate",
+            "startDate",
+            "endDate",
+            "comments",
+            "approvedBy",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "sttr",
+          "columns": [
+            "id",
+            "stuID",
+            "termCode",
+            "acadLevelCode",
+            "attCred",
+            "compCred",
+            "gradePoints",
+            "stuLoad",
+            "gpa",
+            "created",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "permission",
+          "columns": [
+            "id",
+            "permKey",
+            "permName"
+          ]
+        },
+        {
+          "name": "last_login",
+          "columns": [
+            "id",
+            "personID",
+            "loginTimeStamp"
+          ]
+        },
+        {
+          "name": "list",
+          "columns": [
+            "id",
+            "code",
+            "name",
+            "description",
+            "rule",
+            "created",
+            "owner",
+            "deptCode",
+            "status",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "campaign",
+          "columns": [
+            "id",
+            "subject",
+            "from_name",
+            "from_email",
+            "html",
+            "text",
+            "footer",
+            "attachment",
+            "status",
+            "sendstart",
+            "sendfinish",
+            "recipients",
+            "viewed",
+            "bounces",
+            "archive",
+            "owner",
+            "deptCode",
+            "addDate",
+            "last_queued",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "campaign_list",
+          "columns": [
+            "id",
+            "cid",
+            "lid"
+          ]
+        },
+        {
+          "name": "template",
+          "columns": [
+            "id",
+            "name",
+            "description",
+            "content",
+            "owner",
+            "deptCode",
+            "addDate",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "tracking",
+          "columns": [
+            "id",
+            "cid",
+            "sid",
+            "first_open",
+            "viewed",
+            "LastUpdate"
+          ]
+        },
+        {
+          "name": "tracking_link",
+          "columns": [
+            "id",
+            "cid",
+            "sid",
+            "source",
+            "medium",
+            "url",
+            "clicked",
+            "addDate",
+            "LastUpdate"
+          ]
+        }
+      ],
+      "sql_changes": [
+        "$this->execute(\"ALTER TABLE billing_table ADD COLUMN `type` enum('F','T') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'F' AFTER `amount`;\");",
+        "$this->execute(\"ALTER TABLE billing_table ADD COLUMN `termCode` char(22) COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `type`;\");",
+        "$this->execute(\"ALTER TABLE billing_table ADD COLUMN `rule` text COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `termCode`;\");",
+        "$this->execute(\"ALTER TABLE `course` MODIFY COLUMN `preReq` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `course` ADD COLUMN `printText` text COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `preReq`;\");",
+        "$this->execute(\"ALTER TABLE `course` ADD COLUMN `rule` text COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `printText`;\");",
+        "$this->execute(\"ALTER TABLE `course_sec` MODIFY COLUMN `courseSecCode` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `course_sec` MODIFY COLUMN `courseSection` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `course_sec` MODIFY COLUMN `courseCode` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `person` ADD COLUMN `tags` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `status`;\");",
+        "$this->execute(\"ALTER TABLE `staff` ADD COLUMN `tags` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL AFTER `status`;\");",
+        "$this->execute('DROP TABLE IF EXISTS permission');",
+        "$this->execute('DROP TABLE IF EXISTS screen');",
+        "$this->execute('DROP TABLE IF EXISTS student_load_rule');",
+        "\"CREATE VIEW v_stld AS",
+        "\"CREATE VIEW v_sttr AS",
+        "\"CREATE VIEW v_scrd AS",
+        "\"CREATE VIEW v_rgn AS",
+        "\"CREATE VIEW v_sacp AS",
+        "$this->execute(\"DROP TABLE IF EXISTS list;\");",
+        "$this->execute(\"DROP TABLE IF EXISTS campaign;\");",
+        "$this->execute(\"DROP TABLE IF EXISTS campaign_list;\");",
+        "$this->execute(\"DROP TABLE IF EXISTS template;\");",
+        "$this->execute(\"DROP TABLE IF EXISTS tracking;\");",
+        "$this->execute(\"DROP TABLE IF EXISTS tracking_link;\");",
+        "ALTER TABLE `acad_program`",
+        "ALTER TABLE `address`",
+        "ALTER TABLE `application`",
+        "ALTER TABLE `assignment`",
+        "ALTER TABLE `billing_table`",
+        "ALTER TABLE `building`",
+        "ALTER TABLE `course`",
+        "ALTER TABLE `course_sec`",
+        "ALTER TABLE `event`",
+        "ALTER TABLE `event_meta`",
+        "ALTER TABLE `event_request`",
+        "ALTER TABLE `external_course`",
+        "ALTER TABLE `gl_transaction`",
+        "ALTER TABLE `gradebook`",
+        "ALTER TABLE `hiatus`",
+        "ALTER TABLE `institution_attended`",
+        "ALTER TABLE `job`",
+        "ALTER TABLE `met_news`",
+        "ALTER TABLE `met_page`",
+        "ALTER TABLE `payment`",
+        "ALTER TABLE `pay_grade`",
+        "ALTER TABLE `person`",
+        "ALTER TABLE `person_perms`",
+        "ALTER TABLE `person_roles`",
+        "ALTER TABLE `refund`",
+        "ALTER TABLE `room`",
+        "ALTER TABLE `saved_query`",
+        "ALTER TABLE `school`",
+        "ALTER TABLE `semester`",
+        "ALTER TABLE `staff`",
+        "ALTER TABLE `staff_meta`",
+        "ALTER TABLE `student`",
+        "ALTER TABLE `stu_acct_bill`",
+        "ALTER TABLE `stu_acct_fee`",
+        "ALTER TABLE `stu_acct_pp`",
+        "ALTER TABLE `stu_acct_tuition`",
+        "ALTER TABLE `term`",
+        "ALTER TABLE `timesheet`",
+        "ALTER TABLE `transfer_credit`",
+        "ALTER TABLE `transfer_equivalent`"
+      ]
+    },
+    {
+      "path": "legacy/code/app/migrations/20170718142604_fix_fields.php",
+      "lines": 102,
+      "sha256": "c13c90cbe3920bc36f1122f1059eb13313256ce32cc8b229e3acd0626369c6e5",
+      "tables": [],
+      "sql_changes": [
+        "$this->execute(\"ALTER TABLE `stal` MODIFY COLUMN `startDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `sttr` MODIFY COLUMN `stuLoad` CHAR(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `sttr` MODIFY COLUMN `created` datetime DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `startDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `statusDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `statusTime` char(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `applDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `last_login` MODIFY COLUMN `loginTimeStamp` datetime DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `campaign` MODIFY COLUMN `html` longtext COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `campaign` MODIFY COLUMN `text` longtext COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `campaign` MODIFY COLUMN `footer` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `campaign` MODIFY COLUMN `attachment` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `error` MODIFY COLUMN `string` text COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `gl_account` MODIFY COLUMN `gl_acct_memo` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `gl_journal_entry` MODIFY COLUMN `gl_jentry_description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `gl_transaction` MODIFY COLUMN `gl_trans_memo` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `list` MODIFY COLUMN `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `list` MODIFY COLUMN `rule` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `met_link` MODIFY COLUMN `link_src` text COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `person` MODIFY COLUMN `photo` text COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `template` MODIFY COLUMN `content` longtext COLLATE utf8mb4_unicode_ci NOT NULL;\");",
+        "$this->execute(\"ALTER TABLE `tracking_link` MODIFY COLUMN `url` text COLLATE utf8mb4_unicode_ci NOT NULL;\");"
+      ]
+    },
+    {
+      "path": "legacy/code/app/migrations/20170719105649_virtual_stac.php",
+      "lines": 109,
+      "sha256": "28f42f9bef6f725950e70fb406e05b0ea03b5498541f539b927f10fdebe20ead",
+      "tables": [],
+      "sql_changes": [
+        "$this->execute('DROP TABLE IF EXISTS v_stac');",
+        "\"CREATE VIEW v_stac AS",
+        "$this->execute('DROP TABLE IF EXISTS v_scrd');",
+        "\"CREATE VIEW v_scrd AS"
+      ]
+    },
+    {
+      "path": "legacy/code/app/migrations/20171011121135_not_null.php",
+      "lines": 190,
+      "sha256": "2d6356306208abac396ed155b2a687bc09aa49b367639b9da99d4d1c2c4b436c",
+      "tables": [],
+      "sql_changes": [
+        "$this->execute(\"ALTER TABLE `last_login` MODIFY COLUMN `loginTimeStamp` datetime DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `startDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `endDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `statusDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `statusTime` char(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stac` MODIFY COLUMN `attCred` decimal(4,1) NOT NULL DEFAULT '0.0';\");",
+        "$this->execute(\"ALTER TABLE `stal` MODIFY COLUMN `startTerm` char(22) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stal` MODIFY COLUMN `startDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `stal` MODIFY COLUMN `endDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `sttr` MODIFY COLUMN `stuLoad` char(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `applDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `startTerm` char(22) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `admitStatus` char(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `exam` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `PSAT_Verbal` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `PSAT_Math` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `SAT_Verbal` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `SAT_Math` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `ACT_English` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `ACT_Math` char(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `appl_comments` longtext COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `application` MODIFY COLUMN `staff_comments` longtext COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `course` MODIFY COLUMN `endDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `course` MODIFY COLUMN `preReq` text DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `perc` MODIFY COLUMN `endDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `student` MODIFY COLUMN `tags` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `person` MODIFY COLUMN `altID` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `person` MODIFY COLUMN `dob` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `person` MODIFY COLUMN `tags` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `address` MODIFY COLUMN `endDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `acad_program` MODIFY COLUMN `endDate` date DEFAULT NULL;\");",
+        "$this->execute(\"ALTER TABLE `gradebook` MODIFY COLUMN `grade` char(6) COLLATE utf8mb4_unicode_ci DEFAULT NULL;\");"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "path": "legacy/code/app/views/_layouts/blank.php",
+      "lines": 2,
+      "sha256": "9b90071160352ec9eb726249e6a6803615abfb8f800426ab9b7deec1f05f77af",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/_layouts/dashboard.php",
+      "lines": 118,
+      "sha256": "c8dcc58eb6010ff739570086321406885ead4d5fe6fe76f3e973ee57e9f5e3d6",
+      "fields": [
+        "viewport"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/_layouts/myetsis/clean.layout.php",
+      "lines": 267,
+      "sha256": "8474acbb473b5fff4a84badb5c8af4a985930eb7f4bf6f05cc79a7031b262888",
+      "fields": [
+        "author",
+        "description",
+        "viewport"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/_layouts/myetsis/default.layout.php",
+      "lines": 297,
+      "sha256": "7e24fb7d87ec90a64496baa2641e45ad35de23a379c907663f0d31521103e06d",
+      "fields": [
+        "robots",
+        "viewport"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/admin/csseditor.php",
+      "lines": 75,
+      "sha256": "946069e49b2af0887c32caa5bcf399c9c4c4c88536cdc0f3298f287ca5d59528",
+      "fields": [
+        "csseditor"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/admin/index.php",
+      "lines": 58,
+      "sha256": "62180a6f7ef9233717403695e1a5274c4c179f589a99372e9ce656e49e9c8256",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/admin/links.php",
+      "lines": 211,
+      "sha256": "6b7d234d492a0073fae84038d6e1ad592d27229bb4f1816ae3eb1410961e4b1e",
+      "fields": [
+        "id",
+        "link_src",
+        "link_title",
+        "sort",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/admin/news.php",
+      "lines": 210,
+      "sha256": "ef532870d4474d43160e077a2c312c193779db8e636b94e6baefb352f1d974b0",
+      "fields": [
+        "id",
+        "new_post",
+        "news_content",
+        "news_title",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/admin/pages.php",
+      "lines": 220,
+      "sha256": "9684707c40e9d495792c3c5dc02df781ac21399b3b6368fbc86921974189d0a8",
+      "fields": [
+        "addDate",
+        "addedBy",
+        "id",
+        "new_page",
+        "page_content",
+        "page_title",
+        "sort",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/add-inst.php",
+      "lines": 147,
+      "sha256": "5752c22c1a71f4378aaef736248c1e0bf2699b18734a99b0df15439cd344f56d",
+      "fields": [
+        "city",
+        "country",
+        "fice_ceeb",
+        "instName",
+        "instType",
+        "state"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/add.php",
+      "lines": 298,
+      "sha256": "0a316ce3ad665e7db0bc5207da6a88d49985fe1c59968482a6f836e6b67d9ca9",
+      "fields": [
+        "ACT_English",
+        "ACT_Math",
+        "PSAT_Math",
+        "PSAT_Verbal",
+        "SAT_Math",
+        "SAT_Verbal",
+        "acadProgCode",
+        "applDate",
+        "startTerm"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/appls.php",
+      "lines": 145,
+      "sha256": "2903d401d1cbfb7e86bd143f9135b159d1ec6789e37aa3ccb57a60849f326b94",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/application/index.php",
+      "lines": 138,
+      "sha256": "9745f91cebb4ef98a6e9b834ce71fabacc3f69ce229a2ed05a39ef482346426f",
+      "fields": [
+        "appl"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/inst-attended.php",
+      "lines": 190,
+      "sha256": "0c36cdd1f27b204e62c943b857c040d2f244989d3776a8f7c6f255ab2ec790d4",
+      "fields": [
+        "GPA",
+        "degree_awarded",
+        "degree_conferred_date",
+        "fice_ceeb",
+        "fromDate",
+        "major",
+        "personID",
+        "toDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/inst.php",
+      "lines": 107,
+      "sha256": "ec444476c779d18362adc3b23a7a531d8357ddde9f60f4b4b627c7a0599f2eba",
+      "fields": [
+        "inst"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/view-inst.php",
+      "lines": 143,
+      "sha256": "a02e91bf55f22b965b4ac7f899afd3ab91025c7e1230251e0560802d6e3b919f",
+      "fields": [
+        "city",
+        "country",
+        "fice_ceeb",
+        "instName",
+        "instType",
+        "institutionID",
+        "state"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/application/view.php",
+      "lines": 537,
+      "sha256": "e5590225625747e146645fbe93bbdb78e4dc7127c072b89051345af8de42b16e",
+      "fields": [
+        "ACT_English",
+        "ACT_Math",
+        "GPA[]",
+        "PSAT_Math",
+        "PSAT_Verbal",
+        "SAT_Math",
+        "SAT_Verbal",
+        "acadProgCode",
+        "applDate",
+        "applStatus",
+        "appl_comments",
+        "degree_awarded[]",
+        "degree_conferred_date[]",
+        "fice_ceeb[]",
+        "fromDate[]",
+        "id",
+        "id[]",
+        "major[]",
+        "personID",
+        "staff_comments",
+        "startTerm",
+        "toDate[]",
+        "uname"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/calendar/booking-form.php",
+      "lines": 267,
+      "sha256": "5872813adb24d904b469a5de58331ffa7fa9676bb285c30a66a13b510554eb9c",
+      "fields": [
+        "addedBy",
+        "book_request",
+        "catID",
+        "check_event",
+        "description",
+        "endDate",
+        "endTime",
+        "eventType",
+        "repeatFreq",
+        "repeats",
+        "requestor",
+        "roomCode",
+        "startDate",
+        "startTime",
+        "title"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/calendar/events.php",
+      "lines": 86,
+      "sha256": "6c4daea79af50b4bab2d4850743e2d4a36f3e0f03b6377740a2a0a554acc427d",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/calendar/index.php",
+      "lines": 132,
+      "sha256": "746df08d709f38c812e5896d2087c8fbb2e6b58c3a6a5c233a53a79afa5b1a89",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/calendar/request-form.php",
+      "lines": 182,
+      "sha256": "ef602aa66aeea5945c100b786a0257881308a52624d07a46b4b03dbba008ee3f",
+      "fields": [
+        "addDate",
+        "catID",
+        "check_event",
+        "description",
+        "email_request",
+        "endDate",
+        "endTime",
+        "eventType",
+        "repeatFreq",
+        "repeats",
+        "requestor",
+        "roomCode",
+        "startDate",
+        "startTime",
+        "termCode",
+        "title"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/calendar/requests.php",
+      "lines": 113,
+      "sha256": "ccfe4da64bb3633fec06311ce76e84abcc5fa28fdbcde17157710fdf18f04086",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/calendar/setting.php",
+      "lines": 139,
+      "sha256": "e42599a1fe85c53e4270da9a3c1e957a1c0f60284f6af3848129b57ae5743be4",
+      "fields": [
+        "bgcolor",
+        "catID",
+        "cat_name"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/calendar/view-event.php",
+      "lines": 270,
+      "sha256": "9ef05b9e80895e93b7791af51eba577b60a70e8745904f416ba171140718d332",
+      "fields": [
+        "description",
+        "endDate",
+        "endTime",
+        "eventMetaID",
+        "roomCode",
+        "startDate",
+        "startTime",
+        "title"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/calendar/view-request.php",
+      "lines": 287,
+      "sha256": "0d47c0fdeb1e71a6a69b3536cecca69c9e4a19d58b8b6b35853b723899eab526",
+      "fields": [
+        "addedBy",
+        "book_request",
+        "catID",
+        "check_event",
+        "description",
+        "endDate",
+        "endTime",
+        "eventType",
+        "repeatFreq",
+        "repeats",
+        "requestID",
+        "requestor",
+        "roomCode",
+        "startDate",
+        "startTime",
+        "title",
+        "update_request"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/course/add.php",
+      "lines": 248,
+      "sha256": "0c1ea573f5404aa69c14926eb48c6aff8b141f5e91dbfbd5b3f87f002bc99d25",
+      "fields": [
+        "acadLevelCode",
+        "courseDesc",
+        "courseLevelCode",
+        "courseLongTitle",
+        "courseNumber",
+        "courseShortTitle",
+        "deptCode",
+        "endDate",
+        "minCredit",
+        "startDate",
+        "subjectCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/course/addnl-info.php",
+      "lines": 158,
+      "sha256": "9c3cf6b8c4b8c199c5bd7070f6249ebf681aaa927a0bf791315253a177bdd0cd",
+      "fields": [
+        "allowAudit",
+        "allowWaitlist",
+        "minEnroll",
+        "seatCap"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/course/ajax.php",
+      "lines": 228,
+      "sha256": "1536674118716fe49580b6adbf03bde3e8fbc5756026fd3651eebbb8f7165fff",
+      "fields": [
+        "deptCode",
+        "deptDesc",
+        "deptEmail",
+        "deptName",
+        "deptPhone",
+        "subjectCode",
+        "subjectName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/course/index.php",
+      "lines": 140,
+      "sha256": "ee0ba9e9658daa0edc1c803d3981c4dedefaec6d81cdd7a2fbb38e4dbd14c5b6",
+      "fields": [
+        "crse"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/course/prrl.php",
+      "lines": 486,
+      "sha256": "8773c5e9558947cca02ed46c872ca02fd9c494faa0c6ca901de967a8eeaa55fc",
+      "fields": [
+        "preReq",
+        "printText",
+        "rule",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/course/view.php",
+      "lines": 339,
+      "sha256": "58caec2433d1ff92ab6047a3df8f1121d3056080f1d0734b906d2a3c17d2bf5a",
+      "fields": [
+        "acadLevelCode",
+        "courseDesc",
+        "courseLevelCode",
+        "courseLongTitle",
+        "courseNumber",
+        "courseShortTitle",
+        "creditType",
+        "deptCode",
+        "endDate",
+        "minCredit",
+        "startDate",
+        "statusDate",
+        "subjectCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/courses/cart.php",
+      "lines": 99,
+      "sha256": "64e226b48edf410072ef6c975112415273d05d272e1a0c66f32f4b8f8bf7ca6a",
+      "fields": [
+        "courseSecCode[]",
+        "courseSecID[]",
+        "regAction[]",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/courses/index.php",
+      "lines": 196,
+      "sha256": "93c51532ea2822d0be7c7f1bfaac8d9682a4387e96c50468e4c0afd42abbf5c4",
+      "fields": [
+        "courseSecID[]",
+        "regTerm"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/cron/index.php",
+      "lines": 122,
+      "sha256": "4d2370e60c90f2d40dce1e38c274a3c3f447f2dc368e12f5933f55235fa399a0",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/cron/new.php",
+      "lines": 197,
+      "sha256": "026f1edbaf822ebe77a19f37739e436451bda207ed7ef05188d0e1825ba4240f",
+      "fields": [
+        "each",
+        "eachtime",
+        "name",
+        "status",
+        "url"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/cron/setting.php",
+      "lines": 151,
+      "sha256": "1304909fa42726bbc71a6131dada8f4ad157fa050b17e3e115d912bb8b81b533",
+      "fields": [
+        "cronjobpassword",
+        "timeout"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/cron/view.php",
+      "lines": 196,
+      "sha256": "bbf7a96e5cec477ba094094a8b35d4802cfdbbd7507cd4513285a1b16c192fe2",
+      "fields": [
+        "each",
+        "eachtime",
+        "name",
+        "status",
+        "url"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/core-admin-bar.php",
+      "lines": 355,
+      "sha256": "a1c5f4257f58343ae4d90a293ff8e5a60296743c70c8021363fa4d22279d4c73",
+      "fields": [
+        "screen"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/ftp.php",
+      "lines": 68,
+      "sha256": "f1824b72138c00da94470889fe361df8a555f7cc5a3433a0471be56c2f93067c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/index.php",
+      "lines": 95,
+      "sha256": "daef4de14b5d221497b5adc9e30849a894298494c2aaf4cbfe6bf348c5f1cd34",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/install-module.php",
+      "lines": 104,
+      "sha256": "dffb5eda38e2186086ab09aa6ad183919dca47745d55dcbd305c795e830be6eb",
+      "fields": [
+        "module_zip"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/menu.php",
+      "lines": 407,
+      "sha256": "2cc5aad57b6010c3813f58ed2068c93620046b6ab91cef6da828510ef72a9658",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/modules.php",
+      "lines": 93,
+      "sha256": "dd0136c354c9976bdea7bacd535ac70b037632c78fcfff70422bf9ea23ea3c45",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/sms.php",
+      "lines": 107,
+      "sha256": "e576758dcf5410d48eda2d50510ff05a9503ac04ed8d3a5893d1095223abe54e",
+      "fields": [
+        "sms_group",
+        "sms_text"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/support.php",
+      "lines": 49,
+      "sha256": "de9d4f51034dc8485824a41c2a437a366caa0f970fed5bc0e4c307fa205d604f",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/dashboard/system-snapshot.php",
+      "lines": 89,
+      "sha256": "0b2bbca864f493999115745f6be827b41356ed261a2f7ca2bbbc6510ffbb08bb",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/error/404.php",
+      "lines": 57,
+      "sha256": "62fe8f1c3cc133a7a17daf4f3c8fd90ba6532f1fff35bde5a50a69eb35b1c86f",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/error/screen-error.php",
+      "lines": 44,
+      "sha256": "8451b6ddf45fa9d308d8fecdd6b5d42ca3388b20bca0ea45eb108a70fb2493f7",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/account-history.php",
+      "lines": 182,
+      "sha256": "f715121718db737556952610af752ab311826a56dc0771522e6ff7eb56c5b155",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/add-jentry.php",
+      "lines": 269,
+      "sha256": "ddd6c29b1496455e7025bd5b19693d769c9a84589b20c317330910b4a8d2345b",
+      "fields": [
+        "amount[]",
+        "gl_jentry_date",
+        "gl_jentry_description",
+        "gl_jentry_manual_id",
+        "gl_jentry_title",
+        "gl_trans_memo[]",
+        "glacctID[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/add-payment.php",
+      "lines": 204,
+      "sha256": "f804ab6309141dc36fd0ff188a53f67e05ec0afacc2e329f2c51d1f282b32c5a",
+      "fields": [
+        "amount",
+        "checkNum",
+        "comment",
+        "paymentDate",
+        "paymentTypeID",
+        "stuID",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/ah-pdf.php",
+      "lines": 164,
+      "sha256": "04ced77b2a97a725b60254c0676730e50ff522b60102531817326bce31df4cf7",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/batch.php",
+      "lines": 212,
+      "sha256": "152e97693f7f58d27da95fc7b4932cb5f3f75187f73d7a1aeaba603b554ce84c",
+      "fields": [
+        "acadLevelCode",
+        "billDate",
+        "feeID[]",
+        "major",
+        "population",
+        "stu_program",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/billing-table.php",
+      "lines": 225,
+      "sha256": "a3ef74d1cd6d8384628b2f7bc509322428a77c16a8490b027ee27d5da33b322f",
+      "fields": [
+        "amount",
+        "name",
+        "status",
+        "term",
+        "type"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/btrl.php",
+      "lines": 400,
+      "sha256": "ef4f721f9fa09acf7a4551d1585323c9f482ff4edfcb988988bab15016b8899e",
+      "fields": [
+        "rule",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/create-bill.php",
+      "lines": 216,
+      "sha256": "b8e59c6b1fa022c068f2b764d24600193103cc70063c71e0c4c4b5c8e2fb3a7d",
+      "fields": [
+        "billDate",
+        "feeID[]",
+        "stuID",
+        "stu_comments",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/gl-accounts.php",
+      "lines": 220,
+      "sha256": "b0936d588852060957a6eaa37dd1968667039580d44e96233119c7c4b7742fe8",
+      "fields": [
+        "gl_acct_memo",
+        "gl_acct_name",
+        "gl_acct_number",
+        "glacctID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/gl-filter.php",
+      "lines": 116,
+      "sha256": "7984665dbb9a214c64ad1160e038c1a33409aacb17187720a369efc6e79e802c",
+      "fields": [
+        "from",
+        "to"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/gl-summary.php",
+      "lines": 102,
+      "sha256": "bcacf0649a0fb071ef586ad8f81dbce3d5823d67ec2784191a3bfa4dd3bbc981",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/index.php",
+      "lines": 136,
+      "sha256": "dd5720118e9ff73f8b0793272ad4da5d42c595fce755fd4ba6c4a4da552e06ad",
+      "fields": [
+        "bill"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/issue-refund.php",
+      "lines": 183,
+      "sha256": "6304697f3e1d8d68327ae6271d07dd4ba659f0465e215515a83273a3b4ec17d3",
+      "fields": [
+        "amount",
+        "comment",
+        "refundDate",
+        "stuID",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/jentries.php",
+      "lines": 96,
+      "sha256": "fb89e664ee85e8b542d3cf704c7b741d9de0ff0c8cb4d97afb6e5fdcd22f5917",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/jentry-filter.php",
+      "lines": 116,
+      "sha256": "99d25c4aa794237b75426c1c17c9c50efadd2838b4ec5cdb7e9e6931ede51803",
+      "fields": [
+        "from",
+        "to"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/journal-entries.php",
+      "lines": 105,
+      "sha256": "db58dc03e02a5a71c3e7dce953b2e9ef28ae90ade95ce129c8ad996d19c6bcfb",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/payment-plan.php",
+      "lines": 448,
+      "sha256": "21aded0d93d20adca7f7abd984cd3d092785bd979678c6e2d90e7963105ad915",
+      "fields": [
+        "addDate",
+        "addedBy",
+        "amount",
+        "comments",
+        "endDate",
+        "id",
+        "payFrequency",
+        "startDate",
+        "stuID",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/paypal.php",
+      "lines": 198,
+      "sha256": "f2b37cfe858c204c977421cddd6b5c402fb69a18de05ce059b58fd32864fabd9",
+      "fields": [
+        "enable_paypal_gateway",
+        "paypal_business_email",
+        "paypal_currency_code",
+        "paypal_sandbox_mode",
+        "paypal_use_ssl"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/view-bill.php",
+      "lines": 360,
+      "sha256": "9a2cfe6cf007510311c8bf2b115be0e3c4f953c2f75ecc7f5931f8974568f047",
+      "fields": [
+        "amount[]",
+        "billDate",
+        "feeDate[]",
+        "feeID[]",
+        "feeTerm[]",
+        "invTerm",
+        "stuID",
+        "total",
+        "tuitionID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/view-btbl.php",
+      "lines": 176,
+      "sha256": "038c44271d3819bd4970c653a51c86dc547c7e359483ac97555d2d7d2d88cb2e",
+      "fields": [
+        "amount",
+        "name",
+        "status",
+        "term",
+        "type"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/view-comments.php",
+      "lines": 179,
+      "sha256": "c8a79b27934e4dfffdabe3a11ea205902a7ce54ebbdd56e187771cac13c8c619",
+      "fields": [
+        "staff_comments",
+        "stu_comments"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/view-jentry.php",
+      "lines": 126,
+      "sha256": "37437f415d7bd448c497b00470be7314786a6b7897eeed4277191ea0548f260b",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/financial/view-payments.php",
+      "lines": 326,
+      "sha256": "20e80533aec966173a060f49ebeb0498374e0919054b1b68a179a604fa14e01d",
+      "fields": [
+        "amount",
+        "amount[]",
+        "checkNum",
+        "checkNum[]",
+        "comment",
+        "comment[]",
+        "id[]",
+        "paymentDate",
+        "paymentDate[]",
+        "paymentTypeID",
+        "paymentType[]",
+        "stuID",
+        "termCode",
+        "termCode[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/financial/view-refunds.php",
+      "lines": 296,
+      "sha256": "75c0d61a8de0006b39424c83d43ae0ea56c9c158e61228cc8af1a35813458a83",
+      "fields": [
+        "amount",
+        "amount[]",
+        "comment",
+        "id[]",
+        "refundDate",
+        "refundDate[]",
+        "stuID",
+        "termCode",
+        "termCode[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/acad-year.php",
+      "lines": 142,
+      "sha256": "382bc8c17f8f58f0fe94430ed48678547f28c20a02553ed69f6c1424e67e7444",
+      "fields": [
+        "acadYearCode",
+        "acadYearDesc"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/aclv.php",
+      "lines": 212,
+      "sha256": "8d6dd4a743d1722d4fe7646988defdd2f9048ec9ea1609720f16b7982cf4ae01",
+      "fields": [
+        "code",
+        "comp_months",
+        "ft_creds",
+        "grad_level",
+        "ht_creds",
+        "name",
+        "ovr_creds"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/alst.php",
+      "lines": 250,
+      "sha256": "534626e5b9a95057b3272c8f143155f0f0e1692951a6ac1d261a5e5cc9c7c956",
+      "fields": [
+        "acadLevelCode",
+        "id[]",
+        "level",
+        "rule",
+        "rule[]",
+        "stuID",
+        "value[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/building.php",
+      "lines": 158,
+      "sha256": "6fa888d6db4564410b15b600ea1201112226e13c949187b5dfd762afe2ffefbd",
+      "fields": [
+        "buildingCode",
+        "buildingName",
+        "locationCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/ccd.php",
+      "lines": 142,
+      "sha256": "16803b7d360c98f2a7c69aeafc172ffe625e589c9e1032926066ea8fe563f9cd",
+      "fields": [
+        "ccdCode",
+        "ccdName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/cip.php",
+      "lines": 140,
+      "sha256": "35093357231bc93d1f65ebd7eb8f5d1f85dda40b1e72674b5b901798aa23336f",
+      "fields": [
+        "cipCode",
+        "cipName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/clas.php",
+      "lines": 129,
+      "sha256": "2b7696fbdcc268f575abc050828002fd259bae962866f91c23470aa8452c76f2",
+      "fields": [
+        "acadLevelCode",
+        "code[]",
+        "id[]",
+        "name[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/clvr.php",
+      "lines": 248,
+      "sha256": "c1c1d054bef4124b4b9ae366e9201ef10b20f06d59cfdc10c1834e80d87f254c",
+      "fields": [
+        "acadLevelCode",
+        "id[]",
+        "level",
+        "rule",
+        "rule[]",
+        "stuID",
+        "value[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/degree.php",
+      "lines": 141,
+      "sha256": "d1b61611f0d7f4db7f3ce964f89e15fe300a203f72f0c1bfca61055382810361",
+      "fields": [
+        "degreeCode",
+        "degreeName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/department.php",
+      "lines": 184,
+      "sha256": "268ba4de68ad14ffe258b2cb3cf48f9fe2da4c4ac24f438e7f1073828e67a241",
+      "fields": [
+        "deptCode",
+        "deptDesc",
+        "deptEmail",
+        "deptName",
+        "deptPhone"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/grade-scale.php",
+      "lines": 201,
+      "sha256": "7e930b8eb767668a1234ba8012923e548355841d72286caf2bb758a783cd3431",
+      "fields": [
+        "count_in_gpa",
+        "description",
+        "grade",
+        "percent",
+        "points",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/location.php",
+      "lines": 142,
+      "sha256": "1920b2fe84f598da11e0fc6cc0c0478f5b0729ec6567fd4ec702721ac3dc3090",
+      "fields": [
+        "locationCode",
+        "locationName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/major.php",
+      "lines": 142,
+      "sha256": "7673bf0db29dfd6db0dde02ce3e9b0ccabd5e93e5739d2e767b5d95fa2c5a439",
+      "fields": [
+        "majorCode",
+        "majorName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/minor.php",
+      "lines": 142,
+      "sha256": "10583686b56813caad157f0abf91b50eab4365131d70f187fa869e2f6cc24dba",
+      "fields": [
+        "minorCode",
+        "minorName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/rest.php",
+      "lines": 154,
+      "sha256": "2ed9b0196bc9f30b90e2d1fcbb2bdee023b8c081c9f90c624f77df63f4808f39",
+      "fields": [
+        "code",
+        "deptCode",
+        "description"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/room.php",
+      "lines": 169,
+      "sha256": "0209f10f2505fbdf84b31f319c2141f3bd4dadf6eabfa399b77b733f39560d6e",
+      "fields": [
+        "buildingCode",
+        "roomCap",
+        "roomCode",
+        "roomNumber"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/school.php",
+      "lines": 157,
+      "sha256": "f5811a471a7a0491455b15d6afbb37b11ea07c32154fa3d4e81cb054fced63a8",
+      "fields": [
+        "buildingCode",
+        "schoolCode",
+        "schoolName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/semester.php",
+      "lines": 202,
+      "sha256": "a65a6260a261d8c00311380788fdd4dd9d14aad415eae4d772222c696a5f1a8d",
+      "fields": [
+        "acadYearCode",
+        "active",
+        "semCode",
+        "semEndDate",
+        "semName",
+        "semStartDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/specialization.php",
+      "lines": 142,
+      "sha256": "e72e8c5a40a12bad8b95c6f4f052fd5e6a74f59100fc24cb104d6b1c85633330",
+      "fields": [
+        "specCode",
+        "specName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/stld.php",
+      "lines": 268,
+      "sha256": "c2b69e09f3496609412e00989570becba26db3b34d90a44f379751a4dfaf7351",
+      "fields": [
+        "id[]",
+        "level",
+        "rule",
+        "rule[]",
+        "stuID",
+        "termCode",
+        "value[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/subject.php",
+      "lines": 142,
+      "sha256": "560274fadc76d0acfadf8817dc749b5c22603fdcd58f7bb27ceb5f1ea50611ed",
+      "fields": [
+        "subjectCode",
+        "subjectName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/term.php",
+      "lines": 220,
+      "sha256": "11ce678a4804b470f1ad6cc86daa4fea7081397f4e2df0c69670fce230099818",
+      "fields": [
+        "active",
+        "dropAddEndDate",
+        "reportingTerm",
+        "semCode",
+        "termCode",
+        "termEndDate",
+        "termName",
+        "termStartDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-acad-year.php",
+      "lines": 95,
+      "sha256": "291e0807c36b9afae32b2ed7163f49bd93b52ae4b8a7e58f97e1e0fed05b48ff",
+      "fields": [
+        "acadYearCode",
+        "acadYearDesc"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-aclv.php",
+      "lines": 233,
+      "sha256": "cb386ec9633d8a244508d81d4358cb0516f717265e7923146f3377855a78753c",
+      "fields": [
+        "code",
+        "comp_months",
+        "ft_creds",
+        "grad_level",
+        "ht_creds",
+        "name",
+        "ovr_creds"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-building.php",
+      "lines": 113,
+      "sha256": "e194c04c15fe85e79e1194618dc5cf6ace5c2f283204f61de2fc376d674df910",
+      "fields": [
+        "buildingCode",
+        "buildingName",
+        "locationCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-ccd.php",
+      "lines": 95,
+      "sha256": "fa36d2e4217eec699c5601cc73001d0239caab46289a052dafdd5039e16b5eb2",
+      "fields": [
+        "ccdCode",
+        "ccdName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-cip.php",
+      "lines": 95,
+      "sha256": "ef45f19da276c4191c04930a97c3016e072b9ed9233cf3ca078bbfa8cc85517a",
+      "fields": [
+        "cipCode",
+        "cipName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-clas.php",
+      "lines": 122,
+      "sha256": "c0b60fce7328809e5c22f39fd83f46db67ca8f8a31b14252b26ad3991f273ad3",
+      "fields": [
+        "acadLevelCode",
+        "code",
+        "name"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-degree.php",
+      "lines": 95,
+      "sha256": "b0092c3863a25da19bc806869f99c40b73576e370d991b1ba211c636374909b9",
+      "fields": [
+        "degreeCode",
+        "degreeName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-department.php",
+      "lines": 131,
+      "sha256": "079cc42227f75743e0bded95f19033758508d6d8383fc766878abc4863d2caca",
+      "fields": [
+        "deptCode",
+        "deptDesc",
+        "deptEmail",
+        "deptName",
+        "deptPhone"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-grade-scale.php",
+      "lines": 159,
+      "sha256": "42b55827f8c34870610d5e84cc4c50fd8f82ab745f929c34b11415570e157512",
+      "fields": [
+        "count_in_gpa",
+        "description",
+        "grade",
+        "percent",
+        "points",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-location.php",
+      "lines": 95,
+      "sha256": "21f7584c2b6723cb3f6cace20e0fb231f1d076007fe88db6d43fafb93f0a2a43",
+      "fields": [
+        "locationCode",
+        "locationName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-major.php",
+      "lines": 95,
+      "sha256": "21923531ca643a6b570ab4f944772cc930212baf27a675ae3e9fa8af86ba1397",
+      "fields": [
+        "majorCode",
+        "majorName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-minor.php",
+      "lines": 95,
+      "sha256": "491cae3edc3ccd66a89db7039f0c39205a15cc77793774b4cb750cb341463811",
+      "fields": [
+        "minorCode",
+        "minorName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-rest.php",
+      "lines": 105,
+      "sha256": "e2e1c5655897bf5ca9b4912402847185c9cd1e0e7600c81ef9311f969f1149e8",
+      "fields": [
+        "code",
+        "deptCode",
+        "description"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-room.php",
+      "lines": 120,
+      "sha256": "7611be4d82bb24d1ba2787383c0a93794b2f270795ac01f8de8f7e09bd01c937",
+      "fields": [
+        "buildingCode",
+        "roomCap",
+        "roomCode",
+        "roomNumber"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-school.php",
+      "lines": 108,
+      "sha256": "5340b1a18e57cc6eb6a5bf9e0c216dd2a5ae078686b588698db53c9689d1ccfb",
+      "fields": [
+        "buildingCode",
+        "schoolCode",
+        "schoolName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-semester.php",
+      "lines": 148,
+      "sha256": "9396efb3537badb828c681a7f5e9f5be3ad74a3eda964bba5327c24263bfbb79",
+      "fields": [
+        "acadYearCode",
+        "active",
+        "semCode",
+        "semEndDate",
+        "semName",
+        "semStartDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-specialization.php",
+      "lines": 95,
+      "sha256": "d437c5727c5a612987486d1462181ba4d47662bae91d25c09939d2bb773d2f3c",
+      "fields": [
+        "specCode",
+        "specName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-subject.php",
+      "lines": 95,
+      "sha256": "ba0c589eb4cdcc41fc97a0bf8a3ab4ff740cf780037328977288454b94c8487a",
+      "fields": [
+        "subjectCode",
+        "subjectName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/form/view-term.php",
+      "lines": 167,
+      "sha256": "49a45ac97f7e171f0d89d3cc8e334722f39803e2c8e94c5c74d6aecaa63f28c7",
+      "fields": [
+        "active",
+        "dropAddEndDate",
+        "reportingTerm",
+        "semCode",
+        "termCode",
+        "termEndDate",
+        "termName",
+        "termStartDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/hr/add.php",
+      "lines": 242,
+      "sha256": "a31ec28e53c81c14aff1435c927b0cc21fc9a25b085761f6e70b1f57b4cc8a50",
+      "fields": [
+        "addDate",
+        "approvedBy",
+        "endDate",
+        "hireDate",
+        "jobID",
+        "jobStatusCode",
+        "staffID",
+        "staffType",
+        "startDate",
+        "supervisorID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/hr/grades.php",
+      "lines": 193,
+      "sha256": "177ecd09f06b59540fcce5f7638b06a72a643542faf448d225deb645e091f70a",
+      "fields": [
+        "addDate",
+        "addedBy",
+        "grade",
+        "id",
+        "maximum_salary",
+        "minimum_salary"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/hr/index.php",
+      "lines": 148,
+      "sha256": "253f9d91e71784703ca8cdb5fb727b3b0b06cd8971692c45fcf604b84dea6c29",
+      "fields": [
+        "employee"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/hr/jobs.php",
+      "lines": 227,
+      "sha256": "65797b39a4dd417a3b2374a1bdbd2da9c4ac9d67d32940c05985045d1304b890",
+      "fields": [
+        "addDate",
+        "addedBy",
+        "hourly_wage",
+        "id",
+        "pay_grade",
+        "title",
+        "weekly_hours"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/hr/positions.php",
+      "lines": 282,
+      "sha256": "1c7411e69012e2624423a0493eac5d0f52db9b4ff0d9b44dd264b552b1336346",
+      "fields": [
+        "endDate",
+        "hireDate",
+        "id",
+        "jobID",
+        "jobStatusCode",
+        "staffType",
+        "startDate",
+        "supervisorID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/hr/view.php",
+      "lines": 366,
+      "sha256": "8a1e95624c5a48342fbbedad3c7518c8927ea5f287c9e130551a48eb6f44fd22",
+      "fields": [
+        "buildingCode",
+        "deptCode",
+        "endDate",
+        "hireDate",
+        "id",
+        "jobID",
+        "jobStatusCode",
+        "officeCode",
+        "office_phone",
+        "schoolCode",
+        "staffType",
+        "startDate",
+        "status",
+        "supervisorID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/index/index.php",
+      "lines": 108,
+      "sha256": "3765d3bc07528ccce3d46f49faf0b49de70d13ce454bf064c4186a5cedbc7f5f",
+      "fields": [
+        "myetsis_welcome_message"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/index/login.php",
+      "lines": 165,
+      "sha256": "4257f41815ddf54ea3bca95a27f5a8958aaf9ec875f8e767c8c489718364d72b",
+      "fields": [
+        "email",
+        "message",
+        "name",
+        "password",
+        "redirect_to",
+        "rememberme",
+        "sid",
+        "uname"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/index/offline.php",
+      "lines": 43,
+      "sha256": "f9c1de180ab718861a40f838968dbad03c90ee31675fc8a577030acafeb9e94c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/index/password.php",
+      "lines": 74,
+      "sha256": "c8cbc4e4151275e4c38d1dec851a3989dcbe7367e500a41b19f72fc002bb0f04",
+      "fields": [
+        "currPass",
+        "newPass"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/index/profile.php",
+      "lines": 122,
+      "sha256": "e0cddac76c5a2bb3a256933af946ca91f62f9fcda8aecd81658079b20d809f75",
+      "fields": [
+        "Zip",
+        "address1",
+        "address2",
+        "city",
+        "dog",
+        "email",
+        "emergency_contact",
+        "emergency_contact_phone",
+        "ethnicity",
+        "fname",
+        "gender",
+        "lname",
+        "mname",
+        "personID",
+        "phone1",
+        "prefix",
+        "ssn",
+        "state",
+        "uname",
+        "veteran"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/index/spam.php",
+      "lines": 37,
+      "sha256": "b095ea777fc08950b2ba15c52cee80f608f491c2195c36a8c92e1497471b4eb6",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/bounce.php",
+      "lines": 157,
+      "sha256": "3fe18b7236947e115157f2d38cbdd16c3d721bb973efa6a3ca4c27f3b97f41cf",
+      "fields": [
+        "etsis_bmh_host",
+        "etsis_bmh_mailbox",
+        "etsis_bmh_password",
+        "etsis_bmh_port",
+        "etsis_bmh_service",
+        "etsis_bmh_service_option",
+        "etsis_bmh_username"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/campaign/bounced.php",
+      "lines": 86,
+      "sha256": "36ff7b7d2e949d0623347b2483a90c344a536c9e3712b7ead88a0edc81ed324c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/campaign/clicked.php",
+      "lines": 122,
+      "sha256": "7dab36618b8a04004bb68b6ba42251194de4e03cbace79a1b48785270dbee75c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/campaign/create.php",
+      "lines": 294,
+      "sha256": "9e04b86da8ae5c9771a5688924ac378e3a299d8dc6752205f1bf280668017511",
+      "fields": [
+        "archive",
+        "footer",
+        "from_email",
+        "from_name",
+        "html",
+        "lid",
+        "sendstart",
+        "subject"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/campaign/opened.php",
+      "lines": 122,
+      "sha256": "6c0b39353debe837a54f1de80a9cc772f29e9de6cadfa3260d4e23009b15efbd",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/campaign/report.php",
+      "lines": 135,
+      "sha256": "a728eb2e5a4e3f16135c66d322dbb6987898d49e426a5b1eb0dbd5bdbde3701c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/campaign/view.php",
+      "lines": 353,
+      "sha256": "9010a7cf161e57955e1d0931edd57e50b11303e0f32b62f4f18bc98498c5b093",
+      "fields": [
+        "archive",
+        "email",
+        "footer",
+        "from_email",
+        "from_name",
+        "html",
+        "lid",
+        "sendstart",
+        "status",
+        "subject"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/elfinder.php",
+      "lines": 73,
+      "sha256": "4d6725b82e289a963d789d72354bba27e0b022f6905301cb386c4dd75927ae8e",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/index.php",
+      "lines": 183,
+      "sha256": "5ddeb709b38954d1e0ef82defa8a010c06e271801f178879c6d9ed2bd51ac9c0",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/labels.php",
+      "lines": 17,
+      "sha256": "0485bc2c7c4e213d9db8031f58a26c4ad44f5f439744c39e73761ec8d75ed53f",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/list/create.php",
+      "lines": 639,
+      "sha256": "f06825f53cae9d9df9530761603aa1581b404fd7758558862b2e5a8d95436b3a",
+      "fields": [
+        "code",
+        "description",
+        "name",
+        "rule",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/list/index.php",
+      "lines": 121,
+      "sha256": "22aa90249202576d796d211864d0013c100684d4487ab4424dbd676994a99172",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/list/view.php",
+      "lines": 667,
+      "sha256": "c95461056e9346dce348c905fede4e278b116bbcf3dda0cfb5b1ca50a0785097",
+      "fields": [
+        "description",
+        "name",
+        "rule",
+        "status"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/mailmerge.php",
+      "lines": 117,
+      "sha256": "46d6491cc08b28457527ab3e97feae49eb542196140985bcc9f2f9dd08adb13d",
+      "fields": [
+        "label",
+        "qID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/template/create.php",
+      "lines": 238,
+      "sha256": "e173151c004949c0ff8d371d62eb8771fc3ec35438654145bf74a6c2c693c304",
+      "fields": [
+        "content",
+        "description",
+        "name"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/template/index.php",
+      "lines": 133,
+      "sha256": "c36da81705fee966cf4f6b9d484649002e4510f2eb4d9886848405d5f786cd9c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/mrkt/template/view.php",
+      "lines": 253,
+      "sha256": "215640a28da27f13465ff4f9578ac8f4dbd6bb0c9207c1512073a050b31c4d1c",
+      "fields": [
+        "content",
+        "description",
+        "name"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/permission/add.php",
+      "lines": 96,
+      "sha256": "9443bfa03057ad97bb647b06a38fc7095f33b803379f8865da5ab50ec73e11c9",
+      "fields": [
+        "permKey",
+        "permName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/permission/index.php",
+      "lines": 90,
+      "sha256": "b17aaab7ff5f28fd14be68c0d093df2cac3146fec3da2d65e7a11ce4f1933d1d",
+      "fields": [
+        "NewPerm"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/permission/view.php",
+      "lines": 96,
+      "sha256": "6d4c59bb90b02ef388b424b6b2893fd41f06430f2a85a92cbc0d65ddd4aff466",
+      "fields": [
+        "permKey",
+        "permName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/person/add.php",
+      "lines": 426,
+      "sha256": "80fe06c600969de7f691de010aeb7751a394ae7aec010329ff52b691f1c45ff1",
+      "fields": [
+        "address1",
+        "address2",
+        "altID",
+        "city",
+        "country",
+        "dob",
+        "email",
+        "emergency_contact",
+        "emergency_contact_phone",
+        "ethnicity",
+        "fname",
+        "gender",
+        "lname",
+        "mname",
+        "phone",
+        "prefix",
+        "roleID",
+        "sendemail",
+        "ssn",
+        "state",
+        "tags",
+        "uname",
+        "veteran",
+        "zip"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/person/addr-form.php",
+      "lines": 238,
+      "sha256": "e48d22f76c1b1f22b9715ff9ba6883a6ae87bc76fbf9f468b8c8d0a69747851d",
+      "fields": [
+        "address1",
+        "address2",
+        "city",
+        "country",
+        "email1",
+        "email2",
+        "endDate",
+        "ext1",
+        "ext2",
+        "phone1",
+        "phone2",
+        "phoneType1",
+        "phoneType2",
+        "startDate",
+        "state",
+        "zip"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/person/addr.php",
+      "lines": 242,
+      "sha256": "fedfcf8447074c52c84a6f8b1281a221ec6e3bade44c403fe2e7163e956ce9a1",
+      "fields": [
+        "address1",
+        "address2",
+        "city",
+        "country",
+        "email2",
+        "endDate",
+        "ext1",
+        "ext2",
+        "phone1",
+        "phone2",
+        "phoneType1",
+        "phoneType2",
+        "startDate",
+        "state",
+        "zip"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/person/adsu.php",
+      "lines": 116,
+      "sha256": "294d42073a6d3e62bc63e572d2f04060f9c4ef99888b30994d68fe86f5e59e13",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/person/index.php",
+      "lines": 153,
+      "sha256": "a6fd4ed20ea05e0f901e88b71e42da10730bdbd2748e5822ff726e17af5713e8",
+      "fields": [
+        "nae"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/person/perc.php",
+      "lines": 235,
+      "sha256": "ef4289f7841c8e6f222b3ef8b4dd23bf6471a37c728ddc976356f5f98cb6ebb1",
+      "fields": [
+        "addDate",
+        "addedBy",
+        "code",
+        "code[]",
+        "comment",
+        "comment[]",
+        "endDate",
+        "endDate[]",
+        "id[]",
+        "personID",
+        "severity",
+        "severity[]",
+        "startDate",
+        "startDate[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/person/perms.php",
+      "lines": 86,
+      "sha256": "584593c55259b2773c859ecaf53731cbeec9cc77692e980a68629e5ae4d32017",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/person/role.php",
+      "lines": 101,
+      "sha256": "c658fdfdabff0080d8e7e0e0e79666a9effe8d901f16e83594f4055e11a8ab9d",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/person/view.php",
+      "lines": 397,
+      "sha256": "14b6c31a1030f626471c54d0e06e69ae4f1584f2dcb19d2eac173c55f74139ef",
+      "fields": [
+        "dob",
+        "email",
+        "emergency_contact",
+        "emergency_contact_phone",
+        "ethnicity",
+        "fname",
+        "gender",
+        "lname",
+        "mname",
+        "prefix",
+        "ssn",
+        "status",
+        "tags",
+        "veteran"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/plugins/index.php",
+      "lines": 89,
+      "sha256": "4d7254da627b32b171cec5638c41ffd672fb2e0492c72c72b929986c8a06ae75",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/plugins/install.php",
+      "lines": 102,
+      "sha256": "3c2f34f8c6f3750b2aee35672f61dbe97456a00e3efc8994b4437b223f3f68a9",
+      "fields": [
+        "plugin_zip"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/plugins/options.php",
+      "lines": 17,
+      "sha256": "10b2430c1aff32feeb9d54176b9687fa3889a068886c6899778c2f47574ab75a",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/program/add.php",
+      "lines": 321,
+      "sha256": "b612e9b67dc80afa45d1a42718c1bcc0f49d767753209afa561e3a3dd353945a",
+      "fields": [
+        "acadLevelCode",
+        "acadProgCode",
+        "acadProgTitle",
+        "acadYearCode",
+        "ccdCode",
+        "cipCode",
+        "degreeCode",
+        "deptCode",
+        "endDate",
+        "locationCode",
+        "majorCode",
+        "minorCode",
+        "programDesc",
+        "schoolCode",
+        "specCode",
+        "startDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/program/ajax.php",
+      "lines": 900,
+      "sha256": "d52f7289b21ceec83b2e499353cc7e801254301f9232a0b5b67a6ddfcfcadc90",
+      "fields": [
+        "acadYearCode",
+        "acadYearDesc",
+        "addDate",
+        "ccdCode",
+        "ccdName",
+        "cipCode",
+        "cipName",
+        "degreeCode",
+        "degreeName",
+        "deptCode",
+        "deptDesc",
+        "deptEmail",
+        "deptName",
+        "deptPhone",
+        "locationCode",
+        "locationName",
+        "majorCode",
+        "majorName",
+        "minorCode",
+        "minorName",
+        "specCode",
+        "specName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/program/index.php",
+      "lines": 109,
+      "sha256": "04a216cb9ef59288dcd4702ecee87b4d63f057233364dcc919ab152b58d64d6b",
+      "fields": [
+        "prog"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/program/view.php",
+      "lines": 329,
+      "sha256": "31ade116478427fc5336902ae3678046844ccd4cf8fb852aa4de86fea0d160bb",
+      "fields": [
+        "acadLevelCode",
+        "acadProgCode",
+        "acadProgTitle",
+        "acadYearCode",
+        "ccdCode",
+        "cipCode",
+        "degreeCode",
+        "deptCode",
+        "endDate",
+        "id",
+        "locationCode",
+        "majorCode",
+        "minorCode",
+        "programDesc",
+        "schoolCode",
+        "specCode",
+        "startDate",
+        "statusDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/rlde/add.php",
+      "lines": 752,
+      "sha256": "1f457a143e44cfbd246ad1300c7a21f401aa98a6cc5815fec5eda26cd39b6d34",
+      "fields": [
+        "code",
+        "comment",
+        "dept",
+        "description",
+        "file",
+        "rule"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/rlde/index.php",
+      "lines": 113,
+      "sha256": "84071c90fb95008e0b8beb4443e04afc8604bfa509bbc082ee85f48c9d4fe2c2",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/rlde/view.php",
+      "lines": 764,
+      "sha256": "0729cb4d004c4ff3b34903758eef9071e3d7fd8b1874ab94b608c8586ce0ed17",
+      "fields": [
+        "code",
+        "comment",
+        "dept",
+        "description",
+        "file",
+        "rule"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/role/add.php",
+      "lines": 95,
+      "sha256": "bd7b2b3b1b537486fcc2a1f527135467841b4bcef2efed7b5a7fff9552483293",
+      "fields": [
+        "Submit",
+        "roleName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/role/index.php",
+      "lines": 90,
+      "sha256": "8a83449fdc612f2829320c9af83450833164f5147372ba87a00458a3516611cb",
+      "fields": [
+        "NewRole"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/role/view.php",
+      "lines": 98,
+      "sha256": "6ab2c85e0775f65aad3c2f159cdad727c01a25d2d462c7ed420015f6e8ed6797",
+      "fields": [
+        "Submit",
+        "action",
+        "id",
+        "roleName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/add.php",
+      "lines": 377,
+      "sha256": "794e1885c23e28635f17d81c79efacca81258ba2ba94f16eec4e11bdd073eb26",
+      "fields": [
+        "acadLevelCode",
+        "ceu",
+        "comment",
+        "courseLevelCode",
+        "deptCode",
+        "dotw[]",
+        "endDate",
+        "endTime",
+        "locationCode",
+        "minCredit",
+        "secShortTitle",
+        "secType",
+        "sectionNumber",
+        "startDate",
+        "startTime",
+        "termCode",
+        "webReg"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/addnl-info.php",
+      "lines": 150,
+      "sha256": "af876a381b245ba702a2e5d783ee0e62dd816821f7546bd79d7e94373571436f",
+      "fields": [
+        "contactHours",
+        "facID",
+        "instructorLoad",
+        "secType"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/ajax.php",
+      "lines": 224,
+      "sha256": "0d0eea742a08e0bf65d5513064a9690cdc396cc19a04b08ed72bd3245366b37d",
+      "fields": [
+        "deptCode",
+        "deptDesc",
+        "deptEmail",
+        "deptName",
+        "deptPhone",
+        "locationCode",
+        "locationName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/catalog-pdf.php",
+      "lines": 89,
+      "sha256": "dcfe1a51a6db63ea42d090147f0fc1cca9daeca9f09d14faa7ac8cf772972d2f",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/section/catalog.php",
+      "lines": 87,
+      "sha256": "d04e17eb378653f74f0f15ba6bde043a86190831d5ebc97a4eb3952419442978",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/section/index.php",
+      "lines": 109,
+      "sha256": "09621598874084281a52cab5ba941575a681f90aa9e0d552fd772c3e18664613",
+      "fields": [
+        "sect"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/offering-info.php",
+      "lines": 194,
+      "sha256": "d149cdc62c2e660a58e96ad53a32d8302e501553e3923d34ed47ee2ee949ba02",
+      "fields": [
+        "buildingCode",
+        "dotw[]",
+        "endTime",
+        "roomCode",
+        "startTime",
+        "webReg"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/register.php",
+      "lines": 251,
+      "sha256": "56e1f7a3833550f41e19cf899beece173f758c93aa34fce122b1bd0566ba35cd",
+      "fields": [
+        "courseSecID",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/rrsr.php",
+      "lines": 248,
+      "sha256": "a628ca408846bce2693ec6160d0d1cd8404d0d7ac6ef60b233c74c3e4b94d5ad",
+      "fields": [
+        "id[]",
+        "rule",
+        "rule[]",
+        "stuID",
+        "value[]"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/section-fgrade.php",
+      "lines": 108,
+      "sha256": "68592fd4849304c8f4362a859c3f152ca313cfe9a6000319b534b47a12d7a749",
+      "fields": [
+        "attCredit",
+        "courseSecCode",
+        "courseSecID",
+        "stuID[]",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/sros.php",
+      "lines": 138,
+      "sha256": "f6bbddbdc01b9e9c579b9de5d3ca884337c62636f2849a115097a1ec4cf39fc1",
+      "fields": [
+        "sectionID",
+        "template"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/section/templates/roster/default.template.php",
+      "lines": 123,
+      "sha256": "118e8e85254c7958ee92610add9c5ddb096d374bf6780fe0d09289467384d300",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/section/view.php",
+      "lines": 312,
+      "sha256": "7753e34f158eb225c46879f4d23a5ed9e96189822f6111e2d6ddbb07054f3e9d",
+      "fields": [
+        "acadLevelCode",
+        "ceu",
+        "comment",
+        "courseLevelCode",
+        "courseSecCode",
+        "deptCode",
+        "endDate",
+        "locationCode",
+        "minCredit",
+        "secShortTitle",
+        "startDate",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/setting/email.php",
+      "lines": 241,
+      "sha256": "13ab3dc338f55f0d0e6836315c1e13ce010a4c42a795341a3f075eaa651d5e90",
+      "fields": [
+        "admissions_email",
+        "contact_email",
+        "registrar_email_address",
+        "room_request_email",
+        "system_email"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/setting/index.php",
+      "lines": 470,
+      "sha256": "8147d53e339445e67064c086159353ce5ea211a53fbf52185283d71a6618dd4e",
+      "fields": [
+        "amz_s3_access_key",
+        "amz_s3_bucket",
+        "amz_s3_secret_key",
+        "api_key",
+        "contact_phone",
+        "cookieexpire",
+        "cookiepath",
+        "curl",
+        "edutrac_analytics_url",
+        "elfinder_driver",
+        "enable_benchmark",
+        "enable_cron_jobs",
+        "enable_myetsis_appl_form",
+        "enable_myetsis_portal",
+        "etsis_core_locale",
+        "help_desk",
+        "institution_name",
+        "mailing_address",
+        "myetsis_layout",
+        "myetsis_offline_message",
+        "send_acceptance_email",
+        "system_timezone"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/setting/registration.php",
+      "lines": 289,
+      "sha256": "f60bcdfa2b7e223a5340f21340b3e512bd778a31cd18e6dc8b3d66f5d3fd35b4",
+      "fields": [
+        "current_term_code",
+        "number_of_courses",
+        "open_registration",
+        "open_terms",
+        "open_webreg_date",
+        "reg_instructions",
+        "registration_term"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/setting/sms.php",
+      "lines": 244,
+      "sha256": "44399c2d706a740669e483210f7727aaa4e857c99c769e067e5562f18b97107e",
+      "fields": [
+        "message",
+        "to",
+        "twilio_account_sid",
+        "twilio_auth_token",
+        "twilio_phone_number"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/setting/templates.php",
+      "lines": 390,
+      "sha256": "45e9b798d3a38ed1c43679934602dc4c48376ae8a8e5fc5e1bbbd5136a4badab",
+      "fields": [
+        "coa_form_text",
+        "person_login_details",
+        "reset_password_text",
+        "room_booking_confirmation_text",
+        "room_request_text",
+        "student_acceptance_letter",
+        "update_username"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/sql/index.php",
+      "lines": 207,
+      "sha256": "b74a4e54b8e730b3a6723c0b82a1396afddf4b40fb02afa5fae50cd957230127",
+      "fields": [
+        "qID",
+        "qtext",
+        "submit",
+        "type"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/staff/add.php",
+      "lines": 299,
+      "sha256": "99e9c214e66e8d9f7afc2275783901cdeaff752b716f976f42c3d13af905657d",
+      "fields": [
+        "buildingCode",
+        "deptCode",
+        "endDate",
+        "hireDate",
+        "jobID",
+        "jobStatusCode",
+        "officeCode",
+        "office_phone",
+        "schoolCode",
+        "staffType",
+        "startDate",
+        "status",
+        "supervisorID",
+        "tags"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/staff/elfinder.php",
+      "lines": 73,
+      "sha256": "0bacb099355e39a0d3be3f71716f5d3bbc0f0138f5953d99e7838ff7470bee73",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/staff/file-manager.php",
+      "lines": 68,
+      "sha256": "fe974ce8c9ebe0fa8bd92e177da6305f5fdf0a180389e375315fd6a6322506ed",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/staff/index.php",
+      "lines": 135,
+      "sha256": "0a39a87d0de415735d0b745dd6b6bf905aa25bbc5899781dffc1e5e60e48570e",
+      "fields": [
+        "staff"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/staff/view.php",
+      "lines": 315,
+      "sha256": "8ba78bdda08f8c3c72ae75f18548badaf15dbe7ce4d2bbe85ac02d34badb451f",
+      "fields": [
+        "buildingCode",
+        "deptCode",
+        "officeCode",
+        "office_phone",
+        "schoolCode",
+        "status",
+        "tags"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/add-prog.php",
+      "lines": 233,
+      "sha256": "e95ec6f2980be222b6e5accf84f8be5232c3d557f4b7ca8e5d2087c98091058e",
+      "fields": [
+        "acadProgCode",
+        "advisorID",
+        "antGradDate",
+        "catYearCode",
+        "endDate",
+        "startDate"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/add.php",
+      "lines": 304,
+      "sha256": "d5cc7d448c3d8e58f62f8499c567af6e3b1ac7b5f7c77da09b5dfd461ee9a65c",
+      "fields": [
+        "acadLevelCode",
+        "acadProgCode",
+        "advisorID",
+        "antGradDate",
+        "catYearCode",
+        "startDate",
+        "status",
+        "tags"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/fgrades.php",
+      "lines": 69,
+      "sha256": "fd5150a7994c3fd85b7b49d02140cf179b5d59d6e756047cb00c02b0bb846484",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/student/graduation.php",
+      "lines": 133,
+      "sha256": "aa70efedc29b61c0272eab483d0ebe6095d2579e657756b3785a8f03f575fe8e",
+      "fields": [
+        "gradDate",
+        "id",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/index.php",
+      "lines": 134,
+      "sha256": "a9c2bbf7fdc4d126b5999e4969d05b59e378386ec9ac32407b9a4412c25f5ab8",
+      "fields": [
+        "spro"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/sacd.php",
+      "lines": 290,
+      "sha256": "8a94b63cbc5094af46affb3b0204da2be21d7c070a9c0c8704fc2c999bc275d3",
+      "fields": [
+        "acadLevelCode",
+        "attCred",
+        "compCred",
+        "courseCode",
+        "courseID",
+        "courseLevelCode",
+        "creditType",
+        "deptCode",
+        "endDate",
+        "grade",
+        "gradePoints",
+        "longTitle",
+        "reportingTerm",
+        "sectionNumber",
+        "shortTitle",
+        "startDate",
+        "statusDate",
+        "subjectCode",
+        "termCode"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/sacp.php",
+      "lines": 323,
+      "sha256": "4b2f74b539ce8f954accf9bd45e2363cacaa1aed0013e1f31fe6038fd0d8d6ee",
+      "fields": [
+        "advisorID",
+        "antGradDate",
+        "catYearCode",
+        "comments",
+        "eligible_to_graduate",
+        "endDate",
+        "graduationDate",
+        "startDate",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/schedule.php",
+      "lines": 88,
+      "sha256": "89142ffee169df609af9786550a506526cd1c7b98d2e69983c0c7d26c17f610e",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/student/shis.php",
+      "lines": 305,
+      "sha256": "6d07fa065000a8edc3e112289a9cd320d229e329a574e2ee6e71afe7bd69fa23",
+      "fields": [
+        "addDate",
+        "addedBy",
+        "code",
+        "code[]",
+        "comment",
+        "comment[]",
+        "endDate",
+        "endDate[]",
+        "id[]",
+        "startDate",
+        "startDate[]",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/stac.php",
+      "lines": 182,
+      "sha256": "238f9aa376fbe28ef02187063330e83c4866395b0c8863faa1eb0caff456257c",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/student/stal.php",
+      "lines": 205,
+      "sha256": "813e2d04c8c443ed5bd6d3cc088e923fa7e271d3d7a69b1974aef01c6eb49110",
+      "fields": [
+        "acadLevelCode",
+        "currentClassLevel",
+        "endDate",
+        "enrollmentStatus",
+        "gpa",
+        "stalID",
+        "startDate",
+        "startTerm",
+        "stuID"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/sttr.php",
+      "lines": 144,
+      "sha256": "2b6ddf2510aa465a4f8f3cb4d35d3f62c5447ef84bbc851dd8b396ad6a7211ac",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/student/templates/transcript/default.template.php",
+      "lines": 237,
+      "sha256": "20fa500dd19c45323a0414fe9894cccf742839c54be7f64936461b8aa9381048",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/student/terms.php",
+      "lines": 69,
+      "sha256": "97879ef8e6aa1dd0d9503667127e8862a71cc651c6da571d0fe4911b803c6e44",
+      "fields": []
+    },
+    {
+      "path": "legacy/code/app/views/student/tran.php",
+      "lines": 142,
+      "sha256": "6be600e67e1fba939f413f80bdc3ce05a898af1747ef754c1e9cfef586080147",
+      "fields": [
+        "acadLevelCode",
+        "stuID",
+        "template"
+      ]
+    },
+    {
+      "path": "legacy/code/app/views/student/view.php",
+      "lines": 248,
+      "sha256": "b69cb6478fc5f4b321693ba09b7a79b060468bbc5c3759f6a160688b20863a65",
+      "fields": [
+        "status",
+        "tags"
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "path": "legacy/code/app/routers/api.router.php",
+      "lines": 250,
+      "sha256": "32a566160257002038b8c758d1a3de24e93e76c8e707279703df0c723df19d4e",
+      "routes": [
+        [
+          "group",
+          "'/api', function() use ($app) {"
+        ],
+        [
+          "get",
+          "'/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\w+)', function ($table) use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\w+)/(\\w+)/(.+)', function ($table, $field, $any) use($app) {"
+        ],
+        [
+          "post",
+          "'/(\\w+)/', function($table) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/appl.router.php",
+      "lines": 652,
+      "sha256": "ac8d5a52290414b185e2ae88d322ca2fa22e76f8433423ec9499e3ee7c9ba35c",
+      "routes": [
+        [
+          "group",
+          "'/appl', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/editAppl/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/inst-attended/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/inst/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/inst/add/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/inst/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/applications/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/applicantLookup/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteInstAttend/(\\d+)/', function($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/booking.router.php",
+      "lines": 849,
+      "sha256": "25d859821e589044aa4d5d32fc3e0bee7f52059754ccfd9f9d8582052d8f6853",
+      "routes": [
+        [
+          "get",
+          "'/calendar', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/calendar/booking-form/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/events/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/calendar/eventID/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/calendar/setting/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/requests/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/calendar/requestID/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/getEvents/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/calendar/editMeta/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/sbook/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/timetable/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/form/request-form/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/sect/getEvents/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/deleteBookingDay/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/deleteBookingSeries/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/sect/deleteBookingSeries/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/calendar/deleteBookingRequest/(\\d+)/', function ($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/course.router.php",
+      "lines": 730,
+      "sha256": "7b795699c115e833156cd87bb75c215c21868646c638cb75c2e9d9692f60fd80",
+      "routes": [
+        [
+          "group",
+          "'/crse', function() use ($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/prrl/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/(\\d+)/prrl/test/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\d+)/prrl/c/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/addnl/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/crseLookup/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/termLookup/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\d+)/clone/', function($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/dept/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/subj/', function() use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/stuLookup/', function() use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/courses.router.php",
+      "lines": 401,
+      "sha256": "ac535b5fbdf5ba79aba0c7c6c6fd1b1c17a4abd75a820d304dca9ad012f80019",
+      "routes": [
+        [
+          "group",
+          "'/courses', function() use ($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app, $css, $js) {"
+        ],
+        [
+          "get",
+          "'/cart/', function () use($app, $css, $js) {"
+        ],
+        [
+          "post",
+          "'/reg/', function () use($app, $css, $js) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/cron.router.php",
+      "lines": 1248,
+      "sha256": "de28ab69b421487c64a38cc757c89194de3bae44108f02d6b3ce5fc1c5e576c2",
+      "routes": [
+        [
+          "group",
+          "'/cron', function () use($app, $emailer, $email) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/new/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\d+)/reset/', function ($id) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/setting/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/cronjob/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/runALST/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/master/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/purgeActivityLog/', function () {"
+        ],
+        [
+          "get",
+          "'/runEmailQueue/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/runBounceHandler/', function () {"
+        ],
+        [
+          "get",
+          "'/updateSTTR/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/updateSTAL/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/runGraduation/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/purgeErrorLog/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/purgeSavedQuery/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/checkStuBalance/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/runDBBackup/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/runSiteBackup/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/runNodeQ/', function () {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/dashboard.router.php",
+      "lines": 563,
+      "sha256": "a1419da006227de5904108504d28ca341467633b0c7c6f7e5dbea14a9cb61004",
+      "routes": [
+        [
+          "group",
+          "'/dashboard', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/search/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/support/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/system-snapshot/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/modules/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/install-module/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/flushCache/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST|PATCH|PUT|OPTIONS|DELETE', '/connector/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/ftp/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/getSACP/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/getDEPT/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sms/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/error.router.php",
+      "lines": 38,
+      "sha256": "750de1e7d80ee517e97118f4b872a5d82ed311427eac64daa8119558a47d3496",
+      "routes": [
+        [
+          "get",
+          "'404', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/err/screen-error/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/financial.router.php",
+      "lines": 2983,
+      "sha256": "00e2284c169e88aa9503febc91b72852d404178a6579c02733b38e662cdd1dc0",
+      "routes": [
+        [
+          "group",
+          "'/financial', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/create-bill/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/batch/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add-payment/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/issue-refund/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/payment-plan/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/payment-plan/delete/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/paypal/', function () use($app, $css, $js) {"
+        ],
+        [
+          "get",
+          "'/account-history/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/ah-pdf/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/gl-accounts/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/gl-filter/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/gl-filter/([^/]+)/([^/]+)', function ($from, $to) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/jentry-filter/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/jentry-filter/([^/]+)/([^/]+)', function ($from, $to) use($app) {"
+        ],
+        [
+          "get",
+          "'/journal-entries/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/journal-entries/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add-jentry/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/billing-table/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/billing-table/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/billing-table/(\\d+)/btrl/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/billing-table/(\\d+)/btrl/test/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/billing-table/(\\d+)/btrl/c/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deljEntry/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deletePayment/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteRefund/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteFee/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/([^/]+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/([^/]+)/payments/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/([^/]+)/refunds/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/([^/]+)/comments/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/([^/]+)/delete/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/sbill/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "group",
+          "'/stu', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/paypal-ipn/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/payment-cancel/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/payment-success/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/redirectPaypal/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/bill/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/bill/([^/]+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/account-history/', function () use($app, $js) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/form.router.php",
+      "lines": 3677,
+      "sha256": "f9c8efa1dd91c95312d71842a1f2227067a601cf6b05438f7c29d8d92427e0e7",
+      "routes": [
+        [
+          "group",
+          "'/form', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/semester/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/semester/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/term/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/term/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/acad-year/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/acad-year/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/department/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/department/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/subject/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/subject/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/degree/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/degree/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/major/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/major/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/minor/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/minor/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/ccd/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/ccd/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/specialization/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/specialization/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/cip/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/cip/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/rest/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/rest/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/location/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/location/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/building/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/building/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/room/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/room/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/school/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/school/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/grade-scale/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/grade-scale/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/aclv/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/aclv/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/aclv/(\\d+)/stld/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/aclv/(\\d+)/stld/test/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/aclv/(\\d+)/clas/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/aclv/(\\d+)/clvr/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/aclv/(\\d+)/clvr/test/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/aclv/(\\d+)/alst/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/aclv/(\\d+)/alst/test/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/aclv/(\\d+)/stld/(\\d+)/(\\d+)/d/', function ($aid, $rid, $id) {"
+        ],
+        [
+          "get",
+          "'/aclv/(\\d+)/clvr/(\\d+)/(\\d+)/d/', function ($aid, $rid, $id) {"
+        ],
+        [
+          "get",
+          "'/aclv/(\\d+)/alst/(\\d+)/(\\d+)/d/', function ($aid, $rid, $id) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/gradebook.router.php",
+      "lines": 1402,
+      "sha256": "f5ae54e0567cc1a20a26e7b475772e73c5cf8d82bb5aa9c8e191f7c2b4bbc90f",
+      "routes": [
+        [
+          "get",
+          "'/sect/courses/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/attendance/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET', '/sect/(\\d+)/attendance-report/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/sect/(\\d+)/assignments/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/add-assignment/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/(\\d+)/assignment/', function ($sectID, $id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/gradebook/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/(\\d+)/grading/', function ($sectID, $id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/(\\d+)/export/', function ($sectID, $id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/final-grade/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/(\\d+)/students/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/stu/grades/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/sect/emailStudent/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/sect/stuEmailGroup/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/sect/courses/getAttendanceReport/(\\d+)/', function ($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/hr.router.php",
+      "lines": 506,
+      "sha256": "5cd7660b68f34e6f387fa9f1a7fa4694bbd07b28b22912eb62774bde052764f5",
+      "routes": [
+        [
+          "group",
+          "'/hr', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/grades/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/jobs/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/positions/(\\d+)/', function ($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/import.router.php",
+      "lines": 43,
+      "sha256": "b2578c393590abd1e287ef13db83200c98a3d3dc811570749be4e12f22bfd7d5",
+      "routes": [
+        [
+          "match",
+          "'GET|POST', '/form/import/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/index.router.php",
+      "lines": 679,
+      "sha256": "ace4e1902be79fa29fe116efdfd8726f94c49e691a9026e4883b05828221cb36",
+      "routes": [
+        [
+          "get",
+          "'/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/spam/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/offline/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/login/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/reset-password/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/profile/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/password/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/permission/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/permission/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/permission/add/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/role/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/role/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/role/add/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/role/editRole/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/message/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/switchUserTo/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/switchUserBack/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/logout/', function () {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/log.router.php",
+      "lines": 127,
+      "sha256": "4f39f0b8b38b041324fa710e3dc20e95a9228e73438d1e7c208b88ea9274ca66",
+      "routes": [
+        [
+          "get",
+          "'/err/logs/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/audit-trail/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/err/deleteLog/(\\d+)/', function ($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/mrkt.router.php",
+      "lines": 1543,
+      "sha256": "dfbcd47895fb1286e3779e1ed39f7605b949f1b8cfbcf5093a052a44175bfde6",
+      "routes": [
+        [
+          "group",
+          "'/mrkt', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/list/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/list/create/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/template/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/template/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/template/create/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/campaign/create/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/list/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/campaign/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/queue/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/pause/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/resume/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/campaign/(\\d+)/test/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/report/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/report/opened/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/report/clicked/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/elfinder/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/bounce/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/mailmerge/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/mailmerge/(\\d+)/([^/]+)', function ($id, $label) use($app) {"
+        ],
+        [
+          "get",
+          "'/getTemplate/(\\d+)/', function($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/getOpenedDayReport/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/getOpenedHourReport/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/getClickedDayReport/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/getClickedHourReport/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/campaign/(\\d+)/d/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/list/(\\d+)/d/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/list/(\\d+)/c/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/template/(\\d+)/d/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/connector/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/archive/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/tracking/cid/(\\d+)/sid/(\\d+)/', function ($cid, $sid) use($app) {"
+        ],
+        [
+          "get",
+          "'/lt/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/myetsis.router.php",
+      "lines": 966,
+      "sha256": "3831d8a89ace5165034506108acfd5781b1fa9c1ee19c6843cc5024f6256f7bc",
+      "routes": [
+        [
+          "group",
+          "'/admin', function () use($app, $css, $js) {"
+        ],
+        [
+          "get",
+          "'/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/pages/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/news/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/links/', function () use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/csseditor/', function () use($app, $css, $js) {"
+        ],
+        [
+          "get",
+          "'/deletePage/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteLink/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteNews/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/flushCache/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/news/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/news/([^/]+)/', function ($slug) use($app) {"
+        ],
+        [
+          "get",
+          "'/page/([^/]+)/', function ($slug) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/form/address/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/form/photo/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/form/deleteSchoolPhoto/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/form/submitCOA/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/online-app/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/person.router.php",
+      "lines": 1211,
+      "sha256": "7e4275695dbb0b83f95f09d939e965ce5815e8cae2a305b2e9c0402f7c627505",
+      "routes": [
+        [
+          "group",
+          "'/nae', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/perc/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/adsu/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/addr-form/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/addr/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/role/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/perms/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/usernameCheck/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/resetPassword/(\\d+)/', function ($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/plugins.router.php",
+      "lines": 179,
+      "sha256": "ed94dfb4b6b3353165cfee7d382376f1182dc1d616ec075758a0aee0e5356668",
+      "routes": [
+        [
+          "group",
+          "'/plugins', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/activate/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/deactivate/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/options/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/install/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/program.router.php",
+      "lines": 490,
+      "sha256": "f9b106f137db51c62c7d222235a630aedd4d17673794f31629eed093359e6d53",
+      "routes": [
+        [
+          "group",
+          "'/program', function() use ($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/year/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/degree/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/ccd/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/major/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/minor/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/spec/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/cip/', function() use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/rlde.router.php",
+      "lines": 200,
+      "sha256": "ddca9cfa61a81c50d2cbe1a24f0ae5ce645ffd6187372a7f1bb0d30eacad6c69",
+      "routes": [
+        [
+          "group",
+          "'/rlde', function() use ($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/(\\d+)/c/', function ($id) {"
+        ],
+        [
+          "get",
+          "'/(\\d+)/d/', function ($id) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/savedquery.router.php",
+      "lines": 483,
+      "sha256": "da082f41802ccb5ce72a78272c17a05f4a1cf7ef1fdba1880532b881acebb640",
+      "routes": [
+        [
+          "get",
+          "'/sql/saved-queries/', function() use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sql/saved-queries/(\\d+)/', function($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sql/saved-queries/add/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/sql/saved-queries/delete/(\\d+)/', function($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sql/saved-queries/csv-email/', function() use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sect/brgn/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/sql/saved-queries/getSavedQuery/', function() use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/section.router.php",
+      "lines": 1539,
+      "sha256": "50d32da31f9f71b309df2da04fbc4c21b216acb36cdfd9b1883fa8eceb139f3c",
+      "routes": [
+        [
+          "group",
+          "'/sect', function() use ($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/addnl/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/soff/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/fgrade/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/rgn/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/rgn/rrsr/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/rgn/rrsr/test/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sros/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/sros/(\\d+)/(\\w+)/', function ($id, $template) use($app) {"
+        ],
+        [
+          "get",
+          "'/catalog/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/catalog/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "post",
+          "'/secTermLookup/', function() use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/stuLookup/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/regTermLookup/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/regSecLookup/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/defSecLookup/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/loc/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/sectLookup/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/rgn/rrsr/(\\d+)/d/', function ($id) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/settings.router.php",
+      "lines": 262,
+      "sha256": "31afa29c3d6fda66194c5fb33c886c3ea86c648f47965be1f67354788fec9d5a",
+      "routes": [
+        [
+          "match",
+          "'GET|POST', '/setting/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/registration/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/email/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/templates/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sms/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/sms/test/', function () use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/sql.router.php",
+      "lines": 77,
+      "sha256": "6c48ce84d4d5ff2bd3d08d0017a600ba020f1267e0a73f6b9addb14123d6c20b",
+      "routes": [
+        [
+          "group",
+          "'/sql', function() use ($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function() use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/staff.router.php",
+      "lines": 457,
+      "sha256": "6b564d4a685dc1d9476519f460bf4ce5ff5fbd8331364cebb9e4b3e2b2a1bdf1",
+      "routes": [
+        [
+          "group",
+          "'/staff', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST|PATCH|PUT|OPTIONS|DELETE', '/connector/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/file-manager/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/elfinder/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/(\\d+)/', function ($id) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/student.router.php",
+      "lines": 2056,
+      "sha256": "d70a4dffa11db7a8ff94db89d613173a7d2ef0aa0ec8770938f3ba013691b317",
+      "routes": [
+        [
+          "group",
+          "'/stu', function() use ($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/(\\d+)/', function ($id) use($app, $css, $js) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/stac/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sttr/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/shis/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sacd/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sacp/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/sacp/(\\d+)/stal/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/add-prog/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/graduation/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/tran/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/tran/(\\d+)/(\\w+)/(\\w+)/', function ($id, $level, $template) use($app, $css, $js) {"
+        ],
+        [
+          "get",
+          "'/timetable/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/terms/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/schedule/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/final-grades/', function () use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteSHIS/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/deleteSTAC/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "get",
+          "'/getEvents/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/progLookup/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/stuLookup/', function() use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/timesheet.router.php",
+      "lines": 400,
+      "sha256": "a03b5110f31d914e399ec7beaed3274ec390ea2248ade6866377b84321357488",
+      "routes": [
+        [
+          "get",
+          "'/hr/timesheets/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/hr/view-timesheet/([^/]+)/(\\d+)/', function ($week, $id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/staff/timesheets/', function() use($app) {"
+        ],
+        [
+          "get",
+          "'/staff/view-timesheet/([^/]+)/', function($week) use($app) {"
+        ]
+      ]
+    },
+    {
+      "path": "legacy/code/app/routers/transfer.router.php",
+      "lines": 591,
+      "sha256": "c8f88d0917297cda7b1d94cd36d43162132b3e1a676e339ae6b1bd04b7d98c4e",
+      "routes": [
+        [
+          "match",
+          "'GET|POST', '/crse/extr/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/crse/extr/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/crse/tceq/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/crse/tceq/(\\d+)/', function ($id) use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/crse/tceq/add/', function () use($app) {"
+        ],
+        [
+          "match",
+          "'GET|POST', '/crse/tcre/', function () use($app) {"
+        ],
+        [
+          "post",
+          "'/crse/extrLookup/', function() use($app) {"
+        ],
+        [
+          "post",
+          "'/crse/equivLookup/', function() use($app) {"
+        ]
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "path": "legacy/code/app/modules/booking.module.php",
+      "lines": 633,
+      "sha256": "2f656b3f33df112dc911e8ac0b9bc118e1bcf7b0b365119a2e4368dfc457c513",
+      "functions": [
+        "booking_module",
+        "convert_day",
+        "convertCat",
+        "room_booking",
+        "room_request",
+        "update_booking_request",
+        "eventCategory",
+        "get_requestor"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/eventlog.module.php",
+      "lines": 21,
+      "sha256": "3054909e348d64fefecf461f5419fc03d866a1d7fc33988401b70e4ec62c1155",
+      "functions": [
+        "event_log_module"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/financial.module.php",
+      "lines": 959,
+      "sha256": "1ad8cf75739b1af611d85561208bc1ebc90eb4f62e5764da2a82bae5412a15a7",
+      "functions": [
+        "financial_module",
+        "fee_table_dropdown",
+        "payment_type_dropdown",
+        "gl_acct_dropdown",
+        "paypal_payment",
+        "past_balance",
+        "past_credit",
+        "has_balance",
+        "convert_payment_method",
+        "generate_stu_billID",
+        "generate_stu_bill",
+        "paypal_url",
+        "paypal_gateway",
+        "prev_stu_acct_record",
+        "next_stu_acct_record",
+        "etsis_reg_btrl_rule",
+        "add_stu_acct_fee",
+        "add_stu_acct_tuition",
+        "get_btbl_terms",
+        "etsis_btbl_status_label"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/gradebook.module.php",
+      "lines": 224,
+      "sha256": "c28033c41f8df98ebeb22ec91dc9ce86b4cd4f7bfc631516aa685c22c9e13fe5",
+      "functions": [
+        "gradebook_module",
+        "assignmentExist",
+        "gradebookExist",
+        "student_grade",
+        "final_grade",
+        "gb_assignment",
+        "get_attendance_status",
+        "get_attendance_numbers",
+        "does_attendance_exist"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/import.module.php",
+      "lines": 21,
+      "sha256": "00b09a89f0500fcc14a82b834c09580413020b167fa59a79be2415b8b5dd8825",
+      "functions": [
+        "import_module"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/mrkt.module.php",
+      "lines": 2517,
+      "sha256": "d184b3e84606a294bbf9d39612a4180b76667e020be9bf1eeddfe8584a8352ff",
+      "functions": [
+        "mrkt_module",
+        "microtime_float",
+        "get_campaign_lists",
+        "get_campaign_list_id",
+        "get_campaign_by_id",
+        "is_status_ready",
+        "is_status_processing",
+        "is_status_paused",
+        "is_status_sent",
+        "etsis_link_tracking",
+        "get_campaign_template",
+        "get_list_subscribers_count",
+        "etsis_cpgn_status_label",
+        "etsis_list_status_label",
+        "find_x_campaign_id",
+        "find_x_list_id",
+        "find_x_subscriber_id",
+        "find_x_subscriber_email",
+        "etsis_response_time",
+        "etsis_validation_check",
+        "get_list_by",
+        "get_dept_template",
+        "mark_queued_record_sent",
+        "set_queued_message_is_sent",
+        "_etsis_unique_campaign_slug",
+        "campaign_tracking_code",
+        "etsis_test_email",
+        "etsis_email",
+        "send_campaign_to_queue",
+        "get_rlde_person_tags",
+        "get_rlde_staff_tags",
+        "bmhBodyRules",
+        "bmhDSNRules",
+        "bounce_callback_action",
+        "prepData"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/myetsis.module.php",
+      "lines": 314,
+      "sha256": "35200ce91fde0722c85d7ddc81873dbe46fd5c8d8a0dd8645ea0906bcf3a15af",
+      "functions": [
+        "myetsis_module",
+        "met_page",
+        "met_link",
+        "metPageExist",
+        "metNewsExist",
+        "wNews",
+        "metLinkExist",
+        "get_myetsis_page",
+        "the_myetsis_page_content"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/savedquery.module.php",
+      "lines": 128,
+      "sha256": "803fb7475a1ae5382b99b045ad71d17f444860caae38fb2ecac55b7a7840a395",
+      "functions": [
+        "savedquery_module",
+        "userQuery",
+        "getQuery",
+        "getQueryName"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/timesheet.module.php",
+      "lines": 21,
+      "sha256": "104487303a851e50e0e36225c581a1b3cf3045fe53aaabf6e7435cb9d39d74da",
+      "functions": [
+        "timesheet_module"
+      ]
+    },
+    {
+      "path": "legacy/code/app/modules/transfer.module.php",
+      "lines": 90,
+      "sha256": "028cb867b71e5145ce792ca855e0eb368e94e0b9739a6ea17e0aa6ecdf82171f",
+      "functions": [
+        "transfer_module",
+        "get_external_course",
+        "get_courses"
+      ]
+    }
+  ]
+}
