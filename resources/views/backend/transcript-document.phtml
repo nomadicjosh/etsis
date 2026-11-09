@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Academic transcript</title>
+        <style>
+            @page { margin: 0.6in; }
+            body { color: #172b40; background: #fff; font: 11px/1.5 "DejaVu Sans", sans-serif; margin: 0; }
+            main { max-width: 72rem; margin: 0 auto; }
+            h1 { font-size: 22px; margin-bottom: 0; }
+            h2 { font-size: 16px; }
+            .issuer { border-bottom: 2px solid #235b93; padding-bottom: 12px; }
+            .address { white-space: pre-wrap; }
+            .scroll { overflow-x: auto; }
+            .scroll:focus-visible { outline: 3px solid #235b93; outline-offset: 3px; }
+            table { border-collapse: collapse; width: 100%; margin-top: 14px; }
+            caption { text-align: left; font-weight: bold; padding: 8px 0; }
+            thead { display: table-header-group; }
+            th, td { text-align: left; border-bottom: 1px solid #aab5bf; padding: 5px; overflow-wrap: anywhere; }
+            th { color: #172b40; background: #edf1f4; }
+            tr { page-break-inside: avoid; }
+            dl { margin: 12px 0; }
+            dt { font-weight: bold; }
+            dd { margin: 0 0 8px; overflow-wrap: anywhere; }
+            footer { margin-top: 18px; font-size: 10px; overflow-wrap: anywhere; }
+            @media screen and (max-width: 600px) { body { padding: 14px; font-size: 14px; } }
+        </style>
+    </head>
+    <body>
+        <main>
+            <header class="issuer">
+                <h1><?= $escape($document['issuer']['name'] ?: 'Institution not configured') ?></h1>
+                <p class="address"><?= $escape($document['issuer']['address']) ?></p>
+                <h2><?= $document['preview'] ? 'Academic transcript preview — not issued' : 'Official academic transcript' ?></h2>
+            </header>
+            <dl>
+                <dt>Student</dt>
+                <dd><?= $escape($document['student']['name']) ?></dd>
+                <dt>Institutional ID</dt>
+                <dd><?= $escape($document['student']['institutional_id']) ?></dd>
+                <dt>Primary program at preparation</dt>
+                <dd><?= $escape($document['program']['code']) ?> — <?= $escape($document['program']['title']) ?></dd>
+                <dt>Catalog year</dt>
+                <dd><?= $escape($document['catalog']['year_code'] ?? 'Catalog needs review') ?></dd>
+            </dl>
+            <div class="scroll" tabindex="0" role="region" aria-label="Academic credit history">
+                <table>
+                    <caption>Academic credit history; dropped enrollments are omitted</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Term</th>
+                            <th scope="col">Course</th>
+                            <th scope="col">Title</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Attempted</th>
+                            <th scope="col">Earned</th>
+                            <th scope="col">Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($document['credits'] as $row) : ?>
+                        <tr>
+                            <td><?= $escape($row['term_code']) ?></td>
+                            <td><?= $escape($row['course_code']) ?></td>
+                            <td><?= $escape($row['course_title']) ?></td>
+                            <td><?= $escape($row['credit_type']) ?></td>
+                            <td><?= $credits($row['attempted_milli']) ?></td>
+                            <td><?= $credits($row['completed_milli']) ?></td>
+                            <td><?= $escape($row['grade_code'] ?? 'In progress') ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <dl>
+                <dt>Total attempted credits</dt>
+                <dd><?= $credits($document['totals']['attempted_milli']) ?></dd>
+                <dt>Total earned credits</dt>
+                <dd><?= $credits($document['totals']['completed_milli']) ?></dd>
+                <dt>Cumulative GPA</dt>
+                <dd><?= $document['totals']['gpa_milli'] === null ? 'Not yet available' : $credits($document['totals']['gpa_milli']) ?></dd>
+            </dl>
+            <p>Grades and credit values reflect the academic record at preparation. In-progress courses have no final grade. GPA includes only posted grades configured to count toward GPA; values are displayed to three decimal places.</p>
+            <footer>
+                <p>Document reference: <?= $escape($document['document_id'] ?? 'Preview only') ?>.</p>
+                <p>Prepared at: <?= $escape($document['issued_at'] ?? 'Not issued') ?>. Recipient delivery is tracked separately; a download alone does not establish delivery.</p>
+            </footer>
+        </main>
+    </body>
+</html>

@@ -14,7 +14,14 @@
             <article class="campus-program-card">
                 <p class="campus-eyebrow"><?= $this->esc($item['course_code']); ?> · <?= $this->esc($item['term_code']); ?></p>
                 <h3><?= $this->esc($item['title']); ?></h3>
+                <?php if (isset($item['description']) && $item['description'] !== ''): ?>
+                    <details>
+                        <summary>Course description</summary>
+                        <p class="campus-course-description"><?= $this->esc($item['description']); ?></p>
+                    </details>
+                <?php endif; ?>
                 <p><?= $this->esc((int) $item['credits_milli'] / 1000); ?> credits · Section <?= $this->esc($item['section_code']); ?></p>
+                <p><?= $this->esc($item['delivery_label'] ?? 'Delivery to be confirmed'); ?></p>
                 <a href="/portal/courses/?term=<?= $this->esc($item['term_id']); ?>">
                     See course offerings
                     <i class="bi bi-arrow-right" aria-hidden="true"></i>

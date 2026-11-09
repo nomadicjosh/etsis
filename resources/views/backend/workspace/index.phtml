@@ -16,6 +16,7 @@ $navigation = [
     ],
     'DAILY OPERATIONS' => [
         ['teaching', 'My teaching', 'easel', ''],
+        ['registration', 'Registration', 'person-plus', 'sis:registration:manage'],
         ['institutions', 'Transfer credit', 'arrow-left-right', 'sis:transfer:manage'],
         ['bookings', 'Spaces & scheduling', 'calendar3', 'sis:scheduling:manage'],
         ['accounts', 'Student accounts', 'wallet2', 'sis:finance:read'],
@@ -28,7 +29,7 @@ $navigation = [
         ['sharedreports', 'Shared reports', 'file-bar-graph', 'sis:reporting:run'],
         ['reports', 'Reports', 'bar-chart-line', 'sis:reporting:manage'],
         ['forms', 'Application forms', 'ui-checks', 'sis:forms:manage'],
-        ['imports', 'Import data', 'arrow-down-square', 'sis:import:manage'],
+        ['imports', 'Import data', 'arrow-up-square', 'sis:import:manage'],
         ['rules', 'Rules & audiences', 'sliders2', 'sis:rules:manage'],
         ['access', 'Roles & access', 'shield-check', 'admin:access:manage'],
         ['apply', 'Apply to a program', 'send', ''],
@@ -64,6 +65,24 @@ $client = [
         <script defer src="/assets/js/workspace-access.js"></script>
         <script defer src="/assets/js/workspace-people.js"></script>
         <script defer src="/assets/js/workspace-teaching.js"></script>
+        <script defer src="/assets/js/workspace-scheduling.js"></script>
+        <script defer src="/assets/js/workspace-employment.js"></script>
+        <script defer src="/assets/js/workspace-restrictions.js"></script>
+        <script defer src="/assets/js/workspace-students.js"></script>
+        <script defer src="/assets/js/workspace-transfer-awards.js"></script>
+        <script defer src="/assets/js/workspace-transfer.js"></script>
+        <script defer src="/assets/js/workspace-reports.js"></script>
+        <script defer src="/assets/js/workspace-report-requests.js"></script>
+        <script defer src="/assets/js/workspace-report-studio.js"></script>
+        <script defer src="/assets/js/workspace-registration.js"></script>
+        <script defer src="/assets/js/workspace-course-drops.js"></script>
+        <script defer src="/assets/js/workspace-hiatus.js"></script>
+        <script defer src="/assets/js/workspace-catalog.js"></script>
+        <script defer src="/assets/js/workspace-degree-audit.js"></script>
+        <script defer src="/assets/js/workspace-offering-templates.js"></script>
+        <script defer src="/assets/js/workspace-academic-calendar.js"></script>
+        <script defer src="/assets/js/workspace-finance-reviews.js"></script>
+        <script defer src="/assets/js/workspace-transcripts.js"></script>
         <script defer src="/assets/js/workspace.js"></script>
     </head>
     <body>
@@ -251,6 +270,12 @@ $client = [
                                     </div>
                                 </div>
                                 <div class="quick-action-grid">
+                                    <?php if ($can('sis:finance:post')) : ?>
+                                    <button type="button" class="quick-action" id="finance-reviews-open">
+                                        <i class="bi bi-inboxes" aria-hidden="true"></i>
+                                        <span>Finance reviews<small>Receive academic case hand-offs</small></span>
+                                    </button>
+                                    <?php endif; ?>
                                     <button type="button" data-action="new-person" data-requires="sis:person:manage">
                                         <i class="bi bi-person-plus" aria-hidden="true"></i><span>Add a person<small>Start with one connected profile</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></button><a
                                         href="/admin/workspace/forms/"
