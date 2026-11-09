@@ -28,6 +28,7 @@ final readonly class GradebookService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
     ) {
     }
 
@@ -132,49 +133,85 @@ final readonly class GradebookService
     /** @return array<string,mixed> */
     public function gradeChoices(EntityId $student, EntityId $section, ?EntityId $assignment = null): array
     {
-        $this->access->authenticatedUserId();
-        $this->faculty($section);
-        if ($this->registration->enrollment($student, $section) === null) {
-            throw new \DomainException("The student is not registered in this section.");
-        }
-        $this->admissions->student($student);
-        $pursuits = $this->repository->gradePursuits($student);
-        try {
-            $items = $this->repository->gradeChoices($student, $section, $assignment);
-        } catch (\Domain\Gradebook\Exception\GradingContextRequiredException $error) {
-            if ($assignment !== null || count($pursuits) < 2) {
-                throw $error;
-            }
-            return ["items" => [], "pursuits" => $pursuits, "needs_assignment" => true];
-        }
-        return ["items" => $items, "pursuits" => $pursuits, "needs_assignment" => false];
+        $enrollment = $this->gradeEnrollment($student, $section);
+        return $this->credits->choices($student, $section, $enrollment->id, $assignment);
     }
+    /** @return array<string,mixed> */
+    public function reviewFinalGrade(
+        EntityId $student,
+        EntityId $section,
+        EntityId $grade,
+        int $version,
+        ?EntityId $assignment = null,
+        #[\SensitiveParameter] string $reason = "",
+        ?string $effective = null,
+    ): array {
+        $enrollment = $this->gradeEnrollment($student, $section);
+        return $this->credits->review(
+            $student,
+            $section,
+            $enrollment->id,
+            $grade,
+            $version,
+            $assignment,
+            $reason,
+            $effective,
+        );
+    }
+    /** @return array<string,mixed> */
+    public function commitFinalGrade(EntityId $student, EntityId $section, #[\SensitiveParameter] string $token): array
+    {
+        return $this->credits->commit($student, $section, $token);
+    }
+    /** Internal command convenience; browser writes use explicit reviewed tokens. */
     public function finalGrade(
         EntityId $student,
         EntityId $section,
         EntityId $gradeId,
         int $expectedVersion,
         ?EntityId $assignment = null,
+        #[\SensitiveParameter] string $reason = "",
+        ?string $effective = null,
     ): void {
-        $this->access->authenticatedUserId();
-        $this->faculty($section);
-        $this->transactions->run(function () use (
+        $review = $this->reviewFinalGrade(
             $student,
             $section,
             $gradeId,
             $expectedVersion,
             $assignment,
-        ): void {
-            $enrollment = $this->enrolled($student, $section);
-            $actor = $this->faculty($section);
-            $this->repository->finalGrade(
-                $enrollment->id,
-                $this->repository->grade($gradeId),
-                $expectedVersion,
-                $assignment,
-            );
-            $this->audit->record($actor, "registration.graded", $enrollment->id);
-        });
+            $reason,
+            $effective,
+        );
+        $this->commitFinalGrade($student, $section, $review["review_token"]);
+    }
+    /** @return array<string,mixed> */
+    public function gradeHistory(EntityId $student, EntityId $section, ?string $cursor = null): array
+    {
+        $actor = $this->access->authenticatedUserId();
+        $person = $this->admissions->person($this->admissions->student($student)->personId);
+        if ($person->ownerUserId?->value !== $actor->value) {
+            try {
+                $this->faculty($section);
+            } catch (\Domain\Shared\Exception\AccessDeniedException) {
+                $this->access->requirePermission("sis:student:read");
+            }
+        }
+        $enrollment =
+        $this->registration->enrollment($student, $section) ??
+        throw new \Domain\Shared\Exception\RecordNotFoundException("Current enrollment not found.");
+        return $this->credits->history($student, $section, $enrollment->id, $cursor);
+    }
+    private function gradeEnrollment(EntityId $student, EntityId $section): Enrollment
+    {
+        $this->access->authenticatedUserId();
+        try {
+            $this->faculty($section);
+        } catch (\Domain\Shared\Exception\AccessDeniedException) {
+            $this->access->requirePermission("sis:gradebook:amend");
+            $this->access->requirePermission("sis:student:read");
+        }
+        return $this->registration->enrollment($student, $section) ??
+        throw new \Domain\Shared\Exception\RecordNotFoundException("Enrollment not found.");
     }
 
     public function attendance(

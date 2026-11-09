@@ -158,6 +158,6 @@ return [
     | requested. Feel free to add your own console commands.
     */
     'commands' => [
-        \Application\Console\BootstrapAccessCommand::class,
+        \Application\Console\Commands\BootstrapAccessCommand::class,
     ]
 ];

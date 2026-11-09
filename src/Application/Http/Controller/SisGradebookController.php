@@ -97,18 +97,41 @@ final readonly class SisGradebookController
             ),
         );
     }
-    public function finalGrade(ServerRequest $request, string $id): ResponseInterface
+    public function reviewFinalGrade(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->finalGrade(
-            $f->id("student_id"),
-            new EntityId($id),
-            $f->id("grade_id"),
-            $f->integer("version"),
-            $f->optionalId("assignment_id"),
+        return new JsonResponse(
+            $this->service->reviewFinalGrade(
+                $f->id("student_id"),
+                new EntityId($id),
+                $f->id("grade_id"),
+                $f->integer("version", 0),
+                $f->optionalId("assignment_id"),
+                $this->reason($request, $f),
+                $f->optionalText("effective_on", 10),
+            ),
         );
-
-        return new JsonResponse(["status" => "graded"]);
+    }
+    public function commitFinalGrade(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->commitFinalGrade(
+                $f->id("student_id"),
+                new EntityId($id),
+                $f->text("review_token", 65536),
+            ),
+        );
+    }
+    public function gradeHistory(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->service->gradeHistory(
+                new EntityId($student),
+                new EntityId($id),
+                FormInput::from($request)->optionalText("cursor", 16384),
+            ),
+        );
     }
 
     public function attendance(ServerRequest $request, string $id): ResponseInterface
@@ -130,5 +153,12 @@ final readonly class SisGradebookController
         return new JsonResponse([
             "scores" => $this->service->scores(new EntityId($student), new EntityId($id)),
         ]);
+    }
+    private function reason(ServerRequest $request, FormInput $f): string
+    {
+        $body = $request->getParsedBody();
+        return !is_array($body) || !array_key_exists("reason", $body) || $body["reason"] === ""
+        ? ""
+        : $f->bodyText("reason");
     }
 }

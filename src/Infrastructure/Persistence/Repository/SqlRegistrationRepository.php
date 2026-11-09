@@ -356,7 +356,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         ]);
     }
 
-    public function addEnrollment(Enrollment $enrollment, Course $course): void
+    public function addEnrollment(Enrollment $enrollment): void
     {
         $this->sql->insert("sis_enrollments", [
             "id" => $enrollment->id->value,
@@ -370,28 +370,5 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             "status_at" => $enrollment->statusAt->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d H:i:s"),
             "version" => 0,
         ]);
-        $creditId = EntityId::generate();
-        $this->sql->insert("sis_academic_credits", [
-            "id" => $creditId->value,
-            "student_id" => $enrollment->studentId->value,
-            "course_id" => $course->id->value,
-            "term_id" => $enrollment->termId->value,
-            "source_id" => $enrollment->id->value,
-            "credit_type" => "institutional",
-            "course_code" => $course->code,
-            "course_title" => $course->publishedTranscriptTitle ?? $course->title,
-            "attempted_milli" => $course->creditsMilli,
-            "completed_milli" => 0,
-            "grade_points_milli" => 0,
-            "grade_id" => null,
-            "status" => $enrollment->status->value,
-            "version" => 0,
-        ]);
-        if ($course->publicationVersionId !== null) {
-            $this->sql->insert("sis_credit_course_versions", [
-                "id" => $creditId->value,
-                "course_version_id" => $course->publicationVersionId->value,
-            ]);
-        }
     }
 }

@@ -19,6 +19,7 @@ final readonly class DropPolicyService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
     ) {
     }
     /** @return array<string, mixed> */
@@ -65,8 +66,13 @@ final readonly class DropPolicyService
     /** Public academic policy metadata; callers separately authorize the affected student.
      * @return array<string, mixed>
      */
-    public function outcome(EntityId $term, string $effective, ?EntityId $student = null): array
-    {
+    public function outcome(
+        EntityId $term,
+        string $effective,
+        ?EntityId $student = null,
+        ?EntityId $enrollment = null,
+        ?EntityId $section = null,
+    ): array {
         $calendar = $this->policies->calendar($term);
         $base = ["term_code" => $calendar["code"], "grace_ends_on" => $calendar["add_drop_ends_on"]];
         if ($effective <= $calendar["add_drop_ends_on"]) {
@@ -91,7 +97,10 @@ final readonly class DropPolicyService
             ];
         }
         $code = new DropWindows($policy["windows"])->gradeOn($effective);
-        $grade = $this->policies->grade($code, $student);
+        $grade =
+        $student !== null && $enrollment !== null && $section !== null
+        ? $this->credits->dropGrade($enrollment, $student, $section, $code)
+        : $this->policies->grade($code, $student);
         if ($grade === null) {
             throw new ValidationException([
                 [
@@ -104,8 +113,8 @@ final readonly class DropPolicyService
             "delete_records" => false,
             "grade_code" => $code,
             "grade_id" => $grade["id"],
-            "points_milli" => $grade["points_milli"],
-            "counts_gpa" => $grade["counts_gpa"],
+            "points_milli" => (int) $grade["points_milli"],
+            "counts_gpa" => (bool) $grade["counts_gpa"],
             "policy_version" => $policy["version"],
         ];
     }

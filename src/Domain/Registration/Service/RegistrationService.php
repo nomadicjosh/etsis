@@ -28,6 +28,7 @@ final readonly class RegistrationService
         private AuditTrail $audit,
         private Clock $clock,
         private CourseDropService $drops,
+        private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
     ) {
     }
 
@@ -104,7 +105,8 @@ final readonly class RegistrationService
                 $now,
                 $now,
             );
-            $this->repository->addEnrollment($enrollment, $course);
+            $this->repository->addEnrollment($enrollment);
+            $this->credits->open($enrollment, $course, $actor);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
             $this->audit->record($actor, "registration.created", $enrollment->id);
 

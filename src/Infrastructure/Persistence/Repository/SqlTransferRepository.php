@@ -126,7 +126,9 @@ final readonly class SqlTransferRepository implements TransferRepository
     {
         $q = $this->sql->quote(...);
         $credits = $this->sql->fetch(
-            "SELECT c.*, i." .
+            "SELECT c.*, e." .
+                $q("section_id") .
+                ", i." .
                 $q("institutional_id") .
                 ", g." .
                 $q("code") .
@@ -154,6 +156,18 @@ final readonly class SqlTransferRepository implements TransferRepository
                 $q("id") .
                 " = c." .
                 $q("grade_id") .
+                " LEFT JOIN " .
+                $q("sis_enrollments") .
+                " e ON e." .
+                $q("id") .
+                " = c." .
+                $q("source_id") .
+                " AND c." .
+                $q("credit_type") .
+                " = 'institutional' AND e." .
+                $q("student_id") .
+                " = c." .
+                $q("student_id") .
                 " WHERE c." .
                 $q("student_id") .
                 " = ? ORDER BY c." .

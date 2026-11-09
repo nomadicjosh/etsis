@@ -1,7 +1,19 @@
 /* Paged teaching tools. Each read and download is authorized again on the server. */
 window.createWorkspaceTeaching = function (ui) {
     "use strict";
-    const { node, request, requestFile, task, openDrawer, openRecord, table, badge, flow } = ui;
+    const {
+        node,
+        request,
+        requestFile,
+        task,
+        buildForm,
+        formData,
+        openDrawer,
+        openRecord,
+        table,
+        badge,
+        flow,
+    } = ui;
     const status = (value) =>
         ({
             A: "Staff registered",
@@ -232,31 +244,156 @@ window.createWorkspaceTeaching = function (ui) {
             throw new Error(
                 "Catalog staff must publish the applicable grading scale before a grade can be recorded.",
             );
-        return flow(
-            "Save final grade",
+        const body = openDrawer(
+            choices.posted ? "Correct final grade" : "Record final grade",
+            "ACADEMIC RECORD",
+        );
+        body.append(
+            button("Back to record", back, "btn-link"),
+            node("p", {}, `Current grade: ${choices.current_grade_code || "Not graded"}`),
+        );
+        if (choices.posted && !choices.can_amend) {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "A posted grade requires an authorized academic records officer to approve a correction.",
+                ),
+                button("View grade history", () => gradeHistory(sectionRow, student, back)),
+            );
+            return;
+        }
+        const descriptors = [
             [
-                [
-                    "grade_id",
-                    "Institutional grade",
-                    "choice",
-                    choices.items.map((g) => ({
-                        value: g.id,
-                        label: `${g.code} · ${Number(g.points_milli) / 1000} grade points`,
-                    })),
-                ],
+                "grade_id",
+                "Institutional grade",
+                "choice",
+                choices.items.map((g) => ({
+                    value: g.id,
+                    label: `${g.code} · ${Number(g.points_milli) / 1000} grade points`,
+                })),
             ],
-            `/sis/sections/${sectionRow.id}/final-grades/`,
-            (data) => ({
-                ...data,
-                student_id: student.student_id,
-                version: Number(student.grade_version),
-                ...(assignment ? { assignment_id: assignment } : {}),
-            }),
-            back,
-            {},
-            "Choices use this record’s grading policy. Saving checks the displayed grade version. Reload the roster if another person changes the final grade.",
+            ["effective_on", "Effective date", "date"],
+            [
+                "reason",
+                choices.posted ? "Reason for correction" : "Decision note (optional)",
+                "textarea",
+                "",
+                !!choices.posted,
+            ],
+        ];
+        const form = await buildForm(descriptors, { effective_on: choices.effective_on_default });
+        form.elements.reason.maxLength = 1000;
+        form.elements.effective_on.max = choices.effective_on_default;
+        const reviewButton = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review final grade",
+        );
+        form.append(reviewButton);
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "Review the grade before it becomes part of the academic record. Earlier decisions are preserved. Corrections require a reason and separate permission.",
+            ),
+            form,
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const payload = {
+                    ...formData(form, descriptors),
+                    student_id: student.student_id,
+                    version: choices.current_version,
+                    ...(assignment ? { assignment_id: assignment } : {}),
+                };
+                const review = await request(
+                    `/sis/sections/${sectionRow.id}/final-grades/review/`,
+                    "POST",
+                    payload,
+                );
+                const confirmation = openDrawer("Confirm final grade", "REVIEW ACADEMIC DECISION");
+                confirmation.append(
+                    node(
+                        "p",
+                        {},
+                        `${choices.current_grade_code || "Not graded"} → ${review.grade.code} · ${Number(review.grade.points_milli) / 1000} grade points`,
+                    ),
+                    node("p", {}, `Effective date: ${payload.effective_on}`),
+                    node("p", {}, review.reason),
+                    review.earlier_history_unknown
+                        ? node(
+                              "p",
+                              { class: "alert alert-info" },
+                              "Earlier academic facts are retained as an observation. Earlier decision dates and authors are unknown.",
+                          )
+                        : null,
+                    button("Change review", () => {
+                        const restored = openDrawer("Review final grade", "ACADEMIC RECORD");
+                        restored.append(button("Back to record", back, "btn-link"), form);
+                    }),
+                    button(
+                        "Confirm final grade",
+                        async () => {
+                            await request(`/sis/sections/${sectionRow.id}/final-grades/commit/`, "POST", {
+                                student_id: student.student_id,
+                                review_token: review.review_token,
+                            });
+                            await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, reviewButton);
+        });
+    }
+    async function gradeHistory(sectionRow, student, back) {
+        const body = openDrawer("Grade history", "ACADEMIC RECORD");
+        body.append(button("Back to record", back, "btn-link"));
+        await pages(
+            body,
+            async (cursor) => {
+                const page = await request(
+                    `/sis/sections/${sectionRow.id}/students/${student.student_id}/grade-history/`,
+                    "POST",
+                    { cursor: cursor || null },
+                );
+                return { ...page, next_after: page.next_cursor };
+            },
+            (page) =>
+                node(
+                    "div",
+                    {},
+                    page.earlier_history_unknown
+                        ? node(
+                              "p",
+                              { class: "alert alert-info" },
+                              "Earlier history is unknown. An observation preserves the facts first seen by the new history system.",
+                          )
+                        : null,
+                    page.items.length
+                        ? grid(
+                              ["Decision", "Grade", "Effective", "Recorded"],
+                              page.items.map((item) => [
+                                  {
+                                      registration: "Registration accepted",
+                                      observed_existing: "Existing facts observed",
+                                      grade_decided: "Grade decision",
+                                      dropped: "Course dropped",
+                                  }[item.action] || "Academic decision",
+                                  item.grade_code || "—",
+                                  item.effective_at,
+                                  item.recorded_at,
+                              ]),
+                              "Academic grade decisions",
+                          )
+                        : node("p", {}, "No recorded decisions yet."),
+                ),
         );
     }
+
     async function studentRecord(sectionRow, student, back) {
         const body = openDrawer(`${student.given_name} ${student.family_name}`, "GRADES & ATTENDANCE");
         body.append(button("Back to roster", back, "btn-link"));
@@ -264,7 +401,10 @@ window.createWorkspaceTeaching = function (ui) {
         body.append(final);
         final.append(
             node("p", {}, `Current grade: ${student.grade_code || "Not graded"}`),
-            button("Record final grade", () => recordFinalGrade(sectionRow, student, back)),
+            button(student.grade_code ? "Review final grade" : "Record final grade", () =>
+                recordFinalGrade(sectionRow, student, back),
+            ),
+            button("Grade history", () => gradeHistory(sectionRow, student, back)),
         );
         const attendance = area("Attendance");
         body.append(attendance);
@@ -383,5 +523,5 @@ window.createWorkspaceTeaching = function (ui) {
             form.elements.held_on.max = term.ends_on;
         }
     }
-    return { section };
+    return { section, recordFinalGrade, gradeHistory };
 };

@@ -7,7 +7,6 @@ namespace Infrastructure\Persistence\Repository;
 use DateTimeImmutable;
 use Domain\Gradebook\Assignment;
 use Domain\Gradebook\AssignmentScore;
-use Domain\Gradebook\GradeDefinition;
 use Domain\Gradebook\Repository\GradebookRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
@@ -15,42 +14,10 @@ use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlGradebookRepository implements GradebookRepository
 {
-    public function __construct(
-        private SqlRecords $sql,
-        private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
-    ) {
+    public function __construct(private SqlRecords $sql)
+    {
     }
 
-    public function grade(EntityId $id): GradeDefinition
-    {
-        $r = $this->sql->one("sis_grades", ["id" => $id->value]);
-
-        return new GradeDefinition(
-            $id,
-            $r["code"],
-            (int) $r["points_milli"],
-            (bool) $r["passes"],
-            (bool) $r["counts_gpa"],
-        );
-    }
-
-    public function gradePursuits(EntityId $student): array
-    {
-        return $this->grades->pursuits($student);
-    }
-    public function gradeChoices(EntityId $student, EntityId $section, ?EntityId $assignment = null): array
-    {
-        $enrollment = $this->sql->one("sis_enrollments", [
-            "student_id" => $student->value,
-            "section_id" => $section->value,
-        ]);
-        $credit = $this->sql->one("sis_academic_credits", ["source_id" => $enrollment["id"]]);
-        return $this->grades->choices(
-            $student,
-            $credit["grade_id"] === null ? null : new EntityId($credit["grade_id"]),
-            $assignment,
-        );
-    }
     public function addAssignment(Assignment $assignment): void
     {
         $this->sql->insert("sis_assignments", [
@@ -190,45 +157,6 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             ) !== 1
         ) {
             throw new ConcurrentModificationException("The assignment score changed.");
-        }
-    }
-
-    public function finalGrade(
-        EntityId $enrollment,
-        GradeDefinition $grade,
-        int $expectedVersion,
-        ?EntityId $assignment = null,
-    ): void {
-        $credit = $this->sql->one("sis_academic_credits", ["source_id" => $enrollment->value]);
-        $selected = $this->grades->choose(
-            $grade->id,
-            new EntityId($credit["student_id"]),
-            $credit["grade_id"] === null ? null : new EntityId($credit["grade_id"]),
-            $assignment,
-        );
-        $grade = new GradeDefinition(
-            $grade->id,
-            $selected["code"],
-            (int) $selected["points_milli"],
-            (bool) $selected["passes"],
-            (bool) $selected["counts_gpa"],
-        );
-        $attempted = (int) $credit["attempted_milli"];
-        if (
-            $this->sql->update(
-                "sis_academic_credits",
-                [
-                    "grade_id" => $grade->id->value,
-                    "completed_milli" => $grade->passes ? $attempted : 0,
-                    "grade_points_milli" => $grade->countsGpa
-                        ? intdiv($attempted * $grade->pointsMilli, 1000)
-                        : 0,
-                    "version" => $expectedVersion + 1,
-                ],
-                ["id" => $credit["id"], "version" => $expectedVersion],
-            ) !== 1
-        ) {
-            throw new ConcurrentModificationException("The final grade changed.");
         }
     }
 

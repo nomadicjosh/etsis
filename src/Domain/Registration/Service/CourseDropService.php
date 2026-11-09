@@ -37,6 +37,7 @@ final readonly class CourseDropService
         private AuditTrail $audit,
         private Clock $clock,
         private MessageCipher $cipher,
+        private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
     ) {
     }
 
@@ -134,6 +135,16 @@ final readonly class CourseDropService
                 throw new RecordNotFoundException("Enrollment not found.");
             $when = new DateTimeImmutable($effective, $this->clock->now()->getTimezone());
             $closed = $current->withdrawOnDate($this->registration->term($current->termId), $when);
+            $this->credits->drop(
+                $closed,
+                $context["outcome"],
+                new \Domain\Shared\EventSourcing\EventContext(
+                    $actor,
+                    $when,
+                    $operation,
+                    reason: "Reviewed course drop.",
+                ),
+            );
             $this->drops->apply($closed, $version, $context["credit"], $context["outcome"]);
             $reversed =
                 $context["outcome"]["delete_records"] &&
@@ -324,7 +335,7 @@ final readonly class CourseDropService
             "effective_on" => $effective,
             "timezone" => $now->getTimezone()->getName(),
             "credit" => $credit,
-            "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId),
+            "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId),
         ];
     }
     /** @param array<string, mixed> $context */

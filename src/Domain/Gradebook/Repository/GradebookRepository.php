@@ -6,16 +6,10 @@ namespace Domain\Gradebook\Repository;
 
 use Domain\Gradebook\Assignment;
 use Domain\Gradebook\AssignmentScore;
-use Domain\Gradebook\GradeDefinition;
 use Domain\Shared\ValueObject\EntityId;
 
 interface GradebookRepository
 {
-    public function grade(EntityId $id): GradeDefinition;
-    /** @return list<array<string,mixed>> */
-    public function gradePursuits(EntityId $student): array;
-    /** @return list<array<string,mixed>> */
-    public function gradeChoices(EntityId $student, EntityId $section, ?EntityId $assignment = null): array;
     public function addAssignment(Assignment $assignment): void;
     public function assignment(EntityId $id): Assignment;
     public function saveAssignment(Assignment $assignment): void;
@@ -27,12 +21,7 @@ interface GradebookRepository
     /** @return array<string, int> */
     public function attendanceCounts(EntityId $section, EntityId $student): array;
     public function score(AssignmentScore $score, int $expectedVersion): void;
-    public function finalGrade(
-        EntityId $enrollment,
-        GradeDefinition $grade,
-        int $expectedVersion,
-        ?EntityId $assignment = null,
-    ): void;
+
     public function attendance(EntityId $section, EntityId $student, string $on, string $status): void;
     /** @return list<array<string, mixed>> */
     public function scores(

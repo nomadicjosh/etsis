@@ -14,7 +14,12 @@ interface CourseDropRepository
     /** @param array<string, mixed> $credit
      * @param array<string, mixed> $outcome
      */
-    public function apply(Enrollment $closed, int $version, array $credit, array $outcome): void;
+    public function apply(
+        Enrollment $closed,
+        int $version,
+        array $credit,
+        array $outcome,
+    ): void;
     /** @return array<string, mixed>|null */
     public function receipt(EntityId $operation): ?array;
     public function record(

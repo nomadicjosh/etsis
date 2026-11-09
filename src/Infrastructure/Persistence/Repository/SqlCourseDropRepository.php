@@ -14,8 +14,9 @@ use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlCourseDropRepository implements CourseDropRepository
 {
-    public function __construct(private SqlRecords $sql)
-    {
+    public function __construct(
+        private SqlRecords $sql,
+    ) {
     }
     public function credit(Enrollment $enrollment): array
     {
@@ -32,8 +33,12 @@ final readonly class SqlCourseDropRepository implements CourseDropRepository
         $r["course_version_id"] = $reference["course_version_id"] ?? null;
         return $r;
     }
-    public function apply(Enrollment $closed, int $version, array $credit, array $outcome): void
-    {
+    public function apply(
+        Enrollment $closed,
+        int $version,
+        array $credit,
+        array $outcome,
+    ): void {
         if (
             $credit["grade_id"] !== null ||
             $credit["completed_milli"] !== 0 ||
@@ -48,20 +53,6 @@ final readonly class SqlCourseDropRepository implements CourseDropRepository
         }
         $q = $this->sql->quote(...);
         if ($outcome["delete_records"]) {
-            $this->sql->execute(
-                "DELETE FROM " . $q("sis_credit_course_versions") . " WHERE " . $q("id") . " = ?",
-                [$credit["id"]],
-            );
-            $removed = $this->sql->execute(
-                "DELETE FROM " .
-                    $q("sis_academic_credits") .
-                    " WHERE " .
-                    $q("id") .
-                    " = ? AND " .
-                    $q("version") .
-                    " = ?",
-                [$credit["id"], $credit["version"]],
-            );
             $enrolled = $this->sql->execute(
                 "DELETE FROM " .
                     $q("sis_enrollments") .
@@ -73,19 +64,6 @@ final readonly class SqlCourseDropRepository implements CourseDropRepository
                 [$closed->id->value, $version],
             );
         } else {
-            $removed = $this->sql->update(
-                "sis_academic_credits",
-                [
-                    "status" => "W",
-                    "completed_milli" => 0,
-                    "grade_id" => $outcome["grade_id"],
-                    "grade_points_milli" => $outcome["counts_gpa"]
-                        ? intdiv($credit["attempted_milli"] * $outcome["points_milli"], 1000)
-                        : 0,
-                    "version" => $credit["version"] + 1,
-                ],
-                ["id" => $credit["id"], "version" => $credit["version"]],
-            );
             $enrolled = $this->sql->update(
                 "sis_enrollments",
                 [
@@ -98,7 +76,7 @@ final readonly class SqlCourseDropRepository implements CourseDropRepository
                 ["id" => $closed->id->value, "version" => $version],
             );
         }
-        if ($removed !== 1 || $enrolled !== 1) {
+        if ($enrolled !== 1) {
             throw new ConcurrentModificationException("The academic record changed before this drop.");
         }
     }

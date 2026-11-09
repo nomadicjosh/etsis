@@ -105,6 +105,88 @@ final readonly class AcademicGradeCatalog
         );
     }
     /** @return list<array<string,mixed>> */
+    public function capturePolicies(EntityId $student): array
+    {
+        $pursuits = $this->repository->pursuits($student);
+        if (count($pursuits) > 20) {
+            self::invalid("Review the student’s program pursuits.");
+        }
+        if ($pursuits === []) {
+            $pursuits = [
+                [
+                    "id" => null,
+                    "program_id" => null,
+                    "code" => "Global",
+                    "title" => "Institution grading policy",
+                ],
+            ];
+        }
+        $refs = [];
+        foreach ($pursuits as $p) {
+            $scale = $this->scales->resolve(
+                $p["program_id"] === null ? null : new EntityId($p["program_id"]),
+            );
+            $known = $scale["version_id"] !== null;
+            $refs[] = [
+                "assignment_id" => $p["id"],
+                "program_id" => $p["program_id"],
+                "label" => mb_substr($p["code"] . " · " . $p["title"], 0, 191),
+                "known" => $known,
+                "scale_id" => $known ? $scale["program_id"] ?? GradingScaleService::GLOBAL_ID : null,
+                "scale_version_id" => $scale["version_id"],
+            ];
+        }
+        return $refs;
+    }
+    /** @param list<array<string,mixed>> $policies
+     * @return list<array<string,mixed>>
+     */
+    public function boundChoices(
+        EntityId $student,
+        array $policies,
+        ?EntityId $retainedGrade,
+        ?EntityId $assignment,
+    ): array {
+        if ($retainedGrade !== null || $policies === []) {
+            return $this->choices($student, $retainedGrade, $assignment);
+        }
+        $used = [];
+        foreach ($policies as $p) {
+            if ($assignment !== null && $p["assignment_id"] !== $assignment->value) {
+                continue;
+            }
+            $used[$p["scale_version_id"] ?? "unknown"] = $p;
+        }
+        if ($used === []) {
+            self::invalid("Choose a program pursuit retained for this academic record.");
+        }
+        if (count($used) > 1) {
+            throw new \Domain\Gradebook\Exception\GradingContextRequiredException(
+                "Choose the applicable retained program grading policy.",
+            );
+        }
+        $p = array_values($used)[0];
+        if (!$p["known"]) {
+            return $this->choices($student, null, $assignment);
+        }
+        $program = $p["scale_id"] === GradingScaleService::GLOBAL_ID ? null : new EntityId($p["scale_id"]);
+        return $this->scales->publication($program, new EntityId($p["scale_version_id"]))["grades"];
+    }
+    /** @return array<string,mixed> */
+    public function snapshot(EntityId $grade): array
+    {
+        $r = $this->repository->grade($grade);
+        if ($r["scale_version_id"] === null) {
+            return $r;
+        }
+        foreach ($this->publicationGrades($r) as $item) {
+            if ($item["id"] === $grade->value) {
+                return $item;
+            }
+        }
+        throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+    }
+    /** @return list<array<string,mixed>> */
     public function pursuits(EntityId $student): array
     {
         return $this->repository->pursuits($student);

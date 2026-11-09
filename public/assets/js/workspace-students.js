@@ -75,7 +75,35 @@ window.createWorkspaceStudents = function (ui) {
                                     ? button("Review transfer award", () =>
                                           ui.transferAwards().record(id, item.source_id),
                                       )
-                                    : "—",
+                                    : item.credit_type === "institutional" && item.section_id
+                                      ? node(
+                                            "div",
+                                            { class: "inline-actions" },
+                                            button("Grade history", () =>
+                                                ui
+                                                    .teaching()
+                                                    .gradeHistory(
+                                                        { id: item.section_id },
+                                                        { student_id: id },
+                                                        back,
+                                                    ),
+                                            ),
+                                            can("sis:gradebook:amend") &&
+                                                can("sis:student:read") &&
+                                                (item.grade_code || can("sis:gradebook:manage")) &&
+                                                ["A", "N"].includes(item.status)
+                                                ? button("Review final grade", () =>
+                                                      ui
+                                                          .teaching()
+                                                          .recordFinalGrade(
+                                                              { id: item.section_id },
+                                                              { student_id: id, grade_code: item.grade_code },
+                                                              back,
+                                                          ),
+                                                  )
+                                                : null,
+                                        )
+                                      : "—",
                             ]),
                             "Academic transcript",
                         ),
