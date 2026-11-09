@@ -12,6 +12,7 @@
     const money = (minor, currency = 'USD') => new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / 100);
     const text = value => value == null ? '—' : String(value);
     const escapeLabel = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    let relationalStudio = null;
     let current = config.section;
     let listRows = [];
     let nextAfter = null;
@@ -57,14 +58,14 @@
     async function request(path, method = 'GET', data) {
         return jsonResponse(await send(path, method, data));
     }
-    async function requestFile(path, data) {
-        const response = await send(path, 'POST', data, 'text/csv');
+    async function requestFile(path, data, filename = 'section-roster.csv', { type = 'text/csv', maximum = 262144 } = {}) {
+        const response = await send(path, 'POST', data, type);
         if (!response.ok) return jsonResponse(response);
-        if (!response.headers.get('Content-Type')?.startsWith('text/csv')) throw new Error('The download could not be prepared.');
+        if (!response.headers.get('Content-Type')?.startsWith(type)) throw new Error('The download could not be prepared.');
         const file = await response.blob();
-        if (file.size > 262144) throw new Error('The download exceeded the permitted page size.');
+        if (file.size > maximum) throw new Error('The download exceeded the permitted page size.');
         const url = URL.createObjectURL(file);
-        const link = node('a', { href: url, download: 'section-roster.csv', hidden: true });
+        const link = node('a', { href: url, download: filename, hidden: true });
         document.body.append(link); link.click(); link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
@@ -82,27 +83,41 @@
     }
 
     function showError(error) {
-        const alert = $one('#workspace-alert');
+        const main = $one('#workspace-alert');
+        const inDrawer = $one('#record-drawer').matches('.show, .showing');
+        let alert = main;
+        const scope = inDrawer ? $one('#drawer-body') : $one('#workspace-main');
+        if (inDrawer) {
+            main.hidden = true;
+            clear(main);
+            alert = $one('#drawer-error');
+            if (!alert) {
+                alert = node('div', { id: 'drawer-error', class: 'alert alert-danger', role: 'alert', tabindex: '-1' });
+                scope.prepend(alert);
+            }
+        }
         clear(alert);
-        alert.append(node('strong', {}, error.status === 403 ? 'This task needs additional access.' : (error.message || 'Something interrupted the request. Try again.')));
-        if (error.fields?.length) {
+        const entries = (error.fields || []).map(item => ({
+            ...item,
+            controls: $all(`[name="${CSS.escape(item.field)}"]`, scope).filter(field => field.getClientRects().length),
+        }));
+        const hasFields = entries.some(entry => entry.controls.length);
+        const heading = error.status === 403 ? 'This task needs additional access.'
+            : entries.length && !hasFields && error.message === 'Please correct the highlighted fields.'
+                ? 'Please review the following details.'
+                : (error.message || 'Something interrupted the request. Try again.');
+        alert.append(node('strong', {}, heading));
+        if (entries.length) {
             const list = node('ul', { class: 'mb-0 mt-2' });
-            for (const item of error.fields) {
-                const fields = $all(`[name="${CSS.escape(item.field)}"]`).filter(field => field.getClientRects().length);
-                const label = fields[0]?.labels?.[0]?.textContent.replace(/\s*\*\s*$/, '').trim() || item.field;
-                list.append(node('li', {}, `${label}: ${item.message}`));
-                fields.forEach(field => { field.setAttribute('aria-invalid', 'true'); field.classList.add('is-invalid'); });
+            for (const item of entries) {
+                const label = item.controls[0]?.labels?.[0]?.textContent.replace(/\s*\*\s*$/, '').trim();
+                list.append(node('li', {}, label ? `${label}: ${item.message}` : item.message));
+                item.controls.forEach(field => { field.setAttribute('aria-invalid', 'true'); field.classList.add('is-invalid'); });
             }
             alert.append(list);
         }
         alert.hidden = false;
-        // Put errors beside the active form as well, so focus never disappears behind an open drawer.
-        if ($one('#record-drawer').classList.contains('show')) {
-            let local = $one('#drawer-error');
-            if (!local) { local = node('div', { id: 'drawer-error', class: 'alert alert-danger', role: 'alert', tabindex: '-1' }); $one('#drawer-body').prepend(local); }
-            local.textContent = alert.textContent;
-            local.focus();
-        } else alert.focus();
+        alert.focus();
     }
 
     function notify(message) {
@@ -114,6 +129,7 @@
 
     async function task(callback, button) {
         $one('#workspace-alert').hidden = true;
+        $one('#drawer-error')?.remove();
         if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
         try { return await callback(); } catch (error) { showError(error); }
         finally { if (button) { button.disabled = false; button.removeAttribute('aria-busy'); } }
@@ -136,14 +152,15 @@
         return element;
     }
 
+    const deliveryModes = [{ value: 'in_person', label: 'In person' }, { value: 'online', label: 'Online' }, { value: 'hybrid', label: 'Hybrid' }, { value: 'unspecified', label: 'Delivery to be confirmed' }];
     const datasets = {
         people: { title: 'People', description: 'One person. One connected story. Keep admissions, academics, work and access together.', icon: 'people', action: 'Add a person', endpoint: '/sis/persons/', permission: 'sis:person:manage', fields: [ ['given_name', 'Given name'], ['family_name', 'Family name'], ['institutional_id', 'Assigned institutional ID', 'text', '', false] ], columns: [['Person', 'name'], ['Institutional ID', 'institutional_id'], ['Sign-in access', 'account']] },
         applications: { title: 'Admissions', description: 'From a first hello to a new beginning. Review and decide without losing your place.', icon: 'inboxes', action: 'Start an application', permission: 'sis:admissions:manage', columns: [['Applicant', 'name'], ['Institutional ID', 'institutional_id'], ['Status', 'status']] },
-        students: { title: 'Students', description: 'A clearer picture of every student’s academic journey.', icon: 'mortarboard', permission: 'sis:student:read', columns: [['Student', 'name'], ['Institutional ID', 'institutional_id'], ['Standing', 'active']] },
+        students: { title: 'Students', description: 'A clearer picture of every student’s academic journey.', icon: 'mortarboard', permission: 'sis:student:read', columns: [['Student', 'name'], ['Institutional ID', 'institutional_id'], ['Status', 'active']] },
         courses: { title: 'Academic catalog', description: 'Keep programs, courses, terms and sections in one connected workspace.', icon: 'journal-bookmark', action: 'Add a course', endpoint: '/sis/courses/', permission: 'sis:catalog:manage', fields: [['code', 'Course code'], ['title', 'Course title'], ['credits_milli', 'Credits', 'credits']], columns: [['Course', 'title'], ['Code', 'code'], ['Credits', 'credits_milli'], ['Status', 'active']] },
         programs: { title: 'Academic programs', description: 'Give every academic path a clear home.', icon: 'signpost-split', action: 'Add a program', endpoint: '/sis/programs/', permission: 'sis:catalog:manage', fields: [['code', 'Program code'], ['title', 'Program title']], columns: [['Program', 'title'], ['Code', 'code']] },
-        terms: { title: 'Academic terms', description: 'Set the dates once. Keep everyone on the same page.', icon: 'calendar-range', action: 'Add a term', endpoint: '/sis/terms/', permission: 'sis:catalog:manage', fields: [['code', 'Term code'], ['starts_on', 'First day', 'date'], ['ends_on', 'Last day', 'date'], ['add_drop_ends_on', 'Last day to add or drop', 'date']], columns: [['Term', 'code'], ['Starts', 'starts_on'], ['Ends', 'ends_on'], ['Add/drop deadline', 'add_drop_ends_on']] },
-        sections: { title: 'Course sections', description: 'Turn your course catalog into a schedule that works.', icon: 'collection', action: 'Offer a section', endpoint: '/sis/sections/', permission: 'sis:catalog:manage', fields: [['course_id', 'Course', 'lookup', 'courses'], ['term_id', 'Term', 'lookup', 'terms'], ['code', 'Section code'], ['capacity', 'Seats', 'number'], ['faculty_user_id', 'Faculty account (optional)', 'lookup', 'faculty', false], ['web_registration', 'Allow student self-registration', 'checkbox'], ['fee_minor', 'Section fee', 'money'], ['currency', 'Currency', 'currency']], columns: [['Section', 'code'], ['Seats', 'capacity'], ['Status', 'active']] },
+        terms: { title: 'Academic terms', description: 'Set the dates once. Keep everyone on the same page.', icon: 'calendar-range', action: 'Add a term', endpoint: '/sis/terms/', permission: 'sis:catalog:manage', fields: [['code', 'Term code'], ['starts_on', 'First day', 'date'], ['ends_on', 'Last day', 'date'], ['add_drop_ends_on', 'Last day to add or drop', 'date']], columns: [['Term', 'code'], ['Name', 'name'], ['Academic year', 'academic_year_code'], ['Category', 'kind'], ['Starts', 'starts_on'], ['Ends', 'ends_on'], ['Add/drop deadline', 'add_drop_ends_on']] },
+        sections: { title: 'Course sections', description: 'Turn your course catalog into a schedule that works.', icon: 'collection', action: 'Offer a section', endpoint: '/sis/sections/', permission: 'sis:catalog:manage', fields: [['course_id', 'Course', 'lookup', 'courses'], ['term_id', 'Term', 'lookup', 'terms'], ['code', 'Section code'], ['capacity', 'Seats', 'number'], ['delivery_mode', 'Delivery mode', 'choice', deliveryModes], ['faculty_user_id', 'Faculty account (optional)', 'lookup', 'faculty', false], ['web_registration', 'Allow student self-registration', 'checkbox'], ['fee_minor', 'Section fee', 'money'], ['currency', 'Currency', 'currency']], columns: [['Section', 'code'], ['Seats', 'capacity'], ['Status', 'active']] },
         rooms: { title: 'Rooms & spaces', description: 'Make room for classes, meetings, and everything in between.', icon: 'door-open', action: 'Add a room', endpoint: '/sis/rooms/', permission: 'sis:scheduling:manage', fields: [['code', 'Room name or code'], ['capacity', 'Capacity', 'number']], columns: [['Room', 'code'], ['Capacity', 'capacity']] },
         bookings: { title: 'Spaces & scheduling', description: 'See what’s requested, approve what fits, and keep the day flowing.', icon: 'calendar3', action: 'Request a space', endpoint: '/sis/bookings/', permission: 'sis:scheduling:manage', fields: [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'], ['starts_at', 'Starts', 'datetime-local'], ['ends_at', 'Ends', 'datetime-local']], columns: [['Request', 'title'], ['Status', 'status']] },
         employees: { title: 'Team & timesheets', description: 'The people who make your campus work. All connected to their person record.', icon: 'person-workspace', action: 'Add employment', endpoint: '/sis/employees/', permission: 'sis:hr:manage', fields: [['person_id', 'Person', 'lookup', 'people'], ['job_title', 'Job title']], columns: [['Team member', 'name'], ['Job title', 'job_title'], ['Status', 'active']] },
@@ -155,11 +172,33 @@
         portal: { title: 'Campus content', description: 'A useful, welcoming home for campus news and information.', icon: 'window', action: 'Create content', endpoint: '/sis/portal/editor/', permission: 'sis:portal:manage', fields: [['kind', 'Content type', 'choice', ['news', 'page', 'link']], ['code', 'Unique code'], ['title', 'Title'], ['content', 'Content or HTTPS link', 'textarea'], ['audience', 'Audience', 'choice', ['campus', 'public']]], columns: [['Title', 'title'], ['Type', 'kind'], ['Status', 'status']] },
     };
     datasets.transcripts = { title: 'Transcript requests', description: 'Review a request, prepare the official record, and record delivery after it is complete.', icon: 'file-earmark-text', permission: 'sis:transcript:manage', columns: [['Request', 'short_id'], ['Delivery', 'delivery'], ['Status', 'status'], ['Requested', 'requested_at']] };
-    const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, teaching: () => teachingStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const courseDropStudio = window.createWorkspaceCourseDrops({ node, request, task, openDrawer, notify, buildForm, formData });
+    const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
+    const degreeAuditStudio = window.createWorkspaceDegreeAudit({ node, request, task, can, closeDrawer: () => drawer.hide() });
+    const catalogStudio = window.createWorkspaceCatalog({ templates: () => offeringTemplates, deliveryModes, node, request, task, buildForm, formData, openDrawer, table, money, openRecord, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
+    const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, openDrawer, openRecord, table, badge, flow: operations.flow });
+    const schedulingStudio = window.createWorkspaceScheduling({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId) });
+    const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, buildForm, formData, openDrawer });
+    const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
+    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, calendar: () => academicCalendarStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    relationalStudio = window.createWorkspaceReportStudio({ node, request, requestFile, task, can, table, openDrawer, closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(), sharing: async id => { const body = openDrawer('Report sharing', 'REPORT ACCESS'); await operations.enhance('reports', { id }, body); } });
+    const reportRequests = window.createWorkspaceReportRequests({ node, request, task, can, table, badge, buildForm, formData, openDrawer, notify, reports: () => reportStudio, builder: () => relationalStudio });
+    const reportStudio = window.createWorkspaceReports({ builder: () => relationalStudio, node, request, requestFile, task, can, table, openDrawer, openRecord, flow: operations.flow, enhance: operations.enhance, closeDrawer: () => drawer.hide() });
+    const transferStudio = window.createWorkspaceTransfer({ awards: () => transferAwardStudio, node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (kind, id) => operations.audit(kind, { id }) });
+    datasets.timesheets.columns = [['Team member', 'name'], ['Institutional ID', 'institutional_id'], ['Started (UTC)', 'starts_at'], ['Status', 'status']];
     Object.assign(datasets, operations.datasets);
+    datasets.registration = { title: 'Registration', description: 'Register a reviewed group into one section, with eligibility, seats and charges handled together.', icon: 'person-plus', action: 'Register a group', permission: 'sis:registration:manage', columns: [['Section', 'code'], ['Course', 'course_title'], ['Term', 'term_code'], ['Capacity', 'capacity'], ['Status', 'active']] };
+    datasets.external.columns = [['Code', 'code'], ['Course', 'title'], ['Institution', 'institution_name']];
+    datasets.equivalencies.columns = [['External course', 'external_code'], ['Institutional course', 'course_code'], ['Credits', 'credits_milli'], ['Effective', 'starts_on']];
     datasets.sections.columns = datasets.teaching.columns = [['Section', 'code'], ['Course', 'course_code'], ['Term', 'term_code'], ['Seats', 'capacity']];
     datasets.journals.action = 'Post a journal';
     const pageNames = { overview: 'Overview', forms: 'Application forms', imports: 'Import data', rules: 'Rules & audiences', access: 'Roles & access', apply: 'Application', ...Object.fromEntries(Object.entries(datasets).map(([key, value]) => [key, value.title])) };
@@ -236,7 +275,7 @@
         for (const item of data.queue || []) queue.append(node('a', { class: 'queue-row', href: `/admin/workspace/${item.destination}/`, 'data-workspace': item.destination }, node('div', {}, node('span', { class: 'queue-count' }, number(item.value)), node('span', {}, item.label, node('small', { class: 'queue-caption' }, Number(item.value) ? 'Waiting for review' : 'All caught up. A little breathing room.'))), icon('arrow-right')));
     }
 
-    async function records(dataset, search = '', after = '') { return request(`/sis/ui/data/${dataset}/`, 'POST', { search, after }); }
+    async function records(dataset, search = '', after = '') { return dataset === 'academic_years' ? request('/sis/academic-years/', 'POST', { ...(search ? { search } : {}), ...(after ? { after } : {}) }) : request(`/sis/ui/data/${dataset}/`, 'POST', { search, after }); }
     function recordOption(item, dataset = '') {
         return { value: dataset === 'faculty' ? item.owner_user_id : item.id, label: item.term_code ? [item.code, item.course_code, item.term_code].filter(Boolean).join(' · ') : item.institutional_id ? `${item.given_name} ${item.family_name} · ${item.institutional_id}` : [item.code, item.title || item.name || item.job_title].filter(Boolean).join(' · ') || item.id };
     }
@@ -293,9 +332,25 @@
         const tabs = $one('#directory-tabs'); clear(tabs);
         const related = catalogTabs.some(([key]) => key === section) ? catalogTabs : ['rooms', 'bookings'].includes(section) ? [['bookings', 'Space requests'], ['rooms', 'Rooms & spaces']] : ['employees', 'timesheets'].includes(section) ? [['employees', 'Team'], ['timesheets', 'Timesheets']] : ['accounts', 'journals', 'billing', 'ledger'].includes(section) ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']] : ['institutions', 'external', 'equivalencies'].includes(section) ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
         related.forEach(([key, label]) => tabs.append(node('a', { href: `/admin/workspace/${key}/`, 'data-workspace': key, class: section === key ? 'active' : '' }, label)));
+        if (['reports', 'sharedreports'].includes(section)) { tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => reportRequests.create(), event.currentTarget) }, 'Request a report'), node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => reportRequests.queue(), event.currentTarget) }, 'My report requests')); if (can('sis:reporting:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => reportRequests.queue(true), event.currentTarget) }, 'Report request queue')); }
+        if (catalogTabs.some(([key]) => key === section) && can('sis:catalog:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => degreeAuditStudio.library(), event.currentTarget) }, 'Course group library'));
+        if (catalogTabs.some(([key]) => key === section) && can('sis:catalog:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => degreeAuditStudio.gradingScale(), event.currentTarget) }, 'Grading scales'));
+        if (section === 'reports' && can('sis:reporting:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => relationalStudio.start(), event.currentTarget) }, 'Open Report Studio'));
+        if (section === 'accounts' && can('sis:finance:post')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => financeReviewStudio.queue(), event.currentTarget) }, 'Finance review queue'));
         if (section === 'billing' && can('sis:finance:post')) tabs.append(node('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: event => task(() => operations.billingBatch(), event.currentTarget) }, 'Generate student bills'));
-        tabs.hidden = related.length === 0;
+        if (catalogTabs.some(([key]) => key === section) && can('sis:catalog:manage')) { tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => academicCalendarStudio.years(), event.currentTarget) }, 'Academic years')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => academicCalendarStudio.types(), event.currentTarget) }, 'Term types')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => offeringTemplates.page(), event.currentTarget) }, 'Offering templates')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => catalogStudio.start(), event.currentTarget) }, 'Build course offerings')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => catalogStudio.plans(), event.currentTarget) }, 'Saved offering plans')); }
+        if (section === 'registration' && can('sis:registration:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => hiatusStudio.choose(), event.currentTarget) }, 'Student hiatus history'));
+        tabs.hidden = related.length === 0 && !['registration', 'reports', 'sharedreports'].includes(section);
         if (!append) { listRows = []; nextAfter = null; $one('#directory-results').replaceChildren(node('div', { class: 'loading-card' }, 'Getting everything in order…')); }
+        if (section === 'grades' && can('sis:catalog:manage')) {
+            const data = await request('/sis/grading-scales/global/');
+            if (token !== generation || section !== current) return;
+            const rows = data.scale.definition.grades.filter(g => g.code.toLowerCase().includes($one('#directory-search').value.toLowerCase()));
+            $one('#directory-results').replaceChildren(node('div', { class:'table-responsive', tabindex:'0', role:'region', 'aria-label':'Global grading scale' }, table(['Grade','Minimum score (%)','Maximum score (%)','Grade points','Count in GPA','Earns credit'], rows.map(g => [g.code,g.min_score_milli == null ? '—' : g.min_score_milli / 1000,g.max_score_milli == null ? '—' : g.max_score_milli / 1000,g.points_milli / 1000,g.counts_gpa ? 'Yes' : 'No',g.passes ? 'Yes' : 'No']), 'Current global grade scale')));
+            $one('#record-count').textContent = `${rows.length} grade definitions`;
+            $one('#directory-more').hidden = true;
+            return;
+        }
         const result = await records(section, $one('#directory-search').value, append ? nextAfter : '');
         if (token !== generation || section !== current) return;
         listRows = append ? [...listRows, ...result.items] : result.items; nextAfter = result.next_after;
@@ -309,8 +364,9 @@
         $one('#directory-more').hidden = !nextAfter;
     }
 
-    function recordLabel(row) { return [row.given_name, row.family_name].filter(Boolean).join(' ') || row.title || row.name || row.code || row.reference || `Record ${row.id.slice(-6)}`; }
+    function recordLabel(row) { if (row.external_code && row.course_code) return `${row.external_code} → ${row.course_code}`; return [row.given_name, row.family_name].filter(Boolean).join(' ') || row.title || row.name || row.code || row.reference || `Record ${row.id.slice(-6)}`; }
     function renderCell(section, row, field, index) {
+        if (section === 'terms' && field === 'kind') return row.kind === 'standard' ? 'Standard' : row.kind === 'non_standard' ? 'Non-standard' : 'Classification needed';
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
         if (field === 'status') return badge(value);
@@ -329,6 +385,8 @@
     document.addEventListener('click', event => { if (event.target.closest('[data-action="new-person"]')) task(() => createRecord('people')); });
 
     function openDrawer(title, eyebrow = 'CONNECTED RECORD') {
+        relationalStudio?.cleanup();
+        $one('#workspace-alert').hidden = true;
         $one('#drawer-title').textContent = title; $one('#drawer-eyebrow').textContent = eyebrow;
         if (!$one('#record-drawer').matches('.show, .showing')) drawerOpener = document.activeElement;
         const content = node('div');
@@ -336,12 +394,20 @@
         return content;
     }
     $one('#record-drawer').addEventListener('hidden.bs.offcanvas', () => {
+        if (!relationalStudio?.isOpen()) relationalStudio?.cleanup();
         $one('#drawer-body').replaceChildren();
+        if (relationalStudio?.isOpen()) return;
         if (drawerOpener?.isConnected && !drawerOpener.disabled) drawerOpener.focus();
         else $one('#workspace-main').focus({ preventScroll: true });
         drawerOpener = null;
     });
     async function createRecord(section, preset = {}) {
+        if (section === 'grades') return degreeAuditStudio.gradingScale();
+        if (section === 'terms') return academicCalendarStudio.newTerm();
+        if (section === 'registration') return batchRegistration.start();
+        if (section === 'reports') return relationalStudio.start();
+        if (section === 'timesheets') return employmentStudio.submit(preset);
+        if (section === 'bookings') return schedulingStudio.requestBooking(preset);
         if (section === 'journals') return operations.createJournal();
         const definition = datasets[section];
         const body = openDrawer(definition.action, definition.title.toUpperCase());
@@ -353,6 +419,7 @@
             code.after(node('p', { class: 'form-text', id: 'portal-code-help' }, 'Use lowercase letters, numbers and hyphens, for example fall-welcome.'));
             form.append(node('p', { class: 'form-text' }, 'Choose News for portal updates. Campus content requires sign-in; public news appears on the public website. Use Page builder to design public pages.'));
         }
+        if (section === 'rooms') form.elements.code.maxLength = 80;
         if (section === 'terms') {
             const code = form.elements.namedItem('code');
             code.maxLength = 22; code.pattern = String.raw`[A-Za-z0-9][A-Za-z0-9._\/\-]{0,21}`;
@@ -367,7 +434,6 @@
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!form.reportValidity()) return;
             const data = formData(form, definition.fields);
-            if (section === 'bookings') { data.slots = [{ starts_at: data.starts_at, ends_at: data.ends_at }]; delete data.starts_at; delete data.ends_at; }
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
@@ -386,7 +452,7 @@
             let control;
             if (['lookup', 'currency', 'choice'].includes(type)) {
                 control = node('select', { class: 'form-select', id, name: key, required });
-                const values = type === 'lookup' ? await options(source) : type === 'currency' ? ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(value => ({ value, label: value })) : source.map(value => ({ value, label: value }));
+                const values = type === 'lookup' ? await options(source) : type === 'currency' ? ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(value => ({ value, label: value })) : source.map(value => typeof value === 'object' ? value : ({ value, label: value }));
                 populate(control, values, required ? 'Choose…' : 'All / not specified');
                 if (type === 'currency') control.value = 'USD';
             } else if (type === 'textarea') control = node('textarea', { class: 'form-control', id, name: key, rows: 5, maxlength: 10000, required });
@@ -494,6 +560,14 @@
     }
 
     async function openRecord(section, row) {
+        if (section === 'registration') return batchRegistration.start(row.id);
+        if (['institutions', 'external', 'equivalencies'].includes(section)) return transferStudio.record(section, row.id);
+        if (section === 'students') return studentStudio.student(row.id);
+        if (section === 'employees') return employmentStudio.employee(row.id);
+        if (section === 'timesheets') return employmentStudio.entry(row.id);
+        if (section === 'rooms') return schedulingStudio.room(row.id);
+        if (section === 'bookings') return schedulingStudio.booking(row.id);
+        if (['reports', 'sharedreports'].includes(section)) return reportStudio.record(row.id);
         if (section === 'people') return openPerson(row.id);
         if (section === 'applications') return peopleStudio.application(row);
         if (section === 'portal') return editCampusContent(row.id);
@@ -512,11 +586,6 @@
             if (row.status === 'submitted') { action('Accept application', `/sis/applications/${row.id}/decision/`, { decision: 'accept' }, 'Application accepted.', 'btn-primary'); action('Reject application', `/sis/applications/${row.id}/decision/`, { decision: 'reject' }); }
             if (row.status === 'accepted') action('Matriculate student', `/sis/applications/${row.id}/matriculate/`, {}, 'Student record created.', 'btn-primary');
         }
-        if (section === 'bookings' && row.status === 'pending') action('Approve space request', `/sis/bookings/${row.id}/approve/`, {}, 'Space request approved.', 'btn-primary');
-        if (section === 'bookings' && row.status !== 'cancelled') action('Cancel request', `/sis/bookings/${row.id}/cancel/`);
-        if (section === 'timesheets' && row.status === 'pending') { action('Approve timesheet', `/sis/timesheets/${row.id}/decision/`, { approve: true }); action('Reject timesheet', `/sis/timesheets/${row.id}/decision/`, { approve: false }); }
-        if (['reports', 'sharedreports'].includes(section) && can('sis:reporting:run')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: event => task(async () => { const result = await request(`/sis/reports/${row.id}/run/`); body.append(node('div', { class: 'table-responsive record-section' }, table(['Institutional ID', 'Active'], result.rows.map(item => [item.institutional_id, item.active ? 'Yes' : 'No']), 'Report results'))); }, event.currentTarget) }, 'Run report'));
-        if (section === 'students' && can('sis:student:read')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: event => task(async () => { const transcript = await request(`/sis/students/${row.id}/transcript/`); const rows = transcript.rows || transcript.credits || []; body.append(node('div', { class: 'table-responsive record-section' }, table(['Course', 'Title', 'Grade'], rows.map(item => [item.course_code, item.course_title, item.grade_code || '—']), 'Academic transcript'))); }, event.currentTarget) }, 'View transcript'));
         body.append(actions);
         await operations.enhance(section, row, body);
     }
@@ -542,23 +611,7 @@
     }
 
     async function reviewTranscript(id) {
-        const record = await request(`/portal/api/transcripts/${id}/`);
-        const body = openDrawer('Official transcript request', 'REGISTRAR WORKSPACE');
-        body.append(badge(record.status), node('dl', { class: 'detail-list mt-4' },
-            node('div', {}, node('dt', {}, 'Student record'), node('dd', {}, record.student_id)),
-            node('div', {}, node('dt', {}, 'Delivery'), node('dd', {}, record.delivery)),
-            node('div', {}, node('dt', {}, 'Recipient'), node('dd', {}, record.recipient || 'Student pickup'))));
-        const next = record.status === 'pending' ? 'ready' : record.status === 'ready' ? 'fulfilled' : null;
-        body.append(node('p', { class: 'form-text' }, 'Prepare and deliver the official transcript through your institution’s approved process. Mark fulfilled only after delivery; this screen does not email records.'));
-        if (can('sis:student:read')) body.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: event => task(async () => {
-            const result = await request(`/sis/students/${record.student_id}/transcript/`);
-            const rows = result.rows || result.credits || [];
-            body.append(node('div', { class: 'table-responsive mt-4' }, table(['Course', 'Title', 'Grade'], rows.map(item => [item.course_code, item.course_title, item.grade_code || '—']), 'Academic transcript for review')));
-        }, event.currentTarget) }, 'Review academic record'));
-        if (next) body.append(node('button', { class: 'btn btn-primary ms-2', type: 'button', onclick: event => task(async () => {
-            await request(`/portal/api/transcripts/${id}/status/`, 'POST', { status: next, version: Number(record.version) });
-            notify('Transcript request updated.'); await reviewTranscript(id); await loadDirectory();
-        }, event.currentTarget) }, next === 'ready' ? 'Mark ready for delivery' : 'Mark delivered / fulfilled'));
+        return transcriptStudio.record(id);
     }
 
     function fieldInput(field, value, prefix = 'answer') {
@@ -887,6 +940,7 @@
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => { if (!form.reportValidity()) return; await request(`/sis/access/${kind}/`, 'POST', formData(form, fields)); notify('Created. Ready to assign.'); drawer.hide(); await loadAccess(); }, $one('[type="submit"]', form)); });
         body.append(form);
     }
+    listen('#finance-reviews-open', 'click', () => financeReviewStudio.queue());
     listen('#access-new-role', 'click', () => createAccessDefinition('roles'));
     listen('#access-new-permission', 'click', () => createAccessDefinition('permissions'));
 

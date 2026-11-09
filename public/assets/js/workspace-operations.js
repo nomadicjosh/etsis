@@ -51,12 +51,6 @@ window.createWorkspaceOperations = function (ui) {
             ["credits_milli", "Credits awarded", "credits"],
             ["awarded_grade", "Institutional grade code"],
         ],
-        grades: [
-            ["code", "Grade code"],
-            ["points_milli", "GPA points", "credits"],
-            ["passes", "Earns credit", "checkbox"],
-            ["counts_gpa", "Counts toward GPA", "checkbox"],
-        ],
         billing: [
             ["term_id", "Term", "lookup", "terms"],
             ["program_id", "Program (optional)", "lookup", "programs", false],
@@ -99,13 +93,13 @@ window.createWorkspaceOperations = function (ui) {
         grades: definition(
             "Grade definitions",
             "sis:catalog:manage",
-            "/sis/grade-definitions/",
-            "Define a grade",
+            "",
+            "Manage grading scale",
             [
                 ["Grade", "code"],
                 ["GPA points × 1000", "points_milli"],
             ],
-            "Define institutional grades before entering final grades or transfer credit.",
+            "Set up the global grade scale and use explicit program overrides where grading policies differ.",
         ),
         teaching: definition(
             "My teaching",
@@ -269,44 +263,31 @@ window.createWorkspaceOperations = function (ui) {
         const back = () => openRecord("students", row);
         const actions = section("Registration & restrictions");
         body.append(actions);
-        actions.append(
-            button("Register for a section", () =>
-                flow(
-                    "Register student",
-                    [["section_id", "Course section", "lookup", "sections"]],
-                    "/sis/registrations/",
-                    (data) => ({ ...data, student_id: row.id, by_staff: true }),
-                    back,
-                    {},
-                    "This checks seats, prerequisites and staff-blocking restrictions. Section and institutional fees may be posted.",
-                ),
-            ),
-        );
-        actions.append(
-            button("Add a restriction", () =>
-                flow(
-                    "Add restriction",
-                    [
-                        ["code", "Restriction code"],
+        if (row.active !== false && row.active !== 0)
+            actions.append(
+                button("Register for a section", () =>
+                    flow(
+                        "Register student",
                         [
-                            "severity",
-                            "Severity (0–1000; 99+ blocks student registration)",
-                            "number",
+                            [
+                                "section_id",
+                                "Course section",
+                                "lookup",
+                                "sections",
+                            ],
                         ],
-                        ["starts_on", "Starts on", "date"],
-                        ["ends_on", "Ends on (optional)", "date", "", false],
-                        [
-                            "blocks_staff",
-                            "Also block staff registration",
-                            "checkbox",
-                        ],
-                    ],
-                    "/sis/restrictions/",
-                    (data) => ({ ...data, person_id: row.person_id }),
-                    back,
+                        "/sis/registrations/",
+                        (data) => ({
+                            ...data,
+                            student_id: row.id,
+                            by_staff: true,
+                        }),
+                        back,
+                        {},
+                        "This checks seats, prerequisites and staff-blocking restrictions. Section and institutional fees may be posted.",
+                    ),
                 ),
-            ),
-        );
+            );
         await paged(actions, "enrollments", row.id, (rows) =>
             scrollTable(
                 ["Course / section", "Status", "Action"],
@@ -315,46 +296,16 @@ window.createWorkspaceOperations = function (ui) {
                     badge(item.status),
                     ["A", "N"].includes(item.status)
                         ? button("Drop / withdraw", () =>
-                              flow(
-                                  "Confirm drop or withdrawal",
-                                  [],
-                                  "/sis/registrations/drop/",
-                                  () => ({
-                                      student_id: row.id,
-                                      section_id: item.section_id,
-                                  }),
-                                  back,
-                                  {},
-                                  "The term deadline determines drop versus withdrawal. Financial adjustments are separate, auditable transactions.",
-                              ),
+                              ui.courseDrops().review(row.id, item.section_id, back),
                           )
                         : "—",
                 ]),
                 "Student registrations",
             ),
         );
-        if (row.person_id)
-            await paged(actions, "restrictions", row.person_id, (rows) =>
-                scrollTable(
-                    ["Restriction", "Starts", "Ends", "Action"],
-                    rows.map((item) => [
-                        item.code,
-                        item.starts_on,
-                        item.ends_on || "Open",
-                        button("Set end date", () =>
-                            flow(
-                                "End restriction",
-                                [["ends_on", "Ends on", "date"]],
-                                `/sis/restrictions/${item.id}/end/`,
-                                null,
-                                back,
-                            ),
-                        ),
-                    ]),
-                    "Student restrictions",
-                ),
-            );
+        if (row.person_id) await ui.restrictions().list(body, row);
     }
+
     async function roster(body, row, sectionName) {
         return ui.teaching().section(body, row, sectionName);
     }
@@ -839,6 +790,7 @@ window.createWorkspaceOperations = function (ui) {
         );
     }
     async function editCatalog(kind, row) {
+        if (kind === "terms") return ui.calendar().editTerm(row.id);
         const saved = await request(`/sis/ui/catalog/${kind}/${row.id}/`);
         let descriptors = ui.datasets[kind].fields.map((field) => [...field]);
         if (kind === "sections")
@@ -871,7 +823,45 @@ window.createWorkspaceOperations = function (ui) {
             "Existing academic credits and posted charges keep their recorded values. Term dates affect future registration decisions. A concurrent edit requires you to reload before saving.",
         );
     }
+    async function audit(sectionName, row, subjectId = row.id) {
+        const surface = openDrawer("Record audit history", "AUDIT METADATA");
+        surface.append(
+            button(
+                "Back to record",
+                () => openRecord(sectionName, row),
+                "btn-link",
+            ),
+        );
+        await paged(surface, "audit", subjectId, (rows) =>
+            scrollTable(
+                ["Action", "Recorded at (UTC)", "Actor account"],
+                rows.map((item) => [
+                    item.action,
+                    item.recorded_at,
+                    item.actor_id,
+                ]),
+                "Audit events",
+            ),
+        );
+    }
     async function enhance(sectionName, row, body) {
+        if (sectionName === "programs" && can("sis:catalog:manage"))
+            body.append(
+                button("Degree audit requirements", () => ui.degreeAudit().launch(row.id)),
+                button("Program grading scale", () => ui.degreeAudit().gradingScale(row.id)),
+            );
+        if (sectionName === "programs" && can("sis:catalog:manage"))
+            body.append(button("Academic years", () => ui.calendar().years()));
+        if (sectionName === "courses" && can("sis:catalog:manage"))
+            body.append(button("Clone as a course draft", () => ui.catalog().clone(row.id)));
+        if (sectionName === "courses" && can("sis:catalog:manage"))
+            body.append(button("Published definitions", () => ui.catalog().publications(row.id)));
+        if (sectionName === "courses" && can("sis:catalog:manage"))
+            body.append(button("Titles & description", () => ui.catalog().courseText(row.id)));
+        if (sectionName === "sections" && can("sis:catalog:manage"))
+            body.append(button("Course definition", () => ui.catalog().sectionDefinition(row.id)));
+        if (["sections", "teaching"].includes(sectionName) && can("sis:registration:manage"))
+            body.append(button("Register a group into this section", () => ui.batchRegistration().start(row.id)));
         if (
             ["courses", "sections", "programs", "terms"].includes(
                 sectionName,
@@ -885,51 +875,12 @@ window.createWorkspaceOperations = function (ui) {
             );
         if (can("sis:audit:read"))
             body.append(
-                button("View audit history", async () => {
-                    const surface = openDrawer(
-                        "Record audit history",
-                        "AUDIT METADATA",
-                    );
-                    surface.append(
-                        button(
-                            "Back to record",
-                            () => openRecord(sectionName, row),
-                            "btn-link",
-                        ),
-                    );
-                    await paged(surface, "audit", row.id, (rows) =>
-                        scrollTable(
-                            ["Action", "Recorded at (UTC)", "Actor account"],
-                            rows.map((item) => [
-                                item.action,
-                                item.recorded_at,
-                                item.actor_id,
-                            ]),
-                            "Audit events",
-                        ),
-                    );
-                }),
+                button("View audit history", () => audit(sectionName, row)),
             );
         if (sectionName === "students" && can("sis:registration:manage"))
             await registration(body, row);
         if (["sections", "teaching"].includes(sectionName))
             await roster(body, row, sectionName);
-        if (sectionName === "bookings") {
-            const booking = await request(`/sis/bookings/${row.id}/`);
-            body.append(
-                section(
-                    "Requested times",
-                    scrollTable(
-                        ["Starts", "Ends"],
-                        booking.slots.map((slot) => [
-                            new Date(slot.starts_at).toLocaleString(),
-                            new Date(slot.ends_at).toLocaleString(),
-                        ]),
-                        "Booking times",
-                    ),
-                ),
-            );
-        }
         if (
             sectionName === "reports" &&
             can("sis:reporting:manage") &&
@@ -1023,6 +974,7 @@ window.createWorkspaceOperations = function (ui) {
         if (sectionName === "billing") await billing(body, row);
         if (sectionName === "campaigns") await campaign(body, row);
         if (sectionName === "terms" && can("sis:catalog:manage")) {
+            body.append(button("Drop / withdrawal policy", () => ui.courseDrops().policy(row, () => openRecord(sectionName, row))));
             const panel = section("Registration window");
             body.append(panel);
             await paged(panel, "window", row.id, (rows) =>
@@ -1106,39 +1058,14 @@ window.createWorkspaceOperations = function (ui) {
                 ),
             );
         }
-        if (sectionName === "equivalencies")
-            body.append(
-                button("Award transfer credit", () =>
-                    flow(
-                        "Award transfer credit",
-                        [
-                            ["student_id", "Student", "lookup", "students"],
-                            [
-                                "institution_id",
-                                "Sending institution",
-                                "lookup",
-                                "institutions",
-                            ],
-                            ["term_id", "Award term", "lookup", "terms"],
-                            [
-                                "completed_on",
-                                "External course completion date",
-                                "date",
-                            ],
-                            [
-                                "grade_rank",
-                                "Grade rank earned (0–10000)",
-                                "number",
-                            ],
-                        ],
-                        "/sis/transfer-awards/",
-                        (data) => ({ ...data, equivalency_id: row.id }),
-                        () => openRecord(sectionName, row),
-                        {},
-                        "The service verifies the sending institution, effective dates and minimum grade rank before creating an academic credit.",
-                    ),
-                ),
-            );
     }
-    return { datasets, enhance, createJournal, billingBatch, flow };
+    return {
+        datasets,
+        enhance,
+        createJournal,
+        billingBatch,
+        flow,
+        audit,
+        registration,
+    };
 };

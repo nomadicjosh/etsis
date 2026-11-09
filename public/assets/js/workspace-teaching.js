@@ -1,17 +1,7 @@
 /* Paged teaching tools. Each read and download is authorized again on the server. */
 window.createWorkspaceTeaching = function (ui) {
     "use strict";
-    const {
-        node,
-        request,
-        requestFile,
-        task,
-        openDrawer,
-        openRecord,
-        table,
-        badge,
-        flow,
-    } = ui;
+    const { node, request, requestFile, task, openDrawer, openRecord, table, badge, flow } = ui;
     const status = (value) =>
         ({
             A: "Staff registered",
@@ -31,11 +21,7 @@ window.createWorkspaceTeaching = function (ui) {
             label,
         );
     const area = (title) =>
-        node(
-            "section",
-            { class: "record-section", "aria-label": title },
-            node("h3", {}, title),
-        );
+        node("section", { class: "record-section", "aria-label": title }, node("h3", {}, title));
     const grid = (headers, rows, caption) =>
         node(
             "div",
@@ -68,11 +54,7 @@ window.createWorkspaceTeaching = function (ui) {
             after = next.dataset.after;
             await load();
         });
-        container.append(
-            information,
-            content,
-            node("div", { class: "inline-actions mt-3" }, previous, next),
-        );
+        container.append(information, content, node("div", { class: "inline-actions mt-3" }, previous, next));
         async function load() {
             const current = ++version;
             content.setAttribute("aria-busy", "true");
@@ -99,9 +81,7 @@ window.createWorkspaceTeaching = function (ui) {
                 node(
                     "p",
                     { class: "form-text" },
-                    [row.course_title || row.course_code, row.term_code]
-                        .filter(Boolean)
-                        .join(" · "),
+                    [row.course_title || row.course_code, row.term_code].filter(Boolean).join(" · "),
                 ),
             );
         const panel = area("Section roster");
@@ -125,26 +105,15 @@ window.createWorkspaceTeaching = function (ui) {
                         ),
                         page.items.length
                             ? grid(
-                                  [
-                                      "Student",
-                                      "Institutional ID",
-                                      "Registration",
-                                      "Final grade",
-                                      "Action",
-                                  ],
+                                  ["Student", "Institutional ID", "Registration", "Final grade", "Action"],
                                   page.items.map((student) => [
                                       `${student.given_name} ${student.family_name}`,
                                       student.institutional_id,
                                       status(student.status),
                                       student.grade_code || "—",
-                                      page.can_grade &&
-                                      ["A", "N"].includes(student.status)
+                                      page.can_grade && ["A", "N"].includes(student.status)
                                           ? button("Grade & attendance", () =>
-                                                studentRecord(
-                                                    row,
-                                                    student,
-                                                    back,
-                                                ),
+                                                studentRecord(row, student, back),
                                             )
                                           : "—",
                                   ]),
@@ -178,11 +147,7 @@ window.createWorkspaceTeaching = function (ui) {
                     "Add assignment",
                     [
                         ["title", "Assignment title"],
-                        [
-                            "possible_hundredths",
-                            "Possible points",
-                            "hundredths",
-                        ],
+                        ["possible_hundredths", "Possible points", "hundredths"],
                         ["due_on", "Due on", "date"],
                     ],
                     `/sis/sections/${row.id}/assignments/`,
@@ -205,17 +170,11 @@ window.createWorkspaceTeaching = function (ui) {
                               item.title,
                               Number(item.possible_hundredths) / 100,
                               item.due_on,
-                              button("Edit assignment", () =>
-                                  editAssignment(item.id, back),
-                              ),
+                              button("Edit assignment", () => editAssignment(item.id, back)),
                           ]),
                           "Assignments",
                       )
-                    : node(
-                          "p",
-                          { class: "muted-text mt-3" },
-                          "Add an assignment to begin recording scores.",
-                      ),
+                    : node("p", { class: "muted-text mt-3" }, "Add an assignment to begin recording scores."),
         );
     }
     async function editAssignment(id, back) {
@@ -237,52 +196,88 @@ window.createWorkspaceTeaching = function (ui) {
             "Changing possible points changes the percentage represented by existing scores. Recorded earned scores are preserved; the new maximum cannot be below any earned score. Final grades remain separate.",
         );
     }
-    async function studentRecord(sectionRow, student, back) {
-        const body = openDrawer(
-            `${student.given_name} ${student.family_name}`,
-            "GRADES & ATTENDANCE",
+    async function recordFinalGrade(sectionRow, student, back, assignment = null) {
+        const choices = await request(
+            `/sis/sections/${sectionRow.id}/students/${student.student_id}/grade-choices/`,
+            "POST",
+            assignment ? { assignment_id: assignment } : {},
         );
+        if (choices.needs_assignment) {
+            const body = openDrawer("Choose grading program", "STUDENT PROGRAM CONTEXT");
+            const key = "grade-pursuit-choice";
+            const select = node(
+                "select",
+                { id: key, class: "form-select" },
+                node("option", { value: "" }, "Choose the applicable program"),
+            );
+            for (const pursuit of choices.pursuits)
+                select.append(node("option", { value: pursuit.id }, `${pursuit.code} · ${pursuit.title}`));
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "This student pursues programs with different grading scales. Choose the program for this academic record.",
+                ),
+                node("label", { for: key, class: "form-label" }, "Program pursuit"),
+                select,
+                button("Use selected program", async () => {
+                    if (!select.value) throw new Error("Choose the applicable program.");
+                    await recordFinalGrade(sectionRow, student, back, select.value);
+                }),
+                button("Back to roster", back, "btn-link"),
+            );
+            return;
+        }
+        if (!choices.items.length)
+            throw new Error(
+                "Catalog staff must publish the applicable grading scale before a grade can be recorded.",
+            );
+        return flow(
+            "Save final grade",
+            [
+                [
+                    "grade_id",
+                    "Institutional grade",
+                    "choice",
+                    choices.items.map((g) => ({
+                        value: g.id,
+                        label: `${g.code} · ${Number(g.points_milli) / 1000} grade points`,
+                    })),
+                ],
+            ],
+            `/sis/sections/${sectionRow.id}/final-grades/`,
+            (data) => ({
+                ...data,
+                student_id: student.student_id,
+                version: Number(student.grade_version),
+                ...(assignment ? { assignment_id: assignment } : {}),
+            }),
+            back,
+            {},
+            "Choices use this record’s grading policy. Saving checks the displayed grade version. Reload the roster if another person changes the final grade.",
+        );
+    }
+    async function studentRecord(sectionRow, student, back) {
+        const body = openDrawer(`${student.given_name} ${student.family_name}`, "GRADES & ATTENDANCE");
         body.append(button("Back to roster", back, "btn-link"));
         const final = area("Final grade");
         body.append(final);
         final.append(
-            node(
-                "p",
-                {},
-                `Current grade: ${student.grade_code || "Not graded"}`,
-            ),
-            button("Record final grade", () =>
-                flow(
-                    "Save final grade",
-                    [["grade_id", "Institutional grade", "lookup", "grades"]],
-                    `/sis/sections/${sectionRow.id}/final-grades/`,
-                    (data) => ({
-                        ...data,
-                        student_id: student.student_id,
-                        version: Number(student.grade_version),
-                    }),
-                    back,
-                    {},
-                    "Saving checks the displayed grade version. Reload the roster if another person changes the final grade.",
-                ),
-            ),
+            node("p", {}, `Current grade: ${student.grade_code || "Not graded"}`),
+            button("Record final grade", () => recordFinalGrade(sectionRow, student, back)),
         );
         const attendance = area("Attendance");
         body.append(attendance);
         let term = null;
         attendance.append(
-            button("Record attendance", () =>
-                attendanceForm(sectionRow, student, back, null, term),
-            ),
+            button("Record attendance", () => attendanceForm(sectionRow, student, back, null, term)),
         );
         await pages(
             attendance,
             (after) =>
-                request(
-                    `/sis/sections/${sectionRow.id}/students/${student.student_id}/attendance/`,
-                    "POST",
-                    { after },
-                ),
+                request(`/sis/sections/${sectionRow.id}/students/${student.student_id}/attendance/`, "POST", {
+                    after,
+                }),
             (page) => {
                 term = page.term;
                 return node(
@@ -302,13 +297,7 @@ window.createWorkspaceTeaching = function (ui) {
                                   item.held_on,
                                   badge(item.status),
                                   button("Correct mark", () =>
-                                      attendanceForm(
-                                          sectionRow,
-                                          student,
-                                          back,
-                                          item,
-                                          term,
-                                      ),
+                                      attendanceForm(sectionRow, student, back, item, term),
                                   ),
                               ]),
                               "Recorded attendance",
@@ -322,11 +311,9 @@ window.createWorkspaceTeaching = function (ui) {
         await pages(
             scores,
             (after) =>
-                request(
-                    `/sis/sections/${sectionRow.id}/students/${student.student_id}/score-page/`,
-                    "POST",
-                    { after },
-                ),
+                request(`/sis/sections/${sectionRow.id}/students/${student.student_id}/score-page/`, "POST", {
+                    after,
+                }),
             (page) =>
                 page.items.length
                     ? grid(
@@ -349,24 +336,16 @@ window.createWorkspaceTeaching = function (ui) {
                                       `/sis/assignments/${item.assignment_id}/scores/`,
                                       (data) => ({
                                           ...data,
-                                          earned_hundredths:
-                                              data.earned_hundredths ?? null,
+                                          earned_hundredths: data.earned_hundredths ?? null,
                                           student_id: student.student_id,
                                           version: Number(item.version),
                                       }),
-                                      () =>
-                                          studentRecord(
-                                              sectionRow,
-                                              student,
-                                              back,
-                                          ),
+                                      () => studentRecord(sectionRow, student, back),
                                       {
                                           earned_hundredths:
                                               item.earned_hundredths == null
                                                   ? ""
-                                                  : Number(
-                                                        item.earned_hundredths,
-                                                    ) / 100,
+                                                  : Number(item.earned_hundredths) / 100,
                                       },
                                   );
                                   form.elements.earned_hundredths.max =
@@ -378,21 +357,10 @@ window.createWorkspaceTeaching = function (ui) {
                     : node("p", {}, "No assignments have been defined."),
         );
     }
-    async function attendanceForm(
-        section,
-        student,
-        back,
-        record = null,
-        term = null,
-    ) {
+    async function attendanceForm(section, student, back, record = null, term = null) {
         const descriptors = [
             ["held_on", "Class date", "date"],
-            [
-                "status",
-                "Attendance",
-                "choice",
-                ["present", "absent", "late", "excused"],
-            ],
+            ["status", "Attendance", "choice", ["present", "absent", "late", "excused"]],
         ];
         const form = await flow(
             record ? "Save attendance correction" : "Save attendance",
@@ -401,9 +369,7 @@ window.createWorkspaceTeaching = function (ui) {
             (data) => ({
                 ...data,
                 student_id: student.student_id,
-                ...(record
-                    ? { held_on: record.held_on, revision: record.revision }
-                    : {}),
+                ...(record ? { held_on: record.held_on, revision: record.revision } : {}),
             }),
             () => studentRecord(section, student, back),
             record || {},

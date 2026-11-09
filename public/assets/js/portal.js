@@ -369,6 +369,7 @@
                 {},
                 `Section ${course.section_code} · ${Number(course.credits_milli) / 1000} credits`,
             ),
+            el('p', {}, course.delivery_label || 'Delivery to be confirmed'),
             el('p', {}, `${seats} of ${course.capacity} seats available`),
             el(
                 'p',
@@ -376,6 +377,10 @@
                 `Section fee: ${amount(course.fee_minor, course.currency)}`,
             ),
         );
+        if (course.description) {
+            card.append(el('details', {}, el('summary', {}, 'Course description'),
+                el('p', { class: 'campus-course-description' }, course.description)));
+        }
         if (
             registration &&
             me?.students.length &&
@@ -1159,39 +1164,24 @@
                                   ),
                                   ['A', 'N'].includes(item.status)
                                       ? button('Drop / withdraw', async () => {
-                                            dialog(
-                                                'Review your registration change',
-                                                el(
-                                                    'p',
-                                                    {},
-                                                    `You’re changing ${item.course_code}, section ${item.section_code}. The term’s add/drop deadline determines whether this is recorded as a drop or withdrawal. Fee adjustments follow your institution’s billing policy.`,
-                                                ),
-                                                button(
-                                                    'Confirm drop / withdrawal',
-                                                    async () => {
-                                                        await request(
-                                                            '/portal/api/drop/',
-                                                            'POST',
-                                                            {
-                                                                student_id:
-                                                                    student.id,
-                                                                section_id:
-                                                                    item.section_id,
-                                                            },
-                                                        );
-                                                        bootstrap.Modal.getInstance(
-                                                            one(
-                                                                '#campus-dialog',
-                                                            ),
-                                                        ).hide();
-                                                        notice(
-                                                            'Your registration has been updated.',
-                                                        );
-                                                        await renderService();
-                                                    },
-                                                    true,
-                                                ),
-                                            );
+                                            const plan = await request('/portal/api/drop-review/', 'POST', { student_id: student.id, section_id: item.section_id });
+                                            const command = Object.fromEntries(['student_id', 'section_id', 'enrollment_id', 'version', 'operation_id', 'revision', 'effective_on'].map(key => [key, plan[key]]));
+                                            let finished = false;
+                                            const finish = async receipt => {
+                                                if (finished) return;
+                                                finished = true;
+                                                bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
+                                                notice(receipt.academic_records_removed ? 'Your course was removed. Its course charge was reversed if present. Any account credit is reviewed separately for a cash refund.' : `Your course stays on your record with grade ${receipt.grade_code} and zero earned credits. Its course charge is retained.`);
+                                                await renderService();
+                                            };
+                                            dialog('Review your registration change',
+                                                el('p', {}, `${item.course_code} · ${item.section_code}. Effective ${plan.effective_on}. Drop/add ends ${plan.outcome.grace_ends_on}.`),
+                                                el('p', {}, plan.outcome.delete_records
+                                                    ? 'Your enrollment and academic credit will be removed. The original course charge will be reversed if present. This may leave an account credit; cash refunds require a separate review. Other institutional fees are unchanged.'
+                                                    : `Your course stays on your academic record with grade ${plan.outcome.grade_code} and zero earned credits. The original course charge stays payable. GPA treatment: ${plan.outcome.counts_gpa ? 'counts toward GPA under the catalog grade definition' : 'excluded from GPA'}.`),
+                                                button('Confirm drop / withdrawal', async () => finish(await request('/portal/api/drop/', 'POST', command)), true),
+                                                button('Check saved drop', async () => finish(await request(`/portal/api/drop-receipts/${plan.operation_id}/`))),
+                                                el('p', { class: 'form-text' }, 'If the connection is interrupted, check the saved drop or retry this same confirmation.'));
                                         })
                                       : '—',
                               ]),

@@ -1247,3 +1247,6 @@
         display: none;
     }
 }
+
+.campus-course-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.campus-course-card summary:focus-visible, .campus-program-card summary:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }

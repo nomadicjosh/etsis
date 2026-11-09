@@ -1,0 +1,2484 @@
+/* Independent reusable groups and version-pinned degree compositions. No student evaluation. */
+window.createWorkspaceDegreeAudit = function (ui) {
+    "use strict";
+    const { node, request, task } = ui;
+    let dialog = null,
+        opener = null,
+        lastTrigger = null,
+        sequence = 0;
+    document.addEventListener(
+        "click",
+        (e) => {
+            if (!dialog) lastTrigger = e.target.closest?.("button, a") || lastTrigger;
+        },
+        true,
+    );
+    const post = (path, data = {}) => request(path, "POST", data);
+    const op = async () => (await request("/sis/ui/operation-id/")).id;
+    function fail(error) {
+        const target = dialog?.querySelector('[role="alert"]');
+        if (!target) throw error;
+        target.textContent = [
+            error.message || "Please review this request.",
+            ...(error.fields || []).map((f) => f.message),
+        ]
+            .filter(Boolean)
+            .join(" ");
+        target.hidden = false;
+        target.focus();
+    }
+    const button = (label, run, style = "btn-outline-primary") =>
+        node(
+            "button",
+            {
+                type: "button",
+                class: `btn ${style}`,
+                onclick: (e) =>
+                    task(async () => {
+                        try {
+                            await run();
+                        } catch (error) {
+                            fail(error);
+                        }
+                    }, e.currentTarget),
+            },
+            label,
+        );
+    function close() {
+        dialog?.close();
+        dialog?.remove();
+        dialog = null;
+        [
+            opener,
+            ...document.querySelectorAll(
+                "#directory-results button, #directory-tabs a, #directory-tabs button",
+            ),
+        ]
+            .find((el) => el?.isConnected && !el.disabled && el.getClientRects().length)
+            ?.focus({ preventScroll: true });
+    }
+    function screen(title, eyebrow = "ACADEMIC REQUIREMENTS") {
+        opener = dialog ? opener : lastTrigger || document.activeElement;
+        dialog?.close();
+        dialog?.remove();
+        ui.closeDrawer();
+        dialog = node("dialog", {
+            class: "report-workbench degree-audit-studio",
+            "aria-labelledby": "degree-audit-title",
+        });
+        const body = node("div", { class: "report-workbench-body" });
+        dialog.append(
+            node(
+                "header",
+                { class: "report-workbench-heading" },
+                node(
+                    "div",
+                    {},
+                    node("p", { class: "report-workbench-eyebrow" }, eyebrow),
+                    node("h1", { id: "degree-audit-title" }, title),
+                ),
+                button("Close builder", close),
+            ),
+            node("div", {
+                class: "alert alert-danger",
+                role: "alert",
+                tabindex: "-1",
+                hidden: true,
+            }),
+            body,
+        );
+        dialog.addEventListener("cancel", (e) => {
+            e.preventDefault();
+            close();
+        });
+        document.body.append(dialog);
+        dialog.showModal();
+        return body;
+    }
+    window.addEventListener("pagehide", close);
+    const text = (value) => (value == null ? "" : String(value / 1000));
+    function milli(value, nullable = false) {
+        if (nullable && value === "") return null;
+        if (!/^\d{1,7}(\.\d{1,3})?$/.test(value))
+            throw new Error("Use nonnegative numbers with up to three decimal places.");
+        const [whole, fraction = ""] = value.split(".");
+        return Number(whole) * 1000 + Number(fraction.padEnd(3, "0"));
+    }
+    function field(label, value, update, options = {}) {
+        const id = `audit-input-${++sequence}`,
+            input = node("input", {
+                id,
+                class: "form-control",
+                value: value ?? "",
+                ...options,
+            });
+        input.addEventListener("input", () => update(input.value));
+        return node("div", { class: "mb-3" }, node("label", { for: id, class: "form-label" }, label), input);
+    }
+    function search(label, value, run) {
+        let query = value;
+        const form = node("form", { class: "audit-search" }),
+            submit = node("button", { type: "submit", class: "btn btn-primary" }, "Search");
+        form.append(
+            field(label, value, (v) => (query = v), {
+                type: "search",
+                maxlength: 80,
+            }),
+            submit,
+        );
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            task(async () => {
+                try {
+                    await run(query.trim());
+                } catch (error) {
+                    fail(error);
+                }
+            }, submit);
+        });
+        return form;
+    }
+    const badge = (label) => node("span", { class: "audit-tag" }, label);
+    const actions = (...buttons) => node("div", { class: "audit-actions" }, buttons);
+    const panel = (title, help) =>
+        node(
+            "section",
+            { class: "audit-panel" },
+            node("h2", { class: "h5" }, title),
+            node("p", { class: "form-text" }, help),
+        );
+    const count = (d) =>
+        d.requirement_type === "courses"
+            ? `${d.min_courses} ${d.min_courses === 1 ? "course" : "courses"}`
+            : `${text(d.min_credits_milli)} credits${d.min_gpa_milli == null ? "" : ` · ${text(d.min_gpa_milli)} group GPA (earlier definition)`}`;
+    const scaleText = (value) =>
+        Number(value / 1000).toLocaleString(undefined, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 3,
+        });
+    const courseLabel = (c) => `${c.code} · ${c.title}`;
+    function groupTree(item, open = true) {
+        const d = item.definition,
+            details = item.course_details || {};
+        const tree = node(
+            "details",
+            { class: "audit-tree", open },
+            node("summary", {}, d.name, " ", badge(count(d))),
+        );
+        if (d.min_course_grade_points_milli != null)
+            tree.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    `Each applied course requires at least ${text(d.min_course_grade_points_milli)} out of ${scaleText(item.effective_grade_point_scale?.maximum_milli ?? d.max_course_grade_points_milli)} grade points, using its grade definition.`,
+                ),
+            );
+        for (const r of d.rules) {
+            tree.append(
+                node(
+                    "section",
+                    {},
+                    node(
+                        "h3",
+                        { class: "h6" },
+                        r.mode === "all"
+                            ? "Take all"
+                            : r.mode === "choose"
+                              ? `Choose ${r.minimum_courses}`
+                              : d.requirement_type
+                                ? "Eligible courses"
+                                : "Credit pool",
+                    ),
+                    node(
+                        "ul",
+                        {},
+                        r.course_ids.map((id) =>
+                            node(
+                                "li",
+                                {},
+                                details[id] ? courseLabel(details[id]) : "Selected course",
+                                " ",
+                                details[id] ? badge(`${text(details[id].credits_milli)} credits`) : null,
+                            ),
+                        ),
+                    ),
+                ),
+            );
+        }
+        if (!d.rules.length) tree.append(node("p", {}, "Add a requirement to begin."));
+        return tree;
+    }
+    const policyChoices = {
+        repeat_credit: [
+            ["highest_earned", "Highest earned award per course"],
+            ["all_eligible", "Every eligible earned award"],
+        ],
+        repeat_gpa: [
+            ["all_eligible", "All eligible graded attempts"],
+            ["highest_grade", "Highest eligible grade per course"],
+            ["latest_eligible", "Latest eligible attempt per course"],
+        ],
+        transfer_overall_gpa: [
+            ["exclude", "Exclude transfer awards"],
+            ["include_eligible", "Include accepted GPA-eligible awards"],
+        ],
+    };
+    const policyLabels = {
+        repeat_credit: "Repeated-course earned credit",
+        repeat_gpa: "Repeated-course GPA",
+        transfer_overall_gpa: "Transfer awards in overall GPA",
+    };
+    function degreeTree(item) {
+        const d = item.definition,
+            tree = node(
+                "section",
+                { class: "audit-preview" },
+                node("h2", { class: "h4" }, d.name),
+                node(
+                    "p",
+                    {},
+                    `${text(d.min_credits_milli)} total credits · ${text(d.min_resident_milli)} resident credits`,
+                ),
+            );
+        if (item.grade_scale) {
+            const scale = item.grade_scale;
+            const scaleDetails = node(
+                "details",
+                { class: "audit-tree" },
+                node(
+                    "summary",
+                    {},
+                    `${scale.source === "program" ? "Program" : scale.source === "default" ? "Unconfigured default" : "Global"} grading scale · Maximum ${scaleText(scale.maximum_milli)} grade points`,
+                ),
+            );
+            for (const grade of scale.definition.grades)
+                scaleDetails.append(
+                    node(
+                        "p",
+                        {},
+                        `${grade.code}: ${grade.min_score_milli == null ? "No percentage range" : `${text(grade.min_score_milli)}–${text(grade.max_score_milli)}%`} · ${text(grade.points_milli)} grade points · ${grade.counts_gpa ? "Counts in GPA" : "Excluded from GPA"}`,
+                    ),
+                );
+            tree.append(scaleDetails);
+        } else
+            tree.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Grading scale was not recorded with this earlier definition.",
+                ),
+            );
+        for (const g of d.groups) {
+            const resolved = item.group_details?.[g.group_id];
+            if (resolved)
+                tree.append(groupTree({ ...resolved, effective_grade_point_scale: item.grade_scale }));
+            else if (g.rules) tree.append(groupTree({ definition: g, course_details: item.course_details }));
+        }
+        for (const [key, choices] of Object.entries(policyChoices))
+            tree.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    `${policyLabels[key]}: ${choices.find(([v]) => v === d.policies?.[key])?.[1] || "Not recorded"}`,
+                ),
+            );
+        tree.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "Waivers remove required courses everywhere; they create no earned credit or GPA points. This is a requirements preview, not a student degree audit.",
+            ),
+        );
+        return tree;
+    }
+    function pager(target, data, after, stack, run, cursorKey = "next_after") {
+        if (stack.length) target.append(button("Previous page", () => run(stack.at(-1), stack.slice(0, -1))));
+        if (data[cursorKey])
+            target.append(button("Next page", () => run(data[cursorKey], [...stack, after])));
+    }
+    async function library(query = "", after = null, stack = [], back = null) {
+        const result = await post("/sis/course-groups/page/", {
+            published_only: false,
+            ...(query ? { search: query } : {}),
+            ...(after ? { after } : {}),
+        });
+        const body = screen("Course group library", "REUSABLE BUILDING BLOCKS");
+        body.append(
+            node(
+                "p",
+                {},
+                "Build a group once. Reuse its published versions in any degree, program or academic year. Groups have no program owner.",
+            ),
+            actions(
+                button(
+                    "Create course group",
+                    () => newGroup(back || (() => library()), result.grade_point_scale),
+                    "btn-primary",
+                ),
+                back ? button("Return to degree draft", back) : null,
+            ),
+            search("Search course groups", query, (q) => library(q, null, [], back)),
+        );
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const g of result.items)
+            cards.append(
+                node(
+                    "article",
+                    { class: "audit-library-card" },
+                    badge(g.published_version_id ? "Published version available" : "Draft"),
+                    node("h2", { class: "h5" }, g.name),
+                    node("p", { class: "form-text" }, `Working draft · revision ${g.revision}`),
+                    actions(
+                        button(`Build ${g.name}`, async () =>
+                            groupEditor(
+                                await request(`/sis/course-groups/${g.id}/`),
+                                back || (() => library(query, after, stack)),
+                            ),
+                        ),
+                        button("Version history", () =>
+                            history("group", g.id, null, back || (() => library(query, after, stack))),
+                        ),
+                    ),
+                ),
+            );
+        if (!result.items.length)
+            cards.append(node("p", {}, "No groups yet. Create a reusable block to get started."));
+        body.append(cards);
+        pager(body, result, after, stack, (a, s) => library(query, a, s, back));
+    }
+    function newGroup(back, scale = { maximum_milli: 4000, is_default: true }) {
+        let name = "",
+            creationId = null;
+        const body = screen("Create a reusable course group");
+        body.append(
+            node(
+                "p",
+                {},
+                "General education, a major core, or a flexible elective pool: each is an independent library block.",
+            ),
+            field("Course group name", "", (v) => (name = v), { maxlength: 191 }),
+            actions(
+                button(
+                    "Create group draft",
+                    async () => {
+                        const result = await post("/sis/course-groups/create/", {
+                            id: (creationId ??= await op()),
+                            definition: {
+                                name: name.trim(),
+                                min_credits_milli: 0,
+                                requirement_type: "credits",
+                                min_courses: 0,
+                                min_course_grade_points_milli: null,
+                                max_course_grade_points_milli: scale.maximum_milli,
+                                grade_scale_program_id: null,
+                                courses: [],
+                                rules: [],
+                            },
+                        });
+                        groupEditor(result, back);
+                    },
+                    "btn-primary",
+                ),
+                button(back.returnLabel || "Back to library", back),
+            ),
+        );
+    }
+    async function launch(program, after = null, stack = []) {
+        const result = await post(`/sis/programs/${program}/degree-audits/page/`, after ? { after } : {}),
+            body = screen("Degree audit builder");
+        body.append(
+            node(
+                "p",
+                {},
+                "Compose the requirements for a program and academic year from published course-group blocks. Each selection keeps its exact published version.",
+            ),
+            actions(
+                button("Set up an academic year", () => years(program), "btn-primary"),
+                button("Course group library", () => library("", null, [], () => launch(program))),
+            ),
+        );
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const row of result.items)
+            cards.append(
+                node(
+                    "article",
+                    { class: "audit-library-card" },
+                    badge(row.academic_year_code),
+                    node("h2", { class: "h5" }, row.name || "Degree requirements"),
+                    node("p", {}, `Draft revision ${row.revision}`),
+                    actions(
+                        button(`Edit ${row.academic_year_code} requirements`, async () =>
+                            degreeEditor(await request(`/sis/degree-audits/${row.id}/`)),
+                        ),
+                        button("Published requirements", () =>
+                            history("degree", row.id, program, () => launch(program)),
+                        ),
+                    ),
+                ),
+            );
+        if (!result.items.length)
+            cards.append(
+                node("p", {}, "No requirements for this program yet. Choose an academic year to start."),
+            );
+        body.append(cards);
+        pager(body, result, after, stack, (a, s) => launch(program, a, s));
+    }
+    async function years(program, source = null, query = "", after = null, stack = []) {
+        query = query.trim();
+        const result = await post("/sis/academic-years/", {
+            ...(query ? { search: query } : {}),
+            ...(after ? { after } : {}),
+        });
+        const body = screen(
+            source ? "Clone requirements to another academic year" : "Choose an academic year",
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                "Academic years are set up in the Academic catalog. Catalog years remain derived from matriculation.",
+            ),
+            search("Academic year search", query, (q) => years(program, source, q)),
+        );
+        for (const y of result.items)
+            body.append(
+                node(
+                    "article",
+                    { class: "audit-library-card" },
+                    node("h2", { class: "h5" }, y.code),
+                    button(`Use ${y.code}`, async () => {
+                        const row = source
+                            ? await post(`/sis/degree-audits/${source.id}/clone/`, {
+                                  version_id: source.version,
+                                  program_id: program,
+                                  academic_year_id: y.id,
+                              })
+                            : await post(`/sis/programs/${program}/degree-audits/open/`, {
+                                  academic_year_id: y.id,
+                              });
+                        degreeEditor(row);
+                    }),
+                ),
+            );
+        if (!result.items.length)
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "No matching academic years. Set up an academic year in the Academic catalog first.",
+                ),
+            );
+        pager(body, result, after, stack, (a, s) => years(program, source, query, a, s));
+        body.append(button("Back to requirement drafts", () => launch(program)));
+    }
+    function workbench(body, titles) {
+        const grid = node("div", { class: "audit-builder-grid" }),
+            parts = titles.map(([title, help]) => panel(title, help));
+        grid.append(...parts);
+        body.append(grid);
+        return parts;
+    }
+    function checkbox(label, update) {
+        const input = node("input", {
+            type: "checkbox",
+            class: "form-check-input",
+        });
+        input.addEventListener("change", () => update(input.checked));
+        return node("label", { class: "audit-source-choice" }, input, node("span", {}, label));
+    }
+    function draggable(element, payload) {
+        element.draggable = true;
+        element.addEventListener("dragstart", (e) => {
+            e.dataTransfer.setData("application/x-etsis-requirement", JSON.stringify(payload));
+            e.dataTransfer.effectAllowed = "copyMove";
+        });
+        element.append(
+            node("span", { class: "audit-drag-hint", "aria-hidden": "true" }, "⠿ Drag or use the buttons"),
+        );
+    }
+    function dropzone(element, accept) {
+        element.addEventListener("dragover", (e) => {
+            if (e.dataTransfer.types.includes("application/x-etsis-requirement")) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+            }
+        });
+        element.addEventListener("drop", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            task(async () => {
+                try {
+                    const data = JSON.parse(e.dataTransfer.getData("application/x-etsis-requirement"));
+                    await accept(data);
+                } catch (error) {
+                    fail(error);
+                }
+            }, element);
+        });
+    }
+    function move(list, index, offset) {
+        const next = index + offset;
+        if (next < 0 || next >= list.length) return;
+        [list[index], list[next]] = [list[next], list[index]];
+    }
+    function normalGroup(model) {
+        const d = structuredClone(model);
+        d.name = d.name.trim();
+        d.min_credits_milli = d.requirement_type === "credits" ? milli(d.min_credits_milli) : 0;
+        d.min_courses = d.requirement_type === "courses" ? Number(d.min_courses) : 0;
+        d.min_course_grade_points_milli = milli(d.min_course_grade_points_milli, true);
+        if (
+            d.min_course_grade_points_milli != null &&
+            d.min_course_grade_points_milli > d.max_course_grade_points_milli
+        )
+            throw new Error("The per-course minimum cannot exceed the maximum from grade definitions.");
+        const used = new Set();
+        for (const r of d.rules) {
+            r.minimum_courses =
+                r.mode === "all" ? r.course_ids.length : r.mode === "pool" ? 0 : Number(r.minimum_courses);
+            r.course_ids.forEach((id) => used.add(id));
+        }
+        d.courses = d.courses.filter((c) => used.has(c.course_id));
+        return d;
+    }
+    function groupEditor(saved, back, state = null) {
+        if (!state && !saved.definition.requirement_type) {
+            const body = screen("Update course group settings");
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "This earlier group records a credit minimum and an optional average group GPA. Choose the updated credit/course quantity and per-course grade-point threshold explicitly; its published history stays intact.",
+                ),
+                node(
+                    "p",
+                    {},
+                    `Earlier average group GPA: ${saved.definition.min_gpa_milli == null ? "No minimum recorded" : text(saved.definition.min_gpa_milli)}. This value is not copied into the per-course grade-point field.`,
+                ),
+                actions(
+                    button(
+                        "Use credit/course settings",
+                        () => {
+                            const definition = structuredClone(saved.definition);
+                            delete definition.min_gpa_milli;
+                            Object.assign(definition, {
+                                requirement_type: "credits",
+                                min_courses: 0,
+                                min_course_grade_points_milli: null,
+                                max_course_grade_points_milli: saved.grade_point_scale.maximum_milli,
+                                grade_scale_program_id: null,
+                            });
+                            groupEditor({ ...saved, definition }, back);
+                        },
+                        "btn-primary",
+                    ),
+                    button(back.returnLabel || "Back to library", back),
+                ),
+            );
+            return;
+        }
+
+        let scale = state?.scale || saved.grade_point_scale;
+        const model = state?.model || {
+            ...structuredClone(saved.definition),
+            max_course_grade_points_milli: scale.maximum_milli,
+            min_credits_milli: text(saved.definition.min_credits_milli),
+            min_courses: String(saved.definition.min_courses),
+            min_course_grade_points_milli: text(saved.definition.min_course_grade_points_milli),
+        };
+        const details = state?.details || structuredClone(saved.course_details || {});
+        let active = state?.active || model.rules[0]?.id || null;
+        const availableCourses = new Map();
+        const body = screen("Course group builder", "INDEPENDENT LIBRARY BLOCK"),
+            status = node("p", { role: "status", class: "audit-status" });
+        const restore = () => groupEditor(saved, back, { model, details, active, scale });
+        body.append(
+            actions(
+                button(back.returnLabel || "Back to library", back),
+                button("Requirements preview", () =>
+                    preview({ definition: normalGroup(model), course_details: details }, "group", restore),
+                ),
+                button("Save group draft", async () => {
+                    saved = await save();
+                    status.textContent = "Course group draft saved.";
+                }),
+                button(
+                    "Save & review publication",
+                    async () => {
+                        saved = await save();
+                        reasonScreen("group", saved, restore, back);
+                    },
+                    "btn-primary",
+                ),
+            ),
+            status,
+        );
+        const [source, canvas, inspector] = workbench(body, [
+            [
+                "1 · Choose courses",
+                "Check a published course version, then add it to a requirement. You can also drag a version card.",
+            ],
+            [
+                "2 · Build requirements",
+                "Select a requirement card to add courses. Use the buttons to reorder; dragging works too.",
+            ],
+            [
+                "3 · Group settings",
+                "This block is reusable across all programs. Publishing freezes the reviewed definition.",
+            ],
+        ]);
+        const creditsField = field(
+                "Group required credits",
+                model.min_credits_milli,
+                (v) => (model.min_credits_milli = v),
+                { inputmode: "decimal" },
+            ),
+            coursesField = field(
+                "Number of courses required",
+                model.min_courses,
+                (v) => (model.min_courses = v),
+                { type: "number", min: 0, max: 200 },
+            );
+        const creditMode = button("Require credits", () => {
+                model.requirement_type = "credits";
+                quantity();
+            }),
+            courseMode = button("Require courses", () => {
+                model.requirement_type = "courses";
+                quantity();
+            });
+        function quantity() {
+            creditsField.hidden = model.requirement_type !== "credits";
+            coursesField.hidden = model.requirement_type !== "courses";
+            creditMode.setAttribute("aria-pressed", String(model.requirement_type === "credits"));
+            courseMode.setAttribute("aria-pressed", String(model.requirement_type === "courses"));
+        }
+        inspector.append(
+            field("Course group name", model.name, (v) => (model.name = v), { maxlength: 191 }),
+            node(
+                "div",
+                { role: "group", "aria-label": "Group requirement type", class: "audit-segments" },
+                creditMode,
+                courseMode,
+            ),
+            creditsField,
+            coursesField,
+            field(
+                "Minimum grade points for each course (optional)",
+                model.min_course_grade_points_milli,
+                (v) => (model.min_course_grade_points_milli = v),
+                {
+                    type: "number",
+                    inputmode: "decimal",
+                    min: 0,
+                    max: scale.maximum_milli / 1000,
+                    step: "0.001",
+                },
+            ),
+            button("Choose grading context", () =>
+                gradingContext((program, chosen) => {
+                    model.grade_scale_program_id = program;
+                    model.max_course_grade_points_milli = chosen.maximum_milli;
+                    scale = chosen;
+                    restore();
+                }, restore),
+            ),
+            node(
+                "output",
+                { "aria-label": "Maximum grade points", class: "form-text" },
+                `Out of ${scaleText(scale.maximum_milli)} grade points${scale.is_default ? " · Default until grade definitions are configured" : scale.source === "program" ? " · Program grading scale" : " · From grade definitions"}`,
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                "Choose the institution’s required minimum for each applied course, or leave it blank. The scale maximum is automatic; each grade definition supplies the course’s grade-point value.",
+            ),
+            badge(`Working draft · revision ${saved.revision}`),
+        );
+        quantity();
+        const cards = node("div", { class: "audit-canvas" });
+        const versionReview = node("section", {
+            class: "audit-version-review audit-tree",
+            role: "group",
+            "aria-label": "Review course version changes",
+            tabindex: "-1",
+            hidden: true,
+        });
+        canvas.append(
+            button(
+                "Add requirement",
+                async () => {
+                    const r = {
+                        id: await op(),
+                        mode: "pool",
+                        minimum_courses: 0,
+                        course_ids: [],
+                    };
+                    model.rules.push(r);
+                    active = r.id;
+                    render();
+                },
+                "btn-primary",
+            ),
+            versionReview,
+            cards,
+        );
+        async function save() {
+            return post(`/sis/course-groups/${saved.id}/save/`, {
+                revision: saved.revision,
+                definition: normalGroup(model),
+            });
+        }
+        function add(picks, confirmed = false, targetId = active) {
+            const r = model.rules.find((rule) => rule.id === targetId);
+            if (!r) throw new Error("Add or select a requirement card first.");
+            if (new Set(picks.map((p) => p.course_id)).size !== picks.length)
+                throw new Error("Choose one published version of each course.");
+            const replacements = picks.filter((p) =>
+                model.courses.some((c) => c.course_id === p.course_id && c.version_id !== p.version_id),
+            );
+            if (replacements.length && !confirmed) {
+                versionReview.hidden = false;
+                versionReview.replaceChildren(
+                    node("h3", { class: "h5" }, "Review course version changes"),
+                    node(
+                        "p",
+                        {},
+                        "Adopting a version replaces this course reference throughout this working group. Published groups and degrees keep their earlier versions.",
+                    ),
+                );
+                for (const p of replacements) {
+                    const affected = model.rules
+                        .map((rule, i) => (rule.course_ids.includes(p.course_id) ? i + 1 : null))
+                        .filter(Boolean);
+                    versionReview.append(
+                        node(
+                            "p",
+                            {},
+                            `${p.detail.code}: ${details[p.course_id]?.title || "Current course"} → ${p.detail.title}. ${text(details[p.course_id]?.credits_milli || 0)} → ${text(p.detail.credits_milli)} credits. Used in requirements ${affected.join(", ")}.`,
+                        ),
+                    );
+                }
+                versionReview.append(
+                    actions(
+                        button(
+                            "Adopt selected course versions",
+                            () => {
+                                add(picks, true, targetId);
+                                versionReview.hidden = true;
+                                cards.querySelector("button")?.focus({ preventScroll: true });
+                            },
+                            "btn-primary",
+                        ),
+                        button("Keep current course versions", () => {
+                            versionReview.hidden = true;
+                            status.textContent = "Current course references kept.";
+                            cards.querySelector("button")?.focus({ preventScroll: true });
+                        }),
+                    ),
+                );
+                versionReview.focus();
+                return;
+            }
+            for (const pick of picks) {
+                const existing = model.courses.find((c) => c.course_id === pick.course_id);
+                if (existing) existing.version_id = pick.version_id;
+                else model.courses.push({ course_id: pick.course_id, version_id: pick.version_id });
+                details[pick.course_id] = pick.detail;
+                if (!r.course_ids.includes(pick.course_id)) r.course_ids.push(pick.course_id);
+            }
+            render();
+            status.textContent = "Selected course versions applied to the working group.";
+        }
+        function render() {
+            const focusedLabel = cards.contains(document.activeElement)
+                ? document.activeElement.textContent
+                : null;
+            cards.replaceChildren();
+            if (!model.rules.length)
+                cards.append(
+                    node(
+                        "p",
+                        { class: "audit-empty" },
+                        "Start with a requirement, then choose its courses. Try an all-courses core, a choose-two list, or an elective pool.",
+                    ),
+                );
+            model.rules.forEach((r, i) => {
+                const card = node("article", {
+                    class: `audit-rule-card${active === r.id ? " selected" : ""}`,
+                });
+                card.append(
+                    button(
+                        `Select requirement ${i + 1}`,
+                        () => {
+                            active = r.id;
+                            render();
+                        },
+                        active === r.id ? "btn-primary" : "btn-outline-primary",
+                    ),
+                    node(
+                        "div",
+                        {
+                            class: "audit-segments",
+                            role: "group",
+                            "aria-label": `Requirement ${i + 1} type`,
+                        },
+                        [
+                            ["all", "All of these"],
+                            ["choose", "Choose a number"],
+                            ["pool", "Eligible courses"],
+                        ].map(([mode, label]) => {
+                            const b = button(label, () => {
+                                r.mode = mode;
+                                r.minimum_courses = mode === "choose" ? 1 : 0;
+                                render();
+                            });
+                            b.setAttribute("aria-pressed", String(r.mode === mode));
+                            return b;
+                        }),
+                    ),
+                );
+                if (r.mode === "choose")
+                    card.append(
+                        field(
+                            `Requirement ${i + 1} number of courses`,
+                            r.minimum_courses,
+                            (v) => (r.minimum_courses = v),
+                            { type: "number", min: 1, max: 50 },
+                        ),
+                    );
+                const list = node("ul", { class: "audit-course-list" });
+                for (const id of r.course_ids)
+                    list.append(
+                        node(
+                            "li",
+                            {},
+                            node("span", {}, details[id] ? courseLabel(details[id]) : "Selected course"),
+                            button(
+                                `Remove ${details[id]?.code || "course"} from requirement ${i + 1}`,
+                                () => {
+                                    r.course_ids = r.course_ids.filter((c) => c !== id);
+                                    if (!model.rules.some((rule) => rule.course_ids.includes(id)))
+                                        model.courses = model.courses.filter((c) => c.course_id !== id);
+                                    render();
+                                },
+                                "btn-outline-secondary",
+                            ),
+                        ),
+                    );
+                card.append(
+                    list,
+                    r.course_ids.length
+                        ? badge(`${r.course_ids.length} selected courses`)
+                        : node(
+                              "p",
+                              { class: "form-text" },
+                              "Drop published course versions here, or add checked courses.",
+                          ),
+                    actions(
+                        button(`Move requirement ${i + 1} up`, () => {
+                            move(model.rules, i, -1);
+                            render();
+                        }),
+                        button(`Move requirement ${i + 1} down`, () => {
+                            move(model.rules, i, 1);
+                            render();
+                        }),
+                        button(
+                            `Remove requirement ${i + 1}`,
+                            () => {
+                                model.rules.splice(i, 1);
+                                model.courses = model.courses.filter((c) =>
+                                    model.rules.some((rule) => rule.course_ids.includes(c.course_id)),
+                                );
+                                active = model.rules[0]?.id || null;
+                                render();
+                            },
+                            "btn-outline-secondary",
+                        ),
+                    ),
+                );
+                draggable(card, { kind: "rule", id: r.id });
+                dropzone(card, async (data) => {
+                    if (data.kind === "course") {
+                        active = r.id;
+                        const pick = availableCourses.get(`${data.course_id}/${data.version_id}`);
+                        if (!pick) throw new Error("Choose a version from this course panel first.");
+                        add([pick]);
+                    } else if (data.kind === "rule") {
+                        const j = model.rules.findIndex((x) => x.id === data.id);
+                        if (j >= 0) {
+                            const [moving] = model.rules.splice(j, 1);
+                            model.rules.splice(i, 0, moving);
+                            render();
+                        }
+                    }
+                });
+                cards.append(card);
+            });
+            if (focusedLabel) {
+                const target =
+                    [...cards.querySelectorAll("button")].find((b) => b.textContent === focusedLabel) ||
+                    cards.querySelector("button") ||
+                    cards;
+                target.tabIndex = target === cards ? -1 : target.tabIndex;
+                target.focus({ preventScroll: true });
+            }
+        }
+        async function courseSource(query = "", after = null, stack = []) {
+            const data = await post("/sis/ui/data/courses/", {
+                search: query,
+                limit: 20,
+                ...(after ? { after } : {}),
+            });
+            source.replaceChildren(
+                node("h2", { class: "h5" }, "1 · Choose courses"),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Check exact published versions. Drag a version or use Add checked courses.",
+                ),
+                search("Course search", query, (q) => courseSource(q)),
+            );
+            for (const c of data.items) {
+                const card = node(
+                    "details",
+                    { class: "audit-source-card" },
+                    node("summary", {}, courseLabel(c)),
+                );
+                const choices = node("div", { class: "audit-version-list" });
+                let loaded = false;
+                card.append(choices);
+                card.addEventListener("toggle", () => {
+                    if (card.open && !loaded) {
+                        loaded = true;
+                        task(async () => {
+                            try {
+                                await courseVersions(c, choices);
+                            } catch (error) {
+                                loaded = false;
+                                fail(error);
+                            }
+                        }, card);
+                    }
+                });
+                source.append(card);
+            }
+            if (!data.items.length)
+                source.append(
+                    node(
+                        "p",
+                        {},
+                        "No matching courses. Publish a course in the Academic catalog before using it here.",
+                    ),
+                );
+            pager(source, data, after, stack, (a, s) => courseSource(query, a, s));
+        }
+        async function courseVersions(c, target, cursor = null, stack = []) {
+            const data = await post(`/sis/courses/${c.id}/publication/page/`, cursor ? { cursor } : {}),
+                selected = new Map();
+            target.replaceChildren();
+            for (const v of data.items) {
+                const pick = {
+                    course_id: c.id,
+                    version_id: v.version_id,
+                    detail: { ...v.definition, title: v.definition.transcript_title || v.definition.title },
+                };
+                availableCourses.set(`${c.id}/${v.version_id}`, pick);
+                const card = node(
+                    "div",
+                    { class: "audit-version-card" },
+                    checkbox(
+                        `Version ${v.version} · ${courseLabel(v.definition)} · ${text(v.definition.credits_milli)} credits`,
+                        (on) => (on ? selected.set(v.version_id, pick) : selected.delete(v.version_id)),
+                    ),
+                );
+                draggable(card, {
+                    kind: "course",
+                    course_id: c.id,
+                    version_id: v.version_id,
+                });
+                target.append(card);
+            }
+            target.append(
+                button("Add checked courses", () => {
+                    if (!selected.size) throw new Error("Check a published course version first.");
+                    add([...selected.values()]);
+                    selected.clear();
+                    target.querySelectorAll('input[type="checkbox"]').forEach((el) => (el.checked = false));
+                }),
+            );
+            pager(target, data, cursor, stack, (a, s) => courseVersions(c, target, a, s), "next_cursor");
+        }
+        render();
+        courseSource().catch(fail);
+    }
+    function normalDegree(model) {
+        const d = structuredClone(model);
+        d.name = d.name.trim();
+        d.length_months = d.length_months === "" ? null : Number(d.length_months);
+        for (const key of ["min_credits_milli", "min_resident_milli"]) d[key] = milli(d[key]);
+        for (const key of ["min_cumulative_gpa_milli", "min_overall_gpa_milli"]) d[key] = milli(d[key], true);
+        return d;
+    }
+    function degreeEditor(saved, state = null) {
+        if (Object.hasOwn(saved.definition, "courses")) return legacy(saved);
+        const model = state?.model || structuredClone(saved.definition),
+            details = state?.details || structuredClone(saved.group_details || {});
+        if (!state) {
+            for (const k of [
+                "min_credits_milli",
+                "min_resident_milli",
+                "min_cumulative_gpa_milli",
+                "min_overall_gpa_milli",
+            ])
+                model[k] = text(model[k]);
+            model.length_months = model.length_months == null ? "" : String(model.length_months);
+        }
+        const restore = () => degreeEditor(saved, { model, details }),
+            body = screen(
+                "Degree audit builder",
+                `${saved.context.academic_year_code} · ${saved.context.program_title}`,
+            ),
+            status = node("p", { role: "status", class: "audit-status" });
+        restore.returnLabel = "Return to degree draft";
+        body.append(
+            actions(
+                button("Back to requirement drafts", () => launch(saved.program_id)),
+                button("Course group library", () => library("", null, [], restore)),
+                button("Requirements preview", () =>
+                    preview(
+                        {
+                            definition: normalDegree(model),
+                            group_details: details,
+                            grade_scale: saved.grade_scale,
+                        },
+                        "degree",
+                        restore,
+                    ),
+                ),
+                button("Program grading scale", () =>
+                    gradingScale(saved.program_id, async () => {
+                        saved.grade_scale = (
+                            await request(`/sis/programs/${saved.program_id}/grading-scale/`)
+                        ).scale;
+                        restore();
+                    }),
+                ),
+                button("Save degree draft", async () => {
+                    saved = await save();
+                    status.textContent = "Degree draft saved.";
+                }),
+                button(
+                    "Save & review publication",
+                    async () => {
+                        saved = await save();
+                        reasonScreen("degree", saved, restore, () => launch(saved.program_id));
+                    },
+                    "btn-primary",
+                ),
+            ),
+            status,
+        );
+        const [source, canvas, inspector] = workbench(body, [
+            [
+                "1 · Choose library blocks",
+                "Published groups are reusable. Check a version and add it, or drag its card to the canvas.",
+            ],
+            [
+                "2 · Compose the degree",
+                "Arrange blocks into a clear requirement tree. Every block keeps its selected published version.",
+            ],
+            [
+                "3 · Degree settings",
+                "These minimums and institutional policies belong to this degree and requirement year.",
+            ],
+        ]);
+        const cards = node("div", { class: "audit-canvas" });
+        canvas.append(cards);
+        inspector.append(
+            field("Requirement title", model.name, (v) => (model.name = v), {
+                maxlength: 191,
+            }),
+            field(
+                "Total earned credits required",
+                model.min_credits_milli,
+                (v) => (model.min_credits_milli = v),
+                { inputmode: "decimal" },
+            ),
+            field(
+                "Institutional resident credits required",
+                model.min_resident_milli,
+                (v) => (model.min_resident_milli = v),
+                { inputmode: "decimal" },
+            ),
+        );
+        const more = node("details", { class: "audit-tree" }, node("summary", {}, "GPA & program length"));
+        more.append(
+            field(
+                "Minimum cumulative GPA (optional)",
+                model.min_cumulative_gpa_milli,
+                (v) => (model.min_cumulative_gpa_milli = v),
+            ),
+            field(
+                "Minimum overall GPA (optional)",
+                model.min_overall_gpa_milli,
+                (v) => (model.min_overall_gpa_milli = v),
+            ),
+            field(
+                "Expected length in months (optional)",
+                model.length_months,
+                (v) => (model.length_months = v),
+                { type: "number", min: 1, max: 240 },
+            ),
+        );
+        inspector.append(more);
+        const policies = node(
+            "details",
+            { class: "audit-tree", open: true },
+            node("summary", {}, "Institutional audit policies"),
+        );
+        for (const [key, choices] of Object.entries(policyChoices)) {
+            const group = node(
+                "fieldset",
+                { class: "audit-policy" },
+                node("legend", { class: "h6" }, policyLabels[key]),
+            );
+            for (const [value, label] of choices) {
+                const input = node("input", {
+                    type: "radio",
+                    name: `policy-${key}`,
+                    value,
+                    checked: model.policies[key] === value,
+                });
+                input.addEventListener("change", () => (model.policies[key] = value));
+                group.append(node("label", {}, input, " ", label));
+            }
+            policies.append(group);
+        }
+        policies.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "A waiver removes the required course everywhere without adding earned credit or GPA. Other minimum changes require separate exceptions.",
+            ),
+        );
+        inspector.append(policies);
+        async function save() {
+            return post(`/sis/degree-audits/${saved.id}/save/`, {
+                revision: saved.revision,
+                definition: normalDegree(model),
+            });
+        }
+        async function attach(picks) {
+            // Resolve all versions before mutating the draft, so a failed request cannot partially attach a selection.
+            const resolved = await Promise.all(
+                picks.map((p) => request(`/sis/course-groups/${p.group_id}/versions/${p.version_id}/`)),
+            );
+            picks.forEach((p, i) => {
+                const existing = model.groups.find((g) => g.group_id === p.group_id);
+                if (existing) existing.version_id = p.version_id;
+                else model.groups.push({ group_id: p.group_id, version_id: p.version_id });
+                details[p.group_id] = resolved[i];
+            });
+            render();
+            status.textContent =
+                "Selected group versions attached to this degree draft. Other degrees are unchanged.";
+        }
+        function render() {
+            const focusedLabel = cards.contains(document.activeElement)
+                ? document.activeElement.textContent
+                : null;
+            cards.replaceChildren();
+            if (!model.groups.length)
+                cards.append(
+                    node(
+                        "p",
+                        { class: "audit-empty" },
+                        "Your degree starts here. Add published blocks from the library, then arrange them in the order students should see them.",
+                    ),
+                );
+            model.groups.forEach((g, i) => {
+                const item = details[g.group_id],
+                    card = node("article", { class: "audit-rule-card" });
+                card.append(
+                    badge(
+                        g.version_id
+                            ? `Pinned version ${item?.version || ""}`
+                            : "Unpublished group · choose a version",
+                    ),
+                    item ? groupTree(item) : node("p", {}, "Course group"),
+                    actions(
+                        button(`Move block ${i + 1} up`, () => {
+                            move(model.groups, i, -1);
+                            render();
+                        }),
+                        button(`Move block ${i + 1} down`, () => {
+                            move(model.groups, i, 1);
+                            render();
+                        }),
+                        button(
+                            `Remove block ${i + 1}`,
+                            () => {
+                                model.groups.splice(i, 1);
+                                render();
+                            },
+                            "btn-outline-secondary",
+                        ),
+                        button(`Edit block ${i + 1} in library`, async () =>
+                            groupEditor(await request(`/sis/course-groups/${g.group_id}/`), restore),
+                        ),
+                    ),
+                );
+                card.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "To replace this version, choose a published version of the same block in the library panel and add it explicitly.",
+                    ),
+                );
+                draggable(card, { kind: "block", id: g.group_id });
+                dropzone(card, async (data) => {
+                    if (data.kind === "group") await attach([data]);
+                    else if (data.kind === "block") {
+                        const j = model.groups.findIndex((x) => x.group_id === data.id);
+                        if (j >= 0) {
+                            const [moving] = model.groups.splice(j, 1);
+                            model.groups.splice(i, 0, moving);
+                            render();
+                        }
+                    }
+                });
+                cards.append(card);
+            });
+            if (focusedLabel) {
+                const target =
+                    [...cards.querySelectorAll("button")].find((b) => b.textContent === focusedLabel) ||
+                    cards.querySelector("button") ||
+                    cards;
+                target.tabIndex = target === cards ? -1 : target.tabIndex;
+                target.focus({ preventScroll: true });
+            }
+        }
+        dropzone(canvas, async (data) => {
+            if (data.kind === "group" && data.group_id && data.version_id) await attach([data]);
+        });
+        async function groupSource(query = "", after = null, stack = []) {
+            const data = await post("/sis/course-groups/page/", {
+                published_only: true,
+                ...(query ? { search: query } : {}),
+                ...(after ? { after } : {}),
+            });
+            source.replaceChildren(
+                node("h2", { class: "h5" }, "1 · Choose library blocks"),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Choose exact published versions. Add the same group again to explicitly replace its version in this draft.",
+                ),
+                search("Search published groups", query, (q) => groupSource(q)),
+            );
+            for (const g of data.items) {
+                const card = node(
+                        "details",
+                        { class: "audit-source-card" },
+                        node("summary", {}, g.published_name || g.name),
+                    ),
+                    versions = node("div", { class: "audit-version-list" });
+                let loaded = false;
+                card.append(versions);
+                card.addEventListener("toggle", () => {
+                    if (card.open && !loaded) {
+                        loaded = true;
+                        task(async () => {
+                            try {
+                                await groupVersions(g, versions);
+                            } catch (error) {
+                                loaded = false;
+                                fail(error);
+                            }
+                        }, card);
+                    }
+                });
+                source.append(card);
+            }
+            if (!data.items.length)
+                source.append(
+                    node(
+                        "p",
+                        {},
+                        "No published groups. Build and publish a course group in the library first.",
+                    ),
+                    button("Build library groups", () => library("", null, [], restore)),
+                );
+            pager(source, data, after, stack, (a, s) => groupSource(query, a, s));
+        }
+        async function groupVersions(g, target, cursor = null, stack = []) {
+            const data = await post(`/sis/course-groups/${g.id}/versions/`, cursor ? { cursor } : {}),
+                selected = new Map();
+            target.replaceChildren();
+            for (const v of data.items) {
+                const pick = {
+                        kind: "group",
+                        group_id: g.id,
+                        version_id: v.version_id,
+                    },
+                    card = node(
+                        "div",
+                        { class: "audit-version-card" },
+                        checkbox(
+                            `Version ${v.version} · ${v.definition.name} · ${count(v.definition)}`,
+                            (on) => (on ? selected.set(v.version_id, pick) : selected.delete(v.version_id)),
+                        ),
+                    );
+                draggable(card, pick);
+                target.append(card);
+            }
+            target.append(
+                button("Add checked blocks", async () => {
+                    if (!selected.size) throw new Error("Check a published group version first.");
+                    if (selected.size > 1)
+                        throw new Error("Choose one version of this group for the degree.");
+                    await attach([...selected.values()]);
+                    selected.clear();
+                    target.querySelectorAll('input[type="checkbox"]').forEach((el) => (el.checked = false));
+                }),
+            );
+            pager(target, data, cursor, stack, (a, s) => groupVersions(g, target, a, s), "next_cursor");
+        }
+        render();
+        groupSource().catch(fail);
+    }
+    function legacy(saved) {
+        const body = screen("Move existing draft groups into the library");
+        body.append(
+            node(
+                "p",
+                {},
+                "This working draft contains embedded groups from the earlier builder. Move them into independent library drafts before composing new degree requirements. Published history remains unchanged; this step publishes nothing.",
+            ),
+            degreeTree(saved),
+            actions(
+                button(
+                    "Move draft groups into the library",
+                    async () =>
+                        degreeEditor(
+                            await post(`/sis/degree-audits/${saved.id}/reuse-groups/`, {
+                                revision: saved.revision,
+                            }),
+                        ),
+                    "btn-primary",
+                ),
+                button("Back to requirement drafts", () => launch(saved.program_id)),
+            ),
+        );
+    }
+    function preview(item, kind, back) {
+        const body = screen("Requirements preview");
+        body.append(kind === "group" ? groupTree(item) : degreeTree(item), button("Back to builder", back));
+    }
+    function reasonScreen(kind, saved, back, directory) {
+        const body = screen(
+            kind === "group" ? "Review course group publication" : "Review degree publication",
+        );
+        let reason = "";
+        body.append(
+            node(
+                "p",
+                {},
+                "Review saves no publication until you confirm the exact definition. Published versions are retained; later changes create new versions.",
+            ),
+            field("Reason for publication", "", (v) => (reason = v), {
+                maxlength: 1000,
+            }),
+            actions(
+                button(
+                    "Prepare publication",
+                    async () => {
+                        const path =
+                                kind === "group"
+                                    ? `/sis/course-groups/${saved.id}/`
+                                    : `/sis/degree-audits/${saved.id}/`,
+                            reviewed = await post(`${path}review/`, { reason });
+                        const content = screen("Confirm reviewed publication");
+                        content.append(
+                            kind === "group" ? groupTree(reviewed) : degreeTree(reviewed),
+                            node("p", {}, `Reason: ${reviewed.reason}`),
+                            actions(
+                                button(
+                                    "Publish reviewed version",
+                                    async () => {
+                                        await post(`${path}publish/`, {
+                                            review_token: reviewed.review_token,
+                                        });
+                                        await history(kind, saved.id, saved.program_id, directory);
+                                    },
+                                    "btn-primary",
+                                ),
+                                button("Back to builder", back),
+                            ),
+                        );
+                    },
+                    "btn-primary",
+                ),
+                button("Back to builder", back),
+            ),
+        );
+    }
+    async function history(kind, id, program, back, cursor = null, stack = []) {
+        const base = kind === "group" ? `/sis/course-groups/${id}/` : `/sis/degree-audits/${id}/`,
+            result = await post(`${base}versions/`, cursor ? { cursor } : {}),
+            body = screen("Published requirement versions");
+        body.append(
+            node(
+                "p",
+                {},
+                "Retained versions preserve the original requirements. Editing a working draft never rewrites these publications.",
+            ),
+        );
+        for (const row of result.items)
+            body.append(
+                node(
+                    "article",
+                    { class: "audit-library-card" },
+                    node("h2", { class: "h5" }, `Version ${row.version} · ${row.definition.name}`),
+                    actions(
+                        button(`Inspect version ${row.version}`, async () =>
+                            preview(await request(`${base}versions/${row.version_id}/`), kind, () =>
+                                history(kind, id, program, back, cursor, stack),
+                            ),
+                        ),
+                        kind === "degree"
+                            ? button(`Clone version ${row.version} to another academic year`, () =>
+                                  years(program, { id, version: row.version_id }),
+                              )
+                            : null,
+                    ),
+                ),
+            );
+        if (!result.items.length) body.append(node("p", {}, "No published versions yet."));
+        pager(body, result, cursor, stack, (a, s) => history(kind, id, program, back, a, s), "next_cursor");
+        body.append(button("Back", back));
+    }
+    async function studentRequirements(studentId, assignmentId, back) {
+        const base = `/sis/students/${studentId}/programs/${assignmentId}/degree-requirements/`;
+        const data = await request(base),
+            body = screen("Student degree requirements", "RETAINED PROGRAM REQUIREMENTS");
+        const restore = () => studentRequirements(studentId, assignmentId, back);
+        body.append(
+            node(
+                "p",
+                {},
+                "This is the published baseline selected for this program pursuit. Open Student exceptions for approved course waivers and adjusted minimums. This view does not calculate completion or degree eligibility.",
+            ),
+        );
+        if (data.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "The matriculation cohort changed after this selection. The retained requirements remain in place until an authorized registrar reviews a new assignment.",
+                ),
+            );
+        if (data.selection) {
+            body.append(
+                node(
+                    "p",
+                    {},
+                    `${data.requirements.context.program_title} · ${data.requirements.context.academic_year_code} · Version ${data.requirements.version}`,
+                ),
+                node(
+                    "p",
+                    {},
+                    `Pursuit began ${data.selection.pursuit_started_on}. Anticipated completion: ${data.anticipated_completion_on || "Not specified; program length is unknown"}.`,
+                ),
+                degreeTree(data.requirements),
+            );
+        } else
+            body.append(
+                node(
+                    "div",
+                    { class: "audit-empty" },
+                    "No published requirements have been assigned to this program. Publishing a degree does not automatically assign requirements to existing students.",
+                ),
+            );
+        body.append(
+            actions(
+                button("Assignment history", () => studentHistory(base, restore)),
+                data.selection
+                    ? button("Student exceptions", () => studentExceptions(studentId, assignmentId, restore))
+                    : null,
+                ui.can?.("sis:degree-audit:assign") &&
+                    ui.can?.("sis:student:read") &&
+                    data.scope.status === "active"
+                    ? button(
+                          "Assign published requirements",
+                          () => studentChoices(base, data, restore),
+                          "btn-primary",
+                      )
+                    : null,
+                button("Back to student", async () => {
+                    close();
+                    await back();
+                }),
+            ),
+        );
+    }
+    async function studentChoices(base, current, back) {
+        const initial = await post(`${base}choices/`);
+        let body = screen("Choose student degree requirements", "REGISTRAR REVIEW");
+        const returnToChoices = () => {
+            const previous = body;
+            body = screen("Choose student degree requirements", "REGISTRAR REVIEW");
+            body.append(...previous.childNodes);
+        };
+        let selected = null,
+            template = initial.template_id,
+            started = current.selection?.pursuit_started_on || "",
+            reason = "";
+        const choices = node("div", { class: "audit-library-grid" }),
+            status = node("p", { role: "status", class: "audit-status" });
+        body.append(
+            node(
+                "p",
+                {},
+                "Choose a specific published version for the current matriculation cohort. Record the actual pursuit start date; it is not inferred from the entry term. This replaces only the selected program’s requirement reference.",
+            ),
+            choices,
+            status,
+            field("Program pursuit start date", started, (v) => (started = v), {
+                type: "date",
+                required: true,
+            }),
+            field("Reason for requirement assignment", "", (v) => (reason = v), {
+                maxlength: 1000,
+                required: true,
+            }),
+            actions(
+                button(
+                    "Review requirement assignment",
+                    async () => {
+                        if (!selected || !started || !reason.trim())
+                            throw new Error(
+                                "Choose a published version, the actual pursuit start date, and a reason.",
+                            );
+                        const review = await post(`${base}review/`, {
+                            template_id: template,
+                            requirements_version_id: selected,
+                            pursuit_started_on: started,
+                            reason,
+                        });
+                        const content = screen("Confirm student requirement assignment");
+                        content.append(
+                            node(
+                                "p",
+                                {},
+                                `${review.requirements.context.academic_year_code} · Version ${review.requirements.version}. Pursuit began ${review.selection.pursuit_started_on}. Anticipated completion: ${review.anticipated_completion_on || "Not specified"}.`,
+                            ),
+                            node("p", {}, `Reason: ${review.reason}`),
+                            degreeTree(review.requirements),
+                            actions(
+                                button(
+                                    "Assign reviewed requirements",
+                                    async () => {
+                                        await post(`${base}assign/`, { review_token: review.review_token });
+                                        await back();
+                                    },
+                                    "btn-primary",
+                                ),
+                                button("Change selection", returnToChoices),
+                            ),
+                        );
+                    },
+                    "btn-primary",
+                ),
+                button("Back to selected requirements", back),
+            ),
+        );
+        async function page(data, cursor = null, stack = []) {
+            choices.replaceChildren();
+            template = data.template_id;
+            for (const v of data.items) {
+                const input = node("input", {
+                    type: "radio",
+                    name: "student-requirement-version",
+                    value: v.version_id,
+                    checked: selected === v.version_id,
+                    disabled: v.schema_version !== 3,
+                });
+                input.addEventListener("change", () => {
+                    selected = v.version_id;
+                    status.textContent = `Selected version ${v.version}.`;
+                });
+                choices.append(
+                    node(
+                        "article",
+                        { class: "audit-library-card" },
+                        node(
+                            "label",
+                            { class: "audit-source-choice" },
+                            input,
+                            node("span", {}, `Version ${v.version} · ${v.name} · ${v.academic_year_code}`),
+                        ),
+                        v.schema_version !== 3
+                            ? node(
+                                  "p",
+                                  { class: "form-text" },
+                                  "Publish an updated reusable-group composition before assigning this version.",
+                              )
+                            : null,
+                    ),
+                );
+            }
+            if (!data.items.length)
+                choices.append(
+                    node(
+                        "p",
+                        {},
+                        "No published requirements for this matriculation cohort. Catalog staff must publish the degree composition first.",
+                    ),
+                );
+            pager(
+                choices,
+                data,
+                cursor,
+                stack,
+                async (next, previous) =>
+                    page(await post(`${base}choices/`, next ? { cursor: next } : {}), next, previous),
+                "next_cursor",
+            );
+        }
+        await page(initial);
+    }
+    async function studentHistory(base, back, cursor = null, stack = []) {
+        const data = await post(`${base}history/`, cursor ? { cursor } : {}),
+            body = screen("Student requirement assignment history");
+        body.append(
+            node(
+                "p",
+                {},
+                "Each decision retains its exact requirement reference and pursuit start date. Later changes preserve earlier decisions.",
+            ),
+        );
+        for (const item of data.items)
+            body.append(
+                node(
+                    "article",
+                    { class: "audit-library-card" },
+                    node("h2", { class: "h5" }, `Decision ${item.version}`),
+                    node(
+                        "p",
+                        {},
+                        `Pursuit began ${item.pursuit_started_on}. Effective ${item.effective_at}. Recorded ${item.recorded_at}.`,
+                    ),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `Requirement reference: ${item.requirements_version_id}`,
+                    ),
+                ),
+            );
+        if (!data.items.length) body.append(node("p", {}, "No requirement assignment decisions yet."));
+        pager(
+            body,
+            data,
+            cursor,
+            stack,
+            (next, previous) => studentHistory(base, back, next, previous),
+            "next_cursor",
+        );
+        body.append(button("Back to selected requirements", back));
+    }
+
+    const minimumLabels = {
+        min_credits_milli: "Required credits",
+        min_resident_milli: "Resident credits",
+        min_cumulative_gpa_milli: "Cumulative GPA",
+        min_overall_gpa_milli: "Overall GPA",
+        min_gpa_milli: "Minimum GPA",
+    };
+    function adjustmentLabel(p, data) {
+        const d = p.definition;
+        if (d.kind === "substitution") {
+            const required = data?.courses?.find((c) => c.course_id === d.course_id),
+                replacement = data?.substitution_details?.[p.adjustment_id];
+            return `${p.subject_label || `Course substitution · ${required ? courseLabel(required) : "Retained required course"}`} → ${p.replacement_label || (replacement ? courseLabel(replacement) : "Selected replacement publication")}`;
+        }
+        if (d.kind === "waiver") {
+            if (p.subject_label) return p.subject_label;
+            const c = data?.courses?.find((c) => c.course_id === d.course_id);
+            return `Course waiver · ${c ? courseLabel(c) : "Retained course reference"}`;
+        }
+        const t = data?.targets?.find((t) => t.group_id === d.group_id && t.minimum === d.minimum);
+        return `${t?.label || p.scope_label || (d.group_id ? "Course group" : "Degree")} · ${minimumLabels[d.minimum]}: ${text(d.original_milli)} → ${text(d.required_milli)}`;
+    }
+    async function studentExceptions(studentId, assignmentId, back) {
+        const base = `/sis/students/${studentId}/programs/${assignmentId}/degree-adjustments/`,
+            data = await request(base);
+        const restore = () => studentExceptions(studentId, assignmentId, back),
+            body = screen("Student exceptions", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        body.append(
+            node(
+                "p",
+                {},
+                "A course waiver removes the requirement to take that course throughout this program, across every group where it appears. It creates no earned credits or GPA points. A separate degree or dual-degree pursuit has its own approvals.",
+            ),
+            actions(
+                ui.can?.("sis:degree-audit:adjust") && ui.can?.("sis:student:read") && data.selection
+                    ? button(
+                          "Approve an exception",
+                          () => exceptionEditor(base, data, restore),
+                          "btn-primary",
+                      )
+                    : null,
+                button("Exception history", () => exceptionHistory(base, restore)),
+                button("Back to degree requirements", back),
+            ),
+        );
+        const degree = data.effective_minimums.degree;
+        if (Object.keys(degree).length)
+            body.append(
+                node(
+                    "section",
+                    { class: "audit-tree" },
+                    node("h2", { class: "h5" }, "Current minimums for this student"),
+                    ...Object.entries(degree).map(([k, v]) =>
+                        node("p", {}, `${minimumLabels[k]}: ${v === null ? "No minimum" : text(v)}`),
+                    ),
+                ),
+            );
+        const conflicts = Object.values(data.effective_minimums.substitution_conflicts || {});
+        if (conflicts.length)
+            body.append(
+                node(
+                    "section",
+                    { class: "alert alert-info", role: "status" },
+                    node("h2", { class: "h5" }, "Registrar review needed"),
+                    node(
+                        "p",
+                        {},
+                        "Overlapping approvals need review before applying a substitution. An authorized registrar can review revocation below.",
+                    ),
+                    ...[...new Set(conflicts)].map((message) => node("p", {}, message)),
+                ),
+            );
+        if (!data.items.length)
+            body.append(
+                node(
+                    "p",
+                    { class: "audit-empty" },
+                    "No active exceptions. Published requirements remain the baseline.",
+                ),
+            );
+        for (const p of data.items) {
+            const card = node(
+                "article",
+                { class: "audit-library-card" },
+                badge(
+                    p.applicable
+                        ? "Applies to this pursuit"
+                        : "Retained approval · outside current requirements",
+                ),
+                node("h2", { class: "h5 mt-3" }, adjustmentLabel(p, data)),
+            );
+            if (p.definition.kind === "waiver")
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        "This course waiver follows the course throughout this program pursuit, without lowering credit or GPA minimums.",
+                    ),
+                );
+            else if (p.definition.kind === "substitution")
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        "This substitution uses the chosen course publication and applies to the reviewed degree version. It creates no earned credit or grade.",
+                    ),
+                );
+            else
+                card.append(
+                    node("p", {}, "This minimum exception applies to its exact published degree version."),
+                );
+            if (ui.can?.("sis:degree-audit:adjust") && ui.can?.("sis:student:read"))
+                card.append(button("Review revocation", () => exceptionRevoke(base, p, data, restore)));
+            body.append(card);
+        }
+    }
+    function exceptionEditor(base, data, back) {
+        let body = screen("Review a student exception", "REGISTRAR APPROVAL"),
+            kind = "waiver",
+            selected = null,
+            value = "",
+            reason = "",
+            query = "",
+            page = 0,
+            replacement = null,
+            replacementSerial = 0;
+        const restore = () => {
+            const old = body;
+            body = screen("Review a student exception", "REGISTRAR APPROVAL");
+            body.append(...old.childNodes);
+        };
+        body.append(
+            node(
+                "p",
+                {},
+                "Choose the course or minimum, explain the approval, and review its exact effect before confirming. Waivers and substitutions target a course; minimum exceptions can target a degree or one group. Substitutions use an explicit published replacement.",
+            ),
+        );
+        const [source, inspector] = workbench(body, [
+            [
+                "1 · Choose an exception",
+                "Search this program’s published requirements. A waiver targets the course itself.",
+            ],
+            ["2 · Explain and review", "The approval applies only to this student-program pursuit."],
+        ]);
+        source.parentElement.classList.add("audit-adjustment-grid");
+        const list = node("div"),
+            description = node(
+                "p",
+                { role: "status", class: "audit-status" },
+                "Choose a course or minimum to begin.",
+            ),
+            valueField = field("New required minimum", "", (v) => (value = v), { inputmode: "decimal" });
+        valueField.hidden = true;
+        const waiverButton = button("Course waiver", () => {
+                kind = "waiver";
+                selected = null;
+                page = 0;
+                render();
+            }),
+            minimumButton = button("Credit or GPA minimum", () => {
+                kind = "minimum";
+                selected = null;
+                page = 0;
+                render();
+            });
+        const replacementPanel = panel(
+                "Choose the replacement publication",
+                "Search current catalog entries, then explicitly choose a published version. No completed course is required to approve the substitution.",
+            ),
+            replacementList = node("div"),
+            replacementStatus = node(
+                "p",
+                { role: "status", class: "audit-status" },
+                "No replacement publication selected.",
+            );
+        replacementPanel.hidden = true;
+        replacementPanel.append(replacementStatus, replacementList);
+        const substitutionButton = button("Course substitution", async () => {
+            kind = "substitution";
+            selected = null;
+            replacement = null;
+            page = 0;
+            render();
+            await replacementCourses();
+        });
+        source.append(
+            actions(waiverButton, substitutionButton, minimumButton),
+            search("Search exception targets", "", (q) => {
+                query = q;
+                page = 0;
+                render();
+            }),
+            list,
+        );
+        inspector.append(
+            description,
+            valueField,
+            replacementPanel,
+            node(
+                "p",
+                { class: "form-text" },
+                "For a minimum exception, enter the new required value, not the amount to subtract. A waiver never grants course credit or lowers a credit/GPA minimum.",
+            ),
+            field("Reason for student exception", "", (v) => (reason = v), { maxlength: 1000 }),
+            actions(
+                button(
+                    "Review exception",
+                    async () => {
+                        if (!selected || !reason.trim())
+                            throw new Error("Choose an exception target and enter its approval reason.");
+                        if (kind === "substitution" && !replacement)
+                            throw new Error("Choose an explicit published replacement course version.");
+                        const definition =
+                            kind === "waiver"
+                                ? { kind, course_id: selected.course_id }
+                                : kind === "substitution"
+                                  ? {
+                                        kind,
+                                        course_id: selected.course_id,
+                                        replacement_course_id: replacement.course_id,
+                                        replacement_version_id: replacement.version_id,
+                                    }
+                                  : {
+                                        kind,
+                                        group_id: selected.group_id,
+                                        minimum: selected.minimum,
+                                        required_milli: milli(value),
+                                    };
+                        const reviewed = await post(`${base}review/`, { definition, reason });
+                        exceptionConfirmation(base, reviewed, data, back, restore);
+                    },
+                    "btn-primary",
+                ),
+                button("Back to student exceptions", back),
+            ),
+        );
+        function render() {
+            replacementPanel.hidden = kind !== "substitution";
+            substitutionButton.setAttribute("aria-pressed", String(kind === "substitution"));
+            waiverButton.setAttribute("aria-pressed", String(kind === "waiver"));
+            minimumButton.setAttribute("aria-pressed", String(kind === "minimum"));
+            if (!selected) {
+                valueField.hidden = true;
+                description.textContent = "Choose a course or minimum to begin.";
+            }
+            list.replaceChildren();
+            const all = (kind !== "minimum" ? data.courses : data.targets).filter((t) =>
+                (kind !== "minimum" ? `${t.code} ${t.title}` : `${t.label} ${minimumLabels[t.minimum]}`)
+                    .toLowerCase()
+                    .includes(query.toLowerCase()),
+            );
+            for (const t of all.slice(page * 30, (page + 1) * 30)) {
+                const label =
+                    kind !== "minimum"
+                        ? courseLabel(t)
+                        : `${t.label} · ${minimumLabels[t.minimum]} · ${text(t.original_milli)}`;
+                list.append(
+                    node(
+                        "article",
+                        { class: "audit-source-card" },
+                        button(label, () => {
+                            selected = t;
+                            description.textContent =
+                                kind === "waiver"
+                                    ? `Waive ${courseLabel(t)} for this program. Appears in: ${t.groups.join(", ")}.`
+                                    : kind === "substitution"
+                                      ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
+                                      : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
+                            valueField.hidden = kind !== "minimum";
+                            if (kind === "minimum") {
+                                value = text(t.original_milli);
+                                valueField.querySelector("input").value = value;
+                                valueField.querySelector("input").focus();
+                            }
+                        }),
+                    ),
+                );
+            }
+            if (!all.length)
+                list.append(
+                    node("p", {}, "No matching requirements. Review the selected degree publication."),
+                );
+            const pages = actions();
+            if (page)
+                pages.append(
+                    button("Previous targets", () => {
+                        page--;
+                        render();
+                    }),
+                );
+            if ((page + 1) * 30 < all.length)
+                pages.append(
+                    button("More targets", () => {
+                        page++;
+                        render();
+                    }),
+                );
+            list.append(pages);
+        }
+        async function replacementCourses(query = "", after = null, stack = []) {
+            const serial = ++replacementSerial;
+            const result = await post(`${base}replacement-courses/`, {
+                ...(query ? { search: query } : {}),
+                ...(after ? { after } : {}),
+            });
+            if (serial !== replacementSerial || !replacementPanel.isConnected) return;
+            replacementList.replaceChildren(
+                search("Replacement course search", query, (q) => replacementCourses(q)),
+            );
+            replacementStatus.textContent = replacement
+                ? `Chosen version ${replacement.version} · ${courseLabel(replacement)} · ${text(replacement.credits_milli)} credits`
+                : "No replacement publication selected.";
+            for (const course of result.items) {
+                const versions = node("div", { class: "audit-version-list" }),
+                    card = node(
+                        "details",
+                        { class: "audit-source-card" },
+                        node("summary", {}, `${courseLabel(course)} · catalog entry`),
+                        versions,
+                    );
+                let loaded = false;
+                card.addEventListener("toggle", () => {
+                    if (card.open && !loaded) {
+                        loaded = true;
+                        task(async () => {
+                            try {
+                                await replacementVersions(course, versions);
+                            } catch (error) {
+                                loaded = false;
+                                fail(error);
+                            }
+                        }, card);
+                    }
+                });
+                replacementList.append(card);
+            }
+            if (!result.items.length)
+                replacementList.append(
+                    node("p", {}, "No matching catalog entries. Try a different course code or title."),
+                );
+            pager(replacementList, result, after, stack, (next, previous) =>
+                replacementCourses(query, next, previous),
+            );
+        }
+        async function replacementVersions(course, target, cursor = null, stack = []) {
+            const result = await post(
+                `${base}replacement-courses/${course.id}/versions/`,
+                cursor ? { cursor } : {},
+            );
+            if (!target.isConnected) return;
+            target.replaceChildren();
+            for (const version of result.items)
+                target.append(
+                    node(
+                        "article",
+                        { class: "audit-version-card" },
+                        node("p", {}, `${courseLabel(version)} · ${text(version.credits_milli)} credits`),
+                        button(`Select replacement version ${version.version}`, () => {
+                            replacement = version;
+                            replacementStatus.textContent = `Chosen version ${version.version} · ${courseLabel(version)} · ${text(version.credits_milli)} credits`;
+                        }),
+                    ),
+                );
+            if (!result.items.length)
+                target.append(
+                    node(
+                        "p",
+                        {},
+                        "No published versions. Catalog staff must approve a course publication before it can be a replacement.",
+                    ),
+                );
+            pager(
+                target,
+                result,
+                cursor,
+                stack,
+                (next, previous) => replacementVersions(course, target, next, previous),
+                "next_cursor",
+            );
+        }
+        render();
+    }
+    function exceptionConfirmation(base, reviewed, data, back, change) {
+        const body = screen(
+            reviewed.action === "revoke" ? "Confirm exception revocation" : "Confirm student exception",
+        );
+        const p = reviewed.action === "revoke" ? reviewed.previous : reviewed.adjustment;
+        body.append(
+            node(
+                "h2",
+                { class: "h4" },
+                adjustmentLabel(p, {
+                    ...data,
+                    substitution_details: { ...data.substitution_details, ...reviewed.substitution_details },
+                }),
+            ),
+            node("p", {}, `Reason: ${reviewed.reason}`),
+        );
+        if (reviewed.previous && reviewed.action === "grant")
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "This replaces the earlier active approval for this target. Its decision history is retained.",
+                ),
+            );
+        if (p.definition.kind === "waiver")
+            body.append(
+                node(
+                    "p",
+                    {},
+                    reviewed.action === "revoke"
+                        ? "Revoking this waiver restores the course requirement wherever it applies in this program."
+                        : `This course waiver applies throughout this program. It currently appears in: ${reviewed.affected_groups.join(", ")}. Earned credit, grades and GPA points stay unchanged.`,
+                ),
+            );
+        if (p.definition.kind === "substitution") {
+            const selected =
+                reviewed.substitution_details?.[p.adjustment_id] ||
+                data.substitution_details?.[p.adjustment_id];
+            body.append(
+                node(
+                    "p",
+                    {},
+                    reviewed.action === "revoke"
+                        ? "Revoking this substitution restores the original course requirement. Earned coursework and grades are preserved."
+                        : "This replacement may satisfy the original course requirement in the reviewed program. Earned credit and grades come from actual coursework; this approval creates neither.",
+                ),
+            );
+            if (selected)
+                body.append(
+                    node(
+                        "p",
+                        {},
+                        `Chosen replacement publication: version ${selected.version} · ${courseLabel(selected)} · ${text(selected.credits_milli)} credits`,
+                    ),
+                );
+        }
+        body.append(
+            node(
+                "section",
+                { class: "audit-tree" },
+                node("h2", { class: "h5" }, "Degree minimums after this decision"),
+                ...Object.entries(reviewed.effective_minimums.degree).map(([k, v]) =>
+                    node("p", {}, `${minimumLabels[k]}: ${v === null ? "No minimum" : text(v)}`),
+                ),
+            ),
+            actions(
+                button(
+                    reviewed.action === "revoke" ? "Revoke reviewed exception" : "Approve reviewed exception",
+                    async () => {
+                        await post(`${base}commit/`, { review_token: reviewed.review_token });
+                        await back();
+                    },
+                    "btn-primary",
+                ),
+                button("Change review", change),
+                button("Back to student exceptions", back),
+            ),
+        );
+    }
+    function exceptionRevoke(base, p, data, back) {
+        let reason = "",
+            body = screen("Review exception revocation");
+        const restore = () => {
+            const old = body;
+            body = screen("Review exception revocation");
+            body.append(...old.childNodes);
+        };
+        body.append(
+            node("h2", { class: "h4" }, adjustmentLabel(p, data)),
+            node(
+                "p",
+                {},
+                "Revocation retains the approval and records a new decision. Published requirements and other student programs remain unchanged.",
+            ),
+            field("Reason for revocation", "", (v) => (reason = v), { maxlength: 1000 }),
+            actions(
+                button(
+                    "Prepare revocation",
+                    async () => {
+                        if (!reason.trim()) throw new Error("Enter a reason for revocation.");
+                        exceptionConfirmation(
+                            base,
+                            await post(`${base}revoke-review/`, { adjustment_id: p.adjustment_id, reason }),
+                            data,
+                            back,
+                            restore,
+                        );
+                    },
+                    "btn-primary",
+                ),
+                button("Back to student exceptions", back),
+            ),
+        );
+    }
+    async function exceptionHistory(base, back, cursor = null, stack = []) {
+        const data = await post(`${base}history/`, cursor ? { cursor } : {}),
+            body = screen("Student exception history");
+        body.append(
+            node(
+                "p",
+                {},
+                "Approvals, replacements and revocations remain recorded. This view contains decision references without protected approval narratives.",
+            ),
+        );
+        for (const p of data.items)
+            body.append(
+                node(
+                    "article",
+                    { class: "audit-library-card" },
+                    node(
+                        "h2",
+                        { class: "h5" },
+                        `Decision ${p.version} · ${p.action === "grant" ? "Approved" : "Revoked"}`,
+                    ),
+                    p.definition ? node("p", {}, adjustmentLabel(p, null)) : null,
+                    node("p", {}, `Effective ${p.effective_at}. Recorded ${p.recorded_at}.`),
+                ),
+            );
+        if (!data.items.length) body.append(node("p", {}, "No exception decisions yet."));
+        pager(
+            body,
+            data,
+            cursor,
+            stack,
+            (next, previous) => exceptionHistory(base, back, next, previous),
+            "next_cursor",
+        );
+        body.append(button("Back to student exceptions", back));
+    }
+    async function gradingContext(select, back, query = "") {
+        const rows = await post("/sis/ui/data/programs/", query ? { search: query } : {});
+        const body = screen("Choose a grading context");
+        body.append(
+            node(
+                "p",
+                {},
+                "This only selects the scale used to author this reusable group. The group has no program owner; each degree uses its own resolved scale.",
+            ),
+            button("Use global grading scale", async () =>
+                select(null, (await request("/sis/grading-scales/global/")).scale),
+            ),
+            search("Find a program grading context", query, (q) => gradingContext(select, back, q)),
+        );
+        for (const p of rows.items)
+            body.append(
+                button(`Use ${p.code} grading context`, async () =>
+                    select(p.id, (await request(`/sis/programs/${p.id}/grading-scale/`)).scale),
+                ),
+            );
+        body.append(button("Back to group draft", back));
+    }
+    async function gradingScale(program = null, back = null, state = null) {
+        const base = program ? `/sis/programs/${program}/grading-scale/` : "/sis/grading-scales/global/";
+        const data = state?.data || (await request(base));
+        let rows =
+            state?.rows ||
+            data.scale.definition.grades.map((g) => ({
+                ...g,
+                min_score_milli: text(g.min_score_milli),
+                max_score_milli: text(g.max_score_milli),
+                points_milli: text(g.points_milli),
+            }));
+        let inherit = state?.inherit ?? Boolean(program && data.scale.source !== "program");
+        let reason = state?.reason || "",
+            active = state?.active ?? 0;
+        const restore = () => gradingScale(program, back, { data, rows, inherit, reason, active });
+        const body = screen(program ? "Program grading scale" : "Global grading scale", "GRADING POLICY");
+        body.append(
+            node(
+                "p",
+                {},
+                program
+                    ? "This program uses the global scale until you approve a complete program override. Other programs are unaffected."
+                    : "The global scale applies to programs without an override. Grade-point maximums are derived from the grade definitions.",
+            ),
+        );
+        const [source, canvas, inspector] = workbench(body, [
+            ["Grades", "Select a grade to edit its score range and GPA treatment."],
+            [
+                "Scale preview",
+                "Score percentages and GPA points are separate values. Ranges are inclusive; gaps require manual grading.",
+            ],
+            [
+                "Grade settings",
+                "Leave both score boundaries blank for administrative grades without a percentage range.",
+            ],
+        ]);
+        const preview = node("div", { class: "audit-tree" });
+        canvas.append(preview);
+        function render() {
+            source.replaceChildren(node("h2", { class: "h5" }, "Grades"));
+            const limit = 20,
+                start = Math.floor(active / limit) * limit;
+            for (let i = start; i < Math.min(rows.length, start + limit); i++)
+                source.append(
+                    button(`Edit grade ${rows[i].code || i + 1}`, () => {
+                        active = i;
+                        render();
+                    }),
+                );
+            if (start)
+                source.append(
+                    button("Previous grades", () => {
+                        active = start - limit;
+                        render();
+                    }),
+                );
+            if (start + limit < rows.length)
+                source.append(
+                    button("Next grades", () => {
+                        active = start + limit;
+                        render();
+                    }),
+                );
+            source.append(
+                button("Add grade", () => {
+                    if (rows.length >= 200) throw new Error("A scale supports at most 200 grades.");
+                    inherit = false;
+                    rows.push({
+                        code: "",
+                        min_score_milli: "",
+                        max_score_milli: "",
+                        points_milli: "",
+                        passes: false,
+                        counts_gpa: true,
+                    });
+                    active = rows.length - 1;
+                    render();
+                }),
+            );
+            if (program)
+                source.append(
+                    button(inherit ? "Create program override" : "Use global scale", () => {
+                        inherit = !inherit;
+                        if (!inherit && !rows.length)
+                            rows = data.global_scale.definition.grades.map((g) => ({
+                                ...g,
+                                min_score_milli: text(g.min_score_milli),
+                                max_score_milli: text(g.max_score_milli),
+                                points_milli: text(g.points_milli),
+                            }));
+                        render();
+                    }),
+                );
+            inspector.replaceChildren(node("h2", { class: "h5" }, "Grade settings"));
+            const grade = rows[active];
+            if (grade && !inherit) {
+                for (const [key, label, options] of [
+                    ["code", "Grade", { maxlength: 12 }],
+                    ["min_score_milli", "Minimum score (%)", { inputmode: "decimal" }],
+                    ["max_score_milli", "Maximum score (%)", { inputmode: "decimal" }],
+                    ["points_milli", "Grade points", { inputmode: "decimal" }],
+                ])
+                    inspector.append(
+                        field(
+                            label,
+                            grade[key],
+                            (v) => {
+                                grade[key] = key === "code" ? v.toUpperCase() : v;
+                                summary();
+                            },
+                            options,
+                        ),
+                    );
+                for (const [key, label] of [
+                    ["passes", "Earns course credit"],
+                    ["counts_gpa", "Count in GPA"],
+                ]) {
+                    const ident = `scale-choice-${++sequence}`;
+                    inspector.append(
+                        node(
+                            "div",
+                            { class: "form-check mb-3" },
+                            node("input", {
+                                type: "checkbox",
+                                id: ident,
+                                class: "form-check-input",
+                                checked: grade[key],
+                                onchange: (e) => {
+                                    grade[key] = e.target.checked;
+                                    summary();
+                                },
+                            }),
+                            node("label", { for: ident, class: "form-check-label" }, label),
+                        ),
+                    );
+                }
+                inspector.append(
+                    button("Remove selected grade", () => {
+                        rows.splice(active, 1);
+                        active = Math.max(0, active - 1);
+                        render();
+                    }),
+                );
+            }
+            summary();
+        }
+        function summary() {
+            const visible = inherit
+                ? data.global_scale.definition.grades.map((g) => ({
+                      ...g,
+                      min_score_milli: text(g.min_score_milli),
+                      max_score_milli: text(g.max_score_milli),
+                      points_milli: text(g.points_milli),
+                  }))
+                : rows;
+            const maximum = rows.length ? Math.max(...rows.map((g) => Number(g.points_milli) || 0)) : 4;
+            preview.replaceChildren(
+                node(
+                    "p",
+                    {},
+                    inherit
+                        ? "Using the institution’s global scale."
+                        : `Draft maximum: ${maximum.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 3 })} grade points.`,
+                ),
+            );
+            for (const g of visible.slice(Math.floor(active / 20) * 20, Math.floor(active / 20) * 20 + 20))
+                preview.append(
+                    node(
+                        "p",
+                        {},
+                        `${g.code || "New grade"}: ${g.min_score_milli === "" ? "No percentage range" : `${g.min_score_milli}–${g.max_score_milli}%`} · ${g.points_milli || "0"} grade points · ${g.counts_gpa ? "Counts in GPA" : "Excluded from GPA"} · ${g.passes ? "Earns credit" : "No earned credit"}`,
+                    ),
+                );
+        }
+        body.append(
+            field("Reason for grading scale change", reason, (v) => (reason = v), { maxlength: 1000 }),
+            actions(
+                button(
+                    "Review grading scale",
+                    async () => {
+                        const definition = inherit
+                            ? null
+                            : {
+                                  grades: rows.map((g) => ({
+                                      code: g.code.trim(),
+                                      min_score_milli: milli(g.min_score_milli, true),
+                                      max_score_milli: milli(g.max_score_milli, true),
+                                      points_milli: milli(g.points_milli),
+                                      passes: g.passes,
+                                      counts_gpa: g.counts_gpa,
+                                  })),
+                              };
+                        const reviewed = await post(base + "review/", { definition, reason });
+                        const confirmation = screen("Review grading scale");
+                        confirmation.append(
+                            node(
+                                "p",
+                                {},
+                                "Approve only after checking every grade and range. Published degree requirements retain their previous scale.",
+                            ),
+                        );
+                        if (!reviewed.definition)
+                            confirmation.append(
+                                node("p", {}, "Restore this program’s use of the global scale."),
+                            );
+                        else
+                            for (const g of reviewed.definition.grades)
+                                confirmation.append(
+                                    node(
+                                        "p",
+                                        {},
+                                        `${g.code}: ${g.min_score_milli == null ? "No percentage range" : `${text(g.min_score_milli)}–${text(g.max_score_milli)}%`} · ${text(g.points_milli)} grade points · ${g.counts_gpa ? "Counts in GPA" : "Excluded from GPA"}`,
+                                    ),
+                                );
+                        confirmation.append(
+                            node("p", {}, reviewed.reason),
+                            actions(
+                                button("Change scale review", restore),
+                                button(
+                                    "Approve reviewed grading scale",
+                                    async () => {
+                                        await post(base + "commit/", { review_token: reviewed.review_token });
+                                        await gradingScale(program, back);
+                                    },
+                                    "btn-primary",
+                                ),
+                            ),
+                        );
+                    },
+                    "btn-primary",
+                ),
+                back ? button("Back to degree draft", back) : null,
+            ),
+        );
+        render();
+    }
+    return { launch, library, studentRequirements, gradingScale };
+};
