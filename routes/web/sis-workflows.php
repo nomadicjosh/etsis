@@ -443,8 +443,23 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/students/{id}/programs/assign/", [SisStudentRecordController::class, "assign"])
         ->name("sis.student.program.assign");
     $router
-        ->map(["POST"], "/sis/students/{id}/primary-program/", [SisStudentRecordController::class, "primary"])
-        ->name("sis.student.program.primary");
+        ->map(["POST"], "/sis/students/{id}/primary-program/review/", [
+            \Application\Http\Controller\SisStudentPrimaryProgramController::class,
+            "review",
+        ])
+        ->name("sis.student.program.primary.review");
+    $router
+        ->map(["POST"], "/sis/students/{id}/primary-program/commit/", [
+            \Application\Http\Controller\SisStudentPrimaryProgramController::class,
+            "commit",
+        ])
+        ->name("sis.student.program.primary.commit");
+    $router
+        ->map(["POST"], "/sis/students/{id}/primary-program/history/", [
+            \Application\Http\Controller\SisStudentPrimaryProgramController::class,
+            "history",
+        ])
+        ->name("sis.student.program.primary.history");
     $router
         ->map(["POST"], "/sis/students/{id}/programs/{assignment}/status/review/", [
             \Application\Http\Controller\SisStudentProgramStatusController::class,

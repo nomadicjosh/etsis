@@ -36,6 +36,26 @@ final readonly class StudentProgramStatusLedger
     {
         return $this->load($assignment)["root"]->playhead();
     }
+    /** Resolve the exact active pursuit behind the student's primary program pointer. */
+    public function primaryAssignment(\Domain\Student\Student $student): StudentProgram
+    {
+        $after = null;
+        $found = null;
+        do {
+            $rows = $this->records->forProgram($student->id, $student->programId, $after);
+            foreach ($rows as $p) {
+                $this->verify($p);
+                if ($p->status === "active") {
+                    if ($found !== null) {
+                        throw new CorruptHistoryException();
+                    }
+                    $found = $p;
+                }
+                $after = $p->id;
+            }
+        } while (count($rows) === 50);
+        return $found ?? throw new CorruptHistoryException();
+    }
     /** Current uniqueness checks must not trust a conflicting status on another pursuit. */
     public function assertNoActiveProgram(
         EntityId $student,

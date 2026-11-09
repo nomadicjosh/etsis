@@ -36,7 +36,15 @@ test('registrars manage programs and student activity in one accessible record',
         };
         else if (path.endsWith('/programs/assign/')) { programs.unshift({ id: id(999), program_id: added, program_code: 'BA.ART',
             program_title: 'Fictional <b>Arts</b>', term_code: '26/FA', status: 'active' }); result = { id: id(999) }; }
-        else if (path.endsWith('/primary-program/')) { primary = programs.find(row => row.id === data.assignment_id).program_id; version++; }
+        else if (path.endsWith('/primary-program/review/')) {
+            const row = programs.find(row => row.id === data.assignment_id);
+            result = { before: { program_code: primaryRow.program_code, program_title: primaryRow.program_title, entry_term_code: '26/FA' },
+                after: { program_code: row.program_code, program_title: row.program_title, entry_term_code: row.term_code },
+                effective_on: '2026-08-10', review_token: 'fictional-primary-token' };
+        } else if (path.endsWith('/primary-program/commit/')) { primary = programs.find(row => row.id === data.assignment_id).program_id; version++; }
+        else if (path.endsWith('/primary-program/history/')) result = { current_selection: { program_code: primaryRow.program_code, entry_term_code: '26/FA' }, next_cursor: null,
+            items: [{ kind: 'observation', selection: { program_code: 'BS.CS', program_title: 'Computer Science', entry_term_code: '26/FA' },
+                effective_at: '2026-08-10T17:00:00Z', recorded_at: '2026-08-10T17:00:00Z' }] };
         else if (path.endsWith('/activity/history/')) result = { active, today: '2026-08-10', items: [
             { active: true, effective_on: '2026-08-01', recorded_at: '2026-08-10T17:00:00Z', source: 'observed_existing' },
             { active: false, effective_on: '2026-08-10', recorded_at: '2026-08-10T17:01:00Z', source: 'registrar' }], next_cursor: null };
@@ -97,10 +105,24 @@ test('registrars manage programs and student activity in one accessible record',
     await accessible();
     await page.getByRole('button', { name: 'Back to student', exact: true }).click();
     await arts.getByRole('button', { name: 'Make primary', exact: true }).click();
+    await page.getByLabel('Reason for this primary-program decision').fill('Fictional primary selection.');
+    await page.getByRole('button', { name: 'Review primary selection' }).click();
+    expect(calls.some(call => call.path.endsWith('/primary-program/commit/'))).toBe(false);
+    await accessible();
+    await page.getByRole('button', { name: 'Revise primary decision' }).click();
+    await expect(page.getByLabel('Reason for this primary-program decision')).toHaveValue('Fictional primary selection.');
+    await page.getByRole('button', { name: 'Review primary selection' }).click();
     await page.getByRole('button', { name: 'Confirm primary program', exact: true }).click();
     await expect(arts).toContainText('Primary');
     await expect(arts.getByRole('button', { name: 'Close assignment', exact: true })).toHaveCount(0);
-    expect(calls.find(call => call.path.endsWith('/primary-program/'))?.data).toEqual({ assignment_id: id(999), revision: 'student-0' });
+    expect(calls.find(call => call.path.endsWith('/primary-program/review/'))?.data).toEqual({ assignment_id: id(999),
+        revision: 'student-0', reason: 'Fictional primary selection.' });
+    expect(calls.find(call => call.path.endsWith('/primary-program/commit/'))?.data).toEqual({ assignment_id: id(999), review_token: 'fictional-primary-token' });
+    await page.getByRole('button', { name: 'Primary-program history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Observed current selection');
+    await expect(page.locator('#drawer-body')).not.toContainText('Fictional primary selection.');
+    await accessible();
+    await page.getByRole('button', { name: 'Back to student', exact: true }).click();
     await page.getByRole('button', { name: 'Change student activity' }).click();
     await page.getByLabel('Active student record').uncheck();
     await page.getByLabel('Reason for this decision').fill('Fictional registrar decision.');

@@ -152,6 +152,7 @@ final class SisFixture
             $this->sql,
             $rules,
             $this->admissions,
+            $this->primaryProgramLedger(),
         );
         $dropPolicies = new \Infrastructure\Persistence\Repository\SqlDropPolicyRepository(
             $this->sql,
@@ -177,6 +178,7 @@ final class SisFixture
             $this->academicCredits(),
             $this->enrollmentLedger(),
             $this->activityLedger(),
+            $this->primaryProgramLedger(),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -313,6 +315,40 @@ final class SisFixture
             $this->clock,
         );
     }
+    public function primaryProgramLedger(): \Domain\Student\Service\StudentPrimaryProgramLedger
+    {
+        return new \Domain\Student\Service\StudentPrimaryProgramLedger(
+            new \Infrastructure\Persistence\Repository\SqlStudentPrimaryProgramRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->programStatusLedger(),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql,
+                $this->transactions,
+                $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder()),
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            ),
+            $this->access,
+            $this->clock,
+        );
+    }
+    public function primaryProgramService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Student\Service\StudentPrimaryProgramService {
+        return new \Domain\Student\Service\StudentPrimaryProgramService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+            $this->primaryProgramLedger(),
+            $this->programStatusLedger(),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
     public function programStatusLedger(): \Domain\Student\Service\StudentProgramStatusLedger
     {
         return new \Domain\Student\Service\StudentProgramStatusLedger(
@@ -322,16 +358,16 @@ final class SisFixture
                 $this->transactions,
                 $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(
-                    EventStoreFixture::config($this->connection->queryBuilder())
+                    EventStoreFixture::config($this->connection->queryBuilder()),
                 ),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
             ),
             $this->access,
-            $this->clock
+            $this->clock,
         );
     }
     public function programStatusService(
-        ?\Domain\Audit\Repository\AuditTrail $audit = null
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Student\Service\StudentProgramStatusService {
         return new \Domain\Student\Service\StudentProgramStatusService(
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
@@ -341,7 +377,8 @@ final class SisFixture
             $this->transactions,
             $audit ?? $this->audit,
             $this->dropCipher,
-            $this->clock
+            $this->clock,
+            $this->primaryProgramLedger(),
         );
     }
     public function activityService(
@@ -418,6 +455,7 @@ final class SisFixture
                 $this->transactions,
             ),
             $this->admissions,
+            $this->primaryProgramLedger(),
         );
         return new \Domain\Registration\Service\CourseDropService(
             new \Infrastructure\Persistence\Repository\SqlCourseDropRepository($this->sql),

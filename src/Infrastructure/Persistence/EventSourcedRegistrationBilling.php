@@ -22,11 +22,16 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         private SqlRecords $sql,
         private BillingRuleRepository $rules,
         private AdmissionsRepository $admissions,
+        private \Domain\Student\Service\StudentPrimaryProgramLedger $primaryPrograms,
     ) {
     }
 
-    public function reverseCourseCharge(EntityId $student, EntityId $term, EntityId $enrollment, EntityId $actor): bool
-    {
+    public function reverseCourseCharge(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        EntityId $actor,
+    ): bool {
         $row =
         $this->sql->rows(
             "sis_student_accounts",
@@ -52,9 +57,15 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
     /**
      * @throws TypeException
      */
-    public function charge(EntityId $student, EntityId $term, EntityId $operation, Money $fee, EntityId $actor): void
-    {
+    public function charge(
+        EntityId $student,
+        EntityId $term,
+        EntityId $operation,
+        Money $fee,
+        EntityId $actor,
+    ): void {
         $studentRecord = $this->admissions->student($student);
+        $this->primaryPrograms->verify($studentRecord);
         $rules = array_values(
             array_filter(
                 $this->rules->forTerm($term),
@@ -75,7 +86,12 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         ? StudentAccount::open(new AccountId(), $student, $term, $currency)
         : $this->accounts->get(new AccountId($existing[0]["id"]));
         foreach ($rules as $rule) {
-            $account->post(new EntityId((string) $rule->aggregateId()), EntryType::Charge, $rule->amount(), $actor);
+            $account->post(
+                new EntityId((string) $rule->aggregateId()),
+                EntryType::Charge,
+                $rule->amount(),
+                $actor,
+            );
         }
         if ($fee->minor > 0) {
             $account->post($operation, EntryType::Charge, $fee, $actor);

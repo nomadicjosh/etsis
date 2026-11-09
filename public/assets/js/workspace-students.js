@@ -284,6 +284,141 @@ window.createWorkspaceStudents = function (ui) {
         body.append(controls);
     }
 
+    async function primaryProgram(record, item, back, preset = {}) {
+        const body = openDrawer("Review primary program", "REGISTRAR DECISION");
+        body.append(
+            button("Back to student", back),
+            node("h3", {}, `${item.program_code} · ${item.program_title}`),
+            node(
+                "p",
+                { class: "form-text" },
+                "Choose this existing assignment as primary when you confirm. Future rules that use the primary program will use this selection. Other programs, entry terms, degree requirements, earned credits and posted charges stay connected to their existing records.",
+            ),
+        );
+        const descriptors = [["reason", "Reason for this primary-program decision", "textarea"]];
+        const form = await ui.buildForm(descriptors, preset);
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review primary selection",
+        );
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = ui.formData(form, descriptors);
+                const preview = await request(`/sis/students/${record.id}/primary-program/review/`, "POST", {
+                    ...data,
+                    assignment_id: item.id,
+                    revision: record.revision,
+                });
+                const confirmation = openDrawer("Confirm primary program", "REVIEWED DECISION");
+                confirmation.append(
+                    button("Revise primary decision", () => primaryProgram(record, item, back, data)),
+                    node("h3", {}, `${preview.before.program_code} → ${preview.after.program_code}`),
+                    node(
+                        "dl",
+                        { class: "detail-list" },
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "Previous primary pursuit"),
+                            node(
+                                "dd",
+                                {},
+                                `${preview.before.program_title} · ${preview.before.entry_term_code}`,
+                            ),
+                        ),
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "New primary pursuit"),
+                            node(
+                                "dd",
+                                {},
+                                `${preview.after.program_title} · ${preview.after.entry_term_code}`,
+                            ),
+                        ),
+                    ),
+                    node("p", {}, `Takes effect when confirmed on ${preview.effective_on}.`),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "The previous selection and this decision will be retained. Earlier history before tracking began is unknown. Existing charges will not be recalculated.",
+                    ),
+                    button(
+                        "Confirm primary program",
+                        async () => {
+                            await request(`/sis/students/${record.id}/primary-program/commit/`, "POST", {
+                                assignment_id: item.id,
+                                review_token: preview.review_token,
+                            });
+                            await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+                const heading = confirmation.querySelector("h3");
+                heading.tabIndex = -1;
+                heading.focus();
+            }, review);
+        });
+        body.append(form);
+    }
+    async function primaryHistory(id, back, cursor = null, previous = []) {
+        const page = await request(
+            `/sis/students/${id}/primary-program/history/`,
+            "POST",
+            cursor ? { cursor } : {},
+        );
+        const body = openDrawer("Primary-program history", "REGISTRAR RECORD");
+        body.append(
+            button("Back to student", back),
+            node(
+                "p",
+                {},
+                `Current primary pursuit: ${page.current_selection.program_code} · ${page.current_selection.entry_term_code}`,
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                "These labels are retained as recorded. An observation describes the selection seen when tracking began; earlier selections are unknown. Protected reasons and actor details are excluded.",
+            ),
+        );
+        body.append(
+            page.items.length
+                ? grid(
+                      ["Program as recorded", "Pursuit entry term", "Effective", "Recorded", "Record"],
+                      page.items.map((row) => [
+                          `${row.selection.program_code} · ${row.selection.program_title}`,
+                          row.selection.entry_term_code,
+                          row.effective_at,
+                          row.recorded_at,
+                          row.kind === "observation" ? "Observed current selection" : "Registrar selection",
+                      ]),
+                      "Primary-program decisions",
+                  )
+                : node("p", {}, "No primary-program decisions have been recorded yet."),
+        );
+        const controls = node("div", { class: "inline-actions" });
+        if (previous.length)
+            controls.append(
+                button("Previous primary history page", () =>
+                    primaryHistory(id, back, previous[previous.length - 1], previous.slice(0, -1)),
+                ),
+            );
+        if (page.next_cursor)
+            controls.append(
+                button("Next primary history page", () =>
+                    primaryHistory(id, back, page.next_cursor, [...previous, cursor]),
+                ),
+            );
+        body.append(controls);
+    }
+
     async function student(id) {
         const record = await request(`/sis/students/${id}/record/`);
         const body = openDrawer(`${record.given_name} ${record.family_name}`, "STUDENT RECORD");
@@ -376,6 +511,7 @@ window.createWorkspaceStudents = function (ui) {
         if (can("sis:registration:manage")) {
             actions.append(button("Change student activity", () => activity(record, back)));
             actions.append(button("Activity history", () => activityHistory(id, back)));
+            actions.append(button("Primary-program history", () => primaryHistory(id, back)));
         }
 
         const programs = node(
@@ -463,20 +599,7 @@ window.createWorkspaceStudents = function (ui) {
                                   );
                                   if (!item.is_primary && item.status === "active")
                                       controls.append(
-                                          button("Make primary", () =>
-                                              flow(
-                                                  "Confirm primary program",
-                                                  [],
-                                                  `/sis/students/${id}/primary-program/`,
-                                                  () => ({
-                                                      assignment_id: item.id,
-                                                      revision: record.revision,
-                                                  }),
-                                                  back,
-                                                  {},
-                                                  `Make ${item.program_code} the primary program now. Future primary-program billing and reporting rules use this selection. Other program assignments stay active. Posted transactions and the institutional entry term stay unchanged.`,
-                                              ),
-                                          ),
+                                          button("Make primary", () => primaryProgram(record, item, back)),
                                       );
                                   if (!item.is_primary)
                                       controls.append(

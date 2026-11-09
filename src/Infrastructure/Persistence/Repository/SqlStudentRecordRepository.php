@@ -22,15 +22,6 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
         $this->sql->lock("sis_students", $student->value, "id");
     }
 
-    public function setPrimary(EntityId $student, EntityId $program): void
-    {
-        $this->sql->update(
-            "sis_students",
-            ["primary_program_id" => $program->value],
-            ["id" => $student->value],
-        );
-    }
-
     public function program(EntityId $program): array
     {
         $row = $this->sql->one("sis_programs", ["id" => $program->value]);

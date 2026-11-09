@@ -6,15 +6,12 @@ namespace Domain\Student\Service;
 
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
-use Domain\Shared\Exception\ConcurrentModificationException;
-use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Student;
 use Domain\Student\StudentProgram;
-use DomainException;
 
 final readonly class StudentRecordService
 {
@@ -27,6 +24,7 @@ final readonly class StudentRecordService
         private \Domain\Catalog\Service\CatalogEnrollment $catalogs,
         private StudentActivityLedger $activity,
         private StudentProgramStatusLedger $programStatuses,
+        private StudentPrimaryProgramLedger $primaryPrograms,
     ) {
     }
 
@@ -37,6 +35,7 @@ final readonly class StudentRecordService
             $this->records->lock($id);
             $student = $this->read($id);
             $this->activity->verify($student);
+            $this->primaryPrograms->verify($student);
             $person = $this->admissions->person($student->personId);
 
             return [
@@ -73,33 +72,13 @@ final readonly class StudentRecordService
         });
     }
 
-    public function primary(EntityId $id, EntityId $assignmentId, string $revision): void
-    {
-        $actor = $this->access->requirePermission("sis:registration:manage");
-        $this->transactions->run(function () use ($id, $assignmentId, $revision, $actor): void {
-            $this->records->lock($id);
-            $this->registrar($actor);
-            $student = $this->admissions->student($id);
-            $this->check($this->revision($student), $revision);
-            $assignment = $this->ownedAssignment($id, $assignmentId);
-            $this->programStatuses->verify($assignment);
-            if ($assignment->status !== "active") {
-                throw new DomainException("The primary program must be active.");
-            }
-            if ($assignment->programId->value === $student->programId->value) {
-                return;
-            }
-            $this->records->setPrimary($id, $assignment->programId);
-            $this->audit->record($actor, "student.primary_program_changed", $id);
-        });
-    }
-
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
     public function programs(EntityId $id, ?EntityId $after = null): array
     {
         return $this->transactions->run(function () use ($id, $after): array {
             $this->records->lock($id);
             $student = $this->read($id);
+            $this->primaryPrograms->verify($student);
             $rows = $this->records->assignments($id, $after, 51);
             $more = count($rows) > 50;
             $rows = array_slice($rows, 0, 50);
@@ -135,27 +114,10 @@ final readonly class StudentRecordService
         return $student;
     }
 
-    private function ownedAssignment(EntityId $student, EntityId $id): StudentProgram
-    {
-        $assignment = $this->records->assignment($id);
-        if ($assignment->studentId->value !== $student->value) {
-            throw new RecordNotFoundException("Program assignment not found.");
-        }
-
-        return $assignment;
-    }
-
     private function registrar(EntityId $actor): void
     {
         if ($this->access->requirePermission("sis:registration:manage")->value !== $actor->value) {
             throw new \Domain\Shared\Exception\AccessDeniedException("The registrar actor changed.");
-        }
-    }
-
-    private function check(string $current, string $expected): void
-    {
-        if (!hash_equals($current, $expected)) {
-            throw new ConcurrentModificationException("Reload student records before saving.");
         }
     }
 

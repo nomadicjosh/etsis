@@ -31,6 +31,7 @@ final readonly class StudentProgramStatusService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private StudentPrimaryProgramLedger $primaryPrograms,
     ) {
     }
 
@@ -174,7 +175,9 @@ final readonly class StudentProgramStatusService
         if ($p->studentId->value !== $student->value) {
             throw new RecordNotFoundException("Program assignment not found.");
         }
-        return [$this->admissions->student($student), $p];
+        $s = $this->admissions->student($student);
+        $this->primaryPrograms->verify($s);
+        return [$s, $p];
     }
     private function allowed(Student $student, StudentProgram $p, string $status): void
     {

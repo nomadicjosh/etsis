@@ -90,6 +90,7 @@ final class StudentProgramStatusHistoryTest extends TestCase
             $f->catalogEnrollment(),
             $f->activityLedger(),
             $f->programStatusLedger(),
+            $f->primaryProgramLedger(),
         );
     }
     public function testReviewAndHistoryDoNotWriteEventsAndConfirmationRetainsAnExplicitObservation(): void
@@ -167,7 +168,8 @@ final class StudentProgramStatusHistoryTest extends TestCase
         $p = $this->assignment($f);
         $review = $this->review($f, $p);
         $records = $this->records($f);
-        $records->primary($p->studentId, $p->id, $records->view($p->studentId)["revision"]);
+        $selection = $f->primaryProgramService()->review($p->studentId, $p->id, $records->view($p->studentId)["revision"], 'Fictional primary selection.');
+        $f->primaryProgramService()->commit($p->studentId, $p->id, $selection['review_token']);
         $this->expectException(ConcurrentModificationException::class);
         $f->programStatusService()->commit($p->studentId, $p->id, $review["review_token"]);
     }
@@ -293,6 +295,7 @@ final class StudentProgramStatusHistoryTest extends TestCase
             $f->audit,
             $f->dropCipher,
             $f->clock,
+            $f->primaryProgramLedger(),
         );
         $this->expectException(AccessDeniedException::class);
         $service->review($p->studentId, $p->id, false, $this->revision($p), "Fictional reason");
@@ -331,7 +334,7 @@ final class StudentProgramStatusHistoryTest extends TestCase
         $attempts = [
             fn() => $f->programStatusService()->history($p->studentId, $p->id),
             fn() => $records->programs($p->studentId),
-            fn() => $records->primary($p->studentId, $p->id, $records->view($p->studentId)["revision"]),
+            fn() => $f->primaryProgramService()->review($p->studentId, $p->id, $records->view($p->studentId)["revision"], "Fictional primary selection."),
         ];
         foreach ($attempts as $attempt) {
             try {

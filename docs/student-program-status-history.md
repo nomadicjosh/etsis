@@ -1,6 +1,6 @@
 # Closing and reopening student programs
 
-Implemented 2026-11-09. This stage preserves active/closed status decisions for an individual student-program assignment. New assignment creation, primary-program selection, matriculation, graduation, standing and broader program changes still have separate work remaining. It does not introduce another event store.
+Implemented 2026-11-09. This stage preserves active/closed status decisions for an individual student-program assignment. New assignment creation, matriculation, graduation, standing and broader program changes still have separate work remaining. [Primary-program selection](student-primary-program-history.md) now has its own reviewed history. It does not introduce another event store.
 
 ## Staff workflow
 
@@ -28,4 +28,4 @@ Before displaying a program list, selecting a primary assignment, or reviewing/c
 
 The student lock serializes assignment changes. Current registrar permission is checked again after acquiring it. Reviewed history versions prevent stale decisions, and the event append, checkpoint, status update and required audit either commit together or all roll back. Replay reads bounded pages into constant-size state and performs no academic, billing or notification side effects. Browser review tokens are authenticated, encrypted, bound to the actor/student/assignment/purpose and held only in memory.
 
-Fictional tests cover deterministic replay, stale reviews and close/reopen cycles, exact retries, ownership and current permission checks, token binding, missing reasons, expiry, primary/duplicate rules, conflicting saved records, bounded frozen history pages, encrypted reasons, and complete rollback on audit failure. The workspace browser check covers the review, confirmation and timeline with keyboard/focus, accessibility and narrow-screen checks. Full program reconstruction, historical primary-program intervals, backdated corrections and operational rebuild/swap tooling remain later stages.
+Fictional tests cover deterministic replay, stale reviews and close/reopen cycles, exact retries, ownership and current permission checks, token binding, missing reasons, expiry, primary/duplicate rules, conflicting saved records, bounded frozen history pages, encrypted reasons, and complete rollback on audit failure. The workspace browser check covers the review, confirmation and timeline with keyboard/focus, accessibility and narrow-screen checks. Full program reconstruction, backdated primary-program intervals and other backdated corrections and operational rebuild/swap tooling remain later stages.

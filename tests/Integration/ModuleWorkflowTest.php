@@ -286,6 +286,7 @@ final class ModuleWorkflowTest extends TestCase
             $f->sql,
             $rules,
             $f->admissions,
+            $f->primaryProgramLedger(),
         );
         $service = new \Domain\Finance\Service\TermBillingService(
             $rules,

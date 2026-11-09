@@ -390,11 +390,18 @@ if ($assignedResponse->getStatusCode() !== 201) {
     throw new RuntimeException("The student program assignment route failed.");
 }
 $assignmentId = json_decode((string) $assignedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+$primaryDecision = static function (string $assignment, string $revision) use ($teachingPost, $studentPath): int {
+    $response = $teachingPost($studentPath . "/primary-program/review/", ["assignment_id" => $assignment,
+        "revision" => $revision, "reason" => "Fictional primary-program decision."]);
+    if ($response->getStatusCode() !== 200) {
+        return $response->getStatusCode();
+    }
+    $preview = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    return $teachingPost($studentPath . "/primary-program/commit/", ["assignment_id" => $assignment,
+        "review_token" => $preview["review_token"]])->getStatusCode();
+};
 if (
-    $teachingPost($studentPath . "/primary-program/", [
-        "assignment_id" => $assignmentId,
-        "revision" => $studentRecord["revision"],
-    ])->getStatusCode() !== 200
+    $primaryDecision($assignmentId, $studentRecord["revision"]) !== 200
 ) {
     throw new RuntimeException("The primary program route failed.");
 }
@@ -440,10 +447,7 @@ if ($activityDecision(true, $inactive["revision"]) !== 200) {
 }
 $fresh = json_decode((string) $app->router->match($recordGet)->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
-    $teachingPost($studentPath . "/primary-program/", [
-        "assignment_id" => $originalAssignment["id"],
-        "revision" => $fresh["revision"],
-    ])->getStatusCode() !== 200
+    $primaryDecision($originalAssignment["id"], $fresh["revision"]) !== 200
 ) {
     throw new RuntimeException("The original primary program could not be selected.");
 }

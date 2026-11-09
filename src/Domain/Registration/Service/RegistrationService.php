@@ -16,6 +16,7 @@ use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
+use JsonException;
 
 final readonly class RegistrationService
 {
@@ -31,6 +32,7 @@ final readonly class RegistrationService
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
         private EnrollmentLedger $enrollments,
         private \Domain\Student\Service\StudentActivityLedger $activity,
+        private \Domain\Student\Service\StudentPrimaryProgramLedger $primaryPrograms,
     ) {
     }
 
@@ -69,6 +71,7 @@ final readonly class RegistrationService
                 $this->access->requirePermission("sis:registration:manage");
             }
             $this->activity->verify($student);
+            $this->primaryPrograms->verify($student);
             $section = $this->repository->section($sectionId);
             $course = $this->repository->courseForSection($section);
             $window = $this->repository->window($section->termId);
@@ -158,7 +161,10 @@ final readonly class RegistrationService
         return $this->drops->review($student, $section);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     * @throws JsonException
+     */
     public function dropReviewed(
         EntityId $student,
         EntityId $section,
@@ -179,7 +185,10 @@ final readonly class RegistrationService
         );
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     * @throws JsonException
+     */
     public function dropReceipt(EntityId $operation): array
     {
         return $this->drops->receipt($operation);

@@ -27,7 +27,8 @@ final class StudentRecordManagementTest extends TestCase
             $audit ?? $f->audit,
             $f->catalogEnrollment(),
             $f->activityLedger(),
-            $f->programStatusLedger()
+            $f->programStatusLedger(),
+            $f->primaryProgramLedger()
         );
     }
 
@@ -61,6 +62,13 @@ final class StudentRecordManagementTest extends TestCase
         $service->commit($student, $assignment, $review['review_token']);
     }
 
+    private function primary(SisFixture $f, EntityId $student, EntityId $assignment, string $revision, ?AuditTrail $audit = null): void
+    {
+        $service = $f->primaryProgramService($audit);
+        $review = $service->review($student, $assignment, $revision, 'Fictional primary-program decision.');
+        $service->commit($student, $assignment, $review['review_token']);
+    }
+
     private function program(SisFixture $f, string $code = 'BA.ART'): EntityId
     {
         $id = EntityId::generate();
@@ -91,7 +99,7 @@ final class StudentRecordManagementTest extends TestCase
         $program = $this->program($f);
         $assignment = $service->assign($student->id, $program, $f->term);
         self::assertSame($f->program->value, $service->view($student->id)['primary_program']['id']);
-        $service->primary($student->id, $assignment, $before['revision']);
+        $this->primary($f, $student->id, $assignment, $before['revision']);
         $after = $service->view($student->id);
         self::assertSame($program->value, $after['primary_program']['id']);
         self::assertSame($before['entry_term'], $after['entry_term']);
@@ -126,9 +134,9 @@ final class StudentRecordManagementTest extends TestCase
         $closed = $this->assignment($service, $student->id, $assigned);
         self::assertSame('closed', $closed['status']);
         try {
-            $service->primary($student->id, $assigned, $service->view($student->id)['revision']);
+            $this->primary($f, $student->id, $assigned, $service->view($student->id)['revision']);
             self::fail('A closed assignment became primary.');
-        } catch (DomainException) {
+        } catch (DomainException | ValidationException) {
             self::assertFalse($closed['is_primary']);
         }
         $this->programStatus($f, $student->id, $assigned, true, $closed['revision']);
@@ -175,7 +183,7 @@ final class StudentRecordManagementTest extends TestCase
         foreach (
             [fn () => $this->activity($f, $student->id, false, $revision),
             fn () => $service->assign($student->id, $f->program, $f->term),
-            fn () => $service->primary($student->id, new EntityId($row['id']), $revision),
+            fn () => $this->primary($f, $student->id, new EntityId($row['id']), $revision),
             fn () => $this->programStatus($f, $student->id, new EntityId($row['id']), false, $row['revision'])] as $write
         ) {
             try {
@@ -204,7 +212,7 @@ final class StudentRecordManagementTest extends TestCase
         $other = $f->student();
         $foreign = $service->programs($other->id)['items'][0];
         foreach (
-            [fn () => $service->primary($student->id, new EntityId($foreign['id']), $service->view($student->id)['revision']),
+            [fn () => $this->primary($f, $student->id, new EntityId($foreign['id']), $service->view($student->id)['revision']),
             fn () => $this->programStatus($f, $student->id, new EntityId($foreign['id']), false, $foreign['revision'])] as $write
         ) {
             try {
@@ -271,7 +279,7 @@ final class StudentRecordManagementTest extends TestCase
         $before = $normal->view($student->id);
         foreach (
             [fn () => $this->activity($f, $student->id, false, $before['revision'], $audit),
-            fn () => $service->primary($student->id, $assigned, $before['revision']),
+            fn () => $this->primary($f, $student->id, $assigned, $before['revision'], $audit),
             fn () => $service->assign($student->id, $this->program($f, 'MORE.' . bin2hex(random_bytes(2))), $f->term)] as $write
         ) {
             try {

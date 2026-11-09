@@ -36,12 +36,4 @@ final readonly class SisStudentRecordController
 
         return new JsonResponse(["id" => $assigned->value], 201);
     }
-
-    public function primary(ServerRequest $request, string $id): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        $this->service->primary(new EntityId($id), $f->id("assignment_id"), $f->text("revision", 64));
-
-        return new JsonResponse(["status" => "saved"]);
-    }
 }
