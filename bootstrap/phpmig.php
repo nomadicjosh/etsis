@@ -21,6 +21,8 @@ $objectmap['phpmig.adapter'] = function ($c) {
     return new DbalMigrationAdapter(connection: $c['connection'], tableName: 'migration');
 };
 
+$objectmap['sis.history_codec'] = fn () => Codefy::$PHP->make(\Infrastructure\EventSourcing\ProtectedEventCodec::class);
+
 $objectmap['phpmig.migrations_path'] = database_path(path: 'migrations');
 
 return $objectmap;
