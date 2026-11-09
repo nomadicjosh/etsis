@@ -41,8 +41,12 @@ final class PortalPaymentsTest extends TestCase
         [$c, $account] = $this->charged();
         $id = EntityId::generate();
         $c->gateway->failOnce = true;
-        try { $c->checkout->checkout($id, $account); self::fail('Fictional provider did not fail.'); }
-        catch (DomainException) { self::assertSame('pending', $c->payments->find($id)['status']); }
+        try {
+            $c->checkout->checkout($id, $account);
+            self::fail('Fictional provider did not fail.');
+        } catch (DomainException) {
+            self::assertSame('pending', $c->payments->find($id)['status']);
+        }
         $c->checkout->checkout($id, $account);
         self::assertCount(2, $c->gateway->calls);
         self::assertSame($c->gateway->calls[0], $c->gateway->calls[1]);
@@ -54,8 +58,12 @@ final class PortalPaymentsTest extends TestCase
         [$c, $account] = $this->charged();
         $c->gateway->available = false;
         self::assertFalse($c->checkout->enabled());
-        try { $c->checkout->checkout(EntityId::generate(), $account); self::fail('A disabled provider started checkout.'); }
-        catch (DomainException) { self::assertSame([], $c->gateway->calls); }
+        try {
+            $c->checkout->checkout(EntityId::generate(), $account);
+            self::fail('A disabled provider started checkout.');
+        } catch (DomainException) {
+            self::assertSame([], $c->gateway->calls);
+        }
         $c->gateway->available = true;
         $c->sis->access->actor = $c->sis->user();
         $c->sis->student();
@@ -68,11 +76,16 @@ final class PortalPaymentsTest extends TestCase
         [$c, $account] = $this->charged();
         $id = EntityId::generate();
         $c->gateway->failOnce = true;
-        try { $c->checkout->checkout($id, $account); }
-        catch (DomainException) { self::assertTrue(true); }
+        try {
+            $c->checkout->checkout($id, $account);
+        } catch (DomainException) {
+            self::assertTrue(true);
+        }
         $c->sis->clock->time = $c->sis->clock->time->modify('+31 minutes');
-        try { $c->checkout->checkout($id, $account); self::fail('An expired creation window was reused.'); }
-        catch (\Domain\Shared\Exception\ValidationException) {
+        try {
+            $c->checkout->checkout($id, $account);
+            self::fail('An expired creation window was reused.');
+        } catch (\Domain\Shared\Exception\ValidationException) {
             self::assertSame('expired', $c->payments->find($id)['status']);
         }
         $fresh = EntityId::generate();
@@ -88,12 +101,20 @@ final class PortalPaymentsTest extends TestCase
         $c->checkout->checkout($id, $account);
         $c->gateway->confirmation = ['payment' => $id->value, 'session' => 'cs_test_' . $id->value,
             'minor' => 12344, 'currency' => 'USD'];
-        try { $c->confirmation->receive('{}', 'fictional-valid-signature'); self::fail('A mismatched amount was posted.'); }
-        catch (DomainException) { self::assertSame('pending', $c->payments->find($id)['status']); }
+        try {
+            $c->confirmation->receive('{}', 'fictional-valid-signature');
+            self::fail('A mismatched amount was posted.');
+        } catch (DomainException) {
+            self::assertSame('pending', $c->payments->find($id)['status']);
+        }
         $c->gateway->confirmation['minor'] = 12345;
         $c->gateway->confirmation['currency'] = 'EUR';
-        try { $c->confirmation->receive('{}', 'fictional-valid-signature'); self::fail('A mismatched currency was posted.'); }
-        catch (DomainException) { self::assertSame('pending', $c->payments->find($id)['status']); }
+        try {
+            $c->confirmation->receive('{}', 'fictional-valid-signature');
+            self::fail('A mismatched currency was posted.');
+        } catch (DomainException) {
+            self::assertSame('pending', $c->payments->find($id)['status']);
+        }
         $c->gateway->confirmation['currency'] = 'USD';
         $c->confirmation->receive('{}', 'fictional-valid-signature');
         $c->confirmation->receive('{}', 'fictional-valid-signature');
@@ -121,8 +142,10 @@ final class PortalPaymentsTest extends TestCase
         $body = json_encode($event, JSON_THROW_ON_ERROR);
         $time = time();
         $signature = 't=' . $time . ',v1=' . hash_hmac('sha256', $time . '.' . $body, 'whsec_fictional');
-        self::assertSame(['payment' => $id, 'session' => 'cs_test_fictional', 'minor' => 12345, 'currency' => 'USD'],
-            $gateway->verify($body, $signature));
+        self::assertSame(
+            ['payment' => $id, 'session' => 'cs_test_fictional', 'minor' => 12345, 'currency' => 'USD'],
+            $gateway->verify($body, $signature)
+        );
         $config->setConfigKey('portal', ['payments' => ['enabled' => false, 'live' => false,
             'secret' => '', 'webhook_secret' => 'whsec_fictional']]);
         self::assertFalse($gateway->enabled());

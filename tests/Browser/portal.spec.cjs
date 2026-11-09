@@ -150,3 +150,22 @@ test('campus sign-in and account creation have accessible labels and keyboard fo
     await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('autocomplete', 'new-password');
     await accessible(page);
 });
+
+test('published course descriptions remain keyboard accessible plain text on narrow screens', async ({ page }) => {
+    const description = 'Fictional first paragraph.\n<script>window.fictionalPortalDescriptionExecuted = true</script>\nSecond paragraph.';
+    course.description = description;
+    try {
+        await mockServices(page);
+        await page.setViewportSize({ width: 375, height: 812 });
+        await page.goto('/portal/courses/?guest=1');
+        const disclosure = page.locator('#campus-course-results summary').filter({ hasText: 'Course description' });
+        await disclosure.focus();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#campus-course-results .campus-course-description')).toHaveText(description);
+        expect(await page.evaluate(() => window.fictionalPortalDescriptionExecuted)).toBeUndefined();
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    } finally {
+        delete course.description;
+    }
+});

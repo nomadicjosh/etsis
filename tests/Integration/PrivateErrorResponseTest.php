@@ -22,13 +22,18 @@ final class PrivateErrorResponseTest extends TestCase
 
     public function testFrameworkFailuresAreSanitizedAndHaveExpectedStatuses(): void
     {
-        foreach ([
-            [new Qubus\Validation\ValidationException(uri: 'https://example.invalid/fictional-secret',
-                message: 'fictional-secret in raw validation payload', code: 422), 422],
+        foreach (
+            [
+            [new Qubus\Validation\ValidationException(
+                uri: 'https://example.invalid/fictional-secret',
+                message: 'fictional-secret in raw validation payload',
+                code: 422
+            ), 422],
             [new UnauthorizedException(message: 'fictional-secret', code: 401), 403],
             [new Qubus\Routing\Exceptions\NotFoundHttpException('fictional-secret'), 404],
             [new RuntimeException('fictional-secret', 403), 500],
-        ] as [$exception, $status]) {
+            ] as [$exception, $status]
+        ) {
             $response = $this->failure('/sis/private/', 'application/json', $exception);
             self::assertSame($status, $response->getStatusCode());
             self::assertStringContainsString('application/json', $response->getHeaderLine('Content-Type'));
@@ -40,8 +45,11 @@ final class PrivateErrorResponseTest extends TestCase
 
     public function testNativeFormsReceiveEscapedAccessibleRecoveryPageWithoutPayloads(): void
     {
-        $response = $this->failure('/admin/profile/update/', 'text/html,application/json;q=0.5',
-            new ValidationException([['field' => 'name', 'message' => '<script>fictional</script> Check the name.']]));
+        $response = $this->failure(
+            '/admin/profile/update/',
+            'text/html,application/json;q=0.5',
+            new ValidationException([['field' => 'name', 'message' => '<script>fictional</script> Check the name.']])
+        );
         self::assertSame(422, $response->getStatusCode());
         self::assertStringContainsString('text/html', $response->getHeaderLine('Content-Type'));
         $html = (string) $response->getBody();
@@ -72,8 +80,10 @@ final class PrivateErrorResponseTest extends TestCase
         self::assertFalse($response->hasHeader('ETag'));
         self::assertFalse($response->hasHeader('Last-Modified'));
         self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
-        $public = new SisPrivacyMiddleware()->process(new ServerRequest([], [], '/assets/example.txt', 'GET'),
-            new CallableRequestHandler(static fn () => new TextResponse('Asset', 200, ['ETag' => 'fictional'])));
+        $public = new SisPrivacyMiddleware()->process(
+            new ServerRequest([], [], '/assets/example.txt', 'GET'),
+            new CallableRequestHandler(static fn () => new TextResponse('Asset', 200, ['ETag' => 'fictional']))
+        );
         self::assertTrue($public->hasHeader('ETag'));
     }
 }

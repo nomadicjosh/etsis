@@ -1,0 +1,255 @@
+const { test, expect } = require('@playwright/test');
+const AxeBuilder = require('@axe-core/playwright').default;
+const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
+async function accessible(page) {
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
+}
+async function fixture(page, options = {}) {
+    const course = id(1), term = id(2), clone = id(3), prerequisite = id(4), operation = id(5), section = id(6);
+    const termRow = { id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20', add_drop_ends_on: '2026-08-15' };
+    const calls = [], errors = []; let published = false, rows = options.rows || [], saved = options.saved || false, definitionPublished = false;
+    let sectionBound = false;
+    let courseText = { transcript_title: null, description: null };
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname, raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        if (data) calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
+        let result = {};
+        const review = { term: termRow, sections: rows.map(row => ({ ...row, course_code: 'MATH.101', course_title: 'Algebra', faculty_name: null })) };
+        const receipt = { operation_id: operation, review, published_at: published ? '2026-11-07T12:00:00Z' : null, created_at: '2026-11-07T11:00:00Z' };
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === '/sis/ui/operation-id/') result = { id: section };
+        else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/courses/') ? [{ id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }] : path.includes('/terms/') ? [termRow] : path.includes('/sections/') ? [{ id: section, code: 'MATH.101.A', course_title: 'Algebra', course_code: 'MATH.101', term_code: '26/FA', capacity: 20, enrolled: 0, active: true }] : [], next_after: null };
+        else if (path === `/sis/courses/${course}/text/`) {
+            if (data) { courseText = { transcript_title: data.transcript_title, description: data.description }; result = { status: 'saved' }; }
+            else result = { id: course, code: 'MATH.101', title: 'Algebra', ...courseText, revision: 'fictional-text-revision' };
+        }
+        else if (path.endsWith('/course-definition/page/')) result = { section: { id: section, code: 'MATH.101.A' }, has_student_records: false,
+            bound: sectionBound ? { version_id: operation, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], transcript_title: null, description: '<img src=x onerror=alert(1)> Fictional catalog text' } } : null,
+            versions: { items: options.noDefinitions && !definitionPublished ? [] : [{ version_id: options.paged && data?.cursor ? id(10) : operation, version: options.paged && data?.cursor ? 2 : 1, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], transcript_title: null, description: '<img src=x onerror=alert(1)> Fictional catalog text' } }], next_cursor: options.paged && !data?.cursor ? 'fictional-next-page' : null } };
+        else if (path.endsWith('/course-definition/review/')) result = { section_code: 'MATH.101.A', reason: data.reason, review_token: 'fictional-protected-section-token', selected: { version_id: operation, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], transcript_title: null, description: '<img src=x onerror=alert(1)> Fictional catalog text' } } };
+        else if (path.endsWith('/course-definition/commit/')) { sectionBound = true; result = { operation_id: id(9), last_version: 1 }; }
+        else if (path.endsWith('/publication/page/')) result = { items: definitionPublished ? [{ version_id: operation, version: 1, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText }, recorded_at: '2026-11-08T12:00:01Z' }] : [], next_cursor: null, through_version: definitionPublished ? 1 : 0 };
+        else if (path.endsWith('/publication/review/')) result = { expected_version: 0, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText }, reason: data.reason, effective_at: '2026-11-08T12:00:00Z', review_token: 'fictional-protected-review-token' };
+        else if (path.endsWith('/publication/commit/')) { definitionPublished = true; result = { operation_id: operation, last_version: 1 }; }
+        else if (path.endsWith('/clone/review/')) result = { source: { id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }, prerequisites: [{ id: prerequisite, code: 'MATH.001', title: 'Foundations', active: true }], operation_id: clone, revision: 'a'.repeat(64) };
+        else if (path.endsWith('/clone/commit/')) result = { id: clone, code: data.code, title: data.title, credits_milli: data.credits_milli, prerequisites_copied: data.prerequisites.length, active: false };
+        else if (path === '/sis/catalog/offerings/review/') { rows = data.sections; result = { term: termRow, sections: rows.map(row => ({ ...row, course_code: 'MATH.101', course_title: 'Algebra', faculty_name: null })), operation_id: operation, revision: 'b'.repeat(64) }; }
+        else if (path === '/sis/catalog/offerings/save/') { saved = true; result = receipt; }
+        else if (path === '/sis/catalog/offerings/') result = { items: saved ? [{ operation_id: operation, term_code: '26/FA', section_count: rows.length, published_at: receipt.published_at, created_at: receipt.created_at }] : [], next_after: null };
+        else if (path.endsWith('/publication-setup/')) result = { ...review, operation_id: operation, sections: review.sections.map(row => ({ ...row, was_bound: false, has_student_records: false })) };
+        else if (path.endsWith('/publication-review/')) result = { ...review, operation_id: operation, reason: data.reason, review_token: 'fictional-offering-publication-token', sections: review.sections.map(row => ({ ...row, course_version_id: operation, course_definition: { definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText } } })) };
+        else if (path.endsWith('/publish/')) { published = true; result = { ...receipt, published_at: '2026-11-07T12:00:00Z' }; }
+        else if (path === `/sis/catalog/offerings/${operation}/`) result = receipt;
+        else if (path.includes('/sis/ui/operations/')) result = { items: [], next_after: null };
+        else if (path.includes('/prerequisites/')) result = { items: [], next_after: null };
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
+    return { course, term, clone, prerequisite, operation, section, calls, errors };
+}
+
+test('course cloning retains draft details and copies only selected prerequisites', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Clone as a course draft', exact: true }).click();
+    await page.getByLabel('New course code').fill('MATH.102');
+    await page.getByLabel('New course title').fill('Algebra II');
+    await page.getByLabel('Credits', { exact: false }).fill('4');
+    await page.getByLabel('MATH.001 — Foundations', { exact: true }).check();
+    await page.getByRole('button', { name: 'Review course clone', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('4 credits. 1 prerequisites selected. New status: inactive draft.');
+    expect(f.calls.some(call => call.path.endsWith('/clone/commit/'))).toBe(false);
+    await page.getByRole('button', { name: 'Change clone details', exact: true }).click();
+    await expect(page.getByLabel('New course code')).toHaveValue('MATH.102');
+    await expect(page.getByLabel('Credits', { exact: false })).toHaveValue('4');
+    await expect(page.getByLabel('MATH.001 — Foundations', { exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Review course clone', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByRole('button', { name: 'Save course draft', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('created as an inactive draft');
+    expect(f.calls.find(call => call.path.endsWith('/clone/commit/'))).toMatchObject({ data: { operation_id: f.clone, code: 'MATH.102', title: 'Algebra II', credits_milli: 4000, prerequisites: [f.prerequisite], revision: 'a'.repeat(64) }, csrf: 'fictional-test-token' });
+    expect(f.errors).toEqual([]);
+});
+
+test('course offerings stay drafts until a separately reviewed publication and can be resumed', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Build course offerings', exact: true }).click();
+    await page.getByRole('combobox', { name: /^Offering term/ }).selectOption(f.term);
+    await page.getByRole('button', { name: 'Choose sections', exact: true }).click();
+    await page.getByRole('combobox', { name: /^Course/ }).selectOption(f.course);
+    await page.getByLabel('Section code').fill('MATH.101.26FA.A');
+    await page.getByLabel('Section fee').fill('125.50');
+    await page.getByLabel('Delivery mode', { exact: false }).selectOption('online');
+    await page.getByLabel('Enable self-registration when published').check();
+    await page.getByRole('button', { name: 'Keep section in plan', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('have not been saved');
+    await page.getByRole('button', { name: 'Review offering plan', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('MATH.101 — Algebra');
+    expect(f.calls.some(call => call.path.endsWith('/save/'))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByRole('button', { name: 'Save section drafts', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('inactive and unavailable for registration');
+    expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
+    await page.locator('#drawer-body').getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review definitions & publication', exact: true })).toBeDisabled();
+    await page.getByRole('radio', { name: 'Version 1 · MATH.101 · Algebra', exact: true }).check();
+    await page.getByLabel('Reason for offering publication').fill('Fictional term offering approval');
+    await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('normal eligibility checks still apply');
+    expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
+    await page.getByRole('button', { name: 'Change definition choices', exact: true }).click();
+    await expect(page.getByRole('radio')).toBeChecked();
+    await expect(page.getByLabel('Reason for offering publication')).toHaveValue('Fictional term offering approval');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Publish reviewed sections', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Published 1 sections');
+    expect(f.calls.find(call => call.path.endsWith('/save/'))).toMatchObject({ data: { operation_id: f.operation, term_id: f.term, sections: [{ id: f.section, course_id: f.course, fee_minor: 12550, web_registration: true, delivery_mode: 'online' }] }, csrf: 'fictional-test-token' });
+    expect(f.calls.find(call => call.path.endsWith('/publish/'))).toMatchObject({ data: { review_token: 'fictional-offering-publication-token' }, csrf: 'fictional-test-token' });
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('course definitions require review and retain accessible published versions without browser storage', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Published definitions', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No definition has been published yet.');
+    await page.getByLabel('Reason for publication').fill('Fictional approved academic definition');
+    await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('This creates version 1.');
+    expect(f.calls.some(call => call.path.endsWith('/publication/commit/'))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Publish reviewed definition', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Version 1 is retained.');
+    expect(f.calls.find(call => call.path.endsWith('/publication/commit/'))).toMatchObject({ data: { review_token: 'fictional-protected-review-token' }, csrf: 'fictional-test-token' });
+    await page.getByRole('button', { name: 'View published definitions', exact: true }).click();
+    await page.getByText('Version 1 · MATH.101 · Algebra', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Recorded: 2026-11-08T12:00:01Z');
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('course text drafts preserve paragraphs and render markup as text through publication', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Titles & description', exact: true }).click();
+    await page.getByLabel('Transcript title (optional)', { exact: true }).fill('Algebra I');
+    const description = 'First paragraph.\n<script>window.fictionalCourseTextExecuted = true</script>\nSecond paragraph.';
+    await page.getByLabel('Catalog description (optional)', { exact: true }).fill(description);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Save course text draft', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Your text is saved as a draft.');
+    const saved = f.calls.find(call => call.path.endsWith('/text/'));
+    expect(saved).toMatchObject({ csrf: 'fictional-test-token', data: { transcript_title: 'Algebra I', description, revision: 'fictional-text-revision' } });
+    expect(f.calls.some(call => call.path.endsWith('/publication/commit/'))).toBe(false);
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await page.getByLabel('Reason for publication').fill('Fictional approved description');
+    await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText(description);
+    await expect(page.locator('#drawer-body')).toContainText('Algebra I');
+    expect(await page.evaluate(() => window.fictionalCourseTextExecuted)).toBeUndefined();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Publish reviewed definition', exact: true }).click();
+    await page.getByRole('button', { name: 'View published definitions', exact: true }).click();
+    await page.getByText('Version 1 · MATH.101 · Algebra', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText(description);
+    expect(await page.evaluate(() => window.fictionalCourseTextExecuted)).toBeUndefined();
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('section definition is selected and reviewed before an immutable binding is saved', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('link', { name: 'Sections', exact: true }).click();
+    await page.getByRole('button', { name: 'MATH.101.A', exact: true }).click();
+    await page.getByRole('button', { name: 'Course definition', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review section definition', exact: true })).toBeDisabled();
+    await page.getByRole('radio', { name: 'Version 1 · MATH.101 · Algebra', exact: true }).check();
+    await page.getByLabel('Reason for this section definition').fill('Fictional offering approval');
+    await page.getByRole('button', { name: 'Review section definition', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('<img src=x onerror=alert(1)> Fictional catalog text');
+    expect(await page.locator('#drawer-body img').count()).toBe(0);
+    expect(f.calls.some(call => call.path.endsWith('/course-definition/commit/'))).toBe(false);
+    await page.getByRole('button', { name: 'Change selection', exact: true }).click();
+    await expect(page.getByRole('radio')).toBeChecked();
+    await expect(page.getByLabel('Reason for this section definition')).toHaveValue('Fictional offering approval');
+    await page.getByRole('button', { name: 'Review section definition', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Retain reviewed definition', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('This section retains the course definition below.');
+    await expect(page.getByRole('radio')).toHaveCount(0);
+    expect(f.calls.find(call => call.path.endsWith('/course-definition/commit/'))).toMatchObject({ data: { review_token: 'fictional-protected-section-token' }, csrf: 'fictional-test-token' });
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+    await accessible(page);
+});
+
+
+test('one paged definition choice covers multiple offering drafts without losing the selection', async ({ page }) => {
+    const rows = [id(6), id(7)].map((section, index) => ({ id: section, course_id: id(1), code: `MATH.101.26FA.${index + 1}`, capacity: 20, delivery_mode: 'online', fee_minor: 0, currency: 'USD', web_registration: true }));
+    const f = await fixture(page, { rows, saved: true, paged: true });
+    await page.getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Sections: MATH.101.26FA.1, MATH.101.26FA.2');
+    await expect(page.getByRole('radio')).toHaveCount(1);
+    await page.getByRole('radio').check();
+    await page.getByLabel('Reason for offering publication').fill('Fictional multi-section approval');
+    await page.getByRole('button', { name: 'More versions', exact: true }).click();
+    await expect(page.getByRole('radio')).toHaveAccessibleName('Version 2 · MATH.101 · Algebra');
+    await expect(page.locator('#drawer-body')).toContainText('Selected version 1: Algebra. Applies to 2 sections.');
+    await page.getByRole('button', { name: 'Previous versions', exact: true }).click();
+    await expect(page.getByRole('radio')).toBeChecked();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
+    expect(f.calls.find(call => call.path.endsWith('/publication-review/'))).toMatchObject({ data: {
+        course_versions: rows.map(row => ({ section_id: row.id, version_id: f.operation })), reason: 'Fictional multi-section approval',
+    }, csrf: 'fictional-test-token' });
+    expect(f.calls.some(call => call.path.endsWith('/course-definition/commit/'))).toBe(false);
+    expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('missing course publication can be completed before returning to the saved offering choices', async ({ page }) => {
+    const row = { id: id(6), course_id: id(1), code: 'MATH.101.26FA.A', capacity: 20, delivery_mode: 'online', fee_minor: 0, currency: 'USD', web_registration: true };
+    const f = await fixture(page, { rows: [row], saved: true, noDefinitions: true });
+    await page.getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Publish a course definition before publishing these offerings.');
+    await page.getByLabel('Reason for offering publication').fill('Keep this fictional offering reason');
+    await page.getByRole('button', { name: 'Open course publications', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to offering definitions', exact: true }).click();
+    await expect(page.getByLabel('Reason for offering publication')).toHaveValue('Keep this fictional offering reason');
+    await page.getByRole('button', { name: 'Open course publications', exact: true }).click();
+    await page.getByLabel('Reason for publication', { exact: true }).fill('Fictional course approval');
+    await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish reviewed definition', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to offering definitions', exact: true }).click();
+    await expect(page.getByLabel('Reason for offering publication')).toHaveValue('Keep this fictional offering reason');
+    await page.getByRole('radio').check();
+    await expect(page.getByRole('button', { name: 'Review definitions & publication', exact: true })).toBeEnabled();
+    expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+    await accessible(page);
+});

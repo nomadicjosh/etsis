@@ -9,6 +9,7 @@ $root = dirname(__DIR__, 2);
 $fixture = sys_get_temp_dir() . '/etsis-console-' . bin2hex(random_bytes(6));
 mkdir($fixture);
 mkdir($fixture . '/config');
+ini_set('session.save_path', $fixture);
 foreach (glob($root . '/config/*.php') as $file) {
     copy($file, $fixture . '/config/' . basename($file));
 }
@@ -31,7 +32,7 @@ try {
         $_POST = ['_workspace_json' => json_encode(['code' => 'Math-101', 'title' => 'Algebra',
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
-    if (($argv[1] ?? '') === 'check-portal') {
+    if (in_array(($argv[1] ?? ''), ['check-portal', 'check-profile-command'], true)) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
         $_SERVER['SCRIPT_NAME'] = '/index.php';
         $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -83,6 +84,10 @@ try {
         } elseif (($argv[1] ?? '') === 'check-portal') {
             $kernel->bootstrap();
             require __DIR__ . '/PortalBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-profile-command') {
+            $kernel->bootstrap();
+            require __DIR__ . '/ProfileCommandBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-authentication') {
             $kernel->bootstrap();

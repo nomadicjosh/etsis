@@ -15,15 +15,22 @@ final class SqlRbacStorageTest extends TestCase
 {
     private function storage(SisFixture $fixture): SqlStorageResource
     {
-        return new SqlStorageResource($fixture->sql, new AccessService(new SqlAccessRepository($fixture->sql),
-            $fixture->access, $fixture->transactions, $fixture->audit));
+        return new SqlStorageResource($fixture->sql, new AccessService(
+            new SqlAccessRepository($fixture->sql),
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit
+        ));
     }
 
     public function testFrameworkReadsDatabaseDefinitionsAndChangesAreImmediate(): void
     {
         $fixture = new SisFixture();
-        new \Domain\Access\Service\BootstrapAccess(new SqlAccessRepository($fixture->sql),
-            $fixture->transactions, $fixture->audit)->assignFirstAdministrator($fixture->access->actor);
+        new \Domain\Access\Service\BootstrapAccess(
+            new SqlAccessRepository($fixture->sql),
+            $fixture->transactions,
+            $fixture->audit
+        )->assignFirstAdministrator($fixture->access->actor);
         $rbac = new Rbac($this->storage($fixture));
         $role = $rbac->addRole('example-office', 'Fictional office');
         $permission = $rbac->addPermission('example:review');
@@ -57,8 +64,10 @@ final class SqlRbacStorageTest extends TestCase
     {
         $fixture = new SisFixture();
         $rbac = new Rbac($this->storage($fixture));
-        foreach ([fn () => $rbac->deleteRole('super'), fn () => $rbac->deletePermission('sis'),
-            fn () => $rbac->getRole('admin')->removePermission('sis'), fn () => $rbac->clear()] as $operation) {
+        foreach (
+            [fn () => $rbac->deleteRole('super'), fn () => $rbac->deletePermission('sis'),
+            fn () => $rbac->getRole('admin')->removePermission('sis'), fn () => $rbac->clear()] as $operation
+        ) {
             try {
                 $operation();
                 self::fail('Protected access definitions were changed.');

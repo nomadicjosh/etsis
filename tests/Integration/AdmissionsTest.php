@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/Support/EventStoreFixture.php';
+
 use Domain\Admissions\Enum\ApplicationStatus;
 use Domain\Admissions\Service\AdmissionsService;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -55,10 +57,14 @@ final class AdmissionsTest extends TestCase
         $this->access->method('requirePermission')->willReturn($this->owner);
         $this->access->method('authenticatedUserId')->willReturn($this->owner);
         $this->access->method('requireOwnerOrPermission')->willReturn($this->owner);
-        $this->service = new AdmissionsService($this->repository, $this->access,
+        $this->service = new AdmissionsService(
+            $this->repository,
+            $this->access,
             new \Infrastructure\Persistence\DatabaseUnitOfWork($this->connection->queryBuilder()),
             new \Infrastructure\Persistence\SqlAuditTrail(new \Infrastructure\Persistence\SqlRecords($this->connection->queryBuilder())),
-            new \Infrastructure\Identity\RandomInstitutionalIdGenerator());
+            new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+            $this->createStub(\Domain\Catalog\Service\CatalogEnrollment::class)
+        );
     }
 
     public function testAcceptedApplicationCreatesStudentAndProgramAtomically(): void
@@ -123,10 +129,14 @@ final class AdmissionsTest extends TestCase
         $denied->expects(self::once())->method('requireOwnerOrPermission')->with($this->owner, 'sis:student:read')
             ->willThrowException(new AccessDeniedException());
         $this->expectException(AccessDeniedException::class);
-        new AdmissionsService($this->repository, $denied,
+        new AdmissionsService(
+            $this->repository,
+            $denied,
             new \Infrastructure\Persistence\DatabaseUnitOfWork($this->connection->queryBuilder()),
             new \Infrastructure\Persistence\SqlAuditTrail(new \Infrastructure\Persistence\SqlRecords($this->connection->queryBuilder())),
-            new \Infrastructure\Identity\RandomInstitutionalIdGenerator())->student($student->id);
+            new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+            $this->createStub(\Domain\Catalog\Service\CatalogEnrollment::class)
+        )->student($student->id);
     }
 
     public function testMigrationCanRollbackAndReapply(): void
@@ -154,8 +164,12 @@ final class AdmissionsTest extends TestCase
         $application = $this->service->apply($person->id, $this->program, $this->term);
         $this->service->decide($application->id, true);
         $student = $this->service->matriculate($application->id);
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261108000002_CreateSisHistoricalEventTables.php';
+        $historyMigration = new CreateSisHistoricalEventTables('history');
+        $historyMigration->setObjectMap($migration->getObjectMap());
+        $historyMigration->up();
         $db = $this->connection->queryBuilder();
-        $store = new \Infrastructure\Persistence\PdoTransactionalEventStore($db);
+        $store = EventStoreFixture::framework($db);
         $accounts = new \Infrastructure\Persistence\Repository\EventSourcedAccountRepository($store, $db);
         $finance = new \Domain\Finance\Service\StudentAccountService($accounts, $this->repository, $this->access);
         $account = $finance->open($student->id, $this->term, 'USD');
@@ -164,28 +178,36 @@ final class AdmissionsTest extends TestCase
         $finance->post($id, $operation, \Domain\Finance\Enum\EntryType::Payment, new \Domain\Finance\ValueObject\Money(20000, 'USD'));
         $finance->post($id, $operation, \Domain\Finance\Enum\EntryType::Payment, new \Domain\Finance\ValueObject\Money(20000, 'USD'));
         self::assertSame(-20000, $finance->account($id)->balance()->minor);
-        self::assertSame(2, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM event_store')->fetchColumn());
+        self::assertSame(2, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM sis_history_events')->fetchColumn());
         $first = $accounts->get($id);
         $stale = $accounts->get($id);
-        $first->post(EntityId::generate(), \Domain\Finance\Enum\EntryType::Refund,
-            new \Domain\Finance\ValueObject\Money(15000, 'USD'), $this->owner);
+        $first->post(
+            EntityId::generate(),
+            \Domain\Finance\Enum\EntryType::Refund,
+            new \Domain\Finance\ValueObject\Money(15000, 'USD'),
+            $this->owner
+        );
         $accounts->save($first);
-        $stale->post(EntityId::generate(), \Domain\Finance\Enum\EntryType::Refund,
-            new \Domain\Finance\ValueObject\Money(15000, 'USD'), $this->owner);
+        $stale->post(
+            EntityId::generate(),
+            \Domain\Finance\Enum\EntryType::Refund,
+            new \Domain\Finance\ValueObject\Money(15000, 'USD'),
+            $this->owner
+        );
         $rejected = false;
         try {
             $accounts->save($stale);
         } catch (\Exception) {
             $rejected = true;
             self::assertSame(-5000, $finance->account($id)->balance()->minor);
-            self::assertSame(3, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM event_store')->fetchColumn());
+            self::assertSame(3, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM sis_history_events')->fetchColumn());
         }
         self::assertTrue($rejected, 'Concurrent refund must be rejected.');
         try {
             $finance->open($student->id, $this->term, 'USD');
             self::fail('Duplicate account was accepted.');
         } catch (PDOException) {
-            self::assertSame(3, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM event_store')->fetchColumn());
+            self::assertSame(3, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM sis_history_events')->fetchColumn());
         }
     }
 
@@ -210,5 +232,4 @@ final class AdmissionsTest extends TestCase
         $data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertSame('Alex', $this->repository->person(new EntityId($data['id']))->givenName);
     }
-
 }

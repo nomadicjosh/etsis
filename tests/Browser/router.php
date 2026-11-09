@@ -16,6 +16,21 @@ if (is_string($path) && (str_starts_with($path, '/assets/') || str_starts_with($
 
 require $root . '/vendor/autoload.php';
 
+if ($path === '/fixture/transcript-document/') {
+    header('Cache-Control: private, no-store');
+    echo new \Infrastructure\Documents\ProtectedTranscriptRenderer()->html([
+        'issuer' => ['name' => 'Fictional University', 'address' => 'Fictional campus'],
+        'student' => ['name' => 'Alex Example', 'institutional_id' => 'S-FICTIONAL'],
+        'program' => ['code' => 'BS.CS', 'title' => 'Computer Science'], 'preview' => false,
+        'document_id' => 'FICTIONAL-REFERENCE', 'issued_at' => '2026-11-07T12:00:00Z',
+        'credits' => [['term_code' => '26/FA', 'course_code' => 'MATH.101', 'course_title' => 'Algebra',
+            'credit_type' => 'institutional', 'attempted_milli' => 3000, 'completed_milli' => 3000, 'grade_code' => 'A']],
+        'totals' => ['attempted_milli' => 3000, 'completed_milli' => 3000, 'gpa_milli' => 4000],
+    ]);
+    return true;
+}
+
+
 
 if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/login/', '/register/'], true)) {
     $theme = in_array($_GET['theme'] ?? '', ['campus-harbor', 'campus-quad', 'campus-horizon'], true)
@@ -95,7 +110,16 @@ if ($path === '/admin/profile/') {
 echo $loader->render('framework::backend/workspace/index', [
     'title' => 'Fictional campus · Workspace test',
     'section' => 'overview',
-    'permissions' => Domain\Workspace\Service\WorkspaceService::PERMISSIONS,
+    'permissions' => match ($path) {
+        '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
+        '/admin/student-read-fixture/' => ['sis:student:read'],
+        '/admin/registration-fixture/' => ['sis:registration:manage'],
+        '/admin/report-fixture/' => ['sis:reporting:run'],
+        '/admin/report-manager-fixture/' => ['sis:reporting:manage'],
+        '/admin/transfer-fixture/' => ['sis:transfer:manage', 'sis:student:read'],
+        '/admin/transfer-only-fixture/' => ['sis:transfer:manage'],
+        default => Domain\Workspace\Service\WorkspaceService::PERMISSIONS,
+    },
     'displayName' => 'Taylor',
     'csrfMarkup' => '<input type="hidden" name="csrf_token" value="fictional-test-token">',
 ]);

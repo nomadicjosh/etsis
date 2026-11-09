@@ -32,6 +32,8 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
         else if (path.endsWith('/reverse/')) { reversed = true; result = { status: 'reversed' }; }
         else if (path === `/sis/ui/context/roster/${section}/`) result = { can_grade: true, items: [{ id: id('08'), student_id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', status: 'A', grade_version: 2, grade_code: null }], next_after: null };
         else if (path === `/sis/ui/context/assignments/${section}/`) result = { items: [], next_after: null };
+        else if (path === `/sis/sections/${section}/students/${student}/grade-choices/`) result = { items:[{id:grade,code:'A',points_milli:4000}], pursuits:[], needs_assignment:false, current_version:2, effective_on_default:'2026-08-10' };
+        else if(path.endsWith('/final-grades/review/')) result={grade:{code:'A',points_milli:4000},reason:'Initial final grade recorded.',review_token:'fictional-grade-review'};
         else if (path === `/sis/sections/${section}/students/${student}/score-page/`) result = { next_after: null, items: [{ assignment_id: assignment, title: 'Quiz one', possible_hundredths: 1000, earned_hundredths: null, version: 0 }] };
         else if (path === `/sis/sections/${section}/students/${student}/attendance/`) result = { items: [], counts: {}, next_after: null };
         else if (path === `/sis/ui/context/prerequisites/${course}/`) result = { items: [], next_after: null };
@@ -68,8 +70,12 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     await expect.poll(() => requests.find(item => item.path === `/sis/assignments/${assignment}/scores/`)?.payload).toEqual({ student_id: student, earned_hundredths: 825, version: 0 });
     await page.getByRole('button', { name: 'Record final grade', exact: true }).click();
     await page.getByLabel('Institutional grade').selectOption(grade);
-    await page.getByRole('button', { name: 'Save final grade', exact: true }).click();
-    await expect.poll(() => requests.find(item => item.path.endsWith('/final-grades/'))?.payload).toEqual({ student_id: student, grade_id: grade, version: 2 });
+    await page.getByRole('button', { name: 'Review final grade', exact: true }).click();
+    await accessible();
+    expect(requests.some(item=>item.path.endsWith('/commit/') && item.path.includes('final-grades'))).toBe(false);
+    await page.getByRole('button', { name: 'Confirm final grade', exact: true }).click();
+    await expect.poll(() => requests.find(item => item.path.endsWith('/final-grades/commit/'))?.payload).toEqual({ student_id: student, review_token:'fictional-grade-review' });
+    expect(requests.find(item=>item.path.endsWith('/final-grades/review/'))?.payload).toMatchObject({student_id:student,grade_id:grade,version:2,effective_on:'2026-08-10'});
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
     await page.getByRole('button', { name: 'Algebra', exact: true }).click();
@@ -104,13 +110,21 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
                 ledger: [{ id: ledger, code: '1000', title: 'Cash', currency: 'USD' }],
                 terms: [{ id: term, code: '26/FA' }],
                 students: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
+                transferstudents: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
                 institutions: [{ id: institution, code: 'EXAMPLE', name: 'Fictional College' }],
-                equivalencies: [{ id: equivalency, starts_on: '2026-01-01', credits_milli: 3000 }],
+                equivalencies: [{ id: equivalency, external_code: 'EXT.101', course_code: 'CS.101', starts_on: '2026-01-01', credits_milli: 3000 }],
                 campaigns: [{ id: campaign, status: campaignStatus }],
                 people: [{ id: person, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
             };
             result = { items: rows[dataset] || [], next_after: null };
-        } else if (path === '/sis/journals/') result = { id: journal };
+        } else if (path === `/sis/ui/transfer/equivalencies/${equivalency}/`) result = {
+            id: equivalency, institution_id: institution, institution_code: 'EXAMPLE', institution_name: 'Fictional College',
+            external_code: 'EXT.101', external_title: 'External computing', course_code: 'CS.101', course_title: 'Computing',
+            starts_on: '2026-01-01', ends_on: null, credits_milli: 3000, awarded_grade: 'TR', points_milli: 0,
+            counts_gpa: 0, passes: 1, minimum_grade_rank: 2, revision: 'fictional-transfer-revision',
+        };
+        else if (path.endsWith('/awards/')) result = { items: [], next_after: null };
+        else if (path === '/sis/journals/') result = { id: journal };
         else if (path === `/sis/journals/${journal}/`) result = { reference: 'FICT-J1', currency: 'USD', reversed: false, lines: [] };
         else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', status: campaignStatus, can_dispatch: true };
         else if (path === `/sis/campaigns/${campaign}/queue/`) { campaignStatus = 'queued'; result = { delivery_ids: [delivery] }; }
@@ -144,15 +158,14 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await expect(page.locator('#record-drawer')).not.toBeVisible();
     await nav('institutions');
     await page.locator('#directory-tabs [data-workspace="equivalencies"]').click();
-    await page.getByRole('button', { name: `…${equivalency.slice(-8)}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Open EXT.101 → CS.101', exact: true }).click();
     await page.getByRole('button', { name: 'Award transfer credit', exact: true }).click();
     await page.locator('#drawer-body').getByRole('combobox', { name: /^Student/ }).selectOption(student);
-    await page.getByLabel('Sending institution').selectOption(institution);
-    await page.getByLabel('Award term').selectOption(term);
+    await page.getByLabel('Posting term').selectOption(term);
     await page.getByLabel('External course completion date').fill('2026-05-10');
-    await page.getByLabel('Grade rank earned').fill('3');
-    await page.getByRole('button', { name: 'Award transfer credit', exact: true }).click();
-    await expect.poll(() => sent.find(item => item.path === '/sis/transfer-awards/')?.payload).toMatchObject({ student_id: student, equivalency_id: equivalency, institution_id: institution, term_id: term, grade_rank: 3 });
+    await page.getByLabel('External grade rank').fill('3');
+    await page.getByRole('button', { name: 'Confirm transfer award', exact: true }).click();
+    await expect.poll(() => sent.find(item => item.path === '/sis/transfer-awards/')?.payload).toMatchObject({ student_id: student, equivalency_id: equivalency, institution_id: institution, term_id: term, grade_rank: 3, revision: 'fictional-transfer-revision' });
     await close(); await nav('campaigns');
     await page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional announcement');
@@ -165,5 +178,48 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await page.getByRole('button', { name: 'Review and send', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm send to this recipient', exact: true }).click();
     await expect.poll(() => sent.filter(item => item.path === `/sis/deliveries/${delivery}/dispatch/`).length).toBe(1);
+    expect(errors).toEqual([]);
+});
+
+test('final grade selection asks for the student pursuit when grading scales differ', async ({ page }) => {
+    const id = n => `01K000000000000000000000${String(n).padStart(2,'0')}`;
+    const section=id(1), student=id(2), pursuit=id(3), other=id(4), grade=id(5);
+    const calls=[], errors=[];
+    page.on('pageerror', e=>errors.push(e.message));
+    await page.route('**/sis/**', async route=>{
+        const req=route.request(), path=new URL(req.url()).pathname, raw=req.postData();
+        const data=raw?JSON.parse(new URLSearchParams(raw).get('_workspace_json')):{};
+        calls.push({path,data,csrf:req.headers()['x-csrf-token']});
+        let result={items:[],next_after:null};
+        if(path==='/sis/ui/metrics/')result={cards:[],intake:[],pipeline:[],queue:[]};
+        else if(path==='/sis/ui/data/teaching/')result={items:[{id:section,code:'MATH.101.A',capacity:20}],next_after:null};
+        else if(path===`/sis/ui/context/roster/${section}/`)result={can_grade:true,items:[{id:id(6),student_id:student,given_name:'Alex',family_name:'Example',institutional_id:'FICTIONAL',status:'A',grade_code:null,grade_version:0}],next_after:null};
+        else if(path.endsWith('/attendance/'))result={items:[],counts:{},next_after:null};
+        else if(path.endsWith('/grade-choices/'))result=data.assignment_id?{items:[{id:grade,code:'A+',points_milli:5000}],pursuits:[],needs_assignment:false,current_version:0,effective_on_default:'2026-08-10'}:{items:[],pursuits:[{id:pursuit,code:'GRAD',title:'Graduate degree'},{id:other,code:'UG',title:'Undergraduate degree'}],needs_assignment:true};
+        else if(path.endsWith('/final-grades/review/'))result={grade:{code:'A+',points_milli:5000},reason:'Initial final grade recorded.',review_token:'fictional-program-grade'};
+        await route.fulfill({json:result,headers:{'Cache-Control':'private, no-store'}});
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="teaching"]').click();
+    await page.getByRole('button',{name:'MATH.101.A',exact:true}).click();
+    await page.getByRole('button',{name:'Grade & attendance',exact:true}).click();
+    await page.getByRole('button',{name:'Record final grade',exact:true}).click();
+    await expect(page.getByLabel('Program pursuit',{exact:true})).toHaveValue('');
+    await page.setViewportSize({width:390,height:844});
+    let scan=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
+    expect(scan.violations.map(v=>v.id)).toEqual([]);
+    await page.getByLabel('Program pursuit',{exact:true}).selectOption(pursuit);
+    await page.getByRole('button',{name:'Use selected program',exact:true}).click();
+    await expect(page.getByRole('combobox',{name:'Institutional grade',exact:true})).toContainText('A+ · 5 grade points');
+    await page.getByRole('combobox',{name:'Institutional grade',exact:true}).selectOption(grade);
+    scan=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
+    expect(scan.violations.map(v=>v.id)).toEqual([]);
+    await page.getByRole('button',{name:'Review final grade',exact:true}).click();
+    await expect(page.locator('#drawer-body')).toContainText('5 grade points');
+    await page.getByRole('button',{name:'Confirm final grade',exact:true}).click();
+    await expect.poll(()=>calls.find(c=>c.path.endsWith('/final-grades/commit/'))?.data).toEqual({student_id:student,review_token:'fictional-program-grade'});
+    expect(calls.find(c=>c.path.endsWith('/final-grades/review/'))?.data).toMatchObject({student_id:student,grade_id:grade,version:0,assignment_id:pursuit});
+    expect(calls.filter(c=>c.path.endsWith('/grade-choices/')).at(-1)).toMatchObject({data:{assignment_id:pursuit},csrf:'fictional-test-token'});
+    expect(calls.some(c=>c.path==='/sis/ui/data/grades/')).toBe(false);
     expect(errors).toEqual([]);
 });

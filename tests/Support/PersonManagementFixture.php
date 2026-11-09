@@ -40,11 +40,11 @@ final class PersonManagementFixture
         $db = $f->connection->queryBuilder();
         $this->access = new SqlAccessRepository($f->sql);
         $people = new SqlPersonAccountRepository($f->sql, $f->admissions, new RandomInstitutionalIdGenerator());
-        $this->users = new EventSourcedUserRepository(new PdoTransactionalEventStore($db),
+        $this->users = new EventSourcedUserRepository(EventStoreFixture::framework($db),
             new ExpressiveDbalUserProjection($db, $this->access, $people), $db);
         $this->guard = new UserAccountAccess($this->access, $f->access, $f->transactions);
         $this->admissions = new AdmissionsService($f->admissions, $f->access, $f->transactions, $f->audit,
-            new RandomInstitutionalIdGenerator());
+            new RandomInstitutionalIdGenerator(), $f->catalogEnrollment());
         $this->profiles = new PersonProfileEditor($f->admissions, new SqlPersonProfileRepository($f->sql),
             $this->users, $this->guard, $f->access, $f->transactions, $f->audit);
         $this->accounts = new PersonAccountEditor($f->admissions, $this->users, $this->guard, $f->access, $f->audit);

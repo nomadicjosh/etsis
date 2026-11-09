@@ -43,8 +43,12 @@ final class DatabaseAccessTest extends TestCase
         $this->gate = new UserAuth($this->repository, $auth);
         RequestContext::set((new ServerRequest([], [], '/sis/access/roles/', 'GET'))
             ->withAttribute(UserCookieDecryptMiddleware::USER_COOKIE, 'fictional-test-token'));
-        $this->service = new AccessService($this->repository, new GateStudentAccess($this->gate),
-            $f->transactions, $f->audit);
+        $this->service = new AccessService(
+            $this->repository,
+            new GateStudentAccess($this->gate),
+            $f->transactions,
+            $f->audit
+        );
     }
 
     protected function tearDown(): void
@@ -93,15 +97,53 @@ final class DatabaseAccessTest extends TestCase
         }
     }
 
+    public function testRegistrarDutiesCanBeGrantedIndependentlyAndCombinedWithoutChangingStaffRole(): void
+    {
+        $user = $this->fixture->user();
+        $this->service->assign(GrantKind::UserRole, $user, $this->repository->roleNamed('staff')->id, true);
+        $duties = ['sis:transfer:manage', 'sis:catalog:manage', 'sis:transcript:manage'];
+        foreach ($duties as $permission) {
+            self::assertFalse($this->repository->allows($user->value, $permission));
+        }
+        $this->service->assign(GrantKind::UserPermission, $user, $this->permission($duties[0]), true);
+        self::assertTrue($this->repository->allows($user->value, $duties[0]));
+        self::assertFalse($this->repository->allows($user->value, $duties[1]));
+        self::assertFalse($this->repository->allows($user->value, $duties[2]));
+        $role = $this->service->create(DefinitionKind::Role, 'registrar-catalog', 'Selected catalog staff');
+        $this->service->assign(GrantKind::RolePermission, $role->id, $this->permission($duties[1]), true);
+        $this->service->assign(GrantKind::UserRole, $user, $role->id, true);
+        self::assertTrue($this->repository->allows($user->value, $duties[1]));
+        self::assertFalse($this->repository->allows($user->value, $duties[2]));
+        $this->service->assign(GrantKind::UserPermission, $user, $this->permission($duties[2]), true);
+        foreach ($duties as $permission) {
+            self::assertTrue($this->repository->allows($user->value, $permission));
+        }
+        $this->service->assign(GrantKind::UserPermission, $user, $this->permission($duties[0]), false);
+        self::assertFalse($this->repository->allows($user->value, $duties[0]));
+        self::assertTrue($this->repository->allows($user->value, $duties[1]));
+        self::assertTrue($this->repository->allows($user->value, $duties[2]));
+        $other = $this->fixture->user();
+        $this->service->assign(GrantKind::UserRole, $other, $this->repository->roleNamed('staff')->id, true);
+        foreach ($duties as $permission) {
+            self::assertFalse($this->repository->allows($other->value, $permission));
+        }
+        self::assertFalse($this->repository->allows($user->value, 'sis:student:read'));
+    }
+
     public function testExistingUserEditorCannotTakeOverOrDeleteASuperAccount(): void
     {
         $super = $this->fixture->access->actor;
         $admin = $this->fixture->user();
         $this->service->assign(GrantKind::UserRole, $admin, $this->repository->roleNamed('admin')->id, true);
-        $access = new \Domain\User\Service\UserAccountAccess($this->repository,
-            new GateStudentAccess($this->gate), $this->fixture->transactions);
+        $access = new \Domain\User\Service\UserAccountAccess(
+            $this->repository,
+            new GateStudentAccess($this->gate),
+            $this->fixture->transactions
+        );
         $ran = false;
-        $operation = static function () use (&$ran): void { $ran = true; };
+        $operation = static function () use (&$ran): void {
+            $ran = true;
+        };
         $this->fixture->access->actor = $admin;
         try {
             $access->update($super, $operation);
@@ -221,8 +263,12 @@ final class DatabaseAccessTest extends TestCase
                 match ($operation) {
                     'read' => $this->service->definitions(DefinitionKind::Role),
                     'create' => $this->service->create(DefinitionKind::Role, 'intruder'),
-                    'assign' => $this->service->assign(GrantKind::UserPermission, $user,
-                        $this->permission(AccessService::MANAGE), true),
+                    'assign' => $this->service->assign(
+                        GrantKind::UserPermission,
+                        $user,
+                        $this->permission(AccessService::MANAGE),
+                        true
+                    ),
                 };
                 self::fail('Management accepted an unprivileged identity.');
             } catch (AccessDeniedException) {
@@ -274,8 +320,10 @@ final class DatabaseAccessTest extends TestCase
         RequestContext::set(new ServerRequest([], [], '/sis/access/roles/', 'GET'));
         self::assertFalse($this->gate->can('sis:student:read'));
         RequestContext::set(RequestContext::get()->withAttribute(UserCookieDecryptMiddleware::USER_COOKIE, 'fictional')
-            ->withHeader(\Codefy\Framework\Http\Middleware\Auth\UserAuthorizationMiddleware::HEADER_HTTP_STATUS_CODE,
-                'not_authorized'));
+            ->withHeader(
+                \Codefy\Framework\Http\Middleware\Auth\UserAuthorizationMiddleware::HEADER_HTTP_STATUS_CODE,
+                'not_authorized'
+            ));
         self::assertFalse($this->gate->can('sis:student:read'));
     }
 
@@ -290,24 +338,31 @@ final class DatabaseAccessTest extends TestCase
             $id,
             new \Domain\User\ValueObject\Username('fictional'),
             new \Domain\User\ValueObject\UserToken(),
-            new \Qubus\ValueObjects\Person\Name(new \Qubus\ValueObjects\StringLiteral\StringLiteral('Alex'),
+            new \Qubus\ValueObjects\Person\Name(
+                new \Qubus\ValueObjects\StringLiteral\StringLiteral('Alex'),
                 new \Qubus\ValueObjects\StringLiteral\StringLiteral(''),
-                new \Qubus\ValueObjects\StringLiteral\StringLiteral('Example')),
+                new \Qubus\ValueObjects\StringLiteral\StringLiteral('Example')
+            ),
             new \Qubus\ValueObjects\Web\EmailAddress('fictional@example.invalid'),
             new \Domain\User\ValueObject\UserRole('admin'),
             new \Qubus\ValueObjects\StringLiteral\StringLiteral('fictional-password-hash'),
             new DateTimeImmutable(),
         );
         $projection = new \Infrastructure\Projection\ExpressiveDbalUserProjection(
-            $f->connection->queryBuilder(), $this->repository,
-            new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository($f->sql, $f->admissions,
-                new \Infrastructure\Identity\RandomInstitutionalIdGenerator()),
+            $f->connection->queryBuilder(),
+            $this->repository,
+            new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
+                $f->sql,
+                $f->admissions,
+                new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
+            ),
         );
         $projection->projectWhenUserWasCreated($event);
         self::assertTrue($this->repository->allows((string) $id, 'admin:dashboard'));
         self::assertFalse($this->repository->allows((string) $id, AccessService::MANAGE));
         $projection->projectWhenRoleWasChanged(\Domain\User\Event\RoleWasChanged::withData(
-            $id, new \Domain\User\ValueObject\UserRole('admin'),
+            $id,
+            new \Domain\User\ValueObject\UserRole('admin'),
         ));
         self::assertFalse($this->repository->allows((string) $id, AccessService::MANAGE));
     }
@@ -341,8 +396,10 @@ final class DatabaseAccessTest extends TestCase
             self::assertDoesNotMatchRegularExpression('/SCAN (?:p|d|a|r|c)\b/', $detail);
         }
         self::assertFalse($repository->allows($f->access->actor->value, 'large:permission:missing'));
-        $storage = new \Infrastructure\Security\Rbac\SqlStorageResource($f->sql,
-            new AccessService($repository, $f->access, $f->transactions, $f->audit));
+        $storage = new \Infrastructure\Security\Rbac\SqlStorageResource(
+            $f->sql,
+            new AccessService($repository, $f->access, $f->transactions, $f->audit)
+        );
         $pdo->prepares = 0;
         $storage->load();
         $storage->save();
@@ -354,13 +411,19 @@ final class DatabaseAccessTest extends TestCase
         self::assertSame(1, $pdo->prepares);
         self::assertFalse($storedRole->checkAccess('large:permission:missing'));
         $pdo->prepares = 0;
-        $directory = $repository->directory(DefinitionKind::Permission, 'large:permission:', null, 51,
-            GrantKind::RolePermission, $role->id, false);
+        $directory = $repository->directory(
+            DefinitionKind::Permission,
+            'large:permission:',
+            null,
+            51,
+            GrantKind::RolePermission,
+            $role->id,
+            false
+        );
         self::assertCount(51, $directory);
         self::assertSame(1, $pdo->prepares);
         self::assertSame(1, (int) $directory[0]['assigned']);
         self::assertSame(1, (int) $directory[0]['effective']);
-
     }
 
     public function testAccessDirectoryPagesDefinitionsAndReadsDirectAndInheritedState(): void
@@ -370,18 +433,38 @@ final class DatabaseAccessTest extends TestCase
         $admin = $this->repository->roleNamed('admin');
         $this->service->assign(GrantKind::UserRole, $user, $admin->id, true);
         $read = $this->permission('sis:student:read');
-        $page = $this->service->directory(DefinitionKind::Permission, 'sis:student:read', null, 50,
-            GrantKind::UserPermission, $user);
+        $page = $this->service->directory(
+            DefinitionKind::Permission,
+            'sis:student:read',
+            null,
+            50,
+            GrantKind::UserPermission,
+            $user
+        );
         self::assertCount(1, $page['items']);
         self::assertFalse($page['items'][0]['assigned']);
         self::assertTrue($page['items'][0]['effective']);
         $this->service->assign(GrantKind::UserPermission, $user, $read, true);
-        $page = $this->service->directory(DefinitionKind::Permission, 'sis:student:read', null, 50,
-            GrantKind::UserPermission, $user, true);
+        $page = $this->service->directory(
+            DefinitionKind::Permission,
+            'sis:student:read',
+            null,
+            50,
+            GrantKind::UserPermission,
+            $user,
+            true
+        );
         self::assertTrue($page['items'][0]['assigned']);
         $this->service->assign(GrantKind::UserPermission, $user, $read, false);
-        self::assertSame([], $this->service->directory(DefinitionKind::Permission, 'sis:student:read', null, 50,
-            GrantKind::UserPermission, $user, true)['items']);
+        self::assertSame([], $this->service->directory(
+            DefinitionKind::Permission,
+            'sis:student:read',
+            null,
+            50,
+            GrantKind::UserPermission,
+            $user,
+            true
+        )['items']);
         self::assertTrue($this->repository->allows($user->value, 'sis:student:read'));
         for ($i = 0; $i < 55; ++$i) {
             $this->service->create(DefinitionKind::Role, 'paged-office-' . $i);
@@ -394,8 +477,14 @@ final class DatabaseAccessTest extends TestCase
         self::assertCount(55, array_unique(array_column([...$first['items'], ...$second['items']], 'id')));
         self::assertSame([], $this->service->directory(DefinitionKind::Role, '%')['items']);
         self::assertSame([], $this->service->directory(DefinitionKind::Role, "' OR 1=1 --")['items']);
-        $protected = $this->service->directory(DefinitionKind::Permission, '', null, 50,
-            GrantKind::RolePermission, $admin->id);
+        $protected = $this->service->directory(
+            DefinitionKind::Permission,
+            '',
+            null,
+            50,
+            GrantKind::RolePermission,
+            $admin->id
+        );
         self::assertFalse($protected['items'][0]['assignable']);
     }
 
@@ -433,8 +522,10 @@ final class DatabaseAccessTest extends TestCase
         self::assertSame(204, $router->match(new ServerRequest([], [], $path, 'PUT'))->getStatusCode());
         self::assertSame(204, $router->match(new ServerRequest([], [], $path, 'DELETE'))->getStatusCode());
         $this->fixture->access->actor = $this->fixture->user();
-        $response = new SisPrivacyMiddleware()->process(new ServerRequest([], [], '/sis/access/roles/', 'GET'),
-            new CallableRequestHandler($router->match(...)));
+        $response = new SisPrivacyMiddleware()->process(
+            new ServerRequest([], [], '/sis/access/roles/', 'GET'),
+            new CallableRequestHandler($router->match(...))
+        );
         self::assertSame(403, $response->getStatusCode());
         self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
     }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . '/Support/SisFixture.php';
+require_once dirname(__DIR__) . '/Support/AcademicCalendarFixture.php';
 
 use Application\Http\Controller\SisCatalogController;
 use Application\Http\Middleware\SisPrivacyMiddleware;
@@ -19,13 +19,25 @@ final class CatalogTermTest extends TestCase
 {
     private function submit(SisFixture $fixture, array $data): ResponseInterface
     {
-        $controller = new SisCatalogController(new CatalogService(
-            new DbalCatalogRepository($fixture->connection->queryBuilder()), $fixture->access));
+        $wasStaff = $fixture->access->staff;
+        $fixture->access->staff = true;
+        $start = isset($data['starts_on']) ? (int) substr($data['starts_on'], 0, 4) : 2027;
+        $year = $fixture->sql->rows('sis_academic_years', ['start_year' => $start], 1)[0] ?? null;
+        if ($year === null) {
+            $calendar = new AcademicCalendarFixture($fixture);
+            if ($fixture->sql->rows('sis_term_types') === []) {
+                $calendar->type('FIX', 'non_standard', '08-01', '12-31', '08-15');
+            }
+            $year = $calendar->year($start);
+        }
+        $fixture->access->staff = $wasStaff;
+        $data += ['operation_id' => \Domain\Shared\ValueObject\EntityId::generate()->value, 'academic_year_id' => $year['id'], 'name' => 'Fictional term', 'kind' => 'non_standard'];
+        $controller = new \Application\Http\Controller\SisAcademicCalendarController($fixture->calendar());
         $request = new ServerRequest([], [], '/sis/terms/', 'POST')
             ->withHeader('Content-Type', 'application/json')->withBody(new Stream('php://temp', 'w+'));
         $request->getBody()->write(json_encode($data, JSON_THROW_ON_ERROR));
         $request->getBody()->rewind();
-        $endpoint = new CallableRequestHandler($controller->term(...));
+        $endpoint = new CallableRequestHandler($controller->saveTerm(...));
         $json = new CallableRequestHandler(static fn ($request) =>
             new WorkspaceJsonBodyMiddleware()->process($request, $endpoint));
 
@@ -54,15 +66,17 @@ final class CatalogTermTest extends TestCase
     public function testInvalidDatesAndCodesReturnSpecificErrorsWithoutWriting(): void
     {
         $fixture = new SisFixture();
-        foreach ([['code', 'Spring 2027'], ['starts_on', '2027-02-30'],
+        foreach (
+            [['code', 'Spring 2027'], ['starts_on', '2027-02-30'],
             ['ends_on', '2027-01-01'], ['add_drop_ends_on', '2026-12-01'],
-            ['add_drop_ends_on', '2027-05-15']] as [$field, $value]) {
+            ['add_drop_ends_on', '2027-05-15']] as [$field, $value]
+        ) {
             $response = $this->submit($fixture, array_replace($this->valid(), [$field => $value]));
             self::assertSame(422, $response->getStatusCode());
             $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
             self::assertSame($field, $body['errors'][0]['field']);
             self::assertNotSame('Invalid request.', $body['error']);
-            self::assertCount(1, $fixture->sql->rows('sis_terms'));
+            self::assertCount(2, $fixture->sql->rows('sis_terms'));
             self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
         }
     }
@@ -75,7 +89,7 @@ final class CatalogTermTest extends TestCase
         self::assertSame(201, $response->getStatusCode());
         $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertSame('26/FA', $fixture->sql->one('sis_terms', ['id' => $body['id']])['code']);
-        $directory = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql);
+        $directory = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog());
         $matches = $directory->records('terms', null, '26/FA', null);
         self::assertCount(1, $matches['items']);
         self::assertSame('26/FA', $matches['items'][0]['code']);
@@ -88,15 +102,17 @@ final class CatalogTermTest extends TestCase
         self::assertSame(422, $response->getStatusCode());
         $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertSame(['starts_on', 'ends_on', 'add_drop_ends_on'], array_column($body['errors'], 'field'));
-        self::assertCount(1, $fixture->sql->rows('sis_terms'));
+        self::assertCount(2, $fixture->sql->rows('sis_terms'));
     }
 
     public function testDeadlineCanBeFirstOrLastDay(): void
     {
         $fixture = new SisFixture();
         foreach (['2027-01-11', '2027-05-14'] as $index => $deadline) {
-            $response = $this->submit($fixture, array_replace($this->valid(),
-                ['code' => 'EXAMPLE-' . $index, 'add_drop_ends_on' => $deadline]));
+            $response = $this->submit($fixture, array_replace(
+                $this->valid(),
+                ['code' => 'EXAMPLE-' . $index, 'add_drop_ends_on' => $deadline]
+            ));
             self::assertSame(201, $response->getStatusCode());
         }
     }
@@ -106,6 +122,6 @@ final class CatalogTermTest extends TestCase
         $fixture = new SisFixture();
         $fixture->access->staff = false;
         self::assertSame(403, $this->submit($fixture, $this->valid())->getStatusCode());
-        self::assertCount(1, $fixture->sql->rows('sis_terms'));
+        self::assertCount(2, $fixture->sql->rows('sis_terms'));
     }
 }

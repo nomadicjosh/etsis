@@ -20,7 +20,11 @@ final class CatalogCourseTest extends TestCase
     {
         $fixture = new SisFixture();
         $controller = new SisRegistrationController($fixture->service, new RegistrarCatalogService(
-            $fixture->registration, $fixture->access, $fixture->transactions, $fixture->audit));
+            $fixture->registration,
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit
+        ));
         $request = new ServerRequest([], [], '/sis/courses/', 'POST')
             ->withHeader('Content-Type', 'application/json')->withBody(new Stream('php://temp', 'w+'));
         $request->getBody()->write(json_encode(['code' => 'MATH-101', 'title' => 'College Algebra',
@@ -36,7 +40,7 @@ final class CatalogCourseTest extends TestCase
         self::assertSame('MATH-101', $stored['code']);
         self::assertSame('College Algebra', $stored['title']);
         self::assertSame(3000, (int) $stored['credits_milli']);
-        $directory = new SqlWorkspaceRepository($fixture->sql)->records('courses', null, 'MATH-101', null);
+        $directory = new SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog())->records('courses', null, 'MATH-101', null);
         self::assertCount(1, $directory['items']);
         self::assertSame('MATH-101', $directory['items'][0]['code']);
     }

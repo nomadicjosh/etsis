@@ -132,7 +132,7 @@ final class WorkspaceOperationsTest extends TestCase
         $f = new SisFixture();
         $mine = $f->section(10, 0, $f->access->actor);
         $f->section(10, 0, $f->user());
-        $repo = new SqlWorkspaceRepository($f->sql);
+        $repo = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog());
         self::assertSame([$mine->id->value], array_column($repo->records('teaching', $f->access->actor, '', null)['items'], 'id'));
         foreach (['grades', 'billing', 'ledger', 'institutions', 'external', 'equivalencies', 'faculty'] as $dataset) {
             self::assertArrayHasKey($dataset, WorkspaceService::DATASETS);
@@ -225,7 +225,7 @@ final class WorkspaceOperationsTest extends TestCase
             $reports->add($report);
         }
         $reports->share($shared->id, $f->access->actor);
-        $page = new SqlWorkspaceRepository($f->sql)->records('sharedreports', $f->access->actor, '', null);
+        $page = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog())->records('sharedreports', $f->access->actor, '', null);
         self::assertEqualsCanonicalizing([$mine->id->value, $shared->id->value], array_column($page['items'], 'id'));
     }
 
@@ -256,8 +256,12 @@ final class WorkspaceOperationsTest extends TestCase
         $first = $f->section(10, 0);
         $second = $f->section(10, 0);
         $third = $f->section(10, 0);
-        $service = new \Domain\Registration\Service\RegistrarCatalogService($f->registration, $f->access,
-            $f->transactions, $f->audit);
+        $service = new \Domain\Registration\Service\RegistrarCatalogService(
+            $f->registration,
+            $f->access,
+            $f->transactions,
+            $f->audit
+        );
         $service->requireCourse($first->courseId, $second->courseId);
         $service->requireCourse($third->courseId, $second->courseId);
         $service->removeRequiredCourse($first->courseId, $second->courseId);
@@ -295,7 +299,10 @@ final class WorkspaceOperationsTest extends TestCase
         $recipient = $f->user();
         $reports = new \Domain\Reporting\Service\ReportService(
             new \Infrastructure\Persistence\Repository\SqlReportRepository($f->sql),
-            $f->access, $f->transactions, $f->audit);
+            $f->access,
+            $f->transactions,
+            $f->audit
+        );
         $report = $reports->create('Fictional shared report', null, null, null);
         $other = $reports->create('Another report', null, null, null);
         $reports->share($report->id, $recipient);
@@ -304,7 +311,7 @@ final class WorkspaceOperationsTest extends TestCase
         $f->access->actor = $recipient;
         $f->access->staff = false;
         $f->access->grants = ['sis:reporting:run'];
-        self::assertSame([], $reports->run($report->id));
+        self::assertSame([], $reports->run($report->id)['items']);
         $f->access->actor = $owner;
         $f->access->staff = true;
         $reports->unshare($report->id, $recipient);
@@ -312,9 +319,8 @@ final class WorkspaceOperationsTest extends TestCase
         self::assertSame([], $reports->shares($report->id)['items']);
         $f->access->actor = $recipient;
         $f->access->staff = false;
-        self::assertSame([], $reports->run($other->id));
+        self::assertSame([], $reports->run($other->id)['items']);
         $this->expectException(AccessDeniedException::class);
         $reports->run($report->id);
     }
-
 }

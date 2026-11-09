@@ -23,8 +23,14 @@ final class PersonIdentityTest extends TestCase
 {
     private function service(SisFixture $f, ?InstitutionalIdGenerator $generator = null): AdmissionsService
     {
-        return new AdmissionsService($f->admissions, $f->access, $f->transactions, $f->audit,
-            $generator ?? new RandomInstitutionalIdGenerator());
+        return new AdmissionsService(
+            $f->admissions,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            $generator ?? new RandomInstitutionalIdGenerator(),
+            $f->catalogEnrollment()
+        );
     }
 
     public function testBlankIdsAreGeneratedAndManualIdsPreserveLeadingZeros(): void
@@ -85,19 +91,19 @@ final class PersonIdentityTest extends TestCase
         $employee = $hr->addEmployee($student->personId, 'Teaching Assistant');
         $locator = $f->sql->one('sis_student_accounts', ['student_id' => $student->id->value]);
         $finance = new StudentAccountService($f->accounts, $f->admissions, $f->access);
-        $events = $f->sql->rows('event_store');
+        $events = $f->sql->rows('sis_history_events');
         $enrollment = $f->sql->rows('sis_enrollments');
         $person = $service->updateInstitutionalId($student->personId, '00009001', 0);
         self::assertSame('00009001', $service->studentProfile($student->id)->person->institutionalId->value);
         self::assertSame('00009001', $hr->employeeProfile($employee)->person->institutionalId->value);
         $account = $finance->accountProfile(new \Domain\Finance\ValueObject\AccountId($locator['id']));
         self::assertSame('00009001', $account->person->institutionalId->value);
-        self::assertSame('00009001', new SqlTransferRepository($f->sql)->transcript($student->id)[0]['institutional_id']);
+        self::assertSame('00009001', new SqlTransferRepository($f->sql, $f->gradeCatalog())->transcript($student->id)[0]['institutional_id']);
         $report = new \Domain\Reporting\StudentReport(EntityId::generate(), $f->access->actor, 'Students');
-        self::assertSame('00009001', new SqlReportRepository($f->sql)->run($report)[0]['institutional_id']);
+        self::assertSame('00009001', new SqlReportRepository($f->sql)->run($report, null, 50)[0]['institutional_id']);
         self::assertSame($student->personId->value, $person->id->value);
         self::assertSame($enrollment, $f->sql->rows('sis_enrollments'));
-        self::assertSame($events, $f->sql->rows('event_store'));
+        self::assertSame($events, $f->sql->rows('sis_history_events'));
         self::assertStringNotContainsString('00009001', json_encode($f->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
     }
 
@@ -204,15 +210,18 @@ final class PersonIdentityTest extends TestCase
         self::assertSame($id, json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR)['id']);
         $f->access->staff = false;
         $get = new \Qubus\Http\ServerRequest([], [], '/sis/persons/' . $id . '/', 'GET');
-        self::assertSame('STAFF-2001', json_decode((string) $router->match($get)->getBody(), true,
-            flags: JSON_THROW_ON_ERROR)['institutional_id']);
+        self::assertSame('STAFF-2001', json_decode(
+            (string) $router->match($get)->getBody(),
+            true,
+            flags: JSON_THROW_ON_ERROR
+        )['institutional_id']);
         $handler = new \Qubus\Routing\Handlers\CallableRequestHandler($router->match(...));
         $denied = new \Application\Http\Middleware\SisPrivacyMiddleware()->process(
-            $edit->withParsedBody(['institutional_id' => '00009999', 'identity_version' => '1']), $handler,
+            $edit->withParsedBody(['institutional_id' => '00009999', 'identity_version' => '1']),
+            $handler,
         );
         self::assertSame(403, $denied->getStatusCode());
         self::assertStringContainsString('no-store', $denied->getHeaderLine('Cache-Control'));
         self::assertSame('STAFF-2001', $f->admissions->person(new EntityId($id))->institutionalId->value);
     }
-
 }

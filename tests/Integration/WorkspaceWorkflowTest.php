@@ -28,10 +28,21 @@ final class WorkspaceWorkflowTest extends TestCase
         $config = $this->createStub(ConfigContainer::class);
         $config->method('getConfigKey')->willReturn(Key::createNewRandomKey()->saveToAsciiSafeString());
 
-        return new ApplicationFormService(new SqlApplicationFormRepository($fixture->sql),
-            new AdmissionsService($fixture->admissions, $fixture->access, $fixture->transactions,
-                $fixture->audit, new RandomInstitutionalIdGenerator()),
-            $fixture->access, $fixture->transactions, $fixture->audit, new DefuseMessageCipher($config));
+        return new ApplicationFormService(
+            new SqlApplicationFormRepository($fixture->sql),
+            new AdmissionsService(
+                $fixture->admissions,
+                $fixture->access,
+                $fixture->transactions,
+                $fixture->audit,
+                new RandomInstitutionalIdGenerator(),
+                $fixture->catalogEnrollment()
+            ),
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit,
+            new DefuseMessageCipher($config)
+        );
     }
 
     private function fields(): array
@@ -67,8 +78,14 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testConditionalAnswersAreEncryptedAndRetriesAreIdempotent(): void
     {
         $fixture = new SisFixture();
-        $person = new AdmissionsService($fixture->admissions, $fixture->access, $fixture->transactions,
-            $fixture->audit, new RandomInstitutionalIdGenerator());
+        $person = new AdmissionsService(
+            $fixture->admissions,
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit,
+            new RandomInstitutionalIdGenerator(),
+            $fixture->catalogEnrollment()
+        );
         $record = $person->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
         $form = $service->save(null, $fixture->program, 'Application', $this->fields(), null);
@@ -77,14 +94,20 @@ final class WorkspaceWorkflowTest extends TestCase
         $submission = EntityId::generate();
         $answers = ['transfer' => true, 'college' => 'Fictional Example College'];
         $application = $service->submit($submission, $form->id, $record->id, $fixture->term, $answers);
-        self::assertSame($application->value,
-            $service->submit($submission, $form->id, $record->id, $fixture->term, $answers)->value);
+        self::assertSame(
+            $application->value,
+            $service->submit($submission, $form->id, $record->id, $fixture->term, $answers)->value
+        );
         self::assertCount(1, $fixture->sql->rows('sis_applications'));
         self::assertSame($answers, $service->submission($submission)['answers']);
-        self::assertStringNotContainsString('Fictional Example College',
-            json_encode($fixture->sql->rows('sis_form_submissions'), JSON_THROW_ON_ERROR));
-        self::assertStringNotContainsString('Fictional Example College',
-            json_encode($fixture->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString(
+            'Fictional Example College',
+            json_encode($fixture->sql->rows('sis_form_submissions'), JSON_THROW_ON_ERROR)
+        );
+        self::assertStringNotContainsString(
+            'Fictional Example College',
+            json_encode($fixture->sql->rows('sis_audit'), JSON_THROW_ON_ERROR)
+        );
         $fixture->access->actor = $fixture->user();
         $this->expectException(AccessDeniedException::class);
         $service->submission($submission);
@@ -93,8 +116,14 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testInvalidConditionalAnswerDoesNotCreateApplication(): void
     {
         $fixture = new SisFixture();
-        $admissions = new AdmissionsService($fixture->admissions, $fixture->access, $fixture->transactions,
-            $fixture->audit, new RandomInstitutionalIdGenerator());
+        $admissions = new AdmissionsService(
+            $fixture->admissions,
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit,
+            new RandomInstitutionalIdGenerator(),
+            $fixture->catalogEnrollment()
+        );
         $person = $admissions->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
         $form = $service->save(null, $fixture->program, 'Application', $this->fields(), null);
@@ -113,9 +142,16 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testMappedImportPreviewDoesNotWriteAndCommitRechecksContent(): void
     {
         $fixture = new SisFixture();
-        $service = new MappedImportService(new LeagueCourseCsvMapper(),
-            new CatalogImportService(new SqlCatalogImportRepository($fixture->sql),
-                $fixture->access, $fixture->transactions, $fixture->audit), $fixture->access);
+        $service = new MappedImportService(
+            new LeagueCourseCsvMapper(),
+            new CatalogImportService(
+                new SqlCatalogImportRepository($fixture->sql),
+                $fixture->access,
+                $fixture->transactions,
+                $fixture->audit
+            ),
+            $fixture->access
+        );
         $csv = "Name,Credits,Source,Code\nExample Computing,3.125,example-1,CS-101\n";
         $mapping = ['title' => 0, 'credits' => 1, 'external_id' => 2, 'code' => 3];
         $preview = $service->preview($csv, $mapping);
@@ -142,11 +178,20 @@ final class WorkspaceWorkflowTest extends TestCase
     {
         $fixture = new SisFixture();
         $student = $fixture->student($fixture->user());
-        $admissions = new AdmissionsService($fixture->admissions, $fixture->access, $fixture->transactions,
-            $fixture->audit, new RandomInstitutionalIdGenerator());
+        $admissions = new AdmissionsService(
+            $fixture->admissions,
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit,
+            new RandomInstitutionalIdGenerator(),
+            $fixture->catalogEnrollment()
+        );
         $service = new \Domain\Workspace\Service\WorkspaceService(
-            new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql),
-            $fixture->access, new \Infrastructure\Persistence\Repository\SqlAccessRepository($fixture->sql), $admissions);
+            new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog()),
+            $fixture->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($fixture->sql),
+            $admissions
+        );
         self::assertSame(['person'], array_keys($service->person($student->personId)));
         self::assertSame(['cards' => [], 'intake' => [], 'pipeline' => [], 'queue' => []], $service->dashboard());
         $fixture->access->staff = false;
@@ -158,12 +203,18 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testSearchEscapesWildcardsAndCursorPagesDoNotRepeatPeople(): void
     {
         $fixture = new SisFixture();
-        $admissions = new AdmissionsService($fixture->admissions, $fixture->access, $fixture->transactions,
-            $fixture->audit, new RandomInstitutionalIdGenerator());
+        $admissions = new AdmissionsService(
+            $fixture->admissions,
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit,
+            new RandomInstitutionalIdGenerator(),
+            $fixture->catalogEnrollment()
+        );
         for ($index = 0; $index < 52; ++$index) {
             $admissions->createPerson(null, 'Example', 'Person ' . $index);
         }
-        $repository = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql);
+        $repository = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog());
         $first = $repository->records('people', null, '', null);
         $second = $repository->records('people', null, '', new EntityId($first['next_after']));
         self::assertCount(50, $first['items']);
@@ -177,11 +228,20 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testExistingPersonGetsOptionalAccountWithoutDuplicatingProfile(): void
     {
         $fixture = new SisFixture();
-        $admissions = new AdmissionsService($fixture->admissions, $fixture->access, $fixture->transactions,
-            $fixture->audit, new RandomInstitutionalIdGenerator());
+        $admissions = new AdmissionsService(
+            $fixture->admissions,
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit,
+            new RandomInstitutionalIdGenerator(),
+            $fixture->catalogEnrollment()
+        );
         $person = $admissions->createPerson(null, 'Alex', 'Example', '00001234');
         $repository = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
-            $fixture->sql, $fixture->admissions, new RandomInstitutionalIdGenerator());
+            $fixture->sql,
+            $fixture->admissions,
+            new RandomInstitutionalIdGenerator()
+        );
         $account = $fixture->user();
         $linked = $fixture->transactions->run(fn () => $repository->ensure($account, 'Alex', 'Example', $person->id));
         self::assertSame($person->id->value, $linked->id->value);
@@ -199,7 +259,10 @@ final class WorkspaceWorkflowTest extends TestCase
         $student = $fixture->student();
         $service = new \Domain\Rules\Service\RuleService(
             new \Infrastructure\Persistence\Repository\SqlRuleRepository($fixture->sql),
-            $fixture->access, $fixture->transactions, $fixture->audit);
+            $fixture->access,
+            $fixture->transactions,
+            $fixture->audit
+        );
         $tree = ['condition' => 'AND', 'rules' => [
             ['id' => 'active', 'operator' => 'equal', 'value' => true],
             ['id' => 'program_id', 'operator' => 'equal', 'value' => $fixture->program->value],
@@ -217,8 +280,14 @@ final class WorkspaceWorkflowTest extends TestCase
     {
         $f = new SisFixture();
         $forms = $this->forms($f);
-        $admissions = new AdmissionsService($f->admissions, $f->access, $f->transactions,
-            $f->audit, new RandomInstitutionalIdGenerator());
+        $admissions = new AdmissionsService(
+            $f->admissions,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            new RandomInstitutionalIdGenerator(),
+            $f->catalogEnrollment()
+        );
         $person = $admissions->createPerson($f->access->actor, 'Alex', 'Example');
         $original = $forms->save(null, $f->program, 'Original application', $this->fields(), null);
         $forms->publish($original->id, 0);
@@ -245,11 +314,16 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testDirectApplicationsHaveNoInventedFormAnswers(): void
     {
         $f = new SisFixture();
-        $admissions = new AdmissionsService($f->admissions, $f->access, $f->transactions,
-            $f->audit, new RandomInstitutionalIdGenerator());
+        $admissions = new AdmissionsService(
+            $f->admissions,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            new RandomInstitutionalIdGenerator(),
+            $f->catalogEnrollment()
+        );
         $person = $admissions->createPerson(null, 'Jamie', 'Example');
         $application = $admissions->apply($person->id, $f->program, $f->term);
         self::assertNull($this->forms($f)->reviewApplication($application->id)['submission']);
     }
-
 }

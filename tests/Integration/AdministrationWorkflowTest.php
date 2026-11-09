@@ -30,9 +30,12 @@ final class FictionalTransport implements MailTransport
     {
     }
 
-    public function send(EntityId $delivery, #[SensitiveParameter] string $recipient,
-        #[SensitiveParameter] string $subject, #[SensitiveParameter] string $body): void
-    {
+    public function send(
+        EntityId $delivery,
+        #[SensitiveParameter] string $recipient,
+        #[SensitiveParameter] string $subject,
+        #[SensitiveParameter] string $body
+    ): void {
         ++$this->calls;
         if ($this->fail) {
             throw new RuntimeException('fictional-upstream-secret');
@@ -47,8 +50,14 @@ final class AdministrationWorkflowTest extends TestCase
         $config = $this->createStub(ConfigContainer::class);
         $config->method('getConfigKey')->willReturn(Key::createNewRandomKey()->saveToAsciiSafeString());
 
-        return new CampaignService(new SqlCampaignRepository($f->sql), new DefuseMessageCipher($config),
-            $transport, $f->access, $f->transactions, $f->audit);
+        return new CampaignService(
+            new SqlCampaignRepository($f->sql),
+            new DefuseMessageCipher($config),
+            $transport,
+            $f->access,
+            $f->transactions,
+            $f->audit
+        );
     }
 
     public function testCampaignEncryptsContentQueuesOnlyReferencesAndSendsOnce(): void
@@ -121,9 +130,9 @@ final class AdministrationWorkflowTest extends TestCase
         $service->share($report->id, $other);
         $f->access->actor = $other;
         $f->access->staff = false;
-        $rows = $service->run($report->id);
+        $rows = $service->run($report->id)['items'];
         self::assertCount(1, $rows);
-        self::assertSame(['student_id', 'institutional_id', 'program_id', 'entry_term_id', 'active'], array_keys($rows[0]));
+        self::assertSame(['student_id', 'institutional_id', 'program_id', 'entry_term_id', 'active', 'program_code', 'entry_term_code'], array_keys($rows[0]));
     }
 
     public function testCatalogCsvImportIsRepeatableAndBatchFailureRollsBackEverything(): void
@@ -170,5 +179,4 @@ final class AdministrationWorkflowTest extends TestCase
         $this->expectException(DomainException::class);
         $transport->send(EntityId::generate(), 'reader@example.invalid', 'Example', 'Fictional body.');
     }
-
 }

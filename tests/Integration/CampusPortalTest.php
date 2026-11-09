@@ -44,12 +44,18 @@ final class CampusPortalTest extends TestCase
         $campus = $c->content->save(null, 'news', 'campus-news', 'Campus', 'Fictional campus update', 'campus', null);
         $old = $c->posts->create('news', 'legacy-news', 'Existing content', 'Campus content stays private.');
         self::assertSame([], $c->service->publicData()['news']);
-        foreach ([$public, $campus, $old->id] as $id) { $c->posts->publish($id, true, 0); }
+        foreach ([$public, $campus, $old->id] as $id) {
+            $c->posts->publish($id, true, 0);
+        }
         self::assertSame(['public-news'], array_column($c->service->publicData()['news'], 'code'));
         self::assertCount(3, $c->repository->news(true));
         self::assertSame('Welcome', $c->service->article('public-news')['title']);
-        try { $c->service->article('campus-news'); self::fail('Private article escaped its audience.'); }
-        catch (RecordNotFoundException) { self::assertTrue(true); }
+        try {
+            $c->service->article('campus-news');
+            self::fail('Private article escaped its audience.');
+        } catch (RecordNotFoundException) {
+            self::assertTrue(true);
+        }
         $c->content->save($public, 'news', 'public-news', 'Updated title', 'An edited draft', 'public', 1);
         self::assertSame([], $c->service->publicData()['news']);
         self::assertSame(2, $c->content->get($public)['version']);
@@ -101,8 +107,12 @@ final class CampusPortalTest extends TestCase
         self::assertSame('Fictional campus address', $me['contact']['address']);
         self::assertSame(1, $me['contact']['version']);
         self::assertArrayNotHasKey('password', $me['person']);
-        try { $c->service->saveContact('Stale', '', '', 0); self::fail('Stale profile update was accepted.'); }
-        catch (ConcurrentModificationException) { self::assertSame('Alex', $c->service->me()['contact']['preferred_name']); }
+        try {
+            $c->service->saveContact('Stale', '', '', 0);
+            self::fail('Stale profile update was accepted.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame('Alex', $c->service->me()['contact']['preferred_name']);
+        }
         $f->access->actor = $f->user();
         $f->student();
         self::assertSame('', $c->service->me()['contact']['address']);
@@ -118,8 +128,12 @@ final class CampusPortalTest extends TestCase
         $f->student();
         $section = $f->section();
         foreach (['register', 'drop', 'scores'] as $operation) {
-            try { $c->service->$operation($student->id, $section->id); self::fail('Another student was accessible.'); }
-            catch (AccessDeniedException) { self::assertSame([], $f->sql->rows('sis_enrollments')); }
+            try {
+                $c->service->$operation($student->id, $section->id);
+                self::fail('Another student was accessible.');
+            } catch (AccessDeniedException) {
+                self::assertSame([], $f->sql->rows('sis_enrollments'));
+            }
         }
         $own = $f->admissions->student(new EntityId($c->service->me()['students'][0]['id']));
         $f->access->staff = false;
@@ -127,7 +141,8 @@ final class CampusPortalTest extends TestCase
         self::assertCount(1, $c->service->transcript($own->id));
         self::assertCount(1, $c->service->me()['students'][0]['enrollments']);
         $c->service->drop($own->id, $section->id);
-        self::assertSame('D', $c->service->me()['students'][0]['enrollments'][0]['status']);
+        self::assertSame([], $c->service->me()['students'][0]['enrollments']);
+        self::assertSame([], $f->sql->rows('sis_academic_credits'));
     }
 
     public function testGradesAndAccountStatementsUseCanonicalOwnedRecords(): void
@@ -138,7 +153,7 @@ final class CampusPortalTest extends TestCase
         $section = $f->section();
         $f->service->register($student->id, $section->id);
         $grade = new GradeDefinition(EntityId::generate(), 'A', 4000, true, true);
-        $c->gradebook->defineGrade($grade);
+        $f->legacyGrade($grade);
         $c->gradebook->finalGrade($student->id, $section->id, $grade->id, 0);
         $account = new AccountId($c->service->me()['accounts'][0]['id']);
         $f->access->staff = false;
@@ -167,19 +182,25 @@ final class CampusPortalTest extends TestCase
         self::assertSame('records@example.invalid', $c->service->transcriptRequest($id)['recipient']);
         self::assertArrayNotHasKey('encrypted_recipient', $c->service->me()['transcript_requests'][0]);
         $f->access->actor = $f->user();
-        try { $c->service->transcriptRequest($id); self::fail('A request leaked to another user.'); }
-        catch (AccessDeniedException) { self::assertTrue(true); }
+        try {
+            $c->service->transcriptRequest($id);
+            self::fail('A request leaked to another user.');
+        } catch (AccessDeniedException) {
+            self::assertTrue(true);
+        }
         $f->access->grants = ['sis:transcript:manage'];
         self::assertCount(1, $c->service->transcriptQueue());
-        $c->service->transitionTranscript($id, 'ready', 0);
-        try { $c->service->transitionTranscript($id, 'fulfilled', 0); self::fail('A stale transition succeeded.'); }
-        catch (ConcurrentModificationException) { self::assertSame('ready', $c->service->transcriptRequest($id)['status']); }
-        $c->service->transitionTranscript($id, 'fulfilled', 1);
+        foreach (['ready', 'fulfilled'] as $status) {
+            try {
+                $c->service->transitionTranscript($id, $status, 0);
+                self::fail('A transcript bypassed document preparation or evidence.');
+            } catch (DomainException) {
+                self::assertSame('pending', $c->service->transcriptRequest($id)['status']);
+            }
+        }
         $f->access->actor = $owner;
         $f->access->grants = [];
-        self::assertSame('fulfilled', $c->service->transcriptRequest($id)['status']);
-        $this->expectException(DomainException::class);
-        $c->service->transitionTranscript($id, 'cancelled', 2);
+        self::assertSame('pending', $c->service->transcriptRequest($id)['status']);
     }
 
     public function testOnlyTheOwnerCanCancelAPendingTranscriptRequest(): void
@@ -190,11 +211,30 @@ final class CampusPortalTest extends TestCase
         $id = EntityId::generate();
         $c->service->requestTranscript($id, $student->id, 'pickup', '');
         $c->sis->access->actor = $c->sis->user();
-        try { $c->service->transitionTranscript($id, 'cancelled', 0); self::fail('Staff cancelled another owner request.'); }
-        catch (AccessDeniedException) { self::assertTrue(true); }
+        try {
+            $c->service->transitionTranscript($id, 'cancelled', 0);
+            self::fail('Staff cancelled another owner request.');
+        } catch (AccessDeniedException) {
+            self::assertTrue(true);
+        }
         $c->sis->access->actor = $owner;
         $c->sis->access->staff = false;
         $c->service->transitionTranscript($id, 'cancelled', 0);
         self::assertSame('cancelled', $c->service->transcriptRequest($id)['status']);
+    }
+    public function testPortalDropReceiptAlwaysRequiresOwnershipEvenWithRegistrarPermission(): void
+    {
+        $c = new CampusFixture();
+        $f = $c->sis;
+        $f->student(); // Registrar also has a person record; ownership still cannot be bypassed.
+        $student = $f->student($f->user());
+        $section = $f->section();
+        $f->service->register($student->id, $section->id, true);
+        $r = $f->drops->review($student->id, $section->id);
+        $op = new EntityId($r['operation_id']);
+        $receipt = $f->drops->commit($student->id, $section->id, new EntityId($r['enrollment_id']), $r['version'], $op, $r['revision'], $r['effective_on']);
+        self::assertSame($receipt, $f->drops->receipt($op));
+        $this->expectException(AccessDeniedException::class);
+        $c->service->dropReceipt($op);
     }
 }

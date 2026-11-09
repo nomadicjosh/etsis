@@ -100,6 +100,7 @@ test('staff review original application answers and revoke report sharing', asyn
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/applications/') ? [{ id: app, given_name: 'Jamie', family_name: 'Example', status }] : path.includes('/reports/') ? [{ id: report, name: 'Fictional student report' }] : [], next_after: null };
         else if (path === `/sis/applications/${app}/review/`) result = { application: { id: { value: app }, status, version: 0 }, person: { id: { value: person }, givenName: 'Jamie', familyName: 'Example', institutionalId: { value: 'S-EXAMPLE' } }, labels: { program_code: 'BSCS', program_title: 'Computing', term_code: '26/FA' }, submission: { form: { name: 'Original application revision', fields: [{ key: 'returning', label: 'Returning student?', type: 'checkbox' }, { key: 'statement', label: 'Personal statement', type: 'textarea' }] }, answers: { returning: false, statement: '<script>fictional</script> A personal statement.' } } };
         else if (path.endsWith('/decision/')) { status = 'accepted'; result = { status }; }
+        else if (path === `/sis/reports/${report}/`) result = { id: report, name: 'Fictional student report', active: null, can_manage: true, can_run: true };
         else if (path.endsWith('/shares/list/')) result = { items: shared ? [{ id: id(24), user_id: user, given_name: 'Alex', family_name: 'Example' }] : [], next_after: null };
         else if (path.endsWith('/revoke/')) shared = false;
         await route.fulfill({ json: result });

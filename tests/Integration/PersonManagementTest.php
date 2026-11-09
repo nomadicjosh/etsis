@@ -56,16 +56,25 @@ final class PersonManagementTest extends TestCase
         self::assertSame('Jamie', $fixture->sis->admissions->person($person->id)->givenName);
         $fixture->sis->access->staff = false;
         $this->expectException(AccessDeniedException::class);
-        $fixture->profiles->save($person->id, 'Unauthorized', 'Example', false,
-            $fixture->profiles->view($person->id)['revision']);
+        $fixture->profiles->save(
+            $person->id,
+            'Unauthorized',
+            'Example',
+            false,
+            $fixture->profiles->view($person->id)['revision']
+        );
     }
 
     public function testOnlySuperAdministratorsCanChangeSuperAccountCredentialsOrNames(): void
     {
         $fixture = new PersonManagementFixture();
         $person = $fixture->person();
-        $fixture->access->assign(GrantKind::UserRole, $person->ownerUserId,
-            $fixture->access->roleNamed('super')->id, true);
+        $fixture->access->assign(
+            GrantKind::UserRole,
+            $person->ownerUserId,
+            $fixture->access->roleNamed('super')->id,
+            true
+        );
         $record = $fixture->profiles->view($person->id);
         try {
             $fixture->profiles->save($person->id, 'Takeover', 'Attempt', true, $record['revision']);
@@ -120,8 +129,12 @@ final class PersonManagementTest extends TestCase
         } catch (AccessDeniedException) {
             self::assertSame($record['version'], $fixture->accounts->view($person->id)['version']);
         }
-        $fixture->accounts->password($person->id, 'fictional-replacement-password-for-tests',
-            $record['version'], PersonManagementFixture::PASSWORD);
+        $fixture->accounts->password(
+            $person->id,
+            'fictional-replacement-password-for-tests',
+            $record['version'],
+            PersonManagementFixture::PASSWORD
+        );
         self::assertGreaterThan($record['version'], $fixture->accounts->view($person->id)['version']);
     }
 
@@ -148,8 +161,10 @@ final class PersonManagementTest extends TestCase
             $fixture->accounts->email($first->id, $other['email'], $record['version']);
             self::fail('A duplicate account email was accepted.');
         } catch (PDOException) {
-            self::assertSame($record['email'], $fixture->sis->sql->one('users',
-                ['user_id' => $first->ownerUserId->value])['email']);
+            self::assertSame($record['email'], $fixture->sis->sql->one(
+                'users',
+                ['user_id' => $first->ownerUserId->value]
+            )['email']);
             self::assertSame($record['email'], $fixture->accounts->view($first->id)['email']);
             self::assertSame($record['version'], $fixture->accounts->view($first->id)['version']);
         }
@@ -171,9 +186,15 @@ final class PersonManagementTest extends TestCase
         $fixture->sis->access->staff = true;
         $audit = $this->createStub(\Domain\Audit\Repository\AuditTrail::class);
         $audit->method('record')->willThrowException(new RuntimeException('Fictional audit failure.'));
-        $editor = new \Domain\Person\Service\PersonProfileEditor($fixture->sis->admissions,
+        $editor = new \Domain\Person\Service\PersonProfileEditor(
+            $fixture->sis->admissions,
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sis->sql),
-            $fixture->users, $fixture->guard, $fixture->sis->access, $fixture->sis->transactions, $audit);
+            $fixture->users,
+            $fixture->guard,
+            $fixture->sis->access,
+            $fixture->sis->transactions,
+            $audit
+        );
         try {
             $editor->save($person->id, 'RolledBack', 'Example', false, $record['revision']);
             self::fail('An unaudited edit committed.');
@@ -199,5 +220,4 @@ final class PersonManagementTest extends TestCase
             self::assertFalse($fixture->access->isSuper($person->ownerUserId->value));
         }
     }
-
 }

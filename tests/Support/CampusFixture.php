@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/SisFixture.php';
+require_once __DIR__ . "/SisFixture.php";
 
 use Defuse\Crypto\Key;
 use Domain\Finance\Service\StudentAccountService;
@@ -41,16 +41,18 @@ final class FixturePaymentGateway implements PaymentGateway
         $this->calls[] = [$payment->value, $amount->minor, $amount->currency, $expiresAt];
         if ($this->failOnce) {
             $this->failOnce = false;
-            throw new DomainException('Fictional provider failure.');
+            throw new DomainException("Fictional provider failure.");
         }
-        return ['session' => 'cs_test_' . $payment->value,
-            'url' => 'https://checkout.stripe.com/c/pay/fictional-' . $payment->value];
+        return [
+            "session" => "cs_test_" . $payment->value,
+            "url" => "https://checkout.stripe.com/c/pay/fictional-" . $payment->value,
+        ];
     }
 
     public function verify(string $body, string $signature): ?array
     {
-        if ($signature !== 'fictional-valid-signature') {
-            throw new InvalidArgumentException('Invalid notification.');
+        if ($signature !== "fictional-valid-signature") {
+            throw new InvalidArgumentException("Invalid notification.");
         }
         return $this->confirmation;
     }
@@ -76,23 +78,70 @@ final class CampusFixture
         $this->repository = new SqlCampusRepository($f->sql);
         $this->payments = new SqlPaymentRepository($f->sql);
         $config = Collection::factory([]);
-        $config->setConfigKey('app', ['crypto_key' => Key::createNewRandomKey()->saveToAsciiSafeString()]);
+        $config->setConfigKey("app", ["crypto_key" => Key::createNewRandomKey()->saveToAsciiSafeString()]);
         $this->cipher = new DefuseMessageCipher($config);
-        $this->gradebook = new GradebookService(new SqlGradebookRepository($f->sql), $f->registration,
-            $f->admissions, $f->access, $f->transactions, $f->audit);
-        $transfers = new TransferService(new SqlTransferRepository($f->sql), $f->registration,
-            $f->admissions, $f->access, $f->transactions, $f->audit);
-        $this->service = new CampusService($this->repository, $f->access, $f->service, $transfers,
-            $this->gradebook, new StudentAccountService($f->accounts, $f->admissions, $f->access),
-            $this->cipher, $f->transactions, $f->audit, $f->clock);
+        $this->gradebook = new GradebookService(
+            new SqlGradebookRepository($f->sql),
+            $f->registration,
+            $f->admissions,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            $f->academicCredits(),
+        );
+        $transfers = new TransferService(
+            new SqlTransferRepository($f->sql, $f->gradeCatalog()),
+            $f->registration,
+            $f->admissions,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlTransferCatalogRepository(
+                $f->sql,
+                $f->gradeCatalog(),
+            ),
+            $f->transferCredits(),
+        );
+        $this->service = new CampusService(
+            $this->repository,
+            $f->access,
+            $f->service,
+            $transfers,
+            $this->gradebook,
+            new StudentAccountService($f->accounts, $f->admissions, $f->access),
+            $this->cipher,
+            $f->transactions,
+            $f->audit,
+            $f->clock,
+        );
         $posts = new SqlPortalRepository($f->sql);
         $this->posts = new PortalService($posts, $f->access, $f->transactions, $f->audit);
-        $this->content = new CampusContentService($posts, $this->repository, $this->posts,
-            $f->access, $f->transactions, $f->audit);
+        $this->content = new CampusContentService(
+            $posts,
+            $this->repository,
+            $this->posts,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+        );
         $this->gateway = new FixturePaymentGateway();
-        $this->checkout = new PortalPaymentService($this->payments, $this->repository, $f->accounts,
-            $f->access, $this->gateway, $this->cipher, $f->transactions, $f->audit, $f->clock);
-        $this->confirmation = new PaymentConfirmationService($this->gateway, $this->payments,
-            $f->accounts, $f->transactions, $f->audit);
+        $this->checkout = new PortalPaymentService(
+            $this->payments,
+            $this->repository,
+            $f->accounts,
+            $f->access,
+            $this->gateway,
+            $this->cipher,
+            $f->transactions,
+            $f->audit,
+            $f->clock,
+        );
+        $this->confirmation = new PaymentConfirmationService(
+            $this->gateway,
+            $this->payments,
+            $f->accounts,
+            $f->transactions,
+            $f->audit,
+        );
     }
 }
