@@ -1,1 +1,0 @@
-$('input[maxlength]').maxlength();
