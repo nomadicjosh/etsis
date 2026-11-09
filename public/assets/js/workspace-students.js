@@ -25,43 +25,95 @@ window.createWorkspaceStudents = function (ui) {
             table(headers, rows, caption),
         );
 
-    const status = value => value === null ? "Unknown" : value ? "Active" : "Inactive";
+    const status = (value) => (value === null ? "Unknown" : value ? "Active" : "Inactive");
     async function activity(record, back) {
         const page = await request(`/sis/students/${record.id}/activity/history/`, "POST", {});
         const body = openDrawer("Review student activity", "REGISTRAR DECISION");
-        body.append(button("Back to student", back), node("p", {},
-            "Record when the status takes effect and why. Inactive students cannot add registrations. Existing courses, credits, charges, sign-in and employment stay connected."));
-        const descriptors = [["active", "Active student record", "checkbox"],
-            ["effective_on", "Effective date", "date"], ["reason", "Reason for this decision", "textarea"]];
+        body.append(
+            button("Back to student", back),
+            node(
+                "p",
+                {},
+                "Record when the status takes effect and why. Inactive students cannot add registrations. Existing courses, credits, charges, sign-in and employment stay connected.",
+            ),
+        );
+        const descriptors = [
+            ["active", "Active student record", "checkbox"],
+            ["effective_on", "Effective date", "date"],
+            ["reason", "Reason for this decision", "textarea"],
+        ];
         const form = await ui.buildForm(descriptors, { active: record.active, effective_on: page.today });
         form.elements.effective_on.max = page.today;
         form.elements.effective_on.required = true;
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
-        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review activity decision");
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review activity decision",
+        );
         form.append(review);
-        form.addEventListener("submit", event => {
+        form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
                 const data = ui.formData(form, descriptors);
-                const preview = await request(`/sis/students/${record.id}/activity/review/`, "POST",
-                    { ...data, revision: record.revision });
+                const preview = await request(`/sis/students/${record.id}/activity/review/`, "POST", {
+                    ...data,
+                    revision: record.revision,
+                });
                 const confirmBody = openDrawer("Confirm student activity", "REVIEWED DECISION");
-                confirmBody.append(button("Revise decision", () => activity(record, back)),
+                confirmBody.append(
+                    button("Revise decision", () => activity(record, back)),
                     node("h3", {}, `${status(preview.requested_active)} from ${preview.effective_on}`),
-                    node("dl", { class: "detail-list" },
-                        node("div", {}, node("dt", {}, "Previously known on that date"), node("dd", {}, status(preview.active_on_date))),
-                        node("div", {}, node("dt", {}, "Current status before"), node("dd", {}, status(preview.current_active))),
-                        node("div", {}, node("dt", {}, "Current status after"), node("dd", {}, status(preview.resulting_active)))));
-                if (preview.resulting_active !== preview.requested_active) confirmBody.append(node("p", { class: "alert alert-info" },
-                    "A later effective decision continues to control today's status. This decision changes the earlier period only."));
-                confirmBody.append(node("p", { class: "form-text" },
-                    "Earlier history before tracking began is unknown. This decision retains its effective date, recording time and protected reason; it does not drop courses or reverse charges."),
-                    button("Confirm activity decision", async () => {
-                        await request(`/sis/students/${record.id}/activity/commit/`, "POST", { review_token: preview.review_token });
-                        await back();
-                    }, "btn-primary"));
+                    node(
+                        "dl",
+                        { class: "detail-list" },
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "Previously known on that date"),
+                            node("dd", {}, status(preview.active_on_date)),
+                        ),
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "Current status before"),
+                            node("dd", {}, status(preview.current_active)),
+                        ),
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "Current status after"),
+                            node("dd", {}, status(preview.resulting_active)),
+                        ),
+                    ),
+                );
+                if (preview.resulting_active !== preview.requested_active)
+                    confirmBody.append(
+                        node(
+                            "p",
+                            { class: "alert alert-info" },
+                            "A later effective decision continues to control today's status. This decision changes the earlier period only.",
+                        ),
+                    );
+                confirmBody.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "Earlier history before tracking began is unknown. This decision retains its effective date, recording time and protected reason; it does not drop courses or reverse charges.",
+                    ),
+                    button(
+                        "Confirm activity decision",
+                        async () => {
+                            await request(`/sis/students/${record.id}/activity/commit/`, "POST", {
+                                review_token: preview.review_token,
+                            });
+                            await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
                 confirmBody.querySelector("h3").tabIndex = -1;
                 confirmBody.querySelector("h3").focus();
             }, review);
@@ -71,17 +123,164 @@ window.createWorkspaceStudents = function (ui) {
     async function activityHistory(id, back, cursor = null, previous = []) {
         const page = await request(`/sis/students/${id}/activity/history/`, "POST", cursor ? { cursor } : {});
         const body = openDrawer("Activity history", "REGISTRAR RECORD");
-        body.append(button("Back to student", back), node("p", {}, `Current status: ${status(page.active)}`),
-            node("p", { class: "form-text" }, "This timeline lists decisions in recording order. Effective dates determine when each status applies. Earlier history is unknown; an observation records the status seen when tracking began. Protected reasons are not included here."));
-        const sources = { observed_existing: "Observed current status", registrar: "Registrar decision", hiatus: "Hiatus", hiatus_return: "Return from hiatus" };
-        body.append(page.items.length ? grid(["Status", "Effective date", "Recorded", "Source"], page.items.map(item =>
-            [status(item.active), item.effective_on, item.recorded_at, sources[item.source] || "Decision"]), "Student activity decisions")
-            : node("p", {}, "No activity decisions have been recorded yet."));
+        body.append(
+            button("Back to student", back),
+            node("p", {}, `Current status: ${status(page.active)}`),
+            node(
+                "p",
+                { class: "form-text" },
+                "This timeline lists decisions in recording order. Effective dates determine when each status applies. Earlier history is unknown; an observation records the status seen when tracking began. Protected reasons are not included here.",
+            ),
+        );
+        const sources = {
+            observed_existing: "Observed current status",
+            registrar: "Registrar decision",
+            hiatus: "Hiatus",
+            hiatus_return: "Return from hiatus",
+        };
+        body.append(
+            page.items.length
+                ? grid(
+                      ["Status", "Effective date", "Recorded", "Source"],
+                      page.items.map((item) => [
+                          status(item.active),
+                          item.effective_on,
+                          item.recorded_at,
+                          sources[item.source] || "Decision",
+                      ]),
+                      "Student activity decisions",
+                  )
+                : node("p", {}, "No activity decisions have been recorded yet."),
+        );
         const controls = node("div", { class: "inline-actions" });
-        if (previous.length) controls.append(button("Previous activity page", () =>
-            activityHistory(id, back, previous[previous.length - 1], previous.slice(0, -1))));
-        if (page.next_cursor) controls.append(button("Next activity page", () =>
-            activityHistory(id, back, page.next_cursor, [...previous, cursor])));
+        if (previous.length)
+            controls.append(
+                button("Previous activity page", () =>
+                    activityHistory(id, back, previous[previous.length - 1], previous.slice(0, -1)),
+                ),
+            );
+        if (page.next_cursor)
+            controls.append(
+                button("Next activity page", () =>
+                    activityHistory(id, back, page.next_cursor, [...previous, cursor]),
+                ),
+            );
+        body.append(controls);
+    }
+
+    async function programStatus(id, item, back, preset = {}) {
+        const closing = item.status === "active";
+        const body = openDrawer(
+            closing ? "Close program assignment" : "Reopen program assignment",
+            "REGISTRAR DECISION",
+        );
+        body.append(
+            button("Back to student", back),
+            node("p", {}, `${item.program_code} · ${item.program_title}`),
+            node(
+                "p",
+                { class: "form-text" },
+                "This status change takes effect when confirmed. It preserves the program's entry term, degree requirements, credits and financial history. Closing an assignment does not record graduation or withdraw the student from courses.",
+            ),
+        );
+        const descriptors = [["reason", "Reason for this program decision", "textarea"]];
+        const form = await ui.buildForm(descriptors, preset);
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review program status");
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = ui.formData(form, descriptors);
+                const preview = await request(
+                    `/sis/students/${id}/programs/${item.id}/status/review/`,
+                    "POST",
+                    { ...data, active: !closing, revision: item.revision },
+                );
+                const confirmation = openDrawer("Confirm program status", "REVIEWED DECISION");
+                confirmation.append(
+                    button("Revise program decision", () => programStatus(id, item, back, data)),
+                    node("h3", {}, `${preview.program.code}: ${preview.before} → ${preview.after}`),
+                    node(
+                        "p",
+                        {},
+                        `Entry term: ${preview.entry_term.code}. Takes effect when confirmed on ${preview.effective_on}.`,
+                    ),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "The previous status and this decision will be retained. Earlier history before tracking began is unknown. Your reason is protected and is not included in the ordinary status timeline.",
+                    ),
+                    button(
+                        closing ? "Confirm program closure" : "Confirm program reopening",
+                        async () => {
+                            await request(`/sis/students/${id}/programs/${item.id}/status/commit/`, "POST", {
+                                review_token: preview.review_token,
+                            });
+                            await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+                const heading = confirmation.querySelector("h3");
+                heading.tabIndex = -1;
+                heading.focus();
+            }, review);
+        });
+        body.append(form);
+    }
+    async function programStatusHistory(id, item, back, cursor = null, previous = []) {
+        const page = await request(
+            `/sis/students/${id}/programs/${item.id}/status/history/`,
+            "POST",
+            cursor ? { cursor } : {},
+        );
+        const body = openDrawer("Program status history", "REGISTRAR RECORD");
+        body.append(
+            button("Back to student", back),
+            node("h3", {}, `${item.program_code} · ${item.program_title}`),
+            node("p", {}, `Current assignment status: ${page.status}`),
+            node(
+                "p",
+                { class: "form-text" },
+                "An observation records the status seen when tracking began. Earlier decisions are unknown. Protected reasons and raw event details are excluded from this timeline.",
+            ),
+        );
+        body.append(
+            page.items.length
+                ? grid(
+                      ["Status", "Effective", "Recorded", "Record"],
+                      page.items.map((row) => [
+                          row.status,
+                          row.effective_at,
+                          row.recorded_at,
+                          row.kind === "observation" ? "Observed current assignment" : "Registrar decision",
+                      ]),
+                      "Program status decisions",
+                  )
+                : node("p", {}, "No program status decisions have been recorded yet."),
+        );
+        const controls = node("div", { class: "inline-actions" });
+        if (previous.length)
+            controls.append(
+                button("Previous program history page", () =>
+                    programStatusHistory(
+                        id,
+                        item,
+                        back,
+                        previous[previous.length - 1],
+                        previous.slice(0, -1),
+                    ),
+                ),
+            );
+        if (page.next_cursor)
+            controls.append(
+                button("Next program history page", () =>
+                    programStatusHistory(id, item, back, page.next_cursor, [...previous, cursor]),
+                ),
+            );
         body.append(controls);
     }
 
@@ -253,6 +452,11 @@ window.createWorkspaceStudents = function (ui) {
                                   );
                               if (can("sis:registration:manage")) {
                                   controls.append(
+                                      button("Program status history", () =>
+                                          programStatusHistory(id, item, back),
+                                      ),
+                                  );
+                                  controls.append(
                                       button("Matriculation cohort", () =>
                                           ui.calendar().studentCatalog(id, item.id),
                                       ),
@@ -280,21 +484,7 @@ window.createWorkspaceStudents = function (ui) {
                                               item.status === "active"
                                                   ? "Close assignment"
                                                   : "Reopen assignment",
-                                              () =>
-                                                  flow(
-                                                      item.status === "active"
-                                                          ? "Confirm program closure"
-                                                          : "Confirm program reopening",
-                                                      [],
-                                                      `/sis/students/${id}/programs/${item.id}/activity/`,
-                                                      () => ({
-                                                          active: item.status !== "active",
-                                                          revision: item.revision,
-                                                      }),
-                                                      back,
-                                                      {},
-                                                      `${item.program_code}: this changes the assignment status and preserves its entry term and identity. It does not drop courses or award a degree.`,
-                                                  ),
+                                              () => programStatus(id, item, back),
                                           ),
                                       );
                               }

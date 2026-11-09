@@ -313,6 +313,37 @@ final class SisFixture
             $this->clock,
         );
     }
+    public function programStatusLedger(): \Domain\Student\Service\StudentProgramStatusLedger
+    {
+        return new \Domain\Student\Service\StudentProgramStatusLedger(
+            new \Infrastructure\Persistence\Repository\SqlStudentProgramStatusRepository($this->sql),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql,
+                $this->transactions,
+                $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder())
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            ),
+            $this->access,
+            $this->clock
+        );
+    }
+    public function programStatusService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\Student\Service\StudentProgramStatusService {
+        return new \Domain\Student\Service\StudentProgramStatusService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+            $this->programStatusLedger(),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock
+        );
+    }
     public function activityService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Student\Service\StudentActivityService {

@@ -129,3 +129,10 @@ Independent course-group schema 2 now supports credit-or-course quantity with an
 Students now have a reviewed, reasoned activity decision and a private paginated timeline. Effective-date replay preserves later activation/deactivation decisions when an earlier period is corrected. Hiatus and return activity changes share that ledger, retaining existing case receipts and rolling back contradictory case/drop effects atomically. Registration eligibility and student record reads verify the current activity projection. See [student activity history](student-activity-history.md) for the workflow, observation limits and migration.
 
 Migration `20261109000006_CreateSisStudentActivity.php` adds one ULID checkpoint table; the authoritative journal remains unchanged. Full matriculation/program/standing and hiatus-case lifecycle conversion remains outstanding.
+
+
+### Program closure and reopening history (2026-11-09)
+
+Student-program closure/reopening now requires a reason and a reviewed confirmation, with a private paginated status timeline. The original assignment and its entry term remain connected to academic, curriculum and financial records. Exact retries preserve their original outcome without changing a later status. Tracked assignment checks protect program lists, primary selection and duplicate-program decisions against conflicting saved statuses. See [staff workflow, migration and limits](student-program-status-history.md).
+
+Migration `20261109000007_CreateSisProgramStatusStreams.php` adds one ULID checkpoint table alongside the existing shared journal. It does not convert current student rows or create historical actions from them. Assignment creation, primary-program history, matriculation, standing and backdated program corrections remain separate stages. No institutional database was migrated during this work.

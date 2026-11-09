@@ -44,17 +44,4 @@ final readonly class SisStudentRecordController
 
         return new JsonResponse(["status" => "saved"]);
     }
-
-    public function programActivity(ServerRequest $request, string $id, string $assignment): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        $this->service->programActivity(
-            new EntityId($id),
-            new EntityId($assignment),
-            $f->requiredBoolean("active"),
-            $f->text("revision", 64),
-        );
-
-        return new JsonResponse(["status" => "saved"]);
-    }
 }

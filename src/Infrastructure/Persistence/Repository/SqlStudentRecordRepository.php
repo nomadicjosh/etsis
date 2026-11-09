@@ -134,38 +134,6 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
         }
     }
 
-    public function saveAssignment(StudentProgram $assignment): void
-    {
-        $this->sql->update(
-            "sis_student_programs",
-            ["status" => $assignment->status],
-            ["id" => $assignment->id->value],
-        );
-    }
-
-    public function activeProgram(EntityId $student, EntityId $program, ?EntityId $excluding = null): bool
-    {
-        $q = $this->sql->quote(...);
-        return $this->sql->fetch(
-            "SELECT " .
-                $q("id") .
-                " FROM " .
-                $q("sis_student_programs") .
-                " WHERE " .
-                $q("student_id") .
-                " = ? AND " .
-                $q("program_id") .
-                " = ? AND " .
-                $q("status") .
-                " = ?" .
-                ($excluding === null ? "" : " AND " . $q("id") . " <> ?"),
-            $excluding === null
-                ? [$student->value, $program->value, "active"]
-                : [$student->value, $program->value, "active", $excluding->value],
-            1,
-        ) !== [];
-    }
-
     public function assignments(EntityId $student, ?EntityId $after, int $limit): array
     {
         $q = $this->sql->quote(...);

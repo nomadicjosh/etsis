@@ -26,7 +26,8 @@ final class StudentRecordManagementTest extends TestCase
             $f->transactions,
             $audit ?? $f->audit,
             $f->catalogEnrollment(),
-            $f->activityLedger()
+            $f->activityLedger(),
+            $f->programStatusLedger()
         );
     }
 
@@ -36,8 +37,7 @@ final class StudentRecordManagementTest extends TestCase
         bool $active,
         string $revision,
         ?AuditTrail $audit = null
-    ): void
-    {
+    ): void {
         $service = $f->activityService($audit);
         $review = $service->review(
             $student,
@@ -47,6 +47,18 @@ final class StudentRecordManagementTest extends TestCase
             $revision
         );
         $service->commit($student, $review['review_token']);
+    }
+
+    private function programStatus(
+        SisFixture $f,
+        EntityId $student,
+        EntityId $assignment,
+        bool $active,
+        string $revision
+    ): void {
+        $service = $f->programStatusService();
+        $review = $service->review($student, $assignment, $active, $revision, 'Fictional program status decision.');
+        $service->commit($student, $assignment, $review['review_token']);
     }
 
     private function program(SisFixture $f, string $code = 'BA.ART'): EntityId
@@ -103,14 +115,14 @@ final class StudentRecordManagementTest extends TestCase
         $service = $this->service($f);
         $original = $service->programs($student->id)['items'][0];
         try {
-            $service->programActivity($student->id, new EntityId($original['id']), false, $original['revision']);
+            $this->programStatus($f, $student->id, new EntityId($original['id']), false, $original['revision']);
             self::fail('The primary program was closed.');
-        } catch (DomainException) {
+        } catch (DomainException | ValidationException) {
             self::assertTrue($service->programs($student->id)['items'][0]['is_primary']);
         }
         $assigned = $service->assign($student->id, $this->program($f), $f->term);
         $row = $this->assignment($service, $student->id, $assigned);
-        $service->programActivity($student->id, $assigned, false, $row['revision']);
+        $this->programStatus($f, $student->id, $assigned, false, $row['revision']);
         $closed = $this->assignment($service, $student->id, $assigned);
         self::assertSame('closed', $closed['status']);
         try {
@@ -119,10 +131,10 @@ final class StudentRecordManagementTest extends TestCase
         } catch (DomainException) {
             self::assertFalse($closed['is_primary']);
         }
-        $service->programActivity($student->id, $assigned, true, $closed['revision']);
+        $this->programStatus($f, $student->id, $assigned, true, $closed['revision']);
         self::assertSame('active', $this->assignment($service, $student->id, $assigned)['status']);
         try {
-            $service->programActivity($student->id, $assigned, false, $closed['revision']);
+            $this->programStatus($f, $student->id, $assigned, false, $closed['revision']);
             self::fail('A stale assignment edit was accepted.');
         } catch (ConcurrentModificationException) {
             self::assertSame('active', $this->assignment($service, $student->id, $assigned)['status']);
@@ -164,7 +176,7 @@ final class StudentRecordManagementTest extends TestCase
             [fn () => $this->activity($f, $student->id, false, $revision),
             fn () => $service->assign($student->id, $f->program, $f->term),
             fn () => $service->primary($student->id, new EntityId($row['id']), $revision),
-            fn () => $service->programActivity($student->id, new EntityId($row['id']), false, $row['revision'])] as $write
+            fn () => $this->programStatus($f, $student->id, new EntityId($row['id']), false, $row['revision'])] as $write
         ) {
             try {
                 $write();
@@ -193,7 +205,7 @@ final class StudentRecordManagementTest extends TestCase
         $foreign = $service->programs($other->id)['items'][0];
         foreach (
             [fn () => $service->primary($student->id, new EntityId($foreign['id']), $service->view($student->id)['revision']),
-            fn () => $service->programActivity($student->id, new EntityId($foreign['id']), false, $foreign['revision'])] as $write
+            fn () => $this->programStatus($f, $student->id, new EntityId($foreign['id']), false, $foreign['revision'])] as $write
         ) {
             try {
                 $write();
@@ -218,7 +230,7 @@ final class StudentRecordManagementTest extends TestCase
             self::assertSame('program_id', $error->errors[0]['field']);
         }
         $row = $this->assignment($service, $student->id, $assigned);
-        $service->programActivity($student->id, $assigned, false, $row['revision']);
+        $this->programStatus($f, $student->id, $assigned, false, $row['revision']);
         try {
             $service->assign($student->id, $program, $f->term);
             self::fail('A closed program/term pair was duplicated.');
@@ -322,10 +334,10 @@ final class StudentRecordManagementTest extends TestCase
         } catch (ValidationException) {
             self::assertCount(2, $service->programs($student->id)['items']);
         }
-        $service->programActivity($student->id, $first, false, $this->assignment($service, $student->id, $first)['revision']);
+        $this->programStatus($f, $student->id, $first, false, $this->assignment($service, $student->id, $first)['revision']);
         $service->assign($student->id, $program, $term);
         try {
-            $service->programActivity($student->id, $first, true, $this->assignment($service, $student->id, $first)['revision']);
+            $this->programStatus($f, $student->id, $first, true, $this->assignment($service, $student->id, $first)['revision']);
             self::fail('An earlier cohort was reopened alongside another active assignment.');
         } catch (ValidationException) {
             self::assertSame('closed', $this->assignment($service, $student->id, $first)['status']);

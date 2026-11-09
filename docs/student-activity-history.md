@@ -1,6 +1,6 @@
 # Student activity decisions
 
-Implemented 2026-11-09. This slice protects the student's active/inactive status. Program assignments, matriculation/admissions transitions, academic standing, load and the complete hiatus case lifecycle still require their own historical conversion. Apply the [event-sourcing architecture](event-sourcing-architecture.md) when extending those paths.
+Implemented 2026-11-09. This slice protects the student's active/inactive status. Program assignment creation/primary selection, matriculation/admissions transitions, academic standing, load and the complete hiatus case lifecycle still require their own historical conversion. [Program closure and reopening](student-program-status-history.md) now have a separate protected status history. Apply the [event-sourcing architecture](event-sourcing-architecture.md) when extending those paths.
 
 ## Registrar workflow
 

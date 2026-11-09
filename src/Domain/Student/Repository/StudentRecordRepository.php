@@ -19,8 +19,6 @@ interface StudentRecordRepository
     public function primaryCatalog(EntityId $student): ?array;
     public function assignment(EntityId $assignment): StudentProgram;
     public function addAssignment(StudentProgram $assignment): void;
-    public function saveAssignment(StudentProgram $assignment): void;
-    public function activeProgram(EntityId $student, EntityId $program, ?EntityId $excluding = null): bool;
     /** @return list<array<string, mixed>> */
     public function assignments(EntityId $student, ?EntityId $after, int $limit): array;
 }

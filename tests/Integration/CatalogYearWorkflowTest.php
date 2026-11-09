@@ -214,7 +214,8 @@ final class CatalogYearWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->catalogEnrollment(),
-            $f->activityLedger()
+            $f->activityLedger(),
+            $f->programStatusLedger()
         );
         $second = $records->assign($student->id, $other, $student->entryTermId);
         self::assertSame($a->value, $repo->binding($first)['catalog_id']);

@@ -8,7 +8,6 @@ use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
-use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
@@ -27,6 +26,7 @@ final readonly class StudentRecordService
         private AuditTrail $audit,
         private \Domain\Catalog\Service\CatalogEnrollment $catalogs,
         private StudentActivityLedger $activity,
+        private StudentProgramStatusLedger $programStatuses,
     ) {
     }
 
@@ -59,10 +59,11 @@ final readonly class StudentRecordService
         $actor = $this->access->requirePermission("sis:registration:manage");
         return $this->transactions->run(function () use ($id, $program, $term, $actor): EntityId {
             $this->records->lock($id);
+            $this->registrar($actor);
             $this->admissions->student($id);
             $this->records->program($program);
             $this->records->term($term);
-            $this->assertNoActiveProgram($id, $program);
+            $this->programStatuses->assertNoActiveProgram($id, $program);
             $assignment = new StudentProgram(EntityId::generate(), $id, $program, $term);
             $this->records->addAssignment($assignment);
             $this->catalogs->initialize($assignment, $actor);
@@ -77,9 +78,11 @@ final readonly class StudentRecordService
         $actor = $this->access->requirePermission("sis:registration:manage");
         $this->transactions->run(function () use ($id, $assignmentId, $revision, $actor): void {
             $this->records->lock($id);
+            $this->registrar($actor);
             $student = $this->admissions->student($id);
             $this->check($this->revision($student), $revision);
             $assignment = $this->ownedAssignment($id, $assignmentId);
+            $this->programStatuses->verify($assignment);
             if ($assignment->status !== "active") {
                 throw new DomainException("The primary program must be active.");
             }
@@ -91,68 +94,33 @@ final readonly class StudentRecordService
         });
     }
 
-    public function programActivity(
-        EntityId $id,
-        EntityId $assignmentId,
-        bool $active,
-        string $revision,
-    ): void {
-        $actor = $this->access->requirePermission("sis:registration:manage");
-        $this->transactions->run(function () use ($id, $assignmentId, $active, $revision, $actor): void {
-            $this->records->lock($id);
-            $student = $this->admissions->student($id);
-            $assignment = $this->ownedAssignment($id, $assignmentId);
-            $this->check($this->programRevision($assignment), $revision);
-            $status = $active ? "active" : "closed";
-            if ($assignment->status === $status) {
-                return;
-            }
-            if (!$active && $assignment->programId->value === $student->programId->value) {
-                throw new DomainException("Choose another primary program before closing this assignment.");
-            }
-            if ($active) {
-                $this->assertNoActiveProgram($id, $assignment->programId, $assignmentId);
-            }
-            $this->records->saveAssignment(
-                new StudentProgram(
-                    $assignment->id,
-                    $id,
-                    $assignment->programId,
-                    $assignment->entryTermId,
-                    $status,
-                ),
-            );
-            $this->audit->record(
-                $actor,
-                $active ? "student.program_reopened" : "student.program_closed",
-                $id,
-            );
-        });
-    }
-
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
     public function programs(EntityId $id, ?EntityId $after = null): array
     {
-        $student = $this->read($id);
-        $rows = $this->records->assignments($id, $after, 51);
-        $more = count($rows) > 50;
-        $rows = array_slice($rows, 0, 50);
-        foreach ($rows as &$row) {
-            $assignment = new StudentProgram(
-                new EntityId($row["id"]),
-                $id,
-                new EntityId($row["program_id"]),
-                new EntityId($row["entry_term_id"]),
-                $row["status"],
-            );
-            $row["revision"] = $this->programRevision($assignment);
-            $row["is_primary"] =
-            $assignment->status === "active" &&
-            $assignment->programId->value === $student->programId->value;
-        }
-        unset($row);
+        return $this->transactions->run(function () use ($id, $after): array {
+            $this->records->lock($id);
+            $student = $this->read($id);
+            $rows = $this->records->assignments($id, $after, 51);
+            $more = count($rows) > 50;
+            $rows = array_slice($rows, 0, 50);
+            foreach ($rows as &$row) {
+                $assignment = new StudentProgram(
+                    new EntityId($row["id"]),
+                    $id,
+                    new EntityId($row["program_id"]),
+                    new EntityId($row["entry_term_id"]),
+                    $row["status"],
+                );
+                $this->programStatuses->verify($assignment);
+                $row["revision"] = $this->programRevision($assignment);
+                $row["is_primary"] =
+                    $assignment->status === "active" &&
+                    $assignment->programId->value === $student->programId->value;
+            }
+            unset($row);
 
-        return ["items" => $rows, "next_after" => $more ? (string) $rows[49]["id"] : null];
+            return ["items" => $rows, "next_after" => $more ? (string) $rows[49]["id"] : null];
+        });
     }
 
     private function read(EntityId $id): Student
@@ -177,18 +145,10 @@ final readonly class StudentRecordService
         return $assignment;
     }
 
-    private function assertNoActiveProgram(
-        EntityId $student,
-        EntityId $program,
-        ?EntityId $excluding = null,
-    ): void {
-        if ($this->records->activeProgram($student, $program, $excluding)) {
-            throw new ValidationException([
-                [
-                    "field" => "program_id",
-                    "message" => "This program already has an active assignment for the student.",
-                ],
-            ]);
+    private function registrar(EntityId $actor): void
+    {
+        if ($this->access->requirePermission("sis:registration:manage")->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException("The registrar actor changed.");
         }
     }
 

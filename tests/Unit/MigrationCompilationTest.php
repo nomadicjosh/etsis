@@ -72,6 +72,7 @@ require_once $registrationCompilerMigrations . "20261109000004_CreateSisTransfer
 
 require_once $registrationCompilerMigrations . "20261109000005_CreateSisRegistrationHistory.php";
 require_once $registrationCompilerMigrations . "20261109000006_CreateSisStudentActivity.php";
+require_once $registrationCompilerMigrations . "20261109000007_CreateSisProgramStatusStreams.php";
 final class MigrationCompilationTest extends TestCase
 {
     public function testTransferReadIndexesCompileAcrossDialectsAndRollbackOnSqlite(): void
@@ -224,7 +225,7 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(98))
+            ->expects(self::exactly(99))
             ->method("create")
             ->willReturnCallback(static function (
                 string $name,
@@ -280,6 +281,7 @@ final class MigrationCompilationTest extends TestCase
                 new CreateSisTransferCreditStreams("32"),
                 new CreateSisRegistrationHistory("33"),
                 new CreateSisStudentActivity("34"),
+                new CreateSisProgramStatusStreams("35"),
             ];
         foreach ($historyCases2 as $migration) {
             $migration->setObjectMap(new ArrayObject(["phpmig.adapter" => $adapter]));

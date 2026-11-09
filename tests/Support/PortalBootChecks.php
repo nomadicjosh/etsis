@@ -455,13 +455,19 @@ $programPage = json_decode(
 $selected = array_values(
     array_filter($programPage["items"], static fn($row) => $row["id"] === $assignmentId),
 )[0];
-if (
-    $teachingPost($studentPath . "/programs/" . $assignmentId . "/activity/", [
-        "active" => false,
-        "revision" => $selected["revision"],
-    ])->getStatusCode() !== 200
-) {
-    throw new RuntimeException("Program assignment closure failed.");
+$programStatusPath = $studentPath . "/programs/" . $assignmentId . "/status/";
+$programStatusReview = $teachingPost($programStatusPath . "review/", ["active" => false,
+    "revision" => $selected["revision"], "reason" => "Fictional program closure."]);
+if ($programStatusReview->getStatusCode() !== 200) {
+    throw new RuntimeException("Program status review failed.");
+}
+$programStatusToken = json_decode(
+    (string) $programStatusReview->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+)["review_token"];
+if ($teachingPost($programStatusPath . "commit/", ["review_token" => $programStatusToken])->getStatusCode() !== 200) {
+    throw new RuntimeException("Program status confirmation failed.");
 }
 
 // Restrictions and encrypted notes use the real provider, explicit operation IDs and CSRF protection.
