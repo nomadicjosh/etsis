@@ -28,7 +28,8 @@ final readonly class SisWorkspaceController
 
     public function page(string $section): ResponseInterface
     {
-        $sections = ['overview', 'people', 'students', 'applications', 'courses', 'sections', 'programs', 'terms',
+        $sections = ['overview', 'people', 'registration', 'students', 'applications', 'courses', 'sections',
+            'programs', 'terms',
             'rooms', 'bookings', 'employees', 'timesheets', 'accounts', 'journals', 'reports', 'campaigns',
             'sharedreports', 'grades', 'teaching', 'billing', 'ledger', 'institutions', 'external', 'equivalencies',
             'transcripts', 'portal', 'forms', 'imports', 'rules', 'access', 'apply'];

@@ -62,7 +62,8 @@ final readonly class SisTransferController
             $f->id('institution_id'),
             $f->id('term_id'),
             $f->date('completed_on'),
-            $f->integer('grade_rank', 0, 10000)
+            $f->integer('grade_rank', 0, 10000),
+            $f->text('revision', 64)
         );
 
         return new JsonResponse(['credit_id' => $id->value], 201);

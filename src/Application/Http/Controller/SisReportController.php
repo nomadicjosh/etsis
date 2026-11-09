@@ -8,6 +8,9 @@ use Application\Http\FormInput;
 use Domain\Reporting\Service\ReportService;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
+use Laminas\Diactoros\Response\TextResponse;
+use League\Csv\Writer;
+use League\Csv\EscapeFormula;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
 
@@ -52,8 +55,35 @@ final readonly class SisReportController
         return new JsonResponse(['status' => 'revoked']);
     }
 
-    public function run(string $id): ResponseInterface
+    public function show(string $id): ResponseInterface
     {
-        return new JsonResponse(['rows' => $this->service->run(new EntityId($id)), 'limit' => 500]);
+        return new JsonResponse($this->service->view(new EntityId($id)));
+    }
+
+    public function run(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->run(new EntityId($id), FormInput::from($request)->optionalId('after')));
+    }
+
+    public function export(ServerRequest $request, string $id): ResponseInterface
+    {
+        $page = $this->service->export(new EntityId($id), FormInput::from($request)->optionalId('after'));
+        $csv = Writer::fromString();
+        $csv->setEscape('');
+        $escape = new EscapeFormula("'", [' ', "\n"]);
+        $csv->addFormatter($escape->escapeRecord(...));
+        $csv->insertOne(['Institutional ID', 'Primary program', 'Entry term', 'Student activity']);
+        foreach ($page['items'] as $row) {
+            $csv->insertOne([$row['institutional_id'], $row['program_code'], $row['entry_term_code'],
+                $row['active'] ? 'Active' : 'Inactive']);
+        }
+
+        return new TextResponse($csv->toString(), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="student-report-page.csv"',
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "sandbox; default-src 'none'",
+        ]);
     }
 }

@@ -40,7 +40,8 @@ final readonly class SisTimesheetController
 
     public function decide(ServerRequest $request, string $id): ResponseInterface
     {
-        $this->service->decide(new EntityId($id), FormInput::from($request)->boolean('approve'));
+        $f = FormInput::from($request);
+        $this->service->decide(new EntityId($id), $f->requiredBoolean('approve'), $f->integer('version'));
 
         return new JsonResponse(['status' => 'decided']);
     }
@@ -48,22 +49,41 @@ final readonly class SisTimesheetController
     public function show(string $id): ResponseInterface
     {
         $entry = $this->service->get(new EntityId($id));
-        $profile = $this->service->employeeProfile($entry->employeeId);
+        $profile = $this->service->employeeDetails($entry->employeeId);
 
         return new JsonResponse(['id' => $entry->id->value, 'employee_id' => $entry->employeeId->value,
             'status' => $entry->status, 'version' => $entry->version,
-            'institutional_id' => $profile->person->institutionalId->value,
+            'institutional_id' => $profile['institutional_id'],
+            'given_name' => $profile['given_name'], 'family_name' => $profile['family_name'],
+            'job_title' => $profile['job_title'], 'is_self' => $profile['is_self'],
+            'duration_seconds' => $entry->work->endsAt->getTimestamp() - $entry->work->startsAt->getTimestamp(),
             'starts_at' => $entry->work->startsAt->format(DATE_ATOM),
                 'ends_at' => $entry->work->endsAt->format(DATE_ATOM)]);
     }
 
     public function employeeProfile(string $id): ResponseInterface
     {
-        $profile = $this->service->employeeProfile(new EntityId($id));
+        return new JsonResponse($this->service->employeeDetails(new EntityId($id)));
+    }
 
-        return new JsonResponse(['id' => $profile->employee->id->value,
-            'person_id' => $profile->employee->personId->value,
-            'institutional_id' => $profile->person->institutionalId->value,
-            'job_title' => $profile->employee->jobTitle, 'active' => $profile->employee->active]);
+    public function editEmployee(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $this->service->editEmployee(
+            new EntityId($id),
+            $f->text('job_title'),
+            $f->requiredBoolean('active'),
+            $f->text('revision', 64)
+        );
+
+        return new JsonResponse(['status' => 'saved']);
+    }
+
+    public function entries(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->entries(
+            new EntityId($id),
+            FormInput::from($request)->optionalId('after')
+        ));
     }
 }

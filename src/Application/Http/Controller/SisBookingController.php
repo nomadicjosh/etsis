@@ -38,16 +38,16 @@ final readonly class SisBookingController
         return new JsonResponse(['id' => $booking->id->value, 'status' => $booking->status], 201);
     }
 
-    public function approve(string $id): ResponseInterface
+    public function approve(ServerRequest $request, string $id): ResponseInterface
     {
-        $booking = $this->service->approve(new EntityId($id));
+        $booking = $this->service->approve(new EntityId($id), FormInput::from($request)->integer('version'));
 
         return new JsonResponse(['id' => $booking->id->value, 'status' => $booking->status]);
     }
 
-    public function cancel(string $id): ResponseInterface
+    public function cancel(ServerRequest $request, string $id): ResponseInterface
     {
-        $this->service->cancel(new EntityId($id));
+        $this->service->cancel(new EntityId($id), FormInput::from($request)->integer('version'));
 
         return new JsonResponse(['status' => 'cancelled']);
     }

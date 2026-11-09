@@ -101,6 +101,15 @@ final readonly class FormInput
         return !isset($this->data[$key]) || $this->data[$key] === '' ? null : $this->integer($key);
     }
 
+    public function requiredBoolean(string $key): bool
+    {
+        if (!array_key_exists($key, $this->data)) {
+            throw new InvalidArgumentException('A boolean value is required.');
+        }
+
+        return $this->boolean($key);
+    }
+
     public function boolean(string $key, bool $default = false): bool
     {
         if (!array_key_exists($key, $this->data)) {

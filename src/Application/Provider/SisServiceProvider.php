@@ -15,6 +15,42 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\DegreeAudit\Repository\CourseGroupRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCourseGroupRepository::class,
+            \Domain\DegreeAudit\Repository\RequirementsRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlRequirementsRepository::class,
+            \Domain\Registration\Repository\SectionCourseBindingRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlSectionCourseBindingRepository::class,
+            \Domain\Catalog\Repository\CourseTextProjection::class =>
+                \Infrastructure\Persistence\Repository\SqlCourseTextProjection::class,
+            \Domain\Shared\EventSourcing\HistoricalEventStore::class =>
+                \Infrastructure\EventSourcing\SqlHistoricalEventStore::class,
+            \Domain\AcademicCalendar\Repository\AcademicCalendarRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAcademicCalendarRepository::class,
+            \Domain\Catalog\Repository\OfferingTemplateRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlOfferingTemplateRepository::class,
+            \Domain\Reporting\Repository\ReportRequestRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlReportRequestRepository::class,
+            \Domain\Registration\Repository\CourseDropRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCourseDropRepository::class,
+            \Domain\Registration\Repository\DropPolicyRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlDropPolicyRepository::class,
+            \Domain\Transfer\Repository\TransferAwardRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlTransferAwardRepository::class,
+            \Domain\Student\Repository\HiatusImpactRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlHiatusImpactRepository::class,
+            \Domain\Student\Repository\HiatusRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlHiatusRepository::class,
+            \Domain\Registration\Repository\RegistrationBatchRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository::class,
+            \Domain\Transfer\Repository\TransferCatalogRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlTransferCatalogRepository::class,
+            \Domain\Student\Repository\RestrictionRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlRestrictionRepository::class,
+            \Domain\Student\Repository\StudentRecordRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlStudentRecordRepository::class,
+            \Domain\Scheduling\Repository\RoomRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlRoomRepository::class,
             \Domain\Portal\Repository\PaymentRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPaymentRepository::class,
             \Domain\Portal\Service\PaymentGateway::class =>
@@ -29,6 +65,22 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\EventSourcedUserRepository::class,
             \Domain\User\Service\UserProjection::class =>
                 \Infrastructure\Projection\ExpressiveDbalUserProjection::class,
+            \Domain\Finance\Repository\FinancialReviewRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlFinancialReviewRepository::class,
+            \Domain\Transcript\Repository\TranscriptRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlTranscriptRepository::class,
+            \Domain\Transcript\Service\TranscriptDocumentRenderer::class =>
+                \Infrastructure\Documents\ProtectedTranscriptRenderer::class,
+            \Domain\Reporting\Repository\RelationalReportRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlRelationalReportRepository::class,
+            \Domain\Reporting\Repository\RelationalReportSource::class =>
+                \Infrastructure\Reporting\SqlRelationalReportSource::class,
+            \Domain\Catalog\Service\CatalogEnrollment::class =>
+                \Domain\Catalog\Service\InitialCatalogEnrollment::class,
+            \Domain\Catalog\Repository\CatalogYearRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCatalogYearRepository::class,
+            \Domain\Catalog\Repository\CatalogWorkflowRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCatalogWorkflowRepository::class,
             \Domain\Catalog\Repository\CatalogRevisionRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository::class,
             \Domain\Workspace\Repository\OperationsRepository::class =>
@@ -64,10 +116,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\EventSourcedJournalRepository::class,
             \Domain\Shared\Persistence\UnitOfWork::class =>
                 \Infrastructure\Persistence\DatabaseUnitOfWork::class,
-            \Domain\Audit\Repository\AuditTrail::class =>
-                \Infrastructure\Persistence\SqlAuditTrail::class,
-            \Domain\Shared\Service\Clock::class =>
-                \Infrastructure\SystemClock::class,
+            \Domain\Audit\Repository\AuditTrail::class => \Infrastructure\Persistence\SqlAuditTrail::class,
+            \Domain\Shared\Service\Clock::class => \Infrastructure\SystemClock::class,
             \Domain\Registration\Repository\RegistrationRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationRepository::class,
             \Domain\Registration\Service\RegistrationBilling::class =>
@@ -82,6 +132,20 @@ final class SisServiceProvider extends CodefyServiceProvider
         foreach ($bindings as $port => $adapter) {
             $this->codefy->alias($port, $adapter);
         }
+        $this->codefy->delegate(\Domain\Transcript\ValueObject\TranscriptIssuer::class, function () {
+            return new \Domain\Transcript\ValueObject\TranscriptIssuer(
+                $this->codefy->configContainer->string("transcript.issuer_name", ""),
+                $this->codefy->configContainer->string("transcript.issuer_address", ""),
+            );
+        });
+        $this->codefy->delegate(\Domain\Student\ValueObject\HiatusPolicy::class, function () {
+            return new \Domain\Student\ValueObject\HiatusPolicy(
+                $this->codefy->configContainer->array(
+                    "student.hiatus_proposals",
+                    \Domain\Student\ValueObject\HiatusPolicy::DEFAULTS,
+                ),
+            );
+        });
         // Auth configuration translates messages through the bootstrapped application.
         // Resolve it only when the account service is requested, after provider registration.
         $this->codefy->delegate(\Domain\User\Service\PersonAccountService::class, function () {
@@ -92,7 +156,7 @@ final class SisServiceProvider extends CodefyServiceProvider
                 $this->codefy->make(\Domain\Shared\Persistence\UnitOfWork::class),
                 $this->codefy->make(\Domain\Audit\Repository\AuditTrail::class),
                 $this->codefy->make(\Domain\Person\Repository\PersonProfileRepository::class),
-                $this->codefy->configContainer->integer('auth.password_min_length', 26),
+                $this->codefy->configContainer->integer("auth.password_min_length", 26),
             );
         });
         $this->codefy->delegate(\Domain\User\Service\PersonAccountEditor::class, function () {
@@ -102,11 +166,11 @@ final class SisServiceProvider extends CodefyServiceProvider
                 $this->codefy->make(\Domain\User\Service\UserAccountAccess::class),
                 $this->codefy->make(StudentAccess::class),
                 $this->codefy->make(\Domain\Audit\Repository\AuditTrail::class),
-                $this->codefy->configContainer->integer('auth.password_min_length', 26),
+                $this->codefy->configContainer->integer("auth.password_min_length", 26),
             );
         });
         $this->codefy->define(\Infrastructure\SystemClock::class, [
-            ':timezone' => $this->codefy->configContainer->getConfigKey('app.timezone', 'UTC'),
+            ":timezone" => $this->codefy->configContainer->getConfigKey("app.timezone", "UTC"),
         ]);
         $this->codefy->alias(
             \Domain\Catalog\Repository\CatalogRepository::class,
