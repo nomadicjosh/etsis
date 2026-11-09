@@ -27,7 +27,7 @@ interface AdmissionsRepository
     public function saveDecision(AdmissionApplication $application, int $expectedVersion): void;
 
     /** Atomically mark the accepted application matriculated and create its student and program assignment. */
-    public function matriculate(AdmissionApplication $application, Student $student): void;
+    public function matriculate(AdmissionApplication $application, Student $student): \Domain\Student\StudentProgram;
 
     public function student(EntityId $id): Student;
 }

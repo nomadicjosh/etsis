@@ -35,15 +35,15 @@ final readonly class CampusService
         private MessageCipher $cipher,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
-        private Clock $clock
+        private Clock $clock,
     ) {
     }
 
     /** @return array<string, mixed> */
-    public function catalog(?EntityId $term, string $search = '', ?EntityId $after = null): array
+    public function catalog(?EntityId $term, string $search = "", ?EntityId $after = null): array
     {
         if (mb_strlen($search) > 80 || preg_match('/[\x00-\x1f\x7f]/', $search)) {
-            throw new InvalidArgumentException('Invalid catalog search.');
+            throw new InvalidArgumentException("Invalid catalog search.");
         }
         return $this->repository->sections($term, trim($search), $after);
     }
@@ -51,18 +51,21 @@ final readonly class CampusService
     /** @return array<string, mixed> */
     public function publicData(): array
     {
-        return ['terms' => $this->repository->terms(), 'programs' => $this->repository->programs(),
-            'news' => $this->repository->news(false)];
+        return [
+            "terms" => $this->repository->terms(),
+            "programs" => $this->repository->programs(),
+            "news" => $this->repository->news(false),
+        ];
     }
 
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
-    public function programs(string $search = '', ?EntityId $after = null): array
+    public function programs(string $search = "", ?EntityId $after = null): array
     {
         if (mb_strlen($search) > 80 || preg_match('/[\x00-\x1f\x7f]/', $search)) {
-            throw new InvalidArgumentException('Invalid program search.');
+            throw new InvalidArgumentException("Invalid program search.");
         }
         $items = $this->repository->programs(trim($search), $after);
-        return ['items' => $items, 'next_after' => count($items) === 100 ? $items[99]['id'] : null];
+        return ["items" => $items, "next_after" => count($items) === 100 ? $items[99]["id"] : null];
     }
 
     /** @return list<array<string, mixed>> */
@@ -81,7 +84,7 @@ final readonly class CampusService
             $this->access->authenticatedUserId();
         }
         if (preg_match('/^[a-z0-9][a-z0-9-]{0,79}$/D', $code) !== 1) {
-            throw new InvalidArgumentException('Invalid article.');
+            throw new InvalidArgumentException("Invalid article.");
         }
         return $this->repository->article($code, $campus);
     }
@@ -91,22 +94,25 @@ final readonly class CampusService
     {
         $user = $this->access->authenticatedUserId();
         $data = $this->repository->overview($user);
-        $person = new EntityId($data['person']['id']);
+        $person = new EntityId($data["person"]["id"]);
         $contact = $this->repository->contact($person);
-        $data['contact'] = $contact === null ? ['preferred_name' => '', 'phone' => '', 'address' => '', 'version' => 0]
-        : json_decode($this->cipher->open($contact['encrypted_contact']), true, flags: JSON_THROW_ON_ERROR)
-        + ['version' => (int) $contact['version']];
-        $data['news'] = $this->repository->news(true);
-        $data['transcript_requests'] = $this->repository->transcriptRequests($user);
-        $data['request_id'] = EntityId::generate()->value;
-        $data['payment_id'] = EntityId::generate()->value;
-        foreach ($data['students'] as &$student) {
-            $student['enrollments'] = $this->repository->enrollments(new EntityId($student['id']));
+        $data["contact"] =
+        $contact === null
+        ? ["preferred_name" => "", "phone" => "", "address" => "", "version" => 0]
+        : json_decode($this->cipher->open($contact["encrypted_contact"]), true, flags: JSON_THROW_ON_ERROR) + [
+                        "version" => (int) $contact["version"],
+                    ];
+        $data["news"] = $this->repository->news(true);
+        $data["transcript_requests"] = $this->repository->transcriptRequests($user);
+        $data["request_id"] = EntityId::generate()->value;
+        $data["payment_id"] = EntityId::generate()->value;
+        foreach ($data["students"] as &$student) {
+            $student["enrollments"] = $this->repository->enrollments(new EntityId($student["id"]));
         }
         unset($student);
-        foreach ($data['accounts'] as &$account) {
-            $statement = $this->accounts->account(new AccountId($account['id']));
-            $account['balance_minor'] = $statement->balance()->minor;
+        foreach ($data["accounts"] as &$account) {
+            $statement = $this->accounts->account(new AccountId($account["id"]));
+            $account["balance_minor"] = $statement->balance()->minor;
         }
         unset($account);
         return $data;
@@ -116,10 +122,10 @@ final readonly class CampusService
     {
         $user = $this->access->authenticatedUserId();
         $errors = [];
-        $fields = ['preferred_name' => [$preferredName, 80], 'phone' => [$phone, 40], 'address' => [$address, 500]];
+        $fields = ["preferred_name" => [$preferredName, 80], "phone" => [$phone, 40], "address" => [$address, 500]];
         foreach ($fields as $field => [$value, $limit]) {
             if (mb_strlen($value) > $limit || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $value)) {
-                $errors[] = ['field' => $field, 'message' => 'Enter a shorter valid value.'];
+                $errors[] = ["field" => $field, "message" => "Enter a shorter valid value."];
             }
         }
         if ($errors !== []) {
@@ -127,10 +133,21 @@ final readonly class CampusService
         }
         $this->transactions->run(function () use ($user, $preferredName, $phone, $address, $version): void {
             $person = $this->repository->personForUser($user);
-            $this->repository->saveContact($person, $this->cipher->seal(json_encode([
-                'preferred_name' => trim($preferredName), 'phone' => trim($phone), 'address' => trim($address),
-            ], JSON_THROW_ON_ERROR)), $version);
-            $this->audit->record($user, 'portal.contact_updated', $person);
+            $this->repository->saveContact(
+                $person,
+                $this->cipher->seal(
+                    json_encode(
+                        [
+                            "preferred_name" => trim($preferredName),
+                            "phone" => trim($phone),
+                            "address" => trim($address),
+                        ],
+                        JSON_THROW_ON_ERROR,
+                    ),
+                ),
+                $version,
+            );
+            $this->audit->record($user, "portal.contact_updated", $person);
         });
     }
 
@@ -144,6 +161,40 @@ final readonly class CampusService
     {
         $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
         $this->registration->drop($student, $section);
+    }
+    /** @return array<string, mixed> */
+    public function reviewDrop(EntityId $student, EntityId $section): array
+    {
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
+        return $this->registration->reviewDrop($student, $section);
+    }
+    /** @return array<string, mixed> */
+    public function dropReviewed(
+        EntityId $student,
+        EntityId $section,
+        EntityId $enrollment,
+        int $version,
+        EntityId $operation,
+        string $revision,
+        string $effective,
+    ): array {
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
+        return $this->registration->dropReviewed(
+            $student,
+            $section,
+            $enrollment,
+            $version,
+            $operation,
+            $revision,
+            $effective,
+        );
+    }
+    /** @return array<string, mixed> */
+    public function dropReceipt(EntityId $operation): array
+    {
+        $receipt = $this->registration->dropReceipt($operation);
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), new EntityId($receipt["student_id"]));
+        return $receipt;
     }
 
     /** @return list<array<string, mixed>> */
@@ -167,8 +218,12 @@ final readonly class CampusService
         $this->repository->requireOwnedAccount($user, new EntityId((string) $id));
         $account = $this->accounts->account($id);
         $this->repository->ownedStudent($user, $account->studentId());
-        return ['id' => (string) $id, 'currency' => $account->balance()->currency,
-            'balance_minor' => $account->balance()->minor, 'entries' => $account->entries()];
+        return [
+            "id" => (string) $id,
+            "currency" => $account->balance()->currency,
+            "balance_minor" => $account->balance()->minor,
+            "entries" => $account->entries(),
+        ];
     }
 
     public function requestTranscript(EntityId $request, EntityId $student, string $delivery, string $recipient): void
@@ -176,12 +231,13 @@ final readonly class CampusService
         $user = $this->access->authenticatedUserId();
         $this->repository->ownedStudent($user, $student);
         if (
-            !in_array($delivery, ['pickup', 'electronic'], true)
-            || ($delivery === 'electronic' && (strlen($recipient) > 191
-                || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false))
+            !in_array($delivery, ["pickup", "electronic"], true) ||
+            ($delivery === "electronic" &&
+                (strlen($recipient) > 191 || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false))
         ) {
-            throw new ValidationException([['field' => 'recipient',
-                'message' => 'Choose pickup or enter a valid recipient email.']]);
+            throw new ValidationException([
+                ["field" => "recipient", "message" => "Choose pickup or enter a valid recipient email."],
+            ]);
         }
         $this->transactions->run(function () use ($request, $student, $user, $delivery, $recipient): void {
             // Serialize retries and never turn a repeated click into duplicate requests.
@@ -194,26 +250,33 @@ final readonly class CampusService
             }
             if ($existing !== null) {
                 if (
-                    $existing['owner_user_id'] !== $user->value || $existing['student_id'] !== $student->value
-                    || $existing['delivery'] !== $delivery || $this->cipher->open($existing['encrypted_recipient'])
-                        !== ($delivery === 'electronic' ? $recipient : '')
+                    $existing["owner_user_id"] !== $user->value ||
+                    $existing["student_id"] !== $student->value ||
+                    $existing["delivery"] !== $delivery ||
+                    $this->cipher->open($existing["encrypted_recipient"]) !==
+                        ($delivery === "electronic" ? $recipient : "")
                 ) {
-                    throw new DomainException('This request identifier has already been used.');
+                    throw new DomainException("This request identifier has already been used.");
                 }
                 return;
             }
-            $this->repository->addTranscriptRequest($request, ['student_id' => $student->value,
-                'owner_user_id' => $user->value, 'delivery' => $delivery,
-                'encrypted_recipient' => $this->cipher->seal($delivery === 'electronic' ? $recipient : ''),
-                'status' => 'pending', 'requested_at' => $this->clock->now()->format('Y-m-d\TH:i:sP'), 'version' => 0]);
-            $this->audit->record($user, 'transcript.requested', $request);
+            $this->repository->addTranscriptRequest($request, [
+                "student_id" => $student->value,
+                "owner_user_id" => $user->value,
+                "delivery" => $delivery,
+                "encrypted_recipient" => $this->cipher->seal($delivery === "electronic" ? $recipient : ""),
+                "status" => "pending",
+                "requested_at" => $this->clock->now()->format("Y-m-d\TH:i:sP"),
+                "version" => 0,
+            ]);
+            $this->audit->record($user, "transcript.requested", $request);
         });
     }
 
     /** @return list<array<string, mixed>> */
     public function transcriptQueue(?EntityId $after = null): array
     {
-        $this->access->requirePermission('sis:transcript:manage');
+        $this->access->requirePermission("sis:transcript:manage");
         return $this->repository->transcriptRequests(null, $after);
     }
 
@@ -222,11 +285,11 @@ final readonly class CampusService
     {
         $user = $this->access->authenticatedUserId();
         $record = $this->repository->transcriptRequest($id);
-        if ($record['owner_user_id'] !== $user->value) {
-            $this->access->requirePermission('sis:transcript:manage');
+        if ($record["owner_user_id"] !== $user->value) {
+            $this->access->requirePermission("sis:transcript:manage");
         }
-        $record['recipient'] = $this->cipher->open($record['encrypted_recipient']);
-        unset($record['encrypted_recipient']);
+        $record["recipient"] = $this->cipher->open($record["encrypted_recipient"]);
+        unset($record["encrypted_recipient"]);
         return $record;
     }
 
@@ -235,27 +298,24 @@ final readonly class CampusService
         $this->transactions->run(function () use ($id, $status, $version): void {
             $actor = $this->access->authenticatedUserId();
             $record = $this->repository->transcriptRequest($id);
-            if ($status === 'cancelled') {
-                if ($record['owner_user_id'] !== $actor->value) {
-                    throw new AccessDeniedException('Access denied.');
+            if ($status === "cancelled") {
+                if ($record["owner_user_id"] !== $actor->value) {
+                    throw new AccessDeniedException("Access denied.");
                 }
-                if ($record['status'] !== 'pending') {
-                    throw new DomainException('Only pending requests can be cancelled.');
+                if ($record["status"] !== "pending") {
+                    throw new DomainException("Only pending requests can be cancelled.");
                 }
             } else {
-                $this->access->requirePermission('sis:transcript:manage');
-                if (
-                    !(($record['status'] === 'pending' && $status === 'ready')
-                    || ($record['status'] === 'ready' && $status === 'fulfilled'))
-                ) {
-                    throw new DomainException('This transcript transition is not permitted.');
-                }
+                $this->access->requirePermission("sis:transcript:manage");
+                throw new DomainException(
+                    "Prepare a protected document and record delivery evidence through transcript fulfillment.",
+                );
             }
-            if ((int) $record['version'] !== $version) {
-                throw new ConcurrentModificationException('Reload the current transcript request.');
+            if ((int) $record["version"] !== $version) {
+                throw new ConcurrentModificationException("Reload the current transcript request.");
             }
             $this->repository->changeTranscriptStatus($id, $status, $version);
-            $this->audit->record($actor, 'transcript.' . $status, $id);
+            $this->audit->record($actor, "transcript." . $status, $id);
         });
     }
 }

@@ -13,7 +13,6 @@ interface TransferRepository
     public function addInstitution(EntityId $id, string $code, string $name): void;
     public function addExternalCourse(EntityId $id, EntityId $institution, string $code, string $title): void;
     public function addEquivalency(TransferEquivalency $equivalency): void;
-    public function equivalency(EntityId $id): TransferEquivalency;
     public function award(
         EntityId $id,
         EntityId $student,

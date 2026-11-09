@@ -27,56 +27,73 @@ final readonly class RegistrationService
         private RegistrationBilling $billing,
         private AuditTrail $audit,
         private Clock $clock,
+        private CourseDropService $drops,
     ) {
     }
 
     public function register(EntityId $studentId, EntityId $sectionId, bool $byStaff = false): Enrollment
     {
         $actor = $this->access->authenticatedUserId();
-        $owner = $this->admissions->person($this->admissions->student($studentId)->personId)->ownerUserId;
-        $this->access->requireOwnerOrPermission($owner, 'sis:registration:manage');
+        $initialStudent = $this->admissions->student($studentId);
+        $owner = $this->admissions->person($initialStudent->personId)->ownerUserId;
+        $this->access->requireOwnerOrPermission($owner, "sis:registration:manage");
         if ($byStaff) {
-            $this->access->requirePermission('sis:registration:manage');
+            $this->access->requirePermission("sis:registration:manage");
         }
 
-        return $this->transactions->run(function () use ($studentId, $sectionId, $byStaff, $actor): Enrollment {
-            // Lock the student first to protect term limits across different sections, then seats for this section.
+        return $this->transactions->run(function () use (
+            $studentId,
+            $sectionId,
+            $byStaff,
+            $actor,
+            $initialStudent,
+        ): Enrollment {
+            // Acquire all eligibility locks before consistent reads: student, person holds, then section seats.
             $this->repository->lockStudent($studentId);
+            $this->repository->lockPerson($initialStudent->personId);
             $this->repository->lockSection($sectionId);
             $student = $this->admissions->student($studentId);
             $person = $this->admissions->person($student->personId);
-            $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:registration:manage');
+            $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:registration:manage");
             $byStaff = $byStaff || $person->ownerUserId?->value !== $actor->value;
             if ($byStaff) {
-                $this->access->requirePermission('sis:registration:manage');
+                $this->access->requirePermission("sis:registration:manage");
             }
             $section = $this->repository->section($sectionId);
-            $course = $this->repository->course($section->courseId);
+            $course = $this->repository->courseForSection($section);
             $window = $this->repository->window($section->termId);
             $existing = $this->repository->enrollment($studentId, $sectionId);
             if ($existing !== null) {
                 if ($existing->status->isEnrolled()) {
                     return $existing;
                 }
-                throw new DomainException('A closed enrollment requires registrar review before re-enrollment.');
+                throw new DomainException(
+                    "A closed enrollment requires registrar review before re-enrollment.",
+                );
             }
             if (
-                !$section->active || !$course->active
-                || $this->repository->sectionCount($sectionId) >= $section->capacity
+                !$section->active ||
+                !$course->active ||
+                $this->repository->sectionCount($sectionId) >= $section->capacity
             ) {
-                throw new DomainException('The section is inactive or full.');
+                throw new DomainException("The section is inactive or full.");
             }
             $now = $this->clock->now();
+            $blocking = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
             new RegistrationPolicy()->assertEligible(
                 $student,
-                $this->repository->restrictions($student->personId),
+                $blocking === null ? [] : [$blocking],
                 $now,
                 $byStaff,
                 $window->isOpen($now),
                 $section->webRegistration,
                 $this->repository->enrolledCount($studentId, $section->termId),
                 $window->courseLimit,
-                $this->repository->prerequisitesMet($studentId, $section->courseId)
+                $this->repository->prerequisitesMet(
+                    $studentId,
+                    $section->courseId,
+                    $course->publishedPrerequisites,
+                ),
             );
             $enrollment = new Enrollment(
                 EntityId::generate(),
@@ -85,11 +102,11 @@ final readonly class RegistrationService
                 $section->termId,
                 $byStaff ? RegistrationStatus::StaffRegistered : RegistrationStatus::SelfRegistered,
                 $now,
-                $now
+                $now,
             );
             $this->repository->addEnrollment($enrollment, $course);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
-            $this->audit->record($actor, 'registration.created', $enrollment->id);
+            $this->audit->record($actor, "registration.created", $enrollment->id);
 
             return $enrollment;
         });
@@ -97,23 +114,39 @@ final readonly class RegistrationService
 
     public function drop(EntityId $studentId, EntityId $sectionId): Enrollment
     {
-        $actor = $this->access->authenticatedUserId();
-        $owner = $this->admissions->person($this->admissions->student($studentId)->personId)->ownerUserId;
-        $this->access->requireOwnerOrPermission($owner, 'sis:registration:manage');
+        return $this->drops->drop($studentId, $sectionId);
+    }
 
-        return $this->transactions->run(function () use ($studentId, $sectionId, $actor): Enrollment {
-            $this->repository->lockStudent($studentId);
-            $this->repository->lockSection($sectionId);
-            $student = $this->admissions->student($studentId);
-            $person = $this->admissions->person($student->personId);
-            $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:registration:manage');
-            $enrollment = $this->repository->enrollment($studentId, $sectionId)
-                ?? throw new RecordNotFoundException('Enrollment not found.');
-            $dropped = $enrollment->drop($this->repository->term($enrollment->termId), $this->clock->now());
-            $this->repository->saveDrop($dropped, $enrollment->version);
-            $this->audit->record($actor, 'registration.dropped', $enrollment->id);
+    /** @return array<string, mixed> */
+    public function reviewDrop(EntityId $student, EntityId $section): array
+    {
+        return $this->drops->review($student, $section);
+    }
 
-            return $dropped;
-        });
+    /** @return array<string, mixed> */
+    public function dropReviewed(
+        EntityId $student,
+        EntityId $section,
+        EntityId $enrollment,
+        int $version,
+        EntityId $operation,
+        string $revision,
+        string $effective,
+    ): array {
+        return $this->drops->commit(
+            $student,
+            $section,
+            $enrollment,
+            $version,
+            $operation,
+            $revision,
+            $effective,
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public function dropReceipt(EntityId $operation): array
+    {
+        return $this->drops->receipt($operation);
     }
 }

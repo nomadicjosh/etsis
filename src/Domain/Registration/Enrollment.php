@@ -40,4 +40,24 @@ final readonly class Enrollment
             $this->version + 1
         );
     }
+
+    public function withdrawOnDate(Term $term, DateTimeImmutable $on): self
+    {
+        if (
+            !$this->status->isEnrolled() || $term->id->value !== $this->termId->value
+            || $on->format('Y-m-d') < $this->registeredAt->setTimezone($on->getTimezone())->format('Y-m-d')
+        ) {
+            throw new DomainException('A current enrollment and a valid effective date are required.');
+        }
+        return new self(
+            $this->id,
+            $this->studentId,
+            $this->sectionId,
+            $this->termId,
+            $term->dropStatusOn($on),
+            $this->registeredAt,
+            $on,
+            $this->version + 1
+        );
+    }
 }

@@ -16,23 +16,27 @@ interface RegistrationRepository
 {
     public function course(EntityId $id): Course;
     public function section(EntityId $id): Section;
+    public function courseForSection(Section $section): Course;
     public function term(EntityId $id): Term;
     public function window(EntityId $termId): RegistrationWindow;
     public function enrollment(EntityId $student, EntityId $section): ?Enrollment;
     public function lockStudent(EntityId $id): void;
+    public function lockPerson(EntityId $id): void;
     public function lockSection(EntityId $id): void;
+    public function lockCourse(EntityId $id): void;
     public function enrolledCount(EntityId $student, EntityId $term): int;
     public function sectionCount(EntityId $section): int;
-    public function prerequisitesMet(EntityId $student, EntityId $course): bool;
-    /** @return list<Restriction> */
-    public function restrictions(EntityId $person): array;
+    /** @param list<string>|null $required */
+    public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool;
+    public function blockingRestriction(
+        EntityId $person,
+        \DateTimeImmutable $on,
+        bool $byStaff,
+    ): ?Restriction;
     public function addCourse(Course $course): void;
     public function addSection(Section $section): void;
     public function configureWindow(EntityId $termId, RegistrationWindow $window): void;
     public function removePrerequisite(EntityId $course, EntityId $required): void;
     public function addPrerequisite(EntityId $course, EntityId $required): void;
-    public function addRestriction(Restriction $restriction): void;
-    public function endRestriction(EntityId $id, \DateTimeImmutable $on): EntityId;
     public function addEnrollment(Enrollment $enrollment, Course $course): void;
-    public function saveDrop(Enrollment $enrollment, int $expectedVersion): void;
 }

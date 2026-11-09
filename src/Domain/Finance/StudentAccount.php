@@ -29,11 +29,17 @@ final class StudentAccount extends EventSourcedAggregate
     {
         $money = new Money(0, $currency);
         $account = self::root($id);
-        $account->recordThat(StudentAccountWasOpened::occur($id, [
-            'student_id' => $studentId->value,
-            'term_id' => $termId->value,
-            'currency' => $money->currency,
-        ], [Metadata::AGGREGATE_TYPE => 'student_account']));
+        $account->recordThat(
+            StudentAccountWasOpened::occur(
+                $id,
+                [
+                    "student_id" => $studentId->value,
+                    "term_id" => $termId->value,
+                    "currency" => $money->currency,
+                ],
+                [Metadata::AGGREGATE_TYPE => "student_account"],
+            ),
+        );
 
         return $account;
     }
@@ -59,74 +65,97 @@ final class StudentAccount extends EventSourcedAggregate
     {
         $entries = [];
         foreach ($this->operations as $id => $entry) {
-            $entries[] = ['operation_id' => $id] + $entry + ['reversed' => isset($this->reversedOperations[$id])];
+            $entries[] = ["operation_id" => $id] + $entry + ["reversed" => isset($this->reversedOperations[$id])];
         }
 
         return $entries;
     }
 
+    /** @return array{operation_id: string, type: string, minor: int, currency: string, reversed: bool}|null */
+    public function entry(EntityId $operation): ?array
+    {
+        $entry = $this->operations[$operation->value] ?? null;
+        return $entry === null
+        ? null
+        : ["operation_id" => $operation->value] +
+        $entry + ["reversed" => isset($this->reversedOperations[$operation->value])];
+    }
+
     public function post(EntityId $operationId, EntryType $type, Money $amount, EntityId $actorId): void
     {
         if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
-            throw new DomainException('A positive amount in the account currency is required.');
+            throw new DomainException("A positive amount in the account currency is required.");
         }
-        $entry = ['type' => $type->value, 'minor' => $amount->minor, 'currency' => $amount->currency];
+        $entry = ["type" => $type->value, "minor" => $amount->minor, "currency" => $amount->currency];
         if (isset($this->operations[$operationId->value])) {
             if ($this->operations[$operationId->value] !== $entry) {
-                throw new DomainException('The operation identifier has already been used.');
+                throw new DomainException("The operation identifier has already been used.");
             }
             return;
         }
         if ($type === EntryType::Refund && $amount->minor > -$this->balance->minor) {
-            throw new DomainException('A refund cannot exceed available credit.');
+            throw new DomainException("A refund cannot exceed available credit.");
         }
         $delta = $type === EntryType::Payment ? -$amount->minor : $amount->minor;
         $this->balance->add(new Money($delta, $amount->currency));
-        $this->recordThat(AccountEntryWasPosted::occur($this->aggregateId(), $entry + [
-            'operation_id' => $operationId->value,
-            'actor_id' => $actorId->value,
-        ], [Metadata::AGGREGATE_TYPE => 'student_account']));
+        $this->recordThat(
+            AccountEntryWasPosted::occur(
+                $this->aggregateId(),
+                $entry + [
+                    "operation_id" => $operationId->value,
+                    "actor_id" => $actorId->value,
+                ],
+                [Metadata::AGGREGATE_TYPE => "student_account"],
+            ),
+        );
     }
 
     public function reverse(EntityId $operationId, EntityId $actorId): void
     {
-        $entry = $this->operations[$operationId->value]
-        ?? throw new DomainException('The original entry does not exist.');
+        $entry =
+        $this->operations[$operationId->value] ?? throw new DomainException("The original entry does not exist.");
         if (isset($this->reversedOperations[$operationId->value])) {
             return;
         }
-        $delta = $entry['type'] === EntryType::Payment->value ? $entry['minor'] : -$entry['minor'];
-        $this->balance->add(new Money($delta, $entry['currency']));
-        $this->recordThat(AccountEntryWasReversed::occur($this->aggregateId(), [
-            'operation_id' => $operationId->value, 'actor_id' => $actorId->value,
-        ], [Metadata::AGGREGATE_TYPE => 'student_account']));
+        $delta = $entry["type"] === EntryType::Payment->value ? $entry["minor"] : -$entry["minor"];
+        $this->balance->add(new Money($delta, $entry["currency"]));
+        $this->recordThat(
+            AccountEntryWasReversed::occur(
+                $this->aggregateId(),
+                [
+                    "operation_id" => $operationId->value,
+                    "actor_id" => $actorId->value,
+                ],
+                [Metadata::AGGREGATE_TYPE => "student_account"],
+            ),
+        );
     }
 
     protected function whenAccountEntryWasReversed(AccountEntryWasReversed $event): void
     {
-        $operation = $event->payload()['operation_id'];
+        $operation = $event->payload()["operation_id"];
         $entry = $this->operations[$operation];
-        $delta = $entry['type'] === EntryType::Payment->value ? $entry['minor'] : -$entry['minor'];
-        $this->balance = $this->balance->add(new Money($delta, $entry['currency']));
+        $delta = $entry["type"] === EntryType::Payment->value ? $entry["minor"] : -$entry["minor"];
+        $this->balance = $this->balance->add(new Money($delta, $entry["currency"]));
         $this->reversedOperations[$operation] = true;
     }
 
     protected function whenStudentAccountWasOpened(StudentAccountWasOpened $event): void
     {
-        $this->studentId = new EntityId($event->payload()['student_id']);
-        $this->termId = new EntityId($event->payload()['term_id']);
-        $this->balance = new Money(0, $event->payload()['currency']);
+        $this->studentId = new EntityId($event->payload()["student_id"]);
+        $this->termId = new EntityId($event->payload()["term_id"]);
+        $this->balance = new Money(0, $event->payload()["currency"]);
     }
 
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
-        $this->operations[$payload['operation_id']] = [
-            'type' => $payload['type'],
-            'minor' => $payload['minor'],
-            'currency' => $payload['currency'],
+        $this->operations[$payload["operation_id"]] = [
+            "type" => $payload["type"],
+            "minor" => $payload["minor"],
+            "currency" => $payload["currency"],
         ];
-        $delta = $payload['type'] === EntryType::Payment->value ? -$payload['minor'] : $payload['minor'];
-        $this->balance = $this->balance->add(new Money($delta, $payload['currency']));
+        $delta = $payload["type"] === EntryType::Payment->value ? -$payload["minor"] : $payload["minor"];
+        $this->balance = $this->balance->add(new Money($delta, $payload["currency"]));
     }
 }

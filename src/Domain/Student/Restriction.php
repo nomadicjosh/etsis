@@ -11,6 +11,8 @@ use InvalidArgumentException;
 
 final readonly class Restriction
 {
+    public const int REGISTRATION_BLOCKING_SEVERITY = 99;
+
     public function __construct(
         public EntityId $id,
         public EntityId $personId,
@@ -19,14 +21,28 @@ final readonly class Restriction
         public DateRange $dates,
         public bool $blocksStaffRegistration = false,
     ) {
-        if (trim($code) === '' || strlen($code) > 22 || $severity < 0) {
+        if (
+            !mb_check_encoding($code, 'UTF-8') || trim($code) === '' || mb_strlen($code) > 22
+            || $severity < 0 || $severity > 1000
+            || preg_match('/[\x00-\x1F\x7F]/', $code)
+        ) {
             throw new InvalidArgumentException('A valid restriction code and severity are required.');
         }
     }
 
     public function blocksRegistration(DateTimeImmutable $on, bool $byStaff): bool
     {
-        return $this->dates->contains($on)
-        && ($byStaff ? $this->blocksStaffRegistration : $this->severity >= 99);
+        return $this->state($on) === 'active'
+        && ($byStaff ? $this->blocksStaffRegistration : $this->severity >= self::REGISTRATION_BLOCKING_SEVERITY);
+    }
+
+    public function state(DateTimeImmutable $on): string
+    {
+        $date = $on->format('Y-m-d');
+        if ($date < $this->dates->start->format('Y-m-d')) {
+            return 'scheduled';
+        }
+
+        return $this->dates->end !== null && $date > $this->dates->end->format('Y-m-d') ? 'ended' : 'active';
     }
 }

@@ -13,7 +13,6 @@ use Domain\Registration\Section;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
-use Domain\Student\Restriction;
 
 final readonly class RegistrarCatalogService
 {
@@ -59,6 +58,11 @@ final readonly class RegistrarCatalogService
             throw new DomainException('A course cannot require itself.');
         }
         $this->transactions->run(function () use ($course, $required, $actor): void {
+            $ids = [$course->value, $required->value];
+            sort($ids, SORT_STRING);
+            foreach ($ids as $id) {
+                $this->repository->lockCourse(new EntityId($id));
+            }
             $this->repository->addPrerequisite($course, $required);
             $this->audit->record($actor, 'course.prerequisite_added', $course);
         });
@@ -68,26 +72,13 @@ final readonly class RegistrarCatalogService
     {
         $actor = $this->access->requirePermission('sis:catalog:manage');
         $this->transactions->run(function () use ($course, $required, $actor): void {
+            $ids = [$course->value, $required->value];
+            sort($ids, SORT_STRING);
+            foreach ($ids as $id) {
+                $this->repository->lockCourse(new EntityId($id));
+            }
             $this->repository->removePrerequisite($course, $required);
             $this->audit->record($actor, 'course.prerequisite_removed', $course);
-        });
-    }
-
-    public function restrict(Restriction $restriction): void
-    {
-        $actor = $this->access->requirePermission('sis:registration:manage');
-        $this->transactions->run(function () use ($restriction, $actor): void {
-            $this->repository->addRestriction($restriction);
-            $this->audit->record($actor, 'student.restricted', $restriction->personId);
-        });
-    }
-
-    public function endRestriction(EntityId $id, \DateTimeImmutable $on): void
-    {
-        $actor = $this->access->requirePermission('sis:registration:manage');
-        $this->transactions->run(function () use ($id, $on, $actor): void {
-            $person = $this->repository->endRestriction($id, $on);
-            $this->audit->record($actor, 'student.restriction_ended', $person);
         });
     }
 }

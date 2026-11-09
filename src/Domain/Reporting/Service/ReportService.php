@@ -8,6 +8,7 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Reporting\Repository\ReportRepository;
 use Domain\Reporting\StudentReport;
 use Domain\Shared\Persistence\UnitOfWork;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 
@@ -73,16 +74,77 @@ final readonly class ReportService
         return ['items' => $rows, 'next_after' => $more ? (string) $rows[49]['id'] : null];
     }
 
-    /** @return list<array<string, mixed>> */
-    public function run(EntityId $id): array
+    /** @return array<string, mixed> */
+    public function view(EntityId $id): array
+    {
+        $this->access->authenticatedUserId();
+        $report = $this->repository->get($id);
+        $manage = $this->canManage($report);
+        $run = true;
+        try {
+            $this->requireRun($report);
+        } catch (AccessDeniedException) {
+            $run = false;
+        }
+        if (!$manage && !$run) {
+            throw new AccessDeniedException('Access denied.');
+        }
+
+        return $this->repository->describe($id) + ['can_manage' => $manage, 'can_run' => $run];
+    }
+
+    private function canManage(StudentReport $report): bool
+    {
+        try {
+            $this->access->requirePermission('sis:reporting:manage');
+            $this->access->requireOwnerOrPermission($report->ownerUserId, 'sis:reporting:admin');
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+
+    private function requireRun(StudentReport $report): EntityId
     {
         $actor = $this->access->requirePermission('sis:reporting:run');
-        $report = $this->repository->get($id);
-        if ($report->ownerUserId->value !== $actor->value && !$this->repository->isSharedWith($id, $actor)) {
+        if ($report->ownerUserId->value !== $actor->value && !$this->repository->isSharedWith($report->id, $actor)) {
             $this->access->requirePermission('sis:reporting:admin');
         }
-        $this->audit->record($actor, 'report.executed', $id);
 
-        return $this->repository->run($report);
+        return $actor;
+    }
+
+    /** @return array{items: list<array<string, mixed>>, next_after: ?string, limit: int} */
+    public function run(EntityId $id, ?EntityId $after = null): array
+    {
+        return $this->results($id, $after, 'report.executed');
+    }
+
+    /** @return array{items: list<array<string, mixed>>, next_after: ?string, limit: int} */
+    public function export(EntityId $id, ?EntityId $after = null): array
+    {
+        return $this->results($id, $after, 'report.page_exported');
+    }
+
+    /** @return array{items: list<array<string, mixed>>, next_after: ?string, limit: int} */
+    private function results(EntityId $id, ?EntityId $after, string $action): array
+    {
+        $this->access->requirePermission('sis:reporting:run');
+        return $this->transactions->run(function () use ($id, $after, $action): array {
+            // Sharing changes take this lock too; authorize and read only after acquiring it.
+            $this->repository->lock($id);
+            $report = $this->repository->get($id);
+            $actor = $this->requireRun($report);
+            if ($this->repository->isRelational($id)) {
+                throw new \Domain\Shared\Exception\ValidationException([['field' => 'report',
+                    'message' => 'Use Report Studio to execute this relational definition.']]);
+            }
+            $rows = $this->repository->run($report, $after, 51);
+            $more = count($rows) > 50;
+            $rows = array_slice($rows, 0, 50);
+            $this->audit->record($actor, $action, $id);
+
+            return ['items' => $rows, 'next_after' => $more ? (string) $rows[49]['student_id'] : null, 'limit' => 50];
+        });
     }
 }

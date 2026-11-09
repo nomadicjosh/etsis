@@ -9,5 +9,6 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface RegistrationBilling
 {
+    public function reverseCourseCharge(EntityId $student, EntityId $term, EntityId $enrollment, EntityId $actor): bool;
     public function charge(EntityId $student, EntityId $term, EntityId $operation, Money $fee, EntityId $actor): void;
 }

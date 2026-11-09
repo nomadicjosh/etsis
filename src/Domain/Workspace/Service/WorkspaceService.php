@@ -15,7 +15,8 @@ final readonly class WorkspaceService
 {
     public const array DATASETS = [
         'people' => 'sis:person:manage', 'applications' => 'sis:admissions:manage',
-        'students' => 'sis:student:read', 'programs' => '', 'terms' => '',
+        'registration' => 'sis:registration:manage', 'registrationstudents' => 'sis:registration:manage',
+        'transferstudents' => 'sis:transfer:manage', 'students' => 'sis:student:read', 'programs' => '', 'terms' => '',
         'courses' => 'sis:catalog:manage', 'sections' => 'sis:registration:manage',
         'rooms' => 'sis:scheduling:manage', 'bookings' => 'sis:scheduling:manage',
         'employees' => 'sis:hr:manage', 'timesheets' => 'sis:hr:manage',
@@ -73,9 +74,9 @@ final readonly class WorkspaceService
         ) {
             throw new InvalidArgumentException('Invalid workspace search.');
         }
-        $catalogSections = $dataset === 'sections'
-        && $this->permissions->allows($actor->value, 'sis:catalog:manage');
-        if (self::DATASETS[$dataset] !== '' && !$catalogSections) {
+        $catalogRead = ($dataset === 'sections' && $this->permissions->allows($actor->value, 'sis:catalog:manage'))
+        || ($dataset === 'courses' && $this->permissions->allows($actor->value, 'sis:transfer:manage'));
+        if (self::DATASETS[$dataset] !== '' && !$catalogRead) {
             $this->access->requirePermission(self::DATASETS[$dataset]);
         }
         $owner = in_array(

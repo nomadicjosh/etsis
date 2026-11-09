@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Registration;
 
 use Domain\Finance\ValueObject\Money;
+use Domain\Registration\Enum\DeliveryMode;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
@@ -20,6 +21,7 @@ final readonly class Section
         public bool $active,
         public bool $webRegistration,
         public Money $fee,
+        public DeliveryMode $deliveryMode = DeliveryMode::Unspecified,
     ) {
         if (trim($code) === '' || strlen($code) > 80 || $capacity < 1 || $capacity > 100000 || $fee->minor < 0) {
             throw new InvalidArgumentException('A section requires a code, positive capacity and nonnegative fees.');

@@ -41,10 +41,6 @@ final readonly class OperationsService
                 $this->access->requirePermission('sis:registration:manage');
                 $this->admissions->student($id);
                 break;
-            case 'restrictions':
-                $this->access->requirePermission('sis:registration:manage');
-                $this->admissions->person($id);
-                break;
             case 'prerequisites':
             case 'window':
                 $this->access->requirePermission('sis:catalog:manage');

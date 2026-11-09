@@ -12,6 +12,8 @@ use InvalidArgumentException;
 
 final readonly class TransferEquivalency
 {
+    public string $awardedGrade;
+
     public function __construct(
         public EntityId $id,
         public EntityId $externalInstitutionId,
@@ -20,12 +22,13 @@ final readonly class TransferEquivalency
         public DateRange $effectiveDates,
         public int $minimumGradeRank,
         public int $creditThousandths,
-        public string $awardedGrade,
+        string $awardedGrade,
     ) {
+        $this->awardedGrade = strtoupper(trim($awardedGrade));
         if (
             $creditThousandths < 1
             || $creditThousandths > 999_999
-            || trim($awardedGrade) === ''
+            || preg_match('/^[A-Z0-9+.-]{1,12}$/D', $this->awardedGrade) !== 1
             || $minimumGradeRank < 0 || $minimumGradeRank > 10000
         ) {
             throw new InvalidArgumentException('Positive transfer credits and an awarded grade are required.');
@@ -35,7 +38,8 @@ final readonly class TransferEquivalency
     public function assertEligible(EntityId $institutionId, DateTimeImmutable $completedOn, int $gradeRank): void
     {
         if (
-            $institutionId->value !== $this->externalInstitutionId->value
+            $gradeRank < 0 || $gradeRank > 10000
+            || $institutionId->value !== $this->externalInstitutionId->value
             || $completedOn->format('Y-m-d') < $this->effectiveDates->start->format('Y-m-d')
             || ($this->effectiveDates->end !== null
                 && $completedOn->format('Y-m-d') > $this->effectiveDates->end->format('Y-m-d'))

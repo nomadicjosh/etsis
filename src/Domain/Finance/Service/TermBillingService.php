@@ -63,6 +63,9 @@ final readonly class TermBillingService
         $this->transactions->run(function () use ($term, $students, $actor): void {
             foreach ($students as $student) {
                 $this->registration->lockStudent($student);
+            }
+            // Read program eligibility only after acquiring the entire ordered lock set.
+            foreach ($students as $student) {
                 $this->billing->charge($student, $term, EntityId::generate(), new Money(0, 'USD'), $actor);
                 $this->audit->record($actor, 'billing.generated', $student);
             }

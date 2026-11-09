@@ -25,6 +25,7 @@ final readonly class AdmissionsService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private InstitutionalIdGenerator $identifiers,
+        private \Domain\Catalog\Service\CatalogEnrollment $catalogs,
     ) {
     }
 
@@ -139,7 +140,8 @@ final readonly class AdmissionsService
         $application = $this->repository->application($applicationId);
         $student = $application->matriculate(EntityId::generate());
         $this->transactions->run(function () use ($application, $student, $actor): void {
-            $this->repository->matriculate($application, $student);
+            $assignment = $this->repository->matriculate($application, $student);
+            $this->catalogs->initialize($assignment, $actor);
             $this->audit->record($actor, 'student.matriculated', $student->id);
         });
 

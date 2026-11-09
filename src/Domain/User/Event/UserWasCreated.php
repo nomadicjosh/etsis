@@ -7,12 +7,13 @@ namespace Domain\User\Event;
 use Codefy\Domain\EventSourcing\AggregateChanged;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Codefy\Domain\Metadata;
+use DateInvalidTimeZoneException;
+use DateMalformedStringException;
 use Domain\User\ValueObject\UserId;
 use Domain\User\ValueObject\Username;
 use Domain\User\ValueObject\UserRole;
 use Domain\User\ValueObject\UserToken;
 use Qubus\Exception\Data\TypeException;
-use Qubus\Support\DateTime\QubusDateTimeImmutable;
 use Qubus\ValueObjects\Person\Name;
 use Qubus\ValueObjects\StringLiteral\StringLiteral;
 use Qubus\ValueObjects\Web\EmailAddress;
@@ -49,21 +50,21 @@ class UserWasCreated extends AggregateChanged
         $event = self::occur(
             aggregateId: $userId,
             payload: [
-                'user_id' => $userId->toNative(),
-                'person_id' => $personId?->value,
-                'username' => $username->toNative(),
-                'token' => $token->toNative(),
-                'first_name' => $name->getFirstName()->toNative(),
-                'middle_name' => $name->getMiddleName()->toNative(),
-                'last_name' => $name->getLastName()->toNative(),
-                'email' => $emailAddress->toNative(),
-                'role' => $role->toNative(),
-                'password' => $password->toNative(),
-                'created_on' => $createdOn,
+                "user_id" => $userId->toNative(),
+                "person_id" => $personId?->value,
+                "username" => $username->toNative(),
+                "token" => $token->toNative(),
+                "first_name" => $name->getFirstName()->toNative(),
+                "middle_name" => $name->getMiddleName()->toNative(),
+                "last_name" => $name->getLastName()->toNative(),
+                "email" => $emailAddress->toNative(),
+                "role" => $role->toNative(),
+                "password" => $password->toNative(),
+                "created_on" => $createdOn,
             ],
             metadata: [
-                Metadata::AGGREGATE_TYPE => 'user'
-            ]
+                Metadata::AGGREGATE_TYPE => "user",
+            ],
         );
 
         $event->userId = $userId;
@@ -84,7 +85,7 @@ class UserWasCreated extends AggregateChanged
     public function userId(): UserId
     {
         /** @var string $userId */
-        $userId = $this->payload()['user_id'];
+        $userId = $this->payload()["user_id"];
 
         if (!isset($this->userId)) {
             $this->userId = UserId::fromString(userId: $userId);
@@ -96,7 +97,7 @@ class UserWasCreated extends AggregateChanged
     public function username(): Username
     {
         /** @var string $username */
-        $username = $this->payload()['username'];
+        $username = $this->payload()["username"];
 
         if (!isset($this->username)) {
             $this->username = Username::fromNative($username);
@@ -111,7 +112,7 @@ class UserWasCreated extends AggregateChanged
     public function token(): UserToken
     {
         /** @var string $token */
-        $token = $this->payload()['token'];
+        $token = $this->payload()["token"];
 
         if (!isset($this->token)) {
             $this->token = UserToken::fromString($token);
@@ -122,7 +123,11 @@ class UserWasCreated extends AggregateChanged
     public function name(): Name
     {
         /** @var array<string> $name */
-        $name = [$this->payload()['first_name'], $this->payload()['middle_name'], $this->payload()['last_name']];
+        $name = [
+            $this->payload()["first_name"],
+            $this->payload()["middle_name"],
+            $this->payload()["last_name"],
+        ];
 
         if (!isset($this->name)) {
             $this->name = Name::fromNative($name[0], $name[1], $name[2]);
@@ -134,7 +139,7 @@ class UserWasCreated extends AggregateChanged
     public function emailAddress(): EmailAddress
     {
         /** @var string $email */
-        $email = $this->payload()['email'];
+        $email = $this->payload()["email"];
 
         if (!isset($this->emailAddress)) {
             $this->emailAddress = EmailAddress::fromNative($email);
@@ -146,7 +151,7 @@ class UserWasCreated extends AggregateChanged
     public function role(): UserRole
     {
         /** @var string $role */
-        $role = $this->payload()['role'];
+        $role = $this->payload()["role"];
 
         if (!isset($this->role)) {
             $this->role = UserRole::fromNative($role);
@@ -158,7 +163,7 @@ class UserWasCreated extends AggregateChanged
     public function password(): StringLiteral
     {
         /** @var string $password */
-        $password = $this->payload()['password'];
+        $password = $this->payload()["password"];
 
         if (!isset($this->password)) {
             $this->password = StringLiteral::fromNative($password);
@@ -167,10 +172,33 @@ class UserWasCreated extends AggregateChanged
         return $this->password;
     }
 
+    /**
+     * @throws DateMalformedStringException
+     * @throws DateInvalidTimeZoneException
+     */
     public function createdOn(): \DateTimeInterface
     {
         if (!isset($this->createdOn)) {
-            $this->createdOn = QubusDateTimeImmutable::now();
+            $stored = $this->payload()["created_on"];
+            if ($stored instanceof \DateTimeInterface) {
+                $this->createdOn = $stored;
+            } elseif (
+                is_array($stored) &&
+                is_string($stored["date"] ?? null) &&
+                is_string($stored["timezone"] ?? null)
+            ) {
+                $this->createdOn = new \DateTimeImmutable(
+                    $stored["date"],
+                    new \DateTimeZone($stored["timezone"]),
+                );
+            } elseif (is_string($stored)) {
+                $this->createdOn = new \DateTimeImmutable(
+                    $stored,
+                    new \DateTimeZone("UTC"),
+                );
+            } else {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
         }
 
         return $this->createdOn;
