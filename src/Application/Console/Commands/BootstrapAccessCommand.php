@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Application\Console;
+namespace Application\Console\Commands;
 
 use Domain\Access\Service\BootstrapAccess;
 use Domain\Shared\ValueObject\EntityId;
