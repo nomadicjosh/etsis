@@ -64,6 +64,7 @@ final readonly class SisTransferAwardController
             $f->optionalInteger("credits_milli"),
             $f->optionalText("awarded_grade", 12),
             $f->text("reason", 10000),
+            $f->optionalText("effective_on", 10),
         );
     }
 }

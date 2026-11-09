@@ -16,7 +16,6 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Repository\TransferAwardRepository;
-use Domain\Transfer\Repository\TransferCatalogRepository;
 use Domain\Transfer\ValueObject\AwardChange;
 use DomainException;
 
@@ -24,13 +23,13 @@ final readonly class TransferAwardService
 {
     public function __construct(
         private TransferAwardRepository $awards,
-        private TransferCatalogRepository $catalog,
         private RegistrationRepository $registration,
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private TransferCreditLedger $credits,
     ) {
     }
 
@@ -45,25 +44,25 @@ final readonly class TransferAwardService
     public function view(EntityId $student, EntityId $award): array
     {
         $actor = $this->authorize();
-        $record = $this->awards->get($student, $award);
+        $record = $this->stableRecord($student, $award);
         $this->audit->record($actor, "transfer.award_reviewed", $award);
         return $record;
     }
 
     /** @return array<string, mixed> */
-    public function preview(EntityId $student, EntityId $award, AwardChange $change): array
+    public function preview(EntityId $student, EntityId $award, #[\SensitiveParameter] AwardChange $change): array
     {
         $actor = $this->authorize();
-        $initial = $this->awards->get($student, $award);
+        $initial = $this->stableRecord($student, $award);
         $grade =
         $change->grade === null
         ? null
         : $this->awards->grade(
             $change->grade,
             $student,
-            $initial["credit"]["grade_id"] === null
+            $initial["retained_grade_id"] === null
                         ? null
-                        : new EntityId($initial["credit"]["grade_id"]),
+                        : new EntityId($initial["retained_grade_id"]),
         );
         return $this->transactions->run(function () use (
             $student,
@@ -74,6 +73,7 @@ final readonly class TransferAwardService
             $grade,
         ): array {
             $this->lock($initial, $grade);
+            $this->authorizedActor($actor);
             $plan = $this->plan($this->lockedRecord($student, $award, $initial), $change, $grade);
             $this->audit->record($actor, "transfer.correction_previewed", $award);
             return $plan + ["revision" => $this->revision($plan)];
@@ -85,11 +85,11 @@ final readonly class TransferAwardService
         EntityId $student,
         EntityId $award,
         EntityId $operation,
-        AwardChange $change,
+        #[\SensitiveParameter] AwardChange $change,
         string $revision,
     ): array {
         $actor = $this->authorize();
-        $initial = $this->awards->get($student, $award);
+        $initial = $this->stableRecord($student, $award);
         // Resolve lock identities outside the transaction; lock the complete context before any consistent read.
         $seen = $this->awards->action($operation);
         $grade =
@@ -98,9 +98,9 @@ final readonly class TransferAwardService
         : $this->awards->grade(
             $change->grade,
             $student,
-            $initial["credit"]["grade_id"] === null
+            $initial["retained_grade_id"] === null
                         ? null
-                        : new EntityId($initial["credit"]["grade_id"]),
+                        : new EntityId($initial["retained_grade_id"]),
         );
         return $this->transactions->run(function () use (
             $student,
@@ -113,6 +113,7 @@ final readonly class TransferAwardService
             $grade,
         ): array {
             $this->lock($initial, $grade);
+            $this->authorizedActor($actor);
             $previous = $this->awards->action($operation);
             if ($previous !== null) {
                 if ($previous["award_id"] !== $award->value || $previous["actor_id"] !== $actor->value) {
@@ -121,11 +122,18 @@ final readonly class TransferAwardService
                     );
                 }
                 $payload = $this->open($previous);
-                if ($payload["request"] !== $change->describe() || $payload["revision"] !== $revision) {
+                if (
+                    ($payload["format"] ?? null) === "transfer-receipt.v2"
+                        ? $payload["request_hash"] !== $this->requestHash($change) ||
+                            $payload["revision"] !== $revision
+                        : $payload["request"] + ["effective_on" => null] !== $change->describe() ||
+                            $payload["revision"] !== $revision
+                ) {
                     throw new ConcurrentModificationException(
                         "This operation belongs to another transfer correction.",
                     );
                 }
+                $this->verifyReceipt($award, $previous, $payload);
                 return $this->receiptRow($previous);
             }
             $current = $this->lockedRecord($student, $award, $initial);
@@ -135,20 +143,13 @@ final readonly class TransferAwardService
                     "The reviewed transfer award or grade changed. Preview it again.",
                 );
             }
-            $next = $plan["after"];
-            $this->awards->apply(
-                new EntityId($current["credit"]["id"]),
-                $current["credit"]["version"],
-                array_intersect_key(
-                    $next,
-                    array_flip([
-                        "attempted_milli",
-                        "completed_milli",
-                        "grade_points_milli",
-                        "grade_id",
-                        "status",
-                    ]),
-                ),
+            $this->credits->change(
+                $current,
+                $change,
+                $grade,
+                $actor,
+                $operation,
+                new \DateTimeImmutable($plan["effective_at"]),
             );
             $this->awards->record(
                 $operation,
@@ -157,7 +158,16 @@ final readonly class TransferAwardService
                 $actor,
                 $current["credit"]["version"] + 1,
                 $change->kind,
-                $this->cipher->seal(json_encode($plan + ["revision" => $revision], JSON_THROW_ON_ERROR)),
+                $this->cipher->seal(
+                    json_encode(
+                        [
+                            "format" => "transfer-receipt.v2",
+                            "request_hash" => $this->requestHash($change),
+                            "revision" => $revision,
+                        ],
+                        JSON_THROW_ON_ERROR,
+                    ),
+                ),
                 $this->clock
                     ->now()
                     ->setTimezone(new DateTimeZone("UTC"))
@@ -175,31 +185,75 @@ final readonly class TransferAwardService
     public function receipt(EntityId $student, EntityId $award, EntityId $operation): array
     {
         $this->authorize();
-        $this->awards->get($student, $award);
-        $row = $this->awards->action($operation);
-        if ($row === null || $row["award_id"] !== $award->value) {
-            throw new RecordNotFoundException("Transfer correction not found.");
-        }
-        return $this->receiptRow($row);
+        return $this->transactions->run(function () use ($student, $award, $operation): array {
+            $this->stableRecord($student, $award);
+            $row = $this->awards->action($operation);
+            if ($row === null || $row["award_id"] !== $award->value) {
+                throw new RecordNotFoundException("Transfer correction not found.");
+            }
+            $this->verifyReceipt($award, $row, $this->open($row));
+            return $this->receiptRow($row);
+        });
     }
 
     /** @return array<string, mixed> */
     public function history(EntityId $student, EntityId $award, ?EntityId $after = null): array
     {
         $actor = $this->authorize();
-        $this->awards->get($student, $award);
-        $rows = $this->awards->history($award, $after);
-        $items = [];
-        foreach (array_slice($rows, 0, 50) as $row) {
-            $payload = $this->open($row);
-            $items[] = $this->receiptRow($row) + [
-                "reason" => $payload["request"]["reason"],
-                "before" => $payload["before"],
-                "after" => $payload["after"],
-            ];
-        }
-        $this->audit->record($actor, "transfer.correction_history_read", $award);
-        return ["items" => $items, "next_after" => count($rows) > 50 ? $rows[49]["id"] : null];
+        return $this->transactions->run(function () use ($student, $award, $after, $actor): array {
+            $this->stableRecord($student, $award);
+            $rows = $this->awards->history($award, $after);
+            $items = [];
+            $selected = array_slice($rows, 0, 50);
+            $payloads = [];
+            $operations = [];
+            foreach ($selected as $row) {
+                $payloads[$row["id"]] = $this->open($row);
+                if (($payloads[$row["id"]]["format"] ?? null) === "transfer-receipt.v2") {
+                    $operations[] = $row["id"];
+                }
+            }
+            $details = $operations === [] ? [] : $this->credits->details($award, $operations);
+            foreach ($selected as $row) {
+                $payload = $payloads[$row["id"]];
+                if (($payload["format"] ?? null) === "transfer-receipt.v2") {
+                    $detail =
+                    $details[$row["id"]] ?? throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                    if (
+                        $detail["after"]["id"] !== $row["credit_id"] ||
+                        $detail["after"]["version"] !== (int) $row["version"] ||
+                        $detail["actor_id"] !== $row["actor_id"] ||
+                        $detail["action"] !== $row["kind"]
+                    ) {
+                        throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                    }
+                    $items[] = $this->receiptRow($row) + $detail;
+                } else {
+                    $items[] = $this->receiptRow($row) + [
+                    "reason" => $payload["request"]["reason"],
+                    "before" => $payload["before"],
+                    "after" => $payload["after"],
+                    "history_source" => "legacy_receipt",
+                    "effective_at" => null,
+                    ];
+                }
+            }
+            $this->audit->record($actor, "transfer.correction_history_read", $award);
+            return ["items" => $items, "next_after" => count($rows) > 50 ? $rows[49]["id"] : null];
+        });
+    }
+
+    /** Serialize verified reads with this student's award writers; do not compare different committed heads.
+     * @return array<string,mixed> */
+    private function stableRecord(EntityId $student, EntityId $award): array
+    {
+        return $this->transactions->run(function () use ($student, $award): array {
+            $this->registration->lockStudent($student);
+            $record = $this->awards->get($student, $award);
+            $this->awards->lock($award, new EntityId($record["credit"]["id"]));
+            $this->authorize();
+            return $this->credits->verified($this->awards->get($student, $award));
+        });
     }
 
     /** @param array<string, mixed> $initial
@@ -207,10 +261,10 @@ final readonly class TransferAwardService
      */
     private function lockedRecord(EntityId $student, EntityId $award, array $initial): array
     {
-        $current = $this->awards->get($student, $award);
+        $current = $this->credits->verified($this->awards->get($student, $award));
         if (
             $current["credit"]["id"] !== $initial["credit"]["id"] ||
-            $current["credit"]["grade_id"] !== $initial["credit"]["grade_id"]
+            $current["retained_grade_id"] !== $initial["retained_grade_id"]
         ) {
             throw new ConcurrentModificationException(
                 "The transfer context changed while waiting for review. Reload it.",
@@ -226,11 +280,6 @@ final readonly class TransferAwardService
     {
         $this->registration->lockStudent(new EntityId($record["student_id"]));
         $this->registration->lockPerson(new EntityId($record["person_id"]));
-        TransferCatalogLock::acquire(
-            $this->catalog,
-            "equivalencies",
-            ["id" => $record["equivalency_id"]] + $record,
-        );
         $this->awards->lock(new EntityId($record["id"]), new EntityId($record["credit"]["id"]));
         $grades = array_values(
             array_unique(array_filter([$record["credit"]["grade_id"], $grade["id"] ?? null])),
@@ -245,7 +294,7 @@ final readonly class TransferAwardService
      * @param array<string, mixed>|null $initialGrade
      * @return array<string, mixed>
      */
-    private function plan(array $record, AwardChange $change, ?array $initialGrade): array
+    private function plan(array $record, #[\SensitiveParameter] AwardChange $change, ?array $initialGrade): array
     {
         $before = $record["credit"] + [
             "grade_code" => $record["grade_code"],
@@ -261,9 +310,7 @@ final readonly class TransferAwardService
         : $this->awards->grade(
             $change->grade,
             new EntityId($record["student_id"]),
-            $record["credit"]["grade_id"] === null
-                        ? null
-                        : new EntityId($record["credit"]["grade_id"]),
+            $record["retained_grade_id"] === null ? null : new EntityId($record["retained_grade_id"]),
         );
         if ($grade !== $initialGrade) {
             throw new ConcurrentModificationException("The target grade changed. Preview it again.");
@@ -289,12 +336,53 @@ final readonly class TransferAwardService
             ]);
         }
         $after["version"] = $before["version"] + 1;
+        $now = $this->clock->now();
+        $effective = $change->effectiveOn ?? $now->format("Y-m-d");
+        if ($effective < $record["completed_on"] || $effective > $now->format("Y-m-d")) {
+            throw new ValidationException([
+                [
+                    "field" => "effective_on",
+                    "message" => "Choose an effective date from course completion through today.",
+                ],
+            ]);
+        }
         return [
+            "effective_at" => new \DateTimeImmutable($effective, $now->getTimezone())->format(DATE_ATOM),
             "record" => $record,
             "before" => $before,
             "after" => $after,
             "request" => $change->describe(),
         ];
+    }
+
+    /** @param array<string,mixed> $row
+     * @param array<string,mixed> $payload */
+    private function verifyReceipt(EntityId $award, array $row, array $payload): void
+    {
+        if (($payload["format"] ?? null) !== "transfer-receipt.v2") {
+            return;
+        }
+        $detail =
+        $this->credits->details($award, [$row["id"]])[$row["id"]] ??
+        throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        if (
+            $detail["after"]["id"] !== $row["credit_id"] ||
+            $detail["after"]["version"] !== (int) $row["version"] ||
+            $detail["actor_id"] !== $row["actor_id"] ||
+            $detail["action"] !== $row["kind"]
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+    }
+    private function authorizedActor(EntityId $actor): void
+    {
+        if ($this->authorize()->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException("The transfer decision actor changed.");
+        }
+    }
+    private function requestHash(#[\SensitiveParameter] AwardChange $change): string
+    {
+        return hash("sha256", json_encode($change->describe(), JSON_THROW_ON_ERROR));
     }
 
     /** @param array<string, mixed> $plan */

@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace Infrastructure\Persistence\Repository;
 
-use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Repository\TransferAwardRepository;
 use Infrastructure\Persistence\SqlRecords;
-use InvalidArgumentException;
 
 final readonly class SqlTransferAwardRepository implements TransferAwardRepository
 {
@@ -34,7 +32,7 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             "equivalencies",
             new EntityId($r["equivalency_id"]),
         );
-        if ($credit["term_id"] !== $r["term_id"] || $credit["course_id"] !== $context["course_id"]) {
+        if ($credit["term_id"] !== $r["term_id"]) {
             throw new RecordNotFoundException("Transfer award context does not match its credit.");
         }
         $identity =
@@ -84,7 +82,7 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             "term_code" => $term["code"],
             "institution_id" => $context["institution_id"],
             "external_course_id" => $context["external_course_id"],
-            "course_id" => $context["course_id"],
+            "course_id" => $credit["course_id"],
             "institution_code" => $context["institution_code"],
             "institution_name" => $context["institution_name"],
             "external_code" => $context["external_code"],
@@ -118,30 +116,6 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             $r[$key] = (int) $r[$key];
         }
         return $r;
-    }
-
-    public function apply(EntityId $credit, int $version, array $values): void
-    {
-        if (
-            array_diff(array_keys($values), [
-                "attempted_milli",
-                "completed_milli",
-                "grade_points_milli",
-                "grade_id",
-                "status",
-            ]) !== []
-        ) {
-            throw new InvalidArgumentException("Unsupported transfer correction fields.");
-        }
-        if (
-            $this->sql->update("sis_academic_credits", $values + ["version" => $version + 1], [
-                "id" => $credit->value,
-                "version" => $version,
-                "credit_type" => "transfer",
-            ]) !== 1
-        ) {
-            throw new ConcurrentModificationException("The transfer award changed. Review it again.");
-        }
     }
 
     public function action(EntityId $operation): ?array

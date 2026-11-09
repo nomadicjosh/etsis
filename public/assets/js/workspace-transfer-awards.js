@@ -25,7 +25,9 @@ window.createWorkspaceTransferAwards = function (ui) {
         );
     const state = (credit) => (credit.status === "V" ? "Voided" : "Awarded");
     const title = (action) =>
-        ({ amend: "Correct credits or grade", void: "Void this award", reinstate: "Reinstate this award" })[action];
+        ({ amend: "Correct credits or grade", void: "Void this award", reinstate: "Reinstate this award" })[
+            action
+        ];
     const endpoint = (student, award) => `/sis/students/${student}/transfer-awards/${award}/`;
     function identity(record) {
         return node(
@@ -52,7 +54,7 @@ window.createWorkspaceTransferAwards = function (ui) {
                     before.status === "V" ? "Voided" : before.grade_code || "—",
                     after.status === "V" ? "Voided" : after.grade_code || "—",
                 ],
-                ["Grade points", before.grade_points_milli / 1000, after.grade_points_milli / 1000],
+                ["Quality points", before.grade_points_milli / 1000, after.grade_points_milli / 1000],
                 ["Counts toward GPA", before.counts_gpa ? "Yes" : "No", after.counts_gpa ? "Yes" : "No"],
             ],
             "Transfer correction comparison",
@@ -79,6 +81,15 @@ window.createWorkspaceTransferAwards = function (ui) {
                 "p",
                 { class: "form-text" },
                 "Correct this student’s awarded credits or grade with a reviewed reason. Catalog equivalencies and other students’ awards keep their values.",
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                { class: "alert alert-info" },
+                value.earlier_history_unknown
+                    ? "Earlier award decisions are unknown. Existing facts are preserved as an observation when a correction is confirmed; earlier saved receipts remain available."
+                    : "Source details and grading policy are retained with the award’s recorded history.",
             ),
         );
         const actions = node("div", { class: "inline-actions" });
@@ -110,22 +121,30 @@ window.createWorkspaceTransferAwards = function (ui) {
                       ["credits_milli", "Credits awarded", "credits"],
                       ["awarded_grade", "Awarded grade code"],
                   ]),
+            ["effective_on", "Effective date", "date"],
             ["reason", "Registrar reason", "textarea"],
         ];
         const initial = preset || {
             credits_milli: value.credit.status === "V" ? undefined : value.credit.completed_milli,
             awarded_grade: value.grade_code || "",
+            effective_on: value.effective_on_default,
         };
         const form = await buildForm(fields, {
             ...initial,
             credits_milli: initial.credits_milli == null ? undefined : Number(initial.credits_milli) / 1000,
         });
+        form.elements.effective_on.min = value.completed_on;
+        form.elements.effective_on.max = value.effective_on_default;
         if (action !== "void") {
             form.elements.credits_milli.min = 0.001;
             form.elements.credits_milli.max = 999.999;
             form.elements.awarded_grade.maxLength = 12;
         }
-        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review proposed correction");
+        const submit = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review proposed correction",
+        );
         form.append(
             node(
                 "div",
@@ -152,6 +171,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         body.append(
             identity(review.record),
             comparison(review.before, review.after),
+            node("p", {}, `Effective date: ${review.request.effective_on}`),
             node("h3", {}, "Registrar reason"),
             node("p", { class: "private-text" }, review.request.reason),
             node(
@@ -240,22 +260,39 @@ window.createWorkspaceTransferAwards = function (ui) {
                         {},
                         `${item.action === "amend" ? "Correction" : item.action === "void" ? "Voided" : "Reinstated"} · Revision ${item.version + 1}`,
                     ),
-                    node("p", { class: "form-text" }, `${item.created_at} · Staff reference ${item.actor_id}`),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `${item.created_at} · Staff reference ${item.actor_id}`,
+                    ),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        item.history_source === "legacy_receipt"
+                            ? "Earlier saved receipt · effective time unknown"
+                            : `Effective: ${item.effective_at || "Unknown"}`,
+                    ),
                     node("p", { class: "private-text" }, item.reason),
                     comparison(item.before, item.after),
                 ),
             );
         });
         if (!result.items.length)
-            body.append(node("p", {}, "This award has no corrections. Its original posted values remain current."));
+            body.append(
+                node("p", {}, "This award has no corrections. Its original posted values remain current."),
+            );
         const navigation = node("div", { class: "inline-actions" });
         if (stack.length)
             navigation.append(
-                button("Previous correction page", () => history(student, award, stack.at(-1), stack.slice(0, -1))),
+                button("Previous correction page", () =>
+                    history(student, award, stack.at(-1), stack.slice(0, -1)),
+                ),
             );
         if (result.next_after)
             navigation.append(
-                button("Next correction page", () => history(student, award, result.next_after, [...stack, after])),
+                button("Next correction page", () =>
+                    history(student, award, result.next_after, [...stack, after]),
+                ),
             );
         body.append(navigation);
     }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Infrastructure\Persistence\Repository;
 
-use DateTimeImmutable;
 use DomainException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Repository\TransferRepository;
@@ -60,66 +59,6 @@ final readonly class SqlTransferRepository implements TransferRepository
             "credits_milli" => $equivalency->creditThousandths,
             "grade_id" => $grade["id"],
         ]);
-    }
-
-    public function award(
-        EntityId $id,
-        EntityId $student,
-        TransferEquivalency $equivalency,
-        EntityId $term,
-        DateTimeImmutable $completedOn,
-    ): EntityId {
-        $criteria = [
-            "student_id" => $student->value,
-            "equivalency_id" => $equivalency->id->value,
-            "completed_on" => $completedOn->format("Y-m-d"),
-        ];
-        $existing = $this->sql->rows("sis_transfer_awards", $criteria);
-        if ($existing !== []) {
-            if ($existing[0]["term_id"] !== $term->value) {
-                throw new DomainException("This transfer award already belongs to another term.");
-            }
-            $credit = $this->sql->one("sis_academic_credits", ["id" => $existing[0]["credit_id"]]);
-            if ($credit["status"] === "V") {
-                throw new DomainException("This award is voided. Use the reviewed reinstatement workflow.");
-            }
-            return new EntityId($existing[0]["credit_id"]);
-        }
-        $grade = $this->grades->byCode($equivalency->awardedGrade, $student);
-        if (!(bool) $grade["passes"]) {
-            throw new DomainException("The applicable program scale does not award credit for this grade.");
-        }
-        $course = $this->sql->one("sis_courses", ["id" => $equivalency->institutionalCourseId->value]);
-        $creditId = EntityId::generate();
-        $this->sql->insert("sis_academic_credits", [
-            "id" => $creditId->value,
-            "student_id" => $student->value,
-            "course_id" => $equivalency->institutionalCourseId->value,
-            "term_id" => $term->value,
-            "source_id" => $id->value,
-            "credit_type" => "transfer",
-            "course_code" => $course["code"],
-            "course_title" =>
-                $this->sql->rows(
-                    "sis_course_descriptions",
-                    ["course_id" => $equivalency->institutionalCourseId->value],
-                    1,
-                )[0]["published_transcript_title"] ?? $course["title"],
-            "attempted_milli" => $equivalency->creditThousandths,
-            "completed_milli" => $equivalency->creditThousandths,
-            "grade_points_milli" => (bool) $grade["counts_gpa"]
-                ? intdiv($equivalency->creditThousandths * (int) $grade["points_milli"], 1000)
-                : 0,
-            "grade_id" => $grade["id"],
-            "status" => "A",
-            "version" => 0,
-        ]);
-        $this->sql->insert(
-            "sis_transfer_awards",
-            ["id" => $id->value] + $criteria + ["term_id" => $term->value, "credit_id" => $creditId->value],
-        );
-
-        return $creditId;
     }
 
     public function transcript(EntityId $student): array

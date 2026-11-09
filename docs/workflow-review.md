@@ -143,3 +143,5 @@ Student exceptions now include exact-publication course substitutions, including
 ### Consolidated grading definitions
 
 The scale editor now supplies the academic workflows through immutable, publication-scoped `sis_grades` definitions. Final-grade dialogs fetch the affected student's applicable scale, with a program choice for different dual-degree scales. Transfer awards and late-drop policies use the shared catalog. Already graded records and their corrections retain the original scale; reports/transcripts continue using exact grade IDs. The obsolete single-grade API is removed, and verified migration preserves old grade identities and recorded events/receipts before removing the duplicate JSON projection. [Setup and migration](grading-scale-setup.md).
+
+Transfer awards and their reviewed corrections now use [replayable shared-journal history](transfer-credit-history.md), with retained sending-source and grade facts, effective dates, void/reinstatement policy continuity and preserved earlier receipts. Full registration/seat and student lifecycle history remain staged work.

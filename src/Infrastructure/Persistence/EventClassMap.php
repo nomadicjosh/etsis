@@ -24,6 +24,8 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\Transfer\Event\TransferCreditWasEstablished::class,
+            \Domain\Transfer\Event\TransferCreditWasChanged::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished::class,
             \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class,

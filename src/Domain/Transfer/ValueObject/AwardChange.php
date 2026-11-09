@@ -6,7 +6,7 @@ namespace Domain\Transfer\ValueObject;
 
 use Domain\Shared\Exception\ValidationException;
 
-final readonly class AwardChange
+final readonly class AwardChange implements \JsonSerializable
 {
     public string $reason;
     public ?string $grade;
@@ -16,7 +16,14 @@ final readonly class AwardChange
         public ?int $credits,
         ?string $grade,
         #[\SensitiveParameter] string $reason,
+        public ?string $effectiveOn = null,
     ) {
+        if ($effectiveOn !== null) {
+            $date = \DateTimeImmutable::createFromFormat("!Y-m-d", $effectiveOn);
+            if ($date === false || $date->format("Y-m-d") !== $effectiveOn) {
+                self::invalid("effective_on", "Choose a valid effective date.");
+            }
+        }
         $this->reason = trim($reason);
         $this->grade = $grade === null ? null : strtoupper(trim($grade));
         if (!in_array($kind, ["amend", "void", "reinstate"], true)) {
@@ -33,7 +40,10 @@ final readonly class AwardChange
             $this->grade === null ||
             preg_match('/^[A-Z0-9+.-]{1,12}$/D', $this->grade) !== 1
         ) {
-            self::invalid("credits_milli", "Enter positive credits up to 999.999 and an existing passing grade code.");
+            self::invalid(
+                "credits_milli",
+                "Enter positive credits up to 999.999 and an existing passing grade code.",
+            );
         }
         if (
             $this->reason === "" ||
@@ -45,7 +55,7 @@ final readonly class AwardChange
         }
     }
 
-    /** @return array{action: string, credits_milli: ?int, awarded_grade: ?string, reason: string} */
+    /** @return array{action: string, credits_milli: ?int, awarded_grade: ?string, reason: string, effective_on: ?string} */
     public function describe(): array
     {
         return [
@@ -53,7 +63,19 @@ final readonly class AwardChange
             "credits_milli" => $this->credits,
             "awarded_grade" => $this->grade,
             "reason" => $this->reason,
+            "effective_on" => $this->effectiveOn,
         ];
+    }
+
+    /** @return array<string,string> */
+    public function __debugInfo(): array
+    {
+        return ["change" => "[protected transfer correction]"];
+    }
+    /** @return array<string,string> */
+    public function jsonSerialize(): array
+    {
+        return $this->__debugInfo();
     }
 
     private static function invalid(string $field, string $message): never
