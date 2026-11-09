@@ -1,0 +1,12 @@
+|                                 |                                                                                                                                                                             |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Booking Module                  | This module can be used to book room/classroom space, book for events and meetings, and includes an institution calendar, faculty timetables as well as student timetables. |
+| Timesheet Module                | The timesheet modules allows for workstudy students and part time staff to submit timesheets to hr. HR also will be able to view and approve timesheets.                    |
+| Saved Query Module              | Create quick access to the queries you need for ad-hoc reporting.                                                                                                           |
+| Gradebook Module                | Create assignments for grading and send emails with attachments to a student or group of students.                                                                          |
+| Event Log Module                | The event log module logs any error logs as well as recent activity.                                                                                                        |
+| Financial Module                | The financial module includes student accounts, billing tables, general ledger, batch fees as well as the options of recording payments and the issuing of refunds.         |
+| Transfer Module                 | Allows you to create external courses from other institutions in order to add transfer credits for transfer students.                                                       |
+| Communication Management Module | With the communication management module, you can send emails to any group in eduTrac SIS whether it be faculty, staff, students, or everyone.                              |
+| myeduTrac Extended Module       | The module extends the current self service portal which allows for an admin to post news, quick links, and info pages.                                                     |
+| Import Module                   | With the import module, you can import data from a previous system.                                                                                                         |

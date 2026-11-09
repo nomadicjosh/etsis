@@ -1,0 +1,1 @@
+CSV to Email Report screen lets you email reports to yourself or to a colleague within the institution. If you are emailing the report to a colleague, choose the colleague from the Recipient dropdown. If you are emailing the report to yourself, leave Recipient blank.

@@ -1,0 +1,3 @@
+After creating a new person record, you will need to assign a role to the person, otherwise, he/she will only have access to the dashboard when logged in. In order to assign a role to a person, navigate to the NAE screen and search for the person. When the person appears in your search results, click the `Edit User Role` button (see screenshot).
+
+On the manage role form (see screenshot) for the particular person, you will need to assign a user role(s). Click `Save` after you are done. Now the user will be granted permissions assigned to the user role(s) assigned to him/her.

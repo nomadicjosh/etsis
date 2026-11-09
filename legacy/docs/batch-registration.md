@@ -1,0 +1,1 @@
+Use the Batch Registration (BRGN) screen when you need to register a group of students into a course section. You will need to create a [saved query](sql-query/batch-registration.md) in order to select a list of student ID’s.

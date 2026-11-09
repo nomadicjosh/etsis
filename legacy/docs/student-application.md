@@ -1,0 +1,3 @@
+You can create a new student application for a prospective student by searching the prospect on the person screen. When the prospect is returned in the search, click the application button to create a new application (see figure 1).
+
+Once you get to the application screen you can enter all the needed information for the new applicant. Once the applicant becomes a student, the academic program that is on the application will become the student’s program. So make sure that the program on the application is correct before creating a new student record.

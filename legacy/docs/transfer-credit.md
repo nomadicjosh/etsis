@@ -1,0 +1,5 @@
+The Transfer Credit (TCRE) screen allows you to add a new stu acad cred record for a student. As you can see in the screenshot below, once you choose the Transfer Course (FICE/CEEB code must match the transferring institution), most of the information will populate below it. **Note, the minimum grade is there to remind you that a student must have received a grade of ‘C’ from the external institution in order to be eligible for transfer credit.**
+
+What is populated below is based on the transfer equivalency you created. So, the system is make an educated guess and calculations for some of the information. Nevertheless, you have an option to change/update some of the information if it is incorrect. Also, you will need to choose a term (*you may need to create a new term but that depends on how your institution handles transfer credits*), and enter the Student ID.
+
+Please note, that transfer credits cannot be updated via SACD. If the information for the transfer credit is wrong, you will need to delete it from STAC, correct anything that needs to be corrected via EXTR and/or TCEQ, and then re-add the transfer credit.

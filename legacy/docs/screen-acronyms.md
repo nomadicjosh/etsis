@@ -1,0 +1,49 @@
+In eduTrac SIS (etSIS), there are several ways you can navigate to different screens. You can click the Screens button in the top admin bar, or you can navigate the through the sidebar. However, the quickest way to navigate screens is by entering an acronym into the search field located in the admin bar. Start by typing the name of the screen or the acronym and click enter twice.
+
+For your convenience, below are a list of screens you can navigate to by using their acronym.
+
+- **SYSS** – System Settings
+- **MPRM** – Manage Perms
+- **APRM** – Add Permission
+- **MRLE** – Manage Roles
+- **AUDT** – Audit Trail
+- **SQL** – SQL Terminal
+- **ARLE** – Add Role
+- **SCH** – School Form
+- **SEM** – Semester Form
+- **TERM** – Term Form
+- **AYR** – Academic Year Form
+- **CRSE** – Course
+- **DEPT** – Department Form
+- **DEG** – Degree Form
+- **MAJR** – Major Form
+- **MINR** – Minor Form
+- **PROG** – Program
+- **CCD** – CCD Form
+- **CIP** – CIP Form
+- **LOC** – Location Form
+- **BLDG** – Building Form
+- **ROOM** – Room Form
+- **SPEC** – Specialization Form
+- **SUBJ** – Subject Form
+- **APRG** – Add Academic Program
+- **ACRS** – Add Course
+- **SECT** – Course Section
+- **RGN** – Course Registration
+- **NAE** – Name &amp; Address
+- **APER** – Add Person
+- **SPRO** – Student Profile
+- **TRAN** – Generate Transcript
+- **REST** – Restriction
+- **MRKT** – Marketing
+- **GRSC** – Grade Scale
+- **BRGN** – Batch Registration
+- **SROS** – Student Roster
+- **STAF** – Staff
+- **EXTR** – External Course
+- **ATCEQ** – New Transfer Course Equivalency
+- **TCEQ** – Transfer Course Equivalency
+- **TCRE** – Transfer Credit
+- **RLDE** – Rule Definition
+- **ACLV** – Academic Level
+- **APPL** – Application

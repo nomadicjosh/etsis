@@ -1,0 +1,3 @@
+Instructions on how to access the Student Hiatus (SHIS) screen is similar to the way you access the [Student Restrictions Screen](https://web.archive.org/web/20210623205504/https://www.edutracsis.com/person-management/student/student-restrictions/ "Student Restrictions"). With the SHIS screen, you can set the hiatus code, start date, end date, as well as add comments.
+
+**Important note:** If the student’s hiatus is a ‘W’ and the student was registered during the time of withdrawal, it is important that when you withdraw the student from his or her courses for that particular term, make sure the status date matches the start date on the SHIS screen. This is important in case your records are audited sometime in the future.

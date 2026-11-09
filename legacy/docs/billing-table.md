@@ -1,0 +1,3 @@
+In order to generate a bill with fees or add fees to an existing bill, you need to build your billing table with standard fees which can be charged to students. You can add fees such as Student Activities Fee, Late Fees, Registration Fee, and so forth (see screenshot below).
+
+If your fees change every year of every term, you should add the term or year to the name (i.e. Student Activities Fee – 14/FA). Then when the term has ended and this fee should no longer be used, you can set the status to Inactive and then create a new which should be used for the next term or year.

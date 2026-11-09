@@ -1,0 +1,7 @@
+Before you can add transfer credit to a student’s acad cred record, you need to equate an external course with an equivalent course your institution offers. Below is an explanation of the fields to help you create a transfer course equivalency. Make sure the information you enter in EXTR and on this screen is correct and detailed as possible. The combination of the two will be used to populate the information needed for the new stu\_acad\_cred record.
+
+1. Choose the correct external course. The FICE/CEEB code must match the transferring institution.
+2. Choose a course from your institution that is equivalent to the external course.
+3. Enter the start date of when this equivalency should begin. Just like the external course, you may need to shift this date around based on other students who may have taken this course at an earlier date form the same institution. Enter an end date if the equated external course is no longer in use by the other institution or it has been replaced with another.
+4. Enter the grade that should be given to the student (i.e. TR). You may need to create a new academic year, semester and term but that depends on how your institution handles transfer credits.
+5. Enter any comments you deem necessary. Equivalencies are not geared to one particular student, so your comments are internal and should be informational only.
