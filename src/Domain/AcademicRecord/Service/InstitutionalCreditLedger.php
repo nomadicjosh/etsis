@@ -91,7 +91,8 @@ final readonly class InstitutionalCreditLedger
                 new EventContext(
                     $actor,
                     $enrollment->registeredAt,
-                    $id,
+                    $enrollment->id,
+                    $enrollment->id,
                     reason: "Academic credit opened by accepted registration.",
                 ),
                 [$event],
@@ -284,7 +285,7 @@ final readonly class InstitutionalCreditLedger
                         new DateTimeImmutable($d["observed_at"]),
                         $op,
                         reason: "Existing academic facts observed at a reviewed grade decision; " .
-                        "earlier action times and actors are unknown.",
+                            "earlier action times and actors are unknown.",
                     ),
                     [$base],
                 );

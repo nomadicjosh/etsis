@@ -38,5 +38,6 @@ interface RegistrationRepository
     public function configureWindow(EntityId $termId, RegistrationWindow $window): void;
     public function removePrerequisite(EntityId $course, EntityId $required): void;
     public function addPrerequisite(EntityId $course, EntityId $required): void;
-    public function addEnrollment(Enrollment $enrollment): void;
+    /** @return list<string> */
+    public function requiredCourses(EntityId $course): array;
 }

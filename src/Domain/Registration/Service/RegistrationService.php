@@ -29,6 +29,7 @@ final readonly class RegistrationService
         private Clock $clock,
         private CourseDropService $drops,
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
+        private EnrollmentLedger $enrollments,
     ) {
     }
 
@@ -55,7 +56,13 @@ final readonly class RegistrationService
             $this->repository->lockSection($sectionId);
             $student = $this->admissions->student($studentId);
             $person = $this->admissions->person($student->personId);
-            $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:registration:manage");
+            $currentActor = $this->access->requireOwnerOrPermission(
+                $person->ownerUserId,
+                "sis:registration:manage",
+            );
+            if ($currentActor->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException("The registration actor changed.");
+            }
             $byStaff = $byStaff || $person->ownerUserId?->value !== $actor->value;
             if ($byStaff) {
                 $this->access->requirePermission("sis:registration:manage");
@@ -66,6 +73,7 @@ final readonly class RegistrationService
             $existing = $this->repository->enrollment($studentId, $sectionId);
             if ($existing !== null) {
                 if ($existing->status->isEnrolled()) {
+                    $this->enrollments->verifyExisting($existing, $section);
                     return $existing;
                 }
                 throw new DomainException(
@@ -81,6 +89,13 @@ final readonly class RegistrationService
             }
             $now = $this->clock->now();
             $blocking = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
+            $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+            $coursesBefore = $this->repository->enrolledCount($studentId, $section->termId);
+            $prerequisitesMet = $this->repository->prerequisitesMet(
+                $studentId,
+                $section->courseId,
+                $required,
+            );
             new RegistrationPolicy()->assertEligible(
                 $student,
                 $blocking === null ? [] : [$blocking],
@@ -88,13 +103,9 @@ final readonly class RegistrationService
                 $byStaff,
                 $window->isOpen($now),
                 $section->webRegistration,
-                $this->repository->enrolledCount($studentId, $section->termId),
+                $coursesBefore,
                 $window->courseLimit,
-                $this->repository->prerequisitesMet(
-                    $studentId,
-                    $section->courseId,
-                    $course->publishedPrerequisites,
-                ),
+                $prerequisitesMet,
             );
             $enrollment = new Enrollment(
                 EntityId::generate(),
@@ -105,7 +116,27 @@ final readonly class RegistrationService
                 $now,
                 $now,
             );
-            $this->repository->addEnrollment($enrollment);
+            $this->enrollments->accept(
+                $enrollment,
+                $section,
+                $course,
+                [
+                    "student_active" => $student->active,
+                    "by_staff" => $byStaff,
+                    "self_service_open" => $window->isOpen($now),
+                    "courses_before" => $coursesBefore,
+                    "course_limit" => $window->courseLimit,
+                    "prerequisites_met" => $prerequisitesMet,
+                    "required_course_ids" => $required,
+                    "opens_at" => \Domain\Registration\ValueObject\EnrollmentFacts::utc(
+                        $window->dates->start,
+                    ),
+                    "closes_at" => \Domain\Registration\ValueObject\EnrollmentFacts::utc(
+                        $window->dates->end ?? throw new \LogicException("A registration window must end."),
+                    ),
+                ],
+                $actor,
+            );
             $this->credits->open($enrollment, $course, $actor);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
             $this->audit->record($actor, "registration.created", $enrollment->id);

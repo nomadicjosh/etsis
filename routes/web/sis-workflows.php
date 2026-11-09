@@ -39,6 +39,12 @@ use Application\Http\Controller\SisStudentCatalogController;
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
     $router
+        ->map(["POST"], "/sis/students/{student}/registration-history/", [
+            \Application\Http\Controller\SisEnrollmentHistoryController::class,
+            "student",
+        ])
+        ->name("sis.registration.history");
+    $router
         ->map(["POST"], "/sis/grading-scales/global/review/", [
             \Application\Http\Controller\SisGradingScaleController::class,
             "review",

@@ -190,25 +190,54 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
 
     public function enrolledCount(EntityId $student, EntityId $term): int
     {
-        return count(
-            array_filter(
-                $this->sql->rows("sis_enrollments", [
-                    "student_id" => $student->value,
-                    "term_id" => $term->value,
-                ]),
-                static fn(array $r): bool => in_array($r["status"], ["A", "N"], true),
-            ),
-        );
+        $q = $this->sql->quote(...);
+        return (int) $this->sql->fetch(
+            "SELECT COUNT(*) AS " .
+                $q("amount") .
+                " FROM " .
+                $q("sis_enrollments") .
+                " WHERE " .
+                $q("student_id") .
+                " = ? AND " .
+                $q("term_id") .
+                " = ? AND " .
+                $q("status") .
+                " IN (?, ?)",
+            [$student->value, $term->value, "A", "N"],
+            1,
+        )[0]["amount"];
     }
-
     public function sectionCount(EntityId $section): int
     {
-        return count(
-            array_filter(
-                $this->sql->rows("sis_enrollments", ["section_id" => $section->value]),
-                static fn(array $r): bool => in_array($r["status"], ["A", "N"], true),
-            ),
-        );
+        $q = $this->sql->quote(...);
+        return (int) $this->sql->fetch(
+            "SELECT COUNT(*) AS " .
+                $q("amount") .
+                " FROM " .
+                $q("sis_enrollments") .
+                " WHERE " .
+                $q("section_id") .
+                " = ? AND " .
+                $q("status") .
+                " IN (?, ?)",
+            [$section->value, "A", "N"],
+            1,
+        )[0]["amount"];
+    }
+    public function requiredCourses(EntityId $course): array
+    {
+        $rows = $this->sql->rows("sis_prerequisites", ["course_id" => $course->value], 101);
+        if (count($rows) > 100) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "prerequisites",
+                    "message" => "Review this course’s prerequisite policy before registration.",
+                ],
+            ]);
+        }
+        $ids = array_column($rows, "required_course_id");
+        sort($ids, SORT_STRING);
+        return $ids;
     }
 
     public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool
@@ -353,22 +382,6 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             "id" => EntityId::generate()->value,
             "course_id" => $course->value,
             "required_course_id" => $required->value,
-        ]);
-    }
-
-    public function addEnrollment(Enrollment $enrollment): void
-    {
-        $this->sql->insert("sis_enrollments", [
-            "id" => $enrollment->id->value,
-            "student_id" => $enrollment->studentId->value,
-            "section_id" => $enrollment->sectionId->value,
-            "term_id" => $enrollment->termId->value,
-            "status" => $enrollment->status->value,
-            "registered_at" => $enrollment->registeredAt
-                ->setTimezone(new DateTimeZone("UTC"))
-                ->format("Y-m-d H:i:s"),
-            "status_at" => $enrollment->statusAt->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d H:i:s"),
-            "version" => 0,
         ]);
     }
 }

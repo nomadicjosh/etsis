@@ -38,6 +38,7 @@ final readonly class CourseDropService
         private Clock $clock,
         private MessageCipher $cipher,
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
+        private EnrollmentLedger $enrollments,
     ) {
     }
 
@@ -145,7 +146,17 @@ final readonly class CourseDropService
                     reason: "Reviewed course drop.",
                 ),
             );
-            $this->drops->apply($closed, $version, $context["credit"], $context["outcome"]);
+            $this->enrollments->close(
+                $closed,
+                $this->registration->section($section),
+                $context["outcome"],
+                new \Domain\Shared\EventSourcing\EventContext(
+                    $actor,
+                    $when,
+                    $operation,
+                    reason: "Reviewed course drop.",
+                ),
+            );
             $reversed =
                 $context["outcome"]["delete_records"] &&
                 $this->billing->reverseCourseCharge($student, $current->termId, $current->id, $actor);
@@ -299,6 +310,7 @@ final readonly class CourseDropService
         }
         $credit = $this->drops->credit($e);
         $sectionRecord = $this->registration->section($section);
+        $this->enrollments->verifyExisting($e, $sectionRecord);
         if (
             $sectionRecord->termId->value !== $e->termId->value ||
             $credit["course_id"] !== $sectionRecord->courseId->value ||

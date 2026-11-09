@@ -51,6 +51,16 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\EnrollmentWasEstablished::class => [
+                "type" => "enrollment",
+                "root" => \Domain\Registration\EnrollmentHistory::class,
+                "fields" => ["decision_id", "provenance", "enrollment", "source", "eligibility", "seat"],
+            ],
+            \Domain\Registration\Event\EnrollmentWasClosed::class => [
+                "type" => "enrollment",
+                "root" => \Domain\Registration\EnrollmentHistory::class,
+                "fields" => ["decision_id", "previous_decision_id", "status", "status_at", "policy", "seat"],
+            ],
             \Domain\Transfer\Event\TransferCreditWasEstablished::class => [
                 "type" => "transfer_credit",
                 "root" => \Domain\Transfer\TransferCredit::class,
@@ -239,6 +249,15 @@ final readonly class HistoricalSchemaRegistry
             $definition = $this->definition($class);
             if ($class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class && $version === 4) {
                 $definition["fields"][] = "grade_scale";
+            }
+            if ($stream->type === "enrollment") {
+                \Domain\Registration\ValueObject\EnrollmentEventSchema::validate($class, $payload);
+                if (
+                    $class === \Domain\Registration\Event\EnrollmentWasEstablished::class &&
+                    $payload["enrollment"]["id"] !== (string) $stream->aggregateId
+                ) {
+                    throw new CorruptHistoryException();
+                }
             }
             if ($stream->type === "transfer_credit") {
                 \Domain\Transfer\ValueObject\TransferEventSchema::validate($class, $payload);
@@ -566,6 +585,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\EnrollmentHistory::class => "enrollment",
             \Domain\Transfer\TransferCredit::class => "transfer_credit",
             \Domain\AcademicRecord\AcademicCredit::class => "academic_credit",
             \Domain\DegreeAudit\RequirementAdjustments::class => "student_requirement_adjustments",
@@ -586,6 +606,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            "enrollment" => new \Domain\Registration\ValueObject\EnrollmentHistoryId($id),
             "transfer_credit" => new \Domain\Transfer\ValueObject\TransferCreditId($id),
             "academic_credit" => new \Domain\AcademicRecord\ValueObject\AcademicCreditId($id),
             "student_requirement_adjustments" => new \Domain\DegreeAudit\ValueObject\RequirementAdjustmentsId(

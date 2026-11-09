@@ -14,9 +14,8 @@ use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlCourseDropRepository implements CourseDropRepository
 {
-    public function __construct(
-        private SqlRecords $sql,
-    ) {
+    public function __construct(private SqlRecords $sql)
+    {
     }
     public function credit(Enrollment $enrollment): array
     {
@@ -32,53 +31,6 @@ final readonly class SqlCourseDropRepository implements CourseDropRepository
         $reference = $this->sql->rows("sis_credit_course_versions", ["id" => $r["id"]], 1)[0] ?? null;
         $r["course_version_id"] = $reference["course_version_id"] ?? null;
         return $r;
-    }
-    public function apply(
-        Enrollment $closed,
-        int $version,
-        array $credit,
-        array $outcome,
-    ): void {
-        if (
-            $credit["grade_id"] !== null ||
-            $credit["completed_milli"] !== 0 ||
-            $credit["grade_points_milli"] !== 0
-        ) {
-            throw new ValidationException([
-                [
-                    "field" => "enrollment_id",
-                    "message" => "Posted academic credit requires a grade-change review.",
-                ],
-            ]);
-        }
-        $q = $this->sql->quote(...);
-        if ($outcome["delete_records"]) {
-            $enrolled = $this->sql->execute(
-                "DELETE FROM " .
-                    $q("sis_enrollments") .
-                    " WHERE " .
-                    $q("id") .
-                    " = ? AND " .
-                    $q("version") .
-                    " = ?",
-                [$closed->id->value, $version],
-            );
-        } else {
-            $enrolled = $this->sql->update(
-                "sis_enrollments",
-                [
-                    "status" => "W",
-                    "status_at" => $closed->statusAt
-                        ->setTimezone(new DateTimeZone("UTC"))
-                        ->format("Y-m-d H:i:s"),
-                    "version" => $closed->version,
-                ],
-                ["id" => $closed->id->value, "version" => $version],
-            );
-        }
-        if ($enrolled !== 1) {
-            throw new ConcurrentModificationException("The academic record changed before this drop.");
-        }
     }
     public function receipt(EntityId $operation): ?array
     {

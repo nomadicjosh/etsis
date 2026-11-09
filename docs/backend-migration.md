@@ -8,6 +8,8 @@ The target remains PHP 8.4 or newer, with the Application, Domain, and Infrastru
 
 The functional coverage below does **not** mean these contexts already provide complete event sourcing or historical reconstruction. Institutional creation/grade/drop now uses [replayable academic-credit history](academic-credit-history.md), and [transfer award decisions](transfer-credit-history.md) now use the shared journal, while some student/program changes still update mutable rows; metadata audit and encrypted receipts alone cannot reconstruct every prior state. Restore missing historical context together with versioned definitions and the appropriate event streams, rather than layering more mutable fields onto those gaps.
 
+[Registration history](registration-history.md) now retains accepted enrollments and early/late releases, with committed section order, replay-derived enrollment rows and registrar-only history. Request-arrival/waitlist history and complete section/lifecycle versions remain staged work.
+
 ## Source review and scope decisions
 
 `legacy-inventory.json` records documentation, migration tables/columns, view fields, router declarations, module functions, and source checksums. The review now includes 51 documentation files, six legacy migrations, 207 PHP views, 29 routers, and ten module files. The newly supplied module routers and views resolve the earlier missing-source question; missing behavior may also be reconstructed under the user's instruction.
