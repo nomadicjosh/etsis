@@ -1,6 +1,6 @@
 # Institutional credits and grade history
 
-Institutional credits now have a replayable history from accepted registration through final-grade decisions and reviewed early/late drops. These events use the existing **`sis_history_events`** journal. There is no additional event store. Transfer awards, seat-allocation history, section-definition versions and student/program transitions still need their staged conversions.
+Institutional credits now have a replayable history from accepted registration through final-grade decisions and reviewed early/late drops. These events use the existing **`sis_history_events`** journal. There is no additional event store. [Transfer awards and corrections](transfer-credit-history.md) now also use the shared journal. Seat-allocation history, section-definition versions and student/program transitions still need their staged conversions.
 
 ## Staff workflow
 
