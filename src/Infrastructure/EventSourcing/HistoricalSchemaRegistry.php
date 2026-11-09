@@ -28,12 +28,15 @@ final readonly class HistoricalSchemaRegistry
                 in_array(
                     $class,
                     [
+                        \Domain\DegreeAudit\Event\CourseGroupWasPublished::class,
+                        \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class,
                         \Domain\Catalog\Event\CourseDefinitionWasPublished::class,
                         \Domain\DegreeAudit\Event\RequirementsWerePublished::class,
                     ],
                     true,
                 )) ||
-            ($version === 3 && $class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class)
+            (in_array($version, [3, 4], true) &&
+                $class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class)
         ) {
             foreach (EventClassMap::registered() as $registered) {
                 if ($class === $registered && $type === AggregateType::fromClassName($registered)) {
@@ -48,6 +51,46 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class => [
+                "type" => "student_requirement_adjustments",
+                "root" => \Domain\DegreeAudit\RequirementAdjustments::class,
+                "fields" => [
+                    "adjustment_id",
+                    "supersedes_adjustment_id",
+                    "student_id",
+                    "program_id",
+                    "requirement_decision_id",
+                    "template_id",
+                    "requirements_version_id",
+                    "definition",
+                ],
+            ],
+            \Domain\DegreeAudit\Event\RequirementAdjustmentWasRevoked::class => [
+                "type" => "student_requirement_adjustments",
+                "root" => \Domain\DegreeAudit\RequirementAdjustments::class,
+                "fields" => ["adjustment_id", "decision_id", "student_id", "program_id"],
+            ],
+            \Domain\DegreeAudit\Event\StudentRequirementsWereAssigned::class => [
+                "type" => "student_degree_requirements",
+                "root" => \Domain\DegreeAudit\StudentRequirements::class,
+                "fields" => [
+                    "decision_id",
+                    "previous_decision_id",
+                    "student_id",
+                    "program_id",
+                    "template_id",
+                    "requirements_version_id",
+                    "academic_year_id",
+                    "cohort_catalog_id",
+                    "cohort_binding_revision",
+                    "pursuit_started_on",
+                ],
+            ],
+            \Domain\Gradebook\Event\GradingScaleWasChanged::class => [
+                "type" => "grading_scale",
+                "root" => \Domain\Gradebook\GradingScale::class,
+                "fields" => ["version_id", "previous_version_id", "definition"],
+            ],
             \Domain\DegreeAudit\Event\CourseGroupWasPublished::class => [
                 "type" => "course_group_publication",
                 "root" => \Domain\DegreeAudit\CourseGroupPublication::class,
@@ -169,6 +212,9 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class && $version === 4) {
+                $definition["fields"][] = "grade_scale";
+            }
             // Earliest User v1 events predate the optional person link.
             if (
                 $class === \Domain\User\Event\UserWasCreated::class &&
@@ -184,6 +230,63 @@ final readonly class HistoricalSchemaRegistry
             ) {
                 throw new CorruptHistoryException();
             }
+            if ($class === \Domain\Gradebook\Event\GradingScaleWasChanged::class) {
+                if (
+                    (string) $stream->aggregateId ===
+                        \Domain\Gradebook\Service\GradingScaleService::GLOBAL_ID &&
+                    $payload["definition"] === null
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                if ($payload["version_id"] === $payload["previous_version_id"]) {
+                    throw new CorruptHistoryException();
+                }
+                if ($payload["definition"] !== null) {
+                    if (!is_array($payload["definition"])) {
+                        throw new CorruptHistoryException();
+                    }
+                    $scale = new \Domain\Gradebook\ValueObject\GradingScaleDefinition($payload["definition"]);
+                    if ($scale->definition["grades"] === []) {
+                        throw new CorruptHistoryException();
+                    }
+                }
+            }
+            if ($class === \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class) {
+                if (
+                    !is_array($payload["definition"]) ||
+                    !is_string($payload["program_id"]) ||
+                    $payload["adjustment_id"] === $payload["supersedes_adjustment_id"]
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                if ($version === 1) {
+                    new \Domain\DegreeAudit\ValueObject\RequirementAdjustmentDefinition(
+                        $payload["definition"],
+                    );
+                } else {
+                    new \Domain\DegreeAudit\ValueObject\RequirementAdjustmentDefinitionV2(
+                        $payload["definition"],
+                    );
+                }
+            }
+            if (
+                $class === \Domain\DegreeAudit\Event\RequirementAdjustmentWasRevoked::class &&
+                (!is_string($payload["program_id"]) || $payload["decision_id"] === $payload["adjustment_id"])
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if ($class === \Domain\DegreeAudit\Event\StudentRequirementsWereAssigned::class) {
+                if (
+                    !is_string($payload["program_id"]) ||
+                    !is_int($payload["cohort_binding_revision"]) ||
+                    $payload["cohort_binding_revision"] < 0 ||
+                    !is_string($payload["pursuit_started_on"]) ||
+                    $payload["decision_id"] === $payload["previous_decision_id"]
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                new \Domain\DegreeAudit\ValueObject\PursuitStart($payload["pursuit_started_on"]);
+            }
             if ($class === \Domain\DegreeAudit\Event\CourseGroupWasPublished::class) {
                 if (
                     !is_array($payload["definition"]) ||
@@ -191,9 +294,11 @@ final readonly class HistoricalSchemaRegistry
                 ) {
                     throw new CorruptHistoryException();
                 }
-                new \Domain\DegreeAudit\ValueObject\CourseGroupDefinition(
-                    $payload["definition"],
-                )->assertPublishable();
+                $group =
+                $version === 1
+                ? new \Domain\DegreeAudit\ValueObject\CourseGroupDefinition($payload["definition"])
+                : new \Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2($payload["definition"]);
+                $group->assertPublishable();
             }
             if ($class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class) {
                 if (
@@ -224,15 +329,39 @@ final readonly class HistoricalSchemaRegistry
                 $requirements = match ($version) {
                     1 => new \Domain\DegreeAudit\ValueObject\AuditRequirements($payload["definition"]),
                     2 => new \Domain\DegreeAudit\ValueObject\AuditRequirementsV2($payload["definition"]),
-                    3 => new \Domain\DegreeAudit\ValueObject\AuditRequirementsV3($payload["definition"]),
+                    3, 4 => new \Domain\DegreeAudit\ValueObject\AuditRequirementsV3($payload["definition"]),
                     default => throw new CorruptHistoryException(),
                 };
                 $requirements->assertPublishable();
+                if ($version === 4) {
+                    if (!is_array($payload["grade_scale"])) {
+                        throw new CorruptHistoryException();
+                    }
+                    $snapshot = new \Domain\Gradebook\ValueObject\GradingScaleSnapshot(
+                        $payload["grade_scale"],
+                    );
+                    if (
+                        $snapshot->data["program_id"] !== null &&
+                        $snapshot->data["program_id"] !== $payload["program_id"]
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                }
             }
             foreach ($payload as $name => $value) {
                 if (str_ends_with((string) $name, "_id")) {
                     if (
-                        in_array($name, ["program_id", "person_id", "previous_version_id"], true) &&
+                        in_array(
+                            $name,
+                            [
+                                "program_id",
+                                "person_id",
+                                "previous_version_id",
+                                "previous_decision_id",
+                                "supersedes_adjustment_id",
+                            ],
+                            true,
+                        ) &&
                         $value === null
                     ) {
                         continue;
@@ -387,6 +516,8 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\DegreeAudit\RequirementAdjustments::class => "student_requirement_adjustments",
+            \Domain\DegreeAudit\StudentRequirements::class => "student_degree_requirements",
             \Domain\DegreeAudit\CourseGroupPublication::class => "course_group_publication",
             \Domain\DegreeAudit\RequirementsPublication::class => "degree_audit_requirements",
             \Domain\Registration\SectionCourseBinding::class => "section_course_binding",
@@ -403,6 +534,10 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            "student_requirement_adjustments" => new \Domain\DegreeAudit\ValueObject\RequirementAdjustmentsId(
+                $id,
+            ),
+            "student_degree_requirements" => new \Domain\DegreeAudit\ValueObject\StudentRequirementsId($id),
             "course_group_publication" => new \Domain\DegreeAudit\ValueObject\CourseGroupPublicationId($id),
             "degree_audit_requirements" => new \Domain\DegreeAudit\ValueObject\RequirementsPublicationId($id),
             "section_course_binding" => new \Domain\Registration\ValueObject\SectionCourseBindingId($id),

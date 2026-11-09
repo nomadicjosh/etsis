@@ -7,6 +7,7 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\DegreeAudit\Service\CourseGroupService;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
+use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -77,13 +78,13 @@ final readonly class SisCourseGroupController
     {
         return new JsonResponse($this->service->version(new EntityId($id), new EntityId($version)));
     }
-    private function definition(ServerRequest $request): CourseGroupDefinition
+    private function definition(ServerRequest $request): CourseGroupDefinition|CourseGroupDefinitionV2
     {
         $body = $request->getParsedBody();
         $d = is_array($body) ? $body["definition"] ?? null : null;
         if (!is_array($d) || array_is_list($d)) {
             throw new \InvalidArgumentException("Provide a course group definition.");
         }
-        return new CourseGroupDefinition($d);
+        return CourseGroupDefinitionV2::draft($d);
     }
 }

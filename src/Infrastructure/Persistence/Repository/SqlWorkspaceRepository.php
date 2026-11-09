@@ -11,12 +11,28 @@ use InvalidArgumentException;
 
 final readonly class SqlWorkspaceRepository implements WorkspaceRepository
 {
-    public function __construct(private SqlRecords $sql)
-    {
+    public function __construct(
+        private SqlRecords $sql,
+        private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
+    ) {
     }
 
     public function records(string $dataset, ?EntityId $owner, string $search, ?EntityId $after): array
     {
+        if ($dataset === "grades") {
+            $rows = array_values(
+                array_filter(
+                    $this->grades->choices(),
+                    static fn(array $r): bool => ($after === null || $r["id"] < $after->value) &&
+                        ($search === "" || str_contains(mb_strtolower($r["code"]), mb_strtolower($search))),
+                ),
+            );
+            usort($rows, static fn(array $a, array $b): int => strcmp($b["id"], $a["id"]));
+            return [
+                "items" => array_slice($rows, 0, 50),
+                "next_after" => count($rows) > 50 ? $rows[49]["id"] : null,
+            ];
+        }
         [$select, $from, $searchFields] = $this->definition($dataset);
         $q = $this->sql->quote(...);
         $conditions = [];
@@ -193,7 +209,9 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
             ];
         }
         if (in_array($dataset, ["external", "equivalencies"], true)) {
-            [$select, $from] = new SqlTransferCatalogRepository($this->sql)->definition($dataset);
+            [$select, $from] = new SqlTransferCatalogRepository($this->sql, $this->grades)->definition(
+                $dataset,
+            );
             $fields =
             $dataset === "external"
             ? ["r." . $q("code"), "r." . $q("title"), "i." . $q("name")]

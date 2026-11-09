@@ -118,6 +118,15 @@ final class AcademicReportSchema
                 "term_code" => $field("Academic term", "string", "term", "code"),
                 "term_starts_on" => $field("Term begins", "date", "term", "starts_on"),
                 "grade_code" => $field("Final grade", "string", "grade", "code"),
+                "grade_scale_version" => $field(
+                    "Recorded grade scale publication",
+                    "string",
+                    "grade",
+                    "scale_version_id",
+                ),
+                "grade_units" => $field("Grade-point units", "double", "grade", "points_milli") + [
+                    "scale" => 1000,
+                ],
                 "status" => $field("Academic credit status", "string", "credit", "status"),
                 "status_label" => $field("Readable academic status", "string", "credit", "status") + [
                     "expression" => "registration_label",

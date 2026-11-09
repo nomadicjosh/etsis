@@ -55,8 +55,24 @@ final readonly class TransferAwardService
     {
         $actor = $this->authorize();
         $initial = $this->awards->get($student, $award);
-        $grade = $change->grade === null ? null : $this->awards->grade($change->grade);
-        return $this->transactions->run(function () use ($student, $award, $change, $actor, $initial, $grade): array {
+        $grade =
+        $change->grade === null
+        ? null
+        : $this->awards->grade(
+            $change->grade,
+            $student,
+            $initial["credit"]["grade_id"] === null
+                        ? null
+                        : new EntityId($initial["credit"]["grade_id"]),
+        );
+        return $this->transactions->run(function () use (
+            $student,
+            $award,
+            $change,
+            $actor,
+            $initial,
+            $grade,
+        ): array {
             $this->lock($initial, $grade);
             $plan = $this->plan($this->lockedRecord($student, $award, $initial), $change, $grade);
             $this->audit->record($actor, "transfer.correction_previewed", $award);
@@ -76,7 +92,16 @@ final readonly class TransferAwardService
         $initial = $this->awards->get($student, $award);
         // Resolve lock identities outside the transaction; lock the complete context before any consistent read.
         $seen = $this->awards->action($operation);
-        $grade = $seen !== null || $change->grade === null ? null : $this->awards->grade($change->grade);
+        $grade =
+        $seen !== null || $change->grade === null
+        ? null
+        : $this->awards->grade(
+            $change->grade,
+            $student,
+            $initial["credit"]["grade_id"] === null
+                        ? null
+                        : new EntityId($initial["credit"]["grade_id"]),
+        );
         return $this->transactions->run(function () use (
             $student,
             $award,
@@ -91,11 +116,15 @@ final readonly class TransferAwardService
             $previous = $this->awards->action($operation);
             if ($previous !== null) {
                 if ($previous["award_id"] !== $award->value || $previous["actor_id"] !== $actor->value) {
-                    throw new ConcurrentModificationException("This operation belongs to another transfer correction.");
+                    throw new ConcurrentModificationException(
+                        "This operation belongs to another transfer correction.",
+                    );
                 }
                 $payload = $this->open($previous);
                 if ($payload["request"] !== $change->describe() || $payload["revision"] !== $revision) {
-                    throw new ConcurrentModificationException("This operation belongs to another transfer correction.");
+                    throw new ConcurrentModificationException(
+                        "This operation belongs to another transfer correction.",
+                    );
                 }
                 return $this->receiptRow($previous);
             }
@@ -112,7 +141,13 @@ final readonly class TransferAwardService
                 $current["credit"]["version"],
                 array_intersect_key(
                     $next,
-                    array_flip(["attempted_milli", "completed_milli", "grade_points_milli", "grade_id", "status"]),
+                    array_flip([
+                        "attempted_milli",
+                        "completed_milli",
+                        "grade_points_milli",
+                        "grade_id",
+                        "status",
+                    ]),
                 ),
             );
             $this->awards->record(
@@ -191,9 +226,15 @@ final readonly class TransferAwardService
     {
         $this->registration->lockStudent(new EntityId($record["student_id"]));
         $this->registration->lockPerson(new EntityId($record["person_id"]));
-        TransferCatalogLock::acquire($this->catalog, "equivalencies", ["id" => $record["equivalency_id"]] + $record);
+        TransferCatalogLock::acquire(
+            $this->catalog,
+            "equivalencies",
+            ["id" => $record["equivalency_id"]] + $record,
+        );
         $this->awards->lock(new EntityId($record["id"]), new EntityId($record["credit"]["id"]));
-        $grades = array_values(array_unique(array_filter([$record["credit"]["grade_id"], $grade["id"] ?? null])));
+        $grades = array_values(
+            array_unique(array_filter([$record["credit"]["grade_id"], $grade["id"] ?? null])),
+        );
         sort($grades, SORT_STRING);
         foreach ($grades as $id) {
             $this->awards->lockGrade(new EntityId($id));
@@ -206,12 +247,24 @@ final readonly class TransferAwardService
      */
     private function plan(array $record, AwardChange $change, ?array $initialGrade): array
     {
-        $before = $record["credit"] + ["grade_code" => $record["grade_code"], "counts_gpa" => $record["counts_gpa"]];
+        $before = $record["credit"] + [
+            "grade_code" => $record["grade_code"],
+            "counts_gpa" => $record["counts_gpa"],
+        ];
         $voided = $before["status"] === "V";
         if ($change->kind === "reinstate" ? !$voided : !in_array($before["status"], ["A", "N"], true)) {
             throw new DomainException("Select the appropriate action for the current award state.");
         }
-        $grade = $change->grade === null ? null : $this->awards->grade($change->grade);
+        $grade =
+        $change->grade === null
+        ? null
+        : $this->awards->grade(
+            $change->grade,
+            new EntityId($record["student_id"]),
+            $record["credit"]["grade_id"] === null
+                        ? null
+                        : new EntityId($record["credit"]["grade_id"]),
+        );
         if ($grade !== $initialGrade) {
             throw new ConcurrentModificationException("The target grade changed. Preview it again.");
         }
@@ -229,11 +282,19 @@ final readonly class TransferAwardService
         ]);
         if ($before === $after) {
             throw new ValidationException([
-                ["field" => "credits_milli", "message" => "Change the credits or grade before reviewing a correction."],
+                [
+                    "field" => "credits_milli",
+                    "message" => "Change the credits or grade before reviewing a correction.",
+                ],
             ]);
         }
         $after["version"] = $before["version"] + 1;
-        return ["record" => $record, "before" => $before, "after" => $after, "request" => $change->describe()];
+        return [
+            "record" => $record,
+            "before" => $before,
+            "after" => $after,
+            "request" => $change->describe(),
+        ];
     }
 
     /** @param array<string, mixed> $plan */

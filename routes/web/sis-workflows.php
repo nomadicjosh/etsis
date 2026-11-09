@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Application\Http\Controller\SisDegreeAuditController;
+use Application\Http\Controller\SisStudentRequirementsController;
+use Application\Http\Controller\SisRequirementAdjustmentController;
 use Application\Http\Controller\SisCourseGroupController;
 use Application\Http\Controller\SisRegistrationController;
 use Application\Http\Controller\SisCoursePublicationController;
@@ -36,6 +38,48 @@ use Application\Http\Controller\SisStudentCatalogController;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router
+        ->map(["POST"], "/sis/grading-scales/global/review/", [
+            \Application\Http\Controller\SisGradingScaleController::class,
+            "review",
+        ])
+        ->name("sis.grading.global.review");
+    $router
+        ->map(["POST"], "/sis/grading-scales/global/commit/", [
+            \Application\Http\Controller\SisGradingScaleController::class,
+            "commit",
+        ])
+        ->name("sis.grading.global.commit");
+    $router
+        ->map(["GET"], "/sis/grading-scales/global/", [
+            \Application\Http\Controller\SisGradingScaleController::class,
+            "global",
+        ])
+        ->name("sis.grading.global");
+    $router
+        ->map(["POST"], "/sis/sections/{id}/students/{student}/grade-choices/", [
+            SisGradebookController::class,
+            "gradeChoices",
+        ])
+        ->name("sis.gradebook.choices");
+    $router
+        ->map(["GET"], "/sis/programs/{program}/grading-scale/", [
+            \Application\Http\Controller\SisGradingScaleController::class,
+            "view",
+        ])
+        ->name("sis.grading.program");
+    $router
+        ->map(["POST"], "/sis/programs/{program}/grading-scale/review/", [
+            \Application\Http\Controller\SisGradingScaleController::class,
+            "review",
+        ])
+        ->name("sis.grading.program.review");
+    $router
+        ->map(["POST"], "/sis/programs/{program}/grading-scale/commit/", [
+            \Application\Http\Controller\SisGradingScaleController::class,
+            "commit",
+        ])
+        ->name("sis.grading.program.commit");
     $router
         ->map(["POST"], "/sis/catalog/offering-templates/page/", [
             \Application\Http\Controller\SisOfferingTemplateController::class,
@@ -521,9 +565,7 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/registrations/drop/", [SisRegistrationController::class, "drop"])
         ->name("sis.registration.drop");
-    $router
-        ->map(["POST"], "/sis/grade-definitions/", [SisGradebookController::class, "defineGrade"])
-        ->name("sis.gradebook.definegrade");
+
     $router
         ->map(["POST"], "/sis/sections/{id}/assignments/", [SisGradebookController::class, "assignment"])
         ->name("sis.gradebook.assignment");
@@ -730,6 +772,54 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["GET"], "/sis/employees/{id}/", [SisTimesheetController::class, "employeeProfile"])
         ->name("sis.timesheet.employee_profile");
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/replacement-courses/", [
+        SisRequirementAdjustmentController::class,
+        "replacementCourses",
+    ]);
+    $router->post(
+        "/sis/students/{student}/programs/{assignment}/degree-adjustments/replacement-courses/{course}/versions/",
+        [SisRequirementAdjustmentController::class, "replacementVersions"],
+    );
+    $router->get("/sis/students/{student}/programs/{assignment}/degree-adjustments/", [
+        SisRequirementAdjustmentController::class,
+        "view",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/review/", [
+        SisRequirementAdjustmentController::class,
+        "review",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/revoke-review/", [
+        SisRequirementAdjustmentController::class,
+        "revokeReview",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/commit/", [
+        SisRequirementAdjustmentController::class,
+        "commit",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/history/", [
+        SisRequirementAdjustmentController::class,
+        "history",
+    ]);
+    $router->get("/sis/students/{student}/programs/{assignment}/degree-requirements/", [
+        SisStudentRequirementsController::class,
+        "view",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/choices/", [
+        SisStudentRequirementsController::class,
+        "choices",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/review/", [
+        SisStudentRequirementsController::class,
+        "review",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/assign/", [
+        SisStudentRequirementsController::class,
+        "assign",
+    ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/history/", [
+        SisStudentRequirementsController::class,
+        "history",
+    ]);
     $router->post("/sis/programs/{program}/degree-audits/page/", [SisDegreeAuditController::class, "page"]);
     $router->post("/sis/programs/{program}/degree-audits/open/", [SisDegreeAuditController::class, "open"]);
     $router->get("/sis/degree-audits/{id}/", [SisDegreeAuditController::class, "view"]);

@@ -24,6 +24,10 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\Gradebook\Event\GradingScaleWasChanged::class,
+            \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class,
+            \Domain\DegreeAudit\Event\RequirementAdjustmentWasRevoked::class,
+            \Domain\DegreeAudit\Event\StudentRequirementsWereAssigned::class,
             \Domain\DegreeAudit\Event\CourseGroupWasPublished::class,
             \Domain\DegreeAudit\Event\RequirementsWerePublished::class,
             \Domain\Registration\Event\SectionCourseVersionWasBound::class,

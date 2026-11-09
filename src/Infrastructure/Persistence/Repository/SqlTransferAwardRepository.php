@@ -14,8 +14,10 @@ use InvalidArgumentException;
 
 final readonly class SqlTransferAwardRepository implements TransferAwardRepository
 {
-    public function __construct(private SqlRecords $sql)
-    {
+    public function __construct(
+        private SqlRecords $sql,
+        private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
+    ) {
     }
 
     public function get(EntityId $student, EntityId $award): array
@@ -28,7 +30,7 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             "source_id" => $award->value,
             "credit_type" => "transfer",
         ]);
-        $context = new SqlTransferCatalogRepository($this->sql)->get(
+        $context = new SqlTransferCatalogRepository($this->sql, $this->grades)->get(
             "equivalencies",
             new EntityId($r["equivalency_id"]),
         );
@@ -65,7 +67,10 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             [$student->value],
             1,
         )[0] ?? throw new RecordNotFoundException("Transfer student not found.");
-        $grade = $credit["grade_id"] === null ? null : $this->sql->one("sis_grades", ["id" => $credit["grade_id"]]);
+        $grade =
+        $credit["grade_id"] === null
+        ? null
+        : $this->sql->one("sis_grades", ["id" => $credit["grade_id"]]);
         $term = $this->sql->one("sis_terms", ["id" => $r["term_id"]]);
         foreach (["attempted_milli", "completed_milli", "grade_points_milli", "version"] as $key) {
             $credit[$key] = (int) $credit[$key];
@@ -101,10 +106,10 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
         $this->sql->lock("sis_grades", $grade->value, "id");
     }
 
-    public function grade(string $code): array
+    public function grade(string $code, ?EntityId $student = null, ?EntityId $retained = null): array
     {
-        $r = $this->sql->rows("sis_grades", ["code" => $code], 1)[0] ?? null;
-        if ($r === null || !(bool) $r["passes"]) {
+        $r = $this->grades->byCode($code, $student, $retained);
+        if (!(bool) $r["passes"]) {
             throw new ValidationException([
                 ["field" => "awarded_grade", "message" => "Choose an existing passing grade."],
             ]);
@@ -172,7 +177,10 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
         $cursor =
         $after === null
         ? null
-        : $this->sql->one("sis_transfer_award_changes", ["id" => $after->value, "award_id" => $award->value]);
+        : $this->sql->one("sis_transfer_award_changes", [
+                    "id" => $after->value,
+                    "award_id" => $award->value,
+                ]);
         return $this->sql->fetch(
             "SELECT * FROM " .
                 $q("sis_transfer_award_changes") .

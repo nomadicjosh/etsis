@@ -32,7 +32,10 @@ final readonly class DropPolicyService
             "version" => $policy["version"] ?? -1,
             "windows" => $windows,
             "default_policy" => $policy === null,
-            "grading" => array_map(fn(array $w): ?array => $this->policies->grade($w["grade_code"]), $windows),
+            "grading" => array_map(
+                fn(array $w): ?array => $this->policies->grade($w["grade_code"]),
+                $windows,
+            ),
         ];
     }
     public function save(EntityId $term, int $version, DropWindows $windows): void
@@ -49,7 +52,8 @@ final readonly class DropPolicyService
                     throw new ValidationException([
                         [
                             "field" => "windows",
-                            "message" => "Use cutoffs after the drop/add deadline and existing catalog grade codes.",
+                            "message" =>
+                                "Use cutoffs after the drop/add deadline and existing catalog grade codes.",
                         ],
                     ]);
                 }
@@ -61,7 +65,7 @@ final readonly class DropPolicyService
     /** Public academic policy metadata; callers separately authorize the affected student.
      * @return array<string, mixed>
      */
-    public function outcome(EntityId $term, string $effective): array
+    public function outcome(EntityId $term, string $effective, ?EntityId $student = null): array
     {
         $calendar = $this->policies->calendar($term);
         $base = ["term_code" => $calendar["code"], "grace_ends_on" => $calendar["add_drop_ends_on"]];
@@ -87,10 +91,13 @@ final readonly class DropPolicyService
             ];
         }
         $code = new DropWindows($policy["windows"])->gradeOn($effective);
-        $grade = $this->policies->grade($code);
+        $grade = $this->policies->grade($code, $student);
         if ($grade === null) {
             throw new ValidationException([
-                ["field" => "grade", "message" => "Catalog staff must review this term’s missing drop grade."],
+                [
+                    "field" => "grade",
+                    "message" => "Catalog staff must review this term’s missing drop grade.",
+                ],
             ]);
         }
         return $base + [

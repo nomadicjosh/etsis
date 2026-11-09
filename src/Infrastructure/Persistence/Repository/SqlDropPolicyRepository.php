@@ -11,8 +11,10 @@ use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlDropPolicyRepository implements DropPolicyRepository
 {
-    public function __construct(private SqlRecords $sql)
-    {
+    public function __construct(
+        private SqlRecords $sql,
+        private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
+    ) {
     }
     public function calendar(EntityId $term): array
     {
@@ -53,9 +55,17 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
             throw new ConcurrentModificationException("The drop policy changed.");
         }
     }
-    public function grade(string $code): ?array
+    public function grade(string $code, ?EntityId $student = null): ?array
     {
-        $r = $this->sql->rows("sis_grades", ["code" => $code], 1)[0] ?? null;
+        $r = null;
+        foreach ($this->grades->choices($student) as $candidate) {
+            if ($candidate["code"] === $code) {
+                if ($r !== null) {
+                    throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                }
+                $r = $candidate;
+            }
+        }
         if ($r === null) {
             return null;
         }

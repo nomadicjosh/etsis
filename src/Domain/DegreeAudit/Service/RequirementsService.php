@@ -86,6 +86,7 @@ final readonly class RequirementsService
         $row = $this->templates->get($id);
         AuditRequirementsV3::draft($row["definition"]);
         return $row + [
+            "grade_scale" => $this->groups->gradingScale(new EntityId($row["program_id"])),
             "context" => $this->templates->context(
                 new EntityId($row["program_id"]),
                 new EntityId($row["academic_year_id"]),
@@ -95,11 +96,8 @@ final readonly class RequirementsService
         ];
     }
     /** @return array<string, mixed> */
-    public function save(
-        EntityId $id,
-        int $revision,
-        AuditRequirementsV3 $definition,
-    ): array {
+    public function save(EntityId $id, int $revision, AuditRequirementsV3 $definition): array
+    {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         return $this->transactions->run(function () use ($id, $revision, $definition, $actor): array {
             $row = $this->lock($id);
@@ -167,6 +165,7 @@ final readonly class RequirementsService
                 );
             }
             $definition->assertPublishable();
+            $this->assertScale($row["program_id"], $definition);
             $details = $this->courseDetails($definition);
             $state = $this->state($id);
             $state->assertScope($row["program_id"], $row["academic_year_id"]);
@@ -179,7 +178,8 @@ final readonly class RequirementsService
             $op = EntityId::generate();
             $context = new EventContext($actor, $this->clock->now(), $op, reason: $reason);
             $data = [
-                "kind" => "degree-audit-publication-review.v3",
+                "kind" => "degree-audit-publication-review.v4",
+                "grade_scale" => $this->groups->gradingScale(new EntityId($row["program_id"])),
                 "template_id" => $id->value,
                 "actor_id" => $actor->value,
                 "operation_id" => $op->value,
@@ -218,6 +218,7 @@ final readonly class RequirementsService
                         "degree-audit-publication-review.v1",
                         "degree-audit-publication-review.v2",
                         "degree-audit-publication-review.v3",
+                        "degree-audit-publication-review.v4",
                     ],
                     true,
                 ) ||
@@ -242,6 +243,9 @@ final readonly class RequirementsService
             if ($data["kind"] === "degree-audit-publication-review.v3") {
                 $metadata["schema_version"] = 3;
             }
+            if ($data["kind"] === "degree-audit-publication-review.v4") {
+                $metadata["schema_version"] = 4;
+            }
             $event = RequirementsWerePublished::occur(
                 new RequirementsPublicationId($id->value),
                 [
@@ -251,7 +255,10 @@ final readonly class RequirementsService
                     "previous_version_id" => $data["previous_version_id"],
                     "labels" => array_diff_key($c, array_flip(["program_id", "academic_year_id"])),
                     "definition" => $data["definition"],
-                ],
+                ] +
+                    ($data["kind"] === "degree-audit-publication-review.v4"
+                        ? ["grade_scale" => $data["grade_scale"]]
+                        : []),
                 $metadata,
             )->withPlayhead($data["expected_version"] + 1);
             $receipt = $this->history->append(
@@ -267,7 +274,7 @@ final readonly class RequirementsService
                 [$event],
             );
             if ($receipt["event_ids"] === [(string) $event->eventId()]) {
-                if ($data["kind"] !== "degree-audit-publication-review.v3") {
+                if ($data["kind"] !== "degree-audit-publication-review.v4") {
                     throw new ConcurrentModificationException(
                         "Review reusable groups before publishing a new degree requirement version.",
                     );
@@ -286,6 +293,12 @@ final readonly class RequirementsService
                         "Requirements or program details changed. Review again.",
                     );
                 }
+                if ($this->groups->gradingScale(new EntityId($row["program_id"])) !== $data["grade_scale"]) {
+                    throw new ConcurrentModificationException(
+                        "The grading scale changed. Review this degree publication again.",
+                    );
+                }
+                $this->assertScale($row["program_id"], new AuditRequirementsV3($data["definition"]));
                 $this->courseDetails(AuditRequirementsV3::draft($data["definition"]));
                 $this->groupDetails(AuditRequirementsV3::draft($data["definition"]));
                 $this->templates->published($id, $op, $receipt["last_version"]);
@@ -308,6 +321,7 @@ final readonly class RequirementsService
                 "version_id" => $p["version_id"],
                 "version" => $stored->event->playhead(),
                 "definition" => $p["definition"],
+                "grade_scale" => $p["grade_scale"] ?? null,
                 "context" => $p["labels"] + [
                     "program_id" => $p["program_id"],
                     "academic_year_id" => $p["academic_year_id"],
@@ -331,6 +345,29 @@ final readonly class RequirementsService
         ];
     }
 
+    private function assertScale(string $program, AuditRequirementsV3 $definition): void
+    {
+        $scale = $this->groups->gradingScale(new EntityId($program));
+        foreach (["min_cumulative_gpa_milli", "min_overall_gpa_milli"] as $key) {
+            if (
+                $definition->definition[$key] !== null &&
+                $definition->definition[$key] > $scale["maximum_milli"]
+            ) {
+                throw new InvalidArgumentException(
+                    "A degree GPA minimum exceeds the resolved grading scale.",
+                );
+            }
+        }
+        foreach ($this->groupDetails($definition) as $group) {
+            $minimum = $group["definition"]["min_course_grade_points_milli"] ?? null;
+            if ($minimum !== null && $minimum > $scale["maximum_milli"]) {
+                throw new InvalidArgumentException(
+                    "A course-group minimum exceeds this program’s resolved grading scale. " .
+                        "Choose an appropriate group publication.",
+                );
+            }
+        }
+    }
     /** @return array<string, mixed> */
     private function published(EntityId $id, EntityId $version): array
     {

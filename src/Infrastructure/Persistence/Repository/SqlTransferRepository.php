@@ -15,13 +15,19 @@ use PDOException;
 
 final readonly class SqlTransferRepository implements TransferRepository
 {
-    public function __construct(private SqlRecords $sql)
-    {
+    public function __construct(
+        private SqlRecords $sql,
+        private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
+    ) {
     }
 
     public function addInstitution(EntityId $id, string $code, string $name): void
     {
-        $this->insertLabel("sis_external_institutions", ["id" => $id->value, "code" => $code, "name" => $name]);
+        $this->insertLabel("sis_external_institutions", [
+            "id" => $id->value,
+            "code" => $code,
+            "name" => $name,
+        ]);
     }
 
     public function addExternalCourse(EntityId $id, EntityId $institution, string $code, string $title): void
@@ -40,7 +46,7 @@ final readonly class SqlTransferRepository implements TransferRepository
         if ($course["institution_id"] !== $equivalency->externalInstitutionId->value) {
             throw new DomainException("The external institution does not match the course.");
         }
-        $grade = $this->sql->one("sis_grades", ["code" => $equivalency->awardedGrade]);
+        $grade = $this->grades->byCode($equivalency->awardedGrade);
         if (!(bool) $grade["passes"]) {
             throw new DomainException("Transfer credit requires a passing awarded grade.");
         }
@@ -79,7 +85,10 @@ final readonly class SqlTransferRepository implements TransferRepository
             }
             return new EntityId($existing[0]["credit_id"]);
         }
-        $grade = $this->sql->one("sis_grades", ["code" => $equivalency->awardedGrade]);
+        $grade = $this->grades->byCode($equivalency->awardedGrade, $student);
+        if (!(bool) $grade["passes"]) {
+            throw new DomainException("The applicable program scale does not award credit for this grade.");
+        }
         $course = $this->sql->one("sis_courses", ["id" => $equivalency->institutionalCourseId->value]);
         $creditId = EntityId::generate();
         $this->sql->insert("sis_academic_credits", [
@@ -172,7 +181,9 @@ final readonly class SqlTransferRepository implements TransferRepository
             $this->sql->insert($table, $values);
         } catch (PDOException $error) {
             if (in_array((string) $error->getCode(), ["23000", "23505"], true)) {
-                throw new ValidationException([["field" => "code", "message" => "This code is already assigned."]]);
+                throw new ValidationException([
+                    ["field" => "code", "message" => "This code is already assigned."],
+                ]);
             }
             throw $error;
         }

@@ -11,7 +11,9 @@ use Domain\Communications\Service\MessageCipher;
 use Domain\DegreeAudit\CourseGroupPublication;
 use Domain\DegreeAudit\Event\CourseGroupWasPublished;
 use Domain\DegreeAudit\Repository\CourseGroupRepository;
+use Domain\Gradebook\Service\GradingScaleService;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
+use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
 use Domain\DegreeAudit\ValueObject\CourseGroupPublicationId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
@@ -38,6 +40,7 @@ final readonly class CourseGroupService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private GradingScaleService $gradeScale,
     ) {
     }
     /** @return array<string, mixed> */
@@ -50,11 +53,12 @@ final readonly class CourseGroupService
         $rows = $this->groups->page(trim($search), $after, $publishedOnly);
         return [
             "items" => array_slice($rows, 0, 50),
+            "grade_point_scale" => $this->gradePointScale(),
             "next_after" => count($rows) > 50 ? $rows[49]["id"] : null,
         ];
     }
     /** @return array<string, mixed> */
-    public function create(EntityId $id, CourseGroupDefinition $definition): array
+    public function create(EntityId $id, CourseGroupDefinition|CourseGroupDefinitionV2 $definition): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         return $this->transactions->run(function () use ($id, $definition, $actor): array {
@@ -71,6 +75,7 @@ final readonly class CourseGroupService
                 }
                 return $this->view($id);
             }
+            $this->assertCurrentScale($definition);
             $this->groups->create($id, $definition->definition);
             $this->audit->record($actor, "course_group.draft_created", $id);
             return $this->view($id);
@@ -82,25 +87,34 @@ final readonly class CourseGroupService
         $this->access->requirePermission("sis:catalog:manage");
         $row = $this->groups->get($id);
         return $row + [
-            "course_details" => $this->courseDetails(new CourseGroupDefinition($row["definition"])),
+            "course_details" => $this->courseDetails(CourseGroupDefinitionV2::draft($row["definition"])),
+            "grade_point_scale" => $this->gradePointScale(
+                isset($row["definition"]["grade_scale_program_id"])
+                    ? new EntityId($row["definition"]["grade_scale_program_id"])
+                    : null,
+            ),
         ];
     }
     /** @return array<string, mixed> */
-    public function save(EntityId $id, int $revision, CourseGroupDefinition $definition): array
-    {
+    public function save(
+        EntityId $id,
+        int $revision,
+        CourseGroupDefinition|CourseGroupDefinitionV2 $definition,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         return $this->transactions->run(function () use ($id, $revision, $definition, $actor): array {
             $this->groups->lock($id);
             $row = $this->groups->get($id);
             if (
                 in_array($row["revision"], [$revision, $revision + 1], true) &&
-                new CourseGroupDefinition($row["definition"])->hash() === $definition->hash()
+                CourseGroupDefinitionV2::draft($row["definition"])->hash() === $definition->hash()
             ) {
                 return $this->view($id);
             }
             if ($row["revision"] !== $revision) {
                 throw new ConcurrentModificationException("The group changed. Reload before saving.");
             }
+            $this->assertCurrentScale($definition);
             $this->groups->save($id, $revision, $definition->definition);
             $this->audit->record($actor, "course_group.draft_saved", $id);
             return $this->view($id);
@@ -116,8 +130,9 @@ final readonly class CourseGroupService
         return $this->transactions->run(function () use ($id, $actor, $reason): array {
             $this->groups->lock($id);
             $row = $this->groups->get($id);
-            $d = new CourseGroupDefinition($row["definition"]);
+            $d = CourseGroupDefinitionV2::draft($row["definition"]);
             $d->assertPublishable();
+            $this->assertCurrentScale($d);
             $details = $this->courseDetails($d);
             $state = CourseGroupPublication::root($this->stream($id)->aggregateId);
             $cursor = null;
@@ -137,7 +152,10 @@ final readonly class CourseGroupService
             $op = EntityId::generate();
             $context = new EventContext($actor, $this->clock->now(), $op, reason: $reason);
             $data = [
-                "kind" => "course-group-publication-review.v1",
+                "kind" =>
+                    $d instanceof CourseGroupDefinitionV2
+                        ? "course-group-publication-review.v2"
+                        : "course-group-publication-review.v1",
                 "group_id" => $id->value,
                 "actor_id" => $actor->value,
                 "operation_id" => $op->value,
@@ -165,7 +183,11 @@ final readonly class CourseGroupService
             $data = json_decode($this->cipher->open($token), true, 20, JSON_THROW_ON_ERROR);
             if (
                 !is_array($data) ||
-                ($data["kind"] ?? null) !== "course-group-publication-review.v1" ||
+                !in_array(
+                    $data["kind"] ?? null,
+                    ["course-group-publication-review.v1", "course-group-publication-review.v2"],
+                    true,
+                ) ||
                 ($data["group_id"] ?? null) !== $id->value
             ) {
                 throw new InvalidArgumentException();
@@ -180,6 +202,10 @@ final readonly class CourseGroupService
             $this->groups->lock($id);
             $row = $this->groups->get($id);
             $op = new EntityId($data["operation_id"]);
+            $metadata = ["__aggregate_type" => "course_group_publication"];
+            if ($data["kind"] === "course-group-publication-review.v2") {
+                $metadata["schema_version"] = 2;
+            }
             $event = CourseGroupWasPublished::occur(
                 $this->stream($id)->aggregateId,
                 [
@@ -187,7 +213,7 @@ final readonly class CourseGroupService
                     "previous_version_id" => $data["previous_version_id"],
                     "definition" => $data["definition"],
                 ],
-                ["__aggregate_type" => "course_group_publication"],
+                $metadata,
             )->withPlayhead($data["expected_version"] + 1);
             $receipt = $this->history->append(
                 $this->stream($id),
@@ -204,12 +230,13 @@ final readonly class CourseGroupService
             if ($receipt["event_ids"] === [(string) $event->eventId()]) {
                 if (
                     $row["revision"] !== $data["revision"] ||
-                    new CourseGroupDefinition($row["definition"])->hash() !==
-                        new CourseGroupDefinition($data["definition"])->hash()
+                    CourseGroupDefinitionV2::draft($row["definition"])->hash() !==
+                        CourseGroupDefinitionV2::draft($data["definition"])->hash()
                 ) {
                     throw new ConcurrentModificationException("The group changed. Review publication again.");
                 }
-                $this->courseDetails(new CourseGroupDefinition($data["definition"]));
+                $this->assertCurrentScale(CourseGroupDefinitionV2::draft($data["definition"]));
+                $this->courseDetails(CourseGroupDefinitionV2::draft($data["definition"]));
                 $this->groups->published($id, $op, $receipt["last_version"], $data["definition"]["name"]);
                 $this->audit->record($actor, "course_group.published", $id);
             }
@@ -226,6 +253,7 @@ final readonly class CourseGroupService
         foreach ($page->events as $stored) {
             $p = $stored->event->payload();
             $items[] = [
+                "schema_version" => $stored->event->metaParam("schema_version", 1),
                 "group_id" => $id->value,
                 "version_id" => $p["version_id"],
                 "version" => $stored->event->playhead(),
@@ -254,15 +282,45 @@ final readonly class CourseGroupService
             throw new RecordNotFoundException("Published group version not found for this group.");
         }
         return $found + [
-            "course_details" => $this->courseDetails(new CourseGroupDefinition($found["definition"])),
+            "course_details" => $this->courseDetails(CourseGroupDefinitionV2::draft($found["definition"])),
         ];
+    }
+    /** Authorized authoring context, also used by the degree composition workflow.
+     * @return array<string,mixed>
+     */
+    public function gradingScale(?EntityId $program = null): array
+    {
+        $this->access->requirePermission("sis:catalog:manage");
+        return $this->gradePointScale($program);
+    }
+    /** @return array<string,mixed> */
+    private function gradePointScale(?EntityId $program = null): array
+    {
+        return $this->gradeScale->resolve($program);
+    }
+    private function assertCurrentScale(CourseGroupDefinition|CourseGroupDefinitionV2 $definition): void
+    {
+        if (
+            $definition instanceof CourseGroupDefinitionV2 &&
+            $definition->definition["max_course_grade_points_milli"] !==
+                $this->gradePointScale(
+                    $definition->definition["grade_scale_program_id"] === null
+                        ? null
+                        : new EntityId($definition->definition["grade_scale_program_id"]),
+                )["maximum_milli"]
+        ) {
+            throw new ConcurrentModificationException(
+                "Grade definitions changed the maximum grade points. " .
+                    "Reload the group and review its minimum before publishing.",
+            );
+        }
     }
     private function stream(EntityId $id): StreamReference
     {
         return new StreamReference(new CourseGroupPublicationId($id->value), "course_group_publication");
     }
     /** @return array<string, array<string, mixed>> */
-    private function courseDetails(CourseGroupDefinition $definition): array
+    private function courseDetails(CourseGroupDefinition|CourseGroupDefinitionV2 $definition): array
     {
         $rows = [];
         foreach ($definition->definition["courses"] as $c) {

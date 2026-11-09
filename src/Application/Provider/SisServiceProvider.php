@@ -15,6 +15,16 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Gradebook\Repository\AcademicGradeRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAcademicGradeRepository::class,
+            \Domain\Gradebook\Repository\GradingScaleRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlGradingScaleRepository::class,
+            \Domain\DegreeAudit\Repository\ReplacementCourseRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository::class,
+            \Domain\DegreeAudit\Repository\RequirementAdjustmentRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlRequirementAdjustmentRepository::class,
+            \Domain\DegreeAudit\Repository\StudentRequirementsRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlStudentRequirementsRepository::class,
             \Domain\DegreeAudit\Repository\CourseGroupRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlCourseGroupRepository::class,
             \Domain\DegreeAudit\Repository\RequirementsRepository::class =>

@@ -62,7 +62,10 @@ final readonly class CourseDropService
         return $this->transactions->run(function () use ($student, $section, $date, $routing): array {
             $this->lock($student, $section, $routing);
             $context = $this->context($student, $section, $date);
-            return $context + ["operation_id" => EntityId::generate()->value, "revision" => $this->revision($context)];
+            return $context + [
+                "operation_id" => EntityId::generate()->value,
+                "revision" => $this->revision($context),
+            ];
         });
     }
     /** @return array<string, mixed> */
@@ -112,7 +115,9 @@ final readonly class CourseDropService
                 return $this->replay($old, $actor, $hash);
             }
             if (!$effectiveDated && $effective !== $this->clock->now()->format("Y-m-d")) {
-                throw new ConcurrentModificationException("The institutional date changed. Review this drop again.");
+                throw new ConcurrentModificationException(
+                    "The institutional date changed. Review this drop again.",
+                );
             }
             $context = $this->context($student, $section, $effective);
             if (
@@ -120,7 +125,9 @@ final readonly class CourseDropService
                 $context["version"] !== $version ||
                 !hash_equals($this->revision($context), $revision)
             ) {
-                throw new ConcurrentModificationException("This enrollment or drop policy changed. Review it again.");
+                throw new ConcurrentModificationException(
+                    "This enrollment or drop policy changed. Review it again.",
+                );
             }
             $current =
                 $this->registration->enrollment($student, $section) ??
@@ -141,7 +148,11 @@ final readonly class CourseDropService
                 "effective_on" => $effective,
                 "grade_code" => $context["outcome"]["grade_code"],
                 "academic_records_removed" => $context["outcome"]["delete_records"],
-                "course_charge" => $context["outcome"]["delete_records"] ? ($reversed ? "reversed" : "none") : "kept",
+                "course_charge" => $context["outcome"]["delete_records"]
+                    ? ($reversed
+                        ? "reversed"
+                        : "none")
+                    : "kept",
                 "cash_refund_issued" => false,
                 "term_id" => $closed->termId->value,
                 "registered_at" => $closed->registeredAt->format(DATE_ATOM),
@@ -155,7 +166,9 @@ final readonly class CourseDropService
                 $enrollment,
                 $closed->version,
                 $hash,
-                $this->cipher->seal(json_encode(["before" => $context, "result" => $result], JSON_THROW_ON_ERROR)),
+                $this->cipher->seal(
+                    json_encode(["before" => $context, "result" => $result], JSON_THROW_ON_ERROR),
+                ),
                 $this->clock
                     ->now()
                     ->setTimezone(new DateTimeZone("UTC"))
@@ -173,12 +186,18 @@ final readonly class CourseDropService
     public function receipt(EntityId $operation): array
     {
         $actor = $this->access->authenticatedUserId();
-        $row = $this->drops->receipt($operation) ?? throw new RecordNotFoundException("Drop receipt not found.");
+        $row =
+        $this->drops->receipt($operation) ?? throw new RecordNotFoundException("Drop receipt not found.");
         $this->authorize(new EntityId($row["student_id"]));
         if ($row["actor_id"] !== $actor->value) {
             throw new AccessDeniedException("Access denied.");
         }
-        return json_decode($this->cipher->open($row["encrypted_content"]), true, 32, JSON_THROW_ON_ERROR)["result"];
+        return json_decode(
+            $this->cipher->open($row["encrypted_content"]),
+            true,
+            32,
+            JSON_THROW_ON_ERROR,
+        )["result"];
     }
     public function drop(EntityId $student, EntityId $section): Enrollment
     {
@@ -274,11 +293,20 @@ final readonly class CourseDropService
             $credit["course_id"] !== $sectionRecord->courseId->value ||
             $credit["status"] !== $e->status->value
         ) {
-            throw new ConcurrentModificationException("The course and academic record need registrar review.");
+            throw new ConcurrentModificationException(
+                "The course and academic record need registrar review.",
+            );
         }
-        if ($credit["grade_id"] !== null || $credit["completed_milli"] !== 0 || $credit["grade_points_milli"] !== 0) {
+        if (
+            $credit["grade_id"] !== null ||
+            $credit["completed_milli"] !== 0 ||
+            $credit["grade_points_milli"] !== 0
+        ) {
             throw new ValidationException([
-                ["field" => "enrollment_id", "message" => "Posted academic credit requires a grade-change review."],
+                [
+                    "field" => "enrollment_id",
+                    "message" => "Posted academic credit requires a grade-change review.",
+                ],
             ]);
         }
         $s = $this->admissions->student($student);
@@ -296,7 +324,7 @@ final readonly class CourseDropService
             "effective_on" => $effective,
             "timezone" => $now->getTimezone()->getName(),
             "credit" => $credit,
-            "outcome" => $this->policy->outcome($e->termId, $effective),
+            "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId),
         ];
     }
     /** @param array<string, mixed> $context */
@@ -315,6 +343,11 @@ final readonly class CourseDropService
         if (!hash_equals($row["request_hash"], $hash)) {
             throw new ConcurrentModificationException("This reference belongs to another drop request.");
         }
-        return json_decode($this->cipher->open($row["encrypted_content"]), true, 32, JSON_THROW_ON_ERROR)["result"];
+        return json_decode(
+            $this->cipher->open($row["encrypted_content"]),
+            true,
+            32,
+            JSON_THROW_ON_ERROR,
+        )["result"];
     }
 }

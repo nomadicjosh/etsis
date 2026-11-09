@@ -61,7 +61,10 @@ final readonly class HiatusWorkflowService
                     "section_ids" =>
                         $proposal["courses"] && $now
                             ? array_column(
-                                array_filter($context["courses"], static fn(array $row): bool => $row["eligible"]),
+                                array_filter(
+                                    $context["courses"],
+                                    static fn(array $row): bool => $row["eligible"],
+                                ),
                                 "section_id",
                             )
                             : [],
@@ -71,8 +74,11 @@ final readonly class HiatusWorkflowService
     }
 
     /** @return array<string, mixed> */
-    public function commit(StudentHiatus $hiatus, #[\SensitiveParameter] string $note, HiatusImpact $impact): array
-    {
+    public function commit(
+        StudentHiatus $hiatus,
+        #[\SensitiveParameter] string $note,
+        HiatusImpact $impact,
+    ): array {
         $actor = $this->access->requirePermission("sis:registration:manage");
         if ($this->history->find($hiatus->id) !== null) {
             return $this->replay($hiatus, $note, $impact);
@@ -85,7 +91,9 @@ final readonly class HiatusWorkflowService
             }
             $context = $this->context($hiatus->studentId, $hiatus->code, $hiatus->dates, $routing);
             if (!hash_equals($this->revision($context), $impact->revision)) {
-                throw new ConcurrentModificationException("Review the current hiatus plan before confirming.");
+                throw new ConcurrentModificationException(
+                    "Review the current hiatus plan before confirming.",
+                );
             }
             if (!$context["effective_now"] && ($impact->deactivate || $impact->sections !== [])) {
                 throw new ValidationException([
@@ -137,7 +145,12 @@ final readonly class HiatusWorkflowService
                 $result["course_changes"][$index]["course_charge"] = $dropped["course_charge"];
                 $this->audit->record($actor, "registration.effective_dropped", $enrollment->id);
             }
-            $recorded = new HiatusImpact($impact->deactivate, $impact->revision, $result, ...$impact->sections);
+            $recorded = new HiatusImpact(
+                $impact->deactivate,
+                $impact->revision,
+                $result,
+                ...$impact->sections,
+            );
             $this->hiatuses->create($hiatus, $note, $recorded);
             if ($result["student_activity_changed"]) {
                 $this->students->setActive($hiatus->studentId, false);
@@ -148,8 +161,11 @@ final readonly class HiatusWorkflowService
     }
 
     /** @return array<string, mixed> */
-    private function replay(StudentHiatus $hiatus, #[\SensitiveParameter] string $note, HiatusImpact $impact): array
-    {
+    private function replay(
+        StudentHiatus $hiatus,
+        #[\SensitiveParameter] string $note,
+        HiatusImpact $impact,
+    ): array {
         $this->hiatuses->create($hiatus, $note, $impact);
         return [
             "id" => $hiatus->id->value,
@@ -204,7 +220,10 @@ final readonly class HiatusWorkflowService
             $registered = new DateTimeImmutable($row["registered_at"], new DateTimeZone("UTC"))
                 ->setTimezone($now->getTimezone())
                 ->format("Y-m-d");
-            $posted = $row["grade_id"] !== null || $row["completed_milli"] !== 0 || $row["grade_points_milli"] !== 0;
+            $posted =
+            $row["grade_id"] !== null ||
+            $row["completed_milli"] !== 0 ||
+            $row["grade_points_milli"] !== 0;
             $row["eligible"] = !$posted && $registered <= $effective && $effective <= $now->format("Y-m-d");
             $row["reason"] = $posted
             ? "Final grade posted — keep; use the grade-change review process."
@@ -214,7 +233,11 @@ final readonly class HiatusWorkflowService
                         ? "Scheduled date — record history without immediate changes."
                         : ""));
             unset($row["grade_id"], $row["completed_milli"], $row["grade_points_milli"]);
-            $row["drop_policy"] = $this->dropPolicies->outcome(new EntityId($row["term_id"]), $effective);
+            $row["drop_policy"] = $this->dropPolicies->outcome(
+                new EntityId($row["term_id"]),
+                $effective,
+                $studentId,
+            );
             $row["proposed_status"] = $row["drop_policy"]["delete_records"] ? "D" : "W";
         }
         unset($row);
@@ -244,7 +267,8 @@ final readonly class HiatusWorkflowService
             throw new ValidationException([
                 [
                     "field" => "sections",
-                    "message" => "This case exceeds 100 open enrollments and requires a focused registrar review.",
+                    "message" =>
+                        "This case exceeds 100 open enrollments and requires a focused registrar review.",
                 ],
             ]);
         }

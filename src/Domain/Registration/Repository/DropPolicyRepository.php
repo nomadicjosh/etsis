@@ -16,5 +16,5 @@ interface DropPolicyRepository
     /** @param list<array{through: ?string, grade_code: string}> $windows */
     public function save(EntityId $term, int $version, array $windows): void;
     /** @return array<string, mixed>|null */
-    public function grade(string $code): ?array;
+    public function grade(string $code, ?EntityId $student = null): ?array;
 }

@@ -13,7 +13,7 @@ interface TransferAwardRepository
     public function lock(EntityId $award, EntityId $credit): void;
     public function lockGrade(EntityId $grade): void;
     /** @return array<string, mixed> */
-    public function grade(string $code): array;
+    public function grade(string $code, ?EntityId $student = null, ?EntityId $retained = null): array;
     /** @param array<string, scalar|null> $values */
     public function apply(EntityId $credit, int $version, array $values): void;
     /** @return array<string, mixed>|null */
