@@ -42,6 +42,7 @@ final readonly class RequirementsService
         private Clock $clock,
         private CourseGroupService $groups,
         private RequirementProgramContext $programs,
+        private PublishedRequirementsReader $publishedPrograms,
     ) {
     }
 
@@ -363,6 +364,15 @@ final readonly class RequirementsService
         $this->access->requirePermission("sis:catalog:manage");
         $selected = $this->published($id, $version);
         return $selected + [
+            "program_publication" =>
+                ($selected["program_version_id"] ?? null) === null
+                    ? null
+                    : $this->publishedPrograms->programDefinition(
+                        new EntityId($selected["context"]["program_id"]),
+                        new EntityId($selected["context"]["academic_year_id"]),
+                        new EntityId($selected["program_version_id"]),
+                        $selected["context"],
+                    ),
             "course_details" => $this->courseDetails(AuditRequirementsV3::draft($selected["definition"])),
             "group_details" => $this->groupDetails(AuditRequirementsV3::draft($selected["definition"])),
         ];

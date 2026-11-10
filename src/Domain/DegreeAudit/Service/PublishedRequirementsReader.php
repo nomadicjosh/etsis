@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\Catalog\CoursePublication;
+use Domain\Catalog\ProgramPublication;
+use Domain\Catalog\ValueObject\ProgramPublicationId;
+use Domain\Catalog\ValueObject\ProgramDefinition;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Catalog\ValueObject\CoursePublicationId;
 use Domain\Catalog\ValueObject\PublishedCourseDefinition;
 use Domain\DegreeAudit\CourseGroupPublication;
@@ -47,6 +51,15 @@ final readonly class PublishedRequirementsReader
         $state = RequirementsPublication::root($stream->aggregateId);
         $found = $this->selected($stream, $version, $state);
         $p = $found["payload"];
+        $program =
+        $found["program_version_id"] === null
+        ? null
+        : $this->programDefinition(
+            new EntityId($p["program_id"]),
+            new EntityId($p["academic_year_id"]),
+            new EntityId($found["program_version_id"]),
+            $p["labels"],
+        );
         $groups = [];
         if ($found["schema_version"] >= 3) {
             foreach ($p["definition"]["groups"] as $g) {
@@ -62,6 +75,7 @@ final readonly class PublishedRequirementsReader
             "version" => $found["version"],
             "schema_version" => $found["schema_version"],
             "program_version_id" => $found["program_version_id"],
+            "program_publication" => $program,
             "program_id" => $p["program_id"],
             "academic_year_id" => $p["academic_year_id"],
             "context" => $p["labels"],
@@ -70,6 +84,34 @@ final readonly class PublishedRequirementsReader
             "group_details" => $groups,
         ];
     }
+    /** @param array<string,mixed> $labels
+     * @return array<string, mixed>
+     */
+    public function programDefinition(
+        EntityId $program,
+        EntityId $year,
+        EntityId $version,
+        array $labels = [],
+    ): array {
+        $stream = new StreamReference(new ProgramPublicationId($program->value), "program_publication");
+        $found = $this->selected($stream, $version, ProgramPublication::root($stream->aggregateId));
+        $payload = $found["payload"];
+        if (
+            $payload["academic_year_id"] !== $year->value ||
+            ($labels !== [] &&
+                (($labels["program_code"] ?? null) !== $payload["definition"]["code"] ||
+                    ($labels["program_title"] ?? null) !== $payload["definition"]["title"]))
+        ) {
+            throw new CorruptHistoryException();
+        }
+        return [
+            "version_id" => $version->value,
+            "catalog_revision" => $payload["catalog_revision"],
+            "academic_year_code" => $payload["academic_year_code"],
+            "definition" => ProgramDefinition::fromArray($payload["definition"])->describe(),
+        ];
+    }
+
     /** @return array<string, mixed> */
     private function group(EntityId $id, EntityId $version): array
     {
@@ -106,7 +148,7 @@ final readonly class PublishedRequirementsReader
     private function selected(
         StreamReference $stream,
         EntityId $version,
-        RequirementsPublication|CourseGroupPublication|CoursePublication $state,
+        RequirementsPublication|CourseGroupPublication|CoursePublication|ProgramPublication $state,
     ): array {
         $cursor = null;
         $found = null;

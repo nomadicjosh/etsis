@@ -240,6 +240,19 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `${text(d.min_credits_milli)} total credits · ${text(d.min_resident_milli)} resident credits`,
                 ),
             );
+        if (item.program_publication) {
+            const program = item.program_publication;
+            const definition = program.definition;
+            const facts = node("details", { class: "audit-tree-section" },
+                node("summary", {}, `Retained program · ${definition.code} — ${definition.title}`),
+                node("p", {}, `${program.academic_year_code} · Catalog revision ${program.catalog_revision}`),
+                node("p", { class: "course-description-text" }, definition.description || "No description specified."));
+            for (const [kind, label] of Object.entries({ department: "Department", academic_level: "Academic level", award: "Award" })) {
+                const value = definition.classifications[kind];
+                facts.append(node("p", {}, `${label}: ${value ? `${value.code} — ${value.title}` : "Not specified"}`));
+            }
+            tree.append(facts);
+        }
         if (item.grade_scale) {
             const scale = item.grade_scale;
             const scaleDetails = node(
@@ -1609,7 +1622,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     name: "student-requirement-version",
                     value: v.version_id,
                     checked: selected === v.version_id,
-                    disabled: v.schema_version !== 3,
+                    disabled: v.assignable === false || ![3, 4].includes(v.schema_version),
                 });
                 input.addEventListener("change", () => {
                     selected = v.version_id;
@@ -1625,11 +1638,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             input,
                             node("span", {}, `Version ${v.version} · ${v.name} · ${v.academic_year_code}`),
                         ),
-                        v.schema_version !== 3
+                        v.assignment_note || ![3, 4].includes(v.schema_version)
                             ? node(
                                   "p",
                                   { class: "form-text" },
-                                  "Publish an updated reusable-group composition before assigning this version.",
+                                  v.assignment_note || "Publish an updated reusable-group composition before assigning this version.",
                               )
                             : null,
                     ),

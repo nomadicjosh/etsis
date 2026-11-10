@@ -4,7 +4,7 @@ const { fixture, accessible, id } = require("./support/student-degree-fixture.cj
 test("registrar explicitly assigns a cohort publication with preserved review fields and no automatic assignment", async ({
     page,
 }) => {
-    const f = await fixture(page, { paging: true });
+    const f = await fixture(page, { paging: true, requirementSchema: 4 });
     await expect(page.locator("dialog.degree-audit-studio")).toContainText(
         "No published requirements have been assigned",
     );
@@ -208,4 +208,28 @@ test("student readers see their course waiver without approval or revocation con
     expect(f.calls.some((c) => c.path === f.adjustmentBase + "commit/")).toBe(false);
     await accessible(page);
     expect(f.errors).toEqual([]);
+});
+
+test('a mismatched program revision is explained before selection', async ({ page }) => {
+    const f = await fixture(page, { catalogMismatch: true, requirementSchema: 4 });
+    await page.getByRole('button', { name: 'Assign published requirements', exact: true }).click();
+    await expect(page.getByRole('radio', { name: /Version 1 · B.S. Computing/ })).toBeDisabled();
+    await expect(page.locator('dialog.degree-audit-studio')).toContainText('different program catalog revision');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.calls.some(c => c.path.endsWith('/assign/'))).toBe(false);
+});
+
+test('retained program details display their original labels as literal text', async ({ page }) => {
+    await fixture(page, { assigned: true, programPublication: {
+        version_id: id(20), catalog_revision: 1, academic_year_code: '2026-2027',
+        definition: { code: 'BSCS', title: 'Original Computing', description: 'Original program description',
+            classifications: { department: null, academic_level: null,
+                award: { code: 'BS', title: 'Bachelor <script>fictional</script>' } } },
+    } });
+    await page.getByText('Retained program · BSCS — Original Computing', { exact: true }).click();
+    await expect(page.locator('dialog.degree-audit-studio')).toContainText('Bachelor <script>fictional</script>');
+    await expect(page.locator('dialog.degree-audit-studio script')).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
 });

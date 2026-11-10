@@ -129,6 +129,7 @@ final class ReusableGroupFixture
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
                 new \Domain\Catalog\Service\PublishedProgramReader($this->history, new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql)),
             ),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($this->history),
         );
     }
     public function publishGroup(): EntityId

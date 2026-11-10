@@ -21,6 +21,18 @@ final class RequirementProgramLinkTest extends TestCase
         $review = $r->degrees->review($r->degree, "Fictional linked requirements");
         $version = new EntityId($r->degrees->publish($r->degree, $review["review_token"])["operation_id"]);
         $before = $r->sis->sql->rows("sis_history_events");
+        $choices = $student->service->choices($student->student, $student->assignment);
+        $linkedChoice = array_values(
+            array_filter(
+                $choices["items"],
+                static fn(array $item): bool => $item["version_id"] === $version->value,
+            ),
+        )[0];
+        self::assertFalse($linkedChoice["assignable"]);
+        self::assertStringContainsString(
+            "different program catalog revision",
+            $linkedChoice["assignment_note"],
+        );
         try {
             $student->service->review(
                 $student->student,
@@ -67,6 +79,8 @@ final class RequirementProgramLinkTest extends TestCase
         );
         $review = $r->degrees->review($r->degree, "Fictional degree approval");
         self::assertSame($first["operation_id"], $review["program_publication"]["version_id"]);
+        self::assertSame(1, $review['program_publication']['catalog_revision']);
+        self::assertSame('2027-2028', $review['program_publication']['academic_year_code']);
         self::assertSame("Computer Science", $review["context"]["program_title"]);
         $receipt = $r->degrees->publish($r->degree, $review["review_token"]);
         $page = $r->degrees->versions($r->degree);
@@ -77,6 +91,15 @@ final class RequirementProgramLinkTest extends TestCase
             $reader->version($r->degree, new EntityId($receipt["operation_id"]))["program_version_id"],
         );
         $this->program($r, $p);
+        $historical = $reader->version($r->degree, new EntityId($receipt["operation_id"]));
+        self::assertSame("Computer Science", $historical["program_publication"]["definition"]["title"]);
+        self::assertSame(1, $historical["program_publication"]["catalog_revision"]);
+        self::assertSame(
+            "Computer Science",
+            $r->degrees->version($r->degree, new EntityId($receipt["operation_id"]))["program_publication"][
+                "definition"
+            ]["title"],
+        );
         $before = $r->sis->sql->rows("sis_history_events");
         self::assertSame($receipt, $r->degrees->publish($r->degree, $review["review_token"]));
         self::assertSame($before, $r->sis->sql->rows("sis_history_events"));
@@ -110,5 +133,18 @@ final class RequirementProgramLinkTest extends TestCase
         $this->program($r, new ProgramPublicationFixture($r->sis));
         self::assertNull($r->degrees->versions($r->degree)["items"][0]["program_version_id"]);
         self::assertSame($receipt, $r->degrees->publish($r->degree, $review["review_token"]));
+    }
+
+    public function testHistoricalProgramInspectionRejectsAnotherAcademicYear(): void
+    {
+        $r = new ReusableGroupFixture();
+        $publication = $this->program($r, new ProgramPublicationFixture($r->sis));
+        $reader = new \Domain\DegreeAudit\Service\PublishedRequirementsReader($r->history);
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        $reader->programDefinition(
+            $r->sis->program,
+            EntityId::generate(),
+            new EntityId($publication["operation_id"]),
+        );
     }
 }

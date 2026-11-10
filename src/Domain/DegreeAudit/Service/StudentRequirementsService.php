@@ -106,7 +106,22 @@ final readonly class StudentRequirementsService
         if ($row === null) {
             return ["items" => [], "next_cursor" => null, "template_id" => null];
         }
-        return $this->published->page(new EntityId($row["id"]), $cursor) + ["template_id" => $row["id"]];
+        $page = $this->published->page(new EntityId($row["id"]), $cursor);
+        foreach ($page["items"] as &$item) {
+            $compatible =
+            $item["program_version_id"] === null ||
+            $item["program_version_id"] === $scope["cohort_catalog_id"];
+            $item["assignable"] = $compatible && in_array($item["schema_version"], [3, 4], true);
+            $item["assignment_note"] = !$compatible
+            ? "This requirement version belongs to a different program catalog revision."
+            : (!in_array($item["schema_version"], [3, 4], true)
+                    ? "Publish an updated reusable-group composition before assigning this version."
+                    : ($item["program_version_id"] === null
+                        ? "No program-publication link was recorded for this version."
+                        : "Matches the student’s assigned program catalog revision."));
+        }
+        unset($item);
+        return $page + ["template_id" => $row["id"]];
     }
     /** @return array<string, mixed> */
     public function review(

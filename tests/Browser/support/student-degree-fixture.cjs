@@ -19,6 +19,7 @@ async function fixture(page, options = {}) {
         calls = [],
         errors = [];
     const requirements = {
+        program_publication: options.programPublication || null,
         template_id: template,
         version_id: version,
         version: 1,
@@ -196,7 +197,9 @@ async function fixture(page, options = {}) {
                           {
                               version_id: version,
                               version: 1,
-                              schema_version: 3,
+                              schema_version: options.requirementSchema || 3,
+                              assignable: !options.catalogMismatch,
+                              assignment_note: options.catalogMismatch ? "This requirement version belongs to a different program catalog revision." : "Matches the student's assigned program catalog revision.",
                               name: requirements.definition.name,
                               academic_year_code: "2026-2027",
                           },
@@ -334,6 +337,8 @@ async function fixture(page, options = {}) {
     });
     await page.goto(options.readOnly ? "/admin/student-read-fixture/" : "/admin/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('Alex');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     await page.getByRole("button", { name: "Degree requirements", exact: true }).click();
     return {

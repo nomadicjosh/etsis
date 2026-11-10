@@ -26,3 +26,11 @@ Publication review resolves the current year's program reference through verifie
 An exact retry of an accepted requirement confirmation returns the original receipt without following today's program publication or changing a student's selection. Requirement labels retain the reviewed program's code/title. Student and catalog permission boundaries remain separate, with existing CSRF protection, private responses and suppressed debug collectors.
 
 Ordinary builder views do not replay program streams just to render a list. Verification occurs during consequential publication review/confirmation. Explicit historical reads use bounded pages. Evaluation, graduation and other remaining degree-audit features remain on the roadmap.
+
+## Inspect the retained program and choose compatible requirements
+
+Inspecting a published degree version, a student's retained baseline, or an assignment review now includes **Retained program**. Expand it to see the program's original academic year, catalog revision, description, department, academic level and award. The reader verifies the referenced program's protected history and program/year/label scope; it does not substitute the latest catalog definition or today's reference-library labels. Earlier unlinked versions remain unlinked.
+
+The student chooser labels each version's compatibility before selection. Requirements linked to another program catalog revision remain visible with an explanation and cannot be selected. Earlier unlinked versions explicitly identify the unknown link. Both supported reusable-group formats (3 and 4) can be selected when otherwise eligible; server-side review and confirmation still enforce the same boundaries. Existing student selections are not changed by these display improvements.
+
+No new tables, migrations, historical conversion or raw-event endpoint is introduced. Program history is replayed in bounded pages only when an authorized user explicitly inspects a linked definition; ordinary version-choice lists use the existing paged requirement metadata. Missing/foreign program references are rejected, while historical inspection remains independent of today's editable program row.

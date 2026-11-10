@@ -294,7 +294,7 @@ async function fixture(page, options = {}) {
                     json: { error: "Choose published groups and institutional policies before publication." },
                 });
             response = { ...row(), reason: body.reason, review_token: "fictional-degree-review",
-                program_publication: options.linkedProgram ? { version_id: id(18), definition: { code: 'BSCS', title: 'Published Computer Science' } } : null };
+                program_publication: options.linkedProgram ? { version_id: id(18), catalog_revision: 1, academic_year_code: '2027-2028', definition: { code: 'BSCS', title: 'Published Computer Science', description: null, classifications: { department: null, academic_level: null, award: null } } } : null };
         } else if (path === `/sis/degree-audits/${template}/publish/`) {
             degreePublished = true;
             response = { operation_id: id(15), last_version: 1 };
