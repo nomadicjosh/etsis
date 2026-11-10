@@ -47,6 +47,7 @@ final class SisAdmissionsController extends BaseController
             new EntityId($this->text($data, "person_id")),
             new EntityId($this->text($data, "program_id")),
             new EntityId($this->text($data, "entry_term_id")),
+            FormInput::from($request)->id("application_id"),
         );
 
         return new JsonResponse(

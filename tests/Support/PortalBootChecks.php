@@ -1557,7 +1557,15 @@ $sis->access->grants = [];
 
 $matriculation = $app->make(\Domain\Admissions\Service\AdmissionsService::class);
 $catalogPerson = $matriculation->createPerson($sis->user(), "Fictional", "Cohort");
-$catalogApplication = $matriculation->apply($catalogPerson->id, $sis->program, $sis->term);
+$applicationIdentity = \Domain\Shared\ValueObject\EntityId::generate();
+$directApplicationData = ["application_id" => $applicationIdentity->value, "person_id" => $catalogPerson->id->value,
+    "program_id" => $sis->program->value, "entry_term_id" => $sis->term->value];
+$directApplicationResponse = $teachingPost("/sis/applications/", $directApplicationData);
+$directApplicationResult = json_decode((string) $directApplicationResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($directApplicationResponse->getStatusCode() !== 201 || ($directApplicationResult["id"] ?? null) !== $applicationIdentity->value) {
+    throw new RuntimeException("Direct application submission did not resolve through the real providers and CSRF pipeline.");
+}
+$catalogApplication = $sis->admissions->application($applicationIdentity);
 $admissionDecisionPath = "/sis/applications/" . $catalogApplication->id->value . "/decision/";
 $admissionEventsBefore = $sis->sql->rows("sis_history_events");
 $admissionReviewResponse = $teachingPost($admissionDecisionPath . "review/", [
@@ -1609,6 +1617,12 @@ if ($matriculationCommit->getStatusCode() !== 201 || !isset($matriculationReceip
 }
 $catalogStudent = $sis->admissions->student(new \Domain\Shared\ValueObject\EntityId($matriculationReceipt["student_id"]));
 $admissionEventsAfterMatriculation = $sis->sql->rows("sis_history_events");
+if (
+    $teachingPost("/sis/applications/", $directApplicationData)->getStatusCode() !== 201
+    || $sis->sql->rows("sis_history_events") !== $admissionEventsAfterMatriculation
+) {
+    throw new RuntimeException("A direct submission retry changed a later matriculation.");
+}
 if (
     $teachingPost($admissionDecisionPath . "commit/", ["review_token" => $admissionReview["review_token"]])->getStatusCode() !== 200
     || $sis->sql->rows("sis_history_events") !== $admissionEventsAfterMatriculation
@@ -2608,3 +2622,60 @@ if (
 ) {
     throw new RuntimeException("Unified event-store provider wiring failed.");
 }
+
+
+// Genuine form submissions share their history with decisions; current applicant ownership controls reads.
+$sis->access->staff = true;
+$originalSubmissionActor = $sis->access->actor;
+$formApplications = $app->make(\Domain\Admissions\Service\ApplicationFormService::class);
+$trackedForm = $formApplications->save(null, $sis->program, "Fictional tracked submission", [
+    ["key" => "statement", "label" => "Statement", "type" => "text", "required" => true],
+], null);
+$formApplications->publish($trackedForm->id, 0);
+$trackedSubmission = \Domain\Shared\ValueObject\EntityId::generate();
+$trackedResponse = $teachingPost("/sis/forms/" . $trackedForm->id->value . "/submissions/", [
+    "submission_id" => $trackedSubmission->value, "person_id" => $catalogPerson->id->value,
+    "entry_term_id" => $sis->term->value, "answers" => ["statement" => "Fictional private submitted statement"],
+]);
+if ($trackedResponse->getStatusCode() !== 201) {
+    throw new RuntimeException("Tracked form submission did not resolve through the HTTP pipeline.");
+}
+$trackedApplicationId = json_decode((string) $trackedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+$trackedHistoryRequest = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid/sis/applications/" . $trackedApplicationId . "/decision/history/", "GET");
+$trackedHistoryResponse = $app->router->match($trackedHistoryRequest);
+$trackedHistory = json_decode((string) $trackedHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $trackedHistoryResponse->getStatusCode() !== 200 || ($trackedHistory["submission"]["channel"] ?? null) !== "form"
+    || ($trackedHistory["earlier_history_unknown"] ?? null) !== false
+    || str_contains((string) $trackedHistoryResponse->getBody(), "Fictional private submitted statement")
+    || str_contains((string) $trackedHistoryResponse->getBody(), "fingerprint")
+) {
+    throw new RuntimeException("Application history did not retain its curated genuine-submission boundary.");
+}
+$trackedOwnerRequest = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid/sis/form-submissions/" . $trackedSubmission->value . "/", "GET");
+$sis->access->actor = $catalogPerson->ownerUserId;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$trackedOwnerResponse = $app->router->match($trackedOwnerRequest);
+if (
+    $trackedOwnerResponse->getStatusCode() !== 200
+    || !str_contains($trackedOwnerResponse->getHeaderLine("Cache-Control"), "no-store")
+    || !str_contains((string) $trackedOwnerResponse->getBody(), "Fictional private submitted statement")
+) {
+    throw new RuntimeException("The current applicant could not privately read their staff-assisted submission.");
+}
+if (
+    $teachingPost("/sis/applications/", [
+    "application_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+    "person_id" => $catalogPerson->id->value, "program_id" => $sis->program->value, "entry_term_id" => $sis->term->value,
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("An applicant could bypass the required form through direct entry.");
+}
+$sis->access->actor = $sis->user();
+if ($app->router->match($trackedOwnerRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException("Another person could read private application answers.");
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+$sis->access->grants = [];

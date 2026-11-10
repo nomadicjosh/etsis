@@ -134,14 +134,23 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
         $this->record("sis_persons", "id", $application->personId);
         $this->record("sis_programs", "id", $application->programId);
         $this->record("sis_terms", "id", $application->entryTermId);
-        $this->insert("sis_applications", [
-            "id" => $application->id->value,
-            "person_id" => $application->personId->value,
-            "program_id" => $application->programId->value,
-            "entry_term_id" => $application->entryTermId->value,
-            "status" => $application->status->value,
-            "version" => $application->version,
-        ]);
+        try {
+            $this->insert("sis_applications", [
+                "id" => $application->id->value,
+                "person_id" => $application->personId->value,
+                "program_id" => $application->programId->value,
+                "entry_term_id" => $application->entryTermId->value,
+                "status" => $application->status->value,
+                "version" => $application->version,
+            ]);
+        } catch (PDOException $error) {
+            if (in_array((string) $error->getCode(), ["23000", "23505"], true)) {
+                throw new ConcurrentModificationException(
+                    "This application identity is unavailable. Start a new application.",
+                );
+            }
+            throw $error;
+        }
     }
 
     public function application(EntityId $id): AdmissionApplication

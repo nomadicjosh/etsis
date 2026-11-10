@@ -37,11 +37,12 @@ final class WorkspaceWorkflowTest extends TestCase
                 $fixture->audit,
                 new RandomInstitutionalIdGenerator(),
                 $fixture->decisionLedger(),
+                $fixture->submissionService(),
             ),
             $fixture->access,
             $fixture->transactions,
             $fixture->audit,
-            new DefuseMessageCipher($config)
+            $fixture->submissionService()
         );
     }
 
@@ -85,6 +86,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
+            $fixture->submissionService(),
         );
         $record = $person->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
@@ -123,6 +125,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
+            $fixture->submissionService(),
         );
         $person = $admissions->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
@@ -185,6 +188,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
+            $fixture->submissionService(),
         );
         $service = new \Domain\Workspace\Service\WorkspaceService(
             new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog()),
@@ -210,6 +214,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
+            $fixture->submissionService(),
         );
         for ($index = 0; $index < 52; ++$index) {
             $admissions->createPerson(null, 'Example', 'Person ' . $index);
@@ -235,6 +240,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
+            $fixture->submissionService(),
         );
         $person = $admissions->createPerson(null, 'Alex', 'Example', '00001234');
         $repository = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
@@ -287,6 +293,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $f->audit,
             new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
+            $f->submissionService(),
         );
         $person = $admissions->createPerson($f->access->actor, 'Alex', 'Example');
         $original = $forms->save(null, $f->program, 'Original application', $this->fields(), null);
@@ -321,9 +328,10 @@ final class WorkspaceWorkflowTest extends TestCase
             $f->audit,
             new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
+            $f->submissionService(),
         );
         $person = $admissions->createPerson(null, 'Jamie', 'Example');
-        $application = $admissions->apply($person->id, $f->program, $f->term);
+        $application = $f->legacyApplication($person->id, $f->program, $f->term);
         self::assertNull($this->forms($f)->reviewApplication($application->id)['submission']);
     }
 }

@@ -53,6 +53,7 @@ final class PersonManagementFixture
             $f->audit,
             new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
+            $f->submissionService(),
         );
         $this->profiles = new PersonProfileEditor(
             $f->admissions,

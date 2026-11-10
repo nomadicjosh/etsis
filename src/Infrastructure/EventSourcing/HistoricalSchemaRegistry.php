@@ -51,6 +51,11 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class => [
+                "type" => "admission_decision",
+                "root" => \Domain\Admissions\AdmissionDecision::class,
+                "fields" => \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::FIELDS,
+            ],
             \Domain\Admissions\Event\AdmissionApplicationWasObserved::class => [
                 "type" => "admission_decision",
                 "root" => \Domain\Admissions\AdmissionDecision::class,
@@ -339,9 +344,20 @@ final readonly class HistoricalSchemaRegistry
                 $definition["fields"][] = "grade_scale";
             }
             if ($stream->type === "admission_decision") {
-                \Domain\Admissions\ValueObject\AdmissionDecisionSchema::validate($class, $payload);
+                if ($class === \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class) {
+                    \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::validate($payload);
+                } else {
+                    \Domain\Admissions\ValueObject\AdmissionDecisionSchema::validate($class, $payload);
+                }
                 if (
-                    $class === \Domain\Admissions\Event\AdmissionApplicationWasObserved::class &&
+                    in_array(
+                        $class,
+                        [
+                            \Domain\Admissions\Event\AdmissionApplicationWasObserved::class,
+                            \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class,
+                        ],
+                        true,
+                    ) &&
                     $payload["application"]["id"] !== (string) $stream->aggregateId
                 ) {
                     throw new CorruptHistoryException();

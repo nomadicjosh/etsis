@@ -37,9 +37,10 @@ final class StudentRequirementsFixture
             $s->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $s->decisionLedger(),
+            $s->submissionService(),
         );
         $person = $admit->createPerson($s->access->actor, "Fictional", "Learner");
-        $application = $admit->apply($person->id, $s->program, $term);
+        $application = $s->legacyApplication($person->id, $s->program, $term);
         $s->legacyAdmissionDecision($application->id, true);
         $student = $s->legacyStudent($application->id);
         $this->student = $student->id;

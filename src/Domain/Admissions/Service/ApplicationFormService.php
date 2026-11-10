@@ -7,7 +7,6 @@ namespace Domain\Admissions\Service;
 use Domain\Admissions\ApplicationForm;
 use Domain\Admissions\Repository\ApplicationFormRepository;
 use Domain\Audit\Repository\AuditTrail;
-use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
@@ -22,7 +21,7 @@ final readonly class ApplicationFormService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
-        private MessageCipher $cipher,
+        private ApplicationSubmissionService $submissions,
     ) {
     }
 
@@ -123,59 +122,9 @@ final readonly class ApplicationFormService
         EntityId $formId,
         EntityId $person,
         EntityId $term,
-        array $answers,
+        #[\SensitiveParameter] array $answers,
     ): EntityId {
-        return $this->transactions->run(function () use (
-            $submission,
-            $formId,
-            $person,
-            $term,
-            $answers,
-        ): EntityId {
-            $actor = $this->access->authenticatedUserId();
-            $this->admissions->person($person); // Authorize before waiting for the person lock.
-            $this->repository->lockPerson($person);
-            $this->admissions->person($person); // Recheck ownership/permission after waiting.
-            if ($this->access->authenticatedUserId()->value !== $actor->value) {
-                throw new \Domain\Shared\Exception\AccessDeniedException("The submission actor changed.");
-            }
-            $form = $this->repository->get($formId);
-            $this->repository->lockProgram($form->programId);
-            $canonical = $form->validate($answers);
-            $json = json_encode($canonical, JSON_THROW_ON_ERROR);
-            $fingerprint = hash(
-                "sha256",
-                json_encode([$formId->value, $person->value, $term->value, $canonical], JSON_THROW_ON_ERROR),
-            );
-            $existing = $this->repository->submission($submission);
-            if ($existing !== null) {
-                if (
-                    $existing["owner_user_id"] !== $actor->value ||
-                    $existing["fingerprint"] !== $fingerprint
-                ) {
-                    throw new DomainException("This submission identifier has already been used.");
-                }
-
-                return new EntityId($existing["application_id"]);
-            }
-            if ($this->repository->active($form->programId)->id->value !== $formId->value) {
-                throw new DomainException(
-                    "This application form has been replaced. Reload the current form.",
-                );
-            }
-            $application = $this->admissions->apply($person, $form->programId, $term);
-            $this->repository->storeSubmission(
-                $submission,
-                $formId,
-                $application->id,
-                $actor,
-                $this->cipher->seal($json),
-                $fingerprint,
-            );
-            $this->audit->record($actor, "admissions.form_submitted", $application->id);
-
-            return $application->id;
-        });
+        return $this->submissions->submit($submission, $formId, $person, $term, $answers);
     }
 
     /** @return array<string, mixed> */
@@ -195,23 +144,6 @@ final readonly class ApplicationFormService
     /** @return array<string, mixed> */
     public function submission(EntityId $id): array
     {
-        $this->access->authenticatedUserId();
-        $record =
-        $this->repository->submission($id) ??
-        throw new \Domain\Shared\Exception\RecordNotFoundException("Submission not found.");
-        $this->access->requireOwnerOrPermission(
-            new EntityId($record["owner_user_id"]),
-            "sis:admissions:manage",
-        );
-
-        return [
-            "form" => $this->repository->get(new EntityId($record["form_id"])),
-            "answers" => json_decode(
-                $this->cipher->open($record["encrypted_answers"]),
-                true,
-                flags: JSON_THROW_ON_ERROR,
-            ),
-            "application_id" => $record["application_id"],
-        ];
+        return $this->submissions->submission($id);
     }
 }

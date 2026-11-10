@@ -30,6 +30,7 @@ final class PersonIdentityTest extends TestCase
             $f->audit,
             $generator ?? new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
+            $f->submissionService(),
         );
     }
 

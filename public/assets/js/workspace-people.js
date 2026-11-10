@@ -250,7 +250,7 @@ window.createWorkspacePeople = function (ui) {
         const actions = node("div", { class: "inline-actions" });
         body.append(actions);
         actions.append(
-            button("Admissions decision history", () => decisionHistory(row)),
+            button("Application history", () => decisionHistory(row)),
         );
         if (app.status === "submitted") {
             actions.append(
@@ -371,17 +371,51 @@ window.createWorkspacePeople = function (ui) {
         const record = await request(
             `/sis/applications/${row.id}/decision/history/`,
         );
-        const body = openDrawer(
-            "Admissions decision history",
-            "ADMISSIONS RECORD",
-        );
+        const body = openDrawer("Application history", "ADMISSIONS RECORD");
         body.append(button("Back to application", () => application(row)));
+        if (record.submission) {
+            const birth = record.submission;
+            const original = birth.source;
+            body.append(
+                node(
+                    "section",
+                    { class: "record-section" },
+                    node("h3", {}, "Application submitted"),
+                    node(
+                        "p",
+                        {},
+                        `${original.program_code} · ${original.program_title} · ${original.entry_term_code}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        original.submission
+                            ? `${original.submission.form_name} · submitted form revision ${original.submission.form_version}`
+                            : "Direct application entry; no form answers were attached.",
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Submitted: ${birth.effective_at}. Recorded: ${birth.recorded_at}.`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        birth.authorization === "owner"
+                            ? "Submitted by the applicant’s account."
+                            : "Entered by authorized admissions staff for the applicant.",
+                    ),
+                ),
+            );
+        }
         if (!record.history_recorded) {
             body.append(
                 node(
                     "p",
                     {},
-                    "No acceptance or rejection has been recorded in the protected decision history. Earlier decisions and original submission timing remain unknown.",
+                    record.submission
+                        ? "No acceptance or rejection has been recorded yet."
+                        : "No acceptance or rejection has been recorded in the protected decision history. Earlier decisions and original submission timing remain unknown.",
                 ),
             );
             return;
@@ -420,7 +454,9 @@ window.createWorkspacePeople = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "The earlier submitted application was observed when tracking this decision began. Its original submission time is unknown. These labels are retained as recorded. Protected reasons, actor details, submission fingerprints and answers are excluded.",
+                record.earlier_history_unknown === false
+                    ? "This history starts with the actual submission above. Decision labels are retained as recorded. Protected reasons, actor details, submission fingerprints and answers are excluded."
+                    : "The earlier submitted application was observed when tracking this decision began. Its original submission time is unknown. These labels are retained as recorded. Protected reasons, actor details, submission fingerprints and answers are excluded.",
             ),
         );
     }
@@ -549,7 +585,7 @@ window.createWorkspacePeople = function (ui) {
                 "p",
                 { class: "form-text" },
                 record.acceptance_history_unknown === false
-                    ? "These are the original creation facts. Acceptance is retained in Admissions decision history. Later program and activity decisions remain in their respective histories. Protected reasons and actor details are excluded."
+                    ? "These are the original creation facts. Acceptance is retained in Application history. Later program and activity decisions remain in their respective histories. Protected reasons and actor details are excluded."
                     : "These are the original creation facts. Later program and activity decisions remain in their respective histories. The preceding acceptance decision is not yet tracked as an academic event. Protected reasons and actor details are excluded.",
             ),
         );

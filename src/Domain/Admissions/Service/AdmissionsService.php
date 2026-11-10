@@ -26,6 +26,7 @@ final readonly class AdmissionsService
         private AuditTrail $audit,
         private InstitutionalIdGenerator $identifiers,
         private AdmissionDecisionLedger $decisions,
+        private ApplicationSubmissionService $submissions,
     ) {
     }
 
@@ -122,28 +123,12 @@ final readonly class AdmissionsService
     }
 
     public function apply(
-        EntityId $personId,
-        EntityId $programId,
-        EntityId $entryTermId,
+        EntityId $person,
+        EntityId $program,
+        EntityId $term,
+        EntityId $application,
     ): AdmissionApplication {
-        $this->access->authenticatedUserId();
-        $person = $this->repository->person($personId);
-        $actor = $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:admissions:manage");
-        $application = new AdmissionApplication(EntityId::generate(), $personId, $programId, $entryTermId);
-        $this->transactions->run(function () use ($application, $actor): void {
-            $this->repository->lockPerson($application->personId);
-            $person = $this->repository->person($application->personId);
-            if (
-                $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:admissions:manage")
-                    ->value !== $actor->value
-            ) {
-                throw new \Domain\Shared\Exception\AccessDeniedException("The application actor changed.");
-            }
-            $this->repository->addApplication($application);
-            $this->audit->record($actor, "admissions.applied", $application->id);
-        });
-
-        return $application;
+        return $this->submissions->apply($application, $person, $program, $term);
     }
 
     /** @return array{application: AdmissionApplication, person: \Domain\Person\Person} */

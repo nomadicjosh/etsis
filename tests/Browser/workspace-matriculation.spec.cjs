@@ -161,7 +161,7 @@ test("matriculation reviews the derived cohort, preserves revisions and shows cu
         "Original cohort: 2026-2027",
     );
     await expect(page.locator("#drawer-body")).toContainText(
-        "Acceptance is retained in Admissions decision history",
+        "Acceptance is retained in Application history",
     );
     await expect(page.locator("#drawer-body")).not.toContainText(
         "Fictional completed admissions review",

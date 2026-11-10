@@ -367,6 +367,7 @@ final class RegistrationBatchTest extends TestCase
                 $f->audit,
                 new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
                 $f->decisionLedger(),
+                $f->submissionService(),
             )
         );
         self::assertCount(1, $workspace->records('registration')['items']);

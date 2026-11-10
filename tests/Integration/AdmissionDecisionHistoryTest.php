@@ -26,7 +26,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
     {
         $service = $f->admissionsService();
         $person = $service->createPerson($f->user(), "Fictional", "Applicant");
-        return $service->apply($person->id, $f->program, $f->term);
+        return $f->legacyApplication($person->id, $f->program, $f->term);
     }
     private function forms(SisFixture $f): ApplicationFormService
     {
@@ -36,7 +36,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
-            $f->dropCipher,
+            $f->submissionService(),
         );
     }
     public function testReviewWritesNothingAndBothDecisionsReplayWithAttributedProtectedHistory(): void
@@ -196,7 +196,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
             ["encrypted_answers" => $f->dropCipher->seal('{"note":"Changed fictional note"}')],
             ["id" => $id->value],
         );
-        $this->expectException(ConcurrentModificationException::class);
+        $this->expectException(CorruptHistoryException::class);
         $s->commit($app, $review["review_token"]);
     }
     public function testAuditFailureRollsBackApplicationBothEventsHeadsAndReceiptsThenAllowsRetry(): void
@@ -417,24 +417,14 @@ final class AdmissionDecisionHistoryTest extends TestCase
     {
         $f = new SisFixture();
         $person = $f->admissionsService()->createPerson($f->access->actor, "Fictional", "Applicant");
-        $repo = $this->createMock(\Domain\Admissions\Repository\ApplicationFormRepository::class);
-        $repo
-            ->expects(self::once())
-            ->method("lockPerson")
-            ->willReturnCallback(function () use ($f): void {
-                $f->access->actor = $f->user();
-                $f->access->staff = false;
-            });
-        $repo->expects(self::never())->method("get");
-        $forms = new ApplicationFormService(
-            $repo,
-            $f->admissionsService(),
-            $f->access,
-            $f->transactions,
-            $f->audit,
-            $f->dropCipher,
-        );
+        $repo = $this->createMock(\Domain\Admissions\Repository\AdmissionsRepository::class);
+        $repo->method('person')->willReturn($person);
+        $repo->expects(self::once())->method('lockPerson')->willReturnCallback(function () use ($f): void {
+            $f->access->actor = $f->user();
+            $f->access->staff = false;
+        });
+        $repo->expects(self::never())->method('addApplication');
         $this->expectException(AccessDeniedException::class);
-        $forms->submit(EntityId::generate(), EntityId::generate(), $person->id, $f->term, []);
+        $f->submissionService(repository: $repo)->submit(EntityId::generate(), EntityId::generate(), $person->id, $f->term, []);
     }
 }

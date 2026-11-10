@@ -22,7 +22,7 @@ final class MatriculationHistoryTest extends TestCase
     {
         $a = $f->admissionsService();
         $person = $a->createPerson($f->user(), "Fictional", "Prospect");
-        $application = $a->apply($person->id, $f->program, $f->term);
+        $application = $f->legacyApplication($person->id, $f->program, $f->term);
         $f->legacyAdmissionDecision($application->id, true);
         return $f->admissions->application($application->id);
     }
@@ -199,7 +199,7 @@ final class MatriculationHistoryTest extends TestCase
         $f = new SisFixture();
         $a = $this->application($f);
         $s = $f->matriculationService();
-        $other = $f->admissionsService()->apply($a->personId, $a->programId, $a->entryTermId);
+        $other = $f->legacyApplication($a->personId, $a->programId, $a->entryTermId);
         $f->legacyAdmissionDecision($other->id, true);
         $first = $s->review($a->id, "First application");
         $second = $s->review($other->id, "Other application");

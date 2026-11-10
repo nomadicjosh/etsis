@@ -45,7 +45,7 @@ final class AdmissionsTest extends TestCase
     public function testAcceptedApplicationCreatesStudentAndProgramAtomically(): void
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
-        $application = $this->service->apply($person->id, $this->program, $this->term);
+        $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->matriculate($application->id);
         self::assertSame($this->program->value, $this->service->student($student->id)->programId->value);
@@ -56,7 +56,7 @@ final class AdmissionsTest extends TestCase
     public function testSubmittedApplicationCannotMatriculate(): void
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
-        $application = $this->service->apply($person->id, $this->program, $this->term);
+        $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->expectException(\Domain\Shared\Exception\ValidationException::class);
         $this->f->matriculate($application->id);
     }
@@ -64,7 +64,7 @@ final class AdmissionsTest extends TestCase
     public function testStaleDecisionCannotOverwriteAcceptance(): void
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
-        $application = $this->service->apply($person->id, $this->program, $this->term);
+        $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $this->expectException(ConcurrentModificationException::class);
         $this->repository->saveDecision($application->decide(false), 0);
@@ -73,8 +73,8 @@ final class AdmissionsTest extends TestCase
     public function testDuplicateStudentRollsBackApplicationTransition(): void
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
-        $first = $this->service->apply($person->id, $this->program, $this->term);
-        $second = $this->service->apply($person->id, $this->program, $this->term);
+        $first = $this->f->legacyApplication($person->id, $this->program, $this->term);
+        $second = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($first->id, true);
         $this->f->legacyAdmissionDecision($second->id, true);
         $this->f->matriculate($first->id);
@@ -96,7 +96,7 @@ final class AdmissionsTest extends TestCase
     public function testPrivateReadChecksOwner(): void
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
-        $application = $this->service->apply($person->id, $this->program, $this->term);
+        $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->matriculate($application->id);
         $denied = $this->createMock(StudentAccess::class);
@@ -111,6 +111,7 @@ final class AdmissionsTest extends TestCase
             new \Infrastructure\Persistence\SqlAuditTrail(new \Infrastructure\Persistence\SqlRecords($this->connection->queryBuilder())),
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $this->f->decisionLedger(),
+            $this->f->submissionService(),
         )->student($student->id);
     }
 
@@ -131,7 +132,7 @@ final class AdmissionsTest extends TestCase
     public function testFinancialHistoryReplaysAndRejectsConcurrentRefunds(): void
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
-        $application = $this->service->apply($person->id, $this->program, $this->term);
+        $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->legacyStudent($application->id);
         $db = $this->connection->queryBuilder();

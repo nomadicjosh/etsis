@@ -556,6 +556,40 @@ final class SisFixture
         return $id;
     }
 
+    public function applicationContext(): \Domain\Admissions\Service\ApplicationContext
+    {
+        return new \Domain\Admissions\Service\ApplicationContext(
+            new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->dropCipher,
+        );
+    }
+    public function submissionService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+    ): \Domain\Admissions\Service\ApplicationSubmissionService {
+        return new \Domain\Admissions\Service\ApplicationSubmissionService(
+            $repository ?? $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $this->applicationContext(),
+            $this->decisionLedger(),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+        );
+    }
+    /** Current-state fixture for an application predating tracked submission. */
+    public function legacyApplication(
+        EntityId $person,
+        EntityId $program,
+        EntityId $term,
+    ): \Domain\Admissions\AdmissionApplication {
+        $a = new \Domain\Admissions\AdmissionApplication(EntityId::generate(), $person, $program, $term);
+        $this->admissions->addApplication($a);
+        return $a;
+    }
     public function decisionLedger(): \Domain\Admissions\Service\AdmissionDecisionLedger
     {
         $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
@@ -567,7 +601,12 @@ final class SisFixture
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
         );
-        return new \Domain\Admissions\Service\AdmissionDecisionLedger($history, $this->access, $this->clock);
+        return new \Domain\Admissions\Service\AdmissionDecisionLedger(
+            $history,
+            $this->access,
+            $this->clock,
+            $this->applicationContext(),
+        );
     }
     public function decisionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
@@ -575,8 +614,7 @@ final class SisFixture
     ): \Domain\Admissions\Service\AdmissionDecisionService {
         return new \Domain\Admissions\Service\AdmissionDecisionService(
             $repository ?? $this->admissions,
-            new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository($this->sql),
-            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->applicationContext(),
             new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
             $this->decisionLedger(),
             $this->access,
@@ -601,6 +639,7 @@ final class SisFixture
             $this->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $this->decisionLedger(),
+            $this->submissionService(),
         );
     }
     public function programEntryContext(
@@ -675,6 +714,7 @@ final class SisFixture
             $this->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $this->decisionLedger(),
+            $this->submissionService(),
         );
         if (
             $owner === null &&
@@ -683,7 +723,7 @@ final class SisFixture
             $owner = $this->user();
         }
         $person = $service->createPerson($owner ?? $this->access->actor, "Alex", "Example");
-        $application = $service->apply($person->id, $this->program, $this->term);
+        $application = $this->legacyApplication($person->id, $this->program, $this->term);
         $this->legacyAdmissionDecision($application->id, true);
 
         return $this->legacyStudent($application->id);

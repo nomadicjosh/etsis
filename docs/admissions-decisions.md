@@ -16,11 +16,11 @@ Reviews expire after 20 minutes and must be repeated after the institutional dat
 
 ## Historical facts and retries
 
-The first confirmation records **AdmissionApplicationWasObserved** for the submitted application as seen at confirmation. Its person/program/entry-term identities, status and version are retained, with earlier history explicitly unknown. This is an observation, not an invented original submission event or date.
+Newly [submitted applications](application-submission-history.md) now start with their actual creation event. For an earlier application without that event, the first decision confirmation records **AdmissionApplicationWasObserved** for the submitted application as seen at confirmation. Its person/program/entry-term identities, status and version are retained, with earlier history explicitly unknown. This is an observation, not an invented original submission event or date.
 
 **AdmissionWasDecided** then records acceptance or rejection, the preceding recorded decision identity, resulting application version and retained decision context. Protected context carries the trusted actor, reason, operation correlation and effective/recording times. The source retains program/term labels and, where available, the immutable submitted form reference/revision and existing submission fingerprint. It does not duplicate names, institutional IDs or application answers into the event payload.
 
-**Admissions decision history** shows the actual outcome, effective/recording times, retained labels and form revision, plus today's application status. Reasons, actor details, submission fingerprints, answers and raw event envelopes are excluded. Today's catalog renames or replacing the active application form do not rewrite these retained facts. Answers remain in their existing protected submission record.
+**Application history** shows the actual outcome, effective/recording times, retained labels and form revision, plus today's application status. Reasons, actor details, submission fingerprints, answers and raw event envelopes are excluded. Today's catalog renames or replacing the active application form do not rewrite these retained facts. Answers remain in their existing protected submission record.
 
 Resending the same completed confirmation returns its original outcome and version. For example, confirming acceptance, matriculating the student and then resending that acceptance returns the earlier acceptance result while the application remains matriculated. It creates no duplicate events or student and does not undo later student/program changes. Another review cannot overwrite the winning decision; permission is still required for an exact retry.
 
@@ -38,4 +38,4 @@ Both new event schemas use **`sis_history_events`** and its existing stream head
 
 Fictional integration checks cover both outcomes, replay, submitted-form references, protected payloads, stale/expired reviews, permission and owner rechecks, complete rollback, competing confirmations, changed projections and retries after matriculation. Real-provider/router checks cover CSRF, private responses and admissions authorization. Browser checks cover revision, confirmation, history, focus, accessibility and narrow screens. No working database was migrated or used for these fixtures.
 
-Original submission/offer/document transitions, completeness checklists, institutional approval/correction policies, operational rebuild tooling and the full admissions pipeline remain subsequent stages. Event history supports evidence; it does not establish legal compliance by itself.
+New submissions now retain their actual history; offer/document transitions, completeness checklists, institutional approval/correction policies, operational rebuild tooling and the full admissions pipeline remain subsequent stages. Event history supports evidence; it does not establish legal compliance by itself.

@@ -23,9 +23,10 @@ final class AcademicCalendarTest extends TestCase
             $f->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
+            $f->submissionService(),
         );
         $person = $service->createPerson($f->user(), 'Fictional', 'Student');
-        $app = $service->apply($person->id, $f->program, new EntityId($term));
+        $app = $f->legacyApplication($person->id, $f->program, new EntityId($term));
         $f->legacyAdmissionDecision($app->id, true);
         return $f->legacyStudent($app->id);
     }

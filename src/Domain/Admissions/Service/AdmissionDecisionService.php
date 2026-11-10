@@ -7,12 +7,10 @@ namespace Domain\Admissions\Service;
 use Domain\Admissions\AdmissionApplication;
 use Domain\Admissions\Enum\ApplicationStatus;
 use Domain\Admissions\Repository\AdmissionsRepository;
-use Domain\Admissions\Repository\ApplicationFormRepository;
 use Domain\Admissions\ValueObject\AdmissionDecisionSchema;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogYearRepository;
 use Domain\Communications\Service\MessageCipher;
-use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
@@ -20,14 +18,12 @@ use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
-use Domain\Student\Repository\StudentRecordRepository;
 
 final readonly class AdmissionDecisionService
 {
     public function __construct(
         private AdmissionsRepository $admissions,
-        private ApplicationFormRepository $forms,
-        private StudentRecordRepository $records,
+        private ApplicationContext $context,
         private CatalogYearRepository $catalogs,
         private AdmissionDecisionLedger $ledger,
         private StudentAccess $access,
@@ -56,7 +52,7 @@ final readonly class AdmissionDecisionService
         return $this->transactions->run(function () use ($route, $actor, $accept, $reason): array {
             $a = $this->lock($route, $actor);
             $this->eligible($a);
-            $source = $this->source($a);
+            $source = $this->context->source($a);
             $person = $this->admissions->person($a->personId);
             $token = $this->cipher->seal(
                 json_encode(
@@ -123,7 +119,7 @@ final readonly class AdmissionDecisionService
                 return $receipt;
             }
             $this->eligible($a);
-            $source = $this->source($a);
+            $source = $this->context->source($a);
             if (
                 $p["expires"] < $this->clock->now()->getTimestamp() ||
                 !hash_equals($p["context"], $this->context($a, $source))
@@ -188,40 +184,11 @@ final readonly class AdmissionDecisionService
             ]);
         }
     }
-    /** @return array<string,mixed> */
-    private function source(AdmissionApplication $a): array
-    {
-        $program = $this->records->program($a->programId);
-        $term = $this->records->term($a->entryTermId);
-        $r = $this->forms->submissionForApplication($a->id);
-        $submission = null;
-        if ($r !== null) {
-            $form = $this->forms->get(new EntityId($r["form_id"]));
-            if ($r["application_id"] !== $a->id->value || $form->programId->value !== $a->programId->value) {
-                throw new CorruptHistoryException();
-            }
-            $submission = [
-                "id" => $r["id"],
-                "form_id" => $r["form_id"],
-                "form_version" => $form->version,
-                "form_name" => $form->name,
-                "fingerprint" => $r["fingerprint"],
-            ];
-        }
-        $source = [
-            "program_code" => $program["code"],
-            "program_title" => $program["title"],
-            "entry_term_code" => $term["code"],
-            "submission" => $submission,
-        ];
-        AdmissionDecisionSchema::source($source);
-        return $source;
-    }
     /** @param array<string,mixed> $source */
     private function context(AdmissionApplication $a, array $source): string
     {
         $p = $this->admissions->person($a->personId);
-        $r = $this->forms->submissionForApplication($a->id);
+        $r = $this->context->submission($a->id);
         return hash(
             "sha256",
             json_encode(

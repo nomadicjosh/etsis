@@ -189,7 +189,7 @@ for (const accept of [true, false]) {
             ).toHaveCount(0);
         await page
             .getByRole("button", {
-                name: "Admissions decision history",
+                name: "Application history",
                 exact: true,
             })
             .click();

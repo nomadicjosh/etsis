@@ -90,23 +90,6 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
         );
     }
 
-    public function lockPerson(EntityId $person): void
-    {
-        $q = $this->sql->quote(...);
-        $this->sql->execute(
-            "UPDATE " .
-                $q("sis_persons") .
-                " SET " .
-                $q("id") .
-                " = " .
-                $q("id") .
-                " WHERE " .
-                $q("id") .
-                " = ?",
-            [$person->value],
-        );
-        $this->sql->one("sis_persons", ["id" => $person->value]);
-    }
     public function lockProgram(EntityId $program): void
     {
         $this->sql->lock("sis_programs", $program->value, "id");
@@ -214,13 +197,22 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
         string $encrypted,
         string $fingerprint,
     ): void {
-        $this->sql->insert("sis_form_submissions", [
-            "id" => $id->value,
-            "form_id" => $form->value,
-            "application_id" => $application->value,
-            "owner_user_id" => $owner->value,
-            "encrypted_answers" => $encrypted,
-            "fingerprint" => $fingerprint,
-        ]);
+        try {
+            $this->sql->insert("sis_form_submissions", [
+                "id" => $id->value,
+                "form_id" => $form->value,
+                "application_id" => $application->value,
+                "owner_user_id" => $owner->value,
+                "encrypted_answers" => $encrypted,
+                "fingerprint" => $fingerprint,
+            ]);
+        } catch (\PDOException $error) {
+            if (in_array((string) $error->getCode(), ["23000", "23505"], true)) {
+                throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                    "This submission identity is unavailable. Start a new submission.",
+                );
+            }
+            throw $error;
+        }
     }
 }

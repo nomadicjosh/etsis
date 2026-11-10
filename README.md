@@ -20,7 +20,7 @@ The staff workspace brings campus metrics, student intake, admissions, and revie
 
 ## Setup documentation
 
-[Term types, academic years and terms](docs/academic-calendar-setup.md) explains calendar setup and automatically derived matriculation cohorts.
+[Term types, academic years and terms](docs/academic-calendar-setup.md) explains calendar setup and automatically derived matriculation cohorts. [Initial student matriculation](docs/student-matriculation.md) explains the admissions review, first-program history and retry behavior.
 
 ## Development priorities
 
