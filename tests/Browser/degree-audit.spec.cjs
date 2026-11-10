@@ -103,6 +103,7 @@ async function fixture(page, options = {}) {
             repeat_gpa: null,
             transfer_overall_gpa: null,
             waiver: "waive_required_course_everywhere",
+            group_reuse: "one_group",
         },
     };
     if (options.existing)
@@ -117,6 +118,7 @@ async function fixture(page, options = {}) {
             courses: baseGroup.courses,
             groups: [{ id: id(11), ...baseGroup, courses: undefined }],
         };
+    if (options.legacy) delete definition.policies.group_reuse;
     function detail(g, v) {
         const entry = groups.get(g);
         return v
@@ -289,6 +291,7 @@ async function fixture(page, options = {}) {
             const gid = id(sequence++);
             groups.set(gid, { id: gid, definition: structuredClone(baseGroup), revision: 0, versions: [] });
             delete definition.courses;
+            definition.policies.group_reuse = "one_group";
             definition.groups = [{ group_id: gid, version_id: null }];
             degreeRevision++;
             response = row();
@@ -505,6 +508,9 @@ test("legacy inline draft conversion is explicit and publication errors stay in 
     const f = await fixture(page, { existing: true, legacy: true });
     await openDegree(page, true);
     await expect(page.getByRole("dialog")).toContainText("this step publishes nothing");
+    await expect(page.getByRole("dialog")).toContainText(
+        "Completed courses across requirement groups: Not recorded",
+    );
     await expect(page.getByRole("group", { name: "Group planning summary", exact: true })).toContainText(
         "1 distinct course · 3 catalog credits",
     );
@@ -888,6 +894,39 @@ test("group planning updates quantities and counts a shared course once without 
     await expect(plan).toContainText("0 distinct courses · 0 catalog credits");
     await expect(plan).toContainText("Add published courses to plan this group");
     expect(f.calls.some((call) => /\/(save|review|publish)\/$/.test(call.path))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test("course sharing defaults to one group and its chosen publication policy remains visible", async ({
+    page,
+}) => {
+    const f = await fixture(page, { existing: true });
+    await openDegree(page, true);
+    await expect(page.getByLabel("Apply a completed course to one group", { exact: true })).toBeChecked();
+    await page.getByLabel("Allow a completed course in multiple groups", { exact: true }).check();
+    await page.getByLabel("Highest earned award per course", { exact: true }).check();
+    await page.getByLabel("All eligible graded attempts", { exact: true }).check();
+    await page.getByLabel("Exclude transfer awards", { exact: true }).check();
+    await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
+    await page
+        .getByLabel("Reason for publication", { exact: true })
+        .fill("Fictional shared-course policy approval");
+    await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+        "Completed courses across requirement groups: Allow a completed course in multiple groups",
+    );
+    await accessible(page);
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    await page.getByRole("button", { name: "Inspect version 1", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+        "Completed courses across requirement groups: Allow a completed course in multiple groups",
+    );
+    const saved = f.calls.find((call) => call.path === `/sis/degree-audits/${f.template}/save/`);
+    expect(saved.body.definition.policies.group_reuse).toBe("multiple_groups");
+    expect(saved.csrf).toBe("fictional-test-token");
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -11,10 +11,19 @@ use InvalidArgumentException;
 final readonly class AuditRequirementsV3
 {
     public AuditRequirementsV2 $settings;
+    public CourseGroupReuse $groupReuse;
     /** @param array<string, mixed> $definition */
     public function __construct(public array $definition)
     {
+        $reuse = $definition["policies"]["group_reuse"] ?? null;
+        if (!is_string($reuse) || ($policy = CourseGroupReuse::tryFrom($reuse)) === null) {
+            throw new InvalidArgumentException(
+                "Choose whether completed courses can satisfy one group or multiple groups.",
+            );
+        }
+        $this->groupReuse = $policy;
         $base = $definition;
+        unset($base["policies"]["group_reuse"]);
         $base["courses"] = [];
         $base["groups"] = [];
         $this->settings = new AuditRequirementsV2($base);
@@ -57,6 +66,7 @@ final readonly class AuditRequirementsV3
     {
         $d = AuditRequirementsV2::blank($name)->definition;
         unset($d["courses"]);
+        $d["policies"]["group_reuse"] = CourseGroupReuse::OneGroup->value;
         return new self($d);
     }
     /** @param array<string, mixed> $definition */

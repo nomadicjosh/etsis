@@ -78,12 +78,25 @@ Use **Academic catalog → Grading scales** for the global setup, and **Programs
 
 | Setting | Supported choices |
 | --- | --- |
+| Completed courses across requirement groups | Apply a completed course to one group (default for new compositions); or allow it in multiple groups. |
 | Repeated-course earned credit | Highest eligible earned award per course; or every eligible earned award. |
 | Repeated-course GPA | All eligible graded attempts; highest eligible grade per course; or latest eligible graded attempt per course. |
 | Transfer awards in overall GPA | Exclude transfer awards; or include accepted awards explicitly marked GPA eligible. |
 | Course waivers | Remove a required course everywhere without creating earned credits or GPA points. Credit/GPA minimum changes require separate attributed exceptions. |
 
-The three selectable policies start unselected and must be explicit before degree publication. These are frozen inputs for this program/year, not an installation-wide mutable profile. This stage does not recalculate students or apply policies. Unknown earlier policy inputs remain unknown.
+The repeat-credit, repeat-GPA and transfer-GPA choices start unselected and must be explicit before degree publication. Group sharing defaults to one group in new compositions and can be changed before publication. These are frozen inputs for this program/year, not an installation-wide mutable profile. This stage does not recalculate students or apply policies. Unknown earlier policy inputs remain unknown.
+
+## Course sharing across groups
+
+Under **Degree settings → Institutional audit policies**, choose **Apply a completed course to one group** or **Allow a completed course in multiple groups**. This is the institution's policy for the degree being published. It governs sharing the same completed course across requirement groups; repeated attempts retain their separate credit/GPA policies. Sharing never authorizes counting an award twice in overall credit or GPA totals.
+
+The choice is retained with the degree publication and appears in publication reviews, historical inspection and student requirement/approval previews. A later draft or publication cannot replace an earlier student's selected policy. Cloning a publication retains its choice; a blank new composition defaults to one group. Staff can deliberately assign another publication through the existing reasoned student workflow.
+
+The current composition model validates `policies.group_reuse` as `one_group` or `multiple_groups`; missing, null and unsupported values are rejected. The alpha change was preceded by a read-only check of the configured application database: zero degree-requirement events and zero template drafts were present. The existing composition format was extended directly, with no new numbered model, event schema, migration or recorded-fact conversion. Existing unrelated events were not changed.
+
+Earlier inline publication contracts still omit this policy and display it as not recorded. Explicitly moving an inline working draft into a new reusable-group composition assigns the new-draft default; it does not rewrite an earlier publication. Legacy conversion/import of historical facts must not infer a missing allocation policy.
+
+This stage retains the policy input. Student course allocation, repeat/GPA calculations and completion evaluation remain on the roadmap; storing the choice alone does not implement them.
 
 ## Existing inline drafts and publications
 

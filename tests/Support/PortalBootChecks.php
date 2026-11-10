@@ -1219,6 +1219,7 @@ $requirementPath = "/sis/degree-audits/" . $requirementOpened["id"] . "/";
 $requirementDefinition = $requirementOpened["definition"];
 $requirementDefinition["min_credits_milli"] = 3000;
 $requirementDefinition["policies"] = [
+    "group_reuse" => "one_group",
     "repeat_credit" => "highest_earned",
     "repeat_gpa" => "all_eligible",
     "transfer_overall_gpa" => "exclude",

@@ -14,6 +14,7 @@ use Domain\DegreeAudit\ValueObject\AuditRequirements;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV2;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
+use Domain\DegreeAudit\ValueObject\CourseGroupReuse;
 use Domain\DegreeAudit\ValueObject\RequirementsPublicationId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
@@ -566,6 +567,8 @@ final readonly class RequirementsService
             $definition["policies"] ??= AuditRequirementsV2::blank($definition["name"])->definition[
                 "policies"
             ];
+            $definition["policies"]["group_reuse"] =
+                CourseGroupReuse::OneGroup->value;
             $draft = new AuditRequirementsV3($definition);
             $this->templates->save($id, $revision, $draft->definition);
             $this->audit->record($actor, "degree_audit.groups_moved_to_library", $id);

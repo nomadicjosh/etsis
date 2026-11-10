@@ -1,6 +1,6 @@
 # Assigning degree requirements to a student program
 
-The [course group library and degree builder](degree-audit-builder.md) publish reusable requirements. A student program must then retain **one explicit published degree version**. A new catalog publication never changes that selection automatically.
+The [course group library and degree builder](degree-audit-builder.md) publish reusable requirements. A student program must then retain **one explicit published degree version**. A new catalog publication never changes that selection automatically. The selected degree also retains its course-sharing policy: one group by default for new compositions, or multiple groups when the institution publishes that choice. Later policy edits do not change an earlier selection.
 
 This stage records and displays selected requirements. **Preview with approvals** combines the retained baseline with verified student exceptions and allows comparison without changing the selection. It does not evaluate completed courses, calculate eligibility or grant a credential. [Student exceptions](student-degree-exceptions.md) now separately retain course waivers and minimum reductions. The [development roadmap](development-roadmap.md#3-student-degree-audit-evaluation) describes those later stages.
 

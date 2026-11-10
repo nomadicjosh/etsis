@@ -74,6 +74,7 @@ final class ReusableGroupFixture
         $this->definition["min_credits_milli"] = 120000;
         $this->definition["min_resident_milli"] = 30000;
         $this->definition["policies"] = [
+            "group_reuse" => "one_group",
             "repeat_credit" => "highest_earned",
             "repeat_gpa" => "all_eligible",
             "transfer_overall_gpa" => "exclude",
@@ -162,6 +163,7 @@ final class ReusableGroupFixture
     public function oldDefinition(bool $policies = true): array
     {
         $d = $this->definition;
+        unset($d["policies"]["group_reuse"]);
         $g = $this->groupDefinition;
         $d["courses"] = $g["courses"];
         unset($g["courses"]);

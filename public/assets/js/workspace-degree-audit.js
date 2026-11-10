@@ -309,6 +309,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         return tree;
     }
     const policyChoices = {
+        group_reuse: [
+            ["one_group", "Apply a completed course to one group"],
+            ["multiple_groups", "Allow a completed course in multiple groups"],
+        ],
         repeat_credit: [
             ["highest_earned", "Highest earned award per course"],
             ["all_eligible", "Every eligible earned award"],
@@ -324,6 +328,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         ],
     };
     const policyLabels = {
+        group_reuse: "Completed courses across requirement groups",
         repeat_credit: "Repeated-course earned credit",
         repeat_gpa: "Repeated-course GPA",
         transfer_overall_gpa: "Transfer awards in overall GPA",
@@ -1318,7 +1323,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "A waiver removes the required course everywhere without adding earned credit or GPA. Other minimum changes require separate exceptions.",
+                "Group sharing never authorizes counting an award twice in overall credit or GPA totals. Repeat policies remain separate. A waiver creates no credit or GPA; minimum reductions require separate approvals.",
             ),
         );
         inspector.append(policies);

@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after the read-only requirements preview with approved exceptions and baseline comparison.
+Last reviewed: **2026-11-10**, after configurable published course-sharing policy, defaulting new compositions to one group.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -88,7 +88,8 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 
 - [x] [Preview selected requirements with approved exceptions](student-degree-exceptions.md#preview-requirements-with-approved-exceptions) and compare the published baseline, preserving pursuit scope, retained labels and explicit conflict/cohort notices. This does not calculate student completion.
 - [ ] Implement deterministic evaluation against the student's retained degree, group, course and grading publications, using authoritative institutional/transfer credit facts.
-- [ ] Allocate work across overlapping requirements with explicit double-counting rules; explain each applied, unused, insufficient-grade and in-progress course. Do not assume a greedy allocation produces the best valid result.
+- [x] [Retain the institution-selected course-sharing policy](degree-audit-builder.md#course-sharing-across-groups) in each degree publication, defaulting new compositions to one group. Earlier selected policies stay retained; allocation itself remains outstanding.
+- [ ] Allocate work across overlapping requirements using the retained sharing policy; explain each applied, unused, insufficient-grade and in-progress course. Do not assume a greedy allocation produces the best valid result.
 - [ ] Apply the retained repeat-credit, repeat-GPA and transfer-GPA policies. Evaluate credit/course-count quantities, per-course grade-point floors, residency and GPA minimums without converting grade scales implicitly.
 - [ ] Apply pursuit-scoped waivers, substitutions and minimum reductions. A course waiver removes that required course wherever it appears within the pursuit, including outside a group; it creates no earned credit/GPA and does not itself lower minimums.
 - [ ] Complete specialization relationships/exclusions and any remaining requirement grammar against the agreed specification. Existing publications keep their original interpretation.

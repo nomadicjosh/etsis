@@ -36,6 +36,7 @@ async function fixture(page, options = {}) {
                 repeat_gpa: "all_eligible",
                 transfer_overall_gpa: "exclude",
                 waiver: "waive_required_course_everywhere",
+                group_reuse: "one_group",
             },
         },
         group_details: {
