@@ -14,6 +14,7 @@ interface ApplicationFormRepository
     public function save(ApplicationForm $form, ?int $expectedVersion): void;
     public function publish(ApplicationForm $form): void;
     public function disable(EntityId $program): void;
+    public function lockPerson(EntityId $person): void;
     public function lockProgram(EntityId $program): void;
     /** @return list<array<string, mixed>> */
     public function listing(): array;

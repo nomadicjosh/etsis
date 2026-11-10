@@ -99,7 +99,8 @@ test('staff review original application answers and revoke report sharing', asyn
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/applications/') ? [{ id: app, given_name: 'Jamie', family_name: 'Example', status }] : path.includes('/reports/') ? [{ id: report, name: 'Fictional student report' }] : [], next_after: null };
         else if (path === `/sis/applications/${app}/review/`) result = { application: { id: { value: app }, status, version: 0 }, person: { id: { value: person }, givenName: 'Jamie', familyName: 'Example', institutionalId: { value: 'S-EXAMPLE' } }, labels: { program_code: 'BSCS', program_title: 'Computing', term_code: '26/FA' }, submission: { form: { name: 'Original application revision', fields: [{ key: 'returning', label: 'Returning student?', type: 'checkbox' }, { key: 'statement', label: 'Personal statement', type: 'textarea' }] }, answers: { returning: false, statement: '<script>fictional</script> A personal statement.' } } };
-        else if (path.endsWith('/decision/')) { status = 'accepted'; result = { status }; }
+        else if (path.endsWith('/decision/review/')) result = {status: 'accepted', source: {program_code: 'BSCS', program_title: 'Computing', entry_term_code: '26/FA', submission: {form_name: 'Original application revision', form_version: 1}}, person: {given_name: 'Jamie', family_name: 'Example', institutional_id: 'S-EXAMPLE'}, effective_on: '2026-08-10', review_token: 'fictional-acceptance-token'};
+        else if (path.endsWith('/decision/commit/')) { status = 'accepted'; result = { status }; }
         else if (path === `/sis/reports/${report}/`) result = { id: report, name: 'Fictional student report', active: null, can_manage: true, can_run: true };
         else if (path.endsWith('/shares/list/')) result = { items: shared ? [{ id: id(24), user_id: user, given_name: 'Alex', family_name: 'Example' }] : [], next_after: null };
         else if (path.endsWith('/revoke/')) shared = false;
@@ -114,9 +115,12 @@ test('staff review original application answers and revoke report sharing', asyn
     expect(await page.locator('#drawer-body script').count()).toBe(0);
     await accessible(page);
     await page.getByRole('button', { name: 'Accept application', exact: true }).click();
+    await page.getByLabel('Reason for admissions decision').fill('Fictional reviewed acceptance');
+    await page.getByRole('button', { name: 'Review admissions decision', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm acceptance', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Matriculate student', exact: true })).toBeVisible();
-    expect(sent.find(item => item.path.endsWith('/decision/'))?.data).toEqual({ decision: 'accept' });
+    expect(sent.find(item => item.path.endsWith('/decision/review/'))?.data).toEqual({ decision: 'accept', reason: 'Fictional reviewed acceptance' });
+    expect(sent.find(item => item.path.endsWith('/decision/commit/'))?.data).toEqual({ review_token: 'fictional-acceptance-token' });
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="reports"]').click();
     await page.getByRole('button', { name: 'Fictional student report', exact: true }).click();

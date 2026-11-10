@@ -47,6 +47,7 @@ final readonly class MatriculationService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private AdmissionDecisionLedger $decisions,
     ) {
     }
 
@@ -214,7 +215,7 @@ final readonly class MatriculationService
             return [
                 "history_recorded" => true,
                 "earlier_history_unknown" => false,
-                "acceptance_history_unknown" => true,
+                "acceptance_history_unknown" => $this->decisions->verify($a) === 0,
                 "matriculation" => $this->result($f, $r["effective_at"]),
                 "source" => $this->programs->timeline($assignment, null)["assignment_source"],
             ];
@@ -244,6 +245,7 @@ final readonly class MatriculationService
                 throw new AccessDeniedException("The matriculation actor changed.");
             }
         }
+        $this->decisions->verify($a);
         return $a;
     }
     private function eligible(AdmissionApplication $a): void

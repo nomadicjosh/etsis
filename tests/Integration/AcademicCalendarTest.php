@@ -22,10 +22,11 @@ final class AcademicCalendarTest extends TestCase
             $f->transactions,
             $f->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+            $f->decisionLedger(),
         );
         $person = $service->createPerson($f->user(), 'Fictional', 'Student');
         $app = $service->apply($person->id, $f->program, new EntityId($term));
-        $service->decide($app->id, true);
+        $f->legacyAdmissionDecision($app->id, true);
         return $f->legacyStudent($app->id);
     }
     public function testOnlyStartYearIsEnteredAndTermsAreGeneratedAtomicallyFromActiveTypes(): void

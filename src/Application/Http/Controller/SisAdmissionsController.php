@@ -55,18 +55,6 @@ final class SisAdmissionsController extends BaseController
         );
     }
 
-    public function decide(ServerRequest $request, string $id): ResponseInterface
-    {
-        $data = $this->data($request);
-        $decision = $this->text($data, "decision");
-        if (!in_array($decision, ["accept", "reject"], true)) {
-            throw new InvalidArgumentException("The decision must be accept or reject.");
-        }
-        $this->service->decide(new EntityId($id), $decision === "accept");
-
-        return new JsonResponse(["status" => $decision === "accept" ? "accepted" : "rejected"]);
-    }
-
     public function student(string $id): ResponseInterface
     {
         $profile = $this->service->studentProfile(new EntityId($id));

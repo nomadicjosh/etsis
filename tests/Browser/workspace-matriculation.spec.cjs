@@ -88,7 +88,7 @@ test("matriculation reviews the derived cohort, preserves revisions and shows cu
             result = {
                 history_recorded: true,
                 earlier_history_unknown: false,
-                acceptance_history_unknown: true,
+                acceptance_history_unknown: false,
                 source: {
                     ...source,
                     cohort: { ...source.cohort, catalog_id: id(7) },
@@ -161,7 +161,7 @@ test("matriculation reviews the derived cohort, preserves revisions and shows cu
         "Original cohort: 2026-2027",
     );
     await expect(page.locator("#drawer-body")).toContainText(
-        "preceding acceptance decision is not yet tracked",
+        "Acceptance is retained in Admissions decision history",
     );
     await expect(page.locator("#drawer-body")).not.toContainText(
         "Fictional completed admissions review",

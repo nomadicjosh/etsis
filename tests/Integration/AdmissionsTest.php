@@ -46,7 +46,7 @@ final class AdmissionsTest extends TestCase
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
         $application = $this->service->apply($person->id, $this->program, $this->term);
-        $this->service->decide($application->id, true);
+        $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->matriculate($application->id);
         self::assertSame($this->program->value, $this->service->student($student->id)->programId->value);
         self::assertSame(ApplicationStatus::Matriculated, $this->repository->application($application->id)->status);
@@ -65,7 +65,7 @@ final class AdmissionsTest extends TestCase
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
         $application = $this->service->apply($person->id, $this->program, $this->term);
-        $this->service->decide($application->id, true);
+        $this->f->legacyAdmissionDecision($application->id, true);
         $this->expectException(ConcurrentModificationException::class);
         $this->repository->saveDecision($application->decide(false), 0);
     }
@@ -75,8 +75,8 @@ final class AdmissionsTest extends TestCase
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
         $first = $this->service->apply($person->id, $this->program, $this->term);
         $second = $this->service->apply($person->id, $this->program, $this->term);
-        $this->service->decide($first->id, true);
-        $this->service->decide($second->id, true);
+        $this->f->legacyAdmissionDecision($first->id, true);
+        $this->f->legacyAdmissionDecision($second->id, true);
         $this->f->matriculate($first->id);
         try {
             $this->f->matriculate($second->id);
@@ -97,7 +97,7 @@ final class AdmissionsTest extends TestCase
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
         $application = $this->service->apply($person->id, $this->program, $this->term);
-        $this->service->decide($application->id, true);
+        $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->matriculate($application->id);
         $denied = $this->createMock(StudentAccess::class);
         $denied->method('authenticatedUserId')->willReturn(EntityId::generate());
@@ -110,6 +110,7 @@ final class AdmissionsTest extends TestCase
             new \Infrastructure\Persistence\DatabaseUnitOfWork($this->connection->queryBuilder()),
             new \Infrastructure\Persistence\SqlAuditTrail(new \Infrastructure\Persistence\SqlRecords($this->connection->queryBuilder())),
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+            $this->f->decisionLedger(),
         )->student($student->id);
     }
 
@@ -131,7 +132,7 @@ final class AdmissionsTest extends TestCase
     {
         $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
         $application = $this->service->apply($person->id, $this->program, $this->term);
-        $this->service->decide($application->id, true);
+        $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->legacyStudent($application->id);
         $db = $this->connection->queryBuilder();
         $store = EventStoreFixture::framework($db);

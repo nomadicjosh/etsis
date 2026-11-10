@@ -25,6 +25,7 @@ final readonly class AdmissionsService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private InstitutionalIdGenerator $identifiers,
+        private AdmissionDecisionLedger $decisions,
     ) {
     }
 
@@ -130,6 +131,14 @@ final readonly class AdmissionsService
         $actor = $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:admissions:manage");
         $application = new AdmissionApplication(EntityId::generate(), $personId, $programId, $entryTermId);
         $this->transactions->run(function () use ($application, $actor): void {
+            $this->repository->lockPerson($application->personId);
+            $person = $this->repository->person($application->personId);
+            if (
+                $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:admissions:manage")
+                    ->value !== $actor->value
+            ) {
+                throw new \Domain\Shared\Exception\AccessDeniedException("The application actor changed.");
+            }
             $this->repository->addApplication($application);
             $this->audit->record($actor, "admissions.applied", $application->id);
         });
@@ -137,27 +146,27 @@ final readonly class AdmissionsService
         return $application;
     }
 
-    public function decide(EntityId $applicationId, bool $accept): void
-    {
-        $actor = $this->access->requirePermission("sis:admissions:manage");
-        $application = $this->repository->application($applicationId);
-        $this->transactions->run(function () use ($application, $accept, $actor): void {
-            $this->repository->saveDecision($application->decide($accept), $application->version);
-            $this->audit->record(
-                $actor,
-                $accept ? "admissions.accepted" : "admissions.rejected",
-                $application->id,
-            );
-        });
-    }
-
     /** @return array{application: AdmissionApplication, person: \Domain\Person\Person} */
     public function review(EntityId $id): array
     {
-        $this->access->requirePermission("sis:admissions:manage");
-        $application = $this->repository->application($id);
-
-        return ["application" => $application, "person" => $this->repository->person($application->personId)];
+        $actor = $this->access->requirePermission("sis:admissions:manage");
+        $route = $this->repository->application($id);
+        return $this->transactions->run(function () use ($id, $route, $actor): array {
+            $this->repository->lockPerson($route->personId);
+            $this->repository->lockApplication($id);
+            if ($this->access->requirePermission("sis:admissions:manage")->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException("The admissions actor changed.");
+            }
+            $application = $this->repository->application($id);
+            if ($application->personId->value !== $route->personId->value) {
+                throw new ConcurrentModificationException("The application changed. Reload it.");
+            }
+            $this->decisions->verify($application);
+            return [
+                "application" => $application,
+                "person" => $this->repository->person($application->personId),
+            ];
+        });
     }
 
     public function student(EntityId $studentId): Student

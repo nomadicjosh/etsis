@@ -556,6 +556,42 @@ final class SisFixture
         return $id;
     }
 
+    public function decisionLedger(): \Domain\Admissions\Service\AdmissionDecisionLedger
+    {
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql,
+            $this->transactions,
+            $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                EventStoreFixture::config($this->connection->queryBuilder()),
+            ),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        return new \Domain\Admissions\Service\AdmissionDecisionLedger($history, $this->access, $this->clock);
+    }
+    public function decisionService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+    ): \Domain\Admissions\Service\AdmissionDecisionService {
+        return new \Domain\Admissions\Service\AdmissionDecisionService(
+            $repository ?? $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $this->decisionLedger(),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
+    /** Explicit current-state decision fixture predating tracked acceptance/rejection. */
+    public function legacyAdmissionDecision(EntityId $id, bool $accept): void
+    {
+        $a = $this->admissions->application($id);
+        $this->admissions->saveDecision($a->decide($accept), $a->version);
+    }
     public function admissionsService(): AdmissionsService
     {
         return new AdmissionsService(
@@ -564,6 +600,7 @@ final class SisFixture
             $this->transactions,
             $this->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+            $this->decisionLedger(),
         );
     }
     public function programEntryContext(
@@ -602,6 +639,7 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
+            $this->decisionLedger(),
         );
     }
     public function matriculate(EntityId $application): Student
@@ -636,6 +674,7 @@ final class SisFixture
             $this->transactions,
             $this->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+            $this->decisionLedger(),
         );
         if (
             $owner === null &&
@@ -645,7 +684,7 @@ final class SisFixture
         }
         $person = $service->createPerson($owner ?? $this->access->actor, "Alex", "Example");
         $application = $service->apply($person->id, $this->program, $this->term);
-        $service->decide($application->id, true);
+        $this->legacyAdmissionDecision($application->id, true);
 
         return $this->legacyStudent($application->id);
     }

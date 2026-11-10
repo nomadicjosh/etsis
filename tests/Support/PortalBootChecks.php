@@ -1558,7 +1558,42 @@ $sis->access->grants = [];
 $matriculation = $app->make(\Domain\Admissions\Service\AdmissionsService::class);
 $catalogPerson = $matriculation->createPerson($sis->user(), "Fictional", "Cohort");
 $catalogApplication = $matriculation->apply($catalogPerson->id, $sis->program, $sis->term);
-$matriculation->decide($catalogApplication->id, true);
+$admissionDecisionPath = "/sis/applications/" . $catalogApplication->id->value . "/decision/";
+$admissionEventsBefore = $sis->sql->rows("sis_history_events");
+$admissionReviewResponse = $teachingPost($admissionDecisionPath . "review/", [
+    "decision" => "accept", "reason" => "Fictional protected acceptance reason",
+]);
+$admissionReview = json_decode((string) $admissionReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $admissionReviewResponse->getStatusCode() !== 200 || !isset($admissionReview["review_token"])
+    || $sis->sql->rows("sis_history_events") !== $admissionEventsBefore
+) {
+    throw new RuntimeException("Admissions decision preview failed or recorded events before confirmation.");
+}
+$admissionCommitResponse = $teachingPost($admissionDecisionPath . "commit/", ["review_token" => $admissionReview["review_token"]]);
+if ($admissionCommitResponse->getStatusCode() !== 200) {
+    throw new RuntimeException("Admissions confirmation did not resolve through the real provider and CSRF pipeline.");
+}
+$admissionHistoryRequest = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $admissionDecisionPath . "history/", "GET");
+$admissionHistoryResponse = $app->router->match($admissionHistoryRequest);
+$admissionHistory = json_decode((string) $admissionHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $admissionHistoryResponse->getStatusCode() !== 200 || ($admissionHistory["decision"]["status"] ?? null) !== "accepted"
+    || !str_contains($admissionHistoryResponse->getHeaderLine("Cache-Control"), "no-store")
+    || str_contains((string) $admissionHistoryResponse->getBody(), "Fictional protected acceptance reason")
+) {
+    throw new RuntimeException("Admissions decision history did not retain its private, curated envelope.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:student:read", "sis:registration:manage"];
+if (
+    $app->router->match($admissionHistoryRequest)->getStatusCode() !== 403
+    || $teachingPost($admissionDecisionPath . "commit/", ["review_token" => $admissionReview["review_token"]])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Student read or registrar permissions exposed admissions decision authority.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $matriculationPath = "/sis/applications/" . $catalogApplication->id->value . "/matriculate/";
 $matriculationBefore = $sis->sql->rows("sis_history_events");
 $matriculationReview = json_decode((string) $teachingPost($matriculationPath . "review/", [
@@ -1573,6 +1608,14 @@ if ($matriculationCommit->getStatusCode() !== 201 || !isset($matriculationReceip
     throw new RuntimeException("Reviewed matriculation did not resolve through the real provider and CSRF pipeline.");
 }
 $catalogStudent = $sis->admissions->student(new \Domain\Shared\ValueObject\EntityId($matriculationReceipt["student_id"]));
+$admissionEventsAfterMatriculation = $sis->sql->rows("sis_history_events");
+if (
+    $teachingPost($admissionDecisionPath . "commit/", ["review_token" => $admissionReview["review_token"]])->getStatusCode() !== 200
+    || $sis->sql->rows("sis_history_events") !== $admissionEventsAfterMatriculation
+    || $sis->admissions->application($catalogApplication->id)->status->value !== "matriculated"
+) {
+    throw new RuntimeException("An acceptance retry changed a later matriculation.");
+}
 $matriculationHistoryRequest = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $matriculationPath . "history/", "GET");
 $matriculationHistoryResponse = $app->router->match($matriculationHistoryRequest);
 $matriculationHistory = json_decode((string) $matriculationHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);

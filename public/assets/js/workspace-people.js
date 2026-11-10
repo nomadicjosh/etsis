@@ -249,36 +249,17 @@ window.createWorkspacePeople = function (ui) {
             );
         const actions = node("div", { class: "inline-actions" });
         body.append(actions);
-        const back = () => application(row);
+        actions.append(
+            button("Admissions decision history", () => decisionHistory(row)),
+        );
         if (app.status === "submitted") {
             actions.append(
                 button(
                     "Accept application",
-                    () =>
-                        flow(
-                            "Confirm acceptance",
-                            [],
-                            `/sis/applications/${row.id}/decision/`,
-                            () => ({ decision: "accept" }),
-                            back,
-                            {},
-                            "Review the submitted answers and program before accepting this application.",
-                        ),
+                    () => decide(row, true),
                     "btn-primary",
                 ),
-            );
-            actions.append(
-                button("Reject application", () =>
-                    flow(
-                        "Confirm rejection",
-                        [],
-                        `/sis/applications/${row.id}/decision/`,
-                        () => ({ decision: "reject" }),
-                        back,
-                        {},
-                        "This records a rejection decision. Review the application before confirming.",
-                    ),
-                ),
+                button("Reject application", () => decide(row, false)),
             );
         }
         if (app.status === "accepted")
@@ -295,6 +276,153 @@ window.createWorkspacePeople = function (ui) {
                     matriculationHistory(row),
                 ),
             );
+    }
+    async function decide(row, accept, preset = {}) {
+        const title = accept ? "Accept application" : "Reject application";
+        const body = openDrawer(title, "ADMISSIONS DECISION");
+        body.append(
+            button("Back to application", () => application(row)),
+            node(
+                "p",
+                {},
+                "Review the submitted answers in the application, then enter the reason for this decision. Confirmation retains the application’s program, term and submitted form revision.",
+            ),
+        );
+        const fields = [
+            ["reason", "Reason for admissions decision", "textarea"],
+        ];
+        const form = await buildForm(fields, preset);
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review admissions decision",
+        );
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = formData(form, fields);
+                const preview = await request(
+                    `/sis/applications/${row.id}/decision/review/`,
+                    "POST",
+                    { ...data, decision: accept ? "accept" : "reject" },
+                );
+                const confirmation = openDrawer(
+                    accept ? "Confirm acceptance" : "Confirm rejection",
+                    "REVIEWED DECISION",
+                );
+                const source = preview.source;
+                confirmation.append(
+                    button("Revise admissions decision", () =>
+                        decide(row, accept, data),
+                    ),
+                    node(
+                        "h3",
+                        {},
+                        `${preview.person.given_name} ${preview.person.family_name} · ${preview.status}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Institutional ID: ${preview.person.institutional_id}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `${source.program_code} · ${source.program_title} · ${source.entry_term_code}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        source.submission
+                            ? `${source.submission.form_name} · submitted form revision ${source.submission.form_version}`
+                            : "This application was entered directly; no application-form submission is attached.",
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Effective on confirmation: ${preview.effective_on}. ${accept ? "Matriculation remains a separate reviewed action." : "This records a rejection; it does not create a student record."}`,
+                    ),
+                    button(
+                        accept ? "Confirm acceptance" : "Confirm rejection",
+                        async () => {
+                            await request(
+                                `/sis/applications/${row.id}/decision/commit/`,
+                                "POST",
+                                { review_token: preview.review_token },
+                            );
+                            notify("Admissions decision recorded.");
+                            await application(row);
+                        },
+                        "btn-primary",
+                    ),
+                );
+                const heading = confirmation.querySelector("h3");
+                heading.tabIndex = -1;
+                heading.focus();
+            }, review);
+        });
+        body.append(form);
+    }
+    async function decisionHistory(row) {
+        const record = await request(
+            `/sis/applications/${row.id}/decision/history/`,
+        );
+        const body = openDrawer(
+            "Admissions decision history",
+            "ADMISSIONS RECORD",
+        );
+        body.append(button("Back to application", () => application(row)));
+        if (!record.history_recorded) {
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "No acceptance or rejection has been recorded in the protected decision history. Earlier decisions and original submission timing remain unknown.",
+                ),
+            );
+            return;
+        }
+        const source = record.source;
+        body.append(
+            node(
+                "h3",
+                {},
+                record.decision.status === "accepted"
+                    ? "Application accepted"
+                    : "Application rejected",
+            ),
+            node(
+                "p",
+                {},
+                `${source.program_code} · ${source.program_title} · ${source.entry_term_code}`,
+            ),
+            node(
+                "p",
+                {},
+                source.submission
+                    ? `${source.submission.form_name} · submitted form revision ${source.submission.form_version}`
+                    : "Directly entered application; no application-form submission was attached.",
+            ),
+            node(
+                "p",
+                {},
+                `Effective: ${record.decision.effective_at}. Recorded: ${record.recorded_at}.`,
+            ),
+            node(
+                "p",
+                {},
+                `Current application status: ${record.current_status}`,
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                "The earlier submitted application was observed when tracking this decision began. Its original submission time is unknown. These labels are retained as recorded. Protected reasons, actor details, submission fingerprints and answers are excluded.",
+            ),
+        );
     }
     async function matriculate(row, preset = {}) {
         const body = openDrawer("Matriculate student", "ACCEPTED APPLICATION");
@@ -420,7 +548,9 @@ window.createWorkspacePeople = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "These are the original creation facts. Later program and activity decisions remain in their respective histories. The preceding acceptance decision is not yet tracked as an academic event. Protected reasons and actor details are excluded.",
+                record.acceptance_history_unknown === false
+                    ? "These are the original creation facts. Acceptance is retained in Admissions decision history. Later program and activity decisions remain in their respective histories. Protected reasons and actor details are excluded."
+                    : "These are the original creation facts. Later program and activity decisions remain in their respective histories. The preceding acceptance decision is not yet tracked as an academic event. Protected reasons and actor details are excluded.",
             ),
         );
     }

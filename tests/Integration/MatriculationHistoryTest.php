@@ -23,7 +23,7 @@ final class MatriculationHistoryTest extends TestCase
         $a = $f->admissionsService();
         $person = $a->createPerson($f->user(), "Fictional", "Prospect");
         $application = $a->apply($person->id, $f->program, $f->term);
-        $a->decide($application->id, true);
+        $f->legacyAdmissionDecision($application->id, true);
         return $f->admissions->application($application->id);
     }
     private function year(SisFixture $f): EntityId
@@ -200,7 +200,7 @@ final class MatriculationHistoryTest extends TestCase
         $a = $this->application($f);
         $s = $f->matriculationService();
         $other = $f->admissionsService()->apply($a->personId, $a->programId, $a->entryTermId);
-        $f->admissionsService()->decide($other->id, true);
+        $f->legacyAdmissionDecision($other->id, true);
         $first = $s->review($a->id, "First application");
         $second = $s->review($other->id, "Other application");
         $s->commit($a->id, $first["review_token"]);
