@@ -157,6 +157,85 @@ window.createWorkspaceDegreeAudit = function (ui) {
             maximumFractionDigits: 3,
         });
     const courseLabel = (c) => `${c.code} · ${c.title}`;
+    function groupPlan(definition, details, editing = false) {
+        const ids = [
+            ...new Set(
+                definition.courses
+                    ? definition.courses.map((course) => course.course_id)
+                    : definition.rules.flatMap((rule) => rule.course_ids),
+            ),
+        ];
+        let credits = 0;
+        for (const id of ids) {
+            if (!Number.isInteger(details[id]?.credits_milli))
+                return {
+                    course_count: ids.length,
+                    catalog_credits_milli: null,
+                    rule_count: definition.rules.length,
+                    warnings: ["Course details are unavailable. Reload the group before comparing totals."],
+                };
+            credits += details[id].credits_milli;
+        }
+        const summary = {
+            course_count: ids.length,
+            catalog_credits_milli: credits,
+            rule_count: definition.rules.length,
+            warnings: [],
+        };
+        const raw =
+            definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
+        let required = raw;
+        if (editing) {
+            const pattern = definition.requirement_type === "courses" ? /^\d{1,3}$/ : /^\d{1,7}(\.\d{1,3})?$/;
+            if (!pattern.test(String(raw))) required = null;
+            else required = definition.requirement_type === "courses" ? Number(raw) : milli(String(raw));
+        }
+        if (!ids.length) summary.warnings.push("Add published courses to plan this group.");
+        else if (required == null)
+            summary.warnings.push("Enter a valid required total to compare it with the listed courses.");
+        else if (definition.requirement_type === "courses") {
+            if (required > ids.length)
+                summary.warnings.push(
+                    "The required course count exceeds the number of distinct listed courses.",
+                );
+        } else if (required > credits)
+            summary.warnings.push(
+                "The required credits exceed the catalog credits of the listed courses. Review this total.",
+            );
+        return summary;
+    }
+    function planningPanel(liveUpdates = false) {
+        const counts = node("p", { class: "mb-2" }),
+            warnings = node("div"),
+            live = node(
+                "div",
+                liveUpdates ? { role: "status", "aria-atomic": "true" } : {},
+                counts,
+                warnings,
+            ),
+            element = node(
+                "section",
+                { class: "audit-tree-section", role: "group", "aria-label": "Group planning summary" },
+                node("h3", { class: "h6" }, "Group at a glance"),
+                live,
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Each listed course is counted once. Catalog credits are planning figures; student progress depends on grades, awards and approved exceptions.",
+                ),
+            );
+        return {
+            element,
+            update(summary) {
+                counts.textContent = `${summary.course_count} distinct ${summary.course_count === 1 ? "course" : "courses"} · ${summary.catalog_credits_milli == null ? "Catalog credits unavailable" : `${text(summary.catalog_credits_milli)} catalog credits`} · ${summary.rule_count} requirement ${summary.rule_count === 1 ? "card" : "cards"}`;
+                warnings.replaceChildren(
+                    ...summary.warnings.map((message) =>
+                        node("p", { class: "alert alert-warning py-2" }, message),
+                    ),
+                );
+            },
+        };
+    }
     function groupTree(item, open = true) {
         const d = item.definition,
             details = item.course_details || {};
@@ -165,6 +244,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             { class: "audit-tree", open },
             node("summary", {}, d.name, " ", badge(count(d))),
         );
+        const plan = planningPanel();
+        plan.update(item.planning_summary || groupPlan(d, details));
+        tree.append(plan.element);
         if (d.min_course_grade_points_milli != null)
             tree.append(
                 node(
@@ -653,16 +735,26 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "This block is reusable across all programs. Publishing freezes the reviewed definition.",
             ],
         ]);
+        const plan = planningPanel(true);
+        function updatePlan() {
+            plan.update(groupPlan(model, details, true));
+        }
         const creditsField = field(
                 "Group required credits",
                 model.min_credits_milli,
-                (v) => (model.min_credits_milli = v),
+                (v) => {
+                    model.min_credits_milli = v;
+                    updatePlan();
+                },
                 { inputmode: "decimal" },
             ),
             coursesField = field(
                 "Number of courses required",
                 model.min_courses,
-                (v) => (model.min_courses = v),
+                (v) => {
+                    model.min_courses = v;
+                    updatePlan();
+                },
                 { type: "number", min: 0, max: 200 },
             );
         const creditMode = button("Require credits", () => {
@@ -678,6 +770,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             coursesField.hidden = model.requirement_type !== "courses";
             creditMode.setAttribute("aria-pressed", String(model.requirement_type === "credits"));
             courseMode.setAttribute("aria-pressed", String(model.requirement_type === "courses"));
+            updatePlan();
         }
         inspector.append(
             field("Course group name", model.name, (v) => (model.name = v), { maxlength: 191 }),
@@ -719,6 +812,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 { class: "form-text" },
                 "Choose the institution’s required minimum for each applied course, or leave it blank. The scale maximum is automatic; each grade definition supplies the course’s grade-point value.",
             ),
+            plan.element,
             badge(`Working draft · revision ${saved.revision}`),
         );
         quantity();
@@ -817,6 +911,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             status.textContent = "Selected course versions applied to the working group.";
         }
         function render() {
+            updatePlan();
             const focusedLabel = cards.contains(document.activeElement)
                 ? document.activeElement.textContent
                 : null;

@@ -505,6 +505,9 @@ test("legacy inline draft conversion is explicit and publication errors stay in 
     const f = await fixture(page, { existing: true, legacy: true });
     await openDegree(page, true);
     await expect(page.getByRole("dialog")).toContainText("this step publishes nothing");
+    await expect(page.getByRole("group", { name: "Group planning summary", exact: true })).toContainText(
+        "1 distinct course · 3 catalog credits",
+    );
     expect(f.calls.some((c) => c.path.endsWith("/reuse-groups/"))).toBe(false);
     await page.getByRole("button", { name: "Move draft groups into the library", exact: true }).click();
     await expect(page.locator(".audit-canvas")).toContainText("Unpublished group");
@@ -551,6 +554,8 @@ test("course version replacement is reviewed across the working group without ch
     const f = await fixture(page, { newCourseVersion: true });
     await page.getByRole("button", { name: "Course group library", exact: true }).click();
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    const planning = page.getByRole("group", { name: "Group planning summary", exact: true });
+    await expect(planning).toContainText("3 catalog credits");
     await page.getByLabel("Course group name", { exact: true }).fill("Unsaved new name");
     await page.locator(".audit-source-card > summary").click();
     await page.getByRole("checkbox", { name: /Version 2 · MATH.101/ }).check();
@@ -559,8 +564,10 @@ test("course version replacement is reviewed across the working group without ch
         page.getByRole("group", { name: "Review course version changes", exact: true }),
     ).toContainText("3 → 4 credits. Used in requirements 1.");
     expect(f.calls.some((c) => c.path.endsWith("/save/") || c.path.endsWith("/publish/"))).toBe(false);
+    await expect(planning).toContainText("3 catalog credits");
     await accessible(page);
     await page.getByRole("button", { name: "Adopt selected course versions", exact: true }).click();
+    await expect(planning).toContainText("4 catalog credits");
     await expect(page.locator(".audit-canvas")).toContainText("MATH.101 · Advanced Algebra");
     await expect(page.getByLabel("Course group name", { exact: true })).toHaveValue("Unsaved new name");
     await page.getByRole("button", { name: "Save group draft", exact: true }).click();
@@ -846,5 +853,43 @@ test("expired course group review refreshes without saving or publishing until c
         page.getByRole("heading", { name: "Published requirement versions", exact: true }),
     ).toBeVisible();
     expect(f.groups.get(f.group).versions).toHaveLength(2);
+    expect(f.errors).toEqual([]);
+});
+
+test("group planning updates quantities and counts a shared course once without background writes", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    const plan = page.getByRole("group", { name: "Group planning summary", exact: true });
+    await expect(plan).toContainText("1 distinct course · 3 catalog credits · 1 requirement card");
+    const credits = page.getByLabel("Group required credits", { exact: true });
+    await credits.fill("4.5");
+    await expect(plan).toContainText("required credits exceed the catalog credits");
+    await expect(credits).toBeFocused();
+    await credits.fill("");
+    await expect(plan).toContainText("Enter a valid required total");
+    await credits.fill("3");
+    await expect(plan).not.toContainText("required credits exceed");
+    await page.getByRole("button", { name: "Require courses", exact: true }).click();
+    await page.getByLabel("Number of courses required", { exact: true }).fill("2");
+    await expect(plan).toContainText("required course count exceeds");
+    await page.getByLabel("Number of courses required", { exact: true }).fill("1");
+    await expect(plan).not.toContainText("required course count exceeds");
+    await page.getByRole("button", { name: "Add requirement", exact: true }).click();
+    await page.locator(".audit-source-card > summary").click();
+    await page.getByRole("checkbox", { name: /Version 1 · MATH.101/ }).check();
+    await page.getByRole("button", { name: "Add checked courses", exact: true }).click();
+    await expect(plan).toContainText("1 distinct course · 3 catalog credits · 2 requirement cards");
+    await page.getByRole("button", { name: "Remove MATH.101 from requirement 1", exact: true }).click();
+    await expect(plan).toContainText("1 distinct course · 3 catalog credits");
+    await page.getByRole("button", { name: "Remove MATH.101 from requirement 2", exact: true }).click();
+    await expect(plan).toContainText("0 distinct courses · 0 catalog credits");
+    await expect(plan).toContainText("Add published courses to plan this group");
+    expect(f.calls.some((call) => /\/(save|review|publish)\/$/.test(call.path))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.errors).toEqual([]);
 });

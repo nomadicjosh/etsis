@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after shared course-history verification in retained student requirement reads.
+Last reviewed: **2026-11-10**, after live course-group planning totals and retained-version summaries.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -96,7 +96,7 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 
 **Done when:** the same retained inputs reproduce the same explained result; later catalog changes leave earlier results interpretable; dual-degree pursuits remain separate; an authorized graduation decision is retained independently.
 
-Authoring and exception inputs already exist: [builders](degree-audit-builder.md), [student requirement assignment](student-degree-requirements.md), [exceptions](student-degree-exceptions.md). Student evaluation is still outstanding.
+Authoring and exception inputs already exist: [builders with live group planning totals](degree-audit-builder.md#group-planning-summary), [student requirement assignment](student-degree-requirements.md), [exceptions](student-degree-exceptions.md). Student evaluation is still outstanding.
 
 ## 4. Admissions and student services
 

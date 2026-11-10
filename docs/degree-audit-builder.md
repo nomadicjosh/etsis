@@ -39,6 +39,16 @@ Rule controls:
 
 The grammar currently uses explicit course lists. Subject/level/department criteria depend on normalized, historically versioned classification fields. No SQL, PHP, callbacks or executable expressions are accepted. Nested rule trees and specialization relationships remain later grammar stages.
 
+## Group planning summary
+
+**Group at a glance** shows the distinct listed courses, their combined catalog credits and the number of requirement cards. It updates immediately when staff edit a required total, change credit/course mode, add or remove courses, or adopt a different published course version. It uses the course details already loaded in the builder, with no background save or additional history request for each edit. Blank or unfinished quantities show guidance while keeping focus in the input.
+
+A course appearing in several cards contributes its catalog credits once. Zero-credit courses still count as listed courses, and fractional credits retain their thousandths. Working drafts and published previews use the exact selected course publications; changing today's course credits leaves an older group's figures intact. Missing course details are reported as unavailable rather than silently treated as zero.
+
+If the required credit total exceeds the listed catalog credits, the summary asks staff to review it. This is advisory: actual awards, repeats and approved exceptions can differ from catalog figures. Existing publication rules still apply, including the limit on a course-count requirement exceeding its distinct listed courses. The summary does not allocate completed work, evaluate grades or establish degree completion. It creates no new stored policy, publication format or event history.
+
+The same derived summary appears in group previews, publication reviews and published-version inspection. It is calculated from retained definitions, not stored as another editable total.
+
 ## Publication review lifetime
 
 Both builders use a 20-minute review. The confirmation screen shows the exact saved definition, retained course/group references and reason before publication. **Refresh publication review** keeps the reason and prepares a new review of the current saved draft. It saves no draft and publishes nothing; inspect the refreshed definition again if another staff member has edited it. A changed grading maximum may require reloading and updating the group before a fresh review can be prepared.

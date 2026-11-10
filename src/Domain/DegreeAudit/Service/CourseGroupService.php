@@ -14,6 +14,7 @@ use Domain\Gradebook\Service\GradingScaleService;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
 use Domain\DegreeAudit\ValueObject\CourseGroupPublicationId;
+use Domain\DegreeAudit\ValueObject\CourseGroupPlan;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
@@ -86,8 +87,11 @@ final readonly class CourseGroupService
     {
         $this->access->requirePermission("sis:catalog:manage");
         $row = $this->groups->get($id);
+        $definition = CourseGroupDefinitionV2::draft($row["definition"]);
+        $details = $this->courseDetails($definition);
         return $row + [
-            "course_details" => $this->courseDetails(CourseGroupDefinitionV2::draft($row["definition"])),
+            "course_details" => $details,
+            "planning_summary" => CourseGroupPlan::forDefinition($definition, $details)->describe(),
             "grade_point_scale" => $this->gradePointScale(
                 isset($row["definition"]["grade_scale_program_id"])
                     ? new EntityId($row["definition"]["grade_scale_program_id"])
@@ -161,6 +165,7 @@ final readonly class CourseGroupService
             return $data + [
                 "review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR)),
                 "course_details" => $details,
+                "planning_summary" => CourseGroupPlan::forDefinition($d, $details)->describe(),
             ];
         });
     }
@@ -343,8 +348,11 @@ final readonly class CourseGroupService
         if ($found === null) {
             throw new RecordNotFoundException("Published group version not found for this group.");
         }
+        $definition = CourseGroupDefinitionV2::draft($found["definition"]);
+        $details = $this->courseDetails($definition);
         return $found + [
-            "course_details" => $this->courseDetails(CourseGroupDefinitionV2::draft($found["definition"])),
+            "course_details" => $details,
+            "planning_summary" => CourseGroupPlan::forDefinition($definition, $details)->describe(),
         ];
     }
     /** Authorized authoring context, also used by the degree composition workflow.
