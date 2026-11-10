@@ -7,7 +7,7 @@ namespace Domain\DegreeAudit\ValueObject;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
-/** Explicit extension; the original schema-1 definition remains frozen. */
+/** Adds explicit substitutions to the shared minimum and waiver forms. */
 final readonly class RequirementAdjustmentDefinitionV2
 {
     public const array DEGREE_MINIMUMS = RequirementAdjustmentDefinition::DEGREE_MINIMUMS;

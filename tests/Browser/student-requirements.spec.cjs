@@ -179,7 +179,7 @@ test("minimum exceptions show explicit new values and preserve the published bas
     const f = await fixture(page, { assigned: true });
     await page.getByRole("button", { name: "Student exceptions", exact: true }).click();
     await page.getByRole("button", { name: "Approve an exception", exact: true }).click();
-    await page.getByRole("button", { name: "Credit or GPA minimum", exact: true }).click();
+    await page.getByRole("button", { name: "Requirement minimum", exact: true }).click();
     await page.getByRole("button", { name: "Degree · Required credits · 120", exact: true }).click();
     await page.getByLabel("New required minimum", { exact: true }).fill("108");
     await page.getByLabel("Reason for student exception", { exact: true }).fill("Fictional minimum approval");
@@ -210,26 +210,114 @@ test("student readers see their course waiver without approval or revocation con
     expect(f.errors).toEqual([]);
 });
 
-test('a mismatched program revision is explained before selection', async ({ page }) => {
+test("a mismatched program revision is explained before selection", async ({ page }) => {
     const f = await fixture(page, { catalogMismatch: true, requirementSchema: 4 });
-    await page.getByRole('button', { name: 'Assign published requirements', exact: true }).click();
-    await expect(page.getByRole('radio', { name: /Version 1 · B.S. Computing/ })).toBeDisabled();
-    await expect(page.locator('dialog.degree-audit-studio')).toContainText('different program catalog revision');
+    await page.getByRole("button", { name: "Assign published requirements", exact: true }).click();
+    await expect(page.getByRole("radio", { name: /Version 1 · B.S. Computing/ })).toBeDisabled();
+    await expect(page.locator("dialog.degree-audit-studio")).toContainText(
+        "different program catalog revision",
+    );
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
-    expect(f.calls.some(c => c.path.endsWith('/assign/'))).toBe(false);
+    expect(f.calls.some((c) => c.path.endsWith("/assign/"))).toBe(false);
 });
 
-test('retained program details display their original labels as literal text', async ({ page }) => {
-    await fixture(page, { assigned: true, programPublication: {
-        version_id: id(20), catalog_revision: 1, academic_year_code: '2026-2027',
-        definition: { code: 'BSCS', title: 'Original Computing', description: 'Original program description',
-            classifications: { department: null, academic_level: null,
-                award: { code: 'BS', title: 'Bachelor <script>fictional</script>' } } },
-    } });
-    await page.getByText('Retained program · BSCS — Original Computing', { exact: true }).click();
-    await expect(page.locator('dialog.degree-audit-studio')).toContainText('Bachelor <script>fictional</script>');
-    await expect(page.locator('dialog.degree-audit-studio script')).toHaveCount(0);
+test("retained program details display their original labels as literal text", async ({ page }) => {
+    await fixture(page, {
+        assigned: true,
+        programPublication: {
+            version_id: id(20),
+            catalog_revision: 1,
+            academic_year_code: "2026-2027",
+            definition: {
+                code: "BSCS",
+                title: "Original Computing",
+                description: "Original program description",
+                classifications: {
+                    department: null,
+                    academic_level: null,
+                    award: { code: "BS", title: "Bachelor <script>fictional</script>" },
+                },
+            },
+        },
+    });
+    await page.getByText("Retained program · BSCS — Original Computing", { exact: true }).click();
+    await expect(page.locator("dialog.degree-audit-studio")).toContainText(
+        "Bachelor <script>fictional</script>",
+    );
+    await expect(page.locator("dialog.degree-audit-studio script")).toHaveCount(0);
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
+});
+
+test("registrar reduces and revokes a whole-course group minimum through reviewed decisions", async ({
+    page,
+}) => {
+    const f = await fixture(page, { assigned: true, groupMinimums: true });
+    await page.getByRole("button", { name: "Student exceptions", exact: true }).click();
+    await page.getByRole("button", { name: "Approve an exception", exact: true }).click();
+    await page.getByRole("button", { name: "Requirement minimum", exact: true }).click();
+    await page.getByRole("button", { name: "General education · Required courses · 2", exact: true }).click();
+    const input = page.getByLabel("New required minimum", { exact: true });
+    await expect(input).toHaveAttribute("step", "1");
+    await input.fill("1.5");
+    await page
+        .getByLabel("Reason for student exception", { exact: true })
+        .fill("Fictional course-count approval");
+    await page.getByRole("button", { name: "Review exception", exact: true }).click();
+    await expect(page.getByRole("dialog").getByRole("alert")).toContainText("whole number of courses");
+    expect(f.calls.some((call) => call.path === f.adjustmentBase + "review/")).toBe(false);
+    await input.fill("1");
+    await page.getByRole("button", { name: "Review exception", exact: true }).click();
+    const groups = page.getByRole("group", { name: "Group minimums", exact: true });
+    await expect(groups).toContainText("Required courses: 1");
+    await expect(page.getByRole("dialog")).toContainText(
+        "Required course lists and choose-count rules remain in force",
+    );
+    await accessible(page);
+    await page.getByRole("button", { name: "Approve reviewed exception", exact: true }).click();
+    await groups.locator("summary").click();
+    await expect(groups).toContainText("Required courses: 1");
+    expect(
+        f.calls.find((call) => call.path === f.adjustmentBase + "review/").body.definition.required_milli,
+    ).toBe(1000);
+    await page.getByRole("button", { name: "Review revocation", exact: true }).click();
+    await page
+        .getByLabel("Reason for revocation", { exact: true })
+        .fill("Fictional course-count restoration");
+    await page.getByRole("button", { name: "Prepare revocation", exact: true }).click();
+    await expect(groups).toContainText("Required courses: 2");
+    await page.getByRole("button", { name: "Revoke reviewed exception", exact: true }).click();
+    await groups.locator("summary").click();
+    await expect(groups).toContainText("Required courses: 2");
+    expect(f.errors).toEqual([]);
+});
+
+test("per-course group grade-point exception keeps its own units and leaves course counts intact", async ({
+    page,
+}) => {
+    const f = await fixture(page, { assigned: true, groupMinimums: true, requirementGradeMaximum: 5000 });
+    await page.getByRole("button", { name: "Student exceptions", exact: true }).click();
+    await page.getByRole("button", { name: "Approve an exception", exact: true }).click();
+    await page.getByRole("button", { name: "Requirement minimum", exact: true }).click();
+    await page
+        .getByRole("button", { name: "General education · Minimum grade points per course · 2", exact: true })
+        .click();
+    await expect(page.getByLabel("New required minimum", { exact: true })).toHaveAttribute("step", "0.001");
+    await page.getByLabel("New required minimum", { exact: true }).fill("1.7");
+    await page
+        .getByLabel("Reason for student exception", { exact: true })
+        .fill("Fictional individual grade-point exception");
+    await page.getByRole("button", { name: "Review exception", exact: true }).click();
+    const groups = page.getByRole("group", { name: "Group minimums", exact: true });
+    await expect(groups).toContainText("Minimum grade points per course: 1.7 out of 5.0");
+    await expect(groups).toContainText("Required courses: 2");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Approve reviewed exception", exact: true }).click();
+    expect(
+        f.calls.find((call) => call.path === f.adjustmentBase + "review/").body.definition.required_milli,
+    ).toBe(1700);
+    expect(f.errors).toEqual([]);
 });

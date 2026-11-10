@@ -1835,7 +1835,48 @@ window.createWorkspaceDegreeAudit = function (ui) {
         min_cumulative_gpa_milli: "Cumulative GPA",
         min_overall_gpa_milli: "Overall GPA",
         min_gpa_milli: "Minimum GPA",
+        min_courses: "Required courses",
+        min_course_grade_points_milli: "Minimum grade points per course",
     };
+    function groupMinimums(data, title = "Group minimums for this student") {
+        const entries = Object.entries(data.effective_minimums.groups || {});
+        if (!entries.length) return null;
+        const section = node(
+            "section",
+            { class: "audit-tree", role: "group", "aria-label": "Group minimums" },
+            node("h2", { class: "h5" }, title),
+        );
+        for (const [id, group] of entries) {
+            const name =
+                data.group_labels?.[id] ||
+                data.targets?.find((target) => target.group_id === id)?.label ||
+                "Course group";
+            const detail = node(
+                "details",
+                { open: (data.affected_groups || []).includes(name) },
+                node("summary", {}, name),
+            );
+            for (const [key, value] of Object.entries(group)) {
+                if (
+                    !Object.hasOwn(minimumLabels, key) ||
+                    (key === "min_courses" && group.requirement_type !== "courses") ||
+                    (key === "min_credits_milli" && group.requirement_type === "courses")
+                )
+                    continue;
+                const amount =
+                    value == null ? "No minimum" : key === "min_courses" ? String(value) : text(value);
+                detail.append(
+                    node(
+                        "p",
+                        {},
+                        `${minimumLabels[key]}: ${amount}${key === "min_course_grade_points_milli" && value != null ? ` out of ${scaleText(data.grade_scale?.maximum_milli ?? group.max_course_grade_points_milli)}` : ""}`,
+                    ),
+                );
+            }
+            section.append(detail);
+        }
+        return section;
+    }
     function adjustmentLabel(p, data) {
         const d = p.definition;
         if (d.kind === "substitution") {
@@ -1886,6 +1927,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     ),
                 ),
             );
+        const groups = groupMinimums(data);
+        if (groups) body.append(groups);
         const conflicts = Object.values(data.effective_minimums.substitution_conflicts || {});
         if (conflicts.length)
             body.append(
@@ -1989,7 +2032,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 page = 0;
                 render();
             }),
-            minimumButton = button("Credit or GPA minimum", () => {
+            minimumButton = button("Requirement minimum", () => {
                 kind = "minimum";
                 selected = null;
                 page = 0;
@@ -2031,7 +2074,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "For a minimum exception, enter the new required value, not the amount to subtract. A waiver never grants course credit or lowers a credit/GPA minimum.",
+                "Enter the new required value, not the amount to subtract. A waiver never creates earned credit or changes other requirement minimums.",
             ),
             field("Reason for student exception", "", (v) => (reason = v), { maxlength: 1000 }),
             actions(
@@ -2042,6 +2085,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             throw new Error("Choose an exception target and enter its approval reason.");
                         if (kind === "substitution" && !replacement)
                             throw new Error("Choose an explicit published replacement course version.");
+                        if (
+                            kind === "minimum" &&
+                            selected.minimum === "min_courses" &&
+                            !/^\d{1,3}$/.test(value)
+                        )
+                            throw new Error("Use a whole number of courses for this minimum.");
                         const definition =
                             kind === "waiver"
                                 ? { kind, course_id: selected.course_id }
@@ -2101,8 +2150,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             valueField.hidden = kind !== "minimum";
                             if (kind === "minimum") {
                                 value = text(t.original_milli);
-                                valueField.querySelector("input").value = value;
-                                valueField.querySelector("input").focus();
+                                const input = valueField.querySelector("input");
+                                input.type = "number";
+                                input.min = "0";
+                                input.step = t.minimum === "min_courses" ? "1" : "0.001";
+                                input.max =
+                                    t.minimum === "min_courses"
+                                        ? String(t.original_milli / 1000 - 1)
+                                        : text(t.original_milli);
+                                input.inputMode = t.minimum === "min_courses" ? "numeric" : "decimal";
+                                input.value = value;
+                                input.focus();
                             }
                         }),
                     ),
@@ -2277,6 +2335,22 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node("p", {}, `${minimumLabels[k]}: ${v === null ? "No minimum" : text(v)}`),
                 ),
             ),
+            ...[
+                groupMinimums(reviewed, "Group minimums after this decision"),
+                reviewed.adjustment.definition?.minimum === "min_courses"
+                    ? node(
+                          "p",
+                          { class: "form-text" },
+                          "Required course lists and choose-count rules remain in force. This changes only the group's course-count minimum.",
+                      )
+                    : reviewed.adjustment.definition?.minimum === "min_course_grade_points_milli"
+                      ? node(
+                            "p",
+                            { class: "form-text" },
+                            "This changes the per-course grade-point threshold for this group. Recorded grades, grading scales and other groups retain their own values.",
+                        )
+                      : null,
+            ].filter(Boolean),
             actions(
                 button(
                     reviewed.action === "revoke" ? "Revoke reviewed exception" : "Approve reviewed exception",

@@ -51,6 +51,25 @@ async function fixture(page, options = {}) {
             },
         },
     };
+    if (options.groupMinimums) {
+        requirements.grade_scale = { maximum_milli: options.requirementGradeMaximum || 4000 };
+        const block = requirements.group_details[group];
+        Object.assign(block.definition, {
+            requirement_type: "courses",
+            min_credits_milli: 0,
+            min_courses: 2,
+            min_course_grade_points_milli: 2000,
+            max_course_grade_points_milli: 4000,
+            grade_scale_program_id: null,
+            courses: [
+                { course_id: course, version_id: id(12) },
+                { course_id: id(30), version_id: id(31) },
+            ],
+            rules: [{ id: id(9), mode: "pool", minimum_courses: 0, course_ids: [course, id(30)] }],
+        });
+        delete block.definition.min_gpa_milli;
+        block.course_details[id(30)] = { code: "ENG.101", title: "Fictional English", credits_milli: 3000 };
+    }
     let selection = options.assigned
         ? { pursuit_started_on: "2026-08-01", requirements_version_id: version }
         : null;
@@ -78,6 +97,26 @@ async function fixture(page, options = {}) {
             label: "General education",
         },
     ];
+    if (options.groupMinimums) {
+        targets.splice(
+            1,
+            1,
+            {
+                group_id: group,
+                group_version_id: id(8),
+                minimum: "min_courses",
+                original_milli: 2000,
+                label: "General education",
+            },
+            {
+                group_id: group,
+                group_version_id: id(8),
+                minimum: "min_course_grade_points_milli",
+                original_milli: 2000,
+                label: "General education",
+            },
+        );
+    }
     const courses = [
         { course_id: course, code: "MATH.101", title: "Algebra", groups: ["General education"] },
     ];
@@ -89,7 +128,17 @@ async function fixture(page, options = {}) {
                 min_cumulative_gpa_milli: null,
                 min_overall_gpa_milli: null,
             },
-            groups: { [group]: { min_credits_milli: 3000, min_gpa_milli: null } },
+            groups: {
+                [group]: options.groupMinimums
+                    ? {
+                          requirement_type: "courses",
+                          min_credits_milli: 0,
+                          min_courses: 2,
+                          min_course_grade_points_milli: 2000,
+                          max_course_grade_points_milli: 4000,
+                      }
+                    : { min_credits_milli: 3000, min_gpa_milli: null },
+            },
             waived_course_ids: [],
             substitutions: {},
             substitution_conflicts: {},
@@ -103,7 +152,9 @@ async function fixture(page, options = {}) {
                     version_id: d.replacement_version_id,
                 };
             else if (d.group_id === null) out.degree[d.minimum] = d.required_milli;
-            else out.groups[d.group_id][d.minimum] = d.required_milli;
+            else
+                out.groups[d.group_id][d.minimum] =
+                    d.minimum === "min_courses" ? d.required_milli / 1000 : d.required_milli;
         }
         return out;
     }
@@ -199,7 +250,9 @@ async function fixture(page, options = {}) {
                               version: 1,
                               schema_version: options.requirementSchema || 3,
                               assignable: !options.catalogMismatch,
-                              assignment_note: options.catalogMismatch ? "This requirement version belongs to a different program catalog revision." : "Matches the student's assigned program catalog revision.",
+                              assignment_note: options.catalogMismatch
+                                  ? "This requirement version belongs to a different program catalog revision."
+                                  : "Matches the student's assigned program catalog revision.",
                               name: requirements.definition.name,
                               academic_year_code: "2026-2027",
                           },
@@ -246,6 +299,8 @@ async function fixture(page, options = {}) {
                 targets,
                 courses,
                 effective_minimums: effective(),
+                group_labels: { [group]: "General education" },
+                grade_scale: requirements.grade_scale || null,
                 selection,
                 scope: { status: "active" },
                 cohort_changed: false,
@@ -287,7 +342,9 @@ async function fixture(page, options = {}) {
                 adjustment: p,
                 previous: previous || null,
                 reason: body.reason,
-                affected_groups: d.kind !== "minimum" ? ["General education"] : [],
+                affected_groups: d.kind !== "minimum" || d.group_id ? ["General education"] : [],
+                group_labels: { [group]: "General education" },
+                grade_scale: requirements.grade_scale || null,
                 substitution_details: d.kind === "substitution" ? { [p.adjustment_id]: replacement } : {},
                 effective_minimums: effective([...activeAdjustments.filter((x) => x !== previous), p]),
                 review_token: `fictional-exception-${p.adjustment_id}`,
@@ -302,6 +359,8 @@ async function fixture(page, options = {}) {
                 reason: body.reason,
                 affected_groups: [],
                 effective_minimums: effective(activeAdjustments.filter((p) => p !== previous)),
+                group_labels: { [group]: "General education" },
+                grade_scale: requirements.grade_scale || null,
                 review_token: "fictional-revocation",
             };
             preparedAdjustments.set(response.review_token, response);
@@ -337,8 +396,8 @@ async function fixture(page, options = {}) {
     });
     await page.goto(options.readOnly ? "/admin/student-read-fixture/" : "/admin/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
-    await page.locator('#directory-search').fill('Alex');
-    await page.locator('#directory-search').press('Enter');
+    await page.locator("#directory-search").fill("Alex");
+    await page.locator("#directory-search").press("Enter");
     await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     await page.getByRole("button", { name: "Degree requirements", exact: true }).click();
     return {

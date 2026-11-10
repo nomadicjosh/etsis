@@ -16,7 +16,12 @@ final readonly class RequirementAdjustmentDefinition
         "min_cumulative_gpa_milli",
         "min_overall_gpa_milli",
     ];
-    public const array GROUP_MINIMUMS = ["min_credits_milli", "min_gpa_milli"];
+    public const array GROUP_MINIMUMS = [
+        "min_credits_milli",
+        "min_gpa_milli",
+        "min_courses",
+        "min_course_grade_points_milli",
+    ];
     /** @param array<string, mixed> $definition */
     public function __construct(public array $definition)
     {
@@ -36,6 +41,15 @@ final readonly class RequirementAdjustmentDefinition
             "original_milli",
             "required_milli",
         ]);
+        $maximum = match ($definition["minimum"]) {
+            "min_courses" => 200000,
+            "min_course_grade_points_milli",
+            "min_gpa_milli",
+            "min_cumulative_gpa_milli",
+            "min_overall_gpa_milli"
+            => 10000,
+            default => 9999999,
+        };
         if (
             $definition["kind"] !== "minimum" ||
             !is_string($definition["minimum"]) ||
@@ -48,7 +62,9 @@ final readonly class RequirementAdjustmentDefinition
             !is_int($definition["required_milli"]) ||
             $definition["required_milli"] < 0 ||
             $definition["required_milli"] >= $definition["original_milli"] ||
-            $definition["original_milli"] > (str_contains($definition["minimum"], "gpa") ? 10000 : 9999999)
+            $definition["original_milli"] > $maximum ||
+            ($definition["minimum"] === "min_courses" &&
+                ($definition["original_milli"] % 1000 !== 0 || $definition["required_milli"] % 1000 !== 0))
         ) {
             self::invalid();
         }
@@ -80,7 +96,7 @@ final readonly class RequirementAdjustmentDefinition
     private static function invalid(): never
     {
         throw new InvalidArgumentException(
-            "Choose a course waiver or a valid reduction to a published credit/GPA minimum.",
+            "Choose a course waiver or a valid reduction to a published requirement minimum. Course counts must be whole numbers.",
         );
     }
 }

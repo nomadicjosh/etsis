@@ -64,6 +64,8 @@ final readonly class RequirementAdjustmentService
                 "targets" => $choices["targets"],
                 "courses" => $choices["courses"],
                 "effective_minimums" => $effective,
+                "group_labels" => $this->groupLabels($parent),
+                "grade_scale" => $parent["requirements"]["grade_scale"] ?? null,
                 "selection" => $parent["selection"],
                 "scope" => $parent["scope"],
                 "cohort_changed" => $parent["cohort_changed"],
@@ -199,6 +201,7 @@ final readonly class RequirementAdjustmentService
             $this->students->lock($student);
             $parent = $this->requirements->view($student, $assignment);
             $state = $this->state($assignment, $parent);
+            $this->assertActor($actor);
             $p = $d["payload"];
             $op = new EntityId($d["action"] === "grant" ? $p["adjustment_id"] : $p["decision_id"]);
             $class =
@@ -246,6 +249,7 @@ final readonly class RequirementAdjustmentService
                 }
                 $this->audit->record($actor, "degree_audit.exception_" . $d["action"], $assignment);
             }
+            $this->assertActor($actor);
             return $receipt;
         });
     }
@@ -458,7 +462,8 @@ final readonly class RequirementAdjustmentService
                         "group_id" => $id,
                         "group_version_id" => $g["version_id"],
                         "minimum" => $key,
-                        "original_milli" => $g["definition"][$key],
+                        "original_milli" =>
+                            $key === "min_courses" ? $g["definition"][$key] * 1000 : $g["definition"][$key],
                         "label" => $g["definition"]["name"],
                     ];
                 }
@@ -561,6 +566,9 @@ final readonly class RequirementAdjustmentService
             $d["group_id"] === null
             ? $r["definition"][$d["minimum"]] ?? null
             : $r["group_details"][$d["group_id"]]["definition"][$d["minimum"]] ?? null;
+            if ($d["minimum"] === "min_courses" && is_int($base)) {
+                $base *= 1000;
+            }
             if (
                 $base !== $d["original_milli"] ||
                 ($d["group_id"] !== null &&
@@ -571,7 +579,10 @@ final readonly class RequirementAdjustmentService
             if ($d["group_id"] === null) {
                 $degree[$d["minimum"]] = $d["required_milli"];
             } else {
-                $groups[$d["group_id"]][$d["minimum"]] = $d["required_milli"];
+                $groups[$d["group_id"]][$d["minimum"]] =
+                $d["minimum"] === "min_courses"
+                ? intdiv($d["required_milli"], 1000)
+                : $d["required_milli"];
             }
         }
         $conflicts = [];
@@ -620,6 +631,7 @@ final readonly class RequirementAdjustmentService
         }
         $op = new EntityId($action === "grant" ? $p["adjustment_id"] : $p["decision_id"]);
         $context = new EventContext($actor, $this->clock->now(), $op, reason: $reason);
+        $this->assertActor($actor);
         $d = [
             "kind" =>
                 $action === "grant" && $p["definition"]["kind"] === "substitution"
@@ -638,8 +650,27 @@ final readonly class RequirementAdjustmentService
             "action" => $action,
             "adjustment" => $p,
             "reason" => $reason,
+            "group_labels" => $this->groupLabels($parent),
+            "grade_scale" => $parent["requirements"]["grade_scale"] ?? null,
             "review_token" => $this->cipher->seal(json_encode($d, JSON_THROW_ON_ERROR)),
         ];
+    }
+    /** @param array<string,mixed> $parent
+     * @return array<string,string>
+     */
+    private function groupLabels(array $parent): array
+    {
+        $labels = [];
+        foreach ($parent["requirements"]["group_details"] ?? [] as $id => $group) {
+            $labels[$id] = $group["definition"]["name"];
+        }
+        return $labels;
+    }
+    private function assertActor(EntityId $actor): void
+    {
+        if ($this->authorize()->value !== $actor->value) {
+            throw new AccessDeniedException("The student exception reviewer changed.");
+        }
     }
     private function stream(EntityId $assignment): StreamReference
     {

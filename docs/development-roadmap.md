@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after live course-group planning totals and retained-version summaries.
+Last reviewed: **2026-11-10**, after reviewed student group course-count and per-course grade-point reductions.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -32,7 +32,7 @@ These are relative estimates, not calendar commitments or percentages complete. 
 | Staff workspace and portal | Bootstrap staff screens and metrics; public campus content/course discovery; Vihzhuo themes/blocks and authenticated student services. |
 | Academic setup | Term types, reviewed academic-year/term generation, separate term maintenance and derived matriculation cohorts. |
 | Published academic definitions | Academic-year program definitions with retained catalog references; course publications and explicit offering bindings; reviewed section publications with instructional dates and current offering facts; reusable course groups, degree compositions and global/program grading-scale publications. Initial section-version selection and reviewed future-registration amendments are available; offering-plan activation retains those references atomically; further definition coverage remains incomplete. |
-| Student records | Program assignments, primary-program selections, activity history, requirement-version assignment, waivers, substitutions and explicit minimum exceptions. |
+| Student records | Program assignments, primary-program selections, activity history, requirement-version assignment, waivers, substitutions and explicit degree/group minimum exceptions, including whole-course totals and per-course grade-point floors. |
 | Admissions | Program application forms, protected submission references, reviewed acceptance/rejection, independently authorized pre-matriculation corrections and atomic initial matriculation. |
 | Registration and academic credit | Accepted seats and section decision order; early/late drops coupled to billing; institutional grades/corrections and transfer award/correction/void/reinstatement history. |
 | Finance | Event-sourced student-account postings/reversals, term billing rules and balanced journals; registrar/finance review handoff. Portal payment integration exists separately; live settlement is not established by isolated tests. |
