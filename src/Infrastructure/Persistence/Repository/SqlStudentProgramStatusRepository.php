@@ -68,6 +68,19 @@ final readonly class SqlStudentProgramStatusRepository implements StudentProgram
             "last_decision_id" => $r["last_decision_id"],
         ];
     }
+    public function track(StudentProgramStatus $root): void
+    {
+        $f = $root->facts() ?? throw new CorruptHistoryException();
+        if ($root->playhead() !== 1 || $root->earlierHistoryUnknown()) {
+            throw new CorruptHistoryException();
+        }
+        $this->sql->insert("sis_program_status_streams", [
+            "id" => $f["id"],
+            "student_id" => $f["student_id"],
+            "stream_version" => 1,
+            "last_decision_id" => $root->decision() ?? throw new CorruptHistoryException(),
+        ]);
+    }
     public function project(StudentProgramStatus $root, string $before, int $expected): void
     {
         $f = $root->facts() ?? throw new CorruptHistoryException();

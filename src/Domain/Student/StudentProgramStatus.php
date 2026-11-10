@@ -9,6 +9,7 @@ use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Student\Event\StudentProgramWasObserved;
 use Domain\Student\Event\StudentProgramStatusWasChanged;
+use Domain\Student\Event\StudentProgramWasAssigned;
 use Domain\Student\ValueObject\StudentProgramStatusSchema;
 
 /** Current program-assignment status. Decisions in this slice take effect on confirmation. */
@@ -17,6 +18,9 @@ final class StudentProgramStatus extends EventSourcedAggregate
     /** @var array<string,mixed>|null */
     private ?array $facts = null;
     private ?string $decision = null;
+    private bool $earlierUnknown = true;
+    /** @var array<string,mixed>|null */
+    private ?array $source = null;
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (
@@ -37,6 +41,26 @@ final class StudentProgramStatus extends EventSourcedAggregate
         }
         $this->facts = $p["assignment"];
         $this->decision = $p["decision_id"];
+    }
+    public function whenStudentProgramWasAssigned(StudentProgramWasAssigned $event): void
+    {
+        $p = $event->payload();
+        if ($this->facts !== null || $p["assignment"]["id"] !== (string) $this->aggregateId()) {
+            throw new CorruptHistoryException();
+        }
+        $this->facts = $p["assignment"];
+        $this->decision = $p["decision_id"];
+        $this->earlierUnknown = false;
+        $this->source = $p["source"];
+    }
+    public function earlierHistoryUnknown(): bool
+    {
+        return $this->earlierUnknown;
+    }
+    /** @return array<string,mixed>|null */
+    public function assignmentSource(): ?array
+    {
+        return $this->source;
     }
     public function whenStudentProgramStatusWasChanged(StudentProgramStatusWasChanged $event): void
     {

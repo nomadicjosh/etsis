@@ -1,6 +1,6 @@
 # Primary-program decisions
 
-Implemented 2026-11-09. This stage retains changes to the student's primary program, including the exact student-program assignment selected. It complements the separate [program closure/reopening history](student-program-status-history.md). Assignment creation, initial matriculation, standing, graduation and backdated program corrections remain separate work.
+Implemented 2026-11-09. This stage retains changes to the student's primary program, including the exact student-program assignment selected. It complements the separate [program closure/reopening history](student-program-status-history.md). Initial matriculation and its first assignment, standing, graduation and backdated program corrections remain separate work. [Additional assignments](student-program-assignments.md) now begin with their own creation history.
 
 ## Staff workflow
 

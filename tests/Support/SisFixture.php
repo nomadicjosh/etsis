@@ -315,6 +315,56 @@ final class SisFixture
             $this->clock,
         );
     }
+    public function programAssignmentService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Student\Service\StudentProgramAssignmentService {
+        return new \Domain\Student\Service\StudentProgramAssignmentService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+            $this->programStatusLedger(),
+            $this->primaryProgramLedger(),
+            $this->activityLedger(),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $this->catalogEnrollment(),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
+    public function assignProgram(
+        \Domain\Shared\ValueObject\EntityId $student,
+        \Domain\Shared\ValueObject\EntityId $program,
+        \Domain\Shared\ValueObject\EntityId $term,
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Shared\ValueObject\EntityId {
+        $s = $this->admissions->student($student);
+        $revision = hash(
+            "sha256",
+            json_encode(
+                [
+                    $s->id->value,
+                    $s->personId->value,
+                    $s->programId->value,
+                    $s->entryTermId->value,
+                    $s->active,
+                ],
+                JSON_THROW_ON_ERROR,
+            ),
+        );
+        $service = $this->programAssignmentService($audit);
+        $review = $service->review(
+            $student,
+            $program,
+            $term,
+            $revision,
+            "Fictional program assignment reason.",
+        );
+        return new \Domain\Shared\ValueObject\EntityId(
+            $service->commit($student, $review["review_token"])["assignment_id"],
+        );
+    }
     public function primaryProgramLedger(): \Domain\Student\Service\StudentPrimaryProgramLedger
     {
         return new \Domain\Student\Service\StudentPrimaryProgramLedger(

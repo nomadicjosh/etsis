@@ -10,6 +10,10 @@ use Domain\Shared\ValueObject\EntityId;
 interface CatalogYearRepository
 {
     public function derived(EntityId $program, EntityId $term): ?EntityId;
+    /** Pure proposal; an absent curriculum revision is created only on confirmation.
+     * @return array{year_id:string,year_code:string,catalog_id:?string,revision:int}|null */
+    public function plan(EntityId $program, EntityId $term): ?array;
+    public function lockTerm(EntityId $term): void;
     public function lockYear(EntityId $id): void;
     public function lockProgram(EntityId $id): void;
     public function year(EntityId $id): CatalogYear;

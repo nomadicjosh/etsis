@@ -86,8 +86,6 @@ final class StudentProgramStatusHistoryTest extends TestCase
             $f->admissions,
             $f->access,
             $f->transactions,
-            $f->audit,
-            $f->catalogEnrollment(),
             $f->activityLedger(),
             $f->programStatusLedger(),
             $f->primaryProgramLedger(),
@@ -393,7 +391,7 @@ final class StudentProgramStatusHistoryTest extends TestCase
         $term = EntityId::generate();
         $f->sql->insert('sis_terms', ['id' => $term->value, 'code' => '27/FA', 'starts_on' => '2027-08-01',
             'ends_on' => '2027-12-15', 'add_drop_ends_on' => '2027-08-15']);
-        $this->records($f)->assign($p->studentId, $p->programId, $term);
+        $f->assignProgram($p->studentId, $p->programId, $term);
         $before = $f->sql->rows('sis_history_events');
         try {
             $f->programStatusService()->commit($p->studentId, $p->id, $review['review_token']);

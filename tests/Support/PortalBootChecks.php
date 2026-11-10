@@ -382,14 +382,18 @@ $sis->sql->insert("sis_programs", [
     "code" => "FIX.PROGRAM",
     "title" => "Fictional program",
 ]);
-$assignedResponse = $teachingPost($studentPath . "/programs/assign/", [
-    "program_id" => $additionalProgram->value,
-    "entry_term_id" => $sis->term->value,
-]);
-if ($assignedResponse->getStatusCode() !== 201) {
-    throw new RuntimeException("The student program assignment route failed.");
+$assignmentReview = $teachingPost($studentPath . "/programs/assign/review/", [
+    "program_id" => $additionalProgram->value, "entry_term_id" => $sis->term->value,
+    "revision" => $studentRecord["revision"], "reason" => "Fictional additional program assignment."]);
+if ($assignmentReview->getStatusCode() !== 200) {
+    throw new RuntimeException("Program assignment review failed.");
 }
-$assignmentId = json_decode((string) $assignedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+$assignmentPreview = json_decode((string) $assignmentReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$assignedResponse = $teachingPost($studentPath . "/programs/assign/commit/", ["review_token" => $assignmentPreview["review_token"]]);
+if ($assignedResponse->getStatusCode() !== 201) {
+    throw new RuntimeException("Program assignment confirmation failed.");
+}
+$assignmentId = json_decode((string) $assignedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)["assignment_id"];
 $primaryDecision = static function (string $assignment, string $revision) use ($teachingPost, $studentPath): int {
     $response = $teachingPost($studentPath . "/primary-program/review/", ["assignment_id" => $assignment,
         "revision" => $revision, "reason" => "Fictional primary-program decision."]);

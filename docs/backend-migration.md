@@ -143,3 +143,10 @@ Migration `20261109000007_CreateSisProgramStatusStreams.php` adds one ULID check
 Selecting a primary program now requires a reason and reviewed confirmation, with a private student timeline. The shared journal retains the exact student-program assignment, its labels and the prior selection. If the browser sends the same confirmation again, etsis recognizes that it already processed it and reports the earlier outcome without applying the change again. For example, if staff select Biology as primary, later select History, and then close the Biology assignment, retrying the earlier Biology confirmation leaves History primary and Biology closed. Student/program reads, closure checks, registration and the billing adapter verify tracked selections. Posted charges and academic/curriculum records remain intact. See [workflow, migration and limits](student-primary-program-history.md).
 
 Migration `20261109000008_CreateSisPrimaryProgramStreams.php` adds one ULID checkpoint table. No new event store or student backfill is introduced. Assignment creation, initial matriculation, standing and backdated program corrections remain later stages. No institutional database was migrated during this work.
+
+
+### Additional program-assignment creation history (2026-11-09)
+
+Adding a program now requires a reason and a review of the program, entry term and derived cohort. Previewing creates no assignment, curriculum, binding or events. Confirmation retains a real creation event in the existing program-status stream, with the cohort actually assigned; later closure/reopening preserves that start. If an added assignment is later closed, resending its original add confirmation leaves it closed and creates no duplicate. See [staff workflow and scope](student-program-assignments.md).
+
+This step adds no database migration or event table. The assignment, any derived curriculum, cohort binding, event, checkpoint, receipt and audit commit or roll back together. Existing observation events are preserved. Initial admissions matriculation and its first assignment remain a separate conversion. No institutional database was migrated during this work.

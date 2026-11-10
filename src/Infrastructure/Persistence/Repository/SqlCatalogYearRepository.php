@@ -21,34 +21,57 @@ final readonly class SqlCatalogYearRepository implements CatalogYearRepository
     }
     public function derived(EntityId $program, EntityId $term): ?EntityId
     {
-        // The caller holds the program lock. Cohorts follow explicit academic-year membership.
-        $mapping = $this->sql->rows("sis_term_calendar", ["id" => $term->value], 1)[0] ?? null;
-        if (($mapping["academic_year_id"] ?? null) === null) {
+        $plan = $this->plan($program, $term);
+        if ($plan === null) {
             return null;
         }
-        $year = new EntityId($mapping["academic_year_id"]);
-        $this->sql->one("sis_academic_years", ["id" => $year->value]);
-        $current =
-        $this->sql->rows(
-            "sis_program_catalogs",
-            ["program_id" => $program->value, "year_id" => $year->value, "published" => 1, "is_current" => 1],
-            1,
-        )[0] ?? null;
-        if ($current !== null) {
-            return new EntityId($current["id"]);
+        if ($plan["catalog_id"] !== null) {
+            return new EntityId($plan["catalog_id"]);
         }
         $label = $this->sql->one("sis_programs", ["id" => $program->value]);
         $id = EntityId::generate();
         $this->addRelease($id, [
             "program_id" => $program->value,
-            "year_id" => $year->value,
-            "revision" => $this->nextRevision($program, $year),
+            "year_id" => $plan["year_id"],
+            "revision" => $plan["revision"],
             "published" => 1,
             "is_current" => 1,
             "program_code" => $label["code"],
             "program_title" => $label["title"],
         ]);
         return $id;
+    }
+    public function lockTerm(EntityId $term): void
+    {
+        $this->sql->lock("sis_terms", $term->value, "id");
+    }
+    public function plan(EntityId $program, EntityId $term): ?array
+    {
+        // Reviewed assignments hold term/program locks; existing initialization serializes on the program.
+        $mapping = $this->sql->rows("sis_term_calendar", ["id" => $term->value], 1)[0] ?? null;
+        if (($mapping["academic_year_id"] ?? null) === null) {
+            return null;
+        }
+        $year = new EntityId($mapping["academic_year_id"]);
+        $yearRow = $this->sql->one("sis_academic_years", ["id" => $year->value]);
+        $current =
+        $this->sql->rows(
+            "sis_program_catalogs",
+            [
+                    "program_id" => $program->value,
+                    "year_id" => $year->value,
+                    "published" => 1,
+                    "is_current" => 1,
+                ],
+            1,
+        )[0] ?? null;
+        return [
+            "year_id" => $year->value,
+            "year_code" => $yearRow["code"],
+            "catalog_id" => $current["id"] ?? null,
+            "revision" =>
+                $current === null ? $this->nextRevision($program, $year) : (int) $current["revision"],
+        ];
     }
 
     public function lockYear(EntityId $id): void
@@ -166,7 +189,11 @@ final readonly class SqlCatalogYearRepository implements CatalogYearRepository
             ["is_current" => 0],
             ["program_id" => $program->value, "year_id" => $current["year_id"]],
         );
-        $this->sql->update("sis_program_catalogs", ["published" => 1, "is_current" => 1], ["id" => $id->value]);
+        $this->sql->update(
+            "sis_program_catalogs",
+            ["published" => 1, "is_current" => 1],
+            ["id" => $id->value],
+        );
     }
 
     public function binding(EntityId $assignment): ?array

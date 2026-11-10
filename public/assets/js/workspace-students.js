@@ -245,9 +245,24 @@ window.createWorkspaceStudents = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "An observation records the status seen when tracking began. Earlier decisions are unknown. Protected reasons and raw event details are excluded from this timeline.",
+                page.earlier_history_unknown === false
+                    ? "This history starts with the recorded assignment. Protected reasons and raw event details are excluded."
+                    : "An observation records the status seen when tracking began. Earlier decisions are unknown. Protected reasons and raw event details are excluded from this timeline.",
             ),
         );
+        if (page.assignment_source) {
+            const source = page.assignment_source;
+            body.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    `As assigned: ${source.program_code} · ${source.program_title}; entry term ${source.entry_term_code}; ` +
+                        (source.cohort
+                            ? `cohort ${source.cohort.year_code}, curriculum revision ${source.cohort.revision}.`
+                            : "cohort was not linked at assignment."),
+                ),
+            );
+        }
         body.append(
             page.items.length
                 ? grid(
@@ -256,7 +271,11 @@ window.createWorkspaceStudents = function (ui) {
                           row.status,
                           row.effective_at,
                           row.recorded_at,
-                          row.kind === "observation" ? "Observed current assignment" : "Registrar decision",
+                          row.kind === "assignment"
+                              ? "Program assigned"
+                              : row.kind === "observation"
+                                ? "Observed current assignment"
+                                : "Registrar decision",
                       ]),
                       "Program status decisions",
                   )
@@ -419,6 +438,106 @@ window.createWorkspaceStudents = function (ui) {
         body.append(controls);
     }
 
+    async function assignProgram(record, back, preset = {}) {
+        const body = openDrawer("Assign an additional program", "REGISTRAR DECISION");
+        body.append(
+            button("Back to student", back),
+            node(
+                "p",
+                { class: "form-text" },
+                "Choose the program and its entry term. The cohort follows the academic year linked to that term. The student's original institutional entry term and primary program stay unchanged.",
+            ),
+        );
+        const descriptors = [
+            ["program_id", "Academic program", "lookup", "programs"],
+            ["entry_term_id", "Program entry term", "lookup", "terms"],
+            ["reason", "Reason for this assignment", "textarea"],
+        ];
+        const form = await ui.buildForm(descriptors, preset);
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review program assignment",
+        );
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = ui.formData(form, descriptors);
+                const preview = await request(`/sis/students/${record.id}/programs/assign/review/`, "POST", {
+                    ...data,
+                    revision: record.revision,
+                });
+                const source = preview.source;
+                const cohort = source.cohort;
+                const confirmation = openDrawer("Confirm program assignment", "REVIEWED DECISION");
+                confirmation.append(
+                    button("Revise assignment", () => assignProgram(record, back, data)),
+                    node("h3", {}, `${source.program_code} · ${source.program_title}`),
+                    node(
+                        "dl",
+                        { class: "detail-list" },
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "Program entry term"),
+                            node("dd", {}, source.entry_term_code),
+                        ),
+                        node(
+                            "div",
+                            {},
+                            node("dt", {}, "Matriculation cohort"),
+                            node(
+                                "dd",
+                                {},
+                                cohort
+                                    ? `${cohort.year_code} · curriculum revision ${cohort.revision}${cohort.catalog_id ? "" : " (created on confirmation)"}`
+                                    : "Academic calendar review needed",
+                            ),
+                        ),
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `The additional assignment becomes active when confirmed on ${preview.effective_on}.`,
+                    ),
+                );
+                if (!cohort)
+                    confirmation.append(
+                        node(
+                            "p",
+                            { class: "alert alert-warning" },
+                            "This entry term is not linked to an academic year. The assignment will be saved without a cohort; review its academic calendar setup.",
+                        ),
+                    );
+                confirmation.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "This preserves the student's existing programs, earned credits, charges and original entry term. Choose Make primary separately if needed. Degree requirements are selected through their own review.",
+                    ),
+                    button(
+                        "Confirm program assignment",
+                        async () => {
+                            await request(`/sis/students/${record.id}/programs/assign/commit/`, "POST", {
+                                review_token: preview.review_token,
+                            });
+                            await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+                const heading = confirmation.querySelector("h3");
+                heading.tabIndex = -1;
+                heading.focus();
+            }, review);
+        });
+        body.append(form);
+    }
+
     async function student(id) {
         const record = await request(`/sis/students/${id}/record/`);
         const body = openDrawer(`${record.given_name} ${record.family_name}`, "STUDENT RECORD");
@@ -528,22 +647,7 @@ window.createWorkspaceStudents = function (ui) {
             ),
         );
         if (can("sis:registration:manage"))
-            programs.append(
-                button("Assign an additional program", () =>
-                    flow(
-                        "Assign program",
-                        [
-                            ["program_id", "Academic program", "lookup", "programs"],
-                            ["entry_term_id", "Program entry term", "lookup", "terms"],
-                        ],
-                        `/sis/students/${id}/programs/assign/`,
-                        null,
-                        back,
-                        {},
-                        "The assignment becomes active immediately. Select Make primary separately to change the program used for future primary-program rules. Existing financial entries and academic credits retain their history.",
-                    ),
-                ),
-            );
+            programs.append(button("Assign an additional program", () => assignProgram(record, back)));
         const information = node("p", {
             class: "form-text",
             role: "status",

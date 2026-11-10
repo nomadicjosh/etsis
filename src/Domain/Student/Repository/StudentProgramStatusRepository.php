@@ -13,6 +13,8 @@ interface StudentProgramStatusRepository
     /** @return array{id:string,student_id:string,stream_version:int,last_decision_id:string}|null */
     public function marker(EntityId $assignment): ?array;
     public function project(StudentProgramStatus $root, string $before, int $expected): void;
+    /** Track a genuinely new, already inserted assignment inside the same transaction as its first event. */
+    public function track(StudentProgramStatus $root): void;
     /** @return list<StudentProgram> */
     public function forProgram(EntityId $student, EntityId $program, ?EntityId $after): array;
 }

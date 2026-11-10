@@ -6,7 +6,7 @@ test('registrars manage programs and student activity in one accessible record',
     const student = id(1), person = id(2), term = id(3), original = id(4), added = id(5);
     let active = true, primary = original, version = 0;
     const calls = [], errors = [];
-    let programDecision = null;
+    let programDecision = null, assignmentReviews = 0;
     const programs = Array.from({ length: 51 }, (_, index) => ({ id: id(100 + index),
         program_id: index === 0 ? original : id(200 + index), program_code: index === 0 ? 'BS.CS' : `FIX.${index}`,
         program_title: index === 0 ? 'Computer Science' : 'Fictional program', term_code: '26/FA', status: 'active' }));
@@ -34,7 +34,9 @@ test('registrars manage programs and student activity in one accessible record',
                 is_primary: row.program_id === primary && row.status === 'active', revision: `${row.id}-${row.status}` })),
             next_after: data.after ? null : programs[49].id,
         };
-        else if (path.endsWith('/programs/assign/')) { programs.unshift({ id: id(999), program_id: added, program_code: 'BA.ART',
+        else if (path.endsWith('/programs/assign/review/')) result = { source: { program_code: 'BA.ART', program_title: 'Fictional <b>Arts</b>',
+            entry_term_code: '26/FA', cohort: assignmentReviews++ === 0 ? null : { year_code: '2026-2027', revision: 1, catalog_id: null } }, effective_on: '2026-08-10', review_token: 'fictional-assignment-token' };
+        else if (path.endsWith('/programs/assign/commit/')) { programs.unshift({ id: id(999), program_id: added, program_code: 'BA.ART',
             program_title: 'Fictional <b>Arts</b>', term_code: '26/FA', status: 'active' }); result = { id: id(999) }; }
         else if (path.endsWith('/primary-program/review/')) {
             const row = programs.find(row => row.id === data.assignment_id);
@@ -59,7 +61,8 @@ test('registrars manage programs and student activity in one accessible record',
         } else if (path.includes('/programs/') && path.endsWith('/status/commit/')) {
             programDecision.row.status = programDecision.status;
         } else if (path.endsWith('/status/history/')) result = { status: 'active', next_cursor: null,
-            items: [{ kind: 'observation', status: 'active', effective_at: '2026-08-10T17:00:00Z', recorded_at: '2026-08-10T17:00:00Z' },
+            earlier_history_unknown: false, assignment_source: { program_code: 'BA.ART', program_title: 'Fictional arts as assigned', entry_term_code: '26/FA', cohort: { year_code: '2026-2027', revision: 1 } },
+            items: [{ kind: 'assignment', status: 'active', effective_at: '2026-08-10T17:00:00Z', recorded_at: '2026-08-10T17:00:00Z' },
                 { kind: 'decision', status: 'closed', effective_at: '2026-08-10T17:01:00Z', recorded_at: '2026-08-10T17:01:00Z' }] };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -79,9 +82,22 @@ test('registrars manage programs and student activity in one accessible record',
     await page.getByRole('button', { name: 'Assign an additional program' }).click();
     await page.locator('#drawer-body').getByLabel('Academic program').selectOption(added);
     await page.locator('#drawer-body').getByLabel('Program entry term').selectOption(term);
-    await page.getByRole('button', { name: 'Assign program', exact: true }).click();
+    await page.getByLabel('Reason for this assignment').fill('Fictional additional program.');
+    await page.getByRole('button', { name: 'Review program assignment', exact: true }).click();
+    expect(calls.some(call => call.path.endsWith('/programs/assign/commit/'))).toBe(false);
+    await expect(page.locator('#drawer-body')).toContainText('This entry term is not linked to an academic year.');
+    await accessible();
+    await page.getByRole('button', { name: 'Revise assignment' }).click();
+    await expect(page.getByLabel('Reason for this assignment')).toHaveValue('Fictional additional program.');
+    await expect(page.locator('#drawer-body').getByLabel('Academic program')).toHaveValue(added);
+    await page.getByRole('button', { name: 'Review program assignment', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('2026-2027');
+    await expect(page.locator('#drawer-body')).toContainText('created on confirmation');
+    await page.getByRole('button', { name: 'Confirm program assignment', exact: true }).click();
     await expect(programSection).toContainText('Fictional <b>Arts</b>');
-    expect(calls.find(call => call.path.endsWith('/programs/assign/'))?.data).toEqual({ program_id: added, entry_term_id: term });
+    expect(calls.find(call => call.path.endsWith('/programs/assign/review/'))?.data).toEqual({ program_id: added, entry_term_id: term,
+        revision: 'student-0', reason: 'Fictional additional program.' });
+    expect(calls.find(call => call.path.endsWith('/programs/assign/commit/'))?.data).toEqual({ review_token: 'fictional-assignment-token' });
     await expect(page.locator('#drawer-body b')).toHaveCount(0);
     const arts = programSection.locator('tbody tr').filter({ hasText: 'BA.ART' });
     await arts.getByRole('button', { name: 'Close assignment', exact: true }).click();
@@ -101,7 +117,9 @@ test('registrars manage programs and student activity in one accessible record',
     await page.getByRole('button', { name: 'Confirm program reopening' }).click();
     await expect(arts).toContainText('active');
     await arts.getByRole('button', { name: 'Program status history', exact: true }).click();
-    await expect(page.locator('#drawer-body')).toContainText('Observed current assignment');
+    await expect(page.locator('#drawer-body')).toContainText('Program assigned');
+    await expect(page.locator('#drawer-body')).toContainText('Fictional arts as assigned');
+    await expect(page.locator('#drawer-body')).toContainText('This history starts with the recorded assignment.');
     await accessible();
     await page.getByRole('button', { name: 'Back to student', exact: true }).click();
     await arts.getByRole('button', { name: 'Make primary', exact: true }).click();

@@ -28,12 +28,4 @@ final readonly class SisStudentRecordController
             $this->service->programs(new EntityId($id), FormInput::from($request)->optionalId("after")),
         );
     }
-
-    public function assign(ServerRequest $request, string $id): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        $assigned = $this->service->assign(new EntityId($id), $f->id("program_id"), $f->id("entry_term_id"));
-
-        return new JsonResponse(["id" => $assigned->value], 201);
-    }
 }

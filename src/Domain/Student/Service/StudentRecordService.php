@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Domain\Student\Service;
 
 use Domain\Admissions\Repository\AdmissionsRepository;
-use Domain\Audit\Repository\AuditTrail;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
@@ -20,8 +19,6 @@ final readonly class StudentRecordService
         private AdmissionsRepository $admissions,
         private StudentAccess $access,
         private UnitOfWork $transactions,
-        private AuditTrail $audit,
-        private \Domain\Catalog\Service\CatalogEnrollment $catalogs,
         private StudentActivityLedger $activity,
         private StudentProgramStatusLedger $programStatuses,
         private StudentPrimaryProgramLedger $primaryPrograms,
@@ -50,25 +47,6 @@ final readonly class StudentRecordService
                 "catalog" => $this->records->primaryCatalog($id),
                 "revision" => $this->revision($student),
             ];
-        });
-    }
-
-    public function assign(EntityId $id, EntityId $program, EntityId $term): EntityId
-    {
-        $actor = $this->access->requirePermission("sis:registration:manage");
-        return $this->transactions->run(function () use ($id, $program, $term, $actor): EntityId {
-            $this->records->lock($id);
-            $this->registrar($actor);
-            $this->admissions->student($id);
-            $this->records->program($program);
-            $this->records->term($term);
-            $this->programStatuses->assertNoActiveProgram($id, $program);
-            $assignment = new StudentProgram(EntityId::generate(), $id, $program, $term);
-            $this->records->addAssignment($assignment);
-            $this->catalogs->initialize($assignment, $actor);
-            $this->audit->record($actor, "student.program_assigned", $id);
-
-            return $assignment->id;
         });
     }
 
@@ -112,13 +90,6 @@ final readonly class StudentRecordService
         );
 
         return $student;
-    }
-
-    private function registrar(EntityId $actor): void
-    {
-        if ($this->access->requirePermission("sis:registration:manage")->value !== $actor->value) {
-            throw new \Domain\Shared\Exception\AccessDeniedException("The registrar actor changed.");
-        }
     }
 
     private function revision(Student $student): string

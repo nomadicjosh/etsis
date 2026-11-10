@@ -51,6 +51,11 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\StudentProgramWasAssigned::class => [
+                "type" => "student_program_status",
+                "root" => \Domain\Student\StudentProgramStatus::class,
+                "fields" => ["decision_id", "assignment", "source"],
+            ],
             \Domain\Student\Event\PrimaryProgramWasObserved::class => [
                 "type" => "student_primary_program",
                 "root" => \Domain\Student\StudentPrimaryProgram::class,
@@ -306,7 +311,14 @@ final readonly class HistoricalSchemaRegistry
             if ($stream->type === "student_program_status") {
                 \Domain\Student\ValueObject\StudentProgramStatusSchema::validate($class, $payload);
                 if (
-                    $class === \Domain\Student\Event\StudentProgramWasObserved::class &&
+                    in_array(
+                        $class,
+                        [
+                            \Domain\Student\Event\StudentProgramWasObserved::class,
+                            \Domain\Student\Event\StudentProgramWasAssigned::class,
+                        ],
+                        true,
+                    ) &&
                     $payload["assignment"]["id"] !== (string) $stream->aggregateId
                 ) {
                     throw new CorruptHistoryException();

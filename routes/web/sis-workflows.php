@@ -440,8 +440,17 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/students/{id}/programs/", [SisStudentRecordController::class, "programs"])
         ->name("sis.student.programs");
     $router
-        ->map(["POST"], "/sis/students/{id}/programs/assign/", [SisStudentRecordController::class, "assign"])
-        ->name("sis.student.program.assign");
+        ->map(["POST"], "/sis/students/{id}/programs/assign/review/", [
+            \Application\Http\Controller\SisStudentProgramAssignmentController::class,
+            "review",
+        ])
+        ->name("sis.student.program.assign.review");
+    $router
+        ->map(["POST"], "/sis/students/{id}/programs/assign/commit/", [
+            \Application\Http\Controller\SisStudentProgramAssignmentController::class,
+            "commit",
+        ])
+        ->name("sis.student.program.assign.commit");
     $router
         ->map(["POST"], "/sis/students/{id}/primary-program/review/", [
             \Application\Http\Controller\SisStudentPrimaryProgramController::class,

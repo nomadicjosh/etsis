@@ -17,15 +17,13 @@ use PHPUnit\Framework\TestCase;
 
 final class StudentRecordManagementTest extends TestCase
 {
-    private function service(SisFixture $f, ?AuditTrail $audit = null): StudentRecordService
+    private function service(SisFixture $f): StudentRecordService
     {
         return new StudentRecordService(
             new SqlStudentRecordRepository($f->sql),
             $f->admissions,
             $f->access,
             $f->transactions,
-            $audit ?? $f->audit,
-            $f->catalogEnrollment(),
             $f->activityLedger(),
             $f->programStatusLedger(),
             $f->primaryProgramLedger()
@@ -97,7 +95,7 @@ final class StudentRecordManagementTest extends TestCase
         $account = new AccountId($f->sql->rows('sis_student_accounts')[0]['id']);
         $before = $service->view($student->id);
         $program = $this->program($f);
-        $assignment = $service->assign($student->id, $program, $f->term);
+        $assignment = $f->assignProgram($student->id, $program, $f->term);
         self::assertSame($f->program->value, $service->view($student->id)['primary_program']['id']);
         $this->primary($f, $student->id, $assignment, $before['revision']);
         $after = $service->view($student->id);
@@ -128,7 +126,7 @@ final class StudentRecordManagementTest extends TestCase
         } catch (DomainException | ValidationException) {
             self::assertTrue($service->programs($student->id)['items'][0]['is_primary']);
         }
-        $assigned = $service->assign($student->id, $this->program($f), $f->term);
+        $assigned = $f->assignProgram($student->id, $this->program($f), $f->term);
         $row = $this->assignment($service, $student->id, $assigned);
         $this->programStatus($f, $student->id, $assigned, false, $row['revision']);
         $closed = $this->assignment($service, $student->id, $assigned);
@@ -182,7 +180,7 @@ final class StudentRecordManagementTest extends TestCase
         self::assertSame($student->id->value, $service->view($student->id)['id']);
         foreach (
             [fn () => $this->activity($f, $student->id, false, $revision),
-            fn () => $service->assign($student->id, $f->program, $f->term),
+            fn () => $f->assignProgram($student->id, $f->program, $f->term),
             fn () => $this->primary($f, $student->id, new EntityId($row['id']), $revision),
             fn () => $this->programStatus($f, $student->id, new EntityId($row['id']), false, $row['revision'])] as $write
         ) {
@@ -230,9 +228,9 @@ final class StudentRecordManagementTest extends TestCase
         $service = $this->service($f);
         $student = $f->student();
         $program = $this->program($f);
-        $assigned = $service->assign($student->id, $program, $f->term);
+        $assigned = $f->assignProgram($student->id, $program, $f->term);
         try {
-            $service->assign($student->id, $program, $f->term);
+            $f->assignProgram($student->id, $program, $f->term);
             self::fail('The same program had two active assignments.');
         } catch (ValidationException $error) {
             self::assertSame('program_id', $error->errors[0]['field']);
@@ -240,7 +238,7 @@ final class StudentRecordManagementTest extends TestCase
         $row = $this->assignment($service, $student->id, $assigned);
         $this->programStatus($f, $student->id, $assigned, false, $row['revision']);
         try {
-            $service->assign($student->id, $program, $f->term);
+            $f->assignProgram($student->id, $program, $f->term);
             self::fail('A closed program/term pair was duplicated.');
         } catch (ValidationException $error) {
             self::assertSame('program_id', $error->errors[0]['field']);
@@ -254,7 +252,7 @@ final class StudentRecordManagementTest extends TestCase
         $service = $this->service($f);
         $student = $f->student();
         for ($i = 0; $i < 50; ++$i) {
-            $service->assign($student->id, $this->program($f, 'FIX.' . $i), $f->term);
+            $f->assignProgram($student->id, $this->program($f, 'FIX.' . $i), $f->term);
         }
         $first = $service->programs($student->id);
         self::assertCount(50, $first['items']);
@@ -263,7 +261,7 @@ final class StudentRecordManagementTest extends TestCase
         self::assertNull($second['next_after']);
         self::assertSame([], array_intersect(array_column($first['items'], 'id'), array_column($second['items'], 'id')));
         $this->expectException(RecordNotFoundException::class);
-        $service->assign($student->id, EntityId::generate(), $f->term);
+        $f->assignProgram($student->id, EntityId::generate(), $f->term);
     }
 
     public function testAuditFailureRollsBackPrimaryActivityAndAssignmentWrites(): void
@@ -272,15 +270,15 @@ final class StudentRecordManagementTest extends TestCase
         $student = $f->student();
         $normal = $this->service($f);
         $program = $this->program($f);
-        $assigned = $normal->assign($student->id, $program, $f->term);
+        $assigned = $f->assignProgram($student->id, $program, $f->term);
         $audit = $this->createStub(AuditTrail::class);
         $audit->method('record')->willThrowException(new RuntimeException('fictional failure'));
-        $service = $this->service($f, $audit);
+        $service = $this->service($f);
         $before = $normal->view($student->id);
         foreach (
             [fn () => $this->activity($f, $student->id, false, $before['revision'], $audit),
             fn () => $this->primary($f, $student->id, $assigned, $before['revision'], $audit),
-            fn () => $service->assign($student->id, $this->program($f, 'MORE.' . bin2hex(random_bytes(2))), $f->term)] as $write
+            fn () => $f->assignProgram($student->id, $this->program($f, 'MORE.' . bin2hex(random_bytes(2))), $f->term, $audit)] as $write
         ) {
             try {
                 $write();
@@ -332,18 +330,18 @@ final class StudentRecordManagementTest extends TestCase
         $student = $f->student();
         $service = $this->service($f);
         $program = $this->program($f);
-        $first = $service->assign($student->id, $program, $f->term);
+        $first = $f->assignProgram($student->id, $program, $f->term);
         $term = EntityId::generate();
         $f->sql->insert('sis_terms', ['id' => $term->value, 'code' => '27/FA', 'starts_on' => '2027-08-01',
             'ends_on' => '2027-12-20', 'add_drop_ends_on' => '2027-08-15']);
         try {
-            $service->assign($student->id, $program, $term);
+            $f->assignProgram($student->id, $program, $term);
             self::fail('Two active assignments made the primary program ambiguous.');
         } catch (ValidationException) {
             self::assertCount(2, $service->programs($student->id)['items']);
         }
         $this->programStatus($f, $student->id, $first, false, $this->assignment($service, $student->id, $first)['revision']);
-        $service->assign($student->id, $program, $term);
+        $f->assignProgram($student->id, $program, $term);
         try {
             $this->programStatus($f, $student->id, $first, true, $this->assignment($service, $student->id, $first)['revision']);
             self::fail('An earlier cohort was reopened alongside another active assignment.');

@@ -30,8 +30,6 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             $f->admissions,
             $f->access,
             $f->transactions,
-            $f->audit,
-            $f->catalogEnrollment(),
             $f->activityLedger(),
             $f->programStatusLedger(),
             $f->primaryProgramLedger(),
@@ -46,7 +44,9 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             "code" => "FIX." . substr($program->value, -6),
             "title" => "Fictional arts program",
         ]);
-        $id = $this->records($f)->assign($student, $program, $f->term);
+        // Earlier, untracked pursuit fixture for primary-history isolation; new-assignment integration is tested separately.
+        $id = EntityId::generate();
+        new SqlStudentRecordRepository($f->sql)->addAssignment(new StudentProgram($id, $student, $program, $f->term));
         return new SqlStudentRecordRepository($f->sql)->assignment($id);
     }
     private function initial(SisFixture $f, StudentProgram $p): StudentProgram

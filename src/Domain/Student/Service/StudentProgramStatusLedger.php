@@ -15,6 +15,7 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Event\StudentProgramWasObserved;
 use Domain\Student\Event\StudentProgramStatusWasChanged;
+use Domain\Student\Event\StudentProgramWasAssigned;
 use Domain\Student\Repository\StudentProgramStatusRepository;
 use Domain\Student\StudentProgram;
 use Domain\Student\StudentProgramStatus;
@@ -80,6 +81,65 @@ final readonly class StudentProgramStatusLedger
                 $after = $p->id;
             }
         } while (count($rows) === 50);
+    }
+    /** Check both current active pursuits and an existing closed pursuit of the same program/entry term. */
+    public function assertCanAssign(EntityId $student, EntityId $program, EntityId $term): void
+    {
+        $after = null;
+        do {
+            $rows = $this->records->forProgram($student, $program, $after);
+            foreach ($rows as $p) {
+                $this->verify($p);
+                if ($p->status === "active" || $p->entryTermId->value === $term->value) {
+                    throw new \Domain\Shared\Exception\ValidationException([
+                        [
+                            "field" => "program_id",
+                            "message" =>
+                                "This program already has an active assignment or this entry term already exists. " .
+                                "Review the existing assignment.",
+                        ],
+                    ]);
+                }
+                $after = $p->id;
+            }
+        } while (count($rows) === 50);
+    }
+    /** Called only after a genuinely new assignment and its derived cohort are inserted in this unit of work.
+     * @param array<string,mixed> $source
+     * @return array<string,mixed> */
+    public function assigned(
+        StudentProgram $assignment,
+        array $source,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException("The assignment actor changed.");
+        }
+        $root = $this->load($assignment)["root"];
+        if ($root->playhead() !== 0) {
+            throw new CorruptHistoryException();
+        }
+        $at = $this->clock->now();
+        $e = StudentProgramWasAssigned::occur(
+            new StudentProgramStatusId($assignment->id->value),
+            [
+                "decision_id" => $assignment->id->value,
+                "assignment" => StudentProgramStatusSchema::facts($assignment),
+                "source" => $source,
+            ],
+            ["__aggregate_type" => "student_program_status"],
+        )->withPlayhead(1);
+        $root->acceptHistorical($e);
+        $this->history->append(
+            $this->stream($assignment->id),
+            $assignment->id,
+            0,
+            new EventContext($actor, $at, $assignment->id, reason: $reason),
+            [$e],
+        );
+        $this->records->track($root);
+        return $this->result($root, $assignment->id, $at->format(DATE_ATOM));
     }
     /** @return array<string,mixed>|null */
     public function receipt(StudentProgram $assignment, EntityId $operation, EntityId $actor): ?array
@@ -156,9 +216,10 @@ final readonly class StudentProgramStatusLedger
         foreach ($page->events as $stored) {
             $p = $stored->event->payload();
             $observed = $stored->event instanceof StudentProgramWasObserved;
+            $assigned = $stored->event instanceof StudentProgramWasAssigned;
             $items[] = [
-                "kind" => $observed ? "observation" : "decision",
-                "status" => $observed ? $p["assignment"]["status"] : $p["status"],
+                "kind" => $assigned ? "assignment" : ($observed ? "observation" : "decision"),
+                "status" => $observed || $assigned ? $p["assignment"]["status"] : $p["status"],
                 "effective_at" => $stored->context->effectiveAt?->format(DATE_ATOM),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
             ];
@@ -167,7 +228,8 @@ final readonly class StudentProgramStatusLedger
             "assignment_id" => $assignment->id->value,
             "status" => $assignment->status,
             "history_recorded" => $root->playhead() > 0,
-            "earlier_history_unknown" => true,
+            "earlier_history_unknown" => $root->earlierHistoryUnknown(),
+            "assignment_source" => $root->assignmentSource(),
             "items" => $items,
             "next_cursor" => $page->nextCursor,
         ];
@@ -186,7 +248,8 @@ final readonly class StudentProgramStatusLedger
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 if (
-                    $stored->event instanceof StudentProgramStatusWasChanged &&
+                    ($stored->event instanceof StudentProgramStatusWasChanged ||
+                        $stored->event instanceof StudentProgramWasAssigned) &&
                     $root->decision() === $operation?->value
                 ) {
                     if ($stored->context->actor?->value !== $actor?->value) {

@@ -1,6 +1,6 @@
 # Closing and reopening student programs
 
-Implemented 2026-11-09. This stage preserves active/closed status decisions for an individual student-program assignment. New assignment creation, matriculation, graduation, standing and broader program changes still have separate work remaining. [Primary-program selection](student-primary-program-history.md) now has its own reviewed history. It does not introduce another event store.
+Implemented 2026-11-09. This stage preserves active/closed status decisions for an individual student-program assignment. Initial matriculation and its first assignment, graduation, standing and broader program changes still have separate work remaining. [Additional assignment creation](student-program-assignments.md) now records its own creation event. [Primary-program selection](student-primary-program-history.md) now has its own reviewed history. It does not introduce another event store.
 
 ## Staff workflow
 
@@ -14,7 +14,7 @@ Each program row has **Program status history**, including the primary program. 
 
 ## What is retained
 
-The first accepted status change on an assignment without a stream records **StudentProgramWasObserved**. This captures its current student, program, entry term and status at the observation time. Earlier status decisions remain explicitly unknown. Neither opening a record nor reviewing a change manufactures earlier history. This rule also applies to newly created assignments until their creation workflows receive their own historical conversion.
+The first accepted status change on an assignment without a stream records **StudentProgramWasObserved**. This captures its current student, program, entry term and status at the observation time. Earlier status decisions remain explicitly unknown. Neither opening a record nor reviewing a change manufactures earlier history. Additional assignments created through the reviewed assignment workflow instead begin with StudentProgramWasAssigned. Initial matriculation assignments retain this observation rule until their creation workflow is converted.
 
 **StudentProgramStatusWasChanged** then records the chosen active/closed status and preceding recorded decision. The protected context retains the trusted staff actor, entered reason, operation identity and actual confirmation time. Earlier events and existing curriculum/requirement histories remain intact. Reasons are encrypted in the shared journal and are not copied into general audit metadata or the ordinary timeline.
 
