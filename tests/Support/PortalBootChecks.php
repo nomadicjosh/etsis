@@ -1183,8 +1183,8 @@ $yearSaved = $teachingPost("/sis/academic-years/create/", [
 if ($yearSaved->getStatusCode() !== 201) {
     throw new RuntimeException("Academic year creation failed.");
 }
-// The degree-builder chooser omits blank search rather than sending an invalid optional text field.
-$degreeYearChoices = $teachingPost("/sis/academic-years/", []);
+// Empty searches browse the available academic years without weakening required text fields.
+$degreeYearChoices = $teachingPost("/sis/academic-years/", ["search" => ""]);
 $degreeYearRows = json_decode((string) $degreeYearChoices->getBody(), true, flags: JSON_THROW_ON_ERROR);
 $degreeYearSearch = $teachingPost("/sis/academic-years/", ["search" => "2026"]);
 $degreeYearSearchRows = json_decode((string) $degreeYearSearch->getBody(), true, flags: JSON_THROW_ON_ERROR);
@@ -1275,7 +1275,7 @@ $groupPublishedResponse = $teachingPost("/sis/course-groups/" . $groupId . "/pub
 $groupPublished = json_decode((string) $groupPublishedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $groupPublishedResponse->getStatusCode() !== 200 ||
-    $teachingPost("/sis/course-groups/page/", ["published_only" => true])->getStatusCode() !== 200 ||
+    $teachingPost("/sis/course-groups/page/", ["published_only" => true, "search" => ""])->getStatusCode() !== 200 ||
     !str_contains($groupPublishedResponse->getHeaderLine("Cache-Control"), "no-store")
 ) {
     throw new RuntimeException("Course group publication did not use the protected provider.");
@@ -1902,11 +1902,16 @@ if (
 $sis->access->staff = false;
 $sis->access->grants = ["sis:student:read", "sis:degree-audit:adjust"];
 $replacementChoices = $teachingPost($adjustmentPath . "replacement-courses/", ["search" => "EXC.201"]);
+$unfilteredReplacements = $teachingPost($adjustmentPath . "replacement-courses/", ["search" => ""]);
 $replacementVersions = $teachingPost(
     $adjustmentPath . "replacement-courses/" . $replacementId->value . "/versions/",
     [],
 );
-if ($replacementChoices->getStatusCode() !== 200 || $replacementVersions->getStatusCode() !== 200) {
+if (
+    $replacementChoices->getStatusCode() !== 200 ||
+    $unfilteredReplacements->getStatusCode() !== 200 ||
+    $replacementVersions->getStatusCode() !== 200
+) {
     throw new RuntimeException("Protected replacement selectors failed to resolve.");
 }
 $substitutionReviewResponse = $teachingPost($adjustmentPath . "review/", [
@@ -2435,7 +2440,7 @@ $templateRetry = $teachingPost($templatePath . "save/", $templateCommand);
 if (
     $templateSaved->getStatusCode() !== 200 ||
     (string) $templateSaved->getBody() !== (string) $templateRetry->getBody() ||
-    $teachingPost("/sis/catalog/offering-templates/page/", ["active" => true])->getStatusCode() !== 200 ||
+    $teachingPost("/sis/catalog/offering-templates/page/", ["active" => true, "search" => ""])->getStatusCode() !== 200 ||
     $teachingPost($templatePath . "prepare/", [
         "version" => 0,
         "term_id" => $sis->term->value,
@@ -2518,10 +2523,28 @@ if (
 ) {
     throw new RuntimeException("Subject routes did not resolve through protected providers.");
 }
+$subjectSearches = [[], ["search" => ""], ["search" => "   "], ["search" => " FICTIONAL "]];
+foreach ($subjectSearches as $subjectSearch) {
+    $subjectPage = $teachingPost("/sis/catalog/subjects/", $subjectSearch);
+    $subjectRows = json_decode((string) $subjectPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $subjectPage->getStatusCode() !== 200 ||
+        !str_contains($subjectPage->getHeaderLine("Cache-Control"), "no-store") ||
+        !in_array($subjectSaved["id"], array_column($subjectRows["items"] ?? [], "id"), true)
+    ) {
+        throw new RuntimeException("Subject browsing rejected an empty or valid search.");
+    }
+}
+$invalidSubjectSearches = [false, [], str_repeat("x", 101), "bad\nsearch"];
+foreach ($invalidSubjectSearches as $subjectSearch) {
+    if ($teachingPost("/sis/catalog/subjects/", ["search" => $subjectSearch])->getStatusCode() !== 422) {
+        throw new RuntimeException("Subject browsing accepted an invalid search.");
+    }
+}
 $sis->access->staff = false;
 $sis->access->grants = ["sis:registration:manage"];
 if (
-    $teachingPost("/sis/catalog/subjects/", [])->getStatusCode() !== 403 ||
+    $teachingPost("/sis/catalog/subjects/", ["search" => ""])->getStatusCode() !== 403 ||
     $teachingPost("/sis/catalog/subjects/save/", [
         "code" => "DENIED",
         "title" => "Denied",
@@ -2609,7 +2632,7 @@ $publicationReview = json_decode(
 if (
     $publicationReviewResponse->getStatusCode() !== 200 ||
     !isset($publicationReview["review_token"]) ||
-    ($publicationReview["kind"] ?? null) !== "course-publication-review.v4" ||
+    ($publicationReview["kind"] ?? null) !== "course-publication-review" ||
     !is_int($publicationReview["expires_at"] ?? null) ||
     array_key_exists("effective_at", $publicationReview) ||
     !str_contains($publicationReviewResponse->getHeaderLine("Cache-Control"), "no-store")
@@ -2627,7 +2650,6 @@ $publicationRetry = $teachingPost($publicationPath . "commit/", [
 $publicationPage = $teachingPost($publicationPath . "page/", []);
 $publishedDefinitions = json_decode((string) $publicationPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
-    $publishedDefinitions["items"][0]["schema_version"] !== 3 ||
     $publishedDefinitions["items"][0]["definition"]["subject"]["code"] !== "FICTIONAL" ||
     new DateTimeImmutable($publishedDefinitions["items"][0]["effective_at"])->getTimestamp() !==
         $sis->clock->now()->modify("-21 minutes")->getTimestamp() ||

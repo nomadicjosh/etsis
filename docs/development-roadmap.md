@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after explicit course subjects and retained historical classification.
+Last reviewed: **2026-11-10**, after alpha course-model consolidation and application database verification.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 

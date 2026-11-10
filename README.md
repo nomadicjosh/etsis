@@ -2,6 +2,10 @@
 
 ## Version 10 - A New Beginning
 
+## Alpha development
+
+The application is in active alpha. Breaking changes and necessary database migrations are expected. We evolve one current domain model instead of maintaining a new class for each development-era field addition. Release compatibility will be stabilized during release-candidate planning. Historical publications and student/financial decisions remain distinct, preserved facts.
+
 ## Screenshots
 
 Screenshots use a test campus and demonstration data. No real student or staff records are shown.

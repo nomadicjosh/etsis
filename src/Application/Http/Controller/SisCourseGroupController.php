@@ -23,7 +23,7 @@ final readonly class SisCourseGroupController
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->service->page(
-                $f->optionalText("search", 80) ?? "",
+                $f->search("search", 80),
                 $f->optionalId("after"),
                 $f->requiredBoolean("published_only"),
             ),

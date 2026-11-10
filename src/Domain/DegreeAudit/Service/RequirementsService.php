@@ -498,9 +498,9 @@ final readonly class RequirementsService
             $rows[$c["course_id"]] = [
                 "course_id" => $c["course_id"],
                 "version_id" => $c["version_id"],
-                "code" => $d->core->code,
-                "title" => $d->text->transcriptTitle ?? $d->core->title,
-                "credits_milli" => $d->core->creditsMilli,
+                "code" => $d->definition->code,
+                "title" => $d->definition->text->transcriptTitle ?? $d->definition->title,
+                "credits_milli" => $d->definition->creditsMilli,
             ];
         }
         return $rows;

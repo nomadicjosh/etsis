@@ -87,7 +87,7 @@ final readonly class SectionCourseBindingService
                 reason: $reason,
             );
             $data = [
-                "kind" => "section-course-binding-review.v2",
+                "kind" => "section-course-binding-review",
                 "section_id" => $section->value,
                 "actor_id" => $actor->value,
                 "operation_id" => $operation->value,
@@ -100,7 +100,7 @@ final readonly class SectionCourseBindingService
             $proof = $data;
             $proof["selected"] = array_intersect_key(
                 $data["selected"],
-                array_flip(["course_id", "version_id", "schema_version"]),
+                array_flip(["course_id", "version_id"]),
             );
             $proof["definition_hash"] = $this->definitionHash($published);
             return $data + [
@@ -121,11 +121,7 @@ final readonly class SectionCourseBindingService
             $data = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
             if (
                 !is_array($data) ||
-                !in_array(
-                    $data["kind"] ?? null,
-                    ["section-course-binding-review.v1", "section-course-binding-review.v2"],
-                    true,
-                ) ||
+                ($data["kind"] ?? null) !== "section-course-binding-review" ||
                 ($data["section_id"] ?? null) !== $section->value
             ) {
                 throw new InvalidArgumentException();
@@ -166,10 +162,7 @@ final readonly class SectionCourseBindingService
                     );
                 }
                 $published = $this->find($course, $version);
-                $matches =
-                    $data["kind"] === "section-course-binding-review.v2"
-                        ? hash_equals($this->definitionHash($published), $data["definition_hash"])
-                        : $published->describe() === $data["selected"];
+                $matches = hash_equals($this->definitionHash($published), $data["definition_hash"]);
                 if (!$matches) {
                     throw new ConcurrentModificationException(
                         "The selected publication could not be verified.",

@@ -492,7 +492,7 @@ final class SectionPublicationTest extends TestCase
     {
         $proof = $this->f->dropCipher->seal(
             json_encode(
-                ["kind" => "course-publication-review.v2"],
+                ["kind" => "course-publication-review"],
                 JSON_THROW_ON_ERROR,
             ),
         );

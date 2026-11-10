@@ -30,7 +30,7 @@ final readonly class SisRequirementAdjustmentController
             $this->service->replacementCourses(
                 new EntityId($student),
                 new EntityId($assignment),
-                $f->optionalText("search", 80) ?? "",
+                $f->search("search", 80),
                 $f->optionalId("after"),
             ),
         );

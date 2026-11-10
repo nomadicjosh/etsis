@@ -10,7 +10,6 @@ use Domain\Catalog\Event\CourseDefinitionWasPublished;
 use Domain\Catalog\Repository\CatalogRevisionRepository;
 use Domain\Catalog\Repository\CatalogWorkflowRepository;
 use Domain\Catalog\ValueObject\CourseDefinition;
-use Domain\Catalog\ValueObject\CourseDefinitionV2;
 use Domain\Catalog\ValueObject\CourseText;
 use Domain\Catalog\ValueObject\CoursePublicationId;
 use Domain\Communications\Service\MessageCipher;
@@ -60,7 +59,7 @@ final readonly class CoursePublicationService
             $operation = EntityId::generate();
             new EventContext($actor, $this->clock->now(), $operation, reason: $reason);
             $data = [
-                "kind" => "course-publication-review.v4",
+                "kind" => "course-publication-review",
                 "course_id" => $course->value,
                 "operation_id" => $operation->value,
                 "actor_id" => $actor->value,
@@ -85,16 +84,7 @@ final readonly class CoursePublicationService
             $review = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
             if (
                 !is_array($review) ||
-                !in_array(
-                    $review["kind"] ?? null,
-                    [
-                        "course-publication-review.v1",
-                        "course-publication-review.v2",
-                        "course-publication-review.v3",
-                        "course-publication-review.v4",
-                    ],
-                    true,
-                ) ||
+                ($review["kind"] ?? null) !== "course-publication-review" ||
                 ($review["course_id"] ?? null) !== $course->value ||
                 !is_string($review["actor_id"] ?? null) ||
                 !is_string($review["operation_id"] ?? null) ||
@@ -110,19 +100,10 @@ final readonly class CoursePublicationService
             if ($review["previous_version_id"] !== null) {
                 new EntityId($review["previous_version_id"]);
             }
-            if (
-                in_array(
-                    $review["kind"],
-                    ["course-publication-review.v3", "course-publication-review.v4"],
-                    true,
-                )
-            ) {
-                if (!is_int($review["expires_at"] ?? null) || array_key_exists("effective_at", $review)) {
-                    throw new InvalidArgumentException();
-                }
-            } elseif (!is_string($review["effective_at"] ?? null)) {
+            if (!is_int($review["expires_at"] ?? null) || array_key_exists("effective_at", $review)) {
                 throw new InvalidArgumentException();
             }
+            CourseDefinition::fromArray($review["definition"]);
         } catch (Throwable) {
             throw new InvalidArgumentException("Review this course again before publishing.");
         }
@@ -138,24 +119,12 @@ final readonly class CoursePublicationService
                 "previous_version_id" => $review["previous_version_id"],
                 "definition" => $review["definition"],
             ];
-            $schema = match ($review["kind"]) {
-                "course-publication-review.v1" => 1,
-                "course-publication-review.v4" => 3,
-                default => 2,
-            };
             if ($accepted !== null) {
                 if (
                     $accepted->context->actor?->value !== $actor->value ||
                     $accepted->context->reason !== $review["reason"] ||
                     $accepted->event->playhead() !== $review["expected_version"] + 1 ||
-                    $accepted->event->metaParam("schema_version", 1) !== $schema ||
-                    $this->fingerprint($accepted->event->payload()) !== $this->fingerprint($payload) ||
-                    (!in_array(
-                        $review["kind"],
-                        ["course-publication-review.v3", "course-publication-review.v4"],
-                        true,
-                    ) &&
-                        $accepted->context->describe()["effective_at"] !== $review["effective_at"])
+                    $this->fingerprint($accepted->event->payload()) !== $this->fingerprint($payload)
                 ) {
                     throw new ConcurrentModificationException("This publication operation was already used.");
                 }
@@ -169,7 +138,6 @@ final readonly class CoursePublicationService
                 ];
             }
             if (
-                $review["kind"] !== "course-publication-review.v4" ||
                 $review["expires_at"] <= $this->clock->now()->getTimestamp() ||
                 $root->playhead() !== $review["expected_version"] ||
                 $root->versionId() !== $review["previous_version_id"] ||
@@ -182,7 +150,7 @@ final readonly class CoursePublicationService
             $this->authorize($actor);
             $event = CourseDefinitionWasPublished::occur($this->stream($course)->aggregateId, $payload, [
                 "__aggregate_type" => "course_publication",
-                "schema_version" => 3,
+                "schema_version" => 1,
             ])->withPlayhead($root->playhead() + 1);
             $receipt = $this->history->append(
                 $this->stream($course),
@@ -217,7 +185,6 @@ final readonly class CoursePublicationService
             }
             $payload = $stored->event->payload();
             $items[] = [
-                "schema_version" => $stored->event->metaParam("schema_version", 1),
                 "version_id" => $payload["version_id"],
                 "version" => $stored->event->playhead(),
                 "definition" => $payload["definition"],
@@ -305,22 +272,18 @@ final readonly class CoursePublicationService
         return new StreamReference(new CoursePublicationId($course->value), "course_publication");
     }
 
-    private function definition(EntityId $course): \Domain\Catalog\ValueObject\CourseDefinitionV3
+    private function definition(EntityId $course): CourseDefinition
     {
         $row = $this->catalog->get("courses", $course);
         $ids = array_column($this->relationships->prerequisites($course), "id");
         sort($ids, SORT_STRING);
         $this->subjects->lockForCourse($course);
-        return new \Domain\Catalog\ValueObject\CourseDefinitionV3(
-            new CourseDefinitionV2(
-                new CourseDefinition(
-                    (string) $row["code"],
-                    (string) $row["title"],
-                    (int) $row["credits_milli"],
-                    $ids,
-                ),
-                CourseText::fromArray($row),
-            ),
+        return new CourseDefinition(
+            (string) $row["code"],
+            (string) $row["title"],
+            (int) $row["credits_milli"],
+            $ids,
+            CourseText::fromArray($row),
             $this->subjects->course($course),
         );
     }

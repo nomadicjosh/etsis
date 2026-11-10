@@ -57,8 +57,8 @@ final class SubjectPublicationTest extends TestCase
             $subject["revision"],
         );
         $published = $this->c->publications()->publishedDefinition($section->courseId, $version);
-        self::assertSame("MATH", $published->subject->code);
-        self::assertSame("Mathematics", $published->subject->title);
+        self::assertSame("MATH", $published->definition->subject->code);
+        self::assertSame("Mathematics", $published->definition->subject->title);
         self::assertSame($before, $f->sql->rows("sis_history_events"));
         $portal = new \Infrastructure\Persistence\Repository\SqlCampusRepository($f->sql);
         self::assertSame(
@@ -87,7 +87,7 @@ final class SubjectPublicationTest extends TestCase
         $later = $this->publish($section->courseId);
         self::assertSame(
             "MTH",
-            $this->c->publications()->publishedDefinition($section->courseId, $later)->subject->code,
+            $this->c->publications()->publishedDefinition($section->courseId, $later)->definition->subject->code,
         );
         self::assertSame("Mathematics", $portal->sections($f->term, "", null)["items"][0]["subject_title"]);
     }
@@ -181,61 +181,6 @@ final class SubjectPublicationTest extends TestCase
         self::assertSame("CHEM", $f->sql->rows("sis_course_version_subjects")[0]["code"]);
     }
 
-    public function testCompletedPreviousProofWithSchemaTwoRemainsRetryableAfterExpiry(): void
-    {
-        $f = $this->c->sis;
-        $course = $f->section()->courseId;
-        $pub = $this->c->publications();
-        $r = $pub->review($course, "Fictional preceding implementation");
-        $proof = json_decode(
-            $this->c->fixture->cipher->open($r["review_token"]),
-            true,
-            flags: JSON_THROW_ON_ERROR,
-        );
-        $proof["kind"] = "course-publication-review.v3";
-        unset($proof["definition"]["subject"]);
-        $operation = new EntityId($proof["operation_id"]);
-        $stream = new \Domain\Shared\EventSourcing\StreamReference(
-            new \Domain\Catalog\ValueObject\CoursePublicationId($course->value),
-            "course_publication",
-        );
-        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-            $f->sql,
-            $f->transactions,
-            $f->clock,
-            new \Infrastructure\EventSourcing\ProtectedEventCodec(
-                EventStoreFixture::config($f->connection->queryBuilder()),
-            ),
-            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
-        );
-        $event = \Domain\Catalog\Event\CourseDefinitionWasPublished::occur(
-            $stream->aggregateId,
-            [
-                "version_id" => $operation->value,
-                "previous_version_id" => null,
-                "definition" => $proof["definition"],
-            ],
-            ["__aggregate_type" => "course_publication", "schema_version" => 2],
-        );
-        $receipt = $history->append(
-            $stream,
-            $operation,
-            0,
-            new \Domain\Shared\EventSourcing\EventContext(
-                $f->access->actor,
-                $f->clock->now(),
-                $operation,
-                reason: $proof["reason"],
-            ),
-            [$event],
-        );
-        $before = $f->sql->rows("sis_history_events");
-        $f->clock->time = $f->clock->time->modify("+2 days");
-        $token = $this->c->fixture->cipher->seal(json_encode($proof, JSON_THROW_ON_ERROR));
-        self::assertSame($receipt, $pub->publish($course, $token));
-        self::assertSame($before, $f->sql->rows("sis_history_events"));
-        self::assertSame([], $f->sql->rows("sis_course_version_subjects"));
-    }
 
     public function testMaximumMultilingualCourseAndSubjectFitTheBoundedReviewProof(): void
     {

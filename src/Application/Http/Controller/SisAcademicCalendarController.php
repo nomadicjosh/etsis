@@ -63,7 +63,7 @@ final readonly class SisAcademicCalendarController
     public function years(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->service->years($f->optionalId("after"), $f->optionalText("search", 80) ?? ""));
+        return new JsonResponse($this->service->years($f->optionalId("after"), $f->search("search", 80)));
     }
 
     public function review(ServerRequest $request): ResponseInterface

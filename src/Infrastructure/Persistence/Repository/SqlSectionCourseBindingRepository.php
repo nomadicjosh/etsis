@@ -32,30 +32,21 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
                 "credits_milli" => (int) $r["credits_milli"],
                 "prerequisites" => json_decode($r["prerequisites"], true, 8, JSON_THROW_ON_ERROR),
             ];
-            if (in_array((int) $r["schema_version"], [2, 3], true)) {
-                $definition += [
-                    "transcript_title" => $r["transcript_title"],
-                    "description" => $r["description"],
-                ];
-            } elseif ($r["transcript_title"] !== null || $r["description"] !== null) {
+            if ((int) $r["schema_version"] !== 1) {
                 throw new CorruptHistoryException();
             }
+            $definition += ["transcript_title" => $r["transcript_title"], "description" => $r["description"]];
             $subject = $this->sql->rows("sis_course_version_subjects", ["id" => $r["id"]], 1)[0] ?? null;
-            if ((int) $r["schema_version"] === 3) {
-                $definition["subject"] =
-                $subject === null
-                ? null
-                : [
-                            "id" => $subject["subject_id"],
-                            "code" => $subject["code"],
-                            "title" => $subject["title"],
-                        ];
-            } elseif ($subject !== null) {
-                throw new CorruptHistoryException();
-            }
+            $definition["subject"] =
+            $subject === null
+            ? null
+            : [
+                        "id" => $subject["subject_id"],
+                        "code" => $subject["code"],
+                        "title" => $subject["title"],
+                    ];
             $published = PublishedCourseDefinition::fromPublication(new EntityId($r["course_id"]), [
                 "version_id" => $r["id"],
-                "schema_version" => (int) $r["schema_version"],
                 "definition" => $definition,
             ]);
             $owner = $this->sql->one("sis_sections", ["id" => $section->value]);
@@ -78,7 +69,7 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
         $old =
         $this->sql->rows("sis_course_version_subjects", ["id" => $definition->versionId->value], 1)[0] ??
         null;
-        $s = $definition->subject;
+        $s = $definition->definition->subject;
         if ($s === null) {
             if ($old !== null) {
                 throw new CorruptHistoryException();
@@ -107,13 +98,13 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
         $r = [
             "id" => $definition->versionId->value,
             "course_id" => $definition->courseId->value,
-            "schema_version" => $definition->schemaVersion,
-            "code" => $definition->core->code,
-            "title" => $definition->core->title,
-            "credits_milli" => $definition->core->creditsMilli,
-            "transcript_title" => $definition->text?->transcriptTitle,
-            "description" => $definition->text?->description,
-            "prerequisites" => json_encode($definition->core->prerequisites, JSON_THROW_ON_ERROR),
+            "schema_version" => 1,
+            "code" => $definition->definition->code,
+            "title" => $definition->definition->title,
+            "credits_milli" => $definition->definition->creditsMilli,
+            "transcript_title" => $definition->definition->text->transcriptTitle,
+            "description" => $definition->definition->text->description,
+            "prerequisites" => json_encode($definition->definition->prerequisites, JSON_THROW_ON_ERROR),
         ];
         $old = $this->sql->rows("sis_course_versions", ["id" => $definition->versionId->value], 1)[0] ?? null;
         if ($old === null) {

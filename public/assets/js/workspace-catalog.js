@@ -815,9 +815,9 @@ window.createWorkspaceCatalog = function (ui) {
         body.append(node("p", {}, `${draft.code} · ${draft.title}`), form);
     }
     function definitionDetails(definition) {
-        const subject = Object.hasOwn(definition, "subject")
-            ? (definition.subject ? `${definition.subject.code} — ${definition.subject.title}` : "Not specified")
-            : "Not recorded in this earlier definition";
+        const subject = definition.subject
+            ? `${definition.subject.code} — ${definition.subject.title}`
+            : "Not specified";
         return node(
             "dl",
             { class: "detail-list" },
@@ -828,25 +828,13 @@ window.createWorkspaceCatalog = function (ui) {
                 "div",
                 {},
                 node("dt", {}, "Transcript title"),
-                node(
-                    "dd",
-                    {},
-                    Object.hasOwn(definition, "transcript_title")
-                        ? definition.transcript_title || "Not specified"
-                        : "Not recorded in this earlier definition",
-                ),
+                node("dd", {}, definition.transcript_title || "Not specified"),
             ),
             node(
                 "div",
                 {},
                 node("dt", {}, "Catalog description"),
-                node(
-                    "dd",
-                    { class: "course-description-text" },
-                    Object.hasOwn(definition, "description")
-                        ? definition.description || "Not specified"
-                        : "Not recorded in this earlier definition",
-                ),
+                node("dd", { class: "course-description-text" }, definition.description || "Not specified"),
             ),
             node("div", {}, node("dt", {}, "Credits"), node("dd", {}, definition.credits_milli / 1000)),
             node(

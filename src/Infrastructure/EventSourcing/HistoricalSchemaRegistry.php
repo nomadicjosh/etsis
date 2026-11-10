@@ -24,14 +24,12 @@ final readonly class HistoricalSchemaRegistry
     {
         if (
             $version === 1 ||
-            ($version === 3 && $class === \Domain\Catalog\Event\CourseDefinitionWasPublished::class) ||
             ($version === 2 &&
                 in_array(
                     $class,
                     [
                         \Domain\DegreeAudit\Event\CourseGroupWasPublished::class,
                         \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class,
-                        \Domain\Catalog\Event\CourseDefinitionWasPublished::class,
                         \Domain\DegreeAudit\Event\RequirementsWerePublished::class,
                     ],
                     true,
@@ -769,44 +767,14 @@ final readonly class HistoricalSchemaRegistry
     /** @param array<mixed> $payload */
     private function courseDefinition(array $payload, StreamReference $stream, int $version): void
     {
-        $value = $payload["definition"];
+        if (!is_array($payload["definition"]) || $version !== 1) {
+            throw new CorruptHistoryException();
+        }
+        $course = \Domain\Catalog\ValueObject\CourseDefinition::fromArray($payload["definition"]);
         if (
-            !is_array($value) ||
-            count($value) !== match ($version) {
-            1 => 4, 2 => 6, 3 => 7, default => throw new CorruptHistoryException()
-            } ||
-            !is_string($value["code"] ?? null) ||
-            !is_string($value["title"] ?? null) ||
-            !is_int($value["credits_milli"] ?? null) ||
-            !is_array($value["prerequisites"] ?? null) ||
-            !array_is_list($value["prerequisites"]) ||
-            count($value["prerequisites"]) > 100
+            in_array((string) $stream->aggregateId, $course->prerequisites, true)
+            || $payload["version_id"] === $payload["previous_version_id"]
         ) {
-        throw new CorruptHistoryException();
-        }
-        foreach ($value["prerequisites"] as $id) {
-            if (!is_string($id) || $id === (string) $stream->aggregateId) {
-                throw new CorruptHistoryException();
-            }
-        }
-        new \Domain\Catalog\ValueObject\CourseDefinition(
-            $value["code"],
-            $value["title"],
-            $value["credits_milli"],
-            $value["prerequisites"],
-        );
-        if ($version >= 2) {
-            \Domain\Catalog\ValueObject\CourseText::fromArray($value);
-        }
-        if ($version === 3) {
-            if (!array_key_exists("subject", $value) || ($value["subject"] !== null && !is_array($value["subject"]))) {
-                throw new CorruptHistoryException();
-            }
-            if ($value["subject"] !== null) {
-                \Domain\Catalog\ValueObject\SubjectSnapshot::fromArray($value["subject"]);
-            }
-        }
-        if ($payload["version_id"] === $payload["previous_version_id"]) {
             throw new CorruptHistoryException();
         }
     }

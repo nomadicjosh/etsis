@@ -6,7 +6,7 @@ namespace Domain\Catalog\ValueObject;
 
 use InvalidArgumentException;
 
-/** Plain text, not trusted HTML. These limits form part of the published v2 serialization contract. */
+/** Plain text, not trusted HTML. These limits apply to the current course definition. */
 final readonly class CourseText
 {
     public ?string $transcriptTitle;

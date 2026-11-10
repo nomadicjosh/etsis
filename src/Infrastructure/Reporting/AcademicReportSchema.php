@@ -109,12 +109,6 @@ final class AcademicReportSchema
                 "retained_subject" => $join("sis_course_version_subjects", "course_binding", "course_version_id", "id"),
             ],
             "fields" => $personFields + [
-                "retained_course_schema_version" => $field(
-                    "Retained definition schema",
-                    "integer",
-                    "course_version",
-                    "schema_version"
-                ),
                 "retained_subject_code" => $field("Retained subject code", "string", "retained_subject", "code"),
                 "retained_subject_title" => $field("Retained subject name", "string", "retained_subject", "title"),
                 "course_version_id" => $field(
@@ -171,12 +165,6 @@ final class AcademicReportSchema
                 ...$personJoins,
             ],
             "fields" => [
-                "retained_course_schema_version" => $field(
-                    "Retained definition schema",
-                    "integer",
-                    "course_version",
-                    "schema_version"
-                ),
                 "retained_subject_code" => $field("Retained subject code", "string", "retained_subject", "code"),
                 "retained_subject_title" => $field("Retained subject name", "string", "retained_subject", "title"),
                 "section_code" => $field("Section code", "string", "section", "code"),

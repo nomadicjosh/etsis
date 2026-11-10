@@ -44,6 +44,19 @@ final readonly class FormInput
         return !isset($this->data[$key]) ? null : $this->text($key, $maximum);
     }
 
+    public function search(string $key = 'search', int $maximum = 100): string
+    {
+        $value = $this->data[$key] ?? '';
+        if (
+            !is_string($value) || mb_strlen($value) > $maximum
+            || preg_match('/[\x00-\x1F\x7F]/', $value)
+        ) {
+            throw new InvalidArgumentException('A bounded search string is required.');
+        }
+
+        return trim($value);
+    }
+
     public function bodyText(string $key): string
     {
         $value = $this->data[$key] ?? null;

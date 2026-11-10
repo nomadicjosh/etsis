@@ -88,9 +88,9 @@ final readonly class PublishedRequirementsReader
                 $item + ["definition" => $item["payload"]["definition"]],
             );
             $courses[$course->value] = [
-                "code" => $published->core->code,
-                "title" => $published->text->transcriptTitle ?? $published->core->title,
-                "credits_milli" => $published->core->creditsMilli,
+                "code" => $published->definition->code,
+                "title" => $published->definition->text->transcriptTitle ?? $published->definition->title,
+                "credits_milli" => $published->definition->creditsMilli,
             ];
         }
         return [
@@ -167,9 +167,9 @@ final readonly class PublishedRequirementsReader
             "course_id" => $course->value,
             "version_id" => $item["version_id"],
             "version" => $item["version"],
-            "code" => $d->core->code,
-            "title" => $d->text->transcriptTitle ?? $d->core->title,
-            "credits_milli" => $d->core->creditsMilli,
+            "code" => $d->definition->code,
+            "title" => $d->definition->text->transcriptTitle ?? $d->definition->title,
+            "credits_milli" => $d->definition->creditsMilli,
         ];
     }
     private function degreeStream(EntityId $id): StreamReference

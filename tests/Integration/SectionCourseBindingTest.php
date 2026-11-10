@@ -322,61 +322,6 @@ final class SectionCourseBindingTest extends TestCase
         );
         self::assertNotEmpty($review);
     }
-    public function testEarlierSchemaDoesNotBorrowTodayDescriptionOrTranscriptTitle(): void
-    {
-        $operation = EntityId::generate();
-        $stream = new StreamReference(
-            new \Domain\Catalog\ValueObject\CoursePublicationId($this->course->value),
-            "course_publication",
-        );
-        $event = \Domain\Catalog\Event\CourseDefinitionWasPublished::occur(
-            $stream->aggregateId,
-            [
-                "version_id" => $operation->value,
-                "previous_version_id" => null,
-                "definition" => [
-                    "code" => "MATH.101",
-                    "title" => "Algebra",
-                    "credits_milli" => 3000,
-                    "prerequisites" => [],
-                ],
-            ],
-            ["__aggregate_type" => "course_publication"],
-        );
-        $this->history->append(
-            $stream,
-            $operation,
-            0,
-            new \Domain\Shared\EventSourcing\EventContext(
-                $this->f->access->actor,
-                $this->f->clock->now(),
-                $operation,
-                reason: "Fictional earlier publication",
-            ),
-            [$event],
-        );
-        $bytes = $this->f->sql->rows("sis_history_events")[0];
-        $this->bind($operation);
-        $revision = $this->editor->view("courses", $this->course)["revision"];
-        $this->editor->courseText(
-            $this->course,
-            new \Domain\Catalog\ValueObject\CourseText("New short title", "New description"),
-            $revision,
-        );
-        $this->publish();
-        $bound = $this->service->show($this->section->id)["bound"];
-        self::assertSame(1, $bound["schema_version"]);
-        self::assertArrayNotHasKey("description", $bound["definition"]);
-        $rows = new SqlCampusRepository($this->f->sql)->sections($this->f->term, "", null)["items"];
-        self::assertNull($rows[0]["description"]);
-        $student = $this->f->student();
-        $e = $this->f->service->register($student->id, $this->section->id);
-        self::assertSame(
-            "Algebra",
-            $this->f->sql->one("sis_academic_credits", ["source_id" => $e->id->value])["course_title"],
-        );
-        self::assertSame($bytes, $this->f->sql->one("sis_history_events", ["id" => $bytes["id"]]));
-    }
 
     public function testRetainedReportingFieldsAndWorkspaceReadsStayDistinctFromCurrentCatalog(): void
     {
@@ -505,18 +450,5 @@ final class SectionCourseBindingTest extends TestCase
                 self::assertSame([], $this->f->sql->rows("sis_history_events"));
             }
         }
-    }
-    public function testEarlierFullDefinitionReviewCanCommitAndRetryAlongsideCompactProof(): void
-    {
-        $review = $this->service->review($this->section->id, $this->publish(), "Fictional offering decision");
-        $proof = json_decode($this->f->dropCipher->open($review["review_token"]), true, flags: JSON_THROW_ON_ERROR);
-        $proof["kind"] = "section-course-binding-review.v1";
-        $proof["selected"] = $review["selected"];
-        unset($proof["definition_hash"], $proof["correlation_id"]);
-        $oldToken = $this->f->dropCipher->seal(json_encode($proof, JSON_THROW_ON_ERROR));
-        $receipt = $this->service->commit($this->section->id, $oldToken);
-        self::assertSame($receipt, $this->service->commit($this->section->id, $review["review_token"]));
-        self::assertCount(2, $this->f->sql->rows("sis_history_events"));
-        self::assertCount(1, $this->f->sql->rows("sis_section_course_versions"));
     }
 }

@@ -27,7 +27,7 @@ final readonly class SisOfferingTemplateController
         return new JsonResponse(
             $this->service->page(
                 $f->optionalBoolean("active"),
-                $f->optionalText("search", 80) ?? "",
+                $f->search("search", 80),
                 $f->optionalId("after"),
             ),
         );

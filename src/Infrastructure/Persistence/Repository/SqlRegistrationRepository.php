@@ -70,13 +70,13 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         }
         return new Course(
             $bound->courseId,
-            $bound->core->code,
-            $bound->core->title,
-            $bound->core->creditsMilli,
+            $bound->definition->code,
+            $bound->definition->title,
+            $bound->definition->creditsMilli,
             $current->active,
-            $bound->text?->transcriptTitle,
+            $bound->definition->text->transcriptTitle,
             $bound->versionId,
-            $bound->core->prerequisites,
+            $bound->definition->prerequisites,
         );
     }
 

@@ -200,7 +200,10 @@ final class CoursePublicationTest extends TestCase
     public function testTamperedAndCrossCourseReviewTokensAreRejected(): void
     {
         $review = $this->service->review($this->course, "Fictional review");
+        $oldProof = json_decode($this->f->dropCipher->open($review["review_token"]), true, flags: JSON_THROW_ON_ERROR);
+        $oldProof["kind"] = "course-publication-review.v4";
         $cases2 = [
+                [$this->course, $this->f->dropCipher->seal(json_encode($oldProof, JSON_THROW_ON_ERROR))],
                 [$this->course, substr($review["review_token"], 0, -8) . "BADTOKEN"],
                 [EntityId::generate(), $review["review_token"]],
             ];
@@ -289,96 +292,7 @@ final class CoursePublicationTest extends TestCase
         );
     }
 
-    public function testV1EventsAndReceiptsSurviveV2PublicationWithoutAddingInventedOldFields(): void
-    {
-        $operation = EntityId::generate();
-        $definition = [
-            "code" => "MATH.101",
-            "title" => "Algebra",
-            "credits_milli" => 3000,
-            "prerequisites" => [],
-        ];
-        $context = new \Domain\Shared\EventSourcing\EventContext(
-            $this->f->access->actor,
-            new DateTimeImmutable(
-                $this->f->clock->now()->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d\TH:i:s.u\Z"),
-            ),
-            $operation,
-            reason: "Fictional original publication",
-        );
-        $stream = new StreamReference(new CoursePublicationId($this->course->value), "course_publication");
-        $event = CourseDefinitionWasPublished::occur(
-            $stream->aggregateId,
-            ["version_id" => $operation->value, "previous_version_id" => null, "definition" => $definition],
-            ["__aggregate_type" => "course_publication"],
-        );
-        $receipt = $this->history->append($stream, $operation, 0, $context, [$event]);
-        $oldToken = $this->f->dropCipher->seal(
-            json_encode(
-                [
-                    "kind" => "course-publication-review.v1",
-                    "course_id" => $this->course->value,
-                    "operation_id" => $operation->value,
-                    "actor_id" => $this->f->access->actor->value,
-                    "expected_version" => 0,
-                    "previous_version_id" => null,
-                    "definition" => $definition,
-                    "effective_at" => $context->describe()["effective_at"],
-                    "reason" => $context->reason,
-                ],
-                JSON_THROW_ON_ERROR,
-            ),
-        );
-        $before = $this->f->sql->rows("sis_history_events")[0];
-        $this->saveText("Algebra I", "First paragraph.\nSecond paragraph.");
-        $review = $this->service->review($this->course, "Fictional v2 publication");
-        $this->service->publish($this->course, $review["review_token"]);
-        self::assertSame($receipt, $this->service->publish($this->course, $oldToken));
-        self::assertSame($before, $this->f->sql->rows("sis_history_events", ["id" => $before["id"]])[0]);
-        $page = $this->service->versions($this->course);
-        self::assertSame(1, $page["items"][0]["schema_version"]);
-        self::assertArrayNotHasKey("transcript_title", $page["items"][0]["definition"]);
-        self::assertSame(3, $page["items"][1]["schema_version"]);
-        self::assertSame("Algebra I", $page["items"][1]["definition"]["transcript_title"]);
-        $events = array_map(static fn($e) => $e->event, $this->history->page($stream)->events);
-        self::assertSame([1, 3], array_map(static fn($e) => $e->metaParam("schema_version", 1), $events));
-        $restored = CoursePublication::reconstituteFromEventStream(
-            new EventStream($stream->aggregateId, $events),
-        );
-        self::assertSame($review["operation_id"], $restored->versionId());
-    }
 
-    public function testPendingOldReviewCannotCreateANewIncompleteDefinitionAfterUpgrade(): void
-    {
-        $token = $this->f->dropCipher->seal(
-            json_encode(
-                [
-                    "kind" => "course-publication-review.v1",
-                    "course_id" => $this->course->value,
-                    "operation_id" => EntityId::generate()->value,
-                    "actor_id" => $this->f->access->actor->value,
-                    "expected_version" => 0,
-                    "previous_version_id" => null,
-                    "definition" => [
-                        "code" => "MATH.101",
-                        "title" => "Algebra",
-                        "credits_milli" => 3000,
-                        "prerequisites" => [],
-                    ],
-                    "effective_at" => $this->f->clock->now()->format("Y-m-d\TH:i:s.u\Z"),
-                    "reason" => "Fictional pending review",
-                ],
-                JSON_THROW_ON_ERROR,
-            ),
-        );
-        $this->expectException(ConcurrentModificationException::class);
-        try {
-            $this->service->publish($this->course, $token);
-        } finally {
-            self::assertSame([], $this->f->sql->rows("sis_history_events"));
-            self::assertSame([], $this->f->sql->rows("sis_course_descriptions"));
-        }
-    }
 
     public function testDraftTextStaysPrivateUntilPublicationAndRecordedTitlesSurviveFurtherChanges(): void
     {
@@ -502,7 +416,7 @@ final class CoursePublicationTest extends TestCase
         $this->saveText("Algebra I", null);
     }
 
-    public function testCourseTextSchemaVersionsAreStrictlyRegistered(): void
+    public function testCurrentCourseFormatRejectsOtherMarkersAndIncompleteDefinitions(): void
     {
         $review = $this->service->review($this->course, "Fictional schema review");
         $payload = [
@@ -511,7 +425,7 @@ final class CoursePublicationTest extends TestCase
             "definition" => $review["definition"],
         ];
         $stream = new StreamReference(new CoursePublicationId($this->course->value), "course_publication");
-        foreach ([1, 2, 4] as $version) {
+        foreach ([2, 3, 4] as $version) {
             try {
                 new HistoricalSchemaRegistry()->describe(
                     CourseDefinitionWasPublished::occur($stream->aggregateId, $payload, [
@@ -529,7 +443,7 @@ final class CoursePublicationTest extends TestCase
         new HistoricalSchemaRegistry()->describe(
             CourseDefinitionWasPublished::occur($stream->aggregateId, $payload, [
                 "__aggregate_type" => "course_publication",
-                "schema_version" => 2,
+                "schema_version" => 1,
             ]),
         );
     }
@@ -651,7 +565,7 @@ final class CoursePublicationTest extends TestCase
     {
         $reviewedAt = $this->f->clock->now();
         $review = $this->service->review($this->course, "Fictional confirmation-time approval");
-        self::assertSame("course-publication-review.v4", $review["kind"]);
+        self::assertSame("course-publication-review", $review["kind"]);
         self::assertArrayNotHasKey("effective_at", $review);
         self::assertSame($reviewedAt->getTimestamp() + 1200, $review["expires_at"]);
         $this->f->clock->time = $reviewedAt->modify("+2 minutes");
@@ -663,7 +577,7 @@ final class CoursePublicationTest extends TestCase
         );
         self::assertSame($this->f->clock->now()->getTimestamp(), $stored->recordedAt->getTimestamp());
         self::assertSame($receipt["event_ids"][0], (string) $stored->event->eventId());
-        self::assertSame(3, $stored->event->metaParam("schema_version"));
+        self::assertSame(1, $stored->event->metaParam("schema_version"));
         self::assertSame("Fictional confirmation-time approval", $stored->context->reason);
         self::assertSame(
             ProtectedEventCodec::canonical($review["definition"]),
@@ -693,67 +607,6 @@ final class CoursePublicationTest extends TestCase
         self::assertSame(1, $this->service->publish($this->course, $fresh["review_token"])["last_version"]);
     }
 
-    public function testPreviousV2ReceiptsKeepTheirActualOldEventsAndPendingV2ReviewsRequireRefresh(): void
-    {
-        $f = $this->f;
-        $r = $this->service->review($this->course, "Fictional preceding-version approval");
-        $old = json_decode($f->dropCipher->open($r["review_token"]), true, flags: JSON_THROW_ON_ERROR);
-        $old["kind"] = "course-publication-review.v2";
-        unset($old["definition"]["subject"]);
-        unset($old["expires_at"]);
-        $old["effective_at"] = $f->clock
-            ->now()
-            ->setTimezone(new DateTimeZone("UTC"))
-            ->format("Y-m-d\TH:i:s.u\Z");
-        $token = $f->dropCipher->seal(json_encode($old, JSON_THROW_ON_ERROR));
-        try {
-            $this->service->publish($this->course, $token);
-            self::fail("An old pending review created a decision with its earlier review time.");
-        } catch (ConcurrentModificationException) {
-            self::assertSame([], $f->sql->rows("sis_history_events"));
-        }
-        // Fictional persisted v2 event/receipt representing the preceding implementation.
-        $operation = new EntityId($old["operation_id"]);
-        $event = CourseDefinitionWasPublished::occur(
-            $this->stream()->aggregateId,
-            [
-                "version_id" => $operation->value,
-                "previous_version_id" => null,
-                "definition" => $old["definition"],
-            ],
-            ["__aggregate_type" => "course_publication", "schema_version" => 2],
-        );
-        $receipt = $this->history->append(
-            $this->stream(),
-            $operation,
-            0,
-            new \Domain\Shared\EventSourcing\EventContext(
-                $f->access->actor,
-                new DateTimeImmutable($old["effective_at"]),
-                $operation,
-                reason: $old["reason"],
-            ),
-            [$event],
-        );
-        new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql)->apply(
-            $this->course,
-            \Domain\Catalog\ValueObject\CourseText::fromArray($old["definition"]),
-            $operation,
-            1,
-        );
-        $before = $f->sql->rows("sis_history_events");
-        $f->clock->time = $f->clock->time->modify("+1 minute");
-        $this->change();
-        $new = $this->service->review($this->course, "Fictional modern confirmation");
-        $this->service->publish($this->course, $new["review_token"]);
-        $f->clock->time = $f->clock->time->modify("+2 days");
-        $projection = $f->sql->rows("sis_course_descriptions");
-        $events = $f->sql->rows("sis_history_events");
-        self::assertSame($receipt, $this->service->publish($this->course, $token));
-        self::assertSame($before, array_slice($f->sql->rows("sis_history_events"), 0, 1));
-        self::assertSame($events, $f->sql->rows("sis_history_events"));
-        self::assertSame($projection, $f->sql->rows("sis_course_descriptions"));
-    }
 
     public function testCourseReviewAndConfirmationRecheckPermissionsAfterTheLockWait(): void
     {

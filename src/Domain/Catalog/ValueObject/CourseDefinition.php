@@ -7,7 +7,7 @@ namespace Domain\Catalog\ValueObject;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
-/** Frozen v1 contract for the fields the current catalog actually records. */
+/** Current course definition. Alpha field changes evolve this model directly. */
 final readonly class CourseDefinition
 {
     /** @param list<string> $prerequisites */
@@ -16,6 +16,8 @@ final readonly class CourseDefinition
         public string $title,
         public int $creditsMilli,
         public array $prerequisites,
+        public CourseText $text = new CourseText(),
+        public ?SubjectSnapshot $subject = null,
     ) {
         if (
             trim($code) === "" ||
@@ -25,7 +27,9 @@ final readonly class CourseDefinition
             $creditsMilli < 0 ||
             $creditsMilli > 999999
         ) {
-            throw new InvalidArgumentException("Valid course code, title and credit thousandths are required.");
+            throw new InvalidArgumentException(
+                "Valid course code, title and credit thousandths are required.",
+            );
         }
         if (
             !mb_check_encoding($code . $title, "UTF-8") ||
@@ -37,14 +41,55 @@ final readonly class CourseDefinition
         $sorted = $prerequisites;
         sort($sorted, SORT_STRING);
         if ($sorted !== $prerequisites || count(array_unique($prerequisites)) !== count($prerequisites)) {
-            throw new InvalidArgumentException("Course prerequisite identities must be distinct and ordered.");
+            throw new InvalidArgumentException(
+                "Course prerequisite identities must be distinct and ordered.",
+            );
         }
         foreach ($prerequisites as $id) {
             new EntityId($id);
         }
     }
 
-    /** @return array{code: string, title: string, credits_milli: int, prerequisites: list<string>} */
+    /** @param array<string, mixed> $data */
+    public static function fromArray(array $data): self
+    {
+        $keys = [
+            "code",
+            "title",
+            "credits_milli",
+            "prerequisites",
+            "transcript_title",
+            "description",
+            "subject",
+        ];
+        if (
+            count($data) !== count($keys) ||
+            array_diff(array_keys($data), $keys) !== [] ||
+            !is_string($data["code"] ?? null) ||
+            !is_string($data["title"] ?? null) ||
+            !is_int($data["credits_milli"] ?? null) ||
+            !is_array($data["prerequisites"] ?? null) ||
+            !array_is_list($data["prerequisites"]) ||
+            ($data["subject"] !== null && !is_array($data["subject"]))
+        ) {
+            throw new InvalidArgumentException("Provide the complete current course definition.");
+        }
+        foreach ($data["prerequisites"] as $id) {
+            if (!is_string($id)) {
+                throw new InvalidArgumentException("Use course identities for prerequisites.");
+            }
+        }
+        return new self(
+            $data["code"],
+            $data["title"],
+            $data["credits_milli"],
+            $data["prerequisites"],
+            CourseText::fromArray($data),
+            $data["subject"] === null ? null : SubjectSnapshot::fromArray($data["subject"]),
+        );
+    }
+
+    /** @return array<string, mixed> */
     public function describe(): array
     {
         return [
@@ -52,6 +97,7 @@ final readonly class CourseDefinition
             "title" => $this->title,
             "credits_milli" => $this->creditsMilli,
             "prerequisites" => $this->prerequisites,
-        ];
+        ] +
+        $this->text->describe() + ["subject" => $this->subject?->describe()];
     }
 }

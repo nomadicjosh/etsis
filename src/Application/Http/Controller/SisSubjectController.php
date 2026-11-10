@@ -20,7 +20,7 @@ final readonly class SisSubjectController
     {
         $f = FormInput::from($request);
         return new JsonResponse(
-            $this->service->page($f->optionalText("search", 100) ?? "", $f->optionalId("after")),
+            $this->service->page($f->search(), $f->optionalId("after")),
         );
     }
     public function save(ServerRequest $request): ResponseInterface
