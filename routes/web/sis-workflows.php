@@ -675,11 +675,20 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.gradebook.attendance-history");
     $sectionPublications = \Application\Http\Controller\SisSectionPublicationController::class;
-    $router->post("/sis/sections/{id}/publication/selection-review/", [$sectionPublications, "selectionReview"]);
+    $router->post("/sis/sections/{id}/publication/selection-review/", [
+        $sectionPublications,
+        "selectionReview",
+    ]);
     $router->post("/sis/sections/{id}/publication/select/", [$sectionPublications, "select"]);
-    $router->post("/sis/sections/{id}/publication/amendment-review/", [$sectionPublications, "amendmentReview"]);
+    $router->post("/sis/sections/{id}/publication/amendment-review/", [
+        $sectionPublications,
+        "amendmentReview",
+    ]);
     $router->post("/sis/sections/{id}/publication/amend/", [$sectionPublications, "amend"]);
-    $router->post("/sis/sections/{id}/publication/selection-page/", [$sectionPublications, "selectionHistory"]);
+    $router->post("/sis/sections/{id}/publication/selection-page/", [
+        $sectionPublications,
+        "selectionHistory",
+    ]);
     $router->post("/sis/sections/{id}/publication/setup/", [$sectionPublications, "setup"]);
     $router->post("/sis/sections/{id}/publication/review/", [$sectionPublications, "review"]);
     $router->post("/sis/sections/{id}/publication/commit/", [$sectionPublications, "publish"]);
@@ -878,6 +887,10 @@ return static function (Psr7Router $router): void {
         "/sis/students/{student}/programs/{assignment}/degree-adjustments/replacement-courses/{course}/versions/",
         [SisRequirementAdjustmentController::class, "replacementVersions"],
     );
+    $router->get("/sis/students/{student}/programs/{assignment}/degree-adjustments/preview/", [
+        SisRequirementAdjustmentController::class,
+        "preview",
+    ]);
     $router->get("/sis/students/{student}/programs/{assignment}/degree-adjustments/", [
         SisRequirementAdjustmentController::class,
         "view",

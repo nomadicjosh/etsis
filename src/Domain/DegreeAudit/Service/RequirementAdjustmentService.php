@@ -48,8 +48,20 @@ final readonly class RequirementAdjustmentService
     /** @return array<string, mixed> */
     public function view(EntityId $student, EntityId $assignment): array
     {
+        return $this->read($student, $assignment, false);
+    }
+    /** Selected publication and verified approvals from the same locked read; no completion calculation.
+     * @return array<string,mixed>
+     */
+    public function preview(EntityId $student, EntityId $assignment): array
+    {
+        return $this->read($student, $assignment, true);
+    }
+    /** @return array<string,mixed> */
+    private function read(EntityId $student, EntityId $assignment, bool $includeRequirements): array
+    {
         $this->requirements->view($student, $assignment);
-        return $this->transactions->run(function () use ($student, $assignment): array {
+        return $this->transactions->run(function () use ($student, $assignment, $includeRequirements): array {
             $this->students->lock($student);
             $parent = $this->requirements->view($student, $assignment);
             $state = $this->state($assignment, $parent);
@@ -70,7 +82,7 @@ final readonly class RequirementAdjustmentService
                 "scope" => $parent["scope"],
                 "cohort_changed" => $parent["cohort_changed"],
                 "substitution_details" => $this->substitutionDetails($state->active()),
-            ];
+            ] + ($includeRequirements ? ["requirements" => $parent["requirements"]] : []);
         });
     }
     /** @param array<string, mixed> $request

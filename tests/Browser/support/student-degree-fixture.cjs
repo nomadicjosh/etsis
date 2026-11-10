@@ -85,6 +85,69 @@ async function fixture(page, options = {}) {
             ? [{ adjustment_id: id(20), definition: { kind: "waiver", course_id: course }, applicable: true }]
             : [],
         nextAdjustment = 21;
+    if (options.previewApprovals) {
+        activeAdjustments = [
+            { adjustment_id: id(20), definition: { kind: "waiver", course_id: course }, applicable: true },
+            {
+                adjustment_id: id(21),
+                definition: {
+                    kind: "minimum",
+                    group_id: group,
+                    group_version_id: id(8),
+                    minimum: "min_courses",
+                    original_milli: 2000,
+                    required_milli: 1000,
+                },
+                applicable: true,
+            },
+            {
+                adjustment_id: id(22),
+                definition: {
+                    kind: "minimum",
+                    group_id: group,
+                    group_version_id: id(8),
+                    minimum: "min_course_grade_points_milli",
+                    original_milli: 2000,
+                    required_milli: 1700,
+                },
+                applicable: true,
+            },
+            {
+                adjustment_id: id(23),
+                definition: {
+                    kind: "minimum",
+                    group_id: null,
+                    group_version_id: null,
+                    minimum: "min_credits_milli",
+                    original_milli: 120000,
+                    required_milli: 108000,
+                },
+                applicable: true,
+            },
+            {
+                adjustment_id: id(24),
+                definition: {
+                    kind: "substitution",
+                    course_id: id(30),
+                    replacement_course_id: id(15),
+                    replacement_version_id: id(16),
+                },
+                applicable: true,
+            },
+            {
+                adjustment_id: id(25),
+                definition: {
+                    kind: "minimum",
+                    group_id: null,
+                    group_version_id: null,
+                    minimum: "min_credits_milli",
+                    original_milli: 120000,
+                    required_milli: 60000,
+                },
+                applicable: false,
+            },
+        ];
+    }
     const adjustmentHistory = [],
         preparedAdjustments = new Map(),
         receipts = new Set();
@@ -151,6 +214,7 @@ async function fixture(page, options = {}) {
             substitution_conflicts: {},
         };
         for (const p of items) {
+            if (p.applicable === false) continue;
             const d = p.definition;
             if (d.kind === "waiver") out.waived_course_ids.push(d.course_id);
             else if (d.kind === "substitution")
@@ -162,6 +226,10 @@ async function fixture(page, options = {}) {
             else
                 out.groups[d.group_id][d.minimum] =
                     d.minimum === "min_courses" ? d.required_milli / 1000 : d.required_milli;
+        }
+        if (options.previewConflict) {
+            out.substitution_conflicts[id(30)] = "Resolve the overlapping course waiver and substitution.";
+            delete out.substitutions[id(30)];
         }
         return out;
     }
@@ -299,8 +367,9 @@ async function fixture(page, options = {}) {
                     : [],
                 next_cursor: null,
             };
-        else if (path === adjustmentBase)
+        else if (path === adjustmentBase || path === `${adjustmentBase}preview/`)
             response = {
+                ...(path.endsWith("preview/") ? { requirements: selection ? requirements : null } : {}),
                 items: activeAdjustments,
                 substitution_details: substitutionDetails(),
                 targets,
@@ -310,7 +379,7 @@ async function fixture(page, options = {}) {
                 grade_scale: requirements.grade_scale || null,
                 selection,
                 scope: { status: "active" },
-                cohort_changed: false,
+                cohort_changed: Boolean(options.changed),
             };
         else if (path === `${adjustmentBase}replacement-courses/`)
             response = {

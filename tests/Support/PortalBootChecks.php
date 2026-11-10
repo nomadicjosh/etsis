@@ -1871,6 +1871,20 @@ if (
         "Student exception reads leaked approval authority or failed private routing.",
     );
 }
+$previewResponse = $app->router->match(
+    $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $adjustmentPath . "preview/")),
+);
+$previewBody = (string) $previewResponse->getBody();
+$previewData = json_decode($previewBody, true, flags: JSON_THROW_ON_ERROR);
+if (
+    $previewResponse->getStatusCode() !== 200 ||
+    ($previewData["requirements"]["version_id"] ?? null) !== $adjustmentData["selection"]["requirements_version_id"] ||
+    count($previewData["effective_minimums"]["waived_course_ids"] ?? []) !== 1 ||
+    !str_contains($previewResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    str_contains($previewBody, "Fictional registrar waiver")
+) {
+    throw new RuntimeException("Adjusted requirements preview failed private, authorized routing.");
+}
 $sis->access->staff = true;
 $sis->access->grants = [];
 

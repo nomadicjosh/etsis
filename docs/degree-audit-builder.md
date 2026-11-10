@@ -2,7 +2,7 @@
 
 Course groups and degree audits are separate authoring elements. A **course group is an independent, reusable block**; it belongs to no degree, program or academic year. A **degree requirement definition composes particular published versions of those blocks** for a program and academic year. General education can therefore be shared across many degrees, while a specialized group may be used by just one.
 
-This stage provides authoring, immutable publication, historical previews and cloning. Explicit [student program requirement assignment](student-degree-requirements.md) is now implemented. [Student waivers, substitutions and minimum exceptions](student-degree-exceptions.md) are also implemented. Student evaluation, transcript allocation and specialization exclusions remain pending. The preview shows requirements without claiming that a student completed them.
+This stage provides authoring, immutable publication, historical previews and cloning. Explicit [student program requirement assignment](student-degree-requirements.md) is now implemented. The [adjusted requirements preview](student-degree-exceptions.md#preview-requirements-with-approved-exceptions) now combines a selected baseline with approved exceptions without calculating completion. [Student waivers, substitutions and minimum exceptions](student-degree-exceptions.md) are also implemented. Student evaluation, transcript allocation and specialization exclusions remain pending. The preview shows requirements without claiming that a student completed them.
 
 ## Setup and navigation
 

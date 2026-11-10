@@ -20,6 +20,10 @@ final readonly class SisRequirementAdjustmentController
     {
         return new JsonResponse($this->service->view(new EntityId($student), new EntityId($assignment)));
     }
+    public function preview(string $student, string $assignment): ResponseInterface
+    {
+        return new JsonResponse($this->service->preview(new EntityId($student), new EntityId($assignment)));
+    }
     public function replacementCourses(
         ServerRequest $request,
         string $student,

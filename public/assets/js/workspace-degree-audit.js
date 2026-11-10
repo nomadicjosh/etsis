@@ -244,9 +244,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
             { class: "audit-tree", open },
             node("summary", {}, d.name, " ", badge(count(d))),
         );
-        const plan = planningPanel();
-        plan.update(item.planning_summary || groupPlan(d, details));
-        tree.append(plan.element);
+        if (!item.course_approvals) {
+            const plan = planningPanel();
+            plan.update(item.planning_summary || groupPlan(d, details));
+            tree.append(plan.element);
+        }
         if (d.min_course_grade_points_milli != null)
             tree.append(
                 node(
@@ -274,15 +276,31 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node(
                         "ul",
                         {},
-                        r.course_ids.map((id) =>
-                            node(
+                        r.course_ids.map((id) => {
+                            const waived = item.course_approvals?.waived_course_ids.includes(id),
+                                replacement = item.course_approvals?.replacements[id];
+                            return node(
                                 "li",
                                 {},
-                                details[id] ? courseLabel(details[id]) : "Selected course",
+                                node(
+                                    waived ? "s" : "span",
+                                    {},
+                                    details[id] ? courseLabel(details[id]) : "Selected course",
+                                ),
                                 " ",
                                 details[id] ? badge(`${text(details[id].credits_milli)} credits`) : null,
-                            ),
-                        ),
+                                ...(waived ? [" ", badge("Waived for this pursuit")] : []),
+                                ...(replacement
+                                    ? [
+                                          node(
+                                              "p",
+                                              { class: "form-text" },
+                                              `Approved alternative: ${courseLabel(replacement)} · Publication ${replacement.version} · ${text(replacement.credits_milli)} catalog credits. Completion still depends on earned work.`,
+                                          ),
+                                      ]
+                                    : []),
+                            );
+                        }),
                     ),
                 ),
             );
@@ -310,8 +328,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         repeat_gpa: "Repeated-course GPA",
         transfer_overall_gpa: "Transfer awards in overall GPA",
     };
-    function degreeTree(item) {
-        const d = item.definition,
+    function degreeTree(item, approvals = null) {
+        const d = approvals
+                ? { ...item.definition, ...approvals.effective_minimums.degree }
+                : item.definition,
             tree = node(
                 "section",
                 { class: "audit-preview" },
@@ -376,11 +396,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "Grading scale was not recorded with this earlier definition.",
                 ),
             );
+        const courseApprovals = approvals ? previewCourseApprovals(approvals) : null;
         for (const g of d.groups) {
             const resolved = item.group_details?.[g.group_id];
             if (resolved)
-                tree.append(groupTree({ ...resolved, effective_grade_point_scale: item.grade_scale }));
-            else if (g.rules) tree.append(groupTree({ definition: g, course_details: item.course_details }));
+                tree.append(
+                    groupTree({
+                        ...resolved,
+                        definition: approvals
+                            ? { ...resolved.definition, ...approvals.effective_minimums.groups[g.group_id] }
+                            : resolved.definition,
+                        effective_grade_point_scale: item.grade_scale,
+                        ...(approvals ? { course_approvals: courseApprovals } : {}),
+                    }),
+                );
+            else if (g.rules)
+                tree.append(
+                    groupTree({
+                        definition: g,
+                        course_details: item.course_details,
+                        ...(approvals ? { course_approvals: courseApprovals } : {}),
+                    }),
+                );
         }
         for (const [key, choices] of Object.entries(policyChoices))
             tree.append(
@@ -1607,7 +1644,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 {},
-                "This is the published baseline selected for this program pursuit. Open Student exceptions for approved course waivers and adjusted minimums. This view does not calculate completion or degree eligibility.",
+                "This is the published baseline selected for this program pursuit. Preview with approvals to see the combined requirements, or open Student exceptions to review approvals. This view does not calculate completion or degree eligibility.",
             ),
         );
         if (data.cohort_changed)
@@ -1643,6 +1680,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(
             actions(
                 button("Assignment history", () => studentHistory(base, restore)),
+                data.selection
+                    ? button("Preview with approvals", () =>
+                          adjustedRequirements(
+                              base.replace("degree-requirements/", "degree-adjustments/"),
+                              restore,
+                              true,
+                              "Back to degree requirements",
+                          ),
+                      )
+                    : null,
                 data.selection
                     ? button("Student exceptions", () => studentExceptions(studentId, assignmentId, restore))
                     : null,
@@ -1892,6 +1939,122 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const t = data?.targets?.find((t) => t.group_id === d.group_id && t.minimum === d.minimum);
         return `${t?.label || p.scope_label || (d.group_id ? "Course group" : "Degree")} · ${minimumLabels[d.minimum]}: ${text(d.original_milli)} → ${text(d.required_milli)}`;
     }
+    function previewCourseApprovals(data) {
+        const replacements = {};
+        for (const item of data.items) {
+            const d = item.definition;
+            if (!item.applicable || d.kind !== "substitution") continue;
+            const effective = data.effective_minimums.substitutions[d.course_id];
+            if (
+                effective?.course_id === d.replacement_course_id &&
+                effective?.version_id === d.replacement_version_id
+            )
+                replacements[d.course_id] = data.substitution_details[item.adjustment_id];
+        }
+        return { waived_course_ids: data.effective_minimums.waived_course_ids, replacements };
+    }
+    async function adjustedRequirements(
+        base,
+        back,
+        withApprovals = true,
+        backLabel = "Back to student exceptions",
+    ) {
+        const data = await request(`${base}preview/`),
+            body = screen("Requirements with approvals", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        body.append(
+            node(
+                "p",
+                {},
+                "Inspect the selected publication with approved exceptions. This preview does not calculate completed coursework or degree eligibility.",
+            ),
+            actions(
+                button("Refresh preview", () => adjustedRequirements(base, back, withApprovals, backLabel)),
+                button(backLabel, back),
+            ),
+        );
+        if (!data.requirements) {
+            body.append(
+                node(
+                    "p",
+                    { class: "audit-empty" },
+                    "Assign published requirements before previewing this program pursuit.",
+                ),
+            );
+            return;
+        }
+        const active = data.items.filter((item) => item.applicable),
+            kinds = (kind) => active.filter((item) => item.definition.kind === kind).length,
+            summary = [
+                ["waiver", "course waiver"],
+                ["substitution", "substitution approval"],
+                ["minimum", "minimum reduction"],
+            ]
+                .map(([kind, label]) => `${kinds(kind)} ${label}${kinds(kind) === 1 ? "" : "s"}`)
+                .join(" · ");
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                `Selected publication ${data.requirements.version} · ${summary}.`,
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                "Waivers create no earned credit and do not lower group quantities or choose-count rules. Approved minimum reductions are shown separately.",
+            ),
+        );
+        if (data.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "The matriculation cohort changed after this selection. The retained requirements stay selected until an authorized review changes them.",
+                ),
+            );
+        const conflicts = [...new Set(Object.values(data.effective_minimums.substitution_conflicts || {}))];
+        if (conflicts.length)
+            body.append(
+                node(
+                    "section",
+                    { class: "alert alert-info", role: "status" },
+                    node("h2", { class: "h5" }, "Registrar review needed"),
+                    node(
+                        "p",
+                        {},
+                        "Conflicting substitutions are omitted from the adjusted preview. The published course requirement remains visible.",
+                    ),
+                    ...conflicts.map((message) => node("p", {}, message)),
+                ),
+            );
+        const panel = node("section", { "aria-label": "Requirement preview" }),
+            baseline = button("Published baseline", () => show(false)),
+            adjusted = button("With approved exceptions", () => show(true));
+        body.append(
+            node(
+                "div",
+                { class: "audit-actions", role: "group", "aria-label": "Requirement view" },
+                baseline,
+                adjusted,
+            ),
+            panel,
+        );
+        function show(value) {
+            withApprovals = value;
+            baseline.setAttribute("aria-pressed", String(!value));
+            adjusted.setAttribute("aria-pressed", String(value));
+            panel.replaceChildren(
+                node(
+                    "p",
+                    { role: "status", class: "audit-status" },
+                    value
+                        ? "Viewing requirements with approved exceptions."
+                        : "Viewing the published baseline.",
+                ),
+                degreeTree(data.requirements, value ? data : null),
+            );
+        }
+        show(withApprovals);
+    }
     async function studentExceptions(studentId, assignmentId, back) {
         const base = `/sis/students/${studentId}/programs/${assignmentId}/degree-adjustments/`,
             data = await request(base);
@@ -1911,6 +2074,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
                           "btn-primary",
                       )
                     : null,
+                ...(data.selection
+                    ? [
+                          button("Preview requirements with approvals", () =>
+                              adjustedRequirements(base, restore),
+                          ),
+                      ]
+                    : []),
                 button("Exception history", () => exceptionHistory(base, restore)),
                 button("Back to degree requirements", back),
             ),

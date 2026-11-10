@@ -39,6 +39,18 @@ The review and current-exception screens show group minimums separately from deg
 
 The existing event/projection shape is unchanged. New minimum names are validated explicitly. In the recorded `original_milli`/`required_milli` quantities, whole course counts use multiples of 1,000 (three courses = 3,000); effective `min_courses` remains the ordinary integer 3. Grade-point fields remain their existing integer thousandths. Earlier recorded values keep their original units and meaning; no event is rewritten or inferred, and no migration is needed. Approval authority and actor identity are rechecked after replay and before returning a committed result, including accepted retries.
 
+## Preview requirements with approved exceptions
+
+Open **Degree requirements → Preview with approvals**, or **Student exceptions → Preview requirements with approvals**. The full-width view defaults to **With approved exceptions**. Switch to **Published baseline** to compare the same selected publication; switching views makes no request and changes no student record. **Refresh preview** rereads the current selection and approvals together.
+
+The adjusted view shows approved degree/group minima, marks course waivers wherever the course appears, and displays each valid substitution beside its original requirement using the replacement's retained publication label and catalog credits. It keeps required cards and course quantities visible. Waivers and substitutions create no earned work; course-count/grade-point reductions apply only to their explicit group targets. Grading context comes from the selected degree publication when recorded.
+
+Old version-bound reductions remain retained without being applied to a newer selected degree. Pursuit-wide waivers continue where their course is required. Conflicting substitutions are omitted from the adjusted display and flagged for registrar review; the original requirement stays visible. A changed matriculation cohort produces a review notice without moving the selected requirements. Approval counters describe retained applicable approvals, not completed courses or a graduation decision.
+
+Students can inspect their own preview; authorized student readers can inspect it without approval or catalog-editing authority. The preview has no approval controls. The private GET endpoint at `degree-adjustments/preview/` uses the existing owner/assignment checks, student lock and verified histories/projections to return the baseline and approvals from the same read. It exposes no raw events, protected reasons or actors. Missing or inconsistent history/projections block the read rather than trigger repair.
+
+This is a live, read-only preview. It is not a retained audit result, issued document or calculation of completion/GPA. No event, academic credit, financial posting, requirement selection or approval is created by opening, refreshing or switching it. Stored publications and approvals remain unchanged; no migration is needed.
+
 ## Course substitutions
 
 Choose **Course substitution**, select the original required course, then search for a replacement and explicitly choose one of its published versions. This is allowed before the student takes either course. Current catalog code/title are navigation aids only; approval and history retain the exact replacement publication and its title/credits. An unpublished catalog entry cannot be approved. The finder returns at most 20 catalog entries per page and ten publications per version page, with literal wildcard escaping.

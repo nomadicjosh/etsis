@@ -321,3 +321,79 @@ test("per-course group grade-point exception keeps its own units and leaves cour
     ).toBe(1700);
     expect(f.errors).toEqual([]);
 });
+
+test("owner compares published and adjusted requirements without changing approvals or completion", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        groupMinimums: true,
+        previewApprovals: true,
+        requirementGradeMaximum: 5000,
+    });
+    await page.getByRole("button", { name: "Preview with approvals", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Requirements with approvals", exact: true }),
+    ).toBeVisible();
+    const preview = page.getByRole("region", { name: "Requirement preview", exact: true });
+    await expect(preview).toContainText("108 total credits");
+    await expect(preview).toContainText("1 course");
+    await expect(preview).toContainText("at least 1.7 out of 5.0 grade points");
+    await expect(preview.locator("s")).toHaveText("MATH.101 · Algebra");
+    await expect(preview).toContainText("Waived for this pursuit");
+    await expect(preview).toContainText("Approved alternative: SCI.201 · Fictional <b>Science</b>");
+    await expect(preview.locator("b")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toContainText("3 minimum reductions");
+    await expect(page.getByRole("dialog")).toContainText("does not calculate completed coursework");
+    await expect(page.getByRole("button", { name: "Approve an exception", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Published baseline", exact: true }).click();
+    await expect(preview).toContainText("120 total credits");
+    await expect(preview).toContainText("2 courses");
+    await expect(preview.locator("s")).toHaveCount(0);
+    await expect(preview).not.toContainText("SCI.201");
+    await page.getByRole("button", { name: "With approved exceptions", exact: true }).click();
+    await expect(preview).toContainText("108 total credits");
+    await expect(page.getByRole("button", { name: "With approved exceptions", exact: true })).toBeFocused();
+    expect(f.calls.filter((call) => call.path === f.adjustmentBase + "preview/")).toHaveLength(1);
+    await page.getByRole("button", { name: "Refresh preview", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Refresh preview", exact: true })).toBeEnabled();
+    await expect(preview).toContainText("108 total credits");
+    expect(f.calls.filter((call) => call.path === f.adjustmentBase + "preview/")).toHaveLength(2);
+    expect(
+        f.calls.some((call) => /degree-adjustments\/(review|commit|revoke-review)\//.test(call.path)),
+    ).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Back to degree requirements", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Student degree requirements", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("120 total credits");
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test("adjusted requirement preview omits conflicting substitutions and preserves cohort notice", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        groupMinimums: true,
+        previewApprovals: true,
+        previewConflict: true,
+        changed: true,
+    });
+    await page.getByRole("button", { name: "Student exceptions", exact: true }).click();
+    await page.getByRole("button", { name: "Preview requirements with approvals", exact: true }).click();
+    const preview = page.getByRole("region", { name: "Requirement preview", exact: true });
+    await expect(page.getByRole("dialog")).toContainText("Conflicting substitutions are omitted");
+    await expect(page.getByRole("dialog")).toContainText("matriculation cohort changed");
+    await expect(preview).toContainText("ENG.101 · Fictional English");
+    await expect(preview).not.toContainText("Approved alternative");
+    await accessible(page);
+    expect(f.calls.some((call) => call.path.endsWith("/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});

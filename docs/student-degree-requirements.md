@@ -2,7 +2,7 @@
 
 The [course group library and degree builder](degree-audit-builder.md) publish reusable requirements. A student program must then retain **one explicit published degree version**. A new catalog publication never changes that selection automatically.
 
-This stage records and displays selected requirements. It does not evaluate completed courses, calculate eligibility or grant a credential. [Student exceptions](student-degree-exceptions.md) now separately retain course waivers and minimum reductions. The [development roadmap](development-roadmap.md#3-student-degree-audit-evaluation) describes those later stages.
+This stage records and displays selected requirements. **Preview with approvals** combines the retained baseline with verified student exceptions and allows comparison without changing the selection. It does not evaluate completed courses, calculate eligibility or grant a credential. [Student exceptions](student-degree-exceptions.md) now separately retain course waivers and minimum reductions. The [development roadmap](development-roadmap.md#3-student-degree-audit-evaluation) describes those later stages.
 
 ## Setup
 

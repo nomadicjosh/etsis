@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after reviewed student group course-count and per-course grade-point reductions.
+Last reviewed: **2026-11-10**, after the read-only requirements preview with approved exceptions and baseline comparison.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -86,6 +86,7 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 
 ## 3. Student degree-audit evaluation
 
+- [x] [Preview selected requirements with approved exceptions](student-degree-exceptions.md#preview-requirements-with-approved-exceptions) and compare the published baseline, preserving pursuit scope, retained labels and explicit conflict/cohort notices. This does not calculate student completion.
 - [ ] Implement deterministic evaluation against the student's retained degree, group, course and grading publications, using authoritative institutional/transfer credit facts.
 - [ ] Allocate work across overlapping requirements with explicit double-counting rules; explain each applied, unused, insufficient-grade and in-progress course. Do not assume a greedy allocation produces the best valid result.
 - [ ] Apply the retained repeat-credit, repeat-GPA and transfer-GPA policies. Evaluate credit/course-count quantities, per-course grade-point floors, residency and GPA minimums without converting grade scales implicitly.
