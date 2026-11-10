@@ -30,6 +30,7 @@ final class AcademicReportSchema
                 "sis_terms" => "Academic terms",
                 "sis_student_catalogs" => "Assigned curricula",
                 "sis_program_catalogs" => "Program catalog revisions",
+                "sis_program_catalog_details" => "Published program details",
                 "sis_academic_years" => "Academic years",
                 "sis_grades" => "Final grades",
                 "sis_courses" => "Courses",
@@ -103,6 +104,8 @@ final class AcademicReportSchema
                 "term" => $join("sis_terms", "assignment", "entry_term_id", "id"),
                 "binding" => $join("sis_student_catalogs", "assignment", "id", "assignment_id"),
                 "catalog" => $join("sis_program_catalogs", "binding", "catalog_id", "id"),
+                "program_definition" => $join("sis_program_catalog_details", "catalog", "id", "id"),
+                "published_program" => $join("sis_program_catalogs", "program_definition", "id", "id"),
                 "year" => $join("sis_academic_years", "catalog", "year_id", "id"),
             ],
             "fields" => $personFields + [
@@ -112,6 +115,66 @@ final class AcademicReportSchema
                 "assignment_status" => $field("Program assignment status", "string", "assignment", "status"),
                 "catalog_year" => $field("Matriculation academic year", "string", "year", "code"),
                 "catalog_revision" => $field("Assigned catalog revision", "integer", "catalog", "revision"),
+                "published_program_code" => $field(
+                    "Published program code",
+                    "string",
+                    "published_program",
+                    "program_code",
+                ),
+                "published_program_title" => $field(
+                    "Published program title",
+                    "string",
+                    "published_program",
+                    "program_title",
+                ),
+                "published_program_description" => $field(
+                    "Published program description",
+                    "string",
+                    "program_definition",
+                    "description",
+                ),
+                "published_program_year" => $field(
+                    "Published program academic year",
+                    "string",
+                    "program_definition",
+                    "academic_year_code",
+                ),
+                "program_department_code" => $field(
+                    "Program department code",
+                    "string",
+                    "program_definition",
+                    "department_code",
+                ),
+                "program_department_title" => $field(
+                    "Program department name",
+                    "string",
+                    "program_definition",
+                    "department_title",
+                ),
+                "program_academic_level_code" => $field(
+                    "Program academic level code",
+                    "string",
+                    "program_definition",
+                    "academic_level_code",
+                ),
+                "program_academic_level_title" => $field(
+                    "Program academic level name",
+                    "string",
+                    "program_definition",
+                    "academic_level_title",
+                ),
+                "program_award_code" => $field(
+                    "Program award code",
+                    "string",
+                    "program_definition",
+                    "award_code",
+                ),
+                "program_award_title" => $field(
+                    "Program award name",
+                    "string",
+                    "program_definition",
+                    "award_title",
+                ),
             ],
         ];
         $credits = [

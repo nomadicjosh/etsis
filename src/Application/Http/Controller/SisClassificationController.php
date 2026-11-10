@@ -50,7 +50,7 @@ final readonly class SisClassificationController
     public function assign(ServerRequest $request, string $id): ResponseInterface
     {
         $body = $request->getParsedBody();
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             if (!is_array($body) || !array_key_exists($kind->value . "_id", $body)) {
                 throw new InvalidArgumentException("Provide all three course classification choices.");
             }

@@ -137,13 +137,21 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
                 $q("entry_term_id") .
                 ", a." .
                 $q("status") .
-                ", p." .
-                $q("code") .
-                " AS " .
+                ", CASE WHEN pd." .
+                $q("id") .
+                " IS NOT NULL THEN pc." .
                 $q("program_code") .
-                ", p." .
+                " ELSE p." .
+                $q("code") .
+                " END AS " .
+                $q("program_code") .
+                ", CASE WHEN pd." .
+                $q("id") .
+                " IS NOT NULL THEN pc." .
+                $q("program_title") .
+                " ELSE p." .
                 $q("title") .
-                " AS " .
+                " END AS " .
                 $q("program_title") .
                 ", t." .
                 $q("code") .
@@ -187,6 +195,12 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
                 $q("id") .
                 " = cb." .
                 $q("catalog_id") .
+                " LEFT JOIN " .
+                $q("sis_program_catalog_details") .
+                " pd ON pd." .
+                $q("id") .
+                " = pc." .
+                $q("id") .
                 " LEFT JOIN " .
                 $q("sis_academic_years") .
                 " cy ON cy." .

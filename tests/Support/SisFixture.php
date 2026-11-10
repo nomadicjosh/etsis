@@ -668,6 +668,14 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
             $initializer ?? $this->catalogEnrollment(),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                    $this->sql, $this->transactions, $this->clock,
+                    new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
+                    new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                ),
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
+            ),
         );
     }
     public function matriculationService(

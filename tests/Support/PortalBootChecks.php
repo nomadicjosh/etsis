@@ -3042,3 +3042,53 @@ if (
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+
+// Program definitions use the same protected providers, journal and browser pipeline.
+$programDetailsBase = "/sis/programs/" . $sis->program->value . "/";
+$programDetailsRequest = $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $programDetailsBase . "details/"));
+$programDraftResponse = $app->router->match($programDetailsRequest);
+$programDraft = json_decode((string) $programDraftResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$programAwardResponse = $teachingPost("/sis/catalog/classifications/award/save/", ["code" => "DEGREE", "title" => "Fictional degree", "active" => true]);
+$programAward = json_decode((string) $programAwardResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $programDraftResponse->getStatusCode() !== 200 ||
+    !str_contains($programDraftResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $programAwardResponse->getStatusCode() !== 200 ||
+    $teachingPost($programDetailsBase . "details/", [
+        "code" => $programDraft["definition"]["code"], "title" => $programDraft["definition"]["title"],
+        "description" => "Fictional published program text", "department_id" => null, "academic_level_id" => null,
+        "award_id" => $programAward["id"], "revision" => $programDraft["revision"],
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("Program details failed to resolve through the private provider/router pipeline.");
+}
+$programReviewResponse = $teachingPost($programDetailsBase . "publication/review/", ["academic_year_id" => $yearPlan["id"], "reason" => "Fictional program publication approval"]);
+$programReview = json_decode((string) $programReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $programReviewResponse->getStatusCode() !== 200 || !isset($programReview["review_token"]) ||
+    $teachingPost($programDetailsBase . "publication/commit/", ["review_token" => $programReview["review_token"]])->getStatusCode() !== 200 ||
+    $teachingPost($programDetailsBase . "publication/commit/", ["review_token" => $programReview["review_token"]])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("Program publication review, confirmation or retry failed through actual routes.");
+}
+$programPageResponse = $teachingPost($programDetailsBase . "publication/page/", []);
+$programPage = json_decode((string) $programPageResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $programPageResponse->getStatusCode() !== 200 ||
+    ($programPage["items"][0]["definition"]["classifications"]["award"]["code"] ?? null) !== "DEGREE" ||
+    str_contains((string) $programPageResponse->getBody(), "Fictional program publication approval")
+) {
+    throw new RuntimeException("Curated program publication history exposed private context or lost its facts.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:student:read", "sis:registration:manage"];
+if (
+    $app->router->match($programDetailsRequest)->getStatusCode() !== 403 ||
+    $teachingPost($programDetailsBase . "publication/page/", [])->getStatusCode() !== 403 ||
+    $teachingPost($programDetailsBase . "publication/review/", ["academic_year_id" => $yearPlan["id"], "reason" => "Denied"])->getStatusCode() !== 403 ||
+    $teachingPost($programDetailsBase . "publication/commit/", ["review_token" => $programReview["review_token"]])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Student/registration authority exposed program publication management.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];

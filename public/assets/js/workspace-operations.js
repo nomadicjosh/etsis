@@ -847,6 +847,7 @@ window.createWorkspaceOperations = function (ui) {
     async function enhance(sectionName, row, body) {
         if (sectionName === "programs" && can("sis:catalog:manage"))
             body.append(
+                button("Program details & publications", () => ui.programs().open(row.id)),
                 button("Degree audit requirements", () => ui.degreeAudit().launch(row.id)),
                 button("Program grading scale", () => ui.degreeAudit().gradingScale(row.id)),
             );

@@ -38,6 +38,6 @@ Migration **`20261110000004_CreateSisCourseClassifications`** adds the reference
 
 Before extending the current course shape, an application-database check confirmed there were no course-publication events or retained course definitions requiring conversion. No existing events were removed or rewritten, and no historical labels were inferred from current rows. An older open course-publication review must be refreshed.
 
-This stage covers course classification and its retained downstream references. Program/award classifications, program ownership and historical academic-level decisions for students remain separate work. Course classification alone does not decide registration eligibility, degree completion, GPA treatment, billing or access.
+This stage covers course classification and its retained downstream references. [Program publication](program-publication.md) now reuses departments/academic levels and adds degree/award definitions. Historical academic-level decisions for students remain separate work. Course classification alone does not decide registration eligibility, degree completion, GPA treatment, billing or access.
 
 Fictional integration checks cover retained labels after renames/retirement, reports, stale reviews, category/permission boundaries, bounded pages and rollback. Real-provider route checks cover empty searches, typed inputs, CSRF and privacy. Browser checks cover the combined chooser, search clearing, retirement, draft preservation, keyboard saving, literal rendering and accessibility.

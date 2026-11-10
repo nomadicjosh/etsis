@@ -92,7 +92,7 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
     {
         $row = $this->sql->rows("sis_course_classifications", ["id" => $course->value], 1)[0] ?? [];
         $ids = array_map(static fn(EntityId $id): string => $id->value, $additional);
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             if (($row[$kind->value . "_id"] ?? null) !== null) {
                 $ids[] = $row[$kind->value . "_id"];
             }
@@ -108,7 +108,7 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
     {
         $row = $this->sql->rows("sis_course_classifications", ["id" => $course->value], 1)[0] ?? [];
         $values = [];
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             $id = $row[$kind->value . "_id"] ?? null;
             $value = $id === null ? null : $this->get(new EntityId($id));
             if ($value !== null && $value["kind"] !== $kind->value) {

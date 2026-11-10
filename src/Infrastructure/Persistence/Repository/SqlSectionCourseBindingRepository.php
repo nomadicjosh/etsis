@@ -95,7 +95,7 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
     {
         $row = $this->sql->one("sis_course_version_classes", ["id" => $version->value]);
         $values = [];
-        foreach (\Domain\Catalog\Enum\ClassificationKind::cases() as $kind) {
+        foreach (\Domain\Catalog\Enum\ClassificationKind::courseKinds() as $kind) {
             $id = $row[$kind->value . "_id"];
             $code = $row[$kind->value . "_code"];
             $title = $row[$kind->value . "_title"];

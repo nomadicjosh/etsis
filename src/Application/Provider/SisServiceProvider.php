@@ -15,6 +15,8 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Catalog\Repository\ProgramDefinitionRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository::class,
             \Domain\Catalog\Repository\ClassificationRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlClassificationRepository::class,
             \Domain\Catalog\Repository\SubjectRepository::class =>

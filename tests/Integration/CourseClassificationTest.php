@@ -54,7 +54,7 @@ final class CourseClassificationTest extends TestCase
         $f = $this->catalog->sis;
         $section = $f->section();
         $rows = [];
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             $rows[$kind->value] = $this->service->save(
                 $kind,
                 null,
@@ -90,7 +90,7 @@ final class CourseClassificationTest extends TestCase
         $student = $f->student();
         $f->service->register($student->id, $section->id, true);
         $before = $f->sql->rows("sis_history_events");
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             $row = $rows[$kind->value];
             $this->service->save(
                 $kind,
@@ -123,7 +123,7 @@ final class CourseClassificationTest extends TestCase
         $source = new \Infrastructure\Reporting\SqlRelationalReportSource($f->sql);
         foreach (["sections", "credits"] as $dataset) {
             $columns = [];
-            foreach (ClassificationKind::cases() as $kind) {
+            foreach (ClassificationKind::courseKinds() as $kind) {
                 $columns[] = [
                     "field" => "retained_" . $kind->value . "_title",
                     "label" => $kind->value,
@@ -206,7 +206,7 @@ final class CourseClassificationTest extends TestCase
 
     public function testCodesAreUniqueWithinACategoryAndPagesStayBounded(): void
     {
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             $this->service->save($kind, null, "SAME", "Separate " . $kind->value, true, null);
         }
         for ($number = 0; $number < 51; $number++) {

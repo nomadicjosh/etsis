@@ -50,6 +50,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Catalog\Event\ProgramDefinitionWasPublished::class => [
+                "type" => "program_publication", "root" => \Domain\Catalog\ProgramPublication::class,
+                "fields" => \Domain\Catalog\ValueObject\ProgramPublicationSchema::FIELDS,
+            ],
             \Domain\Registration\Event\SectionOfferingVersionWasAmended::class => [
                 "type" => "section_offering_binding", "root" => \Domain\Registration\SectionOfferingBinding::class,
                 "fields" => ["publication_id", "previous_publication_id", "definition_hash"],
@@ -362,6 +366,9 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Catalog\Event\ProgramDefinitionWasPublished::class) {
+                \Domain\Catalog\ValueObject\ProgramPublicationSchema::validate($payload);
+            }
             if ($class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class && $version === 4) {
                 $definition["fields"][] = "grade_scale";
             }
@@ -624,6 +631,7 @@ final readonly class HistoricalSchemaRegistry
                                 "program_id",
                                 "person_id",
                                 "previous_version_id",
+                                "previous_catalog_id",
                                 "previous_decision_id",
                                 "supersedes_adjustment_id",
                             ],
@@ -782,6 +790,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Catalog\ProgramPublication::class => "program_publication",
             \Domain\Registration\SectionOfferingBinding::class => "section_offering_binding",
             \Domain\Registration\SectionPublication::class => "section_publication",
             \Domain\Admissions\AdmissionDecision::class => "admission_decision",
@@ -828,6 +837,7 @@ final readonly class HistoricalSchemaRegistry
             "degree_audit_requirements" => new \Domain\DegreeAudit\ValueObject\RequirementsPublicationId($id),
             "section_course_binding" => new \Domain\Registration\ValueObject\SectionCourseBindingId($id),
             "course_publication" => new \Domain\Catalog\ValueObject\CoursePublicationId($id),
+            "program_publication" => new \Domain\Catalog\ValueObject\ProgramPublicationId($id),
             "student_account" => new \Domain\Finance\ValueObject\AccountId($id),
             "billing_rule" => new \Domain\Finance\ValueObject\BillingRuleId($id),
             "journal" => new \Domain\Finance\ValueObject\JournalId($id),

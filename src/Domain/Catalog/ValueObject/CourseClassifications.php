@@ -23,7 +23,7 @@ final readonly class CourseClassifications
         if (count($data) !== 3) {
             throw new InvalidArgumentException("Provide all three course classification fields.");
         }
-        foreach (ClassificationKind::cases() as $kind) {
+        foreach (ClassificationKind::courseKinds() as $kind) {
             if (!array_key_exists($kind->value, $data)) {
                 throw new InvalidArgumentException("Provide all three course classification fields.");
             }

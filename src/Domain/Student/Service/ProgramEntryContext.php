@@ -19,6 +19,7 @@ final readonly class ProgramEntryContext
         private StudentRecordRepository $students,
         private CatalogYearRepository $catalogs,
         private CatalogEnrollment $enrollment,
+        private \Domain\Catalog\Service\PublishedProgramReader $publishedPrograms,
     ) {
     }
     /** @param array<string,mixed> $source
@@ -42,6 +43,18 @@ final readonly class ProgramEntryContext
         ];
         StudentProgramStatusSchema::source($source);
         $source["cohort"] = $this->catalogs->plan($program, $term);
+        if ($source["cohort"] !== null) {
+            $cohort = $source["cohort"];
+            $published = $this->publishedPrograms->current(
+                $program,
+                new EntityId($cohort["year_id"]),
+                $cohort["catalog_id"] === null ? null : new EntityId($cohort["catalog_id"]),
+            );
+            if ($published !== null) {
+                $source["program_code"] = $published->code;
+                $source["program_title"] = $published->title;
+            }
+        }
         return $source;
     }
     /** @param array{year_id:string,year_code:string,catalog_id:?string,revision:int}|null $plan

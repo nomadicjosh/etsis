@@ -697,6 +697,12 @@ return static function (Psr7Router $router): void {
         "commit",
     ]);
     $subjectController = \Application\Http\Controller\SisSubjectController::class;
+    $programPublications = \Application\Http\Controller\SisProgramPublicationController::class;
+    $router->get("/sis/programs/{id}/details/", [$programPublications, "draft"]);
+    $router->post("/sis/programs/{id}/details/", [$programPublications, "save"]);
+    $router->post("/sis/programs/{id}/publication/review/", [$programPublications, "review"]);
+    $router->post("/sis/programs/{id}/publication/commit/", [$programPublications, "publish"]);
+    $router->post("/sis/programs/{id}/publication/page/", [$programPublications, "page"]);
     $classificationController = \Application\Http\Controller\SisClassificationController::class;
     $router->post("/sis/catalog/classifications/{kind}/page/", [$classificationController, "page"]);
     $router->post("/sis/catalog/classifications/{kind}/save/", [$classificationController, "save"]);

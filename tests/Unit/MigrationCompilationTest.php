@@ -84,6 +84,7 @@ require_once $registrationCompilerMigrations . "20261110000002_AddSisOfferingSel
 
 require_once $registrationCompilerMigrations . "20261110000003_CreateSisCourseSubjects.php";
 require_once $registrationCompilerMigrations . "20261110000004_CreateSisCourseClassifications.php";
+require_once $registrationCompilerMigrations . "20261110000005_CreateSisProgramDefinitions.php";
 
 final class MigrationCompilationTest extends TestCase
 {
@@ -237,7 +238,7 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(109))
+            ->expects(self::exactly(111))
             ->method("create")
             ->willReturnCallback(static function (
                 string $name,
@@ -286,6 +287,7 @@ final class MigrationCompilationTest extends TestCase
                 new CreateSisCourseVersionBindings("25"),
                 new CreateSisCourseSubjects("subjects"),
                 new CreateSisCourseClassifications("classifications"),
+                new CreateSisProgramDefinitions("programs"),
                 new CreateSisDegreeAuditTemplates("26"),
                 new CreateSisCourseGroupLibrary("27"),
                 new CreateSisStudentRequirements("28"),

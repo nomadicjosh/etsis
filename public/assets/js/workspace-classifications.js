@@ -18,6 +18,11 @@ window.createWorkspaceClassifications = function (ui) {
             plural: "Course levels",
             detail: "The course's place in the curriculum, such as introductory or advanced.",
         },
+        award: {
+            singular: "Award",
+            plural: "Degrees & awards",
+            detail: "The credential a program offers, such as a bachelor's degree or certificate. This definition does not award a credential to a student.",
+        },
     };
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -37,6 +42,7 @@ window.createWorkspaceClassifications = function (ui) {
         stack = [],
         choose = null,
         back = null,
+        backLabel = "Back to course classifications",
     ) {
         const category = kinds[kind];
         const data = await request(`/sis/catalog/classifications/${kind}/page/`, "POST", {
@@ -44,7 +50,11 @@ window.createWorkspaceClassifications = function (ui) {
             ...(after ? { after } : {}),
         });
         const body = openDrawer(
-            choose ? `Choose ${category.singular.toLowerCase()}` : "Departments & levels",
+            choose
+                ? `Choose ${category.singular.toLowerCase()}`
+                : kind === "award"
+                  ? "Degrees & awards"
+                  : "Departments & levels",
             "ACADEMIC CATALOG",
         );
         if (!choose) {
@@ -88,9 +98,9 @@ window.createWorkspaceClassifications = function (ui) {
         );
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            task(() => library(kind, input.value, null, [], choose, back));
+            task(() => library(kind, input.value, null, [], choose, back, backLabel));
         });
-        const refresh = () => library(kind, search, after, stack, choose, back);
+        const refresh = () => library(kind, search, after, stack, choose, back, backLabel);
         body.append(
             form,
             button(`Add ${category.singular.toLowerCase()}`, () =>
@@ -116,16 +126,16 @@ window.createWorkspaceClassifications = function (ui) {
         if (stack.length)
             body.append(
                 button("Previous classifications", () =>
-                    library(kind, search, stack.at(-1), stack.slice(0, -1), choose, back),
+                    library(kind, search, stack.at(-1), stack.slice(0, -1), choose, back, backLabel),
                 ),
             );
         if (data.next_after)
             body.append(
                 button("More classifications", () =>
-                    library(kind, search, data.next_after, [...stack, after], choose, back),
+                    library(kind, search, data.next_after, [...stack, after], choose, back, backLabel),
                 ),
             );
-        if (back) body.append(button("Back to course classifications", back));
+        if (back) body.append(button(backLabel, back));
     }
 
     async function editor(kind, row, saved, back) {
@@ -181,7 +191,8 @@ window.createWorkspaceClassifications = function (ui) {
                     ),
                 );
             const cards = node("div", { class: "row g-3 mb-3" });
-            Object.entries(kinds).forEach(([kind, category]) => {
+            ["department", "academic_level", "course_level"].forEach((kind) => {
+                const category = kinds[kind];
                 const value = choices[kind];
                 const card = node(
                     "section",
