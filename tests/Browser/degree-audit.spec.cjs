@@ -238,6 +238,11 @@ async function fixture(page, options = {}) {
                     review_token: `group-review-${gid}`,
                 };
             else if (action === "publish") {
+                if (options.expiredGroupReview && calls.filter((c) => c.path === path).length === 1)
+                    return route.fulfill({
+                        status: 409,
+                        json: { error: "This group publication review expired. Prepare a fresh review." },
+                    });
                 const pub = {
                     version_id: id(sequence++),
                     version: g.versions.length + 1,
@@ -800,5 +805,46 @@ test("expired degree publication can be refreshed with its reason and exact defi
     await expect(
         page.getByRole("heading", { name: "Published requirement versions", exact: true }),
     ).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test("expired course group review refreshes without saving or publishing until confirmed", async ({
+    page,
+}) => {
+    const f = await fixture(page, { expiredGroupReview: true });
+    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
+    await page.getByLabel("Reason for publication", { exact: true }).fill("Fictional renewed group approval");
+    await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Confirm within 20 minutes");
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    const alert = page.getByRole("dialog").getByRole("alert");
+    await expect(alert).toContainText("group publication review expired");
+    await expect(alert).toBeFocused();
+    f.groups.get(f.group).definition.name = "Fictional shared core after staff review";
+    await page.getByRole("button", { name: "Refresh publication review", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Confirm reviewed publication", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Fictional renewed group approval");
+    await expect(page.getByRole("dialog")).toContainText("Fictional shared core after staff review");
+    await expect(page.getByRole("dialog")).toContainText("MATH.101 · Algebra");
+    const reviews = f.calls.filter((c) => c.path === `/sis/course-groups/${f.group}/review/`);
+    expect(reviews).toHaveLength(2);
+    expect(reviews.map((c) => c.body)).toEqual([
+        { reason: "Fictional renewed group approval" },
+        { reason: "Fictional renewed group approval" },
+    ]);
+    expect(f.calls.filter((c) => c.path === `/sis/course-groups/${f.group}/save/`)).toHaveLength(1);
+    expect(f.groups.get(f.group).versions).toHaveLength(1);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Published requirement versions", exact: true }),
+    ).toBeVisible();
+    expect(f.groups.get(f.group).versions).toHaveLength(2);
     expect(f.errors).toEqual([]);
 });

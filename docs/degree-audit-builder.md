@@ -39,6 +39,14 @@ Rule controls:
 
 The grammar currently uses explicit course lists. Subject/level/department criteria depend on normalized, historically versioned classification fields. No SQL, PHP, callbacks or executable expressions are accepted. Nested rule trees and specialization relationships remain later grammar stages.
 
+## Publication review lifetime
+
+Both builders use a 20-minute review. The confirmation screen shows the exact saved definition, retained course/group references and reason before publication. **Refresh publication review** keeps the reason and prepares a new review of the current saved draft. It saves no draft and publishes nothing; inspect the refreshed definition again if another staff member has edited it. A changed grading maximum may require reloading and updating the group before a fresh review can be prepared.
+
+Publication takes effect when confirmation is accepted, after waiting for locks and checking the referenced definitions. For example, a review prepared at 10:00 and confirmed at 10:03 records a publication time of 10:03. Expired or stale reviews write no event, receipt, projection or audit entry. Permissions and the reviewer identity are checked after waiting/replay and again before a new publication is recorded.
+
+A completed confirmation remains safe to retry after expiry or later publications: it returns the original result without publishing again or replacing later selections. Earlier accepted group and degree formats keep their recorded times, facts and retries. Earlier unconfirmed review formats require a fresh review. No stored event format, event table or database migration changes for these safeguards.
+
 ## Degree audit builder
 
 1. Open a program's **Degree audit requirements** and choose **Set up an academic year**. Select an existing academic year to open its draft or create a blank one. Searches trim text and omit a blank search parameter.
@@ -90,7 +98,7 @@ Existing schema-1/2 event bytes and accepted operation receipts remain valid. Ab
 
 `sis_course_groups` stores independent working drafts and reconstructible publication metadata. `sis_degree_audit_templates` stores working composition drafts scoped uniquely by program/academic year and their publication metadata. Neither table is an event store. `CourseGroupWasPublished` and `RequirementsWerePublished` both use the one existing authoritative protected `sis_history_events` table. Backups remain necessary for unpublished drafts. There is no group/history delete API.
 
-Review is side-effect free and binds the exact definition, actor, draft revision, expected stream version, reason and trusted time in an encrypted token. Commit uses locking, expected-version append and atomic event/head/receipt/projection/audit writes. Stale drafts, changed context and competing publications fail without partial publication. Accepted exact retries return the original receipt after later edits; another actor or revoked permission cannot use the review.
+Review is side-effect free and binds the exact definition, actor, draft revision, expected stream version, reason and trusted expiry deadline in an encrypted token. New publications use confirmation time; the review does not supply an effective timestamp. Commit uses locking, expected-version append and atomic event/head/receipt/projection/audit writes. Stale drafts, changed context and competing publications fail without partial publication. Accepted exact retries return the original receipt after later edits; another actor or revoked permission cannot use the review.
 
 Historical previews verify selected group/course publications against their protected streams, never today's mutable catalog labels. Group and degree roots enforce publication predecessor continuity; degree roots also enforce stable program/year ownership. Verified replay consumes bounded pages. History pages contain ten definitions; scoped cursors freeze their upper boundary. Library pages return at most 50 metadata rows with a keyset cursor, exclude draft JSON, escape literal search wildcards and use the published name for published-only search. No complete event history or entire catalog is loaded into the browser.
 

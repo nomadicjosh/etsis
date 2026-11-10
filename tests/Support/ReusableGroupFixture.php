@@ -83,15 +83,18 @@ final class ReusableGroupFixture
             ["group_id" => $this->group->value, "version_id" => $this->groupVersion->value],
         ];
     }
-    public function groupService(?\Domain\Audit\Repository\AuditTrail $audit = null): CourseGroupService
-    {
+    public function groupService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+    ): CourseGroupService {
         $f = $this->sis;
         return new CourseGroupService(
             new SqlCourseGroupRepository($f->sql),
             $this->catalog->publications(),
-            $this->history,
+            $history ?? $this->history,
             $f->access,
-            $f->transactions,
+            $transactions ?? $f->transactions,
             $audit ?? $f->audit,
             $this->catalog->fixture->cipher,
             $f->clock,

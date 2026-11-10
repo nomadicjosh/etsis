@@ -1440,15 +1440,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                               : "No program definition is published for this academic year. This requirement version will have no inferred program-publication link.",
                                       ),
                                   ]),
-                            ...(kind === "group"
-                                ? []
-                                : [
-                                      node(
-                                          "p",
-                                          { class: "form-text" },
-                                          "Confirm within 20 minutes, or refresh this review. Publication takes effect when you confirm it.",
-                                      ),
-                                  ]),
+                            node(
+                                "p",
+                                { class: "form-text" },
+                                "Confirm within 20 minutes, or refresh this review. Publication takes effect when you confirm it.",
+                            ),
                             node("p", {}, `Reason: ${reviewed.reason}`),
                             actions(
                                 button(
@@ -1461,7 +1457,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                     },
                                     "btn-primary",
                                 ),
-                                ...(kind === "group" ? [] : [button("Refresh publication review", prepare)]),
+                                button("Refresh publication review", prepare),
                                 button("Back to builder", back),
                             ),
                         );

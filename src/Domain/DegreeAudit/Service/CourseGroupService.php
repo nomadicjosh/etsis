@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
-use DateTimeImmutable;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Service\CoursePublicationService;
 use Domain\Communications\Service\MessageCipher;
@@ -19,6 +18,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\StreamReference;
+use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
@@ -129,20 +129,13 @@ final readonly class CourseGroupService
         }
         return $this->transactions->run(function () use ($id, $actor, $reason): array {
             $this->groups->lock($id);
+            $this->authorize($actor);
             $row = $this->groups->get($id);
             $d = CourseGroupDefinitionV2::draft($row["definition"]);
             $d->assertPublishable();
             $this->assertCurrentScale($d);
             $details = $this->courseDetails($d);
-            $state = CourseGroupPublication::root($this->stream($id)->aggregateId);
-            $cursor = null;
-            do {
-                $page = $this->history->page($this->stream($id), $cursor, 20);
-                foreach ($page->events as $stored) {
-                    $state->acceptHistorical($stored->event);
-                }
-                $cursor = $page->nextCursor;
-            } while ($cursor !== null);
+            [$state] = $this->load($id);
             if (
                 $state->playhead() !== $row["publication_position"] ||
                 $state->versionId() !== $row["published_version_id"]
@@ -150,12 +143,11 @@ final readonly class CourseGroupService
                 throw new CorruptHistoryException();
             }
             $op = EntityId::generate();
-            $context = new EventContext($actor, $this->clock->now(), $op, reason: $reason);
+            new EventContext($actor, $this->clock->now(), $op, reason: $reason);
+            $this->authorize($actor);
             $data = [
-                "kind" =>
-                    $d instanceof CourseGroupDefinitionV2
-                        ? "course-group-publication-review.v2"
-                        : "course-group-publication-review.v1",
+                "kind" => "course-group-publication-review",
+                "schema_version" => $d instanceof CourseGroupDefinitionV2 ? 2 : 1,
                 "group_id" => $id->value,
                 "actor_id" => $actor->value,
                 "operation_id" => $op->value,
@@ -164,7 +156,7 @@ final readonly class CourseGroupService
                 "previous_version_id" => $state->versionId(),
                 "definition" => $d->definition,
                 "reason" => $reason,
-                "effective_at" => $context->describe()["effective_at"],
+                "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             return $data + [
                 "review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR)),
@@ -185,10 +177,41 @@ final readonly class CourseGroupService
                 !is_array($data) ||
                 !in_array(
                     $data["kind"] ?? null,
-                    ["course-group-publication-review.v1", "course-group-publication-review.v2"],
+                    [
+                        "course-group-publication-review",
+                        "course-group-publication-review.v1",
+                        "course-group-publication-review.v2",
+                    ],
                     true,
                 ) ||
-                ($data["group_id"] ?? null) !== $id->value
+                ($data["group_id"] ?? null) !== $id->value ||
+                !is_string($data["actor_id"] ?? null) ||
+                !is_string($data["operation_id"] ?? null) ||
+                !is_int($data["expected_version"] ?? null) ||
+                $data["expected_version"] < 0 ||
+                !is_int($data["revision"] ?? null) ||
+                !is_string($data["reason"] ?? null) ||
+                !is_array($data["definition"] ?? null) ||
+                !array_key_exists("previous_version_id", $data)
+            ) {
+                throw new InvalidArgumentException();
+            }
+            new EntityId($data["operation_id"]);
+            if ($data["previous_version_id"] !== null) {
+                new EntityId($data["previous_version_id"]);
+            }
+            $schema = match ($data["kind"]) {
+                "course-group-publication-review.v1" => 1,
+                "course-group-publication-review.v2" => 2,
+                default => $data["schema_version"] ?? null,
+            };
+            $definition = CourseGroupDefinitionV2::draft($data["definition"]);
+            if ($schema !== ($definition instanceof CourseGroupDefinitionV2 ? 2 : 1)) {
+                throw new InvalidArgumentException();
+            }
+            if (
+                $data["kind"] === "course-group-publication-review" &&
+                (!is_int($data["expires_at"] ?? null) || array_key_exists("effective_at", $data))
             ) {
                 throw new InvalidArgumentException();
             }
@@ -198,14 +221,12 @@ final readonly class CourseGroupService
         if ($data["actor_id"] !== $actor->value) {
             throw new AccessDeniedException("This group review belongs to another staff member.");
         }
-        return $this->transactions->run(function () use ($id, $data, $actor): array {
+        return $this->transactions->run(function () use ($id, $data, $actor, $schema): array {
             $this->groups->lock($id);
+            $this->authorize($actor);
             $row = $this->groups->get($id);
             $op = new EntityId($data["operation_id"]);
-            $metadata = ["__aggregate_type" => "course_group_publication"];
-            if ($data["kind"] === "course-group-publication-review.v2") {
-                $metadata["schema_version"] = 2;
-            }
+            $metadata = ["__aggregate_type" => "course_group_publication", "schema_version" => $schema];
             $event = CourseGroupWasPublished::occur(
                 $this->stream($id)->aggregateId,
                 [
@@ -215,31 +236,72 @@ final readonly class CourseGroupService
                 ],
                 $metadata,
             )->withPlayhead($data["expected_version"] + 1);
+            [$state, $accepted] = $this->load($id, $op);
+            $this->authorize($actor);
+            if ($accepted !== null) {
+                if (
+                    $accepted->context->actor?->value !== $actor->value ||
+                    $accepted->context->reason !== $data["reason"] ||
+                    $accepted->event->playhead() !== $event->playhead() ||
+                    $accepted->event->metaParam("schema_version", 1) !== $schema ||
+                    $this->fingerprint($accepted->event->payload()) !==
+                        $this->fingerprint($event->payload()) ||
+                    (array_key_exists("effective_at", $data) &&
+                        $data["effective_at"] !== $accepted->context->describe()["effective_at"])
+                ) {
+                    throw new ConcurrentModificationException(
+                        "This group publication operation was already used.",
+                    );
+                }
+                return [
+                    "operation_id" => $op->value,
+                    "first_version" => $accepted->event->playhead(),
+                    "last_version" => $accepted->event->playhead(),
+                    "event_ids" => [(string) $accepted->event->eventId()],
+                ];
+            }
+            if ($data["kind"] !== "course-group-publication-review") {
+                throw new ConcurrentModificationException("Prepare a fresh course group publication review.");
+            }
+            if ($data["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                throw new ConcurrentModificationException(
+                    "This group publication review expired. Prepare a fresh review.",
+                );
+            }
+            if (
+                $state->playhead() !== $row["publication_position"] ||
+                $state->versionId() !== $row["published_version_id"]
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if (
+                $state->playhead() !== $data["expected_version"] ||
+                $state->versionId() !== $data["previous_version_id"] ||
+                $row["revision"] !== $data["revision"] ||
+                CourseGroupDefinitionV2::draft($row["definition"])->hash() !==
+                    CourseGroupDefinitionV2::draft($data["definition"])->hash()
+            ) {
+                throw new ConcurrentModificationException("The group changed. Review publication again.");
+            }
+            $definition = CourseGroupDefinitionV2::draft($data["definition"]);
+            $definition->assertPublishable();
+            $this->assertCurrentScale($definition);
+            $this->courseDetails($definition);
+            $this->authorize($actor);
+            if ($data["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                throw new ConcurrentModificationException(
+                    "This group publication review expired. Prepare a fresh review.",
+                );
+            }
             $receipt = $this->history->append(
                 $this->stream($id),
                 $op,
-                $data["expected_version"],
-                new EventContext(
-                    $actor,
-                    new DateTimeImmutable($data["effective_at"]),
-                    $op,
-                    reason: $data["reason"],
-                ),
+                $state->playhead(),
+                new EventContext($actor, $this->clock->now(), $op, reason: $data["reason"]),
                 [$event],
             );
-            if ($receipt["event_ids"] === [(string) $event->eventId()]) {
-                if (
-                    $row["revision"] !== $data["revision"] ||
-                    CourseGroupDefinitionV2::draft($row["definition"])->hash() !==
-                        CourseGroupDefinitionV2::draft($data["definition"])->hash()
-                ) {
-                    throw new ConcurrentModificationException("The group changed. Review publication again.");
-                }
-                $this->assertCurrentScale(CourseGroupDefinitionV2::draft($data["definition"]));
-                $this->courseDetails(CourseGroupDefinitionV2::draft($data["definition"]));
-                $this->groups->published($id, $op, $receipt["last_version"], $data["definition"]["name"]);
-                $this->audit->record($actor, "course_group.published", $id);
-            }
+            $this->groups->published($id, $op, $receipt["last_version"], $data["definition"]["name"]);
+            $this->audit->record($actor, "course_group.published", $id);
             return $receipt;
         });
     }
@@ -318,6 +380,46 @@ final readonly class CourseGroupService
     private function stream(EntityId $id): StreamReference
     {
         return new StreamReference(new CourseGroupPublicationId($id->value), "course_group_publication");
+    }
+    /** @return array{CourseGroupPublication, ?StoredEvent} */
+    private function load(EntityId $id, ?EntityId $operation = null): array
+    {
+        $stream = $this->stream($id);
+        $state = CourseGroupPublication::root($stream->aggregateId);
+        $accepted = null;
+        $cursor = null;
+        do {
+            $page = $this->history->page($stream, $cursor, 20);
+            foreach ($page->events as $stored) {
+                $state->acceptHistorical($stored->event);
+                if ($operation !== null && $stored->event->payload()["version_id"] === $operation->value) {
+                    if ($accepted !== null || $stored->context->correlation?->value !== $operation->value) {
+                        throw new CorruptHistoryException();
+                    }
+                    $accepted = $stored;
+                }
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        return [$state, $accepted];
+    }
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+            throw new AccessDeniedException("The group publication reviewer changed.");
+        }
+    }
+    /** @param array<mixed> $value */
+    private function fingerprint(array $value): string
+    {
+        $normalize = function (mixed $v) use (&$normalize): mixed {
+            if (!is_array($v)) {
+                return $v;
+            }
+            ksort($v);
+            return array_map($normalize, $v);
+        };
+        return hash("sha256", json_encode($normalize($value), JSON_THROW_ON_ERROR));
     }
     /** @return array<string, array<string, mixed>> */
     private function courseDetails(CourseGroupDefinition|CourseGroupDefinitionV2 $definition): array

@@ -202,3 +202,7 @@ Migration `20261110000005_CreateSisProgramDefinitions` adds two ULID draft/refer
 ### Degree publication review lifetime
 
 Degree-requirement reviews now expire after 20 minutes and record the actual confirmation time when published. Staff can refresh a review while retaining its reason and inspecting the current saved definition again. Permission is rechecked after locks/replay and immediately before writing. Expired or stale reviews write nothing; already completed confirmations return their original result after expiry or later edits. All four earlier stored requirement formats retain their original events, effective times and accepted retries. No database migration or new stored event format is introduced. See [review lifetime and historical behavior](degree-program-publication-link.md#review-lifetime-and-earlier-history).
+
+### Reusable course-group publication reviews
+
+Course-group publications now use the same 20-minute review and refresh flow as degree requirements. Confirmation records the acceptance time and rechecks permission after locks/replay and before writing. Exact retries preserve accepted outcomes after expiry or subsequent group changes; earlier group formats keep their original facts and timestamps. Expired reviews, stale drafts and inconsistent publication projections cannot append another publication. Existing degree references stay pinned to their selected group versions. No database migration or new stored event format is introduced. See [review workflow and limits](degree-audit-builder.md#publication-review-lifetime).
