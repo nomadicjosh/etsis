@@ -153,7 +153,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 ## Next implementation stages
 
-1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. Next, add indexed retained section-version selection to offering and registration paths; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
+1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. The normalized verified version-reference cache is now implemented. Next, add explicit retained section-version selection to offering and registration paths; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
 2. **Policy and attempt integration:** retain the applicable section/policy references in new enrollment/academic facts, then complete reviewed replacements and remaining consequential lifecycle paths. Include reconciliation checks with each slice.
 3. **Degree evaluation:** begin with a deterministic evaluator for the supported published grammar and authoritative completed credits; add explained allocation/policy/exception behavior before presenting graduation eligibility.
 

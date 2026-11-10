@@ -99,6 +99,7 @@ final class SectionPublicationTest extends TestCase
             $f->audit,
             $f->dropCipher,
             $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
         );
     }
 
@@ -570,6 +571,7 @@ final class SectionPublicationTest extends TestCase
             $this->f->audit,
             $this->f->dropCipher,
             $this->f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql),
         );
         $this->expectException(AccessDeniedException::class);
         try {
@@ -602,6 +604,92 @@ final class SectionPublicationTest extends TestCase
         $retained = $this->service->versions($this->section->id)['items'][0]['definition'];
         self::assertSame($person->value, $retained['faculty_person_id']);
         self::assertSame($account->value, $retained['faculty_user_id']);
+    }
+
+    public function testPublicationProjectsAnIndexedImmutableReferenceWithoutChangingEarlierVersions(): void
+    {
+        $proof = $this->review();
+        $first = $this->service->publish($this->section->id, $proof['review_token']);
+        $cache = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        $before = $cache->find(new EntityId($first['operation_id']));
+        self::assertSame($this->section->id->value, $before->section->value);
+        self::assertEquals($proof['definition'], $before->definition->data);
+        $this->catalog->save('sections', $this->section->id, ['capacity' => 35]);
+        $next = $this->review('2026-09-01');
+        $this->service->publish($this->section->id, $next['review_token']);
+        self::assertEquals($before, $cache->find($before->publication));
+        self::assertCount(2, $this->f->sql->rows('sis_section_versions'));
+        self::assertSame($first, $this->service->publish($this->section->id, $proof['review_token']));
+        self::assertCount(2, $this->f->sql->rows('sis_section_versions'));
+    }
+
+    public function testEarlierPublicationCanBeVerifiedAndCachedWithoutFabricatingOrChangingEvents(): void
+    {
+        $proof = $this->review();
+        $receipt = $this->service->publish($this->section->id, $proof['review_token']);
+        $id = new EntityId($receipt['operation_id']);
+        $this->f->sql->execute('DELETE FROM sis_section_versions WHERE id = ?', [$id->value]);
+        $events = $this->f->sql->rows('sis_history_events');
+        $audit = $this->f->sql->rows('sis_audit');
+        self::assertSame($receipt, $this->service->publish($this->section->id, $proof['review_token']));
+        self::assertSame([], $this->f->sql->rows('sis_section_versions'));
+        $verified = $this->service->cacheVersion($this->section->id, $id);
+        self::assertEquals($proof['definition'], $verified->definition->data);
+        self::assertEquals($verified, $this->service->cacheVersion($this->section->id, $id));
+        self::assertSame($events, $this->f->sql->rows('sis_history_events'));
+        self::assertSame($audit, $this->f->sql->rows('sis_audit'));
+    }
+
+    public function testMalformedCachedNumbersAreRejectedWithoutSilentCoercion(): void
+    {
+        $proof = $this->review();
+        $receipt = $this->service->publish($this->section->id, $proof['review_token']);
+        $this->f->sql->update('sis_section_versions', ['capacity' => '20invalid'], ['id' => $receipt['operation_id']]);
+        $cache = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        $this->expectException(CorruptHistoryException::class);
+        $cache->find(new EntityId($receipt['operation_id']));
+    }
+
+    public function testCacheDisagreementIsRejectedRatherThanOverwritten(): void
+    {
+        $proof = $this->review();
+        $receipt = $this->service->publish($this->section->id, $proof['review_token']);
+        $this->f->sql->update('sis_section_versions', ['capacity' => 99], ['id' => $receipt['operation_id']]);
+        $this->expectException(CorruptHistoryException::class);
+        $this->service->cacheVersion($this->section->id, new EntityId($receipt['operation_id']));
+    }
+
+    public function testCrossSectionReferenceAndUnauthorizedCachePreparationAreRejected(): void
+    {
+        $proof = $this->review();
+        $receipt = $this->service->publish($this->section->id, $proof['review_token']);
+        $id = new EntityId($receipt['operation_id']);
+        try {
+            $this->service->cacheVersion($this->f->section()->id, $id);
+            self::fail('Another section must not claim the publication.');
+        } catch (\Domain\Shared\Exception\RecordNotFoundException) {
+            self::assertCount(1, $this->f->sql->rows('sis_section_versions'));
+        }
+        $this->f->access->staff = false;
+        $this->f->access->grants = ['sis:registration:manage'];
+        $this->expectException(AccessDeniedException::class);
+        $this->service->cacheVersion($this->section->id, $id);
+    }
+
+    public function testProjectionFailureRollsBackPublicationAndItsReceipt(): void
+    {
+        $proof = $this->review();
+        $before = $this->f->sql->rows('sis_history_events');
+        $this->f->connection->pdo->exec("CREATE TRIGGER fail_section_cache BEFORE INSERT ON sis_section_versions BEGIN SELECT RAISE(ABORT, 'fictional cache failure'); END");
+        try {
+            $this->service->publish($this->section->id, $proof['review_token']);
+            self::fail('The projection failure must roll back publication.');
+        } catch (PDOException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+            self::assertSame([], $this->f->sql->rows('sis_section_versions'));
+        }
+        $this->f->connection->pdo->exec('DROP TRIGGER fail_section_cache');
+        self::assertSame(1, $this->service->publish($this->section->id, $proof['review_token'])['last_version']);
     }
 
     public function testRegistryRejectsUnknownFieldsAndReplayRejectsBrokenPredecessor(): void

@@ -11,6 +11,8 @@ use Domain\Catalog\Service\CoursePublicationService;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Registration\Event\SectionDefinitionWasPublished;
 use Domain\Registration\Repository\SectionCourseBindingRepository;
+use Domain\Registration\Repository\SectionVersionRepository;
+use Domain\Registration\ValueObject\PublishedSectionDefinition;
 use Domain\Registration\SectionPublication;
 use Domain\Registration\ValueObject\SectionDefinitionV1;
 use Domain\Registration\ValueObject\SectionPublicationId;
@@ -43,6 +45,7 @@ final readonly class SectionPublicationService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private SectionVersionRepository $versions,
     ) {
     }
 
@@ -263,12 +266,42 @@ final readonly class SectionPublicationService
                 ),
                 [$event],
             );
+            $this->versions->retain(new PublishedSectionDefinition(
+                $section,
+                $operation,
+                $receipt["last_version"],
+                new SectionDefinitionV1($r["definition"]),
+            ));
             $this->audit->record(
                 $actor,
                 "section.definition_published",
                 $section,
             );
             return $receipt;
+        });
+    }
+
+    /** Internal preparation for an explicit version-selection command, never an automatic "latest" choice.
+     * Existing publications are verified from actual events before their reference cache is populated.
+     */
+    public function cacheVersion(EntityId $section, EntityId $publication): PublishedSectionDefinition
+    {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        return $this->transactions->run(function () use ($section, $publication, $actor) {
+            $this->lock($section);
+            $this->authorize($actor);
+            [, $accepted] = $this->load($section, $publication);
+            if ($accepted === null) {
+                throw new \Domain\Shared\Exception\RecordNotFoundException("Published section definition not found.");
+            }
+            $definition = new PublishedSectionDefinition(
+                $section,
+                $publication,
+                $accepted->event->playhead(),
+                new SectionDefinitionV1($accepted->event->payload()["definition"]),
+            );
+            $this->versions->retain($definition);
+            return $definition;
         });
     }
 
