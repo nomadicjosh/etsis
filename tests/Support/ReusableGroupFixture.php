@@ -112,22 +112,28 @@ final class ReusableGroupFixture
             $f->clock,
         );
     }
-    public function degreeService(?\Domain\Audit\Repository\AuditTrail $audit = null): RequirementsService
-    {
+    public function degreeService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+    ): RequirementsService {
         $f = $this->sis;
         return new RequirementsService(
             new SqlRequirementsRepository($f->sql),
             $this->catalog->publications(),
-            $this->history,
+            $history ?? $this->history,
             $f->access,
-            $f->transactions,
+            $transactions ?? $f->transactions,
             $audit ?? $f->audit,
             $this->catalog->fixture->cipher,
             $f->clock,
             $this->groupService($audit),
             new \Domain\DegreeAudit\Service\RequirementProgramContext(
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
-                new \Domain\Catalog\Service\PublishedProgramReader($this->history, new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql)),
+                new \Domain\Catalog\Service\PublishedProgramReader(
+                    $this->history,
+                    new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
+                ),
             ),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($this->history),
         );

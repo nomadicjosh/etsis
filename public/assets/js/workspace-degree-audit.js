@@ -243,13 +243,26 @@ window.createWorkspaceDegreeAudit = function (ui) {
         if (item.program_publication) {
             const program = item.program_publication;
             const definition = program.definition;
-            const facts = node("details", { class: "audit-tree-section" },
+            const facts = node(
+                "details",
+                { class: "audit-tree-section" },
                 node("summary", {}, `Retained program · ${definition.code} — ${definition.title}`),
                 node("p", {}, `${program.academic_year_code} · Catalog revision ${program.catalog_revision}`),
-                node("p", { class: "course-description-text" }, definition.description || "No description specified."));
-            for (const [kind, label] of Object.entries({ department: "Department", academic_level: "Academic level", award: "Award" })) {
+                node(
+                    "p",
+                    { class: "course-description-text" },
+                    definition.description || "No description specified.",
+                ),
+            );
+            for (const [kind, label] of Object.entries({
+                department: "Department",
+                academic_level: "Academic level",
+                award: "Award",
+            })) {
                 const value = definition.classifications[kind];
-                facts.append(node("p", {}, `${label}: ${value ? `${value.code} — ${value.title}` : "Not specified"}`));
+                facts.append(
+                    node("p", {}, `${label}: ${value ? `${value.code} — ${value.title}` : "Not specified"}`),
+                );
             }
             tree.append(facts);
         }
@@ -1407,7 +1420,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             actions(
                 button(
                     "Prepare publication",
-                    async () => {
+                    async function prepare() {
                         const path =
                                 kind === "group"
                                     ? `/sis/course-groups/${saved.id}/`
@@ -1416,11 +1429,26 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         const content = screen("Confirm reviewed publication");
                         content.append(
                             kind === "group" ? groupTree(reviewed) : degreeTree(reviewed),
-                            ...(kind === "group" ? [] : [node("p", { class: "alert alert-info", role: "status" },
-                                reviewed.program_publication
-                                    ? `Linked program: ${reviewed.program_publication.definition.code} — ${reviewed.program_publication.definition.title}. These requirements retain this exact published program revision.`
-                                    : "No program definition is published for this academic year. This requirement version will have no inferred program-publication link.",
-                            )]),
+                            ...(kind === "group"
+                                ? []
+                                : [
+                                      node(
+                                          "p",
+                                          { class: "alert alert-info", role: "status" },
+                                          reviewed.program_publication
+                                              ? `Linked program: ${reviewed.program_publication.definition.code} — ${reviewed.program_publication.definition.title}. These requirements retain this exact published program revision.`
+                                              : "No program definition is published for this academic year. This requirement version will have no inferred program-publication link.",
+                                      ),
+                                  ]),
+                            ...(kind === "group"
+                                ? []
+                                : [
+                                      node(
+                                          "p",
+                                          { class: "form-text" },
+                                          "Confirm within 20 minutes, or refresh this review. Publication takes effect when you confirm it.",
+                                      ),
+                                  ]),
                             node("p", {}, `Reason: ${reviewed.reason}`),
                             actions(
                                 button(
@@ -1433,6 +1461,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                     },
                                     "btn-primary",
                                 ),
+                                ...(kind === "group" ? [] : [button("Refresh publication review", prepare)]),
                                 button("Back to builder", back),
                             ),
                         );
@@ -1642,7 +1671,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             ? node(
                                   "p",
                                   { class: "form-text" },
-                                  v.assignment_note || "Publish an updated reusable-group composition before assigning this version.",
+                                  v.assignment_note ||
+                                      "Publish an updated reusable-group composition before assigning this version.",
                               )
                             : null,
                     ),

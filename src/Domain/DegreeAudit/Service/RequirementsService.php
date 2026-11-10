@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
-use DateTimeImmutable;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Service\CoursePublicationService;
 use Domain\Communications\Service\MessageCipher;
@@ -20,6 +19,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\StreamReference;
+use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -160,6 +160,7 @@ final readonly class RequirementsService
         }
         return $this->transactions->run(function () use ($id, $actor, $reason): array {
             $row = $this->lock($id);
+            $this->authorize($actor);
             $definition = AuditRequirementsV3::draft($row["definition"]);
             if (!($definition instanceof AuditRequirementsV3)) {
                 throw new InvalidArgumentException(
@@ -169,7 +170,7 @@ final readonly class RequirementsService
             $definition->assertPublishable();
             $this->assertScale($row["program_id"], $definition);
             $details = $this->courseDetails($definition);
-            $state = $this->state($id);
+            [$state] = $this->load($id);
             $state->assertScope($row["program_id"], $row["academic_year_id"]);
             if (
                 $state->playhead() !== $row["publication_position"] ||
@@ -178,7 +179,7 @@ final readonly class RequirementsService
                 throw new CorruptHistoryException();
             }
             $op = EntityId::generate();
-            $context = new EventContext($actor, $this->clock->now(), $op, reason: $reason);
+            new EventContext($actor, $this->clock->now(), $op, reason: $reason);
             $programPublication = $this->programs->resolve(
                 new EntityId($row["program_id"]),
                 new EntityId($row["academic_year_id"]),
@@ -188,7 +189,7 @@ final readonly class RequirementsService
                 throw new AccessDeniedException("The publication reviewer changed.");
             }
             $data = [
-                "kind" => "degree-audit-publication-review.v4",
+                "kind" => "degree-audit-publication-review",
                 "program_publication" => $programPublication,
                 "grade_scale" => $this->groups->gradingScale(new EntityId($row["program_id"])),
                 "template_id" => $id->value,
@@ -200,7 +201,7 @@ final readonly class RequirementsService
                 "definition" => $definition->definition,
                 "context" => $labels,
                 "reason" => $reason,
-                "effective_at" => $context->describe()["effective_at"],
+                "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             return $data + [
                 "review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR)),
@@ -223,6 +224,7 @@ final readonly class RequirementsService
                 !in_array(
                     $data["kind"] ?? null,
                     [
+                        "degree-audit-publication-review",
                         "degree-audit-publication-review.v1",
                         "degree-audit-publication-review.v2",
                         "degree-audit-publication-review.v3",
@@ -230,9 +232,30 @@ final readonly class RequirementsService
                     ],
                     true,
                 ) ||
-                ($data["template_id"] ?? null) !== $id->value
+                ($data["template_id"] ?? null) !== $id->value ||
+                !is_string($data["actor_id"] ?? null) ||
+                !is_string($data["operation_id"] ?? null) ||
+                !is_int($data["expected_version"] ?? null) ||
+                $data["expected_version"] < 0 ||
+                !is_string($data["reason"] ?? null) ||
+                !is_array($data["definition"] ?? null) ||
+                !is_array($data["context"] ?? null)
             ) {
                 throw new InvalidArgumentException();
+            }
+            new EntityId($data["operation_id"]);
+            if ($data["kind"] === "degree-audit-publication-review") {
+                if (
+                    !is_int($data["expires_at"] ?? null) ||
+                    array_key_exists("effective_at", $data) ||
+                    !array_key_exists("program_publication", $data) ||
+                    !is_int($data["revision"] ?? null) ||
+                    !array_key_exists("previous_version_id", $data) ||
+                    !is_array($data["grade_scale"] ?? null)
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                new AuditRequirementsV3($data["definition"]);
             }
         } catch (Throwable) {
             throw new InvalidArgumentException("Review these requirements again.");
@@ -257,7 +280,13 @@ final readonly class RequirementsService
             if ($data["kind"] === "degree-audit-publication-review.v3") {
                 $metadata["schema_version"] = 3;
             }
-            if ($data["kind"] === "degree-audit-publication-review.v4") {
+            if (
+                in_array(
+                    $data["kind"],
+                    ["degree-audit-publication-review", "degree-audit-publication-review.v4"],
+                    true,
+                )
+            ) {
                 $metadata["schema_version"] = 4;
             }
             $event = RequirementsWerePublished::occur(
@@ -270,63 +299,109 @@ final readonly class RequirementsService
                     "labels" => array_diff_key($c, array_flip(["program_id", "academic_year_id"])),
                     "definition" => $data["definition"],
                 ] +
-                    ($data["kind"] === "degree-audit-publication-review.v4"
+                    (in_array(
+                        $data["kind"],
+                        ["degree-audit-publication-review", "degree-audit-publication-review.v4"],
+                        true,
+                    )
                         ? ["grade_scale" => $data["grade_scale"]]
                         : []),
                 $metadata,
             )->withPlayhead($data["expected_version"] + 1);
+            [$state, $accepted] = $this->load($id, $op);
+            $this->authorize($actor);
+            $state->assertScope($row["program_id"], $row["academic_year_id"]);
+            if ($accepted !== null) {
+                if (
+                    $accepted->context->actor?->value !== $actor->value ||
+                    $accepted->context->reason !== $data["reason"] ||
+                    $accepted->event->playhead() !== $event->playhead() ||
+                    $accepted->event->metaParam("schema_version", 1) !==
+                        $event->metaParam("schema_version", 1) ||
+                    $accepted->event->metaParam("curriculum_version_id") !==
+                        $event->metaParam("curriculum_version_id") ||
+                    $this->fingerprint($accepted->event->payload()) !==
+                        $this->fingerprint($event->payload()) ||
+                    (array_key_exists("effective_at", $data) &&
+                        $data["effective_at"] !== $accepted->context->describe()["effective_at"])
+                ) {
+                    throw new ConcurrentModificationException("This publication operation was already used.");
+                }
+                return [
+                    "operation_id" => $op->value,
+                    "first_version" => $accepted->event->playhead(),
+                    "last_version" => $accepted->event->playhead(),
+                    "event_ids" => [(string) $accepted->event->eventId()],
+                ];
+            }
+            if ($data["kind"] !== "degree-audit-publication-review") {
+                throw new ConcurrentModificationException("Prepare a fresh degree publication review.");
+            }
+            if ($data["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                throw new ConcurrentModificationException(
+                    "This publication review expired. Prepare a fresh review.",
+                );
+            }
+            if (
+                $state->playhead() !== $row["publication_position"] ||
+                $state->versionId() !== $row["published_version_id"]
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if (
+                $state->playhead() !== $data["expected_version"] ||
+                $state->versionId() !== $data["previous_version_id"]
+            ) {
+                throw new ConcurrentModificationException(
+                    "Requirements were published after this review. Review again.",
+                );
+            }
+            $programPublication = $this->programs->resolve(
+                new EntityId($row["program_id"]),
+                new EntityId($row["academic_year_id"]),
+            );
+            if (
+                !array_key_exists("program_publication", $data) ||
+                $programPublication !== $data["program_publication"]
+            ) {
+                throw new ConcurrentModificationException(
+                    "The applicable program publication changed. Review these requirements again.",
+                );
+            }
+            $currentContext = $this->publicationContext($row, $programPublication);
+            if (
+                $row["revision"] !== $data["revision"] ||
+                AuditRequirementsV3::draft($row["definition"])->hash() !==
+                    AuditRequirementsV3::draft($data["definition"])->hash() ||
+                $currentContext !== $c
+            ) {
+                throw new ConcurrentModificationException(
+                    "Requirements or program details changed. Review again.",
+                );
+            }
+            if ($this->groups->gradingScale(new EntityId($row["program_id"])) !== $data["grade_scale"]) {
+                throw new ConcurrentModificationException(
+                    "The grading scale changed. Review this degree publication again.",
+                );
+            }
+            $this->assertScale($row["program_id"], new AuditRequirementsV3($data["definition"]));
+            $this->courseDetails(AuditRequirementsV3::draft($data["definition"]));
+            $this->groupDetails(AuditRequirementsV3::draft($data["definition"]));
+            $this->authorize($actor);
+            if ($data["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                throw new ConcurrentModificationException(
+                    "This publication review expired. Prepare a fresh review.",
+                );
+            }
             $receipt = $this->history->append(
                 $this->stream($id),
                 $op,
-                $data["expected_version"],
-                new EventContext(
-                    $actor,
-                    new DateTimeImmutable($data["effective_at"]),
-                    $op,
-                    reason: $data["reason"],
-                ),
+                $state->playhead(),
+                new EventContext($actor, $this->clock->now(), $op, reason: $data["reason"]),
                 [$event],
             );
-            if ($receipt["event_ids"] === [(string) $event->eventId()]) {
-                if ($data["kind"] !== "degree-audit-publication-review.v4") {
-                    throw new ConcurrentModificationException(
-                        "Review reusable groups before publishing a new degree requirement version.",
-                    );
-                }
-                $programPublication = $this->programs->resolve(
-                    new EntityId($row["program_id"]),
-                    new EntityId($row["academic_year_id"]),
-                );
-                if (
-                    !array_key_exists("program_publication", $data) ||
-                    $programPublication !== $data["program_publication"]
-                ) {
-                    throw new ConcurrentModificationException(
-                        "The applicable program publication changed. Review these requirements again.",
-                    );
-                }
-                $currentContext = $this->publicationContext($row, $programPublication);
-                if (
-                    $row["revision"] !== $data["revision"] ||
-                    AuditRequirementsV3::draft($row["definition"])->hash() !==
-                        AuditRequirementsV3::draft($data["definition"])->hash() ||
-                    $currentContext !== $c
-                ) {
-                    throw new ConcurrentModificationException(
-                        "Requirements or program details changed. Review again.",
-                    );
-                }
-                if ($this->groups->gradingScale(new EntityId($row["program_id"])) !== $data["grade_scale"]) {
-                    throw new ConcurrentModificationException(
-                        "The grading scale changed. Review this degree publication again.",
-                    );
-                }
-                $this->assertScale($row["program_id"], new AuditRequirementsV3($data["definition"]));
-                $this->courseDetails(AuditRequirementsV3::draft($data["definition"]));
-                $this->groupDetails(AuditRequirementsV3::draft($data["definition"]));
-                $this->templates->published($id, $op, $receipt["last_version"]);
-                $this->audit->record($actor, "degree_audit.requirements_published", $id);
-            }
+            $this->templates->published($id, $op, $receipt["last_version"]);
+            $this->audit->record($actor, "degree_audit.requirements_published", $id);
             return $receipt;
         });
     }
@@ -518,19 +593,45 @@ final readonly class RequirementsService
     {
         return new StreamReference(new RequirementsPublicationId($id->value), "degree_audit_requirements");
     }
-    private function state(EntityId $id): RequirementsPublication
+    /** @return array{RequirementsPublication, ?StoredEvent} */
+    private function load(EntityId $id, ?EntityId $operation = null): array
     {
         $s = $this->stream($id);
         $state = RequirementsPublication::root($s->aggregateId);
+        $accepted = null;
         $cursor = null;
         do {
             $page = $this->history->page($s, $cursor, 20);
             foreach ($page->events as $stored) {
                 $state->acceptHistorical($stored->event);
+                if ($operation !== null && $stored->event->payload()["version_id"] === $operation->value) {
+                    if ($accepted !== null || $stored->context->correlation?->value !== $operation->value) {
+                        throw new CorruptHistoryException();
+                    }
+                    $accepted = $stored;
+                }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
-        return $state;
+        return [$state, $accepted];
+    }
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+            throw new AccessDeniedException("The publication reviewer changed.");
+        }
+    }
+    /** @param array<mixed> $value */
+    private function fingerprint(array $value): string
+    {
+        $normalize = function (mixed $v) use (&$normalize): mixed {
+            if (!is_array($v)) {
+                return $v;
+            }
+            ksort($v);
+            return array_map($normalize, $v);
+        };
+        return hash("sha256", json_encode($normalize($value), JSON_THROW_ON_ERROR));
     }
     /** @return array<string, array<string, mixed>> */
     private function courseDetails(

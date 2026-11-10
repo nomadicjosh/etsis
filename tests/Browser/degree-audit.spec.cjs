@@ -293,9 +293,30 @@ async function fixture(page, options = {}) {
                     status: 422,
                     json: { error: "Choose published groups and institutional policies before publication." },
                 });
-            response = { ...row(), reason: body.reason, review_token: "fictional-degree-review",
-                program_publication: options.linkedProgram ? { version_id: id(18), catalog_revision: 1, academic_year_code: '2027-2028', definition: { code: 'BSCS', title: 'Published Computer Science', description: null, classifications: { department: null, academic_level: null, award: null } } } : null };
+            response = {
+                ...row(),
+                reason: body.reason,
+                review_token: "fictional-degree-review",
+                program_publication: options.linkedProgram
+                    ? {
+                          version_id: id(18),
+                          catalog_revision: 1,
+                          academic_year_code: "2027-2028",
+                          definition: {
+                              code: "BSCS",
+                              title: "Published Computer Science",
+                              description: null,
+                              classifications: { department: null, academic_level: null, award: null },
+                          },
+                      }
+                    : null,
+            };
         } else if (path === `/sis/degree-audits/${template}/publish/`) {
+            if (options.expiredReview && calls.filter((c) => c.path === path).length === 1)
+                return route.fulfill({
+                    status: 409,
+                    json: { error: "This publication review expired. Prepare a fresh review." },
+                });
             degreePublished = true;
             response = { operation_id: id(15), last_version: 1 };
         } else if (path === `/sis/degree-audits/${template}/versions/`)
@@ -743,4 +764,41 @@ test("degree preview exposes the resolved program scale with its separate score 
     expect(f.calls.some((c) => c.path.endsWith("/publish/"))).toBe(false);
     expect(f.errors).toEqual([]);
     await accessible(page);
+});
+
+test("expired degree publication can be refreshed with its reason and exact definition intact", async ({
+    page,
+}) => {
+    const f = await fixture(page, { existing: true, expiredReview: true });
+    await openDegree(page, true);
+    await page.getByLabel("Highest earned award per course", { exact: true }).check();
+    await page.getByLabel("All eligible graded attempts", { exact: true }).check();
+    await page.getByLabel("Exclude transfer awards", { exact: true }).check();
+    await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
+    await page.getByLabel("Reason for publication", { exact: true }).fill("Fictional renewed approval");
+    await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Confirm within 20 minutes");
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    const alert = page.getByRole("dialog").getByRole("alert");
+    await expect(alert).toContainText("publication review expired");
+    await expect(alert).toBeFocused();
+    await page.getByRole("button", { name: "Refresh publication review", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Confirm reviewed publication", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Fictional renewed approval");
+    await expect(page.getByRole("dialog")).toContainText("General education");
+    const reviews = f.calls.filter((c) => c.path.endsWith(`/degree-audits/${f.template}/review/`));
+    expect(reviews).toHaveLength(2);
+    expect(reviews.map((c) => c.body)).toEqual([
+        { reason: "Fictional renewed approval" },
+        { reason: "Fictional renewed approval" },
+    ]);
+    expect(f.calls.filter((c) => c.path.endsWith(`/degree-audits/${f.template}/save/`))).toHaveLength(1);
+    await accessible(page);
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Published requirement versions", exact: true }),
+    ).toBeVisible();
+    expect(f.errors).toEqual([]);
 });
