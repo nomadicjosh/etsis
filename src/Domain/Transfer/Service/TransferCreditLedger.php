@@ -202,6 +202,39 @@ final readonly class TransferCreditLedger
         $record["effective_on_default"] = $this->clock->now()->format("Y-m-d");
         return $record;
     }
+    /** Internal audit input, after the caller authorizes and locks the student.
+     * @return array<string,mixed>
+     */
+    public function auditFacts(EntityId $credit, EntityId $student): array
+    {
+        $facts = $this->records->credit($credit);
+        if ($facts["student_id"] !== $student->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The transfer record belongs to another student.",
+            );
+        }
+        $award = new EntityId($facts["source_id"]);
+        $row = $this->records->award($award);
+        if (
+            $row["student_id"] !== $student->value ||
+            $row["credit_id"] !== $credit->value ||
+            $row["term_id"] !== $facts["term_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $root = $this->load($award);
+        return [
+            "credit" => $root->credit() ?? $facts,
+            "grade" => $facts["grade_id"] === null ? null : $root->grade(),
+            "history_recorded" => $root->playhead() > 0,
+            "earlier_history_unknown" =>
+                $root->playhead() === 0 || $root->provenance() === "observed_existing",
+            "history_version" => $root->playhead(),
+            "section_version_id" => null,
+            "completed_on" => $root->source()["completed_on"] ?? $row["completed_on"],
+            "retained_term_code" => $root->source()["term_code"] ?? null,
+        ];
+    }
     /** Called inside the authorized correction's unit of work, after its review revision is checked.
      * @param array<string,mixed> $record
      * @param array<string,mixed>|null $grade */

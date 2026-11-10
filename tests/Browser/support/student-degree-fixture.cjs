@@ -314,6 +314,77 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
+        else if (path === `${base}academic-work/`) {
+            const record = {
+                id: id(40),
+                course_id: course,
+                course_code: "MATH.101",
+                course_title: "Retained algebra",
+                credit_type: "institutional",
+                term_code: "26/FA",
+                term_label_retained: false,
+                completed_on: null,
+                attempted_milli: 3000,
+                completed_milli: 3000,
+                quality_points_milli: 12000,
+                grade: {
+                    code: "A",
+                    points_milli: 4000,
+                    passes: true,
+                    counts_gpa: true,
+                },
+                grade_recorded: true,
+                status: "A",
+                history_recorded: true,
+                earlier_history_unknown: false,
+            };
+            if (body?.after && options.rejectAcademicPage)
+                return route.fulfill({
+                    status: 403,
+                    json: { message: "Access denied." },
+                });
+            response = {
+                items: body?.after
+                    ? [
+                          {
+                              ...record,
+                              id: id(42),
+                              course_code: "ENG.101",
+                              course_title: "Fictional late drop <b>unsafe</b>",
+                              status: "W",
+                              completed_milli: 0,
+                              quality_points_milli: 0,
+                              grade: null,
+                              grade_recorded: false,
+                          },
+                          {
+                              ...record,
+                              id: id(43),
+                              course_code: "TR.101",
+                              credit_type: "transfer",
+                              term_label_retained: true,
+                              status: "V",
+                              completed_milli: 0,
+                              quality_points_milli: 0,
+                              grade: null,
+                              grade_recorded: false,
+                          },
+                      ]
+                    : [
+                          record,
+                          {
+                              ...record,
+                              id: id(41),
+                              course_code: "OLD.101",
+                              course_title: "Observed older work",
+                              grade: null,
+                              history_recorded: false,
+                              earlier_history_unknown: true,
+                          },
+                      ],
+                next_after: body?.after ? null : id(41),
+            };
+        }
         else if (path === `${base}choices/`) {
             cursorCount++;
             response = {

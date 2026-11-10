@@ -20,7 +20,8 @@ The migration is repeatable and preserves existing grants. A preexisting custom 
 4. Enter the **actual program pursuit start date** and a reason. The date is not inferred from entry-term dates, the person's institutional entry term or today's program settings. Future pursuit dates are rejected by this current-pursuit workflow.
 5. Choose **Review requirement assignment**. Review shows the retained groups, courses, general minimums, policies and anticipated completion date. **Change selection** returns to the entered fields. Nothing is assigned until **Assign reviewed requirements** succeeds.
 6. The selected version remains in place when catalog staff publish new degrees, groups or courses. Replacing it or correcting the pursuit date requires another reviewed decision and reason; the earlier decision remains in history.
-7. **Assignment history** lists curated decision/version references and effective/recorded dates. Protected reasons and actor details are not returned through ordinary student reads.
+7. **Academic work** opens a [paged review of current institutional and transfer work](student-academic-work.md). It verifies retained facts without applying them to requirements or calculating completion.
+8. **Assignment history** lists curated decision/version references and effective/recorded dates. Protected reasons and actor details are not returned through ordinary student reads.
 
 Missing cohorts and missing publications produce setup guidance, not invented requirements. Closing a program prevents new selections until it is reopened through the existing program workflow. A later cohort correction leaves the old selection intact and shows a review notice. Changing the requirement selection does not change the cohort, program assignment, courses, grades, finance or enrollment.
 
@@ -30,7 +31,7 @@ The anticipated completion date uses the **selected publication's** length in mo
 
 Assignment/review/choice endpoints require both `sis:degree-audit:assign` and `sis:student:read`. Catalog or registration authority alone is insufficient. Private reads require the signed-in student owner or student-read authority, then verify that the program assignment belongs to that student. Owner reads need no catalog-editing permission. Existing faculty/advisor relationship authorization remains a separate implementation stage; this feature grants no institution-wide student-read permission to faculty.
 
-Routes live under `/sis/students/{student}/programs/{assignment}/degree-requirements/`: a private GET reads the selection; protected POST endpoints provide `choices/`, `review/`, `assign/` and `history/`. Browser mutations preserve framework CSRF protection, no-store/private responses and debug suppression. Tokens and entered student data stay out of browser storage.
+Routes live under `/sis/students/{student}/programs/{assignment}/degree-requirements/`: a private GET reads the selection; protected POST endpoints provide `choices/`, `review/`, `assign/`, `history/` and the read-only `academic-work/` page. Browser mutations preserve framework CSRF protection, no-store/private responses and debug suppression. Tokens and entered student data stay out of browser storage.
 
 `StudentRequirementsWereAssigned` schema 1 uses the existing authoritative `sis_history_events` table. Its stream is keyed by the student-program assignment ULID. Each event records references to the student, program, academic year, cohort binding/revision, degree template/version, explicit pursuit date and predecessor decision. Actor, protected reason, trusted effective time and operation identity are in the protected context. No student names, institutional IDs, transcript rows or duplicated group definitions are copied into the event.
 

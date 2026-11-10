@@ -1812,6 +1812,27 @@ if (
 ) {
     throw new RuntimeException("Student reads exposed requirement assignment authority.");
 }
+// Academic-work paging resolves through the real provider, preserving the private CSRF envelope.
+$academicWorkResponse = $teachingPost($studentRequirementPath . "academic-work/", []);
+$academicWorkBody = json_decode((string) $academicWorkResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$academicWorkNoCsrf = new \Qubus\Http\ServerRequest(
+    [],
+    [],
+    "https://campus.example.invalid" . $studentRequirementPath . "academic-work/",
+    "POST",
+);
+if (
+    $academicWorkResponse->getStatusCode() !== 200 ||
+    !is_array($academicWorkBody["items"] ?? null) ||
+    !str_contains($academicWorkResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $app->router->match($academicWorkNoCsrf)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Private academic-work paging failed provider or CSRF checks.");
+}
+$sis->access->grants = [];
+if ($teachingPost($studentRequirementPath . "academic-work/", [])->getStatusCode() !== 403) {
+    throw new RuntimeException("Academic-work paging exposed another student's records.");
+}
 $sis->access->staff = true;
 $sis->access->grants = [];
 

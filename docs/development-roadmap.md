@@ -87,6 +87,7 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 ## 3. Student degree-audit evaluation
 
 - [x] [Preview selected requirements with approved exceptions](student-degree-exceptions.md#preview-requirements-with-approved-exceptions) and compare the published baseline, preserving pursuit scope, retained labels and explicit conflict/cohort notices. This does not calculate student completion.
+- [x] [Review current academic work on demand](student-academic-work.md), with 20-record pages, verified institutional/transfer histories, retained grade facts and explicit earlier-history gaps. This read-only tool does not allocate courses or establish historical completeness.
 - [ ] Implement deterministic evaluation against the student's retained degree, group, course and grading publications, using authoritative institutional/transfer credit facts.
 - [x] [Retain the institution-selected course-sharing policy](degree-audit-builder.md#course-sharing-across-groups) in each degree publication, defaulting new compositions to one group. Earlier selected policies stay retained; allocation itself remains outstanding.
 - [ ] Allocate work across overlapping requirements using the retained sharing policy; explain each applied, unused, insufficient-grade and in-progress course. Do not assume a greedy allocation produces the best valid result.
@@ -98,7 +99,7 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 
 **Done when:** the same retained inputs reproduce the same explained result; later catalog changes leave earlier results interpretable; dual-degree pursuits remain separate; an authorized graduation decision is retained independently.
 
-Authoring and exception inputs already exist: [builders with live group planning totals](degree-audit-builder.md#group-planning-summary), [student requirement assignment](student-degree-requirements.md), [exceptions](student-degree-exceptions.md). Student evaluation is still outstanding.
+Authoring, exception inputs and [paged academic-work review](student-academic-work.md) already exist: [builders with live group planning totals](degree-audit-builder.md#group-planning-summary), [student requirement assignment](student-degree-requirements.md), [exceptions](student-degree-exceptions.md). Student evaluation is still outstanding.
 
 ## 4. Admissions and student services
 

@@ -140,6 +140,8 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Portal\Repository\PortalRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPortalRepository::class,
 
+            \Domain\DegreeAudit\Repository\AcademicWorkRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAcademicWorkRepository::class,
             \Domain\Transfer\Repository\TransferRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlTransferRepository::class,
             \Domain\Finance\Repository\JournalRepository::class =>

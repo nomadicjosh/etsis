@@ -1684,6 +1684,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         body.append(
             actions(
+                button("Academic work", () => academicWork(base, restore)),
                 button("Assignment history", () => studentHistory(base, restore)),
                 data.selection
                     ? button("Preview with approvals", () =>
@@ -1713,6 +1714,101 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 }),
             ),
         );
+    }
+    async function academicWork(base, back, after = null, stack = []) {
+        const data = await post(`${base}academic-work/`, after ? { after } : {});
+        const body = screen("Academic work", "STUDENT ACADEMIC RECORDS");
+        body.append(
+            node(
+                "p",
+                {},
+                "Review this student's institutional and transfer work. These records have not been allocated to this program's requirements. This view does not calculate completion, GPA or graduation eligibility.",
+            ),
+            node(
+                "p",
+                {},
+                "Grades and credits use retained record facts. Earlier records may have unknown history. Term labels marked current are navigation labels, not retained historical definitions. The list is not ordered by completion date.",
+            ),
+            actions(
+                button("Refresh academic work", () => academicWork(base, back)),
+                button("Back to degree requirements", back),
+            ),
+        );
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const item of data.items) {
+            const grade = item.grade;
+            const status =
+                item.status === "V"
+                    ? "Voided award"
+                    : item.status === "W"
+                      ? "Late drop"
+                      : item.grade_recorded
+                        ? "Grade recorded"
+                        : item.credit_type === "transfer"
+                          ? "Transfer award"
+                          : "No final grade recorded";
+            cards.append(
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", {}, `${item.course_code} · ${item.course_title}`),
+                    node(
+                        "p",
+                        {},
+                        `${item.credit_type === "transfer" ? "Transfer" : "Institutional"} · ${status}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Term: ${item.term_code || "Unknown"}${item.term_code ? (item.term_label_retained ? " (retained)" : " (current label)") : ""}${item.completed_on ? ` · Completed ${item.completed_on}` : ""}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Attempted credits: ${text(item.attempted_milli)} · Awarded credits: ${text(item.completed_milli)}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        grade
+                            ? `Retained grade: ${grade.code} · Grade points per course: ${text(grade.points_milli)}`
+                            : item.grade_recorded
+                              ? "Grade recorded; retained grade definition is unavailable."
+                              : "No retained final grade.",
+                    ),
+                    grade
+                        ? node(
+                              "p",
+                              {},
+                              `Grade definition: ${grade.passes ? "passing" : "not passing"}; ${grade.counts_gpa ? "GPA eligible" : "excluded from GPA"}. Credit-weighted quality points: ${text(item.quality_points_milli)}.`,
+                          )
+                        : null,
+                    node(
+                        "p",
+                        {},
+                        `Course publication: ${item.course_version_id ? "retained reference" : "unknown"}.${item.credit_type === "institutional" ? ` Section publication: ${item.section_version_id ? "retained reference" : "unknown"}.` : ""}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        item.history_recorded
+                            ? "Recorded history verified."
+                            : "No recorded history; these are observed current facts.",
+                    ),
+                    item.earlier_history_unknown
+                        ? node(
+                              "p",
+                              { class: "audit-status" },
+                              "Earlier history is unknown. This record cannot establish all prior academic facts.",
+                          )
+                        : null,
+                ),
+            );
+        }
+        body.append(cards);
+        if (!data.items.length)
+            body.append(node("p", { class: "audit-empty" }, "No current academic work on this page."));
+        pager(body, data, after, stack, (a, s) => academicWork(base, back, a, s));
     }
     async function studentChoices(base, current, back) {
         const initial = await post(`${base}choices/`);

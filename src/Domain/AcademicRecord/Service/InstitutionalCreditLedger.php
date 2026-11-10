@@ -464,6 +464,31 @@ final readonly class InstitutionalCreditLedger
         }
         return null;
     }
+    /** Internal audit input, after the caller authorizes and locks the student.
+     * Deleted early-drop projections are deliberately unavailable here.
+     * @return array<string,mixed>
+     */
+    public function auditFacts(EntityId $credit, EntityId $student): array
+    {
+        $facts =
+        $this->records->projection($credit) ??
+        throw new RecordNotFoundException("Current academic record not found.");
+        if ($facts["student_id"] !== $student->value || $facts["credit_type"] !== "institutional") {
+            throw new AccessDeniedException("The academic record belongs to another scope.");
+        }
+        $root = $this->load($credit);
+        return [
+            "credit" => $root->credit() ?? $facts,
+            "grade" => $root->grade(),
+            "history_recorded" => $root->playhead() > 0,
+            "earlier_history_unknown" =>
+                $root->playhead() === 0 || $root->provenance() === "observed_existing",
+            "history_version" => $root->playhead(),
+            "section_version_id" => $root->sectionVersion(),
+            "completed_on" => null,
+            "retained_term_code" => null,
+        ];
+    }
     /** Caller authorizes owner/assigned faculty/academic reader before requesting curated history.
      * @return array<string,mixed>
      */
