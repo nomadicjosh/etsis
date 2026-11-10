@@ -125,6 +125,10 @@ final class ReusableGroupFixture
             $this->catalog->fixture->cipher,
             $f->clock,
             $this->groupService($audit),
+            new \Domain\DegreeAudit\Service\RequirementProgramContext(
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
+                new \Domain\Catalog\Service\PublishedProgramReader($this->history, new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql)),
+            ),
         );
     }
     public function publishGroup(): EntityId

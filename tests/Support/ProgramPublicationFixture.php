@@ -11,9 +11,9 @@ final class ProgramPublicationFixture
     public \Domain\Catalog\Service\ProgramPublicationService $service;
     public \Domain\Catalog\Service\ClassificationService $classifications;
 
-    public function __construct()
+    public function __construct(?SisFixture $sis = null)
     {
-        $this->calendar = new AcademicCalendarFixture();
+        $this->calendar = new AcademicCalendarFixture($sis);
         $this->sis = $f = $this->calendar->sis;
         $this->calendar->type("PG");
         $catalog = new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($f->sql);

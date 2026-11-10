@@ -41,6 +41,7 @@ final readonly class RequirementsService
         private MessageCipher $cipher,
         private Clock $clock,
         private CourseGroupService $groups,
+        private RequirementProgramContext $programs,
     ) {
     }
 
@@ -177,8 +178,17 @@ final readonly class RequirementsService
             }
             $op = EntityId::generate();
             $context = new EventContext($actor, $this->clock->now(), $op, reason: $reason);
+            $programPublication = $this->programs->resolve(
+                new EntityId($row["program_id"]),
+                new EntityId($row["academic_year_id"]),
+            );
+            $labels = $this->publicationContext($row, $programPublication);
+            if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+                throw new AccessDeniedException("The publication reviewer changed.");
+            }
             $data = [
                 "kind" => "degree-audit-publication-review.v4",
+                "program_publication" => $programPublication,
                 "grade_scale" => $this->groups->gradingScale(new EntityId($row["program_id"])),
                 "template_id" => $id->value,
                 "actor_id" => $actor->value,
@@ -187,10 +197,7 @@ final readonly class RequirementsService
                 "expected_version" => $state->playhead(),
                 "previous_version_id" => $state->versionId(),
                 "definition" => $definition->definition,
-                "context" => $this->templates->context(
-                    new EntityId($row["program_id"]),
-                    new EntityId($row["academic_year_id"]),
-                ),
+                "context" => $labels,
                 "reason" => $reason,
                 "effective_at" => $context->describe()["effective_at"],
             ];
@@ -235,8 +242,14 @@ final readonly class RequirementsService
         return $this->transactions->run(function () use ($id, $data, $actor): array {
             $row = $this->lock($id);
             $op = new EntityId($data["operation_id"]);
+            if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+                throw new AccessDeniedException("The publication reviewer changed.");
+            }
             $c = $data["context"];
             $metadata = ["__aggregate_type" => "degree_audit_requirements"];
+            if (($data["program_publication"] ?? null) !== null) {
+                $metadata["curriculum_version_id"] = $data["program_publication"]["version_id"];
+            }
             if ($data["kind"] === "degree-audit-publication-review.v2") {
                 $metadata["schema_version"] = 2;
             }
@@ -279,10 +292,19 @@ final readonly class RequirementsService
                         "Review reusable groups before publishing a new degree requirement version.",
                     );
                 }
-                $currentContext = $this->templates->context(
+                $programPublication = $this->programs->resolve(
                     new EntityId($row["program_id"]),
                     new EntityId($row["academic_year_id"]),
                 );
+                if (
+                    !array_key_exists("program_publication", $data) ||
+                    $programPublication !== $data["program_publication"]
+                ) {
+                    throw new ConcurrentModificationException(
+                        "The applicable program publication changed. Review these requirements again.",
+                    );
+                }
+                $currentContext = $this->publicationContext($row, $programPublication);
                 if (
                     $row["revision"] !== $data["revision"] ||
                     AuditRequirementsV3::draft($row["definition"])->hash() !==
@@ -318,6 +340,7 @@ final readonly class RequirementsService
             $p = $stored->event->payload();
             $items[] = [
                 "schema_version" => $stored->event->metaParam("schema_version", 1),
+                "program_version_id" => $stored->event->metaParam("curriculum_version_id"),
                 "version_id" => $p["version_id"],
                 "version" => $stored->event->playhead(),
                 "definition" => $p["definition"],
@@ -343,6 +366,23 @@ final readonly class RequirementsService
             "course_details" => $this->courseDetails(AuditRequirementsV3::draft($selected["definition"])),
             "group_details" => $this->groupDetails(AuditRequirementsV3::draft($selected["definition"])),
         ];
+    }
+
+    /** @param array<string,mixed> $row
+     * @param array<string,mixed>|null $publication
+     * @return array<string,mixed>
+     */
+    private function publicationContext(array $row, ?array $publication): array
+    {
+        $context = $this->templates->context(
+            new EntityId($row["program_id"]),
+            new EntityId($row["academic_year_id"]),
+        );
+        if ($publication !== null) {
+            $context["program_code"] = $publication["definition"]["code"];
+            $context["program_title"] = $publication["definition"]["title"];
+        }
+        return $context;
     }
 
     private function assertScale(string $program, AuditRequirementsV3 $definition): void

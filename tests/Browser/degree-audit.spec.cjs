@@ -293,7 +293,8 @@ async function fixture(page, options = {}) {
                     status: 422,
                     json: { error: "Choose published groups and institutional policies before publication." },
                 });
-            response = { ...row(), reason: body.reason, review_token: "fictional-degree-review" };
+            response = { ...row(), reason: body.reason, review_token: "fictional-degree-review",
+                program_publication: options.linkedProgram ? { version_id: id(18), definition: { code: 'BSCS', title: 'Published Computer Science' } } : null };
         } else if (path === `/sis/degree-audits/${template}/publish/`) {
             degreePublished = true;
             response = { operation_id: id(15), last_version: 1 };
@@ -390,7 +391,7 @@ test("independent course group uses cards, checkboxes, requirement types and rev
 test("degree composer selects pinned blocks, keeps unsaved fields while editing the library and publishes", async ({
     page,
 }, testInfo) => {
-    const f = await fixture(page);
+    const f = await fixture(page, { linkedProgram: true });
     await openDegree(page);
     await page.getByRole("button", { name: "Set up an academic year", exact: true }).click();
     expect(f.calls.find((c) => c.path === "/sis/academic-years/").body).toEqual({});
@@ -427,6 +428,7 @@ test("degree composer selects pinned blocks, keeps unsaved fields while editing 
     await page.getByLabel("Reason for publication", { exact: true }).fill("Fictional degree approval");
     await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("120 total credits");
+    await expect(page.getByRole("dialog")).toContainText("Linked program: BSCS — Published Computer Science");
     await expect(page.getByRole("dialog")).toContainText("General education");
     await accessible(page);
     await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();

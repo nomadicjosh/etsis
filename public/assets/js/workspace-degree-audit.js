@@ -1403,6 +1403,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         const content = screen("Confirm reviewed publication");
                         content.append(
                             kind === "group" ? groupTree(reviewed) : degreeTree(reviewed),
+                            ...(kind === "group" ? [] : [node("p", { class: "alert alert-info", role: "status" },
+                                reviewed.program_publication
+                                    ? `Linked program: ${reviewed.program_publication.definition.code} — ${reviewed.program_publication.definition.title}. These requirements retain this exact published program revision.`
+                                    : "No program definition is published for this academic year. This requirement version will have no inferred program-publication link.",
+                            )]),
                             node("p", {}, `Reason: ${reviewed.reason}`),
                             actions(
                                 button(

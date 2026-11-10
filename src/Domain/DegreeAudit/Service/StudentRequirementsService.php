@@ -321,6 +321,15 @@ final readonly class StudentRequirementsService
     private function assertRequirements(array $scope, array $requirements): void
     {
         if (
+            ($requirements["program_version_id"] ?? null) !== null &&
+            $requirements["program_version_id"] !== $scope["cohort_catalog_id"]
+        ) {
+            throw new InvalidArgumentException(
+                "Choose requirements published for this student's assigned program catalog revision. " .
+                    "Changing a cohort requires its own reviewed decision.",
+            );
+        }
+        if (
             $requirements["program_id"] !== $scope["program_id"] ||
             $requirements["academic_year_id"] !== $scope["academic_year_id"]
         ) {

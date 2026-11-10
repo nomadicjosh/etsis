@@ -44,6 +44,8 @@ Five endpoints require `sis:catalog:manage`: GET/POST `/sis/programs/{id}/detail
 
 Older unversioned curriculum references remain unversioned; this workflow does not invent their historical approvals. Existing reference initialization remains available for programs without a recorded publication for that year. Once a year's program publication exists, new entry decisions verify and use it.
 
-Schools, majors/minors, specializations, CIP/location classifications, effective retirement, explicit program-version linkage in degree-requirement publications and public program-discovery presentation remain later stages. Degree-audit selections keep their own retained requirements; evaluation and graduation remain separate work.
+Schools, majors/minors, specializations, CIP/location classifications, effective retirement, public program-discovery presentation remain later stages. Degree-audit selections keep their own retained requirements; evaluation and graduation remain separate work.
 
 Fictional checks cover year-specific student labels/bindings, report joins, retained history, stale/expired/competing reviews, reference changes, permission rechecks, rollback, exact retries, frozen pages and framework replay. Actual-provider/router checks cover CSRF, private responses, permission boundaries and curated history. Browser checks cover combined editing, draft preservation, year/reason review, keyboard confirmation, narrow-screen accessibility and literal rendering.
+
+New degree-requirement publications now retain the reviewed program revision; see [the linked publication workflow](degree-program-publication-link.md). Earlier requirements remain unlinked.

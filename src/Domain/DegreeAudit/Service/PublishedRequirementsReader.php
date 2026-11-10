@@ -33,6 +33,7 @@ final readonly class PublishedRequirementsReader
                 "version_id" => $p["version_id"],
                 "version" => $stored->event->playhead(),
                 "schema_version" => $stored->event->metaParam("schema_version", 1),
+                "program_version_id" => $stored->event->metaParam("curriculum_version_id"),
                 "name" => $p["definition"]["name"],
                 "academic_year_code" => $p["labels"]["academic_year_code"],
             ];
@@ -60,6 +61,7 @@ final readonly class PublishedRequirementsReader
             "version_id" => $version->value,
             "version" => $found["version"],
             "schema_version" => $found["schema_version"],
+            "program_version_id" => $found["program_version_id"],
             "program_id" => $p["program_id"],
             "academic_year_id" => $p["academic_year_id"],
             "context" => $p["labels"],
@@ -119,6 +121,7 @@ final readonly class PublishedRequirementsReader
                         "version_id" => $p["version_id"],
                         "version" => $e->playhead(),
                         "schema_version" => $e->metaParam("schema_version", 1),
+                        "program_version_id" => $e->metaParam("curriculum_version_id"),
                         "payload" => $p,
                     ];
                 }

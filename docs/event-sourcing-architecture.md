@@ -14,7 +14,7 @@ The first [course-publication slice](course-publication.md) retains reviewed def
 
 [Section publications](section-publication.md) now retain reviewed instructional dates, term context, capacity, delivery, canonical faculty identity and fees as immutable versions. Indexed section-version selection and reviewed future-registration amendments now retain the applicable reference in new enrollment/academic facts while preserving earlier references and charges. Offering-plan confirmation now retains reviewed section publications/selections with activation in one transaction. Full policy definitions remain outstanding.
 
-[Program publication](program-publication.md) now retains reviewed program text and department/academic-level/award snapshots per academic year. Publication creates a new catalog reference for future assignments, while earlier student references remain intact. Entry commands verify the selected year’s publication chain; ordinary program/student/report lists remain indexed reads. Explicit linkage to degree-requirement publications remains a subsequent stage.
+[Program publication](program-publication.md) now retains reviewed program text and department/academic-level/award snapshots per academic year. Publication creates a new catalog reference for future assignments, while earlier student references remain intact. Entry commands verify the selected year’s publication chain; ordinary program/student/report lists remain indexed reads. New [degree-requirement publications](degree-program-publication-link.md) now retain the reviewed program definition; new student selections must match its cohort reference.
 
 ## Persistence boundaries
 
