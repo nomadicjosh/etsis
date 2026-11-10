@@ -9,7 +9,7 @@ async function fixture(page, options = {}) {
     const course = id(1), term = id(2), clone = id(3), prerequisite = id(4), operation = id(5), section = id(6);
     const termRow = { id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20', add_drop_ends_on: '2026-08-15' };
     const calls = [], errors = []; let published = false, rows = options.rows || [], saved = options.saved || false, definitionPublished = false;
-    let sectionBound = false, acceptedReview = null;
+    let sectionBound = false, acceptedReview = null, courseReviewCount = 0, courseCommitCount = 0;
     let courseText = { transcript_title: null, description: null };
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -31,9 +31,15 @@ async function fixture(page, options = {}) {
             versions: { items: options.noDefinitions && !definitionPublished ? [] : [{ version_id: options.paged && data?.cursor ? id(10) : operation, version: options.paged && data?.cursor ? 2 : 1, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], transcript_title: null, description: '<img src=x onerror=alert(1)> Fictional catalog text' } }], next_cursor: options.paged && !data?.cursor ? 'fictional-next-page' : null } };
         else if (path.endsWith('/course-definition/review/')) result = { section_code: 'MATH.101.A', reason: data.reason, review_token: 'fictional-protected-section-token', selected: { version_id: operation, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], transcript_title: null, description: '<img src=x onerror=alert(1)> Fictional catalog text' } } };
         else if (path.endsWith('/course-definition/commit/')) { sectionBound = true; result = { operation_id: id(9), last_version: 1 }; }
-        else if (path.endsWith('/publication/page/')) result = { items: definitionPublished ? [{ version_id: operation, version: 1, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText }, recorded_at: '2026-11-08T12:00:01Z' }] : [], next_cursor: null, through_version: definitionPublished ? 1 : 0 };
-        else if (path.endsWith('/publication/review/')) result = { expected_version: 0, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText }, reason: data.reason, effective_at: '2026-11-08T12:00:00Z', review_token: 'fictional-protected-review-token' };
-        else if (path.endsWith('/publication/commit/')) { definitionPublished = true; result = { operation_id: operation, last_version: 1 }; }
+        else if (path.endsWith('/publication/page/')) result = { items: definitionPublished ? [{ version_id: operation, version: 1, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText }, effective_at: '2026-11-08T12:00:00Z', recorded_at: '2026-11-08T12:00:01Z' }] : [], next_cursor: null, through_version: definitionPublished ? 1 : 0 };
+        else if (path.endsWith('/publication/review/')) result = { expected_version: 0, definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText }, reason: data.reason, expires_at: 1794130800, review_token: options.refreshTokens ? `fictional-course-proof-${++courseReviewCount}` : 'fictional-protected-review-token' };
+        else if (path.endsWith('/publication/commit/')) {
+            if (options.rejectFirstCommit && courseCommitCount++ === 0) {
+                await route.fulfill({ status: 409, json: { error: 'This course review expired. Refresh the review before confirming.' }, headers: { 'Cache-Control': 'private, no-store' } });
+                return;
+            }
+            definitionPublished = true; result = { operation_id: operation, last_version: 1 };
+        }
         else if (path.endsWith('/clone/review/')) result = { source: { id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }, prerequisites: [{ id: prerequisite, code: 'MATH.001', title: 'Foundations', active: true }], operation_id: clone, revision: 'a'.repeat(64) };
         else if (path.endsWith('/clone/commit/')) result = { id: clone, code: data.code, title: data.title, credits_milli: data.credits_milli, prerequisites_copied: data.prerequisites.length, active: false };
         else if (path === '/sis/catalog/offerings/review/') { rows = data.sections; result = { term: termRow, sections: rows.map(row => ({ ...row, course_code: 'MATH.101', course_title: 'Algebra', faculty_name: null })), operation_id: operation, revision: 'b'.repeat(64) }; }
@@ -140,6 +146,8 @@ test('course definitions require review and retain accessible published versions
     await page.getByLabel('Reason for publication').fill('Fictional approved academic definition');
     await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('This creates version 1.');
+    await expect(page.locator('#drawer-body')).toContainText('Publication takes effect when you confirm it.');
+    await expect(page.locator('#drawer-body')).toContainText('An unconfirmed review expires after 20 minutes.');
     expect(f.calls.some(call => call.path.endsWith('/publication/commit/'))).toBe(false);
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
@@ -300,5 +308,36 @@ test('offering date overrides stay section-specific and invalid periods do not s
     expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('an expired course review can be refreshed without losing its reason or publishing unseen changes', async ({ page }) => {
+    const f = await fixture(page, { refreshTokens: true, rejectFirstCommit: true });
+    await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Published definitions', exact: true }).click();
+    await page.getByLabel('Reason for publication', { exact: true }).fill('Fictional retained approval reason');
+    await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
+    await page.getByRole('button', { name: 'Return to definitions', exact: true }).click();
+    await expect(page.getByLabel('Reason for publication', { exact: true })).toHaveValue('Fictional retained approval reason');
+    await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish reviewed definition', exact: true }).click();
+    await expect(page.locator('#drawer-error')).toContainText('This course review expired.');
+    expect(f.calls.filter(call => call.path.endsWith('/publication/commit/'))).toHaveLength(1);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.getByRole('button', { name: 'Refresh course review', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#drawer-body')).toContainText('Reason: Fictional retained approval reason');
+    await accessible(page);
+    expect(f.calls.filter(call => call.path.endsWith('/publication/review/'))).toHaveLength(3);
+    expect(f.calls.filter(call => call.path.endsWith('/publication/commit/'))).toHaveLength(1);
+    await page.getByRole('button', { name: 'Publish reviewed definition', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#drawer-body')).toContainText('Version 1 is retained.');
+    const confirmations = f.calls.filter(call => call.path.endsWith('/publication/commit/'));
+    expect(confirmations.map(call => call.data.review_token)).toEqual(['fictional-course-proof-2', 'fictional-course-proof-3']);
+    expect(confirmations.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.errors).toEqual([]);
 });

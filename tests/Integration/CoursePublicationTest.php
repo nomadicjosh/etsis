@@ -64,6 +64,29 @@ final class CoursePublicationTest extends TestCase
         );
     }
 
+    private function serviceUsing(
+        \Domain\Shared\Persistence\UnitOfWork $transactions,
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+    ): CoursePublicationService {
+        $f = $this->f;
+        return new CoursePublicationService(
+            new SqlCatalogRevisionRepository($f->sql),
+            new SqlCatalogWorkflowRepository($f->sql),
+            $history ?? $this->history,
+            $f->access,
+            $transactions,
+            $f->audit,
+            $f->dropCipher,
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql),
+        );
+    }
+
+    private function stream(): StreamReference
+    {
+        return new StreamReference(new CoursePublicationId($this->course->value), "course_publication");
+    }
+
     private function change(): void
     {
         $revision = $this->editor->view("courses", $this->course)["revision"];
@@ -115,12 +138,15 @@ final class CoursePublicationTest extends TestCase
         $later = $this->service->review($this->course, "Fictional second review");
         $this->service->publish($this->course, $later["review_token"]);
         $before = $this->f->sql->rows("sis_audit");
+        $projection = $this->f->sql->rows("sis_course_descriptions");
+        $this->f->clock->time = $this->f->clock->time->modify("+2 days");
         self::assertSame($receipt, $this->service->publish($this->course, $review["review_token"]));
         self::assertCount(2, $this->f->sql->rows("sis_history_events"));
         self::assertSame($before, $this->f->sql->rows("sis_audit"));
+        self::assertSame($projection, $this->f->sql->rows("sis_course_descriptions"));
     }
 
-    public function testStaleDraftReviewRollsBackTheTentativeEventHeadAndReceipt(): void
+    public function testStaleDraftReviewCreatesNoEventHeadOrReceipt(): void
     {
         $review = $this->service->review($this->course, "Fictional review");
         $this->change();
@@ -201,6 +227,7 @@ final class CoursePublicationTest extends TestCase
             self::assertSame([], $this->f->sql->rows("sis_history_operations"));
         }
         $this->f->connection->pdo->exec("DROP TRIGGER fictional_audit_failure");
+        $this->f->clock->time = $this->f->clock->time->modify("+1 minute");
         self::assertSame(1, $this->service->publish($this->course, $review["review_token"])["last_version"]);
     }
 
@@ -618,6 +645,224 @@ final class CoursePublicationTest extends TestCase
         $this->service->publish($this->course, $review["review_token"]);
         self::assertSame($before, $transfer->transcript($student->id));
     }
+    public function testCoursePublicationUsesActualConfirmationTimeAndItsReviewHasNoEffectiveTime(): void
+    {
+        $reviewedAt = $this->f->clock->now();
+        $review = $this->service->review($this->course, "Fictional confirmation-time approval");
+        self::assertSame("course-publication-review.v3", $review["kind"]);
+        self::assertArrayNotHasKey("effective_at", $review);
+        self::assertSame($reviewedAt->getTimestamp() + 1200, $review["expires_at"]);
+        $this->f->clock->time = $reviewedAt->modify("+2 minutes");
+        $receipt = $this->service->publish($this->course, $review["review_token"]);
+        $stored = $this->history->page($this->stream())->events[0];
+        self::assertSame(
+            $this->f->clock->now()->getTimestamp(),
+            $stored->context->effectiveAt->getTimestamp(),
+        );
+        self::assertSame($this->f->clock->now()->getTimestamp(), $stored->recordedAt->getTimestamp());
+        self::assertSame($receipt["event_ids"][0], (string) $stored->event->eventId());
+        self::assertSame(2, $stored->event->metaParam("schema_version"));
+        self::assertSame("Fictional confirmation-time approval", $stored->context->reason);
+        self::assertSame(
+            ProtectedEventCodec::canonical($review["definition"]),
+            ProtectedEventCodec::canonical($stored->event->payload()["definition"]),
+        );
+    }
+
+    public function testExpiredCourseReviewWritesNothingAndAFreshReviewCanBeConfirmed(): void
+    {
+        $this->saveText("Algebra I", "Fictional description");
+        $review = $this->service->review($this->course, "Fictional expiring approval");
+        $projection = $this->f->sql->rows("sis_course_descriptions");
+        $audit = $this->f->sql->rows("sis_audit");
+        $this->f->clock->time = $this->f->clock->time->modify("+20 minutes");
+        try {
+            $this->service->publish($this->course, $review["review_token"]);
+            self::fail("An expired unconfirmed course review was accepted.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $this->f->sql->rows("sis_history_events"));
+            self::assertSame([], $this->f->sql->rows("sis_history_streams"));
+            self::assertSame([], $this->f->sql->rows("sis_history_operations"));
+            self::assertSame($projection, $this->f->sql->rows("sis_course_descriptions"));
+            self::assertSame($audit, $this->f->sql->rows("sis_audit"));
+        }
+        $fresh = $this->service->review($this->course, "Fictional refreshed approval");
+        self::assertNotSame($review["operation_id"], $fresh["operation_id"]);
+        self::assertSame(1, $this->service->publish($this->course, $fresh["review_token"])["last_version"]);
+    }
+
+    public function testPreviousV2ReceiptsKeepTheirActualOldEventsAndPendingV2ReviewsRequireRefresh(): void
+    {
+        $f = $this->f;
+        $r = $this->service->review($this->course, "Fictional preceding-version approval");
+        $old = json_decode($f->dropCipher->open($r["review_token"]), true, flags: JSON_THROW_ON_ERROR);
+        $old["kind"] = "course-publication-review.v2";
+        unset($old["expires_at"]);
+        $old["effective_at"] = $f->clock
+            ->now()
+            ->setTimezone(new DateTimeZone("UTC"))
+            ->format("Y-m-d\TH:i:s.u\Z");
+        $token = $f->dropCipher->seal(json_encode($old, JSON_THROW_ON_ERROR));
+        try {
+            $this->service->publish($this->course, $token);
+            self::fail("An old pending review created a decision with its earlier review time.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $f->sql->rows("sis_history_events"));
+        }
+        // Fictional persisted v2 event/receipt representing the preceding implementation.
+        $operation = new EntityId($old["operation_id"]);
+        $event = CourseDefinitionWasPublished::occur(
+            $this->stream()->aggregateId,
+            [
+                "version_id" => $operation->value,
+                "previous_version_id" => null,
+                "definition" => $old["definition"],
+            ],
+            ["__aggregate_type" => "course_publication", "schema_version" => 2],
+        );
+        $receipt = $this->history->append(
+            $this->stream(),
+            $operation,
+            0,
+            new \Domain\Shared\EventSourcing\EventContext(
+                $f->access->actor,
+                new DateTimeImmutable($old["effective_at"]),
+                $operation,
+                reason: $old["reason"],
+            ),
+            [$event],
+        );
+        new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql)->apply(
+            $this->course,
+            \Domain\Catalog\ValueObject\CourseText::fromArray($old["definition"]),
+            $operation,
+            1,
+        );
+        $before = $f->sql->rows("sis_history_events");
+        $f->clock->time = $f->clock->time->modify("+1 minute");
+        $this->change();
+        $new = $this->service->review($this->course, "Fictional modern confirmation");
+        $this->service->publish($this->course, $new["review_token"]);
+        $f->clock->time = $f->clock->time->modify("+2 days");
+        $projection = $f->sql->rows("sis_course_descriptions");
+        $events = $f->sql->rows("sis_history_events");
+        self::assertSame($receipt, $this->service->publish($this->course, $token));
+        self::assertSame($before, array_slice($f->sql->rows("sis_history_events"), 0, 1));
+        self::assertSame($events, $f->sql->rows("sis_history_events"));
+        self::assertSame($projection, $f->sql->rows("sis_course_descriptions"));
+    }
+
+    public function testCourseReviewAndConfirmationRecheckPermissionsAfterTheLockWait(): void
+    {
+        $f = $this->f;
+        $proof = $this->service->review($this->course, "Fictional authorized review");
+        $transactions = new class ($f) implements \Domain\Shared\Persistence\UnitOfWork {
+            public function __construct(private SisFixture $f)
+            {
+            }
+            public function run(Closure $operation): mixed
+            {
+                return $this->f->transactions->run(function () use ($operation): mixed {
+                    $this->f->access->staff = false;
+                    $this->f->access->grants = [];
+                    return $operation();
+                });
+            }
+        };
+        foreach (["review", "publish"] as $method) {
+            $f->access->staff = true;
+            try {
+                $this->serviceUsing($transactions)->$method(
+                    $this->course,
+                    $method === "review" ? "Fictional waiting review" : $proof["review_token"],
+                );
+                self::fail("Revoked permission was ignored after the course lock wait.");
+            } catch (AccessDeniedException) {
+                self::assertSame([], $f->sql->rows("sis_history_events"));
+            }
+        }
+    }
+
+    public function testPermissionLostDuringReplayPreventsConfirmation(): void
+    {
+        $f = $this->f;
+        $proof = $this->service->review($this->course, "Fictional authorized review");
+        $store = $this->createStub(\Domain\Shared\EventSourcing\HistoricalEventStore::class);
+        $store->method("page")->willReturnCallback(function ($stream, $cursor, $limit) use ($f) {
+            $page = $this->history->page($stream, $cursor, $limit);
+            $f->access->staff = false;
+            $f->access->grants = [];
+            return $page;
+        });
+        $this->expectException(AccessDeniedException::class);
+        try {
+            $this->serviceUsing($f->transactions, $store)->publish($this->course, $proof["review_token"]);
+        } finally {
+            self::assertSame([], $f->sql->rows("sis_history_events"));
+        }
+    }
+
+    public function testCourseConfirmationRefusesClientEffectiveTimeAndMalformedNewProofs(): void
+    {
+        $proof = $this->service->review($this->course, "Fictional current review");
+        $r = json_decode(
+            $this->f->dropCipher->open($proof["review_token"]),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+        $cases = [
+            array_replace($r, ["effective_at" => "2000-01-01T00:00:00Z"]),
+            array_replace($r, ["expires_at" => (string) $r["expires_at"]]),
+            array_replace($r, ["expires_at" => null]),
+            array_replace($r, ["expected_version" => -1]),
+        ];
+        foreach ($cases as $case) {
+            try {
+                $token = $this->f->dropCipher->seal(json_encode($case, JSON_THROW_ON_ERROR));
+                $this->service->publish($this->course, $token);
+                self::fail("An invalid new course review proof was accepted.");
+            } catch (InvalidArgumentException) {
+                self::assertSame([], $this->f->sql->rows("sis_history_events"));
+            }
+        }
+    }
+
+    public function testReceiptRetryVerifiesEarlierHistoryRatherThanBypassingIt(): void
+    {
+        $first = $this->service->review($this->course, "Fictional first approval");
+        $this->service->publish($this->course, $first["review_token"]);
+        $later = $this->service->review($this->course, "Fictional later approval");
+        $this->service->publish($this->course, $later["review_token"]);
+        $earlierRow = $this->f->sql->rows("sis_history_events")[0];
+        $this->f->sql->update(
+            "sis_history_events",
+            ["sealed_event" => "corrupted fictional fixture"],
+            ["id" => $earlierRow["id"]],
+        );
+        $projection = $this->f->sql->rows("sis_course_descriptions");
+        $this->expectException(CorruptHistoryException::class);
+        try {
+            $this->service->publish($this->course, $later["review_token"]);
+        } finally {
+            self::assertSame($projection, $this->f->sql->rows("sis_course_descriptions"));
+        }
+    }
+
+    public function testOriginalReceiptIsFoundAcrossBoundedReplayPagesWithoutReplacingTheLatestText(): void
+    {
+        $first = $this->service->review($this->course, "Fictional first approval");
+        $receipt = $this->service->publish($this->course, $first["review_token"]);
+        for ($i = 0; $i < 51; $i++) {
+            $review = $this->service->review($this->course, "Fictional later approval " . $i);
+            $this->service->publish($this->course, $review["review_token"]);
+        }
+        $this->f->clock->time = $this->f->clock->time->modify("+2 days");
+        $before = $this->f->sql->rows("sis_course_descriptions");
+        self::assertSame($receipt, $this->service->publish($this->course, $first["review_token"]));
+        self::assertCount(52, $this->f->sql->rows("sis_history_events"));
+        self::assertSame($before, $this->f->sql->rows("sis_course_descriptions"));
+    }
+
     public function testCloningCopiesReviewedTextOnlyIntoAnInactiveDraft(): void
     {
         $f = $this->f;

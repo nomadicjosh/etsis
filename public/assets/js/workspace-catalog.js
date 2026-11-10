@@ -857,7 +857,7 @@ window.createWorkspaceCatalog = function (ui) {
             ),
         );
     }
-    async function publications(course, cursor = null, stack = [], returnTo = null) {
+    async function publications(course, cursor = null, stack = [], returnTo = null, draft = { reason: "" }) {
         const data = await request(
             `/sis/courses/${course}/publication/page/`,
             "POST",
@@ -890,6 +890,10 @@ window.createWorkspaceCatalog = function (ui) {
                 "Explain this publication or revision. The reason is retained privately with the decision.",
             ),
         );
+        reason.value = draft.reason;
+        reason.addEventListener("input", () => {
+            draft.reason = reason.value;
+        });
         const review = submit("Review current definition");
         form.append(review);
         form.addEventListener("submit", (event) => {
@@ -899,7 +903,7 @@ window.createWorkspaceCatalog = function (ui) {
                 const reviewed = await request(`/sis/courses/${course}/publication/review/`, "POST", {
                     reason: reason.value,
                 });
-                reviewDefinition(course, reviewed, returnTo);
+                reviewDefinition(course, reviewed, returnTo, draft);
             }, review);
         });
         body.append(form, node("h3", { class: "h5 mt-4" }, "Retained versions (oldest first)"));
@@ -916,7 +920,11 @@ window.createWorkspaceCatalog = function (ui) {
             );
             details.append(
                 definitionDetails(item.definition),
-                node("p", { class: "form-text" }, `Recorded: ${item.recorded_at}`),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}`,
+                ),
                 reference(item.version_id),
             );
             body.append(details);
@@ -924,18 +932,18 @@ window.createWorkspaceCatalog = function (ui) {
         if (stack.length)
             body.append(
                 button("Previous definitions page", () =>
-                    publications(course, stack.at(-1), stack.slice(0, -1), returnTo),
+                    publications(course, stack.at(-1), stack.slice(0, -1), returnTo, draft),
                 ),
             );
         if (data.next_cursor)
             body.append(
                 button("Next definitions page", () =>
-                    publications(course, data.next_cursor, [...stack, cursor], returnTo),
+                    publications(course, data.next_cursor, [...stack, cursor], returnTo, draft),
                 ),
             );
         if (returnTo) body.append(button("Back to offering definitions", returnTo));
     }
-    function reviewDefinition(course, reviewed, returnTo = null) {
+    function reviewDefinition(course, reviewed, returnTo = null, draft = { reason: reviewed.reason }) {
         const body = openDrawer("Review course publication", "REVIEW → PUBLISH");
         body.append(
             node(
@@ -944,7 +952,11 @@ window.createWorkspaceCatalog = function (ui) {
                 `This creates version ${reviewed.expected_version + 1}. Review the saved definition before publishing.`,
             ),
             definitionDetails(reviewed.definition),
-            node("p", {}, `Effective from this review: ${reviewed.effective_at}`),
+            node(
+                "p",
+                { class: "alert alert-info" },
+                "Publication takes effect when you confirm it. An unconfirmed review expires after 20 minutes.",
+            ),
             node("p", {}, `Reason: ${reviewed.reason}`),
         );
         body.append(
@@ -972,7 +984,13 @@ window.createWorkspaceCatalog = function (ui) {
                 },
                 "btn-primary",
             ),
-            button("Return to definitions", () => publications(course, null, [], returnTo)),
+            button("Refresh course review", async () => {
+                const current = await request(`/sis/courses/${course}/publication/review/`, "POST", {
+                    reason: draft.reason,
+                });
+                reviewDefinition(course, current, returnTo, draft);
+            }),
+            button("Return to definitions", () => publications(course, null, [], returnTo, draft)),
         );
     }
     async function sectionDefinition(

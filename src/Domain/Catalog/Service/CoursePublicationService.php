@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Domain\Catalog\Service;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\CoursePublication;
 use Domain\Catalog\Event\CourseDefinitionWasPublished;
@@ -17,6 +15,8 @@ use Domain\Catalog\ValueObject\CourseText;
 use Domain\Catalog\ValueObject\CoursePublicationId;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\EventSourcing\EventContext;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -52,28 +52,21 @@ final readonly class CoursePublicationService
         }
         return $this->transactions->run(function () use ($course, $actor, $reason): array {
             $this->catalog->lock("courses", $course);
+            $this->authorize($actor);
             $definition = $this->definition($course)->describe();
-            $stream = $this->stream($course);
-            $publication = CoursePublication::root($stream->aggregateId);
-            $cursor = null;
-            do {
-                $page = $this->history->page($stream, $cursor, 50);
-                foreach ($page->events as $stored) {
-                    $publication->acceptHistorical($stored->event);
-                }
-                $cursor = $page->nextCursor;
-            } while ($cursor !== null);
+            [$publication] = $this->load($course);
+            $this->authorize($actor);
             $operation = EntityId::generate();
-            $context = new EventContext($actor, $this->clock->now(), $operation, reason: $reason);
+            new EventContext($actor, $this->clock->now(), $operation, reason: $reason);
             $data = [
-                "kind" => "course-publication-review.v2",
+                "kind" => "course-publication-review.v3",
                 "course_id" => $course->value,
                 "operation_id" => $operation->value,
                 "actor_id" => $actor->value,
                 "expected_version" => $publication->playhead(),
                 "previous_version_id" => $publication->versionId(),
                 "definition" => $definition,
-                "effective_at" => $context->describe()["effective_at"],
+                "expires_at" => $this->clock->now()->getTimestamp() + 1200,
                 "reason" => $reason,
             ];
             return $data + ["review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
@@ -93,11 +86,33 @@ final readonly class CoursePublicationService
                 !is_array($review) ||
                 !in_array(
                     $review["kind"] ?? null,
-                    ["course-publication-review.v1", "course-publication-review.v2"],
+                    [
+                        "course-publication-review.v1",
+                        "course-publication-review.v2",
+                        "course-publication-review.v3",
+                    ],
                     true,
                 ) ||
-                ($review["course_id"] ?? null) !== $course->value
+                ($review["course_id"] ?? null) !== $course->value ||
+                !is_string($review["actor_id"] ?? null) ||
+                !is_string($review["operation_id"] ?? null) ||
+                !is_int($review["expected_version"] ?? null) ||
+                $review["expected_version"] < 0 ||
+                !array_key_exists("previous_version_id", $review) ||
+                !is_string($review["reason"] ?? null) ||
+                !is_array($review["definition"] ?? null)
             ) {
+                throw new InvalidArgumentException();
+            }
+            $operation = new EntityId($review["operation_id"]);
+            if ($review["previous_version_id"] !== null) {
+                new EntityId($review["previous_version_id"]);
+            }
+            if ($review["kind"] === "course-publication-review.v3") {
+                if (!is_int($review["expires_at"] ?? null) || array_key_exists("effective_at", $review)) {
+                    throw new InvalidArgumentException();
+                }
+            } elseif (!is_string($review["effective_at"] ?? null)) {
                 throw new InvalidArgumentException();
             }
         } catch (Throwable) {
@@ -106,53 +121,67 @@ final readonly class CoursePublicationService
         if ($review["actor_id"] !== $actor->value) {
             throw new AccessDeniedException("This publication review belongs to another staff member.");
         }
-        return $this->transactions->run(function () use ($course, $actor, $review): array {
+        return $this->transactions->run(function () use ($course, $actor, $review, $operation): array {
             $this->catalog->lock("courses", $course);
-            $operation = new EntityId($review["operation_id"]);
-            $metadata = ["__aggregate_type" => "course_publication"];
-            if ($review["kind"] === "course-publication-review.v2") {
-                $metadata["schema_version"] = 2;
+            $this->authorize($actor);
+            [$root, $accepted] = $this->load($course, $operation);
+            $payload = [
+                "version_id" => $operation->value,
+                "previous_version_id" => $review["previous_version_id"],
+                "definition" => $review["definition"],
+            ];
+            $schema = $review["kind"] === "course-publication-review.v1" ? 1 : 2;
+            if ($accepted !== null) {
+                if (
+                    $accepted->context->actor?->value !== $actor->value ||
+                    $accepted->context->reason !== $review["reason"] ||
+                    $accepted->event->playhead() !== $review["expected_version"] + 1 ||
+                    $accepted->event->metaParam("schema_version", 1) !== $schema ||
+                    $this->fingerprint($accepted->event->payload()) !== $this->fingerprint($payload) ||
+                    ($review["kind"] !== "course-publication-review.v3" &&
+                        $accepted->context->describe()["effective_at"] !== $review["effective_at"])
+                ) {
+                    throw new ConcurrentModificationException("This publication operation was already used.");
+                }
+                $this->authorize($actor);
+                $position = $accepted->event->playhead();
+                return [
+                    "operation_id" => $operation->value,
+                    "first_version" => $position,
+                    "last_version" => $position,
+                    "event_ids" => [(string) $accepted->event->eventId()],
+                ];
             }
-            $event = CourseDefinitionWasPublished::occur(
-                $this->stream($course)->aggregateId,
-                [
-                    "version_id" => $operation->value,
-                    "previous_version_id" => $review["previous_version_id"],
-                    "definition" => $review["definition"],
-                ],
-                $metadata,
-            )->withPlayhead($review["expected_version"] + 1);
-            $context = new EventContext(
-                $actor,
-                new DateTimeImmutable($review["effective_at"], new DateTimeZone("UTC")),
-                $operation,
-                reason: $review["reason"],
-            );
+            if (
+                $review["kind"] !== "course-publication-review.v3" ||
+                $review["expires_at"] <= $this->clock->now()->getTimestamp() ||
+                $root->playhead() !== $review["expected_version"] ||
+                $root->versionId() !== $review["previous_version_id"] ||
+                $this->definition($course)->describe() !== $review["definition"]
+            ) {
+                throw new ConcurrentModificationException(
+                    "The course or review changed. Review it again before publishing.",
+                );
+            }
+            $this->authorize($actor);
+            $event = CourseDefinitionWasPublished::occur($this->stream($course)->aggregateId, $payload, [
+                "__aggregate_type" => "course_publication",
+                "schema_version" => 2,
+            ])->withPlayhead($root->playhead() + 1);
             $receipt = $this->history->append(
                 $this->stream($course),
                 $operation,
-                $review["expected_version"],
-                $context,
+                $root->playhead(),
+                new EventContext($actor, $this->clock->now(), $operation, reason: $review["reason"]),
                 [$event],
             );
-            if ($receipt["event_ids"] === [(string) $event->eventId()]) {
-                // Validate the reviewed draft within the same transaction. Failure also rolls back the new event.
-                if (
-                    $review["kind"] !== "course-publication-review.v2" ||
-                    $this->definition($course)->describe() !== $review["definition"]
-                ) {
-                    throw new ConcurrentModificationException(
-                        "The course changed. Review it again before publishing.",
-                    );
-                }
-                $this->textProjection->apply(
-                    $course,
-                    CourseText::fromArray($review["definition"]),
-                    $operation,
-                    $receipt["last_version"],
-                );
-                $this->audit->record($actor, "course.definition_published", $course);
-            }
+            $this->textProjection->apply(
+                $course,
+                CourseText::fromArray($review["definition"]),
+                $operation,
+                $receipt["last_version"],
+            );
+            $this->audit->record($actor, "course.definition_published", $course);
             return $receipt;
         });
     }
@@ -210,6 +239,49 @@ final readonly class CoursePublicationService
         throw new \Domain\Shared\Exception\RecordNotFoundException(
             "Published course definition not found for this course.",
         );
+    }
+
+    /** @return array{CoursePublication, ?StoredEvent} */
+    private function load(EntityId $course, ?EntityId $operation = null): array
+    {
+        $stream = $this->stream($course);
+        $root = CoursePublication::root($stream->aggregateId);
+        $accepted = null;
+        $cursor = null;
+        do {
+            $page = $this->history->page($stream, $cursor, 50);
+            foreach ($page->events as $stored) {
+                $root->acceptHistorical($stored->event);
+                if ($operation !== null && $stored->event->payload()["version_id"] === $operation->value) {
+                    if ($accepted !== null || $stored->context->correlation?->value !== $operation->value) {
+                        throw new CorruptHistoryException();
+                    }
+                    $accepted = $stored;
+                }
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        return [$root, $accepted];
+    }
+
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+            throw new AccessDeniedException("Access denied.");
+        }
+    }
+
+    /** @param array<mixed> $value */
+    private function fingerprint(array $value): string
+    {
+        $normalize = function (mixed $v) use (&$normalize): mixed {
+            if (!is_array($v)) {
+                return $v;
+            }
+            ksort($v);
+            return array_map($normalize, $v);
+        };
+        return hash("sha256", json_encode($normalize($value), JSON_THROW_ON_ERROR));
     }
 
     private function stream(EntityId $course): StreamReference

@@ -2534,6 +2534,25 @@ if (
         "Course text draft editing did not resolve through protected provider bindings.",
     );
 }
+$expiredCourseReview = json_decode(
+    (string) $teachingPost($publicationPath . "review/", [
+        "reason" => "Fictional expiring course approval",
+    ])->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$courseEventsBeforeExpiry = $sis->sql->rows("sis_history_events");
+$sis->clock->time = $sis->clock->time->modify("+20 minutes");
+$expiredCourseResponse = $teachingPost($publicationPath . "commit/", [
+    "review_token" => $expiredCourseReview["review_token"],
+]);
+if (
+    $expiredCourseResponse->getStatusCode() !== 409 ||
+    !str_contains($expiredCourseResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $sis->sql->rows("sis_history_events") !== $courseEventsBeforeExpiry
+) {
+    throw new RuntimeException("An expired course review was not rejected privately without new events.");
+}
 $publicationReviewResponse = $teachingPost($publicationPath . "review/", [
     "reason" => "Fictional academic catalog publication\nApproved fictional revision.",
 ]);
@@ -2545,13 +2564,18 @@ $publicationReview = json_decode(
 if (
     $publicationReviewResponse->getStatusCode() !== 200 ||
     !isset($publicationReview["review_token"]) ||
+    ($publicationReview["kind"] ?? null) !== "course-publication-review.v3" ||
+    !is_int($publicationReview["expires_at"] ?? null) ||
+    array_key_exists("effective_at", $publicationReview) ||
     !str_contains($publicationReviewResponse->getHeaderLine("Cache-Control"), "no-store")
 ) {
     throw new RuntimeException("Course publication review did not resolve privately through the provider.");
 }
+$sis->clock->time = $sis->clock->time->modify("+2 minutes");
 $publicationSaved = $teachingPost($publicationPath . "commit/", [
     "review_token" => $publicationReview["review_token"],
 ]);
+$sis->clock->time = $sis->clock->time->modify("+21 minutes");
 $publicationRetry = $teachingPost($publicationPath . "commit/", [
     "review_token" => $publicationReview["review_token"],
 ]);
@@ -2559,6 +2583,8 @@ $publicationPage = $teachingPost($publicationPath . "page/", []);
 $publishedDefinitions = json_decode((string) $publicationPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $publishedDefinitions["items"][0]["schema_version"] !== 2 ||
+    new DateTimeImmutable($publishedDefinitions["items"][0]["effective_at"])->getTimestamp() !==
+        $sis->clock->now()->modify("-21 minutes")->getTimestamp() ||
     $publishedDefinitions["items"][0]["definition"]["transcript_title"] !== "Fictional short title"
 ) {
     throw new RuntimeException("Course publication did not retain the reviewed catalog text.");
