@@ -9,7 +9,9 @@ use Domain\Shared\ValueObject\EntityId;
 
 final readonly class MatriculateStudentCommand implements Command
 {
-    public function __construct(public EntityId $applicationId)
-    {
+    public function __construct(
+        public EntityId $applicationId,
+        #[\SensitiveParameter] public string $reviewToken,
+    ) {
     }
 }

@@ -1,6 +1,6 @@
 # Additional student-program assignments
 
-Implemented 2026-11-09. Additional programs now start their history when staff create the assignment. [Closing/reopening](student-program-status-history.md) continues in the same stream, and [primary-program selection](student-primary-program-history.md) remains a separate reviewed action. The first assignment created during admissions matriculation still needs its own historical conversion; this stage does not invent creation events for existing rows.
+Implemented 2026-11-09. Additional programs now start their history when staff create the assignment. [Closing/reopening](student-program-status-history.md) continues in the same stream, and [primary-program selection](student-primary-program-history.md) remains a separate reviewed action. [Initial matriculation](student-matriculation.md) now starts the first assignment in this same status stream; neither path invents creation events for older rows.
 
 ## Staff workflow
 
@@ -30,4 +30,4 @@ The assignment, derived curriculum if needed, cohort binding, creation event, ch
 
 Fictional integration checks cover write-free previews, existing and newly created curriculum references, explicitly unlinked terms, replay from creation, primary selection, closure and exact retries, duplicate and stale reviews, changed calendar/curriculum setup, ownership and permission rechecks, protected reasons, invalid event shapes and complete rollback. The workspace browser check covers review, revision, confirmation and history with keyboard/focus, accessibility and narrow-screen checks.
 
-Initial matriculation and its first program assignment, complete lifecycle/standing decisions, backdated program corrections and operational projection rebuild/swap tooling remain later stages. An initial cohort snapshot records what was assigned at creation; later cohort corrections keep their separate existing history rather than rewriting that event.
+Complete admissions/lifecycle/standing decisions, backdated program corrections and operational projection rebuild/swap tooling remain later stages. An initial cohort snapshot records what was assigned at creation; later cohort corrections keep their separate existing history rather than rewriting that event.

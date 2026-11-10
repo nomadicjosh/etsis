@@ -12,5 +12,6 @@ interface StudentPrimaryProgramRepository
 {
     /** @return array{id:string,assignment_id:string,stream_version:int,last_decision_id:string}|null */
     public function marker(EntityId $student): ?array;
+    public function track(StudentPrimaryProgram $root): void;
     public function project(StudentPrimaryProgram $root, Student $before, int $expected): void;
 }

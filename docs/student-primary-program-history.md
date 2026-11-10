@@ -1,6 +1,6 @@
 # Primary-program decisions
 
-Implemented 2026-11-09. This stage retains changes to the student's primary program, including the exact student-program assignment selected. It complements the separate [program closure/reopening history](student-program-status-history.md). Initial matriculation and its first assignment, standing, graduation and backdated program corrections remain separate work. [Additional assignments](student-program-assignments.md) now begin with their own creation history.
+Implemented 2026-11-09. This stage retains changes to the student's primary program, including the exact student-program assignment selected. It complements the separate [program closure/reopening history](student-program-status-history.md). [Initial matriculation](student-matriculation.md) now establishes the first primary pursuit. Standing, graduation and backdated program corrections remain separate work. [Additional assignments](student-program-assignments.md) now begin with their own creation history.
 
 ## Staff workflow
 
@@ -16,7 +16,7 @@ Primary decisions and their timeline require `sis:registration:manage`. Ownershi
 
 ## Earlier history and retries
 
-The first accepted primary change on a student without a stream records **PrimaryProgramWasObserved**. It captures the selection seen now and its student/person/original-entry-term relationship, then **PrimaryProgramWasSelected** records the new pursuit and preceding recorded decision. Protected context retains the trusted actor, entered reason, actual confirmation time and operation identity. Earlier primary selections remain explicitly unknown. Reads, previews and the migration do not manufacture earlier events, including for new matriculations whose creation workflow still awaits conversion.
+The first accepted primary change on a student without a stream records **PrimaryProgramWasObserved**. It captures the selection seen now and its student/person/original-entry-term relationship, then **PrimaryProgramWasSelected** records the new pursuit and preceding recorded decision. Protected context retains the trusted actor, entered reason, actual confirmation time and operation identity. Earlier primary selections remain explicitly unknown. Reads, previews and the migration do not manufacture earlier events. Newly confirmed matriculations instead begin with **PrimaryProgramWasEstablished**; their later changes append selections without inventing an observation.
 
 The existing primary pointer identifies a program, so etsis resolves its exact active assignment before observing it. If no active assignment exists, or multiple active assignments make the choice ambiguous, etsis stops and reports an error. It does not guess an assignment or repair the records while reading them.
 

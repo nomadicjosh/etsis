@@ -40,13 +40,28 @@ final class PersonManagementFixture
         $db = $f->connection->queryBuilder();
         $this->access = new SqlAccessRepository($f->sql);
         $people = new SqlPersonAccountRepository($f->sql, $f->admissions, new RandomInstitutionalIdGenerator());
-        $this->users = new EventSourcedUserRepository(EventStoreFixture::framework($db),
-            new ExpressiveDbalUserProjection($db, $this->access, $people), $db);
+        $this->users = new EventSourcedUserRepository(
+            EventStoreFixture::framework($db),
+            new ExpressiveDbalUserProjection($db, $this->access, $people),
+            $db
+        );
         $this->guard = new UserAccountAccess($this->access, $f->access, $f->transactions);
-        $this->admissions = new AdmissionsService($f->admissions, $f->access, $f->transactions, $f->audit,
-            new RandomInstitutionalIdGenerator(), $f->catalogEnrollment());
-        $this->profiles = new PersonProfileEditor($f->admissions, new SqlPersonProfileRepository($f->sql),
-            $this->users, $this->guard, $f->access, $f->transactions, $f->audit);
+        $this->admissions = new AdmissionsService(
+            $f->admissions,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            new RandomInstitutionalIdGenerator()
+        );
+        $this->profiles = new PersonProfileEditor(
+            $f->admissions,
+            new SqlPersonProfileRepository($f->sql),
+            $this->users,
+            $this->guard,
+            $f->access,
+            $f->transactions,
+            $f->audit
+        );
         $this->accounts = new PersonAccountEditor($f->admissions, $this->users, $this->guard, $f->access, $f->audit);
     }
 
@@ -56,8 +71,14 @@ final class PersonManagementFixture
         $name = 'fixture_' . chr(97 + ++$this->counter);
         $person = $this->admissions->createPerson(null, 'Alex', 'Example', 'T-' . $this->counter);
         if ($account) {
-            $service = new PersonAccountService($f->admissions, $this->users, $f->access, $f->transactions,
-                $f->audit, new SqlPersonProfileRepository($f->sql));
+            $service = new PersonAccountService(
+                $f->admissions,
+                $this->users,
+                $f->access,
+                $f->transactions,
+                $f->audit,
+                new SqlPersonProfileRepository($f->sql)
+            );
             $service->enable($person->id, $name, $name . '@example.invalid', self::PASSWORD);
         }
 

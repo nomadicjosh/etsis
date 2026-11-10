@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+
 require_once __DIR__ . "/ReusableGroupFixture.php";
 use Domain\Admissions\Service\AdmissionsService;
 use Domain\DegreeAudit\Service\PublishedRequirementsReader;
@@ -35,12 +36,11 @@ final class StudentRequirementsFixture
             $s->transactions,
             $s->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
-            $s->catalogEnrollment(),
         );
         $person = $admit->createPerson($s->access->actor, "Fictional", "Learner");
         $application = $admit->apply($person->id, $s->program, $term);
         $admit->decide($application->id, true);
-        $student = $admit->matriculate($application->id);
+        $student = $s->legacyStudent($application->id);
         $this->student = $student->id;
         $this->assignment = new EntityId(
             $s->sql->rows("sis_student_programs", ["student_id" => $this->student->value], 1)[0]["id"],

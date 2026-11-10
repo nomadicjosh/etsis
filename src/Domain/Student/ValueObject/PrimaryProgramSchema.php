@@ -15,10 +15,15 @@ final class PrimaryProgramSchema
     /** @param array<string,mixed> $p */
     public static function validate(string $class, array $p): void
     {
-        $observed = $class === PrimaryProgramWasObserved::class;
+        $started = $class === \Domain\Student\Event\PrimaryProgramWasEstablished::class;
+        $observed = $class === PrimaryProgramWasObserved::class || $started;
         $fields = $observed
         ? ["decision_id", "student_id", "person_id", "institutional_entry_term_id", "selection"]
         : ["decision_id", "previous_decision_id", "selection"];
+        if ($started) {
+            $fields[] = "application_id";
+            self::id($p["application_id"] ?? null);
+        }
         if (
             (!$observed && $class !== PrimaryProgramWasSelected::class) ||
             count($p) !== count($fields) ||
@@ -38,6 +43,9 @@ final class PrimaryProgramSchema
             }
         }
         self::selection($p["selection"]);
+        if ($started && $p["selection"]["entry_term_id"] !== $p["institutional_entry_term_id"]) {
+            throw new CorruptHistoryException();
+        }
     }
     public static function selection(mixed $s): void
     {

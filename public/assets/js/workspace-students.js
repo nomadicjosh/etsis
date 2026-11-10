@@ -1,8 +1,19 @@
 /* Connected student activity, programs and registration. No private browser storage. */
 window.createWorkspaceStudents = function (ui) {
     "use strict";
-    const { node, request, task, can, openDrawer, openPerson, table, badge, flow, registration, showAudit } =
-        ui;
+    const {
+        node,
+        request,
+        task,
+        can,
+        openDrawer,
+        openPerson,
+        table,
+        badge,
+        flow,
+        registration,
+        showAudit,
+    } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -25,10 +36,18 @@ window.createWorkspaceStudents = function (ui) {
             table(headers, rows, caption),
         );
 
-    const status = (value) => (value === null ? "Unknown" : value ? "Active" : "Inactive");
+    const status = (value) =>
+        value === null ? "Unknown" : value ? "Active" : "Inactive";
     async function activity(record, back) {
-        const page = await request(`/sis/students/${record.id}/activity/history/`, "POST", {});
-        const body = openDrawer("Review student activity", "REGISTRAR DECISION");
+        const page = await request(
+            `/sis/students/${record.id}/activity/history/`,
+            "POST",
+            {},
+        );
+        const body = openDrawer(
+            "Review student activity",
+            "REGISTRAR DECISION",
+        );
         body.append(
             button("Back to student", back),
             node(
@@ -42,7 +61,10 @@ window.createWorkspaceStudents = function (ui) {
             ["effective_on", "Effective date", "date"],
             ["reason", "Reason for this decision", "textarea"],
         ];
-        const form = await ui.buildForm(descriptors, { active: record.active, effective_on: page.today });
+        const form = await ui.buildForm(descriptors, {
+            active: record.active,
+            effective_on: page.today,
+        });
         form.elements.effective_on.max = page.today;
         form.elements.effective_on.required = true;
         form.elements.reason.required = true;
@@ -58,14 +80,25 @@ window.createWorkspaceStudents = function (ui) {
             task(async () => {
                 if (!form.reportValidity()) return;
                 const data = ui.formData(form, descriptors);
-                const preview = await request(`/sis/students/${record.id}/activity/review/`, "POST", {
-                    ...data,
-                    revision: record.revision,
-                });
-                const confirmBody = openDrawer("Confirm student activity", "REVIEWED DECISION");
+                const preview = await request(
+                    `/sis/students/${record.id}/activity/review/`,
+                    "POST",
+                    {
+                        ...data,
+                        revision: record.revision,
+                    },
+                );
+                const confirmBody = openDrawer(
+                    "Confirm student activity",
+                    "REVIEWED DECISION",
+                );
                 confirmBody.append(
                     button("Revise decision", () => activity(record, back)),
-                    node("h3", {}, `${status(preview.requested_active)} from ${preview.effective_on}`),
+                    node(
+                        "h3",
+                        {},
+                        `${status(preview.requested_active)} from ${preview.effective_on}`,
+                    ),
                     node(
                         "dl",
                         { class: "detail-list" },
@@ -106,9 +139,13 @@ window.createWorkspaceStudents = function (ui) {
                     button(
                         "Confirm activity decision",
                         async () => {
-                            await request(`/sis/students/${record.id}/activity/commit/`, "POST", {
-                                review_token: preview.review_token,
-                            });
+                            await request(
+                                `/sis/students/${record.id}/activity/commit/`,
+                                "POST",
+                                {
+                                    review_token: preview.review_token,
+                                },
+                            );
                             await back();
                         },
                         "btn-primary",
@@ -121,7 +158,11 @@ window.createWorkspaceStudents = function (ui) {
         body.append(form);
     }
     async function activityHistory(id, back, cursor = null, previous = []) {
-        const page = await request(`/sis/students/${id}/activity/history/`, "POST", cursor ? { cursor } : {});
+        const page = await request(
+            `/sis/students/${id}/activity/history/`,
+            "POST",
+            cursor ? { cursor } : {},
+        );
         const body = openDrawer("Activity history", "REGISTRAR RECORD");
         body.append(
             button("Back to student", back),
@@ -129,10 +170,13 @@ window.createWorkspaceStudents = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "This timeline lists decisions in recording order. Effective dates determine when each status applies. Earlier history is unknown; an observation records the status seen when tracking began. Protected reasons are not included here.",
+                page.earlier_history_unknown === false
+                    ? "This timeline starts with initial activation at matriculation. Effective dates determine when later statuses apply. Protected reasons are not included here."
+                    : "This timeline lists decisions in recording order. Effective dates determine when each status applies. Earlier history is unknown; an observation records the status seen when tracking began. Protected reasons are not included here.",
             ),
         );
         const sources = {
+            matriculation: "Initial activation at matriculation",
             observed_existing: "Observed current status",
             registrar: "Registrar decision",
             hiatus: "Hiatus",
@@ -150,19 +194,31 @@ window.createWorkspaceStudents = function (ui) {
                       ]),
                       "Student activity decisions",
                   )
-                : node("p", {}, "No activity decisions have been recorded yet."),
+                : node(
+                      "p",
+                      {},
+                      "No activity decisions have been recorded yet.",
+                  ),
         );
         const controls = node("div", { class: "inline-actions" });
         if (previous.length)
             controls.append(
                 button("Previous activity page", () =>
-                    activityHistory(id, back, previous[previous.length - 1], previous.slice(0, -1)),
+                    activityHistory(
+                        id,
+                        back,
+                        previous[previous.length - 1],
+                        previous.slice(0, -1),
+                    ),
                 ),
             );
         if (page.next_cursor)
             controls.append(
                 button("Next activity page", () =>
-                    activityHistory(id, back, page.next_cursor, [...previous, cursor]),
+                    activityHistory(id, back, page.next_cursor, [
+                        ...previous,
+                        cursor,
+                    ]),
                 ),
             );
         body.append(controls);
@@ -183,11 +239,17 @@ window.createWorkspaceStudents = function (ui) {
                 "This status change takes effect when confirmed. It preserves the program's entry term, degree requirements, credits and financial history. Closing an assignment does not record graduation or withdraw the student from courses.",
             ),
         );
-        const descriptors = [["reason", "Reason for this program decision", "textarea"]];
+        const descriptors = [
+            ["reason", "Reason for this program decision", "textarea"],
+        ];
         const form = await ui.buildForm(descriptors, preset);
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
-        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review program status");
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review program status",
+        );
         form.append(review);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -199,10 +261,19 @@ window.createWorkspaceStudents = function (ui) {
                     "POST",
                     { ...data, active: !closing, revision: item.revision },
                 );
-                const confirmation = openDrawer("Confirm program status", "REVIEWED DECISION");
+                const confirmation = openDrawer(
+                    "Confirm program status",
+                    "REVIEWED DECISION",
+                );
                 confirmation.append(
-                    button("Revise program decision", () => programStatus(id, item, back, data)),
-                    node("h3", {}, `${preview.program.code}: ${preview.before} → ${preview.after}`),
+                    button("Revise program decision", () =>
+                        programStatus(id, item, back, data),
+                    ),
+                    node(
+                        "h3",
+                        {},
+                        `${preview.program.code}: ${preview.before} → ${preview.after}`,
+                    ),
                     node(
                         "p",
                         {},
@@ -214,11 +285,17 @@ window.createWorkspaceStudents = function (ui) {
                         "The previous status and this decision will be retained. Earlier history before tracking began is unknown. Your reason is protected and is not included in the ordinary status timeline.",
                     ),
                     button(
-                        closing ? "Confirm program closure" : "Confirm program reopening",
+                        closing
+                            ? "Confirm program closure"
+                            : "Confirm program reopening",
                         async () => {
-                            await request(`/sis/students/${id}/programs/${item.id}/status/commit/`, "POST", {
-                                review_token: preview.review_token,
-                            });
+                            await request(
+                                `/sis/students/${id}/programs/${item.id}/status/commit/`,
+                                "POST",
+                                {
+                                    review_token: preview.review_token,
+                                },
+                            );
                             await back();
                         },
                         "btn-primary",
@@ -231,7 +308,13 @@ window.createWorkspaceStudents = function (ui) {
         });
         body.append(form);
     }
-    async function programStatusHistory(id, item, back, cursor = null, previous = []) {
+    async function programStatusHistory(
+        id,
+        item,
+        back,
+        cursor = null,
+        previous = [],
+    ) {
         const page = await request(
             `/sis/students/${id}/programs/${item.id}/status/history/`,
             "POST",
@@ -279,7 +362,11 @@ window.createWorkspaceStudents = function (ui) {
                       ]),
                       "Program status decisions",
                   )
-                : node("p", {}, "No program status decisions have been recorded yet."),
+                : node(
+                      "p",
+                      {},
+                      "No program status decisions have been recorded yet.",
+                  ),
         );
         const controls = node("div", { class: "inline-actions" });
         if (previous.length)
@@ -297,7 +384,10 @@ window.createWorkspaceStudents = function (ui) {
         if (page.next_cursor)
             controls.append(
                 button("Next program history page", () =>
-                    programStatusHistory(id, item, back, page.next_cursor, [...previous, cursor]),
+                    programStatusHistory(id, item, back, page.next_cursor, [
+                        ...previous,
+                        cursor,
+                    ]),
                 ),
             );
         body.append(controls);
@@ -314,7 +404,9 @@ window.createWorkspaceStudents = function (ui) {
                 "Choose this existing assignment as primary when you confirm. Future rules that use the primary program will use this selection. Other programs, entry terms, degree requirements, earned credits and posted charges stay connected to their existing records.",
             ),
         );
-        const descriptors = [["reason", "Reason for this primary-program decision", "textarea"]];
+        const descriptors = [
+            ["reason", "Reason for this primary-program decision", "textarea"],
+        ];
         const form = await ui.buildForm(descriptors, preset);
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
@@ -329,15 +421,28 @@ window.createWorkspaceStudents = function (ui) {
             task(async () => {
                 if (!form.reportValidity()) return;
                 const data = ui.formData(form, descriptors);
-                const preview = await request(`/sis/students/${record.id}/primary-program/review/`, "POST", {
-                    ...data,
-                    assignment_id: item.id,
-                    revision: record.revision,
-                });
-                const confirmation = openDrawer("Confirm primary program", "REVIEWED DECISION");
+                const preview = await request(
+                    `/sis/students/${record.id}/primary-program/review/`,
+                    "POST",
+                    {
+                        ...data,
+                        assignment_id: item.id,
+                        revision: record.revision,
+                    },
+                );
+                const confirmation = openDrawer(
+                    "Confirm primary program",
+                    "REVIEWED DECISION",
+                );
                 confirmation.append(
-                    button("Revise primary decision", () => primaryProgram(record, item, back, data)),
-                    node("h3", {}, `${preview.before.program_code} → ${preview.after.program_code}`),
+                    button("Revise primary decision", () =>
+                        primaryProgram(record, item, back, data),
+                    ),
+                    node(
+                        "h3",
+                        {},
+                        `${preview.before.program_code} → ${preview.after.program_code}`,
+                    ),
                     node(
                         "dl",
                         { class: "detail-list" },
@@ -362,7 +467,11 @@ window.createWorkspaceStudents = function (ui) {
                             ),
                         ),
                     ),
-                    node("p", {}, `Takes effect when confirmed on ${preview.effective_on}.`),
+                    node(
+                        "p",
+                        {},
+                        `Takes effect when confirmed on ${preview.effective_on}.`,
+                    ),
                     node(
                         "p",
                         { class: "form-text" },
@@ -371,10 +480,14 @@ window.createWorkspaceStudents = function (ui) {
                     button(
                         "Confirm primary program",
                         async () => {
-                            await request(`/sis/students/${record.id}/primary-program/commit/`, "POST", {
-                                assignment_id: item.id,
-                                review_token: preview.review_token,
-                            });
+                            await request(
+                                `/sis/students/${record.id}/primary-program/commit/`,
+                                "POST",
+                                {
+                                    assignment_id: item.id,
+                                    review_token: preview.review_token,
+                                },
+                            );
                             await back();
                         },
                         "btn-primary",
@@ -404,42 +517,69 @@ window.createWorkspaceStudents = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "These labels are retained as recorded. An observation describes the selection seen when tracking began; earlier selections are unknown. Protected reasons and actor details are excluded.",
+                page.earlier_history_unknown === false
+                    ? "This history starts with the first primary program at matriculation. Labels are retained as recorded. Protected reasons and actor details are excluded."
+                    : "These labels are retained as recorded. An observation describes the selection seen when tracking began; earlier selections are unknown. Protected reasons and actor details are excluded.",
             ),
         );
         body.append(
             page.items.length
                 ? grid(
-                      ["Program as recorded", "Pursuit entry term", "Effective", "Recorded", "Record"],
+                      [
+                          "Program as recorded",
+                          "Pursuit entry term",
+                          "Effective",
+                          "Recorded",
+                          "Record",
+                      ],
                       page.items.map((row) => [
                           `${row.selection.program_code} · ${row.selection.program_title}`,
                           row.selection.entry_term_code,
                           row.effective_at,
                           row.recorded_at,
-                          row.kind === "observation" ? "Observed current selection" : "Registrar selection",
+                          row.kind === "initial"
+                              ? "Initial primary program"
+                              : row.kind === "observation"
+                                ? "Observed current selection"
+                                : "Registrar selection",
                       ]),
                       "Primary-program decisions",
                   )
-                : node("p", {}, "No primary-program decisions have been recorded yet."),
+                : node(
+                      "p",
+                      {},
+                      "No primary-program decisions have been recorded yet.",
+                  ),
         );
         const controls = node("div", { class: "inline-actions" });
         if (previous.length)
             controls.append(
                 button("Previous primary history page", () =>
-                    primaryHistory(id, back, previous[previous.length - 1], previous.slice(0, -1)),
+                    primaryHistory(
+                        id,
+                        back,
+                        previous[previous.length - 1],
+                        previous.slice(0, -1),
+                    ),
                 ),
             );
         if (page.next_cursor)
             controls.append(
                 button("Next primary history page", () =>
-                    primaryHistory(id, back, page.next_cursor, [...previous, cursor]),
+                    primaryHistory(id, back, page.next_cursor, [
+                        ...previous,
+                        cursor,
+                    ]),
                 ),
             );
         body.append(controls);
     }
 
     async function assignProgram(record, back, preset = {}) {
-        const body = openDrawer("Assign an additional program", "REGISTRAR DECISION");
+        const body = openDrawer(
+            "Assign an additional program",
+            "REGISTRAR DECISION",
+        );
         body.append(
             button("Back to student", back),
             node(
@@ -467,16 +607,29 @@ window.createWorkspaceStudents = function (ui) {
             task(async () => {
                 if (!form.reportValidity()) return;
                 const data = ui.formData(form, descriptors);
-                const preview = await request(`/sis/students/${record.id}/programs/assign/review/`, "POST", {
-                    ...data,
-                    revision: record.revision,
-                });
+                const preview = await request(
+                    `/sis/students/${record.id}/programs/assign/review/`,
+                    "POST",
+                    {
+                        ...data,
+                        revision: record.revision,
+                    },
+                );
                 const source = preview.source;
                 const cohort = source.cohort;
-                const confirmation = openDrawer("Confirm program assignment", "REVIEWED DECISION");
+                const confirmation = openDrawer(
+                    "Confirm program assignment",
+                    "REVIEWED DECISION",
+                );
                 confirmation.append(
-                    button("Revise assignment", () => assignProgram(record, back, data)),
-                    node("h3", {}, `${source.program_code} · ${source.program_title}`),
+                    button("Revise assignment", () =>
+                        assignProgram(record, back, data),
+                    ),
+                    node(
+                        "h3",
+                        {},
+                        `${source.program_code} · ${source.program_title}`,
+                    ),
                     node(
                         "dl",
                         { class: "detail-list" },
@@ -522,9 +675,13 @@ window.createWorkspaceStudents = function (ui) {
                     button(
                         "Confirm program assignment",
                         async () => {
-                            await request(`/sis/students/${record.id}/programs/assign/commit/`, "POST", {
-                                review_token: preview.review_token,
-                            });
+                            await request(
+                                `/sis/students/${record.id}/programs/assign/commit/`,
+                                "POST",
+                                {
+                                    review_token: preview.review_token,
+                                },
+                            );
                             await back();
                         },
                         "btn-primary",
@@ -540,7 +697,10 @@ window.createWorkspaceStudents = function (ui) {
 
     async function student(id) {
         const record = await request(`/sis/students/${id}/record/`);
-        const body = openDrawer(`${record.given_name} ${record.family_name}`, "STUDENT RECORD");
+        const body = openDrawer(
+            `${record.given_name} ${record.family_name}`,
+            "STUDENT RECORD",
+        );
         const back = () => student(id);
         body.append(
             node("p", {}, record.institutional_id),
@@ -552,7 +712,11 @@ window.createWorkspaceStudents = function (ui) {
                     "div",
                     {},
                     node("dt", {}, "Primary program"),
-                    node("dd", {}, `${record.primary_program.code} · ${record.primary_program.title}`),
+                    node(
+                        "dd",
+                        {},
+                        `${record.primary_program.code} · ${record.primary_program.title}`,
+                    ),
                 ),
                 node(
                     "div",
@@ -565,72 +729,119 @@ window.createWorkspaceStudents = function (ui) {
         const actions = node("div", { class: "inline-actions" });
         body.append(actions);
         if (can("sis:person:manage"))
-            actions.append(button("Open connected person", () => openPerson(record.person_id)));
+            actions.append(
+                button("Open connected person", () =>
+                    openPerson(record.person_id),
+                ),
+            );
         if (can("sis:audit:read"))
-            actions.append(button("View audit history", () => showAudit("students", id)));
+            actions.append(
+                button("View audit history", () => showAudit("students", id)),
+            );
         if (can("sis:student:read"))
             actions.append(
                 button("View transcript", async () => {
-                    const response = await request(`/sis/students/${id}/transcript/`);
-                    const transcript = openDrawer("Academic transcript", "STUDENT RECORD");
+                    const response = await request(
+                        `/sis/students/${id}/transcript/`,
+                    );
+                    const transcript = openDrawer(
+                        "Academic transcript",
+                        "STUDENT RECORD",
+                    );
                     transcript.append(
                         button("Back to student", back),
                         grid(
                             ["Course", "Title", "Grade", "Action"],
-                            (response.rows || response.credits || []).map((item) => [
-                                item.course_code,
-                                item.course_title,
-                                item.grade_code || "—",
-                                item.credit_type === "transfer" &&
-                                item.source_id &&
-                                can("sis:transfer:manage") &&
-                                can("sis:student:read")
-                                    ? button("Review transfer award", () =>
-                                          ui.transferAwards().record(id, item.source_id),
-                                      )
-                                    : item.credit_type === "institutional" && item.section_id
-                                      ? node(
-                                            "div",
-                                            { class: "inline-actions" },
-                                            button("Grade history", () =>
-                                                ui
-                                                    .teaching()
-                                                    .gradeHistory(
-                                                        { id: item.section_id },
-                                                        { student_id: id },
-                                                        back,
-                                                    ),
-                                            ),
-                                            can("sis:gradebook:amend") &&
-                                                can("sis:student:read") &&
-                                                (item.grade_code || can("sis:gradebook:manage")) &&
-                                                ["A", "N"].includes(item.status)
-                                                ? button("Review final grade", () =>
-                                                      ui
-                                                          .teaching()
-                                                          .recordFinalGrade(
-                                                              { id: item.section_id },
-                                                              { student_id: id, grade_code: item.grade_code },
-                                                              back,
-                                                          ),
-                                                  )
-                                                : null,
-                                        )
-                                      : "—",
-                            ]),
+                            (response.rows || response.credits || []).map(
+                                (item) => [
+                                    item.course_code,
+                                    item.course_title,
+                                    item.grade_code || "—",
+                                    item.credit_type === "transfer" &&
+                                    item.source_id &&
+                                    can("sis:transfer:manage") &&
+                                    can("sis:student:read")
+                                        ? button("Review transfer award", () =>
+                                              ui
+                                                  .transferAwards()
+                                                  .record(id, item.source_id),
+                                          )
+                                        : item.credit_type ===
+                                                "institutional" &&
+                                            item.section_id
+                                          ? node(
+                                                "div",
+                                                { class: "inline-actions" },
+                                                button("Grade history", () =>
+                                                    ui
+                                                        .teaching()
+                                                        .gradeHistory(
+                                                            {
+                                                                id: item.section_id,
+                                                            },
+                                                            { student_id: id },
+                                                            back,
+                                                        ),
+                                                ),
+                                                can("sis:gradebook:amend") &&
+                                                    can("sis:student:read") &&
+                                                    (item.grade_code ||
+                                                        can(
+                                                            "sis:gradebook:manage",
+                                                        )) &&
+                                                    ["A", "N"].includes(
+                                                        item.status,
+                                                    )
+                                                    ? button(
+                                                          "Review final grade",
+                                                          () =>
+                                                              ui
+                                                                  .teaching()
+                                                                  .recordFinalGrade(
+                                                                      {
+                                                                          id: item.section_id,
+                                                                      },
+                                                                      {
+                                                                          student_id:
+                                                                              id,
+                                                                          grade_code:
+                                                                              item.grade_code,
+                                                                      },
+                                                                      back,
+                                                                  ),
+                                                      )
+                                                    : null,
+                                            )
+                                          : "—",
+                                ],
+                            ),
                             "Academic transcript",
                         ),
                     );
                 }),
             );
         if (can("sis:registration:manage"))
-            actions.append(button("Registration history", () => ui.registrationHistory().history(id, back)));
+            actions.append(
+                button("Registration history", () =>
+                    ui.registrationHistory().history(id, back),
+                ),
+            );
         if (can("sis:registration:manage"))
-            actions.append(button("Hiatus history", () => ui.hiatus().page(id)));
+            actions.append(
+                button("Hiatus history", () => ui.hiatus().page(id)),
+            );
         if (can("sis:registration:manage")) {
-            actions.append(button("Change student activity", () => activity(record, back)));
-            actions.append(button("Activity history", () => activityHistory(id, back)));
-            actions.append(button("Primary-program history", () => primaryHistory(id, back)));
+            actions.append(
+                button("Change student activity", () => activity(record, back)),
+            );
+            actions.append(
+                button("Activity history", () => activityHistory(id, back)),
+            );
+            actions.append(
+                button("Primary-program history", () =>
+                    primaryHistory(id, back),
+                ),
+            );
         }
 
         const programs = node(
@@ -647,7 +858,11 @@ window.createWorkspaceStudents = function (ui) {
             ),
         );
         if (can("sis:registration:manage"))
-            programs.append(button("Assign an additional program", () => assignProgram(record, back)));
+            programs.append(
+                button("Assign an additional program", () =>
+                    assignProgram(record, back),
+                ),
+            );
         const information = node("p", {
             class: "form-text",
             role: "status",
@@ -667,10 +882,18 @@ window.createWorkspaceStudents = function (ui) {
             after = nextAfter;
             await load();
         });
-        programs.append(information, content, node("div", { class: "inline-actions" }, previous, next));
+        programs.append(
+            information,
+            content,
+            node("div", { class: "inline-actions" }, previous, next),
+        );
         async function load() {
             const token = ++serial;
-            const page = await request(`/sis/students/${id}/programs/`, "POST", { after });
+            const page = await request(
+                `/sis/students/${id}/programs/`,
+                "POST",
+                { after },
+            );
             if (!body.isConnected || token !== serial) return;
             nextAfter = page.next_after;
             previous.disabled = previousCursors.length === 0;
@@ -679,7 +902,14 @@ window.createWorkspaceStudents = function (ui) {
             content.replaceChildren(
                 page.items.length
                     ? grid(
-                          ["Program", "Entry term", "Catalog", "Status", "Primary", "Actions"],
+                          [
+                              "Program",
+                              "Entry term",
+                              "Catalog",
+                              "Status",
+                              "Primary",
+                              "Actions",
+                          ],
                           page.items.map((item) => {
                               const controls = node("div", {
                                   class: "inline-actions",
@@ -687,7 +917,13 @@ window.createWorkspaceStudents = function (ui) {
                               if (can("sis:student:read"))
                                   controls.append(
                                       button("Degree requirements", () =>
-                                          ui.degreeAudit().studentRequirements(id, item.id, back),
+                                          ui
+                                              .degreeAudit()
+                                              .studentRequirements(
+                                                  id,
+                                                  item.id,
+                                                  back,
+                                              ),
                                       ),
                                   );
                               if (can("sis:registration:manage")) {
@@ -698,12 +934,23 @@ window.createWorkspaceStudents = function (ui) {
                                   );
                                   controls.append(
                                       button("Matriculation cohort", () =>
-                                          ui.calendar().studentCatalog(id, item.id),
+                                          ui
+                                              .calendar()
+                                              .studentCatalog(id, item.id),
                                       ),
                                   );
-                                  if (!item.is_primary && item.status === "active")
+                                  if (
+                                      !item.is_primary &&
+                                      item.status === "active"
+                                  )
                                       controls.append(
-                                          button("Make primary", () => primaryProgram(record, item, back)),
+                                          button("Make primary", () =>
+                                              primaryProgram(
+                                                  record,
+                                                  item,
+                                                  back,
+                                              ),
+                                          ),
                                       );
                                   if (!item.is_primary)
                                       controls.append(
@@ -711,7 +958,8 @@ window.createWorkspaceStudents = function (ui) {
                                               item.status === "active"
                                                   ? "Close assignment"
                                                   : "Reopen assignment",
-                                              () => programStatus(id, item, back),
+                                              () =>
+                                                  programStatus(id, item, back),
                                           ),
                                       );
                               }

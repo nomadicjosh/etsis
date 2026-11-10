@@ -285,19 +285,144 @@ window.createWorkspacePeople = function (ui) {
             actions.append(
                 button(
                     "Matriculate student",
-                    () =>
-                        flow(
-                            "Confirm matriculation",
-                            [],
-                            `/sis/applications/${row.id}/matriculate/`,
-                            null,
-                            back,
-                            {},
-                            "Create a student record for this accepted application using its program and entry term. The same person and institutional ID are retained.",
-                        ),
+                    () => matriculate(row),
                     "btn-primary",
                 ),
             );
+        if (app.status === "matriculated")
+            actions.append(
+                button("Matriculation history", () =>
+                    matriculationHistory(row),
+                ),
+            );
+    }
+    async function matriculate(row, preset = {}) {
+        const body = openDrawer("Matriculate student", "ACCEPTED APPLICATION");
+        body.append(
+            button("Back to application", () => application(row)),
+            node(
+                "p",
+                {},
+                "Review the student’s first program, entry term and cohort before creating their record. The person and institutional ID stay connected.",
+            ),
+        );
+        const fields = [["reason", "Reason for matriculation", "textarea"]];
+        const form = await buildForm(fields, preset);
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review matriculation",
+        );
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = formData(form, fields);
+                const preview = await request(
+                    `/sis/applications/${row.id}/matriculate/review/`,
+                    "POST",
+                    data,
+                );
+                const confirmation = openDrawer(
+                    "Confirm matriculation",
+                    "REVIEWED DECISION",
+                );
+                const source = preview.source;
+                confirmation.append(
+                    button("Revise matriculation", () =>
+                        matriculate(row, data),
+                    ),
+                    node(
+                        "h3",
+                        {},
+                        `${preview.person.given_name} ${preview.person.family_name}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Institutional ID: ${preview.person.institutional_id}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `${source.program_code} · ${source.program_title} · ${source.entry_term_code}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        source.cohort
+                            ? `Cohort: ${source.cohort.year_code}. Curriculum revision ${source.cohort.revision}${source.cohort.catalog_id ? " is available." : " will be created on confirmation."}`
+                            : "This term has no linked academic year. No cohort will be assigned; review calendar setup separately.",
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `The student becomes active on ${preview.effective_on}. This records the first program and primary selection together. Degree-audit requirements are assigned separately.`,
+                    ),
+                    button(
+                        "Confirm matriculation",
+                        async () => {
+                            await request(
+                                `/sis/applications/${row.id}/matriculate/commit/`,
+                                "POST",
+                                { review_token: preview.review_token },
+                            );
+                            notify(
+                                "Student record created. Initial program and activity history recorded.",
+                            );
+                            await application(row);
+                        },
+                        "btn-primary",
+                    ),
+                );
+                const heading = confirmation.querySelector("h3");
+                heading.tabIndex = -1;
+                heading.focus();
+            }, review);
+        });
+        body.append(form);
+    }
+    async function matriculationHistory(row) {
+        const record = await request(
+            `/sis/applications/${row.id}/matriculate/history/`,
+        );
+        const body = openDrawer("Matriculation history", "ADMISSIONS RECORD");
+        body.append(button("Back to application", () => application(row)));
+        if (!record.history_recorded) {
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "This application’s earlier matriculation was not recorded in the event history. No creation date or first program is inferred from current records.",
+                ),
+            );
+            return;
+        }
+        const source = record.source;
+        body.append(
+            node("h3", {}, "Initial matriculation"),
+            node(
+                "p",
+                {},
+                `${source.program_code} · ${source.program_title} · ${source.entry_term_code}`,
+            ),
+            node(
+                "p",
+                {},
+                source.cohort
+                    ? `Original cohort: ${source.cohort.year_code} · curriculum revision ${source.cohort.revision}`
+                    : "No cohort was assigned at matriculation.",
+            ),
+            node("p", {}, `Confirmed: ${record.matriculation.effective_at}`),
+            node(
+                "p",
+                { class: "form-text" },
+                "These are the original creation facts. Later program and activity decisions remain in their respective histories. The preceding acceptance decision is not yet tracked as an academic event. Protected reasons and actor details are excluded.",
+            ),
+        );
     }
     return { editProfile, account, application };
 };

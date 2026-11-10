@@ -51,6 +51,35 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Admissions\Event\StudentWasMatriculated::class => [
+                "type" => "matriculation",
+                "root" => \Domain\Admissions\Matriculation::class,
+                "fields" => \Domain\Admissions\ValueObject\MatriculationSchema::FIELDS,
+            ],
+            \Domain\Student\Event\StudentActivityWasStarted::class => [
+                "type" => "student_activity",
+                "root" => \Domain\Student\StudentActivity::class,
+                "fields" => [
+                    "decision_id",
+                    "student_id",
+                    "person_id",
+                    "active",
+                    "effective_on",
+                    "application_id",
+                ],
+            ],
+            \Domain\Student\Event\PrimaryProgramWasEstablished::class => [
+                "type" => "student_primary_program",
+                "root" => \Domain\Student\StudentPrimaryProgram::class,
+                "fields" => [
+                    "decision_id",
+                    "student_id",
+                    "person_id",
+                    "institutional_entry_term_id",
+                    "selection",
+                    "application_id",
+                ],
+            ],
             \Domain\Student\Event\StudentProgramWasAssigned::class => [
                 "type" => "student_program_status",
                 "root" => \Domain\Student\StudentProgramStatus::class,
@@ -299,10 +328,23 @@ final readonly class HistoricalSchemaRegistry
             if ($class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class && $version === 4) {
                 $definition["fields"][] = "grade_scale";
             }
+            if ($stream->type === "matriculation") {
+                \Domain\Admissions\ValueObject\MatriculationSchema::validate($class, $payload);
+                if ($payload["application_id"] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($stream->type === "student_primary_program") {
                 \Domain\Student\ValueObject\PrimaryProgramSchema::validate($class, $payload);
                 if (
-                    $class === \Domain\Student\Event\PrimaryProgramWasObserved::class &&
+                    in_array(
+                        $class,
+                        [
+                            \Domain\Student\Event\PrimaryProgramWasObserved::class,
+                            \Domain\Student\Event\PrimaryProgramWasEstablished::class,
+                        ],
+                        true,
+                    ) &&
                     $payload["student_id"] !== (string) $stream->aggregateId
                 ) {
                     throw new CorruptHistoryException();
@@ -672,6 +714,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Admissions\Matriculation::class => "matriculation",
             \Domain\Student\StudentPrimaryProgram::class => "student_primary_program",
             \Domain\Student\StudentProgramStatus::class => "student_program_status",
             \Domain\Student\StudentActivity::class => "student_activity",
@@ -696,6 +739,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            "matriculation" => new \Domain\Admissions\ValueObject\MatriculationId($id),
             "student_primary_program" => new \Domain\Student\ValueObject\StudentPrimaryProgramId($id),
             "student_program_status" => new \Domain\Student\ValueObject\StudentProgramStatusId($id),
             "student_activity" => new \Domain\Student\ValueObject\StudentActivityId($id),

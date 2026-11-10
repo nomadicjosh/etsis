@@ -10,12 +10,21 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
-    $router->map(["POST"], "/sis/programs/", [SisCatalogController::class, "program"])->name("sis.programs.create");
     $router
-        ->map(["POST"], "/sis/terms/", [\Application\Http\Controller\SisAcademicCalendarController::class, "saveTerm"])
+        ->map(["POST"], "/sis/programs/", [SisCatalogController::class, "program"])
+        ->name("sis.programs.create");
+    $router
+        ->map(["POST"], "/sis/terms/", [
+            \Application\Http\Controller\SisAcademicCalendarController::class,
+            "saveTerm",
+        ])
         ->name("sis.terms.create");
-    $router->map(["POST"], "/sis/accounts/", [SisFinanceController::class, "open"])->name("sis.accounts.open");
-    $router->map(["GET"], "/sis/accounts/{id}/", [SisFinanceController::class, "show"])->name("sis.accounts.show");
+    $router
+        ->map(["POST"], "/sis/accounts/", [SisFinanceController::class, "open"])
+        ->name("sis.accounts.open");
+    $router
+        ->map(["GET"], "/sis/accounts/{id}/", [SisFinanceController::class, "show"])
+        ->name("sis.accounts.show");
     $router
         ->map(["POST"], "/sis/accounts/{id}/entries/", [SisFinanceController::class, "post"])
         ->name("sis.accounts.post");
@@ -29,12 +38,29 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/applications/{id}/decision/", [SisAdmissionsController::class, "decide"])
         ->name("sis.applications.decide");
     $router
-        ->map(["POST"], "/sis/applications/{id}/matriculate/", [SisAdmissionsController::class, "matriculate"])
-        ->name("sis.applications.matriculate");
+        ->map(["POST"], "/sis/applications/{id}/matriculate/review/", [
+            \Application\Http\Controller\SisMatriculationController::class,
+            "review",
+        ])
+        ->name("sis.applications.matriculate.review");
+    $router
+        ->map(["POST"], "/sis/applications/{id}/matriculate/commit/", [
+            \Application\Http\Controller\SisMatriculationController::class,
+            "commit",
+        ])
+        ->name("sis.applications.matriculate.commit");
+    $router
+        ->map(["GET"], "/sis/applications/{id}/matriculate/history/", [
+            \Application\Http\Controller\SisMatriculationController::class,
+            "history",
+        ])
+        ->name("sis.applications.matriculate.history");
     $router
         ->map(["GET"], "/sis/students/{id}/", [SisAdmissionsController::class, "student"])
         ->name("sis.students.show");
-    $router->map(["GET"], "/sis/persons/{id}/", [SisAdmissionsController::class, "person"])->name("sis.persons.show");
+    $router
+        ->map(["GET"], "/sis/persons/{id}/", [SisAdmissionsController::class, "person"])
+        ->name("sis.persons.show");
     $router
         ->map(["POST"], "/sis/persons/{id}/institutional-id/", [
             SisAdmissionsController::class,

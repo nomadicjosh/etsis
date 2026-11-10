@@ -38,6 +38,44 @@ final readonly class StudentActivityLedger
     {
         return $this->load($student)->playhead();
     }
+    /** Called only for a genuinely new student inside the matriculation transaction. */
+    public function start(
+        Student $student,
+        EntityId $application,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason,
+    ): void {
+        if ($this->access->authenticatedUserId()->value !== $actor->value || !$student->active) {
+            throw new AccessDeniedException("The initial activity actor or state changed.");
+        }
+        $root = $this->load($student);
+        if ($root->playhead() !== 0) {
+            throw new CorruptHistoryException();
+        }
+        $decision = PublishedGradeId::forVersion($operation, "matriculation.activity");
+        $e = \Domain\Student\Event\StudentActivityWasStarted::occur(
+            new StudentActivityId($student->id->value),
+            [
+                "decision_id" => $decision->value,
+                "student_id" => $student->id->value,
+                "person_id" => $student->personId->value,
+                "active" => true,
+                "effective_on" => $this->clock->now()->format("Y-m-d"),
+                "application_id" => $application->value,
+            ],
+            ["__aggregate_type" => "student_activity"],
+        )->withPlayhead(1);
+        $root->acceptHistorical($e);
+        $this->history->append(
+            $this->stream($student->id),
+            $decision,
+            0,
+            new EventContext($actor, $this->clock->now(), $operation, reason: $reason),
+            [$e],
+        );
+        $this->records->project($student->id, $root, true, 0);
+    }
     /** @return array<string,mixed> */
     public function preview(Student $student, bool $active, string $on): array
     {
@@ -57,7 +95,7 @@ final readonly class StudentActivityLedger
             "requested_active" => $active,
             "resulting_active" => $root->active(),
             "effective_on" => $on,
-            "earlier_history_unknown" => true,
+            "earlier_history_unknown" => $root->earlierHistoryUnknown(),
         ];
     }
 
@@ -151,10 +189,19 @@ final readonly class StudentActivityLedger
         foreach ($page->events as $stored) {
             $p = $stored->event->payload();
             $items[] = [
-                "kind" => $stored->event instanceof StudentActivityWasObserved ? "observation" : "decision",
+                "kind" =>
+                    $stored->event instanceof \Domain\Student\Event\StudentActivityWasStarted
+                        ? "initial"
+                        : ($stored->event instanceof StudentActivityWasObserved
+                            ? "observation"
+                            : "decision"),
                 "active" => $p["active"],
                 "effective_on" => $p["effective_on"],
-                "source" => $p["source"] ?? "observed_existing",
+                "source" =>
+                    $p["source"] ??
+                    ($stored->event instanceof \Domain\Student\Event\StudentActivityWasStarted
+                        ? "matriculation"
+                        : "observed_existing"),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
             ];
         }
@@ -163,7 +210,7 @@ final readonly class StudentActivityLedger
             "next_cursor" => $page->nextCursor,
             "active" => $student->active,
             "history_recorded" => $root->playhead() > 0,
-            "earlier_history_unknown" => true,
+            "earlier_history_unknown" => $root->earlierHistoryUnknown(),
             "today" => $this->clock->now()->format("Y-m-d"),
         ];
     }

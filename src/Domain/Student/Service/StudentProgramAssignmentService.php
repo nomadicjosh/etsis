@@ -7,7 +7,6 @@ namespace Domain\Student\Service;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogYearRepository;
-use Domain\Catalog\Service\CatalogEnrollment;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -21,7 +20,6 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Student;
 use Domain\Student\StudentProgram;
-use Domain\Student\ValueObject\StudentProgramStatusSchema;
 
 final readonly class StudentProgramAssignmentService
 {
@@ -32,7 +30,7 @@ final readonly class StudentProgramAssignmentService
         private StudentPrimaryProgramLedger $primary,
         private StudentActivityLedger $activity,
         private CatalogYearRepository $catalogs,
-        private CatalogEnrollment $enrollment,
+        private ProgramEntryContext $entry,
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
@@ -75,7 +73,7 @@ final readonly class StudentProgramAssignmentService
                 );
             }
             $this->ledger->assertCanAssign($student, $program, $term);
-            $source = $this->proposal($program, $term);
+            $source = $this->entry->proposal($program, $term);
             $token = $this->cipher->seal(
                 json_encode(
                     [
@@ -151,7 +149,7 @@ final readonly class StudentProgramAssignmentService
                         "This assignment identity already exists. Review the record again.",
                     );
             }
-            $source = $this->proposal($program, $term);
+            $source = $this->entry->proposal($program, $term);
             if (
                 $p["expires"] < $this->clock->now()->getTimestamp() ||
                 !hash_equals($p["context"], $this->context($s, $source))
@@ -163,8 +161,7 @@ final readonly class StudentProgramAssignmentService
             $this->ledger->assertCanAssign($student, $program, $term);
             $assignment = new StudentProgram($id, $student, $program, $term);
             $this->students->addAssignment($assignment);
-            $this->enrollment->initialize($assignment, $actor);
-            $source["cohort"] = $this->acceptedCohort($id, $program, $source["cohort"]);
+            $source = $this->entry->initialize($assignment, $actor, $source);
             $result = $this->ledger->assigned($assignment, $source, $actor, $p["reason"]);
             $this->audit->record($actor, "student.program_assigned", $student);
             return $result;
@@ -182,53 +179,6 @@ final readonly class StudentProgramAssignmentService
         $this->activity->verify($s);
         $this->primary->verify($s);
         return $s;
-    }
-    /** @return array{program_code:string,program_title:string,entry_term_code:string,cohort:?array{year_id:string,year_code:string,catalog_id:?string,revision:int}} */
-    private function proposal(EntityId $program, EntityId $term): array
-    {
-        $programRow = $this->students->program($program);
-        $termRow = $this->students->term($term);
-        $source = [
-            "program_code" => $programRow["code"],
-            "program_title" => $programRow["title"],
-            "entry_term_code" => $termRow["code"],
-            "cohort" => null,
-        ];
-        StudentProgramStatusSchema::source($source);
-        $source["cohort"] = $this->catalogs->plan($program, $term);
-        return $source;
-    }
-    /** @param array{year_id:string,year_code:string,catalog_id:?string,revision:int}|null $plan
-     * @return array{catalog_id:string,year_id:string,year_code:string,revision:int}|null */
-    private function acceptedCohort(EntityId $assignment, EntityId $program, ?array $plan): ?array
-    {
-        $binding = $this->catalogs->binding($assignment);
-        if ($plan === null) {
-            if ($binding !== null) {
-                throw new CorruptHistoryException();
-            }
-            return null;
-        }
-        if ($binding === null) {
-            throw new CorruptHistoryException();
-        }
-        $id = new EntityId($binding["catalog_id"]);
-        $release = $this->catalogs->release($id);
-        if (
-            ($plan["catalog_id"] !== null && $plan["catalog_id"] !== $id->value) ||
-            $release["program_id"] !== $program->value ||
-            $release["year_id"] !== $plan["year_id"] ||
-            $release["year_code"] !== $plan["year_code"] ||
-            $release["revision"] !== $plan["revision"]
-        ) {
-            throw new CorruptHistoryException();
-        }
-        return [
-            "catalog_id" => $id->value,
-            "year_id" => $plan["year_id"],
-            "year_code" => $plan["year_code"],
-            "revision" => $plan["revision"],
-        ];
     }
     private function revision(Student $s): string
     {

@@ -112,6 +112,7 @@ final readonly class StudentProgramStatusLedger
         array $source,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $correlation = null,
     ): array {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException("The assignment actor changed.");
@@ -135,7 +136,7 @@ final readonly class StudentProgramStatusLedger
             $this->stream($assignment->id),
             $assignment->id,
             0,
-            new EventContext($actor, $at, $assignment->id, reason: $reason),
+            new EventContext($actor, $at, $correlation ?? $assignment->id, reason: $reason),
             [$e],
         );
         $this->records->track($root);

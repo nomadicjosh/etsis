@@ -21,6 +21,7 @@ final class StudentActivity extends EventSourcedAggregate
     private ?string $effective = null;
     private ?bool $active = null;
     private bool $explicit = false;
+    private bool $earlierUnknown = true;
 
     public function effectiveThrough(string $date): void
     {
@@ -55,6 +56,25 @@ final class StudentActivity extends EventSourcedAggregate
         if ($p["effective_on"] <= $this->cutoff) {
             $this->select($p);
         }
+    }
+    public function whenStudentActivityWasStarted(
+        \Domain\Student\Event\StudentActivityWasStarted $event,
+    ): void {
+        $p = $event->payload();
+        if ($this->person !== null) {
+            throw new CorruptHistoryException();
+        }
+        $this->person = $p["person_id"];
+        $this->last = $p["decision_id"];
+        $this->earlierUnknown = false;
+        if ($p["effective_on"] <= $this->cutoff) {
+            $this->select($p);
+            $this->explicit = true;
+        }
+    }
+    public function earlierHistoryUnknown(): bool
+    {
+        return $this->earlierUnknown;
     }
     public function whenStudentActivityWasDecided(StudentActivityWasDecided $event): void
     {

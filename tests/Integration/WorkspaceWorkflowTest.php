@@ -36,7 +36,6 @@ final class WorkspaceWorkflowTest extends TestCase
                 $fixture->transactions,
                 $fixture->audit,
                 new RandomInstitutionalIdGenerator(),
-                $fixture->catalogEnrollment()
             ),
             $fixture->access,
             $fixture->transactions,
@@ -84,7 +83,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->transactions,
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
-            $fixture->catalogEnrollment()
         );
         $record = $person->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
@@ -122,7 +120,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->transactions,
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
-            $fixture->catalogEnrollment()
         );
         $person = $admissions->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
@@ -184,7 +181,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->transactions,
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
-            $fixture->catalogEnrollment()
         );
         $service = new \Domain\Workspace\Service\WorkspaceService(
             new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog()),
@@ -209,7 +205,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->transactions,
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
-            $fixture->catalogEnrollment()
         );
         for ($index = 0; $index < 52; ++$index) {
             $admissions->createPerson(null, 'Example', 'Person ' . $index);
@@ -234,7 +229,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->transactions,
             $fixture->audit,
             new RandomInstitutionalIdGenerator(),
-            $fixture->catalogEnrollment()
         );
         $person = $admissions->createPerson(null, 'Alex', 'Example', '00001234');
         $repository = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
@@ -286,7 +280,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             new RandomInstitutionalIdGenerator(),
-            $f->catalogEnrollment()
         );
         $person = $admissions->createPerson($f->access->actor, 'Alex', 'Example');
         $original = $forms->save(null, $f->program, 'Original application', $this->fields(), null);
@@ -320,7 +313,6 @@ final class WorkspaceWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             new RandomInstitutionalIdGenerator(),
-            $f->catalogEnrollment()
         );
         $person = $admissions->createPerson(null, 'Jamie', 'Example');
         $application = $admissions->apply($person->id, $f->program, $f->term);

@@ -325,7 +325,7 @@ final class SisFixture
             $this->primaryProgramLedger(),
             $this->activityLedger(),
             new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
-            $this->catalogEnrollment(),
+            $this->programEntryContext(),
             $this->access,
             $this->transactions,
             $audit ?? $this->audit,
@@ -556,6 +556,78 @@ final class SisFixture
         return $id;
     }
 
+    public function admissionsService(): AdmissionsService
+    {
+        return new AdmissionsService(
+            $this->admissions,
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
+        );
+    }
+    public function programEntryContext(
+        ?\Domain\Catalog\Service\CatalogEnrollment $initializer = null,
+    ): \Domain\Student\Service\ProgramEntryContext {
+        return new \Domain\Student\Service\ProgramEntryContext(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $initializer ?? $this->catalogEnrollment(),
+        );
+    }
+    public function matriculationService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Catalog\Service\CatalogEnrollment $initializer = null,
+        ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+    ): \Domain\Admissions\Service\MatriculationService {
+        $db = $this->connection->queryBuilder();
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql,
+            $this->transactions,
+            $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($db)),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        return new \Domain\Admissions\Service\MatriculationService(
+            $repository ?? $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $this->programEntryContext($initializer),
+            $this->programStatusLedger(),
+            $this->activityLedger(),
+            $this->primaryProgramLedger(),
+            $history,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
+    public function matriculate(EntityId $application): Student
+    {
+        $service = $this->matriculationService();
+        $review = $service->review($application, "Fictional confirmed matriculation");
+        $result = $service->commit($application, $review["review_token"]);
+        return $this->admissions->student(new EntityId($result["student_id"]));
+    }
+    /** Explicit current-state fixture for records predating tracked matriculation. No invented events. */
+    public function legacyStudent(EntityId $application): Student
+    {
+        $a = $this->admissions->application($application);
+        $student = $a->matriculate(EntityId::generate());
+        $p = new \Domain\Student\StudentProgram(
+            EntityId::generate(),
+            $student->id,
+            $a->programId,
+            $a->entryTermId,
+        );
+        $this->transactions->run(function () use ($a, $student, $p): void {
+            $this->admissions->projectMatriculation($a, $student, $p);
+            $this->catalogEnrollment()->initialize($p, $this->access->actor);
+        });
+        return $student;
+    }
     public function student(?EntityId $owner = null): Student
     {
         $service = new AdmissionsService(
@@ -564,7 +636,6 @@ final class SisFixture
             $this->transactions,
             $this->audit,
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
-            $this->catalogEnrollment(),
         );
         if (
             $owner === null &&
@@ -576,7 +647,7 @@ final class SisFixture
         $application = $service->apply($person->id, $this->program, $this->term);
         $service->decide($application->id, true);
 
-        return $service->matriculate($application->id);
+        return $this->legacyStudent($application->id);
     }
 
     public function section(int $capacity = 20, int $fee = 10000, ?EntityId $faculty = null): Section

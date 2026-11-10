@@ -15,6 +15,7 @@ use Domain\Student\ValueObject\PrimaryProgramSchema;
 final class StudentPrimaryProgram extends EventSourcedAggregate
 {
     private ?string $person = null;
+    private bool $earlierUnknown = true;
     private ?string $entryTerm = null;
     private ?string $decision = null;
     /** @var array<string,mixed>|null */
@@ -41,6 +42,23 @@ final class StudentPrimaryProgram extends EventSourcedAggregate
         $this->entryTerm = $p["institutional_entry_term_id"];
         $this->selection = PrimaryProgramSchema::normalizedSelection($p["selection"]);
         $this->decision = $p["decision_id"];
+    }
+    public function whenPrimaryProgramWasEstablished(
+        \Domain\Student\Event\PrimaryProgramWasEstablished $event,
+    ): void {
+        $p = $event->payload();
+        if ($this->selection !== null || $p["student_id"] !== (string) $this->aggregateId()) {
+            throw new CorruptHistoryException();
+        }
+        $this->person = $p["person_id"];
+        $this->entryTerm = $p["institutional_entry_term_id"];
+        $this->selection = PrimaryProgramSchema::normalizedSelection($p["selection"]);
+        $this->decision = $p["decision_id"];
+        $this->earlierUnknown = false;
+    }
+    public function earlierHistoryUnknown(): bool
+    {
+        return $this->earlierUnknown;
     }
     public function whenPrimaryProgramWasSelected(PrimaryProgramWasSelected $event): void
     {

@@ -1559,7 +1559,47 @@ $matriculation = $app->make(\Domain\Admissions\Service\AdmissionsService::class)
 $catalogPerson = $matriculation->createPerson($sis->user(), "Fictional", "Cohort");
 $catalogApplication = $matriculation->apply($catalogPerson->id, $sis->program, $sis->term);
 $matriculation->decide($catalogApplication->id, true);
-$catalogStudent = $matriculation->matriculate($catalogApplication->id);
+$matriculationPath = "/sis/applications/" . $catalogApplication->id->value . "/matriculate/";
+$matriculationBefore = $sis->sql->rows("sis_history_events");
+$matriculationReview = json_decode((string) $teachingPost($matriculationPath . "review/", [
+    "reason" => "Fictional confirmed matriculation",
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (!isset($matriculationReview["review_token"]) || $sis->sql->rows("sis_history_events") !== $matriculationBefore) {
+    throw new RuntimeException("Matriculation review failed or wrote history before confirmation.");
+}
+$matriculationCommit = $teachingPost($matriculationPath . "commit/", ["review_token" => $matriculationReview["review_token"]]);
+$matriculationReceipt = json_decode((string) $matriculationCommit->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($matriculationCommit->getStatusCode() !== 201 || !isset($matriculationReceipt["student_id"])) {
+    throw new RuntimeException("Reviewed matriculation did not resolve through the real provider and CSRF pipeline.");
+}
+$catalogStudent = $sis->admissions->student(new \Domain\Shared\ValueObject\EntityId($matriculationReceipt["student_id"]));
+$matriculationHistoryRequest = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $matriculationPath . "history/", "GET");
+$matriculationHistoryResponse = $app->router->match($matriculationHistoryRequest);
+$matriculationHistory = json_decode((string) $matriculationHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $matriculationHistoryResponse->getStatusCode() !== 200 || ($matriculationHistory["history_recorded"] ?? null) !== true
+    || !str_contains($matriculationHistoryResponse->getHeaderLine("Cache-Control"), "no-store")
+    || str_contains((string) $matriculationHistoryResponse->getBody(), "Fictional confirmed matriculation")
+) {
+    throw new RuntimeException("Matriculation history did not retain its private, curated envelope.");
+}
+$matriculationAfter = $sis->sql->rows("sis_history_events");
+if (
+    $teachingPost($matriculationPath . "commit/", ["review_token" => $matriculationReview["review_token"]])->getStatusCode() !== 201
+    || $sis->sql->rows("sis_history_events") !== $matriculationAfter
+) {
+    throw new RuntimeException("Matriculation confirmation retry changed the recorded history.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:student:read", "sis:registration:manage"];
+if (
+    $app->router->match($matriculationHistoryRequest)->getStatusCode() !== 403
+    || $teachingPost($matriculationPath . "commit/", ["review_token" => $matriculationReview["review_token"]])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Academic read or registrar access exposed admissions matriculation.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $catalogAssignments = json_decode(
     (string) $teachingPost("/sis/students/" . $catalogStudent->id->value . "/programs/", [])->getBody(),
     true,

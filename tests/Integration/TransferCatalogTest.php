@@ -368,7 +368,6 @@ final class TransferCatalogTest extends TestCase
                 $f->transactions,
                 $f->audit,
                 new RandomInstitutionalIdGenerator(),
-                $f->catalogEnrollment(),
             ),
         );
         self::assertCount(1, $workspace->records("courses")["items"]);

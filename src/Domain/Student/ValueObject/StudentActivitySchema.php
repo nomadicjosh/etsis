@@ -16,7 +16,8 @@ final class StudentActivitySchema
     /** @param array<string,mixed> $p */
     public static function validate(string $class, array $p): void
     {
-        $observed = $class === StudentActivityWasObserved::class;
+        $started = $class === \Domain\Student\Event\StudentActivityWasStarted::class;
+        $observed = $class === StudentActivityWasObserved::class || $started;
         $keys = $observed
         ? ["decision_id", "student_id", "person_id", "active", "effective_on"]
         : [
@@ -28,7 +29,11 @@ final class StudentActivitySchema
                 "source",
                 "reference_id",
             ];
+        if ($started) {
+            $keys[] = "application_id";
+        }
         if (
+            ($started && ($p["active"] ?? null) !== true) ||
             (!$observed && $class !== StudentActivityWasDecided::class) ||
             count($p) !== count($keys) ||
             array_diff(array_keys($p), $keys) !== [] ||
@@ -41,6 +46,9 @@ final class StudentActivitySchema
         $ids = $observed
         ? ["decision_id", "student_id", "person_id"]
         : ["decision_id", "previous_decision_id", "student_id"];
+        if ($started) {
+            $ids[] = "application_id";
+        }
         foreach ($ids as $key) {
             if (!is_string($p[$key] ?? null)) {
                 throw new CorruptHistoryException();

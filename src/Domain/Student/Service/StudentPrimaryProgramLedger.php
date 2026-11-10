@@ -37,6 +37,44 @@ final readonly class StudentPrimaryProgramLedger
     ) {
     }
 
+    /** Called after the first genuine assignment is recorded, under the matriculation transaction. */
+    public function initialize(
+        Student $student,
+        EntityId $application,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason,
+    ): void {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException("The initial primary-program actor changed.");
+        }
+        $root = $this->load($student)["root"];
+        if ($root->playhead() !== 0) {
+            throw new CorruptHistoryException();
+        }
+        $decision = PublishedGradeId::forVersion($operation, "matriculation.primary");
+        $e = \Domain\Student\Event\PrimaryProgramWasEstablished::occur(
+            new StudentPrimaryProgramId($student->id->value),
+            [
+                "decision_id" => $decision->value,
+                "student_id" => $student->id->value,
+                "person_id" => $student->personId->value,
+                "institutional_entry_term_id" => $student->entryTermId->value,
+                "selection" => $this->selection($this->statuses->primaryAssignment($student)),
+                "application_id" => $application->value,
+            ],
+            ["__aggregate_type" => "student_primary_program"],
+        )->withPlayhead(1);
+        $root->acceptHistorical($e);
+        $this->history->append(
+            $this->stream($student->id),
+            $decision,
+            0,
+            new EventContext($actor, $this->clock->now(), $operation, reason: $reason),
+            [$e],
+        );
+        $this->records->track($root);
+    }
     /**
      * @throws TypeException
      */
@@ -173,7 +211,12 @@ final readonly class StudentPrimaryProgramLedger
         $items = [];
         foreach ($page->events as $stored) {
             $items[] = [
-                "kind" => $stored->event instanceof PrimaryProgramWasObserved ? "observation" : "selection",
+                "kind" =>
+                    $stored->event instanceof \Domain\Student\Event\PrimaryProgramWasEstablished
+                        ? "initial"
+                        : ($stored->event instanceof PrimaryProgramWasObserved
+                            ? "observation"
+                            : "selection"),
                 "selection" => $stored->event->payload()["selection"],
                 "effective_at" => $stored->context->effectiveAt?->format(DATE_ATOM),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
@@ -183,7 +226,7 @@ final readonly class StudentPrimaryProgramLedger
             "items" => $items,
             "next_cursor" => $page->nextCursor,
             "history_recorded" => $root->playhead() > 0,
-            "earlier_history_unknown" => true,
+            "earlier_history_unknown" => $root->earlierHistoryUnknown(),
             "current_selection" =>
                 $root->selection() ?? $this->selection($this->statuses->primaryAssignment($student)),
         ];

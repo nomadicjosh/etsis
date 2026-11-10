@@ -38,6 +38,19 @@ final readonly class SqlStudentPrimaryProgramRepository implements StudentPrimar
             "last_decision_id" => $r["last_decision_id"],
         ];
     }
+    public function track(StudentPrimaryProgram $root): void
+    {
+        if ($root->playhead() !== 1 || $root->earlierHistoryUnknown()) {
+            throw new CorruptHistoryException();
+        }
+        $s = $root->selection() ?? throw new CorruptHistoryException();
+        $this->sql->insert("sis_primary_program_streams", [
+            "id" => (string) $root->aggregateId(),
+            "assignment_id" => $s["assignment_id"],
+            "stream_version" => 1,
+            "last_decision_id" => $root->decision() ?? throw new CorruptHistoryException(),
+        ]);
+    }
     public function project(StudentPrimaryProgram $root, Student $before, int $expected): void
     {
         $s = $root->selection() ?? throw new CorruptHistoryException();

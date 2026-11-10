@@ -29,7 +29,6 @@ final class PersonIdentityTest extends TestCase
             $f->transactions,
             $f->audit,
             $generator ?? new RandomInstitutionalIdGenerator(),
-            $f->catalogEnrollment()
         );
     }
 

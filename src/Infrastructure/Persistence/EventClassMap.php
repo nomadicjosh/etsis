@@ -24,6 +24,9 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\Admissions\Event\StudentWasMatriculated::class,
+            \Domain\Student\Event\StudentActivityWasStarted::class,
+            \Domain\Student\Event\PrimaryProgramWasEstablished::class,
             \Domain\Student\Event\StudentProgramWasAssigned::class,
             \Domain\Student\Event\PrimaryProgramWasObserved::class,
             \Domain\Student\Event\PrimaryProgramWasSelected::class,

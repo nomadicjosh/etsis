@@ -582,10 +582,6 @@
         const actions = node('div', { class: 'inline-actions' });
         const action = (label, path, data = {}, success = 'Updated.', style = 'btn-outline-primary') => actions.append(node('button', { type: 'button', class: `btn ${style}`, onclick: event => task(async () => { await request(path, 'POST', data); notify(success); drawer.hide(); if (datasets[current]) await loadDirectory(); }, event.currentTarget) }, label));
         if (row.person_id && can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => task(() => openPerson(row.person_id)) }, 'Open person record'));
-        if (section === 'applications') {
-            if (row.status === 'submitted') { action('Accept application', `/sis/applications/${row.id}/decision/`, { decision: 'accept' }, 'Application accepted.', 'btn-primary'); action('Reject application', `/sis/applications/${row.id}/decision/`, { decision: 'reject' }); }
-            if (row.status === 'accepted') action('Matriculate student', `/sis/applications/${row.id}/matriculate/`, {}, 'Student record created.', 'btn-primary');
-        }
         body.append(actions);
         await operations.enhance(section, row, body);
     }
