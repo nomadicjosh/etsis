@@ -55,6 +55,7 @@ final class CoursePublicationTest extends TestCase
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql),
             new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
         $this->editor = new CatalogEditor(
             $catalog,
@@ -81,6 +82,7 @@ final class CoursePublicationTest extends TestCase
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql),
             new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
     }
 

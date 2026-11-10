@@ -1,6 +1,6 @@
 # Published course definitions
 
-A course has one current `CourseDefinition` containing its code, title, fixed credits, prerequisite identities, `CourseText` and optional `SubjectSnapshot`. `PublishedCourseDefinition` adds the course and publication ULIDs. We evolve this model directly during alpha; field additions do not create another numbered domain class or a compatibility API.
+A course has one current `CourseDefinition` containing its code, title, fixed credits, prerequisite identities, `CourseText`, optional `SubjectSnapshot` and `CourseClassifications` for department/academic level/course level. `PublishedCourseDefinition` adds the course and publication ULIDs. We evolve this model directly during alpha; field additions do not create another numbered domain class or a compatibility API.
 
 A new **publication revision** is still a separate historical fact. Changing a title, description or subject and publishing again never overwrites the definition retained by an earlier section or student. Publication revisions and development-era serialization formats are different concerns.
 
@@ -8,7 +8,7 @@ A new **publication revision** is still a separate historical fact. Changing a t
 
 1. Open **Academic catalog → Courses** and open the course. Save course and prerequisite edits first.
 2. Use **Titles & description** for the optional transcript title (80 characters) and plain-text description (10,000 characters). Blank text is explicitly unspecified. Use **Course subject** for an explicit draft classification; subjects are not inferred from the course code.
-3. Select **Published definitions**, enter a reason and choose **Review current definition**. Earlier publications are paged oldest first, 20 at a time.
+3. Use **Departments & levels** to save all three classification choices together; see [classification setup](course-classifications.md). Select **Published definitions**, enter a reason and choose **Review current definition**. Earlier publications are paged oldest first, 20 at a time.
 4. Inspect the complete definition. An unconfirmed review expires after 20 minutes. **Refresh course review** prepares a fresh review; **Return to definitions** lets staff revise the reason. The draft reason remains in page memory across review and history pages, never browser storage.
 5. Choose **Publish reviewed definition**. Confirmation records the actor, protected reason and actual acceptance time, and displays the retained publication reference.
 

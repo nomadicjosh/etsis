@@ -37,6 +37,7 @@ final class AcademicReportSchema
                 "sis_credit_course_versions" => "Academic credit course versions",
                 "sis_section_course_versions" => "Section course definitions",
                 "sis_course_versions" => "Retained course definitions",
+                "sis_course_version_classes" => "Retained course classifications",
                 "sis_section_delivery" => "Delivery formats",
                 "sis_enrollments" => "Enrollments",
                 default => "Related records",
@@ -55,6 +56,26 @@ final class AcademicReportSchema
             "column" => $column,
             "permissions" => $permissions,
         ];
+        $classificationFields = [];
+        $classificationLabels = [
+            "department" => "department",
+            "academic_level" => "academic level",
+            "course_level" => "course level",
+        ];
+        foreach ($classificationLabels as $kind => $label) {
+            $classificationFields["retained_" . $kind . "_code"] = $field(
+                "Retained " . $label . " code",
+                "string",
+                "retained_classifications",
+                $kind . "_code",
+            );
+            $classificationFields["retained_" . $kind . "_title"] = $field(
+                "Retained " . $label . " name",
+                "string",
+                "retained_classifications",
+                $kind . "_title",
+            );
+        }
         $personJoins = [
             "person" => $join("sis_persons", "student", "person_id", "id"),
             "identity" => $join("sis_person_identifiers", "person", "id", "person_id"),
@@ -106,43 +127,65 @@ final class AcademicReportSchema
                 "grade" => $join("sis_grades", "credit", "grade_id", "id"),
                 "course_binding" => $join("sis_credit_course_versions", "credit", "id", "id"),
                 "course_version" => $join("sis_course_versions", "course_binding", "course_version_id", "id"),
-                "retained_subject" => $join("sis_course_version_subjects", "course_binding", "course_version_id", "id"),
-            ],
-            "fields" => $personFields + [
-                "retained_subject_code" => $field("Retained subject code", "string", "retained_subject", "code"),
-                "retained_subject_title" => $field("Retained subject name", "string", "retained_subject", "title"),
-                "course_version_id" => $field(
-                    "Retained course version",
-                    "string",
+                "retained_subject" => $join(
+                    "sis_course_version_subjects",
                     "course_binding",
                     "course_version_id",
+                    "id",
                 ),
-                "course_code" => $field("Recorded course code", "string", "credit", "course_code"),
-                "course_title" => $field("Recorded course title", "string", "credit", "course_title"),
-                "term_code" => $field("Academic term", "string", "term", "code"),
-                "term_starts_on" => $field("Term begins", "date", "term", "starts_on"),
-                "grade_code" => $field("Final grade", "string", "grade", "code"),
-                "grade_scale_version" => $field(
-                    "Recorded grade scale publication",
-                    "string",
-                    "grade",
-                    "scale_version_id",
+                "retained_classifications" => $join(
+                    "sis_course_version_classes",
+                    "course_binding",
+                    "course_version_id",
+                    "id",
                 ),
-                "grade_units" => $field("Grade-point units", "double", "grade", "points_milli") + [
-                    "scale" => 1000,
-                ],
-                "status" => $field("Academic credit status", "string", "credit", "status"),
-                "status_label" => $field("Readable academic status", "string", "credit", "status") + [
-                    "expression" => "registration_label",
-                ],
-                "credit_type" => $field("Credit type", "string", "credit", "credit_type"),
-                "attempted" => $field("Attempted credits", "double", "credit", "attempted_milli") + [
-                    "scale" => 1000,
-                ],
-                "completed" => $field("Earned credits", "double", "credit", "completed_milli") + [
-                    "scale" => 1000,
-                ],
             ],
+            "fields" => $personFields +
+                $classificationFields + [
+                    "retained_subject_code" => $field(
+                        "Retained subject code",
+                        "string",
+                        "retained_subject",
+                        "code",
+                    ),
+                    "retained_subject_title" => $field(
+                        "Retained subject name",
+                        "string",
+                        "retained_subject",
+                        "title",
+                    ),
+                    "course_version_id" => $field(
+                        "Retained course version",
+                        "string",
+                        "course_binding",
+                        "course_version_id",
+                    ),
+                    "course_code" => $field("Recorded course code", "string", "credit", "course_code"),
+                    "course_title" => $field("Recorded course title", "string", "credit", "course_title"),
+                    "term_code" => $field("Academic term", "string", "term", "code"),
+                    "term_starts_on" => $field("Term begins", "date", "term", "starts_on"),
+                    "grade_code" => $field("Final grade", "string", "grade", "code"),
+                    "grade_scale_version" => $field(
+                        "Recorded grade scale publication",
+                        "string",
+                        "grade",
+                        "scale_version_id",
+                    ),
+                    "grade_units" => $field("Grade-point units", "double", "grade", "points_milli") + [
+                        "scale" => 1000,
+                    ],
+                    "status" => $field("Academic credit status", "string", "credit", "status"),
+                    "status_label" => $field("Readable academic status", "string", "credit", "status") + [
+                        "expression" => "registration_label",
+                    ],
+                    "credit_type" => $field("Credit type", "string", "credit", "credit_type"),
+                    "attempted" => $field("Attempted credits", "double", "credit", "attempted_milli") + [
+                        "scale" => 1000,
+                    ],
+                    "completed" => $field("Earned credits", "double", "credit", "completed_milli") + [
+                        "scale" => 1000,
+                    ],
+                ],
         ];
         $sections = [
             "table" => "sis_sections",
@@ -155,7 +198,18 @@ final class AcademicReportSchema
                 "course_text" => $join("sis_course_descriptions", "course", "id", "course_id"),
                 "course_binding" => $join("sis_section_course_versions", "section", "id", "id"),
                 "course_version" => $join("sis_course_versions", "course_binding", "course_version_id", "id"),
-                "retained_subject" => $join("sis_course_version_subjects", "course_binding", "course_version_id", "id"),
+                "retained_subject" => $join(
+                    "sis_course_version_subjects",
+                    "course_binding",
+                    "course_version_id",
+                    "id",
+                ),
+                "retained_classifications" => $join(
+                    "sis_course_version_classes",
+                    "course_binding",
+                    "course_version_id",
+                    "id",
+                ),
                 "term" => $join("sis_terms", "section", "term_id", "id"),
                 "delivery" => $join("sis_section_delivery", "section", "id", "section_id"),
                 "enrollment" => $join("sis_enrollments", "section", "id", "section_id", $studentRead) + [
@@ -164,9 +218,19 @@ final class AcademicReportSchema
                 "student" => $join("sis_students", "enrollment", "student_id", "id", $studentRead),
                 ...$personJoins,
             ],
-            "fields" => [
-                "retained_subject_code" => $field("Retained subject code", "string", "retained_subject", "code"),
-                "retained_subject_title" => $field("Retained subject name", "string", "retained_subject", "title"),
+            "fields" => $classificationFields + [
+                "retained_subject_code" => $field(
+                    "Retained subject code",
+                    "string",
+                    "retained_subject",
+                    "code",
+                ),
+                "retained_subject_title" => $field(
+                    "Retained subject name",
+                    "string",
+                    "retained_subject",
+                    "title",
+                ),
                 "section_code" => $field("Section code", "string", "section", "code"),
                 "retained_course_version_id" => $field(
                     "Retained course version",

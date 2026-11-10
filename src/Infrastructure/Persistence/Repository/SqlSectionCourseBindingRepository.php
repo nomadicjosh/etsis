@@ -45,6 +45,7 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
                         "code" => $subject["code"],
                         "title" => $subject["title"],
                     ];
+            $definition["classifications"] = $this->classifications(new EntityId($r["id"]));
             $published = PublishedCourseDefinition::fromPublication(new EntityId($r["course_id"]), [
                 "version_id" => $r["id"],
                 "definition" => $definition,
@@ -89,6 +90,41 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
         }
     }
 
+    /** @return array<string, mixed> */
+    private function classifications(EntityId $version): array
+    {
+        $row = $this->sql->one("sis_course_version_classes", ["id" => $version->value]);
+        $values = [];
+        foreach (\Domain\Catalog\Enum\ClassificationKind::cases() as $kind) {
+            $id = $row[$kind->value . "_id"];
+            $code = $row[$kind->value . "_code"];
+            $title = $row[$kind->value . "_title"];
+            if ($id === null && ($code !== null || $title !== null)) {
+                throw new CorruptHistoryException();
+            }
+            $values[$kind->value] = $id === null ? null : ["id" => $id, "code" => $code, "title" => $title];
+        }
+        return \Domain\Catalog\ValueObject\CourseClassifications::fromArray($values)->describe();
+    }
+
+    private function retainClassifications(PublishedCourseDefinition $definition): void
+    {
+        $row = ["id" => $definition->versionId->value];
+        foreach ($definition->definition->classifications->describe() as $kind => $value) {
+            $row[$kind . "_id"] = $value["id"] ?? null;
+            $row[$kind . "_code"] = $value["code"] ?? null;
+            $row[$kind . "_title"] = $value["title"] ?? null;
+        }
+        $old =
+        $this->sql->rows("sis_course_version_classes", ["id" => $definition->versionId->value], 1)[0] ??
+        null;
+        if ($old === null) {
+            $this->sql->insert("sis_course_version_classes", $row);
+        } elseif (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($row)) {
+            throw new CorruptHistoryException();
+        }
+    }
+
     public function retain(EntityId $section, PublishedCourseDefinition $definition): void
     {
         $owner = $this->sql->one("sis_sections", ["id" => $section->value]);
@@ -117,6 +153,7 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
             }
         }
         $this->retainSubject($definition);
+        $this->retainClassifications($definition);
         $oldBinding =
         $this->sql->rows("sis_section_course_versions", ["id" => $section->value], 1)[0] ?? null;
         if ($oldBinding === null) {

@@ -62,6 +62,7 @@ final class SectionPublicationTest extends TestCase
             $f->clock,
             new SqlCourseTextProjection($f->sql),
             new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
         $bindings = new SqlSectionCourseBindingRepository($f->sql);
         $review = $this->courses->review(
@@ -715,7 +716,8 @@ final class SectionPublicationTest extends TestCase
             $f->dropCipher,
             $f->clock,
             new SqlCourseTextProjection($f->sql),
-            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql)
+            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
         $service = new SectionPublicationService(
             $this->catalog,

@@ -18,6 +18,7 @@ final readonly class CourseDefinition
         public array $prerequisites,
         public CourseText $text = new CourseText(),
         public ?SubjectSnapshot $subject = null,
+        public CourseClassifications $classifications = new CourseClassifications(),
     ) {
         if (
             trim($code) === "" ||
@@ -61,6 +62,7 @@ final readonly class CourseDefinition
             "transcript_title",
             "description",
             "subject",
+            "classifications",
         ];
         if (
             count($data) !== count($keys) ||
@@ -70,7 +72,8 @@ final readonly class CourseDefinition
             !is_int($data["credits_milli"] ?? null) ||
             !is_array($data["prerequisites"] ?? null) ||
             !array_is_list($data["prerequisites"]) ||
-            ($data["subject"] !== null && !is_array($data["subject"]))
+            ($data["subject"] !== null && !is_array($data["subject"])) ||
+            !is_array($data["classifications"] ?? null)
         ) {
             throw new InvalidArgumentException("Provide the complete current course definition.");
         }
@@ -86,6 +89,7 @@ final readonly class CourseDefinition
             $data["prerequisites"],
             CourseText::fromArray($data),
             $data["subject"] === null ? null : SubjectSnapshot::fromArray($data["subject"]),
+            CourseClassifications::fromArray($data["classifications"]),
         );
     }
 
@@ -98,6 +102,9 @@ final readonly class CourseDefinition
             "credits_milli" => $this->creditsMilli,
             "prerequisites" => $this->prerequisites,
         ] +
-        $this->text->describe() + ["subject" => $this->subject?->describe()];
+        $this->text->describe() + [
+            "subject" => $this->subject?->describe(),
+            "classifications" => $this->classifications->describe(),
+        ];
     }
 }

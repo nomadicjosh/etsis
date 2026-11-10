@@ -2564,6 +2564,48 @@ if (
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+$classificationChoices = [];
+foreach (["department", "academic_level", "course_level"] as $classificationKind) {
+    $classificationBase = "/sis/catalog/classifications/" . $classificationKind . "/";
+    $savedClassification = $teachingPost($classificationBase . "save/", [
+        "code" => "FICTIONAL", "title" => "Fictional " . $classificationKind, "active" => true,
+    ]);
+    $classificationRow = json_decode((string) $savedClassification->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    $classificationPage = $teachingPost($classificationBase . "page/", ["search" => ""]);
+    $classificationRows = json_decode((string) $classificationPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $savedClassification->getStatusCode() !== 200 || $classificationPage->getStatusCode() !== 200 ||
+        ($classificationRows["items"][0]["id"] ?? null) !== $classificationRow["id"]
+    ) {
+        throw new RuntimeException("Classification setup or empty-search browsing failed through the actual router.");
+    }
+    $classificationChoices[$classificationKind . "_id"] = $classificationRow["id"];
+}
+$classificationPath = "/sis/courses/" . $publicationCourse . "/classifications/";
+$classificationGet = $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $classificationPath));
+$classificationResponse = $app->router->match($classificationGet);
+$classificationState = json_decode((string) $classificationResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $classificationResponse->getStatusCode() !== 200 ||
+    !str_contains($classificationResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $teachingPost($classificationPath, $classificationChoices + ["revision" => $classificationState["revision"]])->getStatusCode() !== 200 ||
+    $teachingPost($classificationPath, ["revision" => $classificationState["revision"]])->getStatusCode() !== 422 ||
+    $teachingPost("/sis/catalog/classifications/unknown/page/", ["search" => ""])->getStatusCode() !== 422
+) {
+    throw new RuntimeException("Course classifications did not preserve their typed/private route boundaries.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:registration:manage"];
+if (
+    $app->router->match($classificationGet)->getStatusCode() !== 403 ||
+    $teachingPost("/sis/catalog/classifications/department/page/", ["search" => ""])->getStatusCode() !== 403 ||
+    $teachingPost("/sis/catalog/classifications/department/save/", ["code" => "NO", "title" => "Denied", "active" => true])->getStatusCode() !== 403 ||
+    $teachingPost($classificationPath, $classificationChoices + ["revision" => $classificationState["revision"]])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Registration authority exposed classification setup.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $publicationBefore = $sis->sql->rows("sis_history_events");
 $unverifiedPublication = new \Qubus\Http\ServerRequest(
     [],

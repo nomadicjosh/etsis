@@ -40,6 +40,7 @@ final readonly class CoursePublicationService
         private Clock $clock,
         private \Domain\Catalog\Repository\CourseTextProjection $textProjection,
         private \Domain\Catalog\Repository\SubjectRepository $subjects,
+        private \Domain\Catalog\Repository\ClassificationRepository $classifications,
     ) {
     }
 
@@ -278,6 +279,7 @@ final readonly class CoursePublicationService
         $ids = array_column($this->relationships->prerequisites($course), "id");
         sort($ids, SORT_STRING);
         $this->subjects->lockForCourse($course);
+        $this->classifications->lockForCourse($course);
         return new CourseDefinition(
             (string) $row["code"],
             (string) $row["title"],
@@ -285,6 +287,7 @@ final readonly class CoursePublicationService
             $ids,
             CourseText::fromArray($row),
             $this->subjects->course($course),
+            $this->classifications->course($course),
         );
     }
 }

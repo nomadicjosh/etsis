@@ -818,6 +818,12 @@ window.createWorkspaceCatalog = function (ui) {
         const subject = definition.subject
             ? `${definition.subject.code} — ${definition.subject.title}`
             : "Not specified";
+        const classifications = Object.entries(definition.classifications || {}).map(([kind, value]) =>
+            node("div", {},
+                node("dt", {}, { department: "Department", academic_level: "Academic level", course_level: "Course level" }[kind]),
+                node("dd", {}, value ? `${value.code} — ${value.title}` : "Not specified"),
+            ),
+        );
         return node(
             "dl",
             { class: "detail-list" },
@@ -837,6 +843,7 @@ window.createWorkspaceCatalog = function (ui) {
                 node("dd", { class: "course-description-text" }, definition.description || "Not specified"),
             ),
             node("div", {}, node("dt", {}, "Credits"), node("dd", {}, definition.credits_milli / 1000)),
+            ...classifications,
             node(
                 "div",
                 {},

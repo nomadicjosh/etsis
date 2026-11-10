@@ -186,3 +186,9 @@ Accepted/rejected applications now support reason → before/after review → co
 ### Search-first staff directories (2026-11-10)
 
 People and student directories now wait for an explicit name or institutional-ID search before requesting records. Blank searches return no directory rows after authorization; AJAX results retain the existing 50-row pages and wildcard escaping. Slower earlier search responses cannot replace newer results, and changing a filter restarts pagination. Catalog datasets retain bounded browsing. AJAX update requests continue through the event-sourced command, replay and transaction-lock boundaries appropriate to the action.
+
+### Course departments and levels (2026-11-10)
+
+Catalog staff can now set up departments, academic levels and course levels in one searchable library and assign all three in a combined course screen. Required audit, optimistic revisions, ordered reference locks and category/retirement checks protect draft changes. Course publication retains each accepted identity/code/name, and section/academic-credit Report Studio datasets use the retained reference rather than today's assignment. Existing publications and student records survive later renames and retirements. See [setup, workflow and scope](course-classifications.md).
+
+Migration `20261110000004_CreateSisCourseClassifications` adds three ULID reference/assignment tables and was applied to the configured DDEV application database. Preflight verified that no course publications or retained course definitions required conversion; existing events were not rewritten. The current course model was extended directly, with no new numbered class or journal. Program/award classification remains outstanding. Fictional integration, actual-provider/router and browser checks cover historical preservation, permissions, CSRF/privacy, stale reviews, rollback and accessible combined selection.

@@ -1,5 +1,7 @@
 # Course subjects
 
+For department, academic-level and course-level setup, see [Departments & levels](course-classifications.md). These classifications are independent of the subject and course code.
+
 Subjects classify courses independently of their full course codes. `MATH.101` does not automatically create or select a MATH subject. Departments, academic levels and course levels remain separate future classifications.
 
 Apply **`20261110000003_CreateSisCourseSubjects`** through the normal migration runner after the existing course/section reference migrations. It creates three ULID-keyed tables, without changing recorded events or assigning guessed subjects to existing courses:
