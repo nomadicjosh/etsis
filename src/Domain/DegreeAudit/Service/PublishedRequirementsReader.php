@@ -62,12 +62,7 @@ final readonly class PublishedRequirementsReader
         );
         $groups = [];
         if ($found["schema_version"] >= 3) {
-            foreach ($p["definition"]["groups"] as $g) {
-                $groups[$g["group_id"]] = $this->group(
-                    new EntityId($g["group_id"]),
-                    new EntityId($g["version_id"]),
-                );
-            }
+            $groups = $this->groups($p["definition"]["groups"]);
         }
         return [
             "template_id" => $template->value,
@@ -112,37 +107,62 @@ final readonly class PublishedRequirementsReader
         ];
     }
 
-    /** @return array<string, mixed> */
-    private function group(EntityId $id, EntityId $version): array
+    /** Resolve shared courses once per invocation, retaining only requested versions.
+     * @param list<array{group_id:string, version_id:string}> $references
+     * @return array<string, array<string,mixed>>
+     */
+    private function groups(array $references): array
     {
-        $stream = new StreamReference(new CourseGroupPublicationId($id->value), "course_group_publication");
-        $found = $this->selected($stream, $version, CourseGroupPublication::root($stream->aggregateId));
-        $d = $found["payload"]["definition"];
-        $courses = [];
-        foreach ($d["courses"] as $c) {
-            $course = new EntityId($c["course_id"]);
-            $s = new StreamReference(new CoursePublicationId($course->value), "course_publication");
-            $item = $this->selected(
-                $s,
-                new EntityId($c["version_id"]),
-                CoursePublication::root($s->aggregateId),
+        $groups = [];
+        $requested = [];
+        foreach ($references as $reference) {
+            $id = new EntityId($reference["group_id"]);
+            $version = new EntityId($reference["version_id"]);
+            $stream = new StreamReference(
+                new CourseGroupPublicationId($id->value),
+                "course_group_publication",
             );
-            $published = PublishedCourseDefinition::fromPublication(
-                $course,
-                $item + ["definition" => $item["payload"]["definition"]],
-            );
-            $courses[$course->value] = [
-                "code" => $published->definition->code,
-                "title" => $published->definition->text->transcriptTitle ?? $published->definition->title,
-                "credits_milli" => $published->definition->creditsMilli,
+            $found = $this->selected($stream, $version, CourseGroupPublication::root($stream->aggregateId));
+            $definition = $found["payload"]["definition"];
+            $groups[$id->value] = [
+                "definition" => $definition,
+                "version" => $found["version"],
+                "version_id" => $version->value,
+                "course_details" => [],
             ];
+            foreach ($definition["courses"] as $course) {
+                $requested[$course["course_id"]][$course["version_id"]] = true;
+            }
         }
-        return [
-            "definition" => $d,
-            "version" => $found["version"],
-            "version_id" => $version->value,
-            "course_details" => $courses,
-        ];
+        $courses = [];
+        foreach ($requested as $courseId => $versions) {
+            $id = new EntityId($courseId);
+            $stream = new StreamReference(new CoursePublicationId($id->value), "course_publication");
+            $selected = $this->selectedVersions(
+                $stream,
+                $versions,
+                CoursePublication::root($stream->aggregateId),
+            );
+            foreach ($selected as $versionId => $item) {
+                $published = PublishedCourseDefinition::fromPublication(
+                    $id,
+                    $item + ["definition" => $item["payload"]["definition"]],
+                );
+                $courses[$courseId][$versionId] = [
+                    "code" => $published->definition->code,
+                    "title" => $published->definition->text->transcriptTitle ?? $published->definition->title,
+                    "credits_milli" => $published->definition->creditsMilli,
+                ];
+            }
+        }
+        foreach ($groups as &$group) {
+            foreach ($group["definition"]["courses"] as $reference) {
+                $group["course_details"][$reference["course_id"]] =
+                $courses[$reference["course_id"]][$reference["version_id"]];
+            }
+        }
+        unset($group);
+        return $groups;
     }
     /** @return array<string, mixed> */
     private function selected(
@@ -150,27 +170,45 @@ final readonly class PublishedRequirementsReader
         EntityId $version,
         RequirementsPublication|CourseGroupPublication|CoursePublication|ProgramPublication $state,
     ): array {
+        return $this->selectedVersions($stream, [$version->value => true], $state)[$version->value];
+    }
+    /** Verify a complete frozen stream, keeping only the explicitly requested versions.
+     * @param array<string, true> $versions
+     * @return array<string, array<string,mixed>>
+     */
+    private function selectedVersions(
+        StreamReference $stream,
+        array $versions,
+        RequirementsPublication|CourseGroupPublication|CoursePublication|ProgramPublication $state,
+    ): array {
         $cursor = null;
-        $found = null;
+        $found = [];
         do {
             $page = $this->history->page($stream, $cursor, 10);
             foreach ($page->events as $stored) {
-                $e = $stored->event;
-                $state->acceptHistorical($e);
-                $p = $e->payload();
-                if ($p["version_id"] === $version->value) {
-                    $found = [
-                        "version_id" => $p["version_id"],
-                        "version" => $e->playhead(),
-                        "schema_version" => $e->metaParam("schema_version", 1),
-                        "program_version_id" => $e->metaParam("curriculum_version_id"),
-                        "payload" => $p,
+                $event = $stored->event;
+                $state->acceptHistorical($event);
+                $payload = $event->payload();
+                $versionId = $payload["version_id"];
+                if (isset($versions[$versionId])) {
+                    if (isset($found[$versionId])) {
+                        throw new CorruptHistoryException();
+                    }
+                    $found[$versionId] = [
+                        "version_id" => $versionId,
+                        "version" => $event->playhead(),
+                        "schema_version" => $event->metaParam("schema_version", 1),
+                        "program_version_id" => $event->metaParam("curriculum_version_id"),
+                        "payload" => $payload,
                     ];
                 }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
-        return $found ?? throw new RecordNotFoundException("Published requirements reference not found.");
+        if (count($found) !== count($versions)) {
+            throw new RecordNotFoundException("Published requirements reference not found.");
+        }
+        return $found;
     }
     /** Internal course publications, after student/office authorization in the calling workflow.
      * @return array<string, mixed> */

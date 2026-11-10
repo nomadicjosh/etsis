@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after reusable course-group publication review expiry, confirmation-time publication and safe earlier-format retries.
+Last reviewed: **2026-11-10**, after shared course-history verification in retained student requirement reads.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -63,6 +63,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [ ] Support versioned fixed/variable-credit rules and student-selected credits; keep CEUs separate from academic credits. Add explicit reporting-term/group relationships where required.
 - [ ] Finish trusted actor, reason, effective-date and correlation context for older framework/financial command paths. Course, program, reusable course-group and degree-requirement publications now use confirmation time, expiring reviews and permission rechecks while preserving earlier completed receipts/events. Preserve real existing events and mark unknown earlier facts honestly.
 - [ ] Reconcile remaining consequential hiatus/return and policy/status writers into canonical streams without duplicating actions or discarding existing case evidence.
+- [x] [Resolve shared retained course histories once per degree read](student-degree-requirements.md#shared-course-history-reads), with exact version selection, bounded verification and no reuse across separate invocations. This reduces repeated replay in student requirement reads/reviews/confirmations; it does not complete evaluation or operational rebuilds.
 - [ ] Provide bounded, read-only integrity/reconciliation tools and independently verified projection checkpoints; rebuild into isolated output, validate it and deliberately switch readers. Replay must never send messages, issue refunds or grant access.
 - [ ] Implement and exercise key rotation/recovery, independently protected integrity anchors, least-privilege database access and backup/restore procedures.
 - [ ] Establish institutional retention categories, legal holds, protected artifact/document retention and access/export evidence, including backups. Preserve necessary facts without retaining unnecessary sensitive material indefinitely.

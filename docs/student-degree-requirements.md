@@ -2,7 +2,7 @@
 
 The [course group library and degree builder](degree-audit-builder.md) publish reusable requirements. A student program must then retain **one explicit published degree version**. A new catalog publication never changes that selection automatically.
 
-This stage records and displays selected requirements. It does not evaluate completed courses, calculate eligibility or grant a credential. [Student exceptions](student-degree-exceptions.md) now separately retain course waivers and minimum reductions. The full [degree audit plan](degree-audit-plan.md) remains the direction for those later stages.
+This stage records and displays selected requirements. It does not evaluate completed courses, calculate eligibility or grant a credential. [Student exceptions](student-degree-exceptions.md) now separately retain course waivers and minimum reductions. The [development roadmap](development-roadmap.md#3-student-degree-audit-evaluation) describes those later stages.
 
 ## Setup
 
@@ -39,6 +39,14 @@ The effective timestamp comes from the trusted review context; the journal suppl
 The student row lock serializes selection decisions with current program/cohort changes. The encrypted review binds its actor, student, assignment, exact publication, program/cohort snapshot and expected stream version. Changed cohorts/statuses, conflicting decisions, tampered tokens and revoked authority fail closed. Event, stream head, operation receipt, current projection and audit commit together. An accepted exact retry returns its original receipt after later decisions without reverting the current selection.
 
 The read model is checked against bounded, verified stream replay; missing or altered projection data fails closed. Root replay enforces predecessor continuity and stable student/program ownership. The internal immutable reader resolves exact degree/group/course publications independently of catalog-authoring permissions and today's catalog labels. History and choice pages are capped at ten entries with scoped authenticated cursors. It exposes curated requirements, not raw event envelopes or protected reasons.
+
+## Shared course-history reads
+
+A retained degree can contain several groups that refer to the same course, sometimes using different published versions. Resolving that degree now gathers those references first and verifies each unique course stream once per invocation. Each group still receives its own exact version's title and credits. For example, ten groups sharing five one-page course histories require five course-history page reads rather than fifty. Longer histories still use as many bounded pages as verification requires; this is not a claim about total database queries or elapsed response time.
+
+Verification continues through each stream's frozen upper boundary, including later publications that were not selected. Missing references, repeated selected version identities and invalid predecessor chains are rejected. Only requested versions are retained while replaying; unrelated course definitions are discarded. Response fields, group ordering and course ordering remain unchanged.
+
+The temporary lookup exists only inside one degree resolution. A later read, assignment review or confirmation verifies history again, even when the same reader service instance is reused. No shared/disposable cache, new projection, migration or event conversion is introduced. Owner/office authorization and command locks remain in the calling workflows. Directory searches continue using their existing bounded read models; they do not load full degree histories.
 
 ## Verification and remaining work
 
