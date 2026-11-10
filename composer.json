@@ -1,14 +1,14 @@
 {
-    "name": "codefyphp/vihzhuo",
+    "name": "nomadicjosh/etsis",
     "type": "project",
-    "description": "Starter app that provides a simple and quick way to build websites in minutes.",
-    "keywords": ["codefy","codefyphp","codefy-php","routing","skeleton","vihzhuo"],
+    "description": "etSIS is the most advanced open source student information system for higher education.",
+    "keywords": ["educational-institutions","higher-education","higher-ed","student-information","student-management"],
     "license": "MIT",
     "authors": [
         {
             "name": "Joshua Parker",
             "email": "joshua@joshuaparker.dev",
-            "homepage": "https://joshuaparker.dev/",
+            "homepage": "https://qubuslabs.io/",
             "role": "Developer"
         }
     ],
@@ -16,6 +16,7 @@
         "php": ">=8.4",
         "ext-pdo": "*",
         "codefyphp/codefy": "^4",
+        "dompdf/dompdf": "^3.1.6",
         "league/csv": "^9.0",
         "nomadicjosh/vihzhuo": "^2",
         "stripe/stripe-php": "^20.0"
