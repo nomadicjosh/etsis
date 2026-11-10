@@ -8,6 +8,7 @@ use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Registration\Repository\RegistrationBatchRepository;
 use Domain\Registration\Repository\RegistrationRepository;
+use Domain\Registration\Repository\SectionVersionRepository;
 use Domain\Registration\ValueObject\RegistrationBatchSelection;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -30,6 +31,7 @@ final readonly class RegistrationBatchService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private SectionVersionRepository $versions,
     ) {
     }
 
@@ -172,6 +174,7 @@ final readonly class RegistrationBatchService
         return ['section' => ['id' => $section->id->value, 'code' => $section->code,
             'term_id' => $section->termId->value,
             'section_version_id' => $section->publicationVersionId?->value,
+            'selection_position' => $this->versions->selectionPosition($section->id),
             'course_version_id' => $course->publicationVersionId?->value,
             'course_code' => $course->code, 'course_title' => $course->title, 'credits_milli' => $course->creditsMilli,
             'active' => $section->active && $course->active, 'fee_minor' => $section->fee->minor,

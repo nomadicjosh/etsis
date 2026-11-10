@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Registration\Service;
 
 use Domain\Registration\Event\SectionOfferingVersionWasSelected;
+use Domain\Registration\Event\SectionOfferingVersionWasAmended;
 use Domain\Registration\Repository\SectionVersionRepository;
 use Domain\Registration\ValueObject\PublishedSectionDefinition;
 use Domain\Registration\ValueObject\SectionOfferingBindingId;
@@ -13,7 +14,7 @@ use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\ValueObject\EntityId;
 
-/** Internal command check: at most one selection event, independent of publication-stream length. */
+/** Internal command check: one committed selection head event, independent of publication-stream length. */
 final class SectionOfferingSelection
 {
     public static function stream(EntityId $section): StreamReference
@@ -27,19 +28,20 @@ final class SectionOfferingSelection
         HistoricalEventStore $history,
     ): ?PublishedSectionDefinition {
         $selected = $versions->selected($section);
-        $page = $history->page(self::stream($section), null, 2);
-        if ($page->throughVersion === 0 && $page->events === [] && $selected === null) {
+        $last = $history->latest(self::stream($section));
+        $position = $versions->selectionPosition($section);
+        if ($last === null && $selected === null && $position === 0) {
             return null;
         }
         if (
             $selected === null ||
-            $page->throughVersion !== 1 ||
-            count($page->events) !== 1 ||
-            $page->nextCursor !== null ||
-            !($page->events[0]->event instanceof SectionOfferingVersionWasSelected) ||
-            $page->events[0]->event->playhead() !== 1 ||
-            $page->events[0]->event->payload()["publication_id"] !== $selected->publication->value ||
-            !hash_equals($page->events[0]->event->payload()["definition_hash"], $selected->fingerprint())
+            $last === null ||
+            $last->event->playhead() !== $position ||
+            ($position === 1
+                ? !($last->event instanceof SectionOfferingVersionWasSelected)
+                : !($last->event instanceof SectionOfferingVersionWasAmended)) ||
+            $last->event->payload()["publication_id"] !== $selected->publication->value ||
+            !hash_equals($last->event->payload()["definition_hash"], $selected->fingerprint())
         ) {
             throw new CorruptHistoryException();
         }

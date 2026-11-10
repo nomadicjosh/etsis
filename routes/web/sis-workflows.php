@@ -677,6 +677,9 @@ return static function (Psr7Router $router): void {
     $sectionPublications = \Application\Http\Controller\SisSectionPublicationController::class;
     $router->post("/sis/sections/{id}/publication/selection-review/", [$sectionPublications, "selectionReview"]);
     $router->post("/sis/sections/{id}/publication/select/", [$sectionPublications, "select"]);
+    $router->post("/sis/sections/{id}/publication/amendment-review/", [$sectionPublications, "amendmentReview"]);
+    $router->post("/sis/sections/{id}/publication/amend/", [$sectionPublications, "amend"]);
+    $router->post("/sis/sections/{id}/publication/selection-page/", [$sectionPublications, "selectionHistory"]);
     $router->post("/sis/sections/{id}/publication/setup/", [$sectionPublications, "setup"]);
     $router->post("/sis/sections/{id}/publication/review/", [$sectionPublications, "review"]);
     $router->post("/sis/sections/{id}/publication/commit/", [$sectionPublications, "publish"]);

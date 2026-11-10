@@ -2613,6 +2613,67 @@ $selectedSetup = json_decode((string) $teachingPost($sectionPublicationPath . 's
 if (($selectedSetup['selected_offering']['version_id'] ?? null) !== $sectionPublicationReview['operation_id']) {
     throw new RuntimeException('Offering selection read model was not available.');
 }
+// Reviewed amendments resolve through the same real providers, protected routes and browser guards.
+$offeringCatalog = new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($sis->sql);
+$offeringCatalog->save("sections", $bindingSection->id, ["capacity" => 30]);
+$nextPublication = json_decode(
+    (string) $teachingPost($sectionPublicationPath . "review/", $sectionPublicationInput)->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$nextPublished = json_decode(
+    (string) $teachingPost($sectionPublicationPath . "commit/", [
+        "review_token" => $nextPublication["review_token"],
+    ])->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$offeringAmendmentInput = [
+    "version_id" => $nextPublished["operation_id"],
+    "reason" => "Fictional future offering amendment",
+];
+$offeringAmendmentResponse = $teachingPost(
+    $sectionPublicationPath . "amendment-review/",
+    $offeringAmendmentInput,
+);
+$offeringAmendment = json_decode(
+    (string) $offeringAmendmentResponse->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if ($offeringAmendmentResponse->getStatusCode() !== 200 || !isset($offeringAmendment["review_token"])) {
+    throw new RuntimeException("Future offering amendment review did not resolve through its provider.");
+}
+$offeringAmended = $teachingPost($sectionPublicationPath . "amend/", [
+    "review_token" => $offeringAmendment["review_token"],
+]);
+$offeringAmendedRetry = $teachingPost($sectionPublicationPath . "amend/", [
+    "review_token" => $offeringAmendment["review_token"],
+]);
+$selectionHistoryResponse = $teachingPost($sectionPublicationPath . "selection-page/", []);
+$selectionHistory = json_decode(
+    (string) $selectionHistoryResponse->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$amendedSetup = json_decode(
+    (string) $teachingPost($sectionPublicationPath . "setup/", [])->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    $offeringAmended->getStatusCode() !== 200 ||
+    (string) $offeringAmended->getBody() !== (string) $offeringAmendedRetry->getBody() ||
+    $selectionHistoryResponse->getStatusCode() !== 200 ||
+    array_column($selectionHistory["items"], "action") !== ["selected", "amended"] ||
+    ($amendedSetup["selected_offering"]["version_id"] ?? null) !== $nextPublished["operation_id"] ||
+    str_contains((string) $selectionHistoryResponse->getBody(), "Fictional future offering amendment") ||
+    str_contains((string) $selectionHistoryResponse->getBody(), "actor_id")
+) {
+    throw new RuntimeException(
+        "Future offering amendment failed its private history and original receipt checks.",
+    );
+}
 $sis->access->staff = false;
 $sis->access->grants = ['sis:registration:manage'];
 if (
@@ -2627,7 +2688,9 @@ if (
 $sis->access->staff = true;
 $sis->access->staff = false;
 $sis->access->grants = ['sis:registration:manage'];
-$sectionPublicationActions = ['setup' => [], 'page' => [], 'review' => $sectionPublicationInput,
+$sectionPublicationActions = ['amendment-review' => $offeringAmendmentInput,
+    'amend' => ['review_token' => $offeringAmendment['review_token']], 'selection-page' => [],
+    'setup' => [], 'page' => [], 'review' => $sectionPublicationInput,
     'commit' => ['review_token' => $sectionPublicationReview['review_token']]];
 foreach ($sectionPublicationActions as $action => $payload) {
     if ($teachingPost($sectionPublicationPath . $action . '/', $payload)->getStatusCode() !== 403) {

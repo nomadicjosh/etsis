@@ -11,6 +11,12 @@ use Domain\Shared\ValueObject\EntityId;
 interface SectionVersionRepository
 {
     public function selected(EntityId $section): ?PublishedSectionDefinition;
+    public function selectionPosition(EntityId $section): int;
+    public function amend(
+        PublishedSectionDefinition $before,
+        PublishedSectionDefinition $after,
+        int $expectedPosition,
+    ): void;
     public function select(PublishedSectionDefinition $definition): void;
     public function enrollmentVersion(EntityId $enrollment): ?EntityId;
     public function retainEnrollmentVersion(EntityId $enrollment, ?EntityId $publication): void;

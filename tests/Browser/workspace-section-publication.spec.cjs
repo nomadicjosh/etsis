@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
 
-async function fixture(page, { bound = true, paged = false, unavailable = false } = {}) {
+async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false } = {}) {
   const section = id(1),
     course = id(2),
     term = id(3),
@@ -45,6 +45,11 @@ async function fixture(page, { bound = true, paged = false, unavailable = false 
     errors = [];
   let latest = null;
   let selected = null;
+  if (amendment) {
+    selected = { version: 1, version_id: publication, definition: { ...definition } };
+    latest = { version: 2, version_id: id(6), definition: { ...definition, capacity: 30, fee_minor: 5000, instruction_starts_on: '2026-09-01' },
+      effective_at: '2026-11-10T12:00:00Z', recorded_at: '2026-11-10T12:00:01Z' };
+  }
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/sis/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -104,6 +109,18 @@ async function fixture(page, { bound = true, paged = false, unavailable = false 
             : [],
         next_cursor: paged && !data.cursor ? "fictional-section-cursor" : null,
       };
+    else if (path.endsWith("/publication/amendment-review/")) result = {
+      previous: selected, selected: latest, enrolled: 3, seat_sequence: 7,
+      faculty_label: 'Not assigned', reason: data.reason, review_token: 'fictional-amendment-proof',
+    };
+    else if (path.endsWith("/publication/amend/")) {
+      selected = latest;
+      result = { operation_id: id(11), first_version: 2, last_version: 2, event_ids: [id(12)] };
+    }
+    else if (path.endsWith("/publication/selection-page/")) result = {
+      items: [{ action: 'selected', version: 1, selected: { version: 1, version_id: publication, definition },
+        effective_at: '2026-11-10T12:00:00Z', recorded_at: '2026-11-10T12:00:01Z' }], next_cursor: null,
+    };
     else if (path.endsWith("/publication/selection-review/")) result = {
       selected: { version: 1, version_id: publication, definition },
       faculty_label: 'Not assigned', reason: data.reason, review_token: 'fictional-offering-selection-proof',
@@ -331,4 +348,35 @@ test('offering selection is reviewed explicitly and remains selected after confi
     expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
     expect(f.errors).toEqual([]);
     await accessible(page);
+});
+
+test('future offering amendments show prior and proposed terms without rebinding existing students', async ({ page }) => {
+    const f = await fixture(page, { amendment: true });
+    await page.getByText('Version 2 · MATH.101.A · 2026-09-01', { exact: true }).click();
+    await page.getByRole('button', { name: 'Use this version for future registrations', exact: true }).click();
+    await page.getByLabel('Reason for future offering amendment').fill('Fictional future-cohort approval');
+    await page.getByRole('button', { name: 'Review future offering amendment', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Previously selected offering');
+    await expect(page.locator('#drawer-body')).toContainText('3 currently enrolled students keep their recorded offering references and charges');
+    await expect(page.locator('#drawer-body')).toContainText('2026-08-24');
+    await expect(page.locator('#drawer-body')).toContainText('2026-09-01');
+    expect(f.calls.some(call => call.path.endsWith('/amend/'))).toBe(false);
+    await page.getByRole('button', { name: 'Revise future offering amendment', exact: true }).click();
+    await expect(page.getByLabel('Reason for future offering amendment')).toHaveValue('Fictional future-cohort approval');
+    await page.getByRole('button', { name: 'Review future offering amendment', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Confirm future offering amendment', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#drawer-body')).toContainText('New registrations retain section version 2');
+    expect(f.calls.find(call => call.path.endsWith('/amend/'))).toMatchObject({
+      data: { review_token: 'fictional-amendment-proof' }, csrf: 'fictional-test-token',
+    });
+    await page.getByRole('button', { name: 'Offering selection history', exact: true }).click();
+    await page.getByText('Initial selection · publication version 1', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('2026-08-24');
+    await accessible(page);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
 });

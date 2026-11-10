@@ -1112,6 +1112,8 @@ window.createWorkspaceCatalog = function (ui) {
         if (setup.selected_offering) {
             body.append(node("p", { class: "alert alert-info", role: "status" },
                 `New registrations retain section version ${setup.selected_offering.version}, with instructional dates ${setup.selected_offering.definition.instruction_starts_on} through ${setup.selected_offering.definition.instruction_ends_on}. Later publications do not replace this selection.`));
+            body.append(button("Offering selection history", () => offeringSelectionHistory(section,
+                () => sectionPublications(section, cursor, stack, currentDraft))));
         } else if (setup.has_student_records) {
             body.append(node("p", {}, "Initial offering selection requires an empty section. Earlier student records keep their original facts."));
         }
@@ -1247,9 +1249,12 @@ window.createWorkspaceCatalog = function (ui) {
                         `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}`,
                     ),
                     reference(item.version_id),
-                !setup.selected_offering && !setup.has_student_records
-                    ? button("Use this version for new registrations", () => selectOffering(section, item,
-                        () => sectionPublications(section, cursor, stack, currentDraft))) : null,
+                setup.selected_offering && item.version_id !== setup.selected_offering.version_id
+                    ? button("Use this version for future registrations", () => selectOffering(section, item,
+                        () => sectionPublications(section, cursor, stack, currentDraft), "", true))
+                    : !setup.selected_offering && !setup.has_student_records
+                        ? button("Use this version for new registrations", () => selectOffering(section, item,
+                            () => sectionPublications(section, cursor, stack, currentDraft))) : null,
                 ),
             );
         }
@@ -1266,33 +1271,126 @@ window.createWorkspaceCatalog = function (ui) {
                 ),
             );
     }
-    async function selectOffering(section, item, back, reason = "") {
-        const body = openDrawer("Choose section version for registration", "DETAILS → REVIEW → CONFIRM");
-        body.append(offeringDetails(item.definition), node("p", {},
-            "Select the initial offering version for new registrations. This is available for an empty section; prior academic records are never assigned a version retrospectively."));
-        const fields = [["reason", "Reason for offering selection", "textarea"]];
+    async function offeringSelectionHistory(section, back, cursor = null, stack = []) {
+        const data = await request(
+            `/sis/sections/${section}/publication/selection-page/`,
+            "POST",
+            cursor ? { cursor } : {},
+        );
+        const body = openDrawer("Offering selection history", "RETAINED DECISIONS");
+        if (!data.items.length) body.append(node("p", {}, "No offering selection has been recorded."));
+        for (const item of data.items) {
+            body.append(
+                node(
+                    "details",
+                    { class: "surface p-3 mb-3" },
+                    node(
+                        "summary",
+                        {},
+                        `${item.action === "amended" ? "Future offering amendment" : "Initial selection"} · publication version ${item.selected.version}`,
+                    ),
+                    offeringDetails(item.selected.definition),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}`,
+                    ),
+                ),
+            );
+        }
+        if (stack.length)
+            body.append(
+                button("Previous selection history page", () =>
+                    offeringSelectionHistory(section, back, stack.at(-1), stack.slice(0, -1)),
+                ),
+            );
+        if (data.next_cursor)
+            body.append(
+                button("Next selection history page", () =>
+                    offeringSelectionHistory(section, back, data.next_cursor, [...stack, cursor]),
+                ),
+            );
+        body.append(button("Back to section publications", back));
+    }
+    async function selectOffering(section, item, back, reason = "", amend = false) {
+        const body = openDrawer(
+            amend ? "Amend future offering version" : "Choose section version for registration",
+            "DETAILS → REVIEW → CONFIRM",
+        );
+        body.append(
+            offeringDetails(item.definition),
+            node(
+                "p",
+                {},
+                amend
+                    ? "Choose a published version for future registrations. Existing enrollment, academic and financial records keep their original facts."
+                    : "Select the initial offering version for new registrations. This is available for an empty section; prior academic records are never assigned a version retrospectively.",
+            ),
+        );
+        const fields = [
+            [
+                "reason",
+                amend ? "Reason for future offering amendment" : "Reason for offering selection",
+                "textarea",
+            ],
+        ];
         const form = await buildForm(fields, { reason });
         form.querySelector('[name="reason"]').maxLength = 1000;
-        const review = submit("Review offering selection");
+        const review = submit(amend ? "Review future offering amendment" : "Review offering selection");
         form.append(review);
-        form.addEventListener("submit", event => {
+        form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
                 const draft = formData(form, fields);
-                const reviewed = await request(`/sis/sections/${section}/publication/selection-review/`, "POST", {
-                    version_id: item.version_id, reason: draft.reason,
-                });
-                const target = openDrawer("Review offering selection", "REVIEW → CONFIRM");
-                target.append(offeringDetails(reviewed.selected.definition, reviewed.faculty_label),
+                const reviewed = await request(
+                    `/sis/sections/${section}/publication/${amend ? "amendment-review" : "selection-review"}/`,
+                    "POST",
+                    {
+                        version_id: item.version_id,
+                        reason: draft.reason,
+                    },
+                );
+                const target = openDrawer(
+                    amend ? "Review future offering amendment" : "Review offering selection",
+                    "REVIEW → CONFIRM",
+                );
+                if (amend)
+                    target.append(
+                        node("h3", { class: "h5" }, "Previously selected offering"),
+                        offeringDetails(reviewed.previous.definition),
+                        node(
+                            "p",
+                            {},
+                            `${reviewed.enrolled} currently enrolled students keep their recorded offering references and charges.`,
+                        ),
+                        node("h3", { class: "h5" }, "Offering for future registrations"),
+                    );
+                target.append(
+                    offeringDetails(reviewed.selected.definition, reviewed.faculty_label),
                     node("p", {}, `Selected publication: version ${reviewed.selected.version}.`),
                     node("p", {}, `Reason: ${reviewed.reason}`),
-                    node("p", {}, "New registrations will retain this offering version. A later offering amendment needs a separate reviewed workflow."),
-                    button("Revise offering selection", () => selectOffering(section, item, back, draft.reason)),
-                    button("Confirm offering selection", async () => {
-                        await request(`/sis/sections/${section}/publication/select/`, "POST", { review_token: reviewed.review_token });
-                        await sectionPublications(section);
-                    }, "btn-primary"));
+                    node(
+                        "p",
+                        {},
+                        "New registrations will retain this offering version. Earlier academic records and charges remain unchanged.",
+                    ),
+                    button(amend ? "Revise future offering amendment" : "Revise offering selection", () =>
+                        selectOffering(section, item, back, draft.reason, amend),
+                    ),
+                    button(
+                        amend ? "Confirm future offering amendment" : "Confirm offering selection",
+                        async () => {
+                            await request(
+                                `/sis/sections/${section}/publication/${amend ? "amend" : "select"}/`,
+                                "POST",
+                                { review_token: reviewed.review_token },
+                            );
+                            await sectionPublications(section);
+                        },
+                        "btn-primary",
+                    ),
+                );
             }, review);
         });
         body.append(form, button("Back to section publications", back));

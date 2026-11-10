@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after initial section-version selection and search-first private directories.
+Last reviewed: **2026-11-10**, after reviewed future-registration offering amendments.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -31,7 +31,7 @@ These are relative estimates, not calendar commitments or percentages complete. 
 | Access | Database roles, permissions and additional user grants; protected system definitions; separate registrar duties; unrestricted `super` authority. |
 | Staff workspace and portal | Bootstrap staff screens and metrics; public campus content/course discovery; Vihzhuo themes/blocks and authenticated student services. |
 | Academic setup | Term types, reviewed academic-year/term generation, separate term maintenance and derived matriculation cohorts. |
-| Published academic definitions | Course publications and explicit offering bindings; reviewed section publications with instructional dates and current offering facts; reusable course groups, degree compositions and global/program grading-scale publications. Section-version selection for registration and further definition coverage remain incomplete. |
+| Published academic definitions | Course publications and explicit offering bindings; reviewed section publications with instructional dates and current offering facts; reusable course groups, degree compositions and global/program grading-scale publications. Initial section-version selection and reviewed future-registration amendments are available; offering-plan integration and further definition coverage remain incomplete. |
 | Student records | Program assignments, primary-program selections, activity history, requirement-version assignment, waivers, substitutions and explicit minimum exceptions. |
 | Admissions | Program application forms, protected submission references, reviewed acceptance/rejection, independently authorized pre-matriculation corrections and atomic initial matriculation. |
 | Registration and academic credit | Accepted seats and section decision order; early/late drops coupled to billing; institutional grades/corrections and transfer award/correction/void/reinstatement history. |
@@ -155,7 +155,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 ## Next implementation stages
 
-1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. The verified reference cache and explicit initial selection for new individual/self-service and group registrations are implemented. Next, integrate offering-plan activation and reviewed amendments; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
+1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. The verified reference cache and explicit initial selection for new individual/self-service and group registrations are implemented. Reviewed amendments now preserve existing student references and charges while changing the selection for later registrations. Next, integrate offering-plan activation; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
 2. **Policy and attempt integration:** retain the applicable section/policy references in new enrollment/academic facts, then complete reviewed replacements and remaining consequential lifecycle paths. Include reconciliation checks with each slice.
 3. **Degree evaluation:** begin with a deterministic evaluator for the supported published grammar and authoritative completed credits; add explained allocation/policy/exception behavior before presenting graduation eligibility.
 

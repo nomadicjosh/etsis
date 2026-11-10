@@ -25,4 +25,9 @@ interface HistoricalEventStore
 
     /** A cursor freezes the first page's committed head; subsequent appends do not enter that replay. */
     public function page(StreamReference $stream, ?string $cursor = null, int $limit = 50): EventPage;
+
+    /** Verify and return the committed head event, without reconstructing the aggregate or scanning earlier events.
+     * Only suitable for checks whose required state is self-contained in the latest event.
+     */
+    public function latest(StreamReference $stream): ?StoredEvent;
 }

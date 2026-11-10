@@ -698,6 +698,7 @@ final class SectionPublicationTest extends TestCase
         $proof = $this->review();
         $this->service->publish($this->section->id, $proof['review_token']);
         $history = $this->createStub(\Domain\Shared\EventSourcing\HistoricalEventStore::class);
+        $history->method('latest')->willThrowException(new LogicException('Routine setup must not read event heads.'));
         $history->method('page')->willThrowException(new LogicException('Routine setup must not replay history.'));
         $transactions = $this->createStub(\Domain\Shared\Persistence\UnitOfWork::class);
         $transactions->method('run')->willThrowException(new LogicException('Routine setup must not open a write transaction.'));
@@ -984,7 +985,8 @@ final class SectionPublicationTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
-            $f->clock
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql)
         );
         $before = $batch->review($selection);
         $this->service->select($this->section->id, $review['review_token']);
@@ -1050,6 +1052,422 @@ final class SectionPublicationTest extends TestCase
         $publicationReview = $this->review();
         $this->expectException(InvalidArgumentException::class);
         $this->service->select($this->section->id, $publicationReview['review_token']);
+    }
+
+    private function amendments(
+        ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+    ): \Domain\Registration\Service\SectionOfferingAmendmentService {
+        $f = $this->f;
+        return new \Domain\Registration\Service\SectionOfferingAmendmentService(
+            $this->service,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
+            $this->catalog,
+            new \Infrastructure\Persistence\Repository\SqlEnrollmentHistoryRepository($f->sql),
+            $f->registration,
+            $this->history,
+            $f->access,
+            $transactions ?? $f->transactions,
+            $f->audit,
+            $f->dropCipher,
+            $f->clock,
+        );
+    }
+
+    private function futurePublication(bool $changeFee = true): EntityId
+    {
+        if ($changeFee) {
+            $this->catalog->save("sections", $this->section->id, ["capacity" => 30, "fee_minor" => 15000]);
+        }
+        $review = $this->review("2026-09-01");
+        return new EntityId(
+            $this->service->publish($this->section->id, $review["review_token"])["operation_id"],
+        );
+    }
+
+    public function testFutureOfferingAmendmentPreservesEarlierStudentsAndPricesOnlyNewRegistrations(): void
+    {
+        [$first, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $oldStudent = $this->f->student();
+        $oldEnrollment = $this->f->service->register($oldStudent->id, $this->section->id, true);
+        $oldCredit = $this->f->sql->rows("sis_academic_credits");
+        $before = $this->f->sql->rows("sis_history_events");
+        $next = $this->futurePublication();
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $next, "Future cohort pricing");
+        self::assertSame(1, $review["enrolled"]);
+        self::assertSame($first["operation_id"], $review["previous"]["version_id"]);
+        self::assertSame(1, $review["expected_version"]);
+        $this->f->clock->time = $this->f->clock->time->modify("+1 minute");
+        $receipt = $service->commit($this->section->id, $review["review_token"]);
+        self::assertSame(2, $receipt["last_version"]);
+        self::assertSame($oldCredit, $this->f->sql->rows("sis_academic_credits"));
+        self::assertSame($before, array_slice($this->f->sql->rows("sis_history_events"), 0, count($before)));
+        $newStudent = $this->f->student();
+        $newEnrollment = $this->f->service->register($newStudent->id, $this->section->id, true);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        self::assertSame($first["operation_id"], $versions->enrollmentVersion($oldEnrollment->id)->value);
+        self::assertSame($next->value, $versions->enrollmentVersion($newEnrollment->id)->value);
+        foreach ([[$oldStudent, 10000], [$newStudent, 15000]] as [$student, $expected]) {
+            $account = $this->f->sql->one("sis_student_accounts", ["student_id" => $student->id->value]);
+            self::assertSame(
+                $expected,
+                $this->f->accounts->get(new \Domain\Finance\ValueObject\AccountId($account["id"]))->balance()
+                    ->minor,
+            );
+        }
+        $history = $service->history($this->section->id);
+        self::assertSame(["selected", "amended"], array_column($history["items"], "action"));
+        self::assertStringNotContainsString(
+            "Future cohort pricing",
+            json_encode($history, JSON_THROW_ON_ERROR),
+        );
+        self::assertStringNotContainsString("actor_id", json_encode($history, JSON_THROW_ON_ERROR));
+        $last = $this->history->latest(
+            \Domain\Registration\Service\SectionOfferingSelection::stream($this->section->id),
+        );
+        self::assertSame($this->f->clock->time->getTimestamp(), $last->context->effectiveAt->getTimestamp());
+    }
+
+    public function testOldAmendmentAndInitialRetriesCannotRestoreEarlierFutureSelections(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $initialReceipt = $this->service->select($this->section->id, $initial["review_token"]);
+        $next = $this->futurePublication();
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $next, "First amendment");
+        $first = $service->commit($this->section->id, $review["review_token"]);
+        $later = $this->review("2026-10-01");
+        $third = new EntityId(
+            $this->service->publish($this->section->id, $later["review_token"])["operation_id"],
+        );
+        $latest = $service->review($this->section->id, $third, "Later amendment");
+        $service->commit($this->section->id, $latest["review_token"]);
+        $this->f->service->register($this->f->student()->id, $this->section->id, true);
+        $this->f->clock->time = $this->f->clock->time->modify("+2 days");
+        $before = $this->f->sql->rows("sis_history_events");
+        self::assertSame($first, $service->commit($this->section->id, $review["review_token"]));
+        self::assertSame(
+            $initialReceipt,
+            $this->service->select($this->section->id, $initial["review_token"]),
+        );
+        self::assertSame(
+            $third->value,
+            $this->service->setup($this->section->id)["selected_offering"]["version_id"],
+        );
+        self::assertSame($before, $this->f->sql->rows("sis_history_events"));
+    }
+
+    public function testOfferingAmendmentRejectsStaleReviewAfterASelectionReturnsToItsEarlierValue(): void
+    {
+        [$first, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $next = $this->futurePublication(false);
+        $later = $this->review("2026-10-01");
+        $third = new EntityId(
+            $this->service->publish($this->section->id, $later["review_token"])["operation_id"],
+        );
+        $service = $this->amendments();
+        $stale = $service->review($this->section->id, $third, "Pending amendment");
+        $change = $service->review($this->section->id, $next, "Intervening amendment");
+        $service->commit($this->section->id, $change["review_token"]);
+        $back = $service->review(
+            $this->section->id,
+            new EntityId($first["operation_id"]),
+            "Explicit return to earlier publication",
+        );
+        $service->commit($this->section->id, $back["review_token"]);
+        self::assertSame(
+            $first["operation_id"],
+            $this->service->setup($this->section->id)["selected_offering"]["version_id"],
+        );
+        $this->expectException(ConcurrentModificationException::class);
+        $service->commit($this->section->id, $stale["review_token"]);
+    }
+
+    public function testRegistrationsAndDropsInvalidateAnAmendmentEvenWhenHeadcountReturnsToTheSameNumber(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $student = $this->f->student();
+        $this->f->service->register($student->id, $this->section->id, true);
+        $next = $this->futurePublication(false);
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $next, "Reviewed population");
+        $this->f->service->drop($student->id, $this->section->id);
+        $this->f->service->register($this->f->student()->id, $this->section->id, true);
+        self::assertSame(1, $this->f->registration->sectionCount($this->section->id));
+        $this->expectException(ConcurrentModificationException::class);
+        $service->commit($this->section->id, $review["review_token"]);
+    }
+
+    public function testAmendmentAuditFailureRollsBackTheNewEventPointerAndPreparedReference(): void
+    {
+        [$first, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $next = $this->futurePublication();
+        $this->f->sql->execute("DELETE FROM sis_section_versions WHERE id = ?", [$next->value]);
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $next, "Audited amendment");
+        $before = $this->f->sql->rows("sis_history_events");
+        $this->f->connection->pdo->exec(
+            "CREATE TRIGGER fail_amend_audit BEFORE INSERT ON sis_audit WHEN NEW.action = 'section.offering_version_amended' BEGIN SELECT RAISE(ABORT, 'fictional failure'); END",
+        );
+        try {
+            $service->commit($this->section->id, $review["review_token"]);
+            self::fail("Audit failure must roll back the amended selection.");
+        } catch (PDOException) {
+            self::assertSame($before, $this->f->sql->rows("sis_history_events"));
+            self::assertSame([], $this->f->sql->rows("sis_section_versions", ["id" => $next->value]));
+            self::assertSame(
+                $first["operation_id"],
+                $this->service->setup($this->section->id)["selected_offering"]["version_id"],
+            );
+        }
+        $this->f->connection->pdo->exec("DROP TRIGGER fail_amend_audit");
+        self::assertSame(2, $service->commit($this->section->id, $review["review_token"])["last_version"]);
+    }
+
+    public function testAmendmentsRequireCurrentCatalogAuthorityAndTheOriginalReviewer(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $this->futurePublication(), "Office review");
+        $actor = $this->f->access->actor;
+        $this->f->access->actor = $this->f->user();
+        try {
+            $service->commit($this->section->id, $review["review_token"]);
+            self::fail("Another actor reused the amendment.");
+        } catch (AccessDeniedException) {
+            $this->f->access->actor = $actor;
+        }
+        $this->f->access->staff = false;
+        $this->f->access->grants = ["sis:registration:manage"];
+        $this->expectException(AccessDeniedException::class);
+        $service->commit($this->section->id, $review["review_token"]);
+    }
+
+    public function testUnconfirmedAmendmentsExpireAndNoOpAmendmentsAreRejected(): void
+    {
+        [$first, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $service = $this->amendments();
+        try {
+            $service->review($this->section->id, new EntityId($first["operation_id"]), "No change");
+            self::fail("A no-op amendment must not create another decision.");
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            $review = $service->review($this->section->id, $this->futurePublication(), "Expiring review");
+        }
+        $this->f->clock->time = $this->f->clock->time->modify("+20 minutes");
+        $this->expectException(ConcurrentModificationException::class);
+        $service->commit($this->section->id, $review["review_token"]);
+    }
+
+    public function testAmendmentsRejectCrossSectionAndWrongPurposeTokens(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $this->futurePublication(), "Bound review");
+        try {
+            $service->commit($this->f->section()->id, $review["review_token"]);
+            self::fail("An amendment token was reused for another section.");
+        } catch (InvalidArgumentException) {
+            $this->expectException(InvalidArgumentException::class);
+            $service->commit($this->section->id, $initial["review_token"]);
+        }
+    }
+
+    public function testAmendmentHistoryPagesFreezeTheirHeadAndDoNotExposeProtectedContext(): void
+    {
+        [$first, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $second = $this->futurePublication(false);
+        $service = $this->amendments();
+        for ($i = 0; $i < 21; $i++) {
+            $target = $i % 2 === 0 ? $second : new EntityId($first["operation_id"]);
+            $review = $service->review($this->section->id, $target, "Protected amendment reason");
+            $service->commit($this->section->id, $review["review_token"]);
+        }
+        $page = $service->history($this->section->id);
+        self::assertCount(20, $page["items"]);
+        $review = $service->review(
+            $this->section->id,
+            new EntityId($first["operation_id"]),
+            "Later amendment",
+        );
+        $service->commit($this->section->id, $review["review_token"]);
+        $last = $service->history($this->section->id, $page["next_cursor"]);
+        self::assertCount(2, $last["items"]);
+        self::assertSame(22, $last["through_version"]);
+        self::assertStringNotContainsString(
+            "Protected amendment reason",
+            json_encode($page, JSON_THROW_ON_ERROR),
+        );
+        self::assertStringNotContainsString("actor_id", json_encode($page, JSON_THROW_ON_ERROR));
+        $this->expectException(CorruptHistoryException::class);
+        $service->history($this->f->section()->id, $page["next_cursor"]);
+    }
+
+    public function testCommittedHeadReadIsBoundedAndDetectsLastEventTampering(): void
+    {
+        self::assertNull($this->history->latest($this->stream()));
+        $first = $this->review();
+        $this->service->publish($this->section->id, $first["review_token"]);
+        $second = $this->review("2026-09-01");
+        $receipt = $this->service->publish($this->section->id, $second["review_token"]);
+        $last = $this->history->latest($this->stream());
+        self::assertSame($receipt["event_ids"][0], (string) $last->event->eventId());
+        self::assertSame(2, $last->event->playhead());
+        $this->f->sql->update(
+            "sis_history_events",
+            ["sealed_event" => "corrupt fixture"],
+            ["id" => $last->id->value],
+        );
+        $this->expectException(CorruptHistoryException::class);
+        $this->history->latest($this->stream());
+    }
+
+    public function testOfferingAmendmentInvalidatesGroupReviewEvenAfterReturningToTheSamePublication(): void
+    {
+        [$first, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $f = $this->f;
+        $batch = new \Domain\Registration\Service\RegistrationBatchService(
+            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($f->sql),
+            $f->registration,
+            $f->admissions,
+            $f->service,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
+        );
+        $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
+            $this->section->id,
+            $f->student()->id,
+        );
+        $pending = $batch->review($selection);
+        $next = $this->futurePublication(false);
+        $service = $this->amendments();
+        $change = $service->review($this->section->id, $next, "Intervening amendment");
+        $service->commit($this->section->id, $change["review_token"]);
+        $back = $service->review($this->section->id, new EntityId($first["operation_id"]), "Explicit return");
+        $service->commit($this->section->id, $back["review_token"]);
+        self::assertSame(
+            $pending["section"]["section_version_id"],
+            $batch->review($selection)["section"]["section_version_id"],
+        );
+        try {
+            $batch->commit(new EntityId($pending["operation_id"]), $selection, $pending["revision"]);
+            self::fail("An intervening selection must require a fresh group review.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $f->sql->rows("sis_enrollments"));
+        }
+        $fresh = $batch->review($selection);
+        self::assertSame(
+            1,
+            $batch->commit(new EntityId($fresh["operation_id"]), $selection, $fresh["revision"])["created"],
+        );
+    }
+
+    public function testAmendmentAcceptsTheFullUnicodeReasonLimitAndReplaysThroughBothPorts(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $service = $this->amendments();
+        $reason = str_repeat("🎓", 1000);
+        $review = $service->review($this->section->id, $this->futurePublication(), $reason);
+        self::assertLessThanOrEqual(32768, strlen($review["review_token"]));
+        $service->commit($this->section->id, $review["review_token"]);
+        $stream = \Domain\Registration\Service\SectionOfferingSelection::stream($this->section->id);
+        $events = array_map(static fn($stored) => $stored->event, $this->history->page($stream)->events);
+        $framework = \Domain\Registration\SectionOfferingBinding::reconstituteFromEventStream(
+            new EventStream($stream->aggregateId, $events),
+        );
+        $incremental = \Domain\Registration\SectionOfferingBinding::root($stream->aggregateId);
+        foreach ($events as $event) {
+            $incremental->acceptHistorical($event);
+        }
+        self::assertSame(2, $framework->playhead());
+        self::assertSame($framework->publication(), $incremental->publication());
+        self::assertSame($reason, $this->history->latest($stream)->context->reason);
+        $payload = $events[1]->payload();
+        $payload["previous_publication_id"] = EntityId::generate()->value;
+        $bad = \Domain\Registration\Event\SectionOfferingVersionWasAmended::occur(
+            $stream->aggregateId,
+            $payload,
+            ["__aggregate_type" => "section_offering_binding"],
+        )->withPlayhead(2);
+        $broken = \Domain\Registration\SectionOfferingBinding::root($stream->aggregateId);
+        $broken->acceptHistorical($events[0]);
+        $this->expectException(CorruptHistoryException::class);
+        $broken->acceptHistorical($bad);
+    }
+
+    public function testAmendmentPermissionIsRecheckedAfterWaitingForTheLock(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $review = $this->amendments()->review(
+            $this->section->id,
+            $this->futurePublication(),
+            "Before lock wait",
+        );
+        $before = $this->f->sql->rows("sis_history_events");
+        $transactions = new class ($this->f) implements \Domain\Shared\Persistence\UnitOfWork {
+            public function __construct(private SisFixture $fixture)
+            {
+            }
+            public function run(Closure $operation): mixed
+            {
+                return $this->fixture->transactions->run(function () use ($operation): mixed {
+                    $this->fixture->access->staff = false;
+                    $this->fixture->access->grants = [];
+                    return $operation();
+                });
+            }
+        };
+        try {
+            $this->amendments($transactions)->commit($this->section->id, $review["review_token"]);
+            self::fail("Revoked authority must prevent the amendment.");
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $this->f->sql->rows("sis_history_events"));
+        }
+    }
+
+    public function testChangedOperationalOfferingRequiresAnotherPublicationAndReview(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $this->futurePublication(), "Reviewed offering");
+        $before = $this->f->sql->rows("sis_history_events");
+        $this->catalog->save("sections", $this->section->id, ["fee_minor" => 25000]);
+        try {
+            $service->commit($this->section->id, $review["review_token"]);
+            self::fail("Unreviewed fee changes must not be accepted.");
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            self::assertSame($before, $this->f->sql->rows("sis_history_events"));
+        }
+    }
+
+    public function testOfferingPositionDriftBlocksNewRegistration(): void
+    {
+        [, $initial] = $this->selectedOffering();
+        $this->service->select($this->section->id, $initial["review_token"]);
+        $service = $this->amendments();
+        $review = $service->review($this->section->id, $this->futurePublication(), "Next offering");
+        $service->commit($this->section->id, $review["review_token"]);
+        $this->f->sql->update(
+            "sis_section_offering_versions",
+            ["stream_version" => 1],
+            ["id" => $this->section->id->value],
+        );
+        $this->expectException(CorruptHistoryException::class);
+        $this->f->service->register($this->f->student()->id, $this->section->id, true);
     }
 
     public function testRegistryRejectsUnknownFieldsAndReplayRejectsBrokenPredecessor(): void

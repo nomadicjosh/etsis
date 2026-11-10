@@ -438,6 +438,7 @@ final class SectionCourseBindingTest extends TestCase
             $this->f->transactions,
             $this->f->audit,
             $this->f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql),
         );
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $this->section->id,

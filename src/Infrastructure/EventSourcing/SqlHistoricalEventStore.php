@@ -340,6 +340,32 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
         });
     }
 
+    public function latest(StreamReference $stream): ?StoredEvent
+    {
+        return $this->transactions->run(function () use ($stream): ?StoredEvent {
+            $head = $this->sql->rows('sis_history_streams', [
+                'stream_type' => $stream->type, 'aggregate_id' => (string) $stream->aggregateId,
+            ], 1)[0] ?? null;
+            if ($head === null) {
+                return null;
+            }
+            $this->verifyHead($head, $stream);
+            if ($head['version'] === 0) {
+                if ($head['head_hash'] !== self::ZERO) {
+                    throw new CorruptHistoryException();
+                }
+                return null;
+            }
+            $last = $this->sql->rows('sis_history_events', [
+                'stream_id' => $head['id'], 'position' => $head['version'],
+            ], 1)[0] ?? null;
+            if ($last === null || $last['event_hash'] !== $head['head_hash']) {
+                throw new CorruptHistoryException();
+            }
+            return $this->decode($stream, $last);
+        });
+    }
+
     /** @param array<string, scalar|null> $criteria
      * @return array<string, mixed>|null
      */

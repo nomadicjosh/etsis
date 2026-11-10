@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\SectionOfferingVersionWasAmended::class => [
+                "type" => "section_offering_binding", "root" => \Domain\Registration\SectionOfferingBinding::class,
+                "fields" => ["publication_id", "previous_publication_id", "definition_hash"],
+            ],
             \Domain\Registration\Event\SectionOfferingVersionWasSelected::class => [
                 "type" => "section_offering_binding", "root" => \Domain\Registration\SectionOfferingBinding::class,
                 "fields" => ["publication_id", "definition_hash"],
@@ -690,6 +694,12 @@ final readonly class HistoricalSchemaRegistry
                 $definition["type"] === "section_offering_binding"
                 && (!is_string($payload["definition_hash"])
                     || preg_match('/^[a-f0-9]{64}$/D', $payload["definition_hash"]) !== 1)
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if (
+                $class === \Domain\Registration\Event\SectionOfferingVersionWasAmended::class
+                && $payload['publication_id'] === $payload['previous_publication_id']
             ) {
                 throw new CorruptHistoryException();
             }

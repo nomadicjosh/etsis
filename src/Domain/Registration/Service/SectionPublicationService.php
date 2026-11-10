@@ -434,6 +434,46 @@ final readonly class SectionPublicationService
         );
     }
 
+    /** Internal command context for an explicitly chosen publication; no projection writes or selection changes.
+     * @return array{selected: PublishedSectionDefinition, source_hash: string, faculty_label: string}
+     */
+    public function offeringContext(EntityId $section, EntityId $publication): array
+    {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        return $this->transactions->run(function () use ($section, $publication, $actor): array {
+            [$row, $term] = $this->lock($section);
+            $this->authorize($actor);
+            $definition = $this->publicationFromHistory($section, $publication);
+            $d = $definition->definition->data;
+            $course = $this->verifiedCourse($section) ?? throw new CorruptHistoryException();
+            if (
+                $this->fingerprint(
+                    $this->definition(
+                        $row,
+                        $term,
+                        $course,
+                        $d["instruction_starts_on"],
+                        $d["instruction_ends_on"],
+                    ),
+                ) !== $this->fingerprint($d)
+            ) {
+                throw new \Domain\Shared\Exception\ValidationException([
+                    [
+                        "field" => "version_id",
+                        "message" =>
+                            "Publish the current offering details, then choose that publication "
+                            . "for future registrations.",
+                    ],
+                ]);
+            }
+            return [
+                "selected" => $definition,
+                "source_hash" => $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
+                "faculty_label" => $this->facultyLabel($row),
+            ];
+        });
+    }
+
     /** Curated publication pages omit protected reasons, actors and raw envelopes.
      * @return array<string, mixed>
      */

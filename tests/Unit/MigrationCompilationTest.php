@@ -80,6 +80,8 @@ require_once $registrationCompilerMigrations . "20261109000010_CreateSisSectionV
 
 require_once $registrationCompilerMigrations . "20261110000001_CreateSisSectionOfferingSelections.php";
 
+require_once $registrationCompilerMigrations . "20261110000002_AddSisOfferingSelectionPosition.php";
+
 final class MigrationCompilationTest extends TestCase
 {
     public function testTransferReadIndexesCompileAcrossDialectsAndRollbackOnSqlite(): void
@@ -330,5 +332,46 @@ final class MigrationCompilationTest extends TestCase
                 self::assertSame(26, $table->getColumns()["id"]->get("length"));
             }
         }
+    }
+    public function testOfferingSelectionPositionUpgradePreservesExistingReferencesAndCompilesAcrossDialects(): void
+    {
+        $connection = new \Qubus\Expressive\Connection\Pdo\Sqlite([
+            "driver" => "pdo_sqlite",
+            "dsn" => "sqlite::memory:",
+        ]);
+        $connection->pdo->exec(
+            "CREATE TABLE sis_section_offering_versions (id VARCHAR(26) PRIMARY KEY, publication_id VARCHAR(26) NOT NULL)",
+        );
+        $section = \Domain\Shared\ValueObject\EntityId::generate()->value;
+        $publication = \Domain\Shared\ValueObject\EntityId::generate()->value;
+        $statement = $connection->pdo->prepare(
+            "INSERT INTO sis_section_offering_versions (id, publication_id) VALUES (?, ?)",
+        );
+        $statement->execute([$section, $publication]);
+        $migration = new AddSisOfferingSelectionPosition("1");
+        $migration->setObjectMap(
+            new ArrayObject(["phpmig.adapter" => new DbalMigrationAdapter($connection, "test_migrations")]),
+        );
+        $migration->up();
+        $row = $connection->pdo
+            ->query("SELECT * FROM sis_section_offering_versions")
+            ->fetch(PDO::FETCH_ASSOC);
+        self::assertSame($section, $row["id"]);
+        self::assertSame($publication, $row["publication_id"]);
+        self::assertSame(1, (int) $row["stream_version"]);
+        $alter = new \Qubus\Expressive\Schema\AlterTable("sis_section_offering_versions");
+        $alter->integer("stream_version")->notNull()->defaultValue(1);
+        foreach (["MySQL", "PostgreSQL", "SQLite", "SQLServer", "Oracle"] as $driver) {
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect
+                ->method("quoteIdentifier")
+                ->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $sql = new $class($dialect)->alter($alter);
+            self::assertNotEmpty($sql);
+            self::assertStringContainsString("stream_version", json_encode($sql, JSON_THROW_ON_ERROR));
+        }
+        $this->expectException(LogicException::class);
+        $migration->down();
     }
 }
