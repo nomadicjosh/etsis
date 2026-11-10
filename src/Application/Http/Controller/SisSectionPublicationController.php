@@ -22,10 +22,8 @@ final readonly class SisSectionPublicationController
         return new JsonResponse($this->service->setup(new EntityId($id)));
     }
 
-    public function review(
-        ServerRequest $request,
-        string $id,
-    ): ResponseInterface {
+    public function review(ServerRequest $request, string $id): ResponseInterface
+    {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->service->review(
@@ -37,10 +35,8 @@ final readonly class SisSectionPublicationController
         );
     }
 
-    public function publish(
-        ServerRequest $request,
-        string $id,
-    ): ResponseInterface {
+    public function publish(ServerRequest $request, string $id): ResponseInterface
+    {
         return new JsonResponse(
             $this->service->publish(
                 new EntityId($id),
@@ -56,6 +52,20 @@ final readonly class SisSectionPublicationController
                 new EntityId($id),
                 FormInput::from($request)->optionalText("cursor", 16384),
             ),
+        );
+    }
+    public function selectionReview(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->reviewSelection(new EntityId($id), $f->id("version_id"), $f->bodyText("reason")),
+        );
+    }
+
+    public function select(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->service->select(new EntityId($id), FormInput::from($request)->text("review_token", 16384)),
         );
     }
 }

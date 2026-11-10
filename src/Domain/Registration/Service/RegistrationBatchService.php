@@ -170,7 +170,9 @@ final readonly class RegistrationBatchService
                 'enrollment_id' => $enrollment?->id->value, 'enrollment_status' => $enrollment?->status->value];
         }
         return ['section' => ['id' => $section->id->value, 'code' => $section->code,
-            'term_id' => $section->termId->value, 'course_version_id' => $course->publicationVersionId?->value,
+            'term_id' => $section->termId->value,
+            'section_version_id' => $section->publicationVersionId?->value,
+            'course_version_id' => $course->publicationVersionId?->value,
             'course_code' => $course->code, 'course_title' => $course->title, 'credits_milli' => $course->creditsMilli,
             'active' => $section->active && $course->active, 'fee_minor' => $section->fee->minor,
             'currency' => $section->fee->currency, 'capacity' => $section->capacity,

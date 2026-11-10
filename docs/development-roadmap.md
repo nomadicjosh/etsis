@@ -1,12 +1,14 @@
 # Development roadmap
 
-Last reviewed: **2026-11-09**, after the first published section-definition stage.
+Last reviewed: **2026-11-10**, after initial section-version selection and search-first private directories.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
 This is the planning overview. [Backend coverage](backend-migration.md) records implementation detail; [workflow review](workflow-review.md) records the approved staff experience. The [event-sourcing architecture](event-sourcing-architecture.md) and [historical field review](academic-history-field-review.md) govern historical and security acceptance. Legacy modules are integrated capabilities, with no paid-add-on gates.
 
 ## Reading the estimates
+
+Preserve historical facts and support attributed corrections and controlled replay/recovery. AJAX search can avoid unnecessary initial directory requests; AJAX updates retain the event-sourced command and transaction boundaries they require.
 
 Effort describes remaining implementation, interface work, tests and documentation together:
 
@@ -153,7 +155,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 ## Next implementation stages
 
-1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. The normalized verified version-reference cache is now implemented. Next, add explicit retained section-version selection to offering and registration paths; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
+1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. The verified reference cache and explicit initial selection for new individual/self-service and group registrations are implemented. Next, integrate offering-plan activation and reviewed amendments; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
 2. **Policy and attempt integration:** retain the applicable section/policy references in new enrollment/academic facts, then complete reviewed replacements and remaining consequential lifecycle paths. Include reconciliation checks with each slice.
 3. **Degree evaluation:** begin with a deterministic evaluator for the supported published grammar and authoritative completed credits; add explained allocation/policy/exception behavior before presenting graduation eligibility.
 

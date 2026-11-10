@@ -22,6 +22,7 @@ final class AcademicCredit extends EventSourcedAggregate
     private ?string $section = null;
     private ?string $decision = null;
     private ?string $provenance = null;
+    private ?string $sectionVersion = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -48,6 +49,13 @@ final class AcademicCredit extends EventSourcedAggregate
         $p = $event->payload();
         if ($this->credit !== null || $p["credit"]["id"] !== (string) $this->aggregateId()) {
             throw new CorruptHistoryException();
+        }
+        $this->sectionVersion = $event->metaParam('section_version_id', null);
+        if ($this->sectionVersion !== null) {
+            new \Domain\Shared\ValueObject\EntityId($this->sectionVersion);
+            if ($p['provenance'] !== 'registration') {
+                throw new CorruptHistoryException();
+            }
         }
         $this->provenance = $p["provenance"];
         $this->credit = $p["credit"];
@@ -136,5 +144,9 @@ final class AcademicCredit extends EventSourcedAggregate
     public function decision(): ?string
     {
         return $this->decision;
+    }
+    public function sectionVersion(): ?string
+    {
+        return $this->sectionVersion;
     }
 }

@@ -59,6 +59,8 @@ test('registrars review paged holds, retry notes safely and end a restriction wi
     };
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     const holdSection = page.locator('section[aria-label="Restrictions and holds"]');
     await expect(holdSection.locator('tbody tr')).toHaveCount(50);

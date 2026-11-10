@@ -2597,6 +2597,34 @@ if (
 ) {
     throw new RuntimeException('Section publication did not preserve its private history and original receipt.');
 }
+$offeringReviewResponse = $teachingPost($sectionPublicationPath . 'selection-review/', [
+    'version_id' => $sectionPublicationReview['operation_id'], 'reason' => 'Fictional initial offering selection',
+]);
+$offeringReview = json_decode((string) $offeringReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($offeringReviewResponse->getStatusCode() !== 200 || !isset($offeringReview['review_token'])) {
+    throw new RuntimeException('Offering selection review did not resolve privately.');
+}
+$offeringSelected = $teachingPost($sectionPublicationPath . 'select/', ['review_token' => $offeringReview['review_token']]);
+$offeringRetry = $teachingPost($sectionPublicationPath . 'select/', ['review_token' => $offeringReview['review_token']]);
+if ($offeringSelected->getStatusCode() !== 200 || (string) $offeringSelected->getBody() !== (string) $offeringRetry->getBody()) {
+    throw new RuntimeException('Offering selection did not preserve its original receipt.');
+}
+$selectedSetup = json_decode((string) $teachingPost($sectionPublicationPath . 'setup/', [])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (($selectedSetup['selected_offering']['version_id'] ?? null) !== $sectionPublicationReview['operation_id']) {
+    throw new RuntimeException('Offering selection read model was not available.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage'];
+if (
+    $teachingPost($sectionPublicationPath . 'selection-review/', [
+    'version_id' => $sectionPublicationReview['operation_id'], 'reason' => 'Forbidden',
+    ])->getStatusCode() !== 403 || $teachingPost($sectionPublicationPath . 'select/', [
+    'review_token' => $offeringReview['review_token'],
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Offering selection bypassed catalog permission.');
+}
+$sis->access->staff = true;
 $sis->access->staff = false;
 $sis->access->grants = ['sis:registration:manage'];
 $sectionPublicationActions = ['setup' => [], 'page' => [], 'review' => $sectionPublicationInput,

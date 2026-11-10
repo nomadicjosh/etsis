@@ -334,4 +334,41 @@ final class WorkspaceWorkflowTest extends TestCase
         $application = $f->legacyApplication($person->id, $f->program, $f->term);
         self::assertNull($this->forms($f)->reviewApplication($application->id)['submission']);
     }
+    public function testPrivateDirectoriesDoNotQueryRecordsUntilASearchIsProvided(): void
+    {
+        $f = new SisFixture();
+        $repo = $this->createMock(\Domain\Workspace\Repository\WorkspaceRepository::class);
+        $repo->expects(self::never())->method('records');
+        $service = new \Domain\Workspace\Service\WorkspaceService(
+            $repo,
+            $f->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql),
+            $f->admissionsService()
+        );
+        $expected = ['items' => [], 'next_after' => null, 'search_required' => true];
+        foreach (['people', 'students'] as $dataset) {
+            self::assertSame($expected, $service->records($dataset));
+            self::assertSame($expected, $service->records($dataset, '   ', EntityId::generate()));
+        }
+    }
+
+    public function testPrivateDirectorySearchIsTrimmedAndRetainsPaginationAndPermissions(): void
+    {
+        $f = new SisFixture();
+        $after = EntityId::generate();
+        $repo = $this->createMock(\Domain\Workspace\Repository\WorkspaceRepository::class);
+        $repo->expects(self::once())->method('records')->with('students', null, 'Jamie', $after)
+            ->willReturn(['items' => [], 'next_after' => null]);
+        $service = new \Domain\Workspace\Service\WorkspaceService(
+            $repo,
+            $f->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql),
+            $f->admissionsService()
+        );
+        self::assertSame(['items' => [], 'next_after' => null], $service->records('students', ' Jamie ', $after));
+        $f->access->staff = false;
+        $f->access->grants = ['admin:dashboard'];
+        $this->expectException(AccessDeniedException::class);
+        $service->records('students', '');
+    }
 }

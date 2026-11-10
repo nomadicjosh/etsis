@@ -70,6 +70,8 @@ async function fixture(page, limited = false) {
     });
     await page.goto(limited ? "/admin/student-read-fixture/" : "/admin/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     return { calls, errors, student, cursor };
 }

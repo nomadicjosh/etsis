@@ -93,6 +93,8 @@ test("registrar reviews a reasoned grade correction from the student record and 
     });
     await page.goto("/admin/grade-amend-fixture/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     await page.getByRole("button", { name: "Grade history", exact: true }).click();

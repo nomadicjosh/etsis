@@ -30,6 +30,7 @@ final readonly class EnrollmentLedger
         private HistoricalEventStore $history,
         private StudentAccess $access,
         private Clock $clock,
+        private \Domain\Registration\Repository\SectionVersionRepository $versions,
     ) {
     }
     /** @param array<string,mixed> $eligibility */
@@ -48,6 +49,17 @@ final readonly class EnrollmentLedger
         ) {
             throw new CorruptHistoryException();
         }
+        $selected = SectionOfferingSelection::verify($section->id, $this->versions, $this->history);
+        if ($selected?->publication->value !== $section->publicationVersionId?->value) {
+            throw new CorruptHistoryException();
+        }
+        if ($selected !== null && !$selected->matchesOffering($section, $course)) {
+            throw new \DomainException('This offering changed after version selection. Registrar review is required.');
+        }
+        $metadata = ['__aggregate_type' => 'enrollment'];
+        if ($selected !== null) {
+            $metadata['section_version_id'] = $selected->publication->value;
+        }
         $seat = $this->nextSeat($section, 1);
         $event = EnrollmentWasEstablished::occur(
             new EnrollmentHistoryId($enrollment->id->value),
@@ -59,7 +71,7 @@ final readonly class EnrollmentLedger
                 "eligibility" => $eligibility,
                 "seat" => $seat,
             ],
-            ["__aggregate_type" => "enrollment"],
+            $metadata,
         )->withPlayhead(1);
         $this->history->append(
             $this->stream($enrollment->id),
@@ -188,6 +200,7 @@ final readonly class EnrollmentLedger
         }
         return [
             "enrollment_id" => $id->value,
+            "section_version_id" => $root->sectionVersion(),
             "student_id" => $f["student_id"],
             "section_id" => $f["section_id"],
             "section_code" => $s["section_code"],
@@ -226,6 +239,9 @@ final readonly class EnrollmentLedger
             $m["term_id"] !== $f["term_id"] ||
             $m["last_sequence"] !== $seat["sequence"]
         ) {
+            throw new CorruptHistoryException();
+        }
+        if ($this->versions->enrollmentVersion($id)?->value !== $root->sectionVersion()) {
             throw new CorruptHistoryException();
         }
         $current = $this->records->current($id);
@@ -314,6 +330,10 @@ final readonly class EnrollmentLedger
         $f = $root->facts() ?? throw new CorruptHistoryException();
         $seat = $root->seat() ?? throw new CorruptHistoryException();
         $this->records->project($f, $seat["sequence"], $expectedVersion);
+        $this->versions->retainEnrollmentVersion(
+            new EntityId($f['id']),
+            $root->sectionVersion() === null ? null : new EntityId($root->sectionVersion())
+        );
         $last = $root->decisions();
         $this->records->index($last[count($last) - 1]);
     }

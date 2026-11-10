@@ -43,6 +43,8 @@ test('connected workspace, form studio, CSV mapping, rules and narrow-screen acc
     await accessible();
     await page.screenshot({ path: 'test-results/workspace-desktop.png' });
     await page.locator('.workspace-nav-link[data-workspace="people"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await expect(page.locator('#directory-results')).toContainText('Alex Example');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('S-EXAMPLE');

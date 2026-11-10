@@ -24,6 +24,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     private array $decisions = [];
     private ?string $decision = null;
     private ?string $provenance = null;
+    private ?string $sectionVersion = null;
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (
@@ -41,6 +42,13 @@ final class EnrollmentHistory extends EventSourcedAggregate
         $p = $event->payload();
         if ($this->facts !== null || $p["enrollment"]["id"] !== (string) $this->aggregateId()) {
             throw new CorruptHistoryException();
+        }
+        $this->sectionVersion = $event->metaParam('section_version_id', null);
+        if ($this->sectionVersion !== null) {
+            new \Domain\Shared\ValueObject\EntityId($this->sectionVersion);
+            if ($p['provenance'] !== 'registered') {
+                throw new CorruptHistoryException();
+            }
         }
         $this->facts = $p["enrollment"];
         $this->source = $p["source"];
@@ -111,5 +119,9 @@ final class EnrollmentHistory extends EventSourcedAggregate
     public function provenance(): ?string
     {
         return $this->provenance;
+    }
+    public function sectionVersion(): ?string
+    {
+        return $this->sectionVersion;
     }
 }

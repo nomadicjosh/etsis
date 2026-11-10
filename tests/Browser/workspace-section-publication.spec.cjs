@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
 
-async function fixture(page, { bound = true, paged = false } = {}) {
+async function fixture(page, { bound = true, paged = false, unavailable = false } = {}) {
   const section = id(1),
     course = id(2),
     term = id(3),
@@ -44,6 +44,7 @@ async function fixture(page, { bound = true, paged = false } = {}) {
   const calls = [],
     errors = [];
   let latest = null;
+  let selected = null;
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/sis/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -81,6 +82,9 @@ async function fixture(page, { bound = true, paged = false } = {}) {
             }
           : null,
         latest,
+        selected_offering: selected,
+        has_student_records: false,
+        publication_status: unavailable ? "unavailable" : latest ? "ready" : "unpublished",
         faculty_label: "Not assigned",
       };
     else if (path.endsWith("/publication/page/"))
@@ -100,6 +104,14 @@ async function fixture(page, { bound = true, paged = false } = {}) {
             : [],
         next_cursor: paged && !data.cursor ? "fictional-section-cursor" : null,
       };
+    else if (path.endsWith("/publication/selection-review/")) result = {
+      selected: { version: 1, version_id: publication, definition },
+      faculty_label: 'Not assigned', reason: data.reason, review_token: 'fictional-offering-selection-proof',
+    };
+    else if (path.endsWith("/publication/select/")) {
+      selected = { version: 1, version_id: publication, definition };
+      result = { operation_id: id(9), first_version: 1, last_version: 1, event_ids: [id(10)] };
+    }
     else if (path.endsWith("/publication/review/"))
       result = {
         expected_version: 0,
@@ -284,4 +296,39 @@ test("unbound sections guide staff to the required course selection", async ({
     }),
   ).toHaveCount(0);
   await accessible(page);
+});
+
+test("missing current projection is explained without presenting older dates as current", async ({ page }) => {
+    const f = await fixture(page, { unavailable: true, paged: true });
+    await expect(page.locator("#drawer-body")).toContainText("The latest published details are temporarily unavailable");
+    await expect(page.getByLabel("Instruction starts on")).toHaveValue("2026-08-01");
+    expect(f.calls.some(call => call.path.endsWith("/review/") || call.path.endsWith("/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+    await accessible(page);
+});
+
+test('offering selection is reviewed explicitly and remains selected after confirmation', async ({ page }) => {
+    const f = await fixture(page, { paged: true });
+    await page.getByText('Version 1 · MATH.101.A · 2026-08-24', { exact: true }).click();
+    await page.getByRole('button', { name: 'Use this version for new registrations', exact: true }).click();
+    await page.getByLabel('Reason for offering selection').fill('Fictional registrar approval');
+    await page.getByRole('button', { name: 'Review offering selection', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('New registrations will retain this offering version');
+    expect(f.calls.some(call => call.path.endsWith('/select/'))).toBe(false);
+    await page.getByRole('button', { name: 'Revise offering selection', exact: true }).click();
+    await expect(page.getByLabel('Reason for offering selection')).toHaveValue('Fictional registrar approval');
+    await page.getByRole('button', { name: 'Review offering selection', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Confirm offering selection', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#drawer-body')).toContainText('New registrations retain section version 1');
+    await expect(page.getByRole('button', { name: 'Use this version for new registrations', exact: true })).toHaveCount(0);
+    expect(f.calls.find(call => call.path.endsWith('/select/'))).toMatchObject({
+      data: { review_token: 'fictional-offering-selection-proof' }, csrf: 'fictional-test-token',
+    });
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+    await accessible(page);
 });

@@ -42,6 +42,8 @@ test('registrar reviews early removal and recovers a committed drop without anot
     const f = await fixture(page);
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await page.getByRole('button', { name: 'Drop / withdraw', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('original course charge');

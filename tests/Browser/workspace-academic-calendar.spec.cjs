@@ -126,6 +126,8 @@ test('separate Terms entry maintains generated terms and allows exceptional term
 
 test('student cohort shows retained curriculum and escaped history without a manual year assignment', async ({ page }) => {
     const f = await fixture(page); await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Sadie Example', exact: true }).click();
     await page.getByRole('button', { name: 'Matriculation cohort', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Academic year 2024-2025; retained curriculum version 1');

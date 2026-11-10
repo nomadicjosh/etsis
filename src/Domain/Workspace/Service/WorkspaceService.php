@@ -124,6 +124,10 @@ final readonly class WorkspaceService
         if (self::DATASETS[$dataset] !== "" && !$catalogRead) {
             $this->access->requirePermission(self::DATASETS[$dataset]);
         }
+        // Personal directories are search-first, including direct API callers. Authorization above is mandatory.
+        if (in_array($dataset, ['people', 'students'], true) && trim($search) === '') {
+            return ['items' => [], 'next_after' => null, 'search_required' => true];
+        }
         $owner = in_array(
             $dataset,
             ["reports", "sharedreports", "campaigns", "portal", "rules", "teaching"],

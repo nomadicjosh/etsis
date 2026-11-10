@@ -19,12 +19,95 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
     {
     }
 
+    public function selected(EntityId $section): ?PublishedSectionDefinition
+    {
+        $row = $this->sql->rows('sis_section_offering_versions', ['id' => $section->value], 1)[0] ?? null;
+        if ($row === null) {
+            return null;
+        }
+        $definition = $this->find(new EntityId($row['publication_id'])) ?? throw new CorruptHistoryException();
+        if ($definition->section->value !== $section->value) {
+            throw new CorruptHistoryException();
+        }
+        return $definition;
+    }
+
+    public function select(PublishedSectionDefinition $definition): void
+    {
+        $old = $this->selected($definition->section);
+        if ($old !== null) {
+            if ($old->fingerprint() !== $definition->fingerprint()) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        $this->retain($definition);
+        $this->sql->insert('sis_section_offering_versions', [
+            'id' => $definition->section->value, 'publication_id' => $definition->publication->value,
+        ]);
+    }
+
+    public function enrollmentVersion(EntityId $enrollment): ?EntityId
+    {
+        $row = $this->sql->rows('sis_enrollment_section_versions', ['id' => $enrollment->value], 1)[0] ?? null;
+        return $row === null ? null : new EntityId($row['publication_id']);
+    }
+
+    public function retainEnrollmentVersion(EntityId $enrollment, ?EntityId $publication): void
+    {
+        $old = $this->enrollmentVersion($enrollment);
+        if ($old !== null) {
+            if ($old->value !== $publication?->value) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        if ($publication !== null) {
+            $this->sql->insert('sis_enrollment_section_versions', [
+                'id' => $enrollment->value, 'publication_id' => $publication->value,
+            ]);
+        }
+    }
+
     public function find(EntityId $publication): ?PublishedSectionDefinition
     {
         $row = $this->sql->rows('sis_section_versions', ['id' => $publication->value], 1)[0] ?? null;
         if ($row === null) {
             return null;
         }
+        return $this->hydrate($publication, $row);
+    }
+
+    /** @return array{status: string, latest: ?PublishedSectionDefinition} */
+    public function latest(EntityId $section): array
+    {
+        $q = $this->sql->quote(...);
+        // One statement gives a consistent head/reference pair without section write locks or replay.
+        $row = $this->sql->fetch(
+            'SELECT v.*, h.' . $q('version') . ' AS ' . $q('head_version')
+            . ' FROM ' . $q('sis_history_streams') . ' h LEFT JOIN ' . $q('sis_section_versions') . ' v'
+            . ' ON v.' . $q('section_id') . ' = h.' . $q('aggregate_id')
+            . ' AND v.' . $q('stream_version') . ' = h.' . $q('version')
+            . ' WHERE h.' . $q('stream_type') . ' = ? AND h.' . $q('aggregate_id') . ' = ?',
+            ['section_publication', $section->value],
+            1,
+        )[0] ?? null;
+        if ($row === null || $this->integer($row['head_version']) === 0) {
+            return ['status' => 'unpublished', 'latest' => null];
+        }
+        if ($row['id'] === null) {
+            return ['status' => 'unavailable', 'latest' => null];
+        }
+        $definition = $this->hydrate(new EntityId($row['id']), $row);
+        if ($definition->section->value !== $section->value) {
+            throw new CorruptHistoryException();
+        }
+        return ['status' => 'ready', 'latest' => $definition];
+    }
+
+    /** @param array<string, mixed> $row */
+    private function hydrate(EntityId $publication, array $row): PublishedSectionDefinition
+    {
         try {
             $facts = array_intersect_key($row, array_flip(SectionDefinitionV1::FIELDS));
             $facts['capacity'] = $this->integer($facts['capacity']);

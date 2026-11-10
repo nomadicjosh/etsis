@@ -581,14 +581,15 @@ final class SectionPublicationTest extends TestCase
         }
     }
 
-    public function testMissingBindingProjectionDoesNotTurnRecordedHistoryIntoAnUnboundSection(): void
+    public function testMissingBindingProjectionIsDetectedAtTheReviewedCommandBoundary(): void
     {
         $this->f->sql->execute(
             "DELETE FROM sis_section_course_versions WHERE id = ?",
             [$this->section->id->value],
         );
+        self::assertNull($this->service->setup($this->section->id)['course_definition']);
         $this->expectException(CorruptHistoryException::class);
-        $this->service->setup($this->section->id);
+        $this->review();
     }
 
     public function testTeachingIdentityRetainsTheCanonicalPersonAfterTheSignInLinkChanges(): void
@@ -690,6 +691,365 @@ final class SectionPublicationTest extends TestCase
         }
         $this->f->connection->pdo->exec('DROP TRIGGER fail_section_cache');
         self::assertSame(1, $this->service->publish($this->section->id, $proof['review_token'])['last_version']);
+    }
+
+    public function testSetupUsesReadModelsWithoutReplayOrAWriteTransaction(): void
+    {
+        $proof = $this->review();
+        $this->service->publish($this->section->id, $proof['review_token']);
+        $history = $this->createStub(\Domain\Shared\EventSourcing\HistoricalEventStore::class);
+        $history->method('page')->willThrowException(new LogicException('Routine setup must not replay history.'));
+        $transactions = $this->createStub(\Domain\Shared\Persistence\UnitOfWork::class);
+        $transactions->method('run')->willThrowException(new LogicException('Routine setup must not open a write transaction.'));
+        $f = $this->f;
+        $relationships = new SqlCatalogWorkflowRepository($f->sql);
+        $courses = new CoursePublicationService(
+            $this->catalog,
+            $relationships,
+            $history,
+            $f->access,
+            $transactions,
+            $f->audit,
+            $f->dropCipher,
+            $f->clock,
+            new SqlCourseTextProjection($f->sql)
+        );
+        $service = new SectionPublicationService(
+            $this->catalog,
+            $relationships,
+            new SqlSectionCourseBindingRepository($f->sql),
+            $courses,
+            $history,
+            $f->access,
+            $transactions,
+            $f->audit,
+            $f->dropCipher,
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql)
+        );
+        $before = $f->sql->rows('sis_history_events');
+        $setup = $service->setup($this->section->id);
+        self::assertSame('ready', $setup['publication_status']);
+        self::assertSame($proof['operation_id'], $setup['latest']['version_id']);
+        self::assertSame($before, $f->sql->rows('sis_history_events'));
+    }
+
+    public function testMissingLatestProjectionNeverFallsBackToAnOlderPublication(): void
+    {
+        $first = $this->review();
+        $this->service->publish($this->section->id, $first['review_token']);
+        $second = $this->review('2026-09-01');
+        $this->service->publish($this->section->id, $second['review_token']);
+        $this->f->sql->execute('DELETE FROM sis_section_versions WHERE id = ?', [$second['operation_id']]);
+        $before = $this->f->sql->rows('sis_history_events');
+        $setup = $this->service->setup($this->section->id);
+        self::assertSame('unavailable', $setup['publication_status']);
+        self::assertNull($setup['latest']);
+        self::assertCount(1, $this->f->sql->rows('sis_section_versions'));
+        self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+        $this->service->cacheVersion($this->section->id, new EntityId($second['operation_id']));
+        self::assertSame($second['operation_id'], $this->service->setup($this->section->id)['latest']['version_id']);
+    }
+
+    public function testUnpublishedSetupUsesTermSuggestionsWithoutManufacturingHistory(): void
+    {
+        $before = $this->f->sql->rows('sis_history_events');
+        $setup = $this->service->setup($this->section->id);
+        self::assertSame('unpublished', $setup['publication_status']);
+        self::assertNull($setup['latest']);
+        self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+    }
+
+    private function selectedOffering(): array
+    {
+        $review = $this->review();
+        $published = $this->service->publish($this->section->id, $review['review_token']);
+        $selection = $this->service->reviewSelection(
+            $this->section->id,
+            new EntityId($published['operation_id']),
+            'Fictional initial offering selection'
+        );
+        return [$published, $selection];
+    }
+
+    public function testSelectedOfferingIsRecordedOnNewEnrollmentAndAcademicEvents(): void
+    {
+        [$publication, $review] = $this->selectedOffering();
+        self::assertSame([], $this->f->sql->rows('sis_section_offering_versions'));
+        $before = $this->f->sql->rows('sis_history_events');
+        $this->service->select($this->section->id, $review['review_token']);
+        self::assertSame($before, array_slice($this->f->sql->rows('sis_history_events'), 0, count($before)));
+        $student = $this->f->student();
+        $enrollment = $this->f->service->register($student->id, $this->section->id, true);
+        $cache = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        self::assertSame($publication['operation_id'], $cache->enrollmentVersion($enrollment->id)->value);
+        $stream = new StreamReference(new \Domain\Registration\ValueObject\EnrollmentHistoryId($enrollment->id->value), 'enrollment');
+        $registered = $this->history->page($stream)->events[0]->event;
+        self::assertSame($publication['operation_id'], $registered->metaParam('section_version_id'));
+        $mapping = $this->f->sql->rows('sis_academic_credit_streams', ['enrollment_id' => $enrollment->id->value], 1)[0];
+        $creditStream = new StreamReference(new \Domain\AcademicRecord\ValueObject\AcademicCreditId($mapping['id']), 'academic_credit');
+        $established = $this->history->page($creditStream)->events[0]->event;
+        self::assertSame($publication['operation_id'], $established->metaParam('section_version_id'));
+        $root = \Domain\Registration\EnrollmentHistory::reconstituteFromEventStream(new EventStream($stream->aggregateId, [$registered]));
+        $credit = \Domain\AcademicRecord\AcademicCredit::reconstituteFromEventStream(new EventStream($creditStream->aggregateId, [$established]));
+        self::assertSame($publication['operation_id'], $root->sectionVersion());
+        self::assertSame($root->sectionVersion(), $credit->sectionVersion());
+        $this->catalog->save('courses', $this->section->courseId, ['title' => 'Future catalog title']);
+        $rows = $this->f->sql->rows('sis_academic_credits');
+        self::assertNotSame('Future catalog title', $rows[0]['course_title']);
+        self::assertSame($enrollment->id->value, $this->f->service->register($student->id, $this->section->id, true)->id->value);
+    }
+
+    public function testOfferingSelectionRetryPreservesLaterEnrollmentAndPublication(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $receipt = $this->service->select($this->section->id, $review['review_token']);
+        $student = $this->f->student();
+        $this->f->service->register($student->id, $this->section->id, true);
+        $later = $this->review('2026-09-01');
+        $this->service->publish($this->section->id, $later['review_token']);
+        $before = $this->f->sql->rows('sis_history_events');
+        $this->f->clock->time = $this->f->clock->time->modify('+1 day');
+        self::assertSame($receipt, $this->service->select($this->section->id, $review['review_token']));
+        self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+        self::assertSame($review['publication_id'], $this->service->setup($this->section->id)['selected_offering']['version_id']);
+    }
+
+    public function testEnrollmentAfterSelectionReviewPreventsRetrospectiveBinding(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $this->f->service->register($this->f->student()->id, $this->section->id, true);
+        $before = $this->f->sql->rows('sis_history_events');
+        try {
+            $this->service->select($this->section->id, $review['review_token']);
+            self::fail('A populated section must not acquire an initial binding.');
+        } catch (DomainException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+            self::assertSame([], $this->f->sql->rows('sis_section_offering_versions'));
+            self::assertSame([], $this->f->sql->rows('sis_enrollment_section_versions'));
+        }
+    }
+
+    public function testCompetingInitialSelectionsCannotReplaceTheFirstAcceptedVersion(): void
+    {
+        [, $first] = $this->selectedOffering();
+        $next = $this->review('2026-09-01');
+        $published = $this->service->publish($this->section->id, $next['review_token']);
+        $second = $this->service->reviewSelection($this->section->id, new EntityId($published['operation_id']), 'Different offering');
+        $this->service->select($this->section->id, $first['review_token']);
+        $before = $this->f->sql->rows('sis_history_events');
+        try {
+            $this->service->select($this->section->id, $second['review_token']);
+            self::fail('A competing selection overwrote the first one.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+            self::assertSame($first['publication_id'], $this->service->setup($this->section->id)['selected_offering']['version_id']);
+        }
+    }
+
+    public function testStaleAndExpiredOfferingReviewsLeaveNoSelection(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $this->catalog->save('sections', $this->section->id, ['capacity' => 23]);
+        try {
+            $this->service->select($this->section->id, $review['review_token']);
+            self::fail('A changed offering must invalidate its review.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $this->f->sql->rows('sis_section_offering_versions'));
+        }
+        $this->catalog->save('sections', $this->section->id, ['capacity' => 20]);
+        $this->f->clock->time = $this->f->clock->time->modify('+20 minutes');
+        $this->expectException(ConcurrentModificationException::class);
+        $this->service->select($this->section->id, $review['review_token']);
+    }
+
+    public function testOfferingSelectionRequiresCurrentCatalogPermissionAndOriginalActor(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $actor = $this->f->access->actor;
+        $this->f->access->actor = $this->f->user();
+        try {
+            $this->service->select($this->section->id, $review['review_token']);
+            self::fail('Another actor reused the review.');
+        } catch (AccessDeniedException) {
+            $this->f->access->actor = $actor;
+        }
+        $this->f->access->staff = false;
+        $this->f->access->grants = ['sis:registration:manage'];
+        $this->expectException(AccessDeniedException::class);
+        $this->service->select($this->section->id, $review['review_token']);
+    }
+
+    public function testOfferingSelectionAuditFailureRollsBackAllAcceptedState(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $before = $this->f->sql->rows('sis_history_events');
+        $this->f->connection->pdo->exec("CREATE TRIGGER fail_selection_audit BEFORE INSERT ON sis_audit WHEN NEW.action = 'section.offering_version_selected' BEGIN SELECT RAISE(ABORT, 'fictional selection failure'); END");
+        try {
+            $this->service->select($this->section->id, $review['review_token']);
+            self::fail('Audit failure did not roll back the selection.');
+        } catch (PDOException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+            self::assertSame([], $this->f->sql->rows('sis_section_offering_versions'));
+        }
+        $this->f->connection->pdo->exec('DROP TRIGGER fail_selection_audit');
+        self::assertSame(1, $this->service->select($this->section->id, $review['review_token'])['last_version']);
+    }
+
+    public function testCorruptSelectionProjectionStopsRegistrationWithoutACharge(): void
+    {
+        [$publication, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $this->f->sql->update('sis_section_versions', ['capacity' => 99], ['id' => $publication['operation_id']]);
+        $student = $this->f->student();
+        $before = $this->f->sql->rows('sis_history_events');
+        try {
+            $this->f->service->register($student->id, $this->section->id, true);
+            self::fail('A changed definition projection was accepted.');
+        } catch (CorruptHistoryException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+            self::assertSame([], $this->f->sql->rows('sis_enrollments'));
+        }
+    }
+
+    public function testOperationalOfferingChangesRequireReviewBeforeAnotherRegistration(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $student = $this->f->student();
+        $this->f->service->register($student->id, $this->section->id, true);
+        $this->catalog->save('sections', $this->section->id, ['capacity' => 25]);
+        self::assertNotNull($this->f->service->register($student->id, $this->section->id, true));
+        $another = $this->f->student();
+        $before = $this->f->sql->rows('sis_history_events');
+        try {
+            $this->f->service->register($another->id, $this->section->id, true);
+            self::fail('A different current offering was registered under the retained definition.');
+        } catch (DomainException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+        }
+    }
+
+    public function testEarlyDropRetainsVersionReferenceAndRetakeGetsANewReferenceIdentity(): void
+    {
+        [$publication, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $student = $this->f->student();
+        $first = $this->f->service->register($student->id, $this->section->id, true);
+        $this->f->service->drop($student->id, $this->section->id);
+        self::assertSame([], $this->f->sql->rows('sis_academic_credits'));
+        self::assertSame([], $this->f->sql->rows('sis_enrollments'));
+        $second = $this->f->service->register($student->id, $this->section->id, true);
+        self::assertNotSame($first->id->value, $second->id->value);
+        $cache = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        self::assertSame($publication['operation_id'], $cache->enrollmentVersion($first->id)->value);
+        self::assertSame($publication['operation_id'], $cache->enrollmentVersion($second->id)->value);
+        self::assertCount(2, $this->f->sql->rows('sis_enrollment_section_versions'));
+    }
+
+    public function testMissingEnrollmentReferenceIsDetectedAndCanBeRebuiltFromRecordedMetadata(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $student = $this->f->student();
+        $enrollment = $this->f->service->register($student->id, $this->section->id, true);
+        $this->f->sql->execute('DELETE FROM sis_enrollment_section_versions WHERE id = ?', [$enrollment->id->value]);
+        try {
+            $this->f->service->register($student->id, $this->section->id, true);
+            self::fail('A missing retained reference was ignored.');
+        } catch (CorruptHistoryException) {
+            $stream = new StreamReference(new \Domain\Registration\ValueObject\EnrollmentHistoryId($enrollment->id->value), 'enrollment');
+            $recorded = $this->history->page($stream)->events[0]->event;
+            $cache = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+            $before = $this->f->sql->rows('sis_history_events');
+            $cache->retainEnrollmentVersion($enrollment->id, new EntityId($recorded->metaParam('section_version_id')));
+            self::assertSame($enrollment->id->value, $this->f->service->register($student->id, $this->section->id, true)->id->value);
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+        }
+    }
+
+    public function testSelectionInvalidatesAnEarlierGroupRegistrationReview(): void
+    {
+        [$publication, $review] = $this->selectedOffering();
+        $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
+            $this->section->id,
+            $this->f->student()->id
+        );
+        $f = $this->f;
+        $batch = new \Domain\Registration\Service\RegistrationBatchService(
+            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($f->sql),
+            $f->registration,
+            $f->admissions,
+            $f->service,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            $f->clock
+        );
+        $before = $batch->review($selection);
+        $this->service->select($this->section->id, $review['review_token']);
+        $this->expectException(ConcurrentModificationException::class);
+        $batch->commit(new EntityId($before['operation_id']), $selection, $before['revision']);
+    }
+
+    public function testSelfServiceKeepsTheSameOfferingReferenceAsStaffRegistration(): void
+    {
+        [$publication, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $owner = $this->f->user();
+        $student = $this->f->student($owner);
+        $this->f->access->actor = $owner;
+        $this->f->access->staff = false;
+        $this->f->access->grants = [];
+        $enrollment = $this->f->service->register($student->id, $this->section->id);
+        self::assertSame('N', $enrollment->status->value);
+        $cache = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        self::assertSame($publication['operation_id'], $cache->enrollmentVersion($enrollment->id)->value);
+    }
+
+    public function testMissingOfferingPointerCannotMakeRegistrationSilentlyUnversioned(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $this->f->sql->execute('DELETE FROM sis_section_offering_versions WHERE id = ?', [$this->section->id->value]);
+        $student = $this->f->student();
+        $this->expectException(CorruptHistoryException::class);
+        $this->f->service->register($student->id, $this->section->id, true);
+    }
+
+    public function testEnrollmentReferenceFailureRollsBackTheSeatCreditChargeAndReceipts(): void
+    {
+        [, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $student = $this->f->student();
+        $before = $this->f->sql->rows('sis_history_events');
+        $this->f->connection->pdo->exec("CREATE TRIGGER fail_enrollment_ref BEFORE INSERT ON sis_enrollment_section_versions BEGIN SELECT RAISE(ABORT, 'fictional reference failure'); END");
+        try {
+            $this->f->service->register($student->id, $this->section->id, true);
+            self::fail('Reference projection failure must roll back the full registration.');
+        } catch (PDOException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+            self::assertSame([], $this->f->sql->rows('sis_enrollments'));
+            self::assertSame([], $this->f->sql->rows('sis_academic_credits'));
+            self::assertSame([], $this->f->sql->rows('sis_enrollment_section_versions'));
+        }
+        $this->f->connection->pdo->exec('DROP TRIGGER fail_enrollment_ref');
+        $this->f->service->register($student->id, $this->section->id, true);
+        self::assertCount(1, $this->f->sql->rows('sis_enrollment_section_versions'));
+    }
+
+    public function testForeignPublicationAndWrongPurposeCannotSelectAnOffering(): void
+    {
+        [$publication, $proof] = $this->selectedOffering();
+        try {
+            $this->service->reviewSelection($this->f->section()->id, new EntityId($publication['operation_id']), 'Foreign section');
+            self::fail('A section claimed another section publication.');
+        } catch (\Domain\Shared\Exception\RecordNotFoundException) {
+            self::assertSame([], $this->f->sql->rows('sis_section_offering_versions'));
+        }
+        $publicationReview = $this->review();
+        $this->expectException(InvalidArgumentException::class);
+        $this->service->select($this->section->id, $publicationReview['review_token']);
     }
 
     public function testRegistryRejectsUnknownFieldsAndReplayRejectsBrokenPredecessor(): void

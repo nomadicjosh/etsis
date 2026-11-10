@@ -115,6 +115,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             (bool) $r["web_registration"],
             new Money((int) $r["fee_minor"], $r["currency"]),
             \Domain\Registration\Enum\DeliveryMode::parse($r["delivery_mode"] ?? "unspecified"),
+            new SqlSectionVersionRepository($this->sql)->selected($id)?->publication,
         );
     }
 

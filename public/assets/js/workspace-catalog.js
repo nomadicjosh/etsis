@@ -1105,6 +1105,16 @@ window.createWorkspaceCatalog = function (ui) {
                 "Retain the reviewed offering and instructional dates as a dated version. Earlier publications remain available when today's section settings change. Registration and drop deadlines continue to follow term policy.",
             ),
         );
+        if (setup.publication_status === "unavailable") {
+            body.append(node("p", { class: "alert alert-warning", role: "status" },
+                "The latest published details are temporarily unavailable. Review the recorded history before confirming new dates. Suggested term dates may differ from the latest publication."));
+        }
+        if (setup.selected_offering) {
+            body.append(node("p", { class: "alert alert-info", role: "status" },
+                `New registrations retain section version ${setup.selected_offering.version}, with instructional dates ${setup.selected_offering.definition.instruction_starts_on} through ${setup.selected_offering.definition.instruction_ends_on}. Later publications do not replace this selection.`));
+        } else if (setup.has_student_records) {
+            body.append(node("p", {}, "Initial offering selection requires an empty section. Earlier student records keep their original facts."));
+        }
         if (!setup.course_definition) {
             body.append(
                 node(
@@ -1237,6 +1247,9 @@ window.createWorkspaceCatalog = function (ui) {
                         `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}`,
                     ),
                     reference(item.version_id),
+                !setup.selected_offering && !setup.has_student_records
+                    ? button("Use this version for new registrations", () => selectOffering(section, item,
+                        () => sectionPublications(section, cursor, stack, currentDraft))) : null,
                 ),
             );
         }
@@ -1252,6 +1265,37 @@ window.createWorkspaceCatalog = function (ui) {
                     sectionPublications(section, page.next_cursor, [...stack, cursor], currentDraft),
                 ),
             );
+    }
+    async function selectOffering(section, item, back, reason = "") {
+        const body = openDrawer("Choose section version for registration", "DETAILS → REVIEW → CONFIRM");
+        body.append(offeringDetails(item.definition), node("p", {},
+            "Select the initial offering version for new registrations. This is available for an empty section; prior academic records are never assigned a version retrospectively."));
+        const fields = [["reason", "Reason for offering selection", "textarea"]];
+        const form = await buildForm(fields, { reason });
+        form.querySelector('[name="reason"]').maxLength = 1000;
+        const review = submit("Review offering selection");
+        form.append(review);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const draft = formData(form, fields);
+                const reviewed = await request(`/sis/sections/${section}/publication/selection-review/`, "POST", {
+                    version_id: item.version_id, reason: draft.reason,
+                });
+                const target = openDrawer("Review offering selection", "REVIEW → CONFIRM");
+                target.append(offeringDetails(reviewed.selected.definition, reviewed.faculty_label),
+                    node("p", {}, `Selected publication: version ${reviewed.selected.version}.`),
+                    node("p", {}, `Reason: ${reviewed.reason}`),
+                    node("p", {}, "New registrations will retain this offering version. A later offering amendment needs a separate reviewed workflow."),
+                    button("Revise offering selection", () => selectOffering(section, item, back, draft.reason)),
+                    button("Confirm offering selection", async () => {
+                        await request(`/sis/sections/${section}/publication/select/`, "POST", { review_token: reviewed.review_token });
+                        await sectionPublications(section);
+                    }, "btn-primary"));
+            }, review);
+        });
+        body.append(form, button("Back to section publications", back));
     }
     return { clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

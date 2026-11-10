@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\SectionOfferingVersionWasSelected::class => [
+                "type" => "section_offering_binding", "root" => \Domain\Registration\SectionOfferingBinding::class,
+                "fields" => ["publication_id", "definition_hash"],
+            ],
             \Domain\Registration\Event\SectionDefinitionWasPublished::class => [
                 "type" => "section_publication",
                 "root" => \Domain\Registration\SectionPublication::class,
@@ -682,6 +686,13 @@ final readonly class HistoricalSchemaRegistry
             ) {
                 throw new CorruptHistoryException();
             }
+            if (
+                $definition["type"] === "section_offering_binding"
+                && (!is_string($payload["definition_hash"])
+                    || preg_match('/^[a-f0-9]{64}$/D', $payload["definition_hash"]) !== 1)
+            ) {
+                throw new CorruptHistoryException();
+            }
             if ($definition["type"] === "section_publication") {
                 if (!is_array($payload["definition"]) || $payload["version_id"] === $payload["previous_version_id"]) {
                     throw new CorruptHistoryException();
@@ -782,6 +793,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\SectionOfferingBinding::class => "section_offering_binding",
             \Domain\Registration\SectionPublication::class => "section_publication",
             \Domain\Admissions\AdmissionDecision::class => "admission_decision",
             \Domain\Admissions\Matriculation::class => "matriculation",
@@ -809,6 +821,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            "section_offering_binding" => new \Domain\Registration\ValueObject\SectionOfferingBindingId($id),
             "section_publication" => new \Domain\Registration\ValueObject\SectionPublicationId($id),
             "admission_decision" => new \Domain\Admissions\ValueObject\AdmissionDecisionId($id),
             "matriculation" => new \Domain\Admissions\ValueObject\MatriculationId($id),

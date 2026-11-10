@@ -18,6 +18,8 @@
     let nextAfter = null;
     let intakeChart = null;
     let generation = 0;
+    let directoryRequest = 0;
+    let directoryQuery = '';
     let dirty = false;
     let formSerial = 0;
     let drawerOpener = null;
@@ -323,7 +325,11 @@
     }
 
     async function loadDirectory(append = false) {
-        const section = current; const definition = datasets[section]; const token = generation;
+        const section = current; const definition = datasets[section]; const navigation = generation;
+        const query = $one('#directory-search').value.trim();
+        if (append && query !== directoryQuery) return loadDirectory(false);
+        const token = ++directoryRequest;
+        if (!append) directoryQuery = query;
         $one('#directory-heading').textContent = definition.title;
         $one('#directory-description').textContent = definition.description;
         $one('#directory-list-title').textContent = definition.title;
@@ -351,8 +357,28 @@
             $one('#directory-more').hidden = true;
             return;
         }
-        const result = await records(section, $one('#directory-search').value, append ? nextAfter : '');
-        if (token !== generation || section !== current) return;
+        if (['people', 'students'].includes(section) && query === '') {
+            listRows = []; nextAfter = null;
+            $one('#directory-results').replaceChildren(emptyState(
+                section === 'people' ? 'Find a person.' : 'Find a student.',
+                'Search by name or institutional ID. Records appear only after you search.', definition.icon));
+            $one('#record-count').textContent = 'Search to view records';
+            $one('#directory-more').hidden = true;
+            return;
+        }
+        if (!append) {
+            listRows = []; nextAfter = null;
+            clear($one('#directory-results'));
+            $one('#record-count').textContent = 'Loading records…';
+            $one('#directory-more').hidden = true;
+        }
+        let result;
+        try { result = await records(section, query, append ? nextAfter : ''); }
+        catch (error) {
+            if (token !== directoryRequest || navigation !== generation || section !== current) return;
+            throw error;
+        }
+        if (token !== directoryRequest || navigation !== generation || section !== current) return;
         listRows = append ? [...listRows, ...result.items] : result.items; nextAfter = result.next_after;
         const results = $one('#directory-results'); clear(results);
         if (!listRows.length) results.append(emptyState('A clean slate.', 'There are no matching records here yet. Try a different search or use the button above to get started.', definition.icon));
@@ -379,7 +405,10 @@
         }
         return value;
     }
-    listen('#directory-search-form', 'submit', () => loadDirectory());
+    $one('#directory-search-form').addEventListener('submit', event => {
+        event.preventDefault();
+        task(() => loadDirectory());
+    });
     listen('#directory-more', 'click', () => loadDirectory(true));
     listen('#directory-create', 'click', () => current === 'applications' ? startApplication() : createRecord(current));
     document.addEventListener('click', event => { if (event.target.closest('[data-action="new-person"]')) task(() => createRecord('people')); });

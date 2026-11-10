@@ -142,7 +142,7 @@ final readonly class RegistrationService
                 ],
                 $actor,
             );
-            $this->credits->open($enrollment, $course, $actor);
+            $this->credits->open($enrollment, $course, $actor, $section->publicationVersionId);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
             $this->audit->record($actor, "registration.created", $enrollment->id);
 

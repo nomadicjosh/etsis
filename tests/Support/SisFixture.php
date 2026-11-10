@@ -272,6 +272,7 @@ final class SisFixture
             $history,
             $this->access,
             $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
     public function academicCredits(
@@ -296,6 +297,7 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
     public function activityLedger(): \Domain\Student\Service\StudentActivityLedger

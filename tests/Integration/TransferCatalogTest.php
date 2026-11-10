@@ -395,7 +395,7 @@ final class TransferCatalogTest extends TestCase
         }
         $f->access->grants[] = "sis:student:read";
         self::assertCount(1, $this->transfer->transcript($this->student->id));
-        self::assertCount(1, $workspace->records("students")["items"]);
+        self::assertCount(1, $workspace->records("students", $f->admissions->person($this->student->personId)->institutionalId->value)["items"]);
         self::assertNotContains("sis:catalog:manage", $workspace->capabilities());
         self::assertNotContains("sis:transcript:manage", $workspace->capabilities());
     }

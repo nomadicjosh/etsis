@@ -72,6 +72,8 @@ test('registrars manage programs and student activity in one accessible record',
     };
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     const programSection = page.locator('section[aria-label="Student programs"]');
     await expect(programSection.locator('tbody tr')).toHaveCount(50);

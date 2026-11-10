@@ -42,6 +42,8 @@ test('person edits, linked account maintenance and bounded access controls', asy
     });
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="people"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     expect(calls.filter(item => item.path.startsWith('/sis/access/directory/'))).toHaveLength(0);
     await page.getByRole('button', { name: 'Edit person profile', exact: true }).click();

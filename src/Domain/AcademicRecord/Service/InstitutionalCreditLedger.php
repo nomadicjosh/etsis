@@ -46,13 +46,18 @@ final readonly class InstitutionalCreditLedger
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private \Domain\Registration\Repository\SectionVersionRepository $versions,
     ) {
     }
 
     /** Internal registration command. Caller has already authorized/locked the student and section. */
-    public function open(Enrollment $enrollment, Course $course, EntityId $actor): void
-    {
-        $this->transactions->run(function () use ($enrollment, $course, $actor): void {
+    public function open(
+        Enrollment $enrollment,
+        Course $course,
+        EntityId $actor,
+        ?EntityId $sectionVersion = null,
+    ): void {
+        $this->transactions->run(function () use ($enrollment, $course, $actor, $sectionVersion): void {
             $this->actor($actor);
             $id = EntityId::generate();
             $facts = new CreditSnapshot([
@@ -72,6 +77,13 @@ final readonly class InstitutionalCreditLedger
                 "version" => 0,
                 "course_version_id" => $course->publicationVersionId?->value,
             ]);
+            if ($this->versions->enrollmentVersion($enrollment->id)?->value !== $sectionVersion?->value) {
+                throw new CorruptHistoryException();
+            }
+            $metadata = ["__aggregate_type" => "academic_credit"];
+            if ($sectionVersion !== null) {
+                $metadata["section_version_id"] = $sectionVersion->value;
+            }
             $event = InstitutionalCreditWasEstablished::occur(
                 new AcademicCreditId($id->value),
                 [
@@ -82,7 +94,7 @@ final readonly class InstitutionalCreditLedger
                     "policies" => $this->grades->capturePolicies($enrollment->studentId),
                     "grade" => null,
                 ],
-                ["__aggregate_type" => "academic_credit"],
+                $metadata,
             )->withPlayhead(1);
             $this->history->append(
                 $this->stream($id),
@@ -530,6 +542,12 @@ final readonly class InstitutionalCreditLedger
             $m["enrollment_id"] !== $c["source_id"] ||
             $m["student_id"] !== $c["student_id"] ||
             $m["section_id"] !== $root->section()
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if (
+            $this->versions->enrollmentVersion(new EntityId($c["source_id"]))?->value !==
+            $root->sectionVersion()
         ) {
             throw new CorruptHistoryException();
         }
