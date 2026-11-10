@@ -51,6 +51,11 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\SectionDefinitionWasPublished::class => [
+                "type" => "section_publication",
+                "root" => \Domain\Registration\SectionPublication::class,
+                "fields" => ["version_id", "previous_version_id", "definition"],
+            ],
             \Domain\Admissions\Event\AdmissionDecisionWasObserved::class => [
                 "type" => "admission_decision",
                 "root" => \Domain\Admissions\AdmissionDecision::class,
@@ -677,6 +682,12 @@ final readonly class HistoricalSchemaRegistry
             ) {
                 throw new CorruptHistoryException();
             }
+            if ($definition["type"] === "section_publication") {
+                if (!is_array($payload["definition"]) || $payload["version_id"] === $payload["previous_version_id"]) {
+                    throw new CorruptHistoryException();
+                }
+                new \Domain\Registration\ValueObject\SectionDefinitionV1($payload["definition"]);
+            }
             if ($definition["type"] === "course_publication") {
                 $this->courseDefinition($payload, $stream, $version);
             }
@@ -771,6 +782,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\SectionPublication::class => "section_publication",
             \Domain\Admissions\AdmissionDecision::class => "admission_decision",
             \Domain\Admissions\Matriculation::class => "matriculation",
             \Domain\Student\StudentPrimaryProgram::class => "student_primary_program",
@@ -797,6 +809,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            "section_publication" => new \Domain\Registration\ValueObject\SectionPublicationId($id),
             "admission_decision" => new \Domain\Admissions\ValueObject\AdmissionDecisionId($id),
             "matriculation" => new \Domain\Admissions\ValueObject\MatriculationId($id),
             "student_primary_program" => new \Domain\Student\ValueObject\StudentPrimaryProgramId($id),

@@ -895,6 +895,7 @@ window.createWorkspaceCatalog = function (ui) {
                 definitionDetails(data.bound.definition),
                 reference(data.bound.version_id),
                 node("p", {}, "Create another offering to use a different course version."),
+                button("Publish section details", () => sectionPublications(section)),
             );
             return;
         }
@@ -1047,5 +1048,210 @@ window.createWorkspaceCatalog = function (ui) {
             button("Change selection", back),
         );
     }
-    return { clone, start, plans, publications, courseText, sectionDefinition, templateDraft: draftList };
+    function offeringDetails(definition, facultyLabel = null) {
+        const fields = [
+            ["Section", definition.code],
+            [
+                "Instructional dates",
+                `${definition.instruction_starts_on} through ${definition.instruction_ends_on}`,
+            ],
+            ["Term", `${definition.term_code}: ${definition.term_starts_on} through ${definition.term_ends_on}`],
+            ["Capacity", definition.capacity],
+            [
+                "Delivery",
+                {
+                    in_person: "In person",
+                    online: "Online",
+                    hybrid: "Hybrid",
+                    unspecified: "To be confirmed",
+                }[definition.delivery_mode],
+            ],
+            ["Section fee", money(definition.fee_minor, definition.currency)],
+        ];
+        if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
+        const details = node("dl", { class: "row g-2" });
+        for (const [label, value] of fields) {
+            details.append(
+                node("dt", { class: "col-sm-4" }, label),
+                node("dd", { class: "col-sm-8 text-break" }, value),
+            );
+        }
+        details.append(
+            node("dt", { class: "col-sm-4" }, "Course publication"),
+            node("dd", { class: "col-sm-8 text-break" }, node("code", {}, definition.course_version_id)),
+        );
+        if (facultyLabel === null && definition.faculty_person_id) {
+            details.append(
+                node("dt", { class: "col-sm-4" }, "Retained faculty person"),
+                node("dd", { class: "col-sm-8 text-break" }, node("code", {}, definition.faculty_person_id)),
+            );
+        }
+        return details;
+    }
+    async function sectionPublications(section, cursor = null, stack = [], draft = null) {
+        const setup = await request(`/sis/sections/${section}/publication/setup/`, "POST", {});
+        const page = await request(
+            `/sis/sections/${section}/publication/page/`,
+            "POST",
+            cursor ? { cursor } : {},
+        );
+        let currentDraft = draft;
+        const body = openDrawer("Published section details", "ACADEMIC CATALOG");
+        body.append(node("p", {}, `Section: ${setup.section.code}`));
+        body.append(
+            node(
+                "p",
+                {},
+                "Retain the reviewed offering and instructional dates as a dated version. Earlier publications remain available when today's section settings change. Registration and drop deadlines continue to follow term policy.",
+            ),
+        );
+        if (!setup.course_definition) {
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    "Choose and retain the course definition first, then return here to publish the section details.",
+                ),
+            );
+            body.append(button("Choose course definition", () => sectionDefinition(section)));
+        } else {
+            const initial = draft || {
+                instruction_starts_on: setup.latest?.definition.instruction_starts_on || setup.term.starts_on,
+                instruction_ends_on: setup.latest?.definition.instruction_ends_on || setup.term.ends_on,
+                reason: "",
+            };
+            const fields = [
+                ["instruction_starts_on", "Instruction starts on", "date"],
+                ["instruction_ends_on", "Instruction ends on", "date"],
+                ["reason", "Reason for section publication", "textarea"],
+            ];
+            const form = await buildForm(fields, initial);
+            currentDraft = initial;
+            form.addEventListener("input", () => {
+                currentDraft = formData(form, fields);
+            });
+            const reason = form.querySelector('[name="reason"]');
+            reason.maxLength = 1000;
+            const help = node(
+                "p",
+                { id: "section-publication-date-help", class: "form-text" },
+                setup.latest
+                    ? "Dates start with the latest publication. Check them for this revision; the original versions stay retained."
+                    : "Term dates are suggested starting values. Confirm the actual instructional dates; short sessions may differ.",
+            );
+            for (const name of ["instruction_starts_on", "instruction_ends_on"]) {
+                form.querySelector(`[name="${name}"]`).setAttribute("aria-describedby", help.id);
+            }
+            const review = submit("Review section publication");
+            form.append(help, review);
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                task(async () => {
+                    if (!form.reportValidity()) return;
+                    const values = formData(form, fields);
+                    const reviewed = await request(
+                        `/sis/sections/${section}/publication/review/`,
+                        "POST",
+                        values,
+                    );
+                    const target = openDrawer("Review section publication", "REVIEW → PUBLISH");
+                    target.append(
+                        node(
+                            "p",
+                            {},
+                            `Version ${reviewed.expected_version + 1} records the offering reviewed now.`,
+                        ),
+                        offeringDetails(reviewed.definition, reviewed.faculty_label),
+                        node("p", {}, `Reason: ${reviewed.reason}`),
+                        node(
+                            "p",
+                            {},
+                            "Publication takes effect when confirmed. Existing registrations, grades and charges keep their current records.",
+                        ),
+                    );
+                    if (
+                        reviewed.definition.instruction_starts_on < reviewed.definition.term_starts_on ||
+                        reviewed.definition.instruction_ends_on > reviewed.definition.term_ends_on
+                    ) {
+                        target.append(
+                            node(
+                                "p",
+                                { class: "alert alert-warning", role: "status" },
+                                "These instructional dates extend beyond the selected term. Confirm that this is the intended offering. Term deadlines stay as configured.",
+                            ),
+                        );
+                    }
+                    target.append(
+                        button("Revise section publication", () =>
+                            sectionPublications(section, cursor, stack, values),
+                        ),
+                        button(
+                            "Publish reviewed section details",
+                            async () => {
+                                const result = await request(
+                                    `/sis/sections/${section}/publication/commit/`,
+                                    "POST",
+                                    { review_token: reviewed.review_token },
+                                );
+                                const saved = openDrawer("Section details published", "PUBLICATION SAVED");
+                                saved.append(
+                                    node(
+                                        "p",
+                                        { role: "status" },
+                                        `Version ${result.last_version} is retained with its instructional dates and reviewed offering details.`,
+                                    ),
+                                    reference(result.operation_id),
+                                    button(
+                                        "View section publications",
+                                        () => sectionPublications(section),
+                                        "btn-primary",
+                                    ),
+                                );
+                            },
+                            "btn-primary",
+                        ),
+                    );
+                }, review);
+            });
+            body.append(form);
+        }
+        body.append(node("h3", { class: "h5 mt-4" }, "Retained section versions (oldest first)"));
+        if (!page.items.length)
+            body.append(
+                node("p", {}, "No section details have been published yet. Earlier offering history is unknown."),
+            );
+        for (const item of page.items) {
+            body.append(
+                node(
+                    "details",
+                    { class: "surface p-3 mb-3" },
+                    node(
+                        "summary",
+                        {},
+                        `Version ${item.version} · ${item.definition.code} · ${item.definition.instruction_starts_on}`,
+                    ),
+                    offeringDetails(item.definition),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}`,
+                    ),
+                    reference(item.version_id),
+                ),
+            );
+        }
+        if (stack.length)
+            body.append(
+                button("Previous section versions page", () =>
+                    sectionPublications(section, stack.at(-1), stack.slice(0, -1), currentDraft),
+                ),
+            );
+        if (page.next_cursor)
+            body.append(
+                button("Next section versions page", () =>
+                    sectionPublications(section, page.next_cursor, [...stack, cursor], currentDraft),
+                ),
+            );
+    }
+    return { clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

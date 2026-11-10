@@ -108,6 +108,8 @@ Term-template setup now includes explicit first/second calendar-year examples, o
 
 ## Protected history foundation: first implementation slice
 
+[Section publications](section-publication.md) now add an explicit instructional period and reviewed offering facts through reason → review → confirm. Revising and paging history preserve the draft. Earlier versions remain available; selecting these versions for new registrations and integrating offering-plan publication remain subsequent stages.
+
 The [single protected event journal](event-history-foundation.md) backs the domain and framework ports. Its migration verifies and converts existing User/financial events before removing the old event table. It supplies authenticated encryption, explicit provenance, expected-version checks, durable receipts and paged replay. Academic SQL writes, richer command attribution, retention operations and projection rebuild coordination remain staged work.
 
 The first [published course definitions](course-publication.md) now have a reviewed staff workflow and immutable journal-backed versions for the catalog fields already recorded. Saving draft edits preserves earlier publications. Remaining legacy fields and section/attempt version references are the next catalog slices; downstream historical protection is not yet complete.

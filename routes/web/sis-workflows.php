@@ -674,6 +674,11 @@ return static function (Psr7Router $router): void {
             "attendanceHistory",
         ])
         ->name("sis.gradebook.attendance-history");
+    $sectionPublications = \Application\Http\Controller\SisSectionPublicationController::class;
+    $router->post("/sis/sections/{id}/publication/setup/", [$sectionPublications, "setup"]);
+    $router->post("/sis/sections/{id}/publication/review/", [$sectionPublications, "review"]);
+    $router->post("/sis/sections/{id}/publication/commit/", [$sectionPublications, "publish"]);
+    $router->post("/sis/sections/{id}/publication/page/", [$sectionPublications, "page"]);
     $router->post("/sis/sections/{id}/course-definition/page/", [
         SisSectionCourseBindingController::class,
         "show",

@@ -2571,6 +2571,43 @@ if (
 ) {
     throw new RuntimeException("Section course binding did not retain an idempotent definition.");
 }
+// Section publications use the actual router/providers and keep browser CSRF and private reads.
+$sectionPublicationPath = '/sis/sections/' . $bindingSection->id->value . '/publication/';
+$sectionPublicationInput = [
+    'instruction_starts_on' => '2026-08-24', 'instruction_ends_on' => '2026-12-18',
+    'reason' => 'Fictional section publication',
+];
+$sectionPublicationReviewResponse = $teachingPost($sectionPublicationPath . 'review/', $sectionPublicationInput);
+$sectionPublicationReview = json_decode((string) $sectionPublicationReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($sectionPublicationReviewResponse->getStatusCode() !== 200 || !isset($sectionPublicationReview['review_token'])) {
+    throw new RuntimeException('Section publication did not resolve through its provider.');
+}
+$sectionPublicationSaved = $teachingPost($sectionPublicationPath . 'commit/', ['review_token' => $sectionPublicationReview['review_token']]);
+$sectionPublicationRetry = $teachingPost($sectionPublicationPath . 'commit/', ['review_token' => $sectionPublicationReview['review_token']]);
+$sectionPublicationHistoryResponse = $teachingPost($sectionPublicationPath . 'page/', []);
+$sectionPublicationHistory = json_decode((string) $sectionPublicationHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$sectionPublicationSetup = $teachingPost($sectionPublicationPath . 'setup/', []);
+if (
+    $sectionPublicationSaved->getStatusCode() !== 200 || $sectionPublicationRetry->getStatusCode() !== 200
+    || (string) $sectionPublicationSaved->getBody() !== (string) $sectionPublicationRetry->getBody()
+    || $sectionPublicationSetup->getStatusCode() !== 200
+    || ($sectionPublicationHistory['items'][0]['definition']['instruction_starts_on'] ?? null) !== '2026-08-24'
+    || str_contains((string) $sectionPublicationHistoryResponse->getBody(), 'Fictional section publication')
+    || str_contains((string) $sectionPublicationHistoryResponse->getBody(), 'actor_id')
+) {
+    throw new RuntimeException('Section publication did not preserve its private history and original receipt.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage'];
+$sectionPublicationActions = ['setup' => [], 'page' => [], 'review' => $sectionPublicationInput,
+    'commit' => ['review_token' => $sectionPublicationReview['review_token']]];
+foreach ($sectionPublicationActions as $action => $payload) {
+    if ($teachingPost($sectionPublicationPath . $action . '/', $payload)->getStatusCode() !== 403) {
+        throw new RuntimeException('Section publication bypassed catalog permission.');
+    }
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $sis->access->staff = false;
 $sis->access->grants = ["sis:registration:manage"];
 if (

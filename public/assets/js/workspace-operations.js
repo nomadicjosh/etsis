@@ -860,6 +860,8 @@ window.createWorkspaceOperations = function (ui) {
             body.append(button("Titles & description", () => ui.catalog().courseText(row.id)));
         if (sectionName === "sections" && can("sis:catalog:manage"))
             body.append(button("Course definition", () => ui.catalog().sectionDefinition(row.id)));
+        if (sectionName === "sections" && can("sis:catalog:manage"))
+            body.append(button("Published section details", () => ui.catalog().sectionPublications(row.id)));
         if (["sections", "teaching"].includes(sectionName) && can("sis:registration:manage"))
             body.append(button("Register a group into this section", () => ui.batchRegistration().start(row.id)));
         if (

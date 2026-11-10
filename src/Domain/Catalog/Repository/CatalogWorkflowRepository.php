@@ -17,7 +17,7 @@ interface CatalogWorkflowRepository
     public function lockOperation(EntityId $id): void;
     public function record(EntityId $id, EntityId $actor, string $kind, string $encrypted, string $on): void;
     public function published(EntityId $id, string $on, string $encrypted): void;
-    /** @return array{id: string, name: string} */
+    /** @return array{id: string, name: string, person_id: string} */
     public function faculty(EntityId $user): array;
     public function codeExists(string $kind, string $code, ?EntityId $term = null): bool;
 }

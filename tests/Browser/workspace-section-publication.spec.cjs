@@ -1,0 +1,287 @@
+const { test, expect } = require("@playwright/test");
+const AxeBuilder = require("@axe-core/playwright").default;
+const id = (n) => String(n).padStart(26, "0");
+
+async function fixture(page, { bound = true, paged = false } = {}) {
+  const section = id(1),
+    course = id(2),
+    term = id(3),
+    publication = id(4);
+  const row = {
+    id: section,
+    code: "MATH.101.A",
+    course_id: course,
+    term_id: term,
+    course_code: "MATH.101",
+    course_title: "Fictional Algebra",
+    term_code: "26/FA",
+    capacity: 20,
+    active: 1,
+    faculty_user_id: null,
+    faculty_person_id: null,
+    web_registration: 1,
+    fee_minor: 2500,
+    currency: "USD",
+    delivery_mode: "online",
+  };
+  const definition = {
+    course_id: course,
+    course_version_id: publication,
+    term_id: term,
+    term_code: "26/FA",
+    term_starts_on: "2026-08-01",
+    term_ends_on: "2026-12-20",
+    code: row.code,
+    capacity: 20,
+    faculty_user_id: null,
+    faculty_person_id: null,
+    delivery_mode: "online",
+    fee_minor: 2500,
+    currency: "USD",
+    instruction_starts_on: "2026-08-24",
+    instruction_ends_on: "2026-12-18",
+  };
+  const calls = [],
+    errors = [];
+  let latest = null;
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/sis/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const raw = route.request().postData();
+    const data = raw
+      ? JSON.parse(new URLSearchParams(raw).get("_workspace_json"))
+      : null;
+    if (data)
+      calls.push({
+        path,
+        data,
+        csrf: route.request().headers()["x-csrf-token"],
+      });
+    let result = { items: [], next_after: null };
+    if (path === "/sis/ui/metrics/")
+      result = { cards: [], intake: [], pipeline: [], queue: [] };
+    else if (path.startsWith("/sis/ui/data/"))
+      result = {
+        items: path.includes("/sections/") ? [row] : [],
+        next_after: null,
+      };
+    else if (path.endsWith("/publication/setup/"))
+      result = {
+        section: row,
+        term: {
+          id: term,
+          code: "26/FA",
+          starts_on: "2026-08-01",
+          ends_on: "2026-12-20",
+        },
+        course_definition: bound
+          ? {
+              version_id: publication,
+              definition: { code: "MATH.101", title: "Algebra" },
+            }
+          : null,
+        latest,
+        faculty_label: "Not assigned",
+      };
+    else if (path.endsWith("/publication/page/"))
+      result = {
+        items: latest
+          ? [latest]
+          : paged
+            ? [
+                {
+                  version: data.cursor ? 21 : 1,
+                  version_id: publication,
+                  definition,
+                  effective_at: "2026-11-09T12:00:00Z",
+                  recorded_at: "2026-11-09T12:00:01Z",
+                },
+              ]
+            : [],
+        next_cursor: paged && !data.cursor ? "fictional-section-cursor" : null,
+      };
+    else if (path.endsWith("/publication/review/"))
+      result = {
+        expected_version: 0,
+        definition: {
+          ...definition,
+          instruction_starts_on: data.instruction_starts_on,
+          instruction_ends_on: data.instruction_ends_on,
+        },
+        reason: data.reason,
+        faculty_label: "Not assigned",
+        review_token: "fictional-section-publication-proof",
+      };
+    else if (path.endsWith("/publication/commit/")) {
+      const reviewed = calls
+        .filter((call) => call.path.endsWith("/publication/review/"))
+        .at(-1).data;
+      latest = {
+        version: 1,
+        version_id: publication,
+        definition: { ...definition, ...reviewed },
+        effective_at: "2026-11-09T12:00:00Z",
+        recorded_at: "2026-11-09T12:00:01Z",
+      };
+      result = {
+        operation_id: publication,
+        first_version: 1,
+        last_version: 1,
+        event_ids: [id(5)],
+      };
+    }
+    await route.fulfill({
+      json: result,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  });
+  await page.goto("/admin/");
+  await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
+  await page.getByRole("link", { name: "Sections", exact: true }).click();
+  await page.getByRole("button", { name: "MATH.101.A", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Published section details", exact: true })
+    .click();
+  return { section, publication, calls, errors };
+}
+async function accessible(page) {
+  const scan = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(
+    scan.violations.map((item) => ({
+      id: item.id,
+      targets: item.nodes.map((node) => node.target),
+    })),
+  ).toEqual([]);
+}
+
+test("section publication preserves dates and reason through revision, then confirms only the reviewed proof", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await expect(page.getByLabel("Instruction starts on")).toHaveValue(
+    "2026-08-01",
+  );
+  await expect(page.locator("#drawer-body")).toContainText(
+    "Term dates are suggested starting values",
+  );
+  await page.getByLabel("Instruction starts on").fill("2026-07-20");
+  await page.getByLabel("Instruction ends on").fill("2026-12-18");
+  await page
+    .getByLabel("Reason for section publication")
+    .fill("Fictional <b>short-session</b> approval");
+  await page
+    .getByRole("button", { name: "Review section publication", exact: true })
+    .click();
+  await expect(page.locator("#drawer-body")).toContainText(
+    "These instructional dates extend beyond the selected term",
+  );
+  await expect(page.locator("#drawer-body")).toContainText("Online");
+  expect(f.calls.some((call) => call.path.endsWith("/commit/"))).toBe(false);
+  expect(await page.locator("#drawer-body b").count()).toBe(0);
+  await page
+    .getByRole("button", { name: "Revise section publication", exact: true })
+    .click();
+  await expect(page.getByLabel("Instruction starts on")).toHaveValue(
+    "2026-07-20",
+  );
+  await expect(page.getByLabel("Instruction ends on")).toHaveValue(
+    "2026-12-18",
+  );
+  await expect(page.getByLabel("Reason for section publication")).toHaveValue(
+    "Fictional <b>short-session</b> approval",
+  );
+  await page
+    .getByRole("button", { name: "Review section publication", exact: true })
+    .click();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await accessible(page);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page
+    .getByRole("button", {
+      name: "Publish reviewed section details",
+      exact: true,
+    })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#drawer-body")).toContainText(
+    "Version 1 is retained",
+  );
+  expect(f.calls.find((call) => call.path.endsWith("/commit/"))).toMatchObject({
+    data: { review_token: "fictional-section-publication-proof" },
+    csrf: "fictional-test-token",
+  });
+  await page
+    .getByRole("button", { name: "View section publications", exact: true })
+    .click();
+  await expect(page.getByLabel("Instruction starts on")).toHaveValue(
+    "2026-07-20",
+  );
+  await page
+    .getByText("Version 1 · MATH.101.A · 2026-07-20", { exact: true })
+    .click();
+  await expect(page.locator("#drawer-body")).toContainText(
+    "2026-07-20 through 2026-12-18",
+  );
+  expect(
+    await page.evaluate(() => [localStorage.length, sessionStorage.length]),
+  ).toEqual([0, 0]);
+  expect(f.errors).toEqual([]);
+  await accessible(page);
+});
+
+test("paged section history keeps an unsaved publication draft", async ({
+  page,
+}) => {
+  const f = await fixture(page, { paged: true });
+  await page.getByLabel("Instruction starts on").fill("2026-08-24");
+  await page
+    .getByLabel("Reason for section publication")
+    .fill("Fictional draft to retain");
+  await page
+    .getByRole("button", { name: "Next section versions page", exact: true })
+    .click();
+  await expect(page.locator("#drawer-body")).toContainText("Version 21");
+  await expect(page.getByLabel("Instruction starts on")).toHaveValue(
+    "2026-08-24",
+  );
+  await expect(page.getByLabel("Reason for section publication")).toHaveValue(
+    "Fictional draft to retain",
+  );
+  await page
+    .getByRole("button", {
+      name: "Previous section versions page",
+      exact: true,
+    })
+    .click();
+  await expect(page.locator("#drawer-body")).toContainText("Version 1");
+  await expect(page.getByLabel("Reason for section publication")).toHaveValue(
+    "Fictional draft to retain",
+  );
+  expect(f.calls.some((call) => call.path.endsWith("/commit/"))).toBe(false);
+  expect(f.errors).toEqual([]);
+});
+
+test("unbound sections guide staff to the required course selection", async ({
+  page,
+}) => {
+  await fixture(page, { bound: false });
+  await expect(page.locator("#drawer-body")).toContainText(
+    "Choose and retain the course definition first",
+  );
+  await expect(
+    page.getByRole("button", { name: "Choose course definition", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Review section publication",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await accessible(page);
+});

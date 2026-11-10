@@ -118,7 +118,8 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
     {
         $rows = $this->sql->rows("sis_persons", ["owner_user_id" => $user->value], 1);
         $person = $rows[0] ?? throw new RecordNotFoundException("Choose a person with a sign-in account.");
-        return ["id" => $user->value, "name" => trim($person["given_name"] . " " . $person["family_name"])];
+        return ["id" => $user->value, "name" => trim($person["given_name"] . " " . $person["family_name"]),
+            "person_id" => $person["id"]];
     }
 
     public function codeExists(string $kind, string $code, ?EntityId $term = null): bool
