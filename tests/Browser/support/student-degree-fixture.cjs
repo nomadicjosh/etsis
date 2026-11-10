@@ -52,7 +52,14 @@ async function fixture(page, options = {}) {
         },
     };
     if (options.groupMinimums) {
-        requirements.grade_scale = { maximum_milli: options.requirementGradeMaximum || 4000 };
+        requirements.grade_scale = {
+            maximum_milli: options.requirementGradeMaximum || 4000,
+            source: "program",
+            program_id: program,
+            version_id: id(32),
+            is_default: false,
+            definition: { grades: [] },
+        };
         const block = requirements.group_details[group];
         Object.assign(block.definition, {
             requirement_type: "courses",

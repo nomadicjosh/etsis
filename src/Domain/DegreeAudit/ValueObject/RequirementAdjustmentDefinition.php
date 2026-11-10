@@ -96,7 +96,8 @@ final readonly class RequirementAdjustmentDefinition
     private static function invalid(): never
     {
         throw new InvalidArgumentException(
-            "Choose a course waiver or a valid reduction to a published requirement minimum. Course counts must be whole numbers.",
+            "Choose a course waiver or a valid reduction to a published requirement minimum. " .
+                "Course counts must be whole numbers.",
         );
     }
 }
