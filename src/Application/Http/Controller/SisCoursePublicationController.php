@@ -28,7 +28,7 @@ final readonly class SisCoursePublicationController
         return new JsonResponse(
             $this->service->publish(
                 new EntityId($id),
-                FormInput::from($request)->text("review_token", 262144),
+                FormInput::from($request)->text("review_token", 524288),
             ),
         );
     }

@@ -231,7 +231,10 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
             }
             $length = strlen($canonical);
             $size += $length;
-            if ($length > 65536 || $size > 262144) {
+            // Course definitions have a reviewed 10,000-character Unicode description contract.
+            // Keep other events at 64 KiB and retain the existing 256 KiB batch ceiling.
+            $maximum = $event instanceof \Domain\Catalog\Event\CourseDefinitionWasPublished ? 262144 : 65536;
+            if ($length > $maximum || $size > 262144) {
                 throw new InvalidArgumentException("The protected event batch exceeds its size limit.");
             }
             $described[] = $data;

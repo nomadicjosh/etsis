@@ -61,6 +61,7 @@ final class SectionCourseBindingTest extends TestCase
             $f->dropCipher,
             $f->clock,
             new SqlCourseTextProjection($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
         );
         $this->service = new SectionCourseBindingService(
             $catalog,

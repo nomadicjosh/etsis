@@ -377,6 +377,7 @@
                 `Section fee: ${amount(course.fee_minor, course.currency)}`,
             ),
         );
+        if (course.subject_title) card.append(el('p', {}, `${course.subject_code} · ${course.subject_title}`));
         if (course.description) {
             card.append(el('details', {}, el('summary', {}, 'Course description'),
                 el('p', { class: 'campus-course-description' }, course.description)));

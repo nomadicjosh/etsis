@@ -1,6 +1,6 @@
 # Published course definitions
 
-Course publication now retains an explicitly reviewed definition in the single protected event store. Version 2 preserves course code, catalog title, fixed credit thousandths, prerequisite identities, an optional transcript title and an optional plain-text catalog description. Earlier version-1 definitions retain their original four fields and are never rewritten. Explicit section binding now retains a selected published version for an empty section. Both publication and binding use the existing event table.
+Course publication now retains an explicitly reviewed definition in the single protected event store. Version 3 adds the [explicitly assigned subject](course-subjects.md). Version 2 preserves course code, catalog title, fixed credit thousandths, prerequisite identities, an optional transcript title and an optional plain-text catalog description. Earlier version-1 definitions retain their original four fields and are never rewritten. Explicit section binding now retains a selected published version for an empty section. Both publication and binding use the existing event table.
 
 ## Staff workflow
 
@@ -16,13 +16,13 @@ Publication preserves a definition for institutional reference. It is separate f
 
 ## Confirmation safeguards
 
-New course reviews use purpose-version 3. This changes the review proof, not the historical definition schema: newly confirmed `CourseDefinitionWasPublished` events still use the frozen schema-2 definition. The review contains the staff member, course, operation, expected stream position, predecessor, reviewed definition, protected reason and a 20-minute expiry. It contains no selectable effective time. A client cannot backdate the new decision by supplying a review timestamp.
+New course reviews use purpose-version 4. This changes the review proof, not the historical definition schema: newly confirmed `CourseDefinitionWasPublished` events use schema 3, which adds the explicitly assigned subject or null. Earlier definition schemas remain frozen; see [course subjects](course-subjects.md). The review contains the staff member, course, operation, expected stream position, predecessor, reviewed definition, protected reason and a 20-minute expiry. It contains no selectable effective time. A client cannot backdate the new decision by supplying a review timestamp.
 
 Review and confirmation recheck current `sis:catalog:manage` after acquiring the course lock. Confirmation verifies the publication's expected position and predecessor, rechecks the saved draft and captures the trusted clock at acceptance. It also rechecks authority after bounded stream replay. Expired, stale, competing or wrong-actor requests cannot create a publication. A projection or required audit failure rolls back the new event, head and operation receipt together.
 
 A completed retry returns its original event receipt after expiry, later publications or draft edits. It does not restore earlier text or create missing projection rows. The protected stream is verified in bounded pages before returning the result; a corrupted earlier event cannot be bypassed by retrying a later operation. Routine catalog listings continue using their existing read models.
 
-Completed purpose-version-1/2 reviews remain retryable with their original schema, actor, reason, payload, event identity and recorded effective time. Earlier persisted events are unchanged, including those whose effective time was captured during review by the preceding implementation. An **unconfirmed** older review must be refreshed; it cannot create a new decision under the old timing behavior. Curated history shows both effective and recording times while omitting protected reasons, actors and raw envelopes. No migration, new event type or journal table is introduced.
+Completed purpose-version-1/2/3 reviews remain retryable with their original schema, actor, reason, payload, event identity and recorded effective time. Earlier persisted events are unchanged, including those whose effective time was captured during review by the preceding implementation. An **unconfirmed** older review must be refreshed; it cannot create a new decision under the old timing behavior. Curated history shows both effective and recording times while omitting protected reasons, actors and raw envelopes. No migration, new event type or journal table is introduced.
 
 ## Bind a section to a publication
 

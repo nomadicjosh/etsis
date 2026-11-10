@@ -32,12 +32,25 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
                 "credits_milli" => (int) $r["credits_milli"],
                 "prerequisites" => json_decode($r["prerequisites"], true, 8, JSON_THROW_ON_ERROR),
             ];
-            if ((int) $r["schema_version"] === 2) {
+            if (in_array((int) $r["schema_version"], [2, 3], true)) {
                 $definition += [
                     "transcript_title" => $r["transcript_title"],
                     "description" => $r["description"],
                 ];
             } elseif ($r["transcript_title"] !== null || $r["description"] !== null) {
+                throw new CorruptHistoryException();
+            }
+            $subject = $this->sql->rows("sis_course_version_subjects", ["id" => $r["id"]], 1)[0] ?? null;
+            if ((int) $r["schema_version"] === 3) {
+                $definition["subject"] =
+                $subject === null
+                ? null
+                : [
+                            "id" => $subject["subject_id"],
+                            "code" => $subject["code"],
+                            "title" => $subject["title"],
+                        ];
+            } elseif ($subject !== null) {
                 throw new CorruptHistoryException();
             }
             $published = PublishedCourseDefinition::fromPublication(new EntityId($r["course_id"]), [
@@ -58,6 +71,31 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
     public function hasStudentRecords(EntityId $section): bool
     {
         return $this->sql->rows("sis_enrollments", ["section_id" => $section->value], 1) !== [];
+    }
+
+    private function retainSubject(PublishedCourseDefinition $definition): void
+    {
+        $old =
+        $this->sql->rows("sis_course_version_subjects", ["id" => $definition->versionId->value], 1)[0] ??
+        null;
+        $s = $definition->subject;
+        if ($s === null) {
+            if ($old !== null) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        $row = [
+            "id" => $definition->versionId->value,
+            "subject_id" => $s->id->value,
+            "code" => $s->code,
+            "title" => $s->title,
+        ];
+        if ($old === null) {
+            $this->sql->insert("sis_course_version_subjects", $row);
+        } elseif (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($row)) {
+            throw new CorruptHistoryException();
+        }
     }
 
     public function retain(EntityId $section, PublishedCourseDefinition $definition): void
@@ -87,6 +125,7 @@ final readonly class SqlSectionCourseBindingRepository implements SectionCourseB
                 throw new CorruptHistoryException();
             }
         }
+        $this->retainSubject($definition);
         $oldBinding =
         $this->sql->rows("sis_section_course_versions", ["id" => $section->value], 1)[0] ?? null;
         if ($oldBinding === null) {

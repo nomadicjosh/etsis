@@ -54,6 +54,7 @@ final class CoursePublicationTest extends TestCase
             $f->dropCipher,
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
         );
         $this->editor = new CatalogEditor(
             $catalog,
@@ -79,6 +80,7 @@ final class CoursePublicationTest extends TestCase
             $f->dropCipher,
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
         );
     }
 
@@ -336,10 +338,10 @@ final class CoursePublicationTest extends TestCase
         $page = $this->service->versions($this->course);
         self::assertSame(1, $page["items"][0]["schema_version"]);
         self::assertArrayNotHasKey("transcript_title", $page["items"][0]["definition"]);
-        self::assertSame(2, $page["items"][1]["schema_version"]);
+        self::assertSame(3, $page["items"][1]["schema_version"]);
         self::assertSame("Algebra I", $page["items"][1]["definition"]["transcript_title"]);
         $events = array_map(static fn($e) => $e->event, $this->history->page($stream)->events);
-        self::assertSame([1, 2], array_map(static fn($e) => $e->metaParam("schema_version", 1), $events));
+        self::assertSame([1, 3], array_map(static fn($e) => $e->metaParam("schema_version", 1), $events));
         $restored = CoursePublication::reconstituteFromEventStream(
             new EventStream($stream->aggregateId, $events),
         );
@@ -509,7 +511,7 @@ final class CoursePublicationTest extends TestCase
             "definition" => $review["definition"],
         ];
         $stream = new StreamReference(new CoursePublicationId($this->course->value), "course_publication");
-        foreach ([1, 3] as $version) {
+        foreach ([1, 2, 4] as $version) {
             try {
                 new HistoricalSchemaRegistry()->describe(
                     CourseDefinitionWasPublished::occur($stream->aggregateId, $payload, [
@@ -649,7 +651,7 @@ final class CoursePublicationTest extends TestCase
     {
         $reviewedAt = $this->f->clock->now();
         $review = $this->service->review($this->course, "Fictional confirmation-time approval");
-        self::assertSame("course-publication-review.v3", $review["kind"]);
+        self::assertSame("course-publication-review.v4", $review["kind"]);
         self::assertArrayNotHasKey("effective_at", $review);
         self::assertSame($reviewedAt->getTimestamp() + 1200, $review["expires_at"]);
         $this->f->clock->time = $reviewedAt->modify("+2 minutes");
@@ -661,7 +663,7 @@ final class CoursePublicationTest extends TestCase
         );
         self::assertSame($this->f->clock->now()->getTimestamp(), $stored->recordedAt->getTimestamp());
         self::assertSame($receipt["event_ids"][0], (string) $stored->event->eventId());
-        self::assertSame(2, $stored->event->metaParam("schema_version"));
+        self::assertSame(3, $stored->event->metaParam("schema_version"));
         self::assertSame("Fictional confirmation-time approval", $stored->context->reason);
         self::assertSame(
             ProtectedEventCodec::canonical($review["definition"]),
@@ -697,6 +699,7 @@ final class CoursePublicationTest extends TestCase
         $r = $this->service->review($this->course, "Fictional preceding-version approval");
         $old = json_decode($f->dropCipher->open($r["review_token"]), true, flags: JSON_THROW_ON_ERROR);
         $old["kind"] = "course-publication-review.v2";
+        unset($old["definition"]["subject"]);
         unset($old["expires_at"]);
         $old["effective_at"] = $f->clock
             ->now()

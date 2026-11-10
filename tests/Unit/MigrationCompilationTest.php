@@ -82,6 +82,8 @@ require_once $registrationCompilerMigrations . "20261110000001_CreateSisSectionO
 
 require_once $registrationCompilerMigrations . "20261110000002_AddSisOfferingSelectionPosition.php";
 
+require_once $registrationCompilerMigrations . "20261110000003_CreateSisCourseSubjects.php";
+
 final class MigrationCompilationTest extends TestCase
 {
     public function testTransferReadIndexesCompileAcrossDialectsAndRollbackOnSqlite(): void
@@ -234,7 +236,7 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(103))
+            ->expects(self::exactly(106))
             ->method("create")
             ->willReturnCallback(static function (
                 string $name,
@@ -281,6 +283,7 @@ final class MigrationCompilationTest extends TestCase
                 new CreateSisHistoricalEventTables("23"),
                 new CreateSisCourseDescriptionsTable("24"),
                 new CreateSisCourseVersionBindings("25"),
+                new CreateSisCourseSubjects("subjects"),
                 new CreateSisDegreeAuditTemplates("26"),
                 new CreateSisCourseGroupLibrary("27"),
                 new CreateSisStudentRequirements("28"),

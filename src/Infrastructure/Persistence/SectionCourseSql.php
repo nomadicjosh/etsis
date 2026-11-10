@@ -32,7 +32,9 @@ final readonly class SectionCourseSql
         " pcv ON pcv." .
         $q("id") .
         " = scb." .
-        $q("course_version_id");
+        $q("course_version_id") .
+        " LEFT JOIN " . $q("sis_course_version_subjects") .
+        " pcs ON pcs." . $q("id") . " = pcv." . $q("id");
     }
 
     public function value(string $field, string $unboundExpression): string

@@ -16,8 +16,13 @@ final readonly class PublishedCourseDefinition
         public int $schemaVersion,
         public CourseDefinition $core,
         public ?CourseText $text,
+        public ?SubjectSnapshot $subject = null,
     ) {
-        if (!in_array($schemaVersion, [1, 2], true) || ($schemaVersion === 1) !== ($text === null)) {
+        if (
+            !in_array($schemaVersion, [1, 2, 3], true) ||
+            ($schemaVersion === 1) !== ($text === null) ||
+            ($schemaVersion < 3 && $subject !== null)
+        ) {
             throw new CorruptHistoryException();
         }
     }
@@ -32,6 +37,9 @@ final readonly class PublishedCourseDefinition
             $item["schema_version"],
             new CourseDefinition($d["code"], $d["title"], $d["credits_milli"], $d["prerequisites"]),
             $item["schema_version"] === 1 ? null : CourseText::fromArray($d),
+            $item["schema_version"] === 3 && $d["subject"] !== null
+                ? SubjectSnapshot::fromArray($d["subject"])
+                : null,
         );
     }
 
@@ -42,7 +50,10 @@ final readonly class PublishedCourseDefinition
             "course_id" => $this->courseId->value,
             "version_id" => $this->versionId->value,
             "schema_version" => $this->schemaVersion,
-            "definition" => $this->core->describe() + ($this->text?->describe() ?? []),
+            "definition" =>
+                $this->core->describe() +
+                ($this->text?->describe() ?? []) +
+                ($this->schemaVersion === 3 ? ["subject" => $this->subject?->describe()] : []),
         ];
     }
 }

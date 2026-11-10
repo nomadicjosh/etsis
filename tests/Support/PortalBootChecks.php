@@ -2496,6 +2496,51 @@ $sis->access->staff = true;
 $publicationCourse = $sis->section()->courseId->value;
 $publicationPath = "/sis/courses/" . $publicationCourse . "/publication/";
 $sis->access->staff = true;
+$subjectResponse = $teachingPost("/sis/catalog/subjects/save/", [
+    "code" => "FICTIONAL",
+    "title" => "Fictional subject",
+    "active" => true,
+]);
+$subjectSaved = json_decode((string) $subjectResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$subjectCoursePath = "/sis/courses/" . $publicationCourse . "/subject/";
+$subjectCourseResponse = $app->router->match(
+    $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $subjectCoursePath)),
+);
+$subjectCourse = json_decode((string) $subjectCourseResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $subjectResponse->getStatusCode() !== 200 ||
+    $subjectCourseResponse->getStatusCode() !== 200 ||
+    $teachingPost($subjectCoursePath, [
+        "subject_id" => $subjectSaved["id"],
+        "revision" => $subjectCourse["revision"],
+    ])->getStatusCode() !== 200 ||
+    $teachingPost("/sis/catalog/subjects/", ["search" => "FICTIONAL"])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("Subject routes did not resolve through protected providers.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:registration:manage"];
+if (
+    $teachingPost("/sis/catalog/subjects/", [])->getStatusCode() !== 403 ||
+    $teachingPost("/sis/catalog/subjects/save/", [
+        "code" => "DENIED",
+        "title" => "Denied",
+        "active" => true,
+    ])->getStatusCode() !== 403 ||
+    $teachingPost($subjectCoursePath, [
+        "subject_id" => null,
+        "revision" => $subjectCourse["revision"],
+    ])->getStatusCode() !== 403 ||
+    $app->router
+        ->match(
+            $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $subjectCoursePath)),
+        )
+        ->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Registration permission exposed catalog subject setup.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $publicationBefore = $sis->sql->rows("sis_history_events");
 $unverifiedPublication = new \Qubus\Http\ServerRequest(
     [],
@@ -2564,7 +2609,7 @@ $publicationReview = json_decode(
 if (
     $publicationReviewResponse->getStatusCode() !== 200 ||
     !isset($publicationReview["review_token"]) ||
-    ($publicationReview["kind"] ?? null) !== "course-publication-review.v3" ||
+    ($publicationReview["kind"] ?? null) !== "course-publication-review.v4" ||
     !is_int($publicationReview["expires_at"] ?? null) ||
     array_key_exists("effective_at", $publicationReview) ||
     !str_contains($publicationReviewResponse->getHeaderLine("Cache-Control"), "no-store")
@@ -2582,7 +2627,8 @@ $publicationRetry = $teachingPost($publicationPath . "commit/", [
 $publicationPage = $teachingPost($publicationPath . "page/", []);
 $publishedDefinitions = json_decode((string) $publicationPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
-    $publishedDefinitions["items"][0]["schema_version"] !== 2 ||
+    $publishedDefinitions["items"][0]["schema_version"] !== 3 ||
+    $publishedDefinitions["items"][0]["definition"]["subject"]["code"] !== "FICTIONAL" ||
     new DateTimeImmutable($publishedDefinitions["items"][0]["effective_at"])->getTimestamp() !==
         $sis->clock->now()->modify("-21 minutes")->getTimestamp() ||
     $publishedDefinitions["items"][0]["definition"]["transcript_title"] !== "Fictional short title"

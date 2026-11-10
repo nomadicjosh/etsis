@@ -857,6 +857,7 @@ window.createWorkspaceOperations = function (ui) {
         if (sectionName === "courses" && can("sis:catalog:manage"))
             body.append(button("Published definitions", () => ui.catalog().publications(row.id)));
         if (sectionName === "courses" && can("sis:catalog:manage"))
+            body.append(button("Course subject", () => ui.catalog().courseSubject(row.id)));
             body.append(button("Titles & description", () => ui.catalog().courseText(row.id)));
         if (sectionName === "sections" && can("sis:catalog:manage"))
             body.append(button("Course definition", () => ui.catalog().sectionDefinition(row.id)));

@@ -815,11 +815,15 @@ window.createWorkspaceCatalog = function (ui) {
         body.append(node("p", {}, `${draft.code} · ${draft.title}`), form);
     }
     function definitionDetails(definition) {
+        const subject = Object.hasOwn(definition, "subject")
+            ? (definition.subject ? `${definition.subject.code} — ${definition.subject.title}` : "Not specified")
+            : "Not recorded in this earlier definition";
         return node(
             "dl",
             { class: "detail-list" },
             node("div", {}, node("dt", {}, "Course code"), node("dd", {}, definition.code)),
             node("div", {}, node("dt", {}, "Course title"), node("dd", {}, definition.title)),
+            node("div", {}, node("dt", {}, "Subject"), node("dd", {}, subject)),
             node(
                 "div",
                 {},
@@ -1516,5 +1520,127 @@ window.createWorkspaceCatalog = function (ui) {
         });
         body.append(form, button("Back to section publications", back));
     }
-    return { clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    async function subjects(search = "", after = null, stack = [], choose = null) {
+        const data = await request("/sis/catalog/subjects/", "POST", { search, ...(after ? { after } : {}) });
+        const body = openDrawer(choose ? "Choose course subject" : "Course subjects", "ACADEMIC CATALOG");
+        body.append(
+            node(
+                "p",
+                {},
+                "Subjects classify courses independently of their course codes. Retiring a subject preserves its earlier published uses.",
+            ),
+        );
+        const form = node("form", {});
+        const input = node("input", {
+            type: "search",
+            id: "subject-search",
+            class: "form-control",
+            maxlength: 100,
+            value: search,
+        });
+        form.append(
+            node("label", { for: input.id, class: "form-label" }, "Find subjects"),
+            input,
+            submit("Search subjects"),
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(() => subjects(input.value, null, [], choose));
+        });
+        body.append(
+            form,
+            button("Add subject", () => subjectEditor(null, () => subjects(search, after, stack, choose))),
+        );
+        if (!data.items.length) body.append(node("p", {}, "No matching subjects. Add a subject to begin."));
+        for (const row of data.items) {
+            const card = node(
+                "div",
+                { class: "surface p-3 mb-2" },
+                node("h3", { class: "h5" }, `${row.code} — ${row.title}`),
+                node("p", {}, row.active ? "Active" : "Retired"),
+                button(`Edit ${row.code}`, () =>
+                    subjectEditor(row, () => subjects(search, after, stack, choose)),
+                ),
+            );
+            if (choose && row.active)
+                card.append(button(`Choose ${row.code}`, () => choose(row), "btn-primary"));
+            body.append(card);
+        }
+        if (stack.length)
+            body.append(
+                button("Previous subjects", () => subjects(search, stack.at(-1), stack.slice(0, -1), choose)),
+            );
+        if (data.next_after)
+            body.append(
+                button("More subjects", () => subjects(search, data.next_after, [...stack, after], choose)),
+            );
+        if (choose) body.append(button("Back to course subject", () => choose(null)));
+    }
+    async function subjectEditor(row, back) {
+        const body = openDrawer(row ? "Edit subject" : "Add subject", "REFERENCE SETUP");
+        const fields = [
+            ["code", "Subject code", "text"],
+            ["title", "Subject name", "text"],
+            ["active", "Active subject", "checkbox"],
+        ];
+        const form = await buildForm(fields, row ?? { active: true });
+        form.elements.namedItem("code").maxLength = 40;
+        const save = submit("Save subject");
+        form.append(save);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request("/sis/catalog/subjects/save/", "POST", {
+                    ...formData(form, fields),
+                    id: row?.id ?? null,
+                    revision: row?.revision ?? null,
+                });
+                await back();
+            }, save);
+        });
+        body.append(form, button("Back to subjects", back));
+    }
+    async function courseSubject(course) {
+        const current = await request(`/sis/courses/${course}/subject/`);
+        const body = openDrawer("Course subject", "DRAFT CLASSIFICATION");
+        body.append(
+            node("p", {}, `${current.course.code} — ${current.course.title}`),
+            node(
+                "p",
+                { role: "status" },
+                current.subject
+                    ? `${current.subject.code} — ${current.subject.title}`
+                    : "No subject assigned",
+            ),
+            node(
+                "p",
+                {},
+                "Save a draft subject, then review and publish the course to retain it. Earlier publications and student records stay unchanged.",
+            ),
+            button("Choose subject", () =>
+                subjects("", null, [], async (row) => {
+                    if (row) {
+                        await request(`/sis/courses/${course}/subject/`, "POST", {
+                            subject_id: row.id,
+                            revision: current.revision,
+                        });
+                    }
+                    await courseSubject(course);
+                }),
+            ),
+            button("Review course publication", () => publications(course)),
+        );
+        if (current.subject)
+            body.append(
+                button("Clear draft subject", async () => {
+                    await request(`/sis/courses/${course}/subject/`, "POST", {
+                        subject_id: null,
+                        revision: current.revision,
+                    });
+                    await courseSubject(course);
+                }),
+            );
+    }
+    return { subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

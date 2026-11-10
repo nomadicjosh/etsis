@@ -112,8 +112,9 @@ final readonly class SqlCampusRepository implements CampusRepository
             $title .
             ") LIKE ? ESCAPE '!' OR LOWER(s." .
             $q("code") .
-            ") LIKE ? ESCAPE '!')";
-            array_push($params, $pattern, $pattern, $pattern);
+            ") LIKE ? ESCAPE '!' OR LOWER(pcs." . $q("code") .
+            ") LIKE ? ESCAPE '!' OR LOWER(pcs." . $q("title") . ") LIKE ? ESCAPE '!')";
+            array_push($params, $pattern, $pattern, $pattern, $pattern, $pattern);
         }
         $rows = $this->sql->fetch(
             "SELECT s." .
@@ -152,6 +153,8 @@ final readonly class SqlCampusRepository implements CampusRepository
                 $description .
                 " AS " .
                 $q("description") .
+                ", pcs." . $q("code") . " AS " . $q("subject_code") .
+                ", pcs." . $q("title") . " AS " . $q("subject_title") .
                 ", scb." .
                 $q("course_version_id") .
                 ", t." .

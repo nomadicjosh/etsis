@@ -112,6 +112,7 @@ final class CatalogWorkflowFixture
             $this->fixture->cipher,
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql),
         );
     }
 

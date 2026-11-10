@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-10**, after course-publication confirmation-time, expiry and authorization safeguards.
+Last reviewed: **2026-11-10**, after explicit course subjects and retained historical classification.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -57,7 +57,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 
 ## 1. Historical definitions and security/recovery
 
-- [ ] Restore normalized subjects, departments, academic/course levels and program/award classifications identified in the historical field review; retain applicable values through publication references.
+- [ ] Finish normalized classifications: [course subjects](course-subjects.md) now have explicit setup, assignment and retained publication references. Departments, academic/course levels and program/award classifications remain.
 - [ ] Complete section publications: instructional dates, retained course/grading/registration policy, delivery classification, teaching assignments and fee references. Review later changes against affected students.
 - [ ] Support versioned fixed/variable-credit rules and student-selected credits; keep CEUs separate from academic credits. Add explicit reporting-term/group relationships where required.
 - [ ] Finish trusted actor, reason, effective-date and correlation context for older framework/financial command paths. Course publication now uses confirmation time, expiring reviews and permission rechecks while preserving earlier completed receipts/events. Preserve real existing events and mark unknown earlier facts honestly.

@@ -24,6 +24,8 @@ The staff workspace brings campus metrics, student intake, admissions, and revie
 
 [Application submission history](docs/application-submission-history.md), [admissions decisions](docs/admissions-decisions.md), and [outcome corrections](docs/admissions-corrections.md) describe retained history, staff permissions and reviewed corrections before matriculation.
 
+[Course subjects](docs/course-subjects.md) explains explicit subject setup, draft assignment and historical publication references.
+
 ## Development priorities
 
 [Development roadmap](docs/development-roadmap.md) summarizes working foundations, remaining milestones, relative effort and release acceptance, with historical integrity and security first.

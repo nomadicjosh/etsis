@@ -105,8 +105,18 @@ final class AcademicReportSchema
                 "term" => $join("sis_terms", "credit", "term_id", "id"),
                 "grade" => $join("sis_grades", "credit", "grade_id", "id"),
                 "course_binding" => $join("sis_credit_course_versions", "credit", "id", "id"),
+                "course_version" => $join("sis_course_versions", "course_binding", "course_version_id", "id"),
+                "retained_subject" => $join("sis_course_version_subjects", "course_binding", "course_version_id", "id"),
             ],
             "fields" => $personFields + [
+                "retained_course_schema_version" => $field(
+                    "Retained definition schema",
+                    "integer",
+                    "course_version",
+                    "schema_version"
+                ),
+                "retained_subject_code" => $field("Retained subject code", "string", "retained_subject", "code"),
+                "retained_subject_title" => $field("Retained subject name", "string", "retained_subject", "title"),
                 "course_version_id" => $field(
                     "Retained course version",
                     "string",
@@ -151,6 +161,7 @@ final class AcademicReportSchema
                 "course_text" => $join("sis_course_descriptions", "course", "id", "course_id"),
                 "course_binding" => $join("sis_section_course_versions", "section", "id", "id"),
                 "course_version" => $join("sis_course_versions", "course_binding", "course_version_id", "id"),
+                "retained_subject" => $join("sis_course_version_subjects", "course_binding", "course_version_id", "id"),
                 "term" => $join("sis_terms", "section", "term_id", "id"),
                 "delivery" => $join("sis_section_delivery", "section", "id", "section_id"),
                 "enrollment" => $join("sis_enrollments", "section", "id", "section_id", $studentRead) + [
@@ -160,6 +171,14 @@ final class AcademicReportSchema
                 ...$personJoins,
             ],
             "fields" => [
+                "retained_course_schema_version" => $field(
+                    "Retained definition schema",
+                    "integer",
+                    "course_version",
+                    "schema_version"
+                ),
+                "retained_subject_code" => $field("Retained subject code", "string", "retained_subject", "code"),
+                "retained_subject_title" => $field("Retained subject name", "string", "retained_subject", "title"),
                 "section_code" => $field("Section code", "string", "section", "code"),
                 "retained_course_version_id" => $field(
                     "Retained course version",

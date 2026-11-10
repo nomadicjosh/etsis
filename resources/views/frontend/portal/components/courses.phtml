@@ -14,6 +14,9 @@
             <article class="campus-program-card">
                 <p class="campus-eyebrow"><?= $this->esc($item['course_code']); ?> · <?= $this->esc($item['term_code']); ?></p>
                 <h3><?= $this->esc($item['title']); ?></h3>
+                <?php if (isset($item['subject_title'])): ?>
+                    <p><?= $this->esc($item['subject_code']); ?> · <?= $this->esc($item['subject_title']); ?></p>
+                <?php endif; ?>
                 <?php if (isset($item['description']) && $item['description'] !== ''): ?>
                     <details>
                         <summary>Course description</summary>
