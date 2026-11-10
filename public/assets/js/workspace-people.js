@@ -270,6 +270,16 @@ window.createWorkspacePeople = function (ui) {
                     "btn-primary",
                 ),
             );
+        if (
+            ["accepted", "rejected"].includes(app.status) &&
+            can("sis:admissions:manage") &&
+            can("sis:admissions:correct")
+        )
+            actions.append(
+                button("Correct admissions decision", () =>
+                    correctDecision(row, app.status),
+                ),
+            );
         if (app.status === "matriculated")
             actions.append(
                 button("Matriculation history", () =>
@@ -367,10 +377,110 @@ window.createWorkspacePeople = function (ui) {
         });
         body.append(form);
     }
-    async function decisionHistory(row) {
-        const record = await request(
-            `/sis/applications/${row.id}/decision/history/`,
+    async function correctDecision(row, currentStatus, preset = {}) {
+        const target = currentStatus === "accepted" ? "rejected" : "accepted";
+        const body = openDrawer(
+            "Correct admissions decision",
+            "PRE-MATRICULATION CORRECTION",
         );
+        body.append(
+            button("Back to application", () => application(row)),
+            node(
+                "p",
+                {},
+                `Change ${currentStatus} to ${target}. The earlier decision stays in history. This action does not reverse matriculation or change student records.`,
+            ),
+        );
+        const fields = [
+            ["reason", "Reason for admissions correction", "textarea"],
+        ];
+        const form = await buildForm(fields, preset);
+        form.elements.reason.required = true;
+        form.elements.reason.maxLength = 10000;
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review admissions correction",
+        );
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = formData(form, fields);
+                const preview = await request(
+                    `/sis/applications/${row.id}/decision/correction/review/`,
+                    "POST",
+                    {
+                        ...data,
+                        decision: target === "accepted" ? "accept" : "reject",
+                    },
+                );
+                const confirmation = openDrawer(
+                    "Confirm admissions correction",
+                    "REVIEWED CORRECTION",
+                );
+                confirmation.append(
+                    button("Revise admissions correction", () =>
+                        correctDecision(row, currentStatus, data),
+                    ),
+                    node(
+                        "h3",
+                        {},
+                        `${preview.before.status} → ${preview.status}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `${preview.person.given_name} ${preview.person.family_name} · ${preview.person.institutional_id}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `${preview.source.program_code} · ${preview.source.program_title} · ${preview.source.entry_term_code}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        preview.before.history_recorded
+                            ? "The previous recorded outcome remains in history. This correction takes effect on confirmation."
+                            : "The earlier decision was not recorded. Its current status will be observed before this correction; no earlier decision date will be invented.",
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Effective on confirmation: ${preview.effective_on}`,
+                    ),
+                    button(
+                        "Confirm admissions correction",
+                        async () => {
+                            await request(
+                                `/sis/applications/${row.id}/decision/correction/commit/`,
+                                "POST",
+                                { review_token: preview.review_token },
+                            );
+                            notify("Admissions correction recorded.");
+                            await application(row);
+                        },
+                        "btn-primary",
+                    ),
+                );
+                const heading = confirmation.querySelector("h3");
+                heading.tabIndex = -1;
+                heading.focus();
+            }, review);
+        });
+        body.append(form);
+    }
+    async function decisionHistory(row, cursor = null, previous = []) {
+        const record =
+            cursor === null
+                ? await request(`/sis/applications/${row.id}/decision/history/`)
+                : await request(
+                      `/sis/applications/${row.id}/decision/history/page/`,
+                      "POST",
+                      { cursor },
+                  );
         const body = openDrawer("Application history", "ADMISSIONS RECORD");
         body.append(button("Back to application", () => application(row)));
         if (record.submission) {
@@ -418,6 +528,82 @@ window.createWorkspacePeople = function (ui) {
                         : "No acceptance or rejection has been recorded in the protected decision history. Earlier decisions and original submission timing remain unknown.",
                 ),
             );
+            return;
+        }
+        if (Array.isArray(record.items)) {
+            body.append(
+                node(
+                    "p",
+                    {},
+                    `Current application status: ${record.current_status}`,
+                ),
+            );
+            for (const item of record.items.filter(
+                (item) => item.kind !== "submission",
+            )) {
+                const observed = item.kind === "observation";
+                const section = node(
+                    "section",
+                    { class: "record-section" },
+                    node(
+                        "h3",
+                        {},
+                        observed
+                            ? "Observed current application"
+                            : item.kind === "correction"
+                              ? `Decision corrected: ${item.previous_status} → ${item.status}`
+                              : item.status === "accepted"
+                                ? "Application accepted"
+                                : "Application rejected",
+                    ),
+                );
+                if (item.source)
+                    section.append(
+                        node(
+                            "p",
+                            {},
+                            `${item.source.program_code} · ${item.source.program_title} · ${item.source.entry_term_code}`,
+                        ),
+                    );
+                section.append(
+                    node(
+                        "p",
+                        {},
+                        observed
+                            ? `Status seen: ${item.status}. Earlier decision timing is unknown. Observed: ${item.recorded_at}.`
+                            : `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}.`,
+                    ),
+                );
+                body.append(section);
+            }
+            body.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Decisions are listed in recording order. Original outcomes stay in history. Protected reasons, actor details, submission fingerprints and answers are excluded.",
+                ),
+            );
+            const controls = node("div", { class: "inline-actions" });
+            if (previous.length)
+                controls.append(
+                    button("Previous application history page", () =>
+                        decisionHistory(
+                            row,
+                            previous[previous.length - 1],
+                            previous.slice(0, -1),
+                        ),
+                    ),
+                );
+            if (record.next_cursor)
+                controls.append(
+                    button("Next application history page", () =>
+                        decisionHistory(row, record.next_cursor, [
+                            ...previous,
+                            cursor,
+                        ]),
+                    ),
+                );
+            body.append(controls);
             return;
         }
         const source = record.source;

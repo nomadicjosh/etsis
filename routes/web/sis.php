@@ -53,6 +53,24 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.applications.decision.history");
     $router
+        ->map(["POST"], "/sis/applications/{id}/decision/history/page/", [
+            \Application\Http\Controller\SisAdmissionDecisionController::class,
+            "page",
+        ])
+        ->name("sis.applications.decision.history.page");
+    $router
+        ->map(["POST"], "/sis/applications/{id}/decision/correction/review/", [
+            \Application\Http\Controller\SisAdmissionCorrectionController::class,
+            "review",
+        ])
+        ->name("sis.applications.correction.review");
+    $router
+        ->map(["POST"], "/sis/applications/{id}/decision/correction/commit/", [
+            \Application\Http\Controller\SisAdmissionCorrectionController::class,
+            "commit",
+        ])
+        ->name("sis.applications.correction.commit");
+    $router
         ->map(["POST"], "/sis/applications/{id}/matriculate/review/", [
             \Application\Http\Controller\SisMatriculationController::class,
             "review",

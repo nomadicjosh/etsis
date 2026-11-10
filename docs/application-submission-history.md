@@ -38,4 +38,6 @@ Creation locks the person before term/program setup and rechecks the current own
 
 Fictional integration checks cover both channels, ownership and staff assistance, form/answer verification, protected payloads, replay through decisions/matriculation, stale or conflicting identifiers, earlier receipts, re-encryption and complete rollback. Real-provider/router checks exercise creation, owner reads, authorization, CSRF, private responses and retries. Browser checks cover known submission history before/after decisions and the earlier unknown-history path, including keyboard use, accessibility and narrow screens. No working database was used or migrated.
 
-Offers, documents/checklists, institution-specific admissions correction/reopening policy, complete operational reconstruction and further admissions transitions remain later stages.
+Offers, documents/checklists, further institution-specific approval/reopening policy, complete operational reconstruction and further admissions transitions remain later stages.
+
+[Outcome corrections](admissions-corrections.md) now retain reasoned pre-matriculation changes and original decisions in this same stream.

@@ -2679,3 +2679,55 @@ if ($app->router->match($trackedOwnerRequest)->getStatusCode() !== 403) {
 $sis->access->actor = $originalSubmissionActor;
 $sis->access->staff = true;
 $sis->access->grants = [];
+
+
+// Correction authority is independent; history remains readable by ordinary admissions staff.
+$sis->access->staff = true;
+$correctionApplication = $trackedApplicationId;
+$correctionDecisionPath = "/sis/applications/" . $correctionApplication . "/decision/";
+$initialCorrectionReview = json_decode((string) $teachingPost($correctionDecisionPath . "review/", [
+    "decision" => "accept", "reason" => "Fictional initial acceptance for correction",
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$initialCorrectionReceipt = $teachingPost($correctionDecisionPath . "commit/", ["review_token" => $initialCorrectionReview["review_token"]]);
+if ($initialCorrectionReceipt->getStatusCode() !== 200) {
+    throw new RuntimeException("Correction fixture acceptance failed.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:admissions:manage"];
+$correctionData = ["decision" => "reject", "reason" => "Fictional protected outcome correction"];
+if ($teachingPost($correctionDecisionPath . "correction/review/", $correctionData)->getStatusCode() !== 403) {
+    throw new RuntimeException("Admissions management alone granted correction authority.");
+}
+$sis->access->grants = ["sis:admissions:manage", "sis:admissions:correct"];
+$httpCorrectionResponse = $teachingPost($correctionDecisionPath . "correction/review/", $correctionData);
+$httpCorrectionReview = json_decode((string) $httpCorrectionResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($httpCorrectionResponse->getStatusCode() !== 200 || !isset($httpCorrectionReview["review_token"])) {
+    throw new RuntimeException("Correction preview did not resolve through the real providers and CSRF pipeline.");
+}
+$httpCorrectionCommit = $teachingPost($correctionDecisionPath . "correction/commit/", ["review_token" => $httpCorrectionReview["review_token"]]);
+if ($httpCorrectionCommit->getStatusCode() !== 200) {
+    throw new RuntimeException("Correction confirmation failed through the private HTTP pipeline.");
+}
+$correctionHistoryRequest = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $correctionDecisionPath . "history/", "GET");
+$sis->access->grants = ["sis:admissions:manage"];
+$httpCorrectionHistoryResponse = $app->router->match($correctionHistoryRequest);
+$httpCorrectionHistory = json_decode((string) $httpCorrectionHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $httpCorrectionHistoryResponse->getStatusCode() !== 200 || ($httpCorrectionHistory["current_status"] ?? null) !== "rejected"
+    || array_column($httpCorrectionHistory["items"] ?? [], "kind") !== ["submission", "decision", "correction"]
+    || str_contains((string) $httpCorrectionHistoryResponse->getBody(), "Fictional protected outcome correction")
+    || $teachingPost($correctionDecisionPath . "history/page/", [])->getStatusCode() !== 200
+    || $teachingPost($correctionDecisionPath . "correction/commit/", ["review_token" => $httpCorrectionReview["review_token"]])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Curated correction history, paging or current permission checks failed.");
+}
+$correctionEvents = $sis->sql->rows("sis_history_events");
+if (
+    $teachingPost($correctionDecisionPath . "commit/", ["review_token" => $initialCorrectionReview["review_token"]])->getStatusCode() !== 200
+    || $sis->admissions->application(new \Domain\Shared\ValueObject\EntityId($correctionApplication))->status->value !== "rejected"
+    || $sis->sql->rows("sis_history_events") !== $correctionEvents
+) {
+    throw new RuntimeException("An initial acceptance retry undid a later correction.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];

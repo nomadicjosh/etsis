@@ -10,7 +10,7 @@ The review shows the person and current institutional ID, proposed outcome, prog
 
 Choose **Confirm acceptance** or **Confirm rejection**. The application status/version, observation, actual decision events, operation receipts and required audit commit together. A failure rolls everything back. Acceptance does not create a student, assign a cohort or charge tuition; **Matriculate student** remains a separate reviewed action. Rejection creates no student record.
 
-Only a currently submitted application can receive this decision. An application already accepted, rejected or matriculated must be reviewed through its history; this stage does not offer reopening or correction by overwriting its status. Those policies and attributed correction workflows remain subsequent work.
+Only a currently submitted application can receive this decision. Accepted/rejected applications now have a separate [reviewed outcome correction](admissions-corrections.md) requiring independent authority. Original outcomes are retained. Matriculated applications and reopening for edits remain outside that correction action.
 
 Reviews expire after 20 minutes and must be repeated after the institutional date changes. Changes to the application/version, person identity, program/term labels or attached submission context also require another review. Reviews are authenticated encrypted tokens bound to actor, application, purpose, chosen outcome and context; they stay in browser memory.
 
@@ -20,7 +20,7 @@ Newly [submitted applications](application-submission-history.md) now start with
 
 **AdmissionWasDecided** then records acceptance or rejection, the preceding recorded decision identity, resulting application version and retained decision context. Protected context carries the trusted actor, reason, operation correlation and effective/recording times. The source retains program/term labels and, where available, the immutable submitted form reference/revision and existing submission fingerprint. It does not duplicate names, institutional IDs or application answers into the event payload.
 
-**Application history** shows the actual outcome, effective/recording times, retained labels and form revision, plus today's application status. Reasons, actor details, submission fingerprints, answers and raw event envelopes are excluded. Today's catalog renames or replacing the active application form do not rewrite these retained facts. Answers remain in their existing protected submission record.
+**Application history** shows a paged list of original outcomes and corrections, effective/recording times, retained labels and form revision, plus today's application status. Reasons, actor details, submission fingerprints, answers and raw event envelopes are excluded. Today's catalog renames or replacing the active application form do not rewrite these retained facts. Answers remain in their existing protected submission record.
 
 Resending the same completed confirmation returns its original outcome and version. For example, confirming acceptance, matriculating the student and then resending that acceptance returns the earlier acceptance result while the application remains matriculated. It creates no duplicate events or student and does not undo later student/program changes. Another review cannot overwrite the winning decision; permission is still required for an exact retry.
 
@@ -38,4 +38,4 @@ Both new event schemas use **`sis_history_events`** and its existing stream head
 
 Fictional integration checks cover both outcomes, replay, submitted-form references, protected payloads, stale/expired reviews, permission and owner rechecks, complete rollback, competing confirmations, changed projections and retries after matriculation. Real-provider/router checks cover CSRF, private responses and admissions authorization. Browser checks cover revision, confirmation, history, focus, accessibility and narrow screens. No working database was migrated or used for these fixtures.
 
-New submissions now retain their actual history; offer/document transitions, completeness checklists, institutional approval/correction policies, operational rebuild tooling and the full admissions pipeline remain subsequent stages. Event history supports evidence; it does not establish legal compliance by itself.
+New submissions now retain their actual history; offer/document transitions, completeness checklists, further institutional approval/reopening policies, operational rebuild tooling and the full admissions pipeline remain subsequent stages. Event history supports evidence; it does not establish legal compliance by itself.

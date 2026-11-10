@@ -140,11 +140,13 @@ final readonly class AdmissionDecisionService
         });
     }
     /** @return array<string,mixed> */
-    public function history(EntityId $application): array
+    public function history(EntityId $application, ?string $cursor = null): array
     {
         $actor = $this->access->requirePermission("sis:admissions:manage");
         $route = $this->admissions->application($application);
-        return $this->transactions->run(fn(): array => $this->ledger->timeline($this->lock($route, $actor)));
+        return $this->transactions->run(
+            fn(): array => $this->ledger->timeline($this->lock($route, $actor), $cursor),
+        );
     }
     private function lock(AdmissionApplication $route, EntityId $actor): AdmissionApplication
     {

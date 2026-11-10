@@ -30,6 +30,14 @@ final class AdmissionDecision extends EventSourcedAggregate
         }
         if ($event instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted) {
             \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::validate($event->payload());
+        } elseif (
+            $event instanceof \Domain\Admissions\Event\AdmissionDecisionWasObserved ||
+            $event instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected
+        ) {
+            \Domain\Admissions\ValueObject\AdmissionCorrectionSchema::validate(
+                $event::class,
+                $event->payload(),
+            );
         } else {
             AdmissionDecisionSchema::validate($event::class, $event->payload());
         }
@@ -83,6 +91,47 @@ final class AdmissionDecision extends EventSourcedAggregate
                     if ($after[$key] !== $value) {
                         throw new CorruptHistoryException();
                     }
+                }
+            }
+        }
+        $this->application["status"] = $p["status"];
+        $this->application["version"] = $p["application_version"];
+        $this->source = $p["source"];
+        $this->decision = $p["decision_id"];
+    }
+    public function whenAdmissionDecisionWasObserved(
+        \Domain\Admissions\Event\AdmissionDecisionWasObserved $event,
+    ): void {
+        $p = $event->payload();
+        if ($this->application !== null || $p["application"]["id"] !== (string) $this->aggregateId()) {
+            throw new CorruptHistoryException();
+        }
+        $this->application = $p["application"];
+        $this->source = $p["source"];
+        $this->decision = $p["decision_id"];
+    }
+    public function whenAdmissionDecisionWasCorrected(
+        \Domain\Admissions\Event\AdmissionDecisionWasCorrected $event,
+    ): void {
+        $p = $event->payload();
+        if (
+            $this->application === null ||
+            $this->source === null ||
+            $this->application["status"] !== $p["previous_status"] ||
+            $p["previous_decision_id"] !== $this->decision ||
+            $p["application_version"] !== $this->application["version"] + 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $before = $this->source["submission"];
+        $after = $p["source"]["submission"];
+        if (($before === null) !== ($after === null)) {
+            throw new CorruptHistoryException();
+        }
+        if ($before !== null) {
+            foreach ($before as $key => $value) {
+                if ($after[$key] !== $value) {
+                    throw new CorruptHistoryException();
                 }
             }
         }

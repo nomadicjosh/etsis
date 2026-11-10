@@ -182,6 +182,16 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
         $this->transition($application, $expectedVersion, ApplicationStatus::Submitted, $application->status);
     }
 
+    public function saveCorrection(AdmissionApplication $before, AdmissionApplication $after): void
+    {
+        if ($before->correctDecision($after->status === ApplicationStatus::Accepted) != $after) {
+            throw new DomainException(
+                "The correction must preserve the application identity and advance its version once.",
+            );
+        }
+        $this->transition($after, $before->version, $before->status, $after->status);
+    }
+
     public function lockPerson(EntityId $id): void
     {
         $this->lock("sis_persons", $id);

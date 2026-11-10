@@ -51,6 +51,16 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Admissions\Event\AdmissionDecisionWasObserved::class => [
+                "type" => "admission_decision",
+                "root" => \Domain\Admissions\AdmissionDecision::class,
+                "fields" => \Domain\Admissions\ValueObject\AdmissionCorrectionSchema::OBSERVED,
+            ],
+            \Domain\Admissions\Event\AdmissionDecisionWasCorrected::class => [
+                "type" => "admission_decision",
+                "root" => \Domain\Admissions\AdmissionDecision::class,
+                "fields" => \Domain\Admissions\ValueObject\AdmissionCorrectionSchema::CORRECTED,
+            ],
             \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class => [
                 "type" => "admission_decision",
                 "root" => \Domain\Admissions\AdmissionDecision::class,
@@ -346,6 +356,17 @@ final readonly class HistoricalSchemaRegistry
             if ($stream->type === "admission_decision") {
                 if ($class === \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class) {
                     \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::validate($payload);
+                } elseif (
+                    in_array(
+                        $class,
+                        [
+                            \Domain\Admissions\Event\AdmissionDecisionWasObserved::class,
+                            \Domain\Admissions\Event\AdmissionDecisionWasCorrected::class,
+                        ],
+                        true,
+                    )
+                ) {
+                    \Domain\Admissions\ValueObject\AdmissionCorrectionSchema::validate($class, $payload);
                 } else {
                     \Domain\Admissions\ValueObject\AdmissionDecisionSchema::validate($class, $payload);
                 }
@@ -354,6 +375,7 @@ final readonly class HistoricalSchemaRegistry
                         $class,
                         [
                             \Domain\Admissions\Event\AdmissionApplicationWasObserved::class,
+                            \Domain\Admissions\Event\AdmissionDecisionWasObserved::class,
                             \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class,
                         ],
                         true,

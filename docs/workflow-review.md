@@ -162,3 +162,8 @@ Accepted registration and early/late releases now have [replayable enrollment hi
 ### Actual application submission history
 
 Applicants and staff keep the existing program-form workflow. New submissions now record when they were made and the exact submitted form/reference in the shared journal. **Application history** shows the retained initial program/term context even before a decision exists. Current owners can read staff-assisted answers; unrelated accounts cannot. Exact retries preserve later admissions and matriculation outcomes, while earlier applications keep an honest unknown-history boundary. [Workflow and retained-artifact limits](application-submission-history.md).
+
+
+### Pre-matriculation admissions corrections
+
+**Admissions → accepted/rejected application → Correct admissions decision** now reviews an explicit outcome change and reason under independent correction authority. Revising preserves the reason, earlier outcomes remain in paged Application history, and retries cannot reset later decisions or matriculation. Older current outcomes are explicitly observed without invented dates. Matriculated outcomes and reopening for application edits remain separate work. [Workflow and permission migration](admissions-corrections.md).

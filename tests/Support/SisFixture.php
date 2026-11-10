@@ -608,6 +608,22 @@ final class SisFixture
             $this->applicationContext(),
         );
     }
+    public function correctionService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+    ): \Domain\Admissions\Service\AdmissionCorrectionService {
+        return new \Domain\Admissions\Service\AdmissionCorrectionService(
+            $repository ?? $this->admissions,
+            $this->applicationContext(),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $this->decisionLedger(),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
     public function decisionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,

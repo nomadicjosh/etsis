@@ -39,6 +39,15 @@ final readonly class SisAdmissionDecisionController
             ),
         );
     }
+    public function page(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->service->history(
+                new EntityId($id),
+                FormInput::from($request)->optionalText("cursor", 10000),
+            ),
+        );
+    }
     public function history(string $id): ResponseInterface
     {
         return new JsonResponse($this->service->history(new EntityId($id)));

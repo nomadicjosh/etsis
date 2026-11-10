@@ -5,6 +5,9 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:admissions:correct" => [
+            "description" => "Approve reasoned admissions outcome corrections before matriculation.",
+        ],
         "sis:gradebook:amend" => ["description" => "Approve reasoned final-grade corrections."],
         "sis:degree-audit:adjust" => [
             "description" => "Approve and revoke student-program course waivers and minimum exceptions.",
