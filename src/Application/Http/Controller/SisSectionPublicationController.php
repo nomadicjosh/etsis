@@ -43,7 +43,7 @@ final readonly class SisSectionPublicationController
         return new JsonResponse(
             $this->service->publish(
                 new EntityId($id),
-                FormInput::from($request)->text("review_token", 16384),
+                FormInput::from($request)->text("review_token", 32768),
             ),
         );
     }
@@ -69,7 +69,7 @@ final readonly class SisSectionPublicationController
     public function select(ServerRequest $request, string $id): ResponseInterface
     {
         return new JsonResponse(
-            $this->service->select(new EntityId($id), FormInput::from($request)->text("review_token", 16384)),
+            $this->service->select(new EntityId($id), FormInput::from($request)->text("review_token", 32768)),
         );
     }
 

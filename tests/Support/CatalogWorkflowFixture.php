@@ -42,21 +42,51 @@ final class CatalogWorkflowFixture
         );
     }
 
-    public function offerings(?AuditTrail $audit = null): OfferingService
-    {
+    public function offerings(
+        ?AuditTrail $audit = null,
+        ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+    ): OfferingService {
         $f = $this->sis;
         return new OfferingService(
             $this->operations,
             new SqlCatalogRevisionRepository($f->sql),
             $f->registration,
             $f->access,
-            $f->transactions,
+            $transactions ?? $f->transactions,
             $audit ?? $f->audit,
             $this->fixture->cipher,
             $f->clock,
             $this->publications(),
             $this->bindings($audit),
             new \Infrastructure\Persistence\Repository\SqlSectionCourseBindingRepository($f->sql),
+            $this->sectionPublications($audit),
+        );
+    }
+
+    public function sectionPublications(
+        ?AuditTrail $audit = null,
+    ): \Domain\Registration\Service\SectionPublicationService {
+        $f = $this->sis;
+        return new \Domain\Registration\Service\SectionPublicationService(
+            new SqlCatalogRevisionRepository($f->sql),
+            $this->operations,
+            new \Infrastructure\Persistence\Repository\SqlSectionCourseBindingRepository($f->sql),
+            $this->publications(),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $f->sql,
+                $f->transactions,
+                $f->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($f->connection->queryBuilder()),
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            ),
+            $f->access,
+            $f->transactions,
+            $audit ?? $f->audit,
+            $this->fixture->cipher,
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
         );
     }
 

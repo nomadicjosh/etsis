@@ -9,7 +9,7 @@ async function fixture(page, options = {}) {
     const course = id(1), term = id(2), clone = id(3), prerequisite = id(4), operation = id(5), section = id(6);
     const termRow = { id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20', add_drop_ends_on: '2026-08-15' };
     const calls = [], errors = []; let published = false, rows = options.rows || [], saved = options.saved || false, definitionPublished = false;
-    let sectionBound = false;
+    let sectionBound = false, acceptedReview = null;
     let courseText = { transcript_title: null, description: null };
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -18,7 +18,7 @@ async function fixture(page, options = {}) {
         if (data) calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = {};
         const review = { term: termRow, sections: rows.map(row => ({ ...row, course_code: 'MATH.101', course_title: 'Algebra', faculty_name: null })) };
-        const receipt = { operation_id: operation, review, published_at: published ? '2026-11-07T12:00:00Z' : null, created_at: '2026-11-07T11:00:00Z' };
+        const receipt = { operation_id: operation, review: published && acceptedReview ? acceptedReview : review, published_at: published ? '2026-11-07T12:00:00Z' : null, created_at: '2026-11-07T11:00:00Z' };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/operation-id/') result = { id: section };
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/courses/') ? [{ id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }] : path.includes('/terms/') ? [termRow] : path.includes('/sections/') ? [{ id: section, code: 'MATH.101.A', course_title: 'Algebra', course_code: 'MATH.101', term_code: '26/FA', capacity: 20, enrolled: 0, active: true }] : [], next_after: null };
@@ -39,8 +39,18 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/catalog/offerings/review/') { rows = data.sections; result = { term: termRow, sections: rows.map(row => ({ ...row, course_code: 'MATH.101', course_title: 'Algebra', faculty_name: null })), operation_id: operation, revision: 'b'.repeat(64) }; }
         else if (path === '/sis/catalog/offerings/save/') { saved = true; result = receipt; }
         else if (path === '/sis/catalog/offerings/') result = { items: saved ? [{ operation_id: operation, term_code: '26/FA', section_count: rows.length, published_at: receipt.published_at, created_at: receipt.created_at }] : [], next_after: null };
-        else if (path.endsWith('/publication-setup/')) result = { ...review, operation_id: operation, sections: review.sections.map(row => ({ ...row, was_bound: false, has_student_records: false })) };
-        else if (path.endsWith('/publication-review/')) result = { ...review, operation_id: operation, reason: data.reason, review_token: 'fictional-offering-publication-token', sections: review.sections.map(row => ({ ...row, course_version_id: operation, course_definition: { definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText } } })) };
+        else if (path.endsWith('/publication-setup/')) result = { ...review, operation_id: operation, sections: review.sections.map(row => ({ ...row, was_bound: false, has_student_records: false, instruction_starts_on: termRow.starts_on, instruction_ends_on: termRow.ends_on, selected_offering: null })) };
+        else if (path.endsWith('/publication-review/')) {
+            result = { ...review, operation_id: operation, reason: data.reason, review_token: 'fictional-offering-publication-token', sections: review.sections.map(row => {
+                const dates = data.section_dates.find(item => item.section_id === row.id);
+                return { ...row, ...dates, section_version_id: id(11), selected_offering: null, course_version_id: operation,
+                    section_definition: { ...row, course_version_id: operation, term_code: termRow.code,
+                        term_starts_on: termRow.starts_on, term_ends_on: termRow.ends_on,
+                        faculty_person_id: null, ...dates },
+                    course_definition: { definition: { code: 'MATH.101', title: 'Algebra', credits_milli: 3000, prerequisites: [], ...courseText } } };
+            }) };
+            acceptedReview = result;
+        }
         else if (path.endsWith('/publish/')) { published = true; result = { ...receipt, published_at: '2026-11-07T12:00:00Z' }; }
         else if (path === `/sis/catalog/offerings/${operation}/`) result = receipt;
         else if (path.includes('/sis/ui/operations/')) result = { items: [], next_after: null };
@@ -99,6 +109,9 @@ test('course offerings stay drafts until a separately reviewed publication and c
     await page.getByRole('button', { name: 'Review publication', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Review definitions & publication', exact: true })).toBeDisabled();
     await page.getByRole('radio', { name: 'Version 1 · MATH.101 · Algebra', exact: true }).check();
+    await page.getByText('MATH.101.26FA.A · 2026-08-01 through 2026-12-20', { exact: true }).click();
+    await page.getByLabel('Instruction starts for MATH.101.26FA.A', { exact: true }).fill('2026-09-01');
+    await page.getByLabel('Instruction ends for MATH.101.26FA.A', { exact: true }).fill('2026-11-30');
     await page.getByLabel('Reason for offering publication').fill('Fictional term offering approval');
     await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('normal eligibility checks still apply');
@@ -106,6 +119,7 @@ test('course offerings stay drafts until a separately reviewed publication and c
     await page.getByRole('button', { name: 'Change definition choices', exact: true }).click();
     await expect(page.getByRole('radio')).toBeChecked();
     await expect(page.getByLabel('Reason for offering publication')).toHaveValue('Fictional term offering approval');
+    await expect(page.getByLabel('Instruction starts for MATH.101.26FA.A', { exact: true })).toHaveValue('2026-09-01');
     await accessible(page);
     await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
     await accessible(page);
@@ -221,7 +235,8 @@ test('one paged definition choice covers multiple offering drafts without losing
     await accessible(page);
     await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
     expect(f.calls.find(call => call.path.endsWith('/publication-review/'))).toMatchObject({ data: {
-        course_versions: rows.map(row => ({ section_id: row.id, version_id: f.operation })), reason: 'Fictional multi-section approval',
+        course_versions: rows.map(row => ({ section_id: row.id, version_id: f.operation })),
+        section_dates: rows.map(row => ({ section_id: row.id, instruction_starts_on: '2026-08-01', instruction_ends_on: '2026-12-20' })), reason: 'Fictional multi-section approval',
     }, csrf: 'fictional-test-token' });
     expect(f.calls.some(call => call.path.endsWith('/course-definition/commit/'))).toBe(false);
     expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
@@ -252,4 +267,38 @@ test('missing course publication can be completed before returning to the saved 
     expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
     expect(f.errors).toEqual([]);
     await accessible(page);
+});
+
+
+test('offering date overrides stay section-specific and invalid periods do not submit', async ({ page }) => {
+    const rows = [id(6), id(7)].map((section, index) => ({ id: section, course_id: id(1), code: `MATH.101.${index + 1}`,
+        capacity: 20, delivery_mode: 'online', fee_minor: 0, currency: 'USD', web_registration: true }));
+    const f = await fixture(page, { rows, saved: true });
+    await page.getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await page.getByRole('radio').check();
+    await page.getByLabel('Reason for offering publication').fill('Fictional short-session approval');
+    await page.getByText('MATH.101.1 · 2026-08-01 through 2026-12-20', { exact: true }).click();
+    await page.getByLabel('Instruction starts for MATH.101.1', { exact: true }).fill('2026-09-01');
+    await page.getByLabel('Instruction ends for MATH.101.1', { exact: true }).fill('2026-08-31');
+    await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
+    expect(f.calls.some(call => call.path.endsWith('/publication-review/'))).toBe(false);
+    await page.getByLabel('Instruction ends for MATH.101.1', { exact: true }).fill('2027-01-05');
+    await expect(page.locator('#drawer-body')).toContainText('These instructional dates extend beyond the term');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review definitions & publication', exact: true }).click();
+    expect(f.calls.find(call => call.path.endsWith('/publication-review/')).data.section_dates).toEqual([
+        { section_id: rows[0].id, instruction_starts_on: '2026-09-01', instruction_ends_on: '2027-01-05' },
+        { section_id: rows[1].id, instruction_starts_on: '2026-08-01', instruction_ends_on: '2026-12-20' },
+    ]);
+    await expect(page.locator('#drawer-body')).toContainText('MATH.101.1 · 2026-09-01 through 2027-01-05');
+    await page.getByText('MATH.101.1 · 2026-09-01 through 2027-01-05', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Publication will retain this offering version for future registrations');
+    await accessible(page);
+    expect(f.calls.some(call => call.path.endsWith('/publish/'))).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
 });

@@ -34,6 +34,7 @@ final readonly class OfferingService
         private CoursePublicationService $publications,
         private \Domain\Registration\Service\SectionCourseBindingService $bindingService,
         private \Domain\Registration\Repository\SectionCourseBindingRepository $bindings,
+        private \Domain\Registration\Service\SectionPublicationService $sections,
     ) {
     }
 
@@ -165,12 +166,14 @@ final readonly class OfferingService
     }
 
     /** @param array<string, EntityId> $versions Section identity => explicitly chosen publication identity.
+     * @param array<string, array{instruction_starts_on: string, instruction_ends_on: string}> $dates
      * @return array<string, mixed>
      */
     public function reviewPublication(
         EntityId $id,
         array $versions,
         #[\SensitiveParameter] string $reason,
+        array $dates = [],
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (mb_strlen($reason) > 1000) {
@@ -179,17 +182,34 @@ final readonly class OfferingService
         // Validate attributed reason before acquiring locks; effective time is captured at the final publication.
         new \Domain\Shared\EventSourcing\EventContext($actor, $this->clock->now(), $id, reason: $reason);
         $routing = $this->payload($this->operation($id))["request"];
-        return $this->transactions->run(function () use ($id, $versions, $reason, $actor, $routing): array {
+        return $this->transactions->run(function () use (
+            $id,
+            $versions,
+            $reason,
+            $actor,
+            $routing,
+            $dates,
+        ): array {
             $this->lockPublication($id, $routing);
-            $context = $this->publicationContext($this->operation($id), $versions);
+            $this->authorize($actor);
+            $context = $this->publicationContext($this->operation($id), $versions, true, $dates);
             $selected = array_column($context["sections"], "course_version_id", "id");
             ksort($selected);
+            $instructionDates = [];
+            foreach ($context["sections"] as $section) {
+                $instructionDates[$section["id"]] = [
+                    "instruction_starts_on" => $section["instruction_starts_on"],
+                    "instruction_ends_on" => $section["instruction_ends_on"],
+                ];
+            }
             $proof = [
-                "kind" => "offering-publication-review.v1",
+                "kind" => "offering-publication-review.v2",
                 "operation_id" => $id->value,
                 "actor_id" => $actor->value,
                 "revision" => $this->revision($context),
                 "versions" => $selected,
+                "instruction_dates" => $instructionDates,
+                "expires_at" => $this->clock->now()->getTimestamp() + 1200,
                 "reason" => $reason,
             ];
             return $context + [
@@ -210,7 +230,12 @@ final readonly class OfferingService
             $proof = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($proof) ||
-                ($proof["kind"] ?? null) !== "offering-publication-review.v1" ||
+                !in_array(
+                    $proof["kind"] ?? null,
+                    ["offering-publication-review.v1", "offering-publication-review.v2"],
+                    true,
+                ) ||
+                !is_string($proof["actor_id"] ?? null) ||
                 ($proof["operation_id"] ?? null) !== $id->value
             ) {
                 throw new \InvalidArgumentException();
@@ -227,6 +252,7 @@ final readonly class OfferingService
         $hash = hash("sha256", $token);
         return $this->transactions->run(function () use ($id, $proof, $actor, $routing, $hash): array {
             $this->lockPublication($id, $routing);
+            $this->authorize($actor);
             $row = $this->operation($id);
             $data = $this->payload($row);
             if ($row["published_at"] !== null) {
@@ -241,14 +267,23 @@ final readonly class OfferingService
                 }
                 return $this->receipt($row);
             }
-            $versions = array_map(static fn(string $v): EntityId => new EntityId($v), $proof["versions"]);
-            $context = $this->publicationContext($row, $versions);
-            if (!hash_equals($this->revision($context), $proof["revision"])) {
+            if (
+                $proof["kind"] !== "offering-publication-review.v2" ||
+                !is_int($proof["expires_at"] ?? null) ||
+                $proof["expires_at"] <= $this->clock->now()->getTimestamp()
+            ) {
                 throw new ConcurrentModificationException(
-                    "Drafts or course bindings changed. Review publication again.",
+                    "Review the offering plan again before publishing.",
                 );
             }
-            foreach ($context["sections"] as $section) {
+            $versions = array_map(static fn(string $v): EntityId => new EntityId($v), $proof["versions"]);
+            $context = $this->publicationContext($row, $versions, true, $proof["instruction_dates"]);
+            if (!hash_equals($this->revision($context), $proof["revision"])) {
+                throw new ConcurrentModificationException(
+                    "Offering details or retained versions changed. Review publication again.",
+                );
+            }
+            foreach ($context["sections"] as &$section) {
                 $sectionId = new EntityId($section["id"]);
                 if (!$section["was_bound"]) {
                     $binding = $this->bindingService->review(
@@ -259,12 +294,35 @@ final readonly class OfferingService
                     );
                     $this->bindingService->commit($sectionId, $binding["review_token"]);
                 }
+                if ($section["selected_offering"] === null) {
+                    $publication = $this->sections->review(
+                        $sectionId,
+                        $section["instruction_starts_on"],
+                        $section["instruction_ends_on"],
+                        $proof["reason"],
+                        $id,
+                    );
+                    if ($publication["definition"] !== $section["section_definition"]) {
+                        throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                    }
+                    $published = $this->sections->publish($sectionId, $publication["review_token"]);
+                    $selection = $this->sections->reviewSelection(
+                        $sectionId,
+                        new EntityId($published["operation_id"]),
+                        $proof["reason"],
+                        $id,
+                    );
+                    $this->sections->select($sectionId, $selection["review_token"]);
+                    $section["selected_offering"] = $selection["selected"];
+                }
+                $section["section_version_id"] = $section["selected_offering"]["version_id"];
                 $this->catalog->save("sections", $sectionId, [
                     "active" => 1,
                     "web_registration" => (int) $section["web_registration"],
                 ]);
                 $this->audit->record($actor, "section.published", $sectionId);
             }
+            unset($section);
             $data["publication"] = [
                 "actor_id" => $actor->value,
                 "review_hash" => $hash,
@@ -328,10 +386,15 @@ final readonly class OfferingService
 
     /** @param array<string, mixed> $row
      * @param array<string, EntityId> $versions
+     * @param array<string, array{instruction_starts_on: string, instruction_ends_on: string}> $dates
      * @return array<string, mixed>
      */
-    private function publicationContext(array $row, array $versions, bool $requireVersions = true): array
-    {
+    private function publicationContext(
+        array $row,
+        array $versions,
+        bool $requireVersions = true,
+        array $dates = [],
+    ): array {
         if ($row["published_at"] !== null) {
             throw new ValidationException([
                 ["field" => "operation", "message" => "This offering plan is already published."],
@@ -341,6 +404,8 @@ final readonly class OfferingService
         $sections = $request["sections"];
         if (
             count($versions) > 25 ||
+            count($dates) > 25 ||
+            array_diff(array_keys($dates), array_column($sections, "id")) !== [] ||
             array_diff(array_keys($versions), array_column($sections, "id")) !== []
         ) {
             throw new ValidationException([
@@ -354,6 +419,15 @@ final readonly class OfferingService
         $definitions = [];
         foreach ($sections as $intended) {
             $s = $this->registration->section(new EntityId($intended["id"]));
+            if ($s->courseId->value !== $intended["course_id"] || $s->termId->value !== $request["term_id"]) {
+                throw new ValidationException([
+                    [
+                        "field" => "sections",
+                        "message" =>
+                            "A draft no longer belongs to this plan's course and term. Review its setup.",
+                    ],
+                ]);
+            }
             $course = $this->registration->course($s->courseId);
             if ($s->active || !$course->active) {
                 throw new ValidationException([
@@ -397,7 +471,14 @@ final readonly class OfferingService
                 }
             }
             $faculty = $s->facultyUserId === null ? null : $this->operations->faculty($s->facultyUserId);
-            $result[] = [
+            $offering = $this->sections->plannedOffering(
+                $s->id,
+                $published,
+                $dates[$s->id->value]["instruction_starts_on"] ?? null,
+                $dates[$s->id->value]["instruction_ends_on"] ?? null,
+                $requireVersions,
+            );
+            $result[] = $offering + [
                 "id" => $s->id->value,
                 "course_id" => $s->courseId->value,
                 "term_id" => $s->termId->value,
@@ -480,6 +561,13 @@ final readonly class OfferingService
     private function revision(array $context): string
     {
         return hash("sha256", json_encode($context, JSON_THROW_ON_ERROR));
+    }
+
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException("Access denied.");
+        }
     }
 
     private function now(): string

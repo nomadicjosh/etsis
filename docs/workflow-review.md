@@ -108,7 +108,7 @@ Term-template setup now includes explicit first/second calendar-year examples, o
 
 ## Protected history foundation: first implementation slice
 
-[Section publications](section-publication.md) now add an explicit instructional period and reviewed offering facts through reason → review → confirm. Revising and paging history preserve the draft. Earlier versions remain available; selecting these versions for new registrations and integrating offering-plan publication remain subsequent stages.
+[Section publications](section-publication.md) now add an explicit instructional period and reviewed offering facts through reason → review → confirm. Revising and paging history preserve the draft. Earlier versions remain available; explicit initial selections and reviewed future-registration amendments now preserve their references in new academic facts. Offering-plan publication reviews per-section dates and retains offering references with activation in one transaction. Complete policy coverage remains subsequent work.
 
 The [single protected event journal](event-history-foundation.md) backs the domain and framework ports. Its migration verifies and converts existing User/financial events before removing the old event table. It supplies authenticated encryption, explicit provenance, expected-version checks, durable receipts and paged replay. Academic SQL writes, richer command attribution, retention operations and projection rebuild coordination remain staged work.
 

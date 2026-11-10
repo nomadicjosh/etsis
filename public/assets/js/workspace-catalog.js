@@ -393,6 +393,19 @@ window.createWorkspaceCatalog = function (ui) {
             summary(saved.review),
             reference(saved.operation_id),
         );
+        if (saved.published_at) {
+            for (const row of saved.review.sections.filter((row) => row.section_version_id)) {
+                body.append(
+                    node(
+                        "details",
+                        { class: "surface p-3 mb-3" },
+                        node("summary", {}, `${row.code} · retained offering version`),
+                        offeringDetails(row.section_definition, row.faculty_name ?? "Not assigned"),
+                        reference(row.section_version_id),
+                    ),
+                );
+            }
+        }
         if (!saved.published_at)
             body.append(
                 button("Review publication", () => offeringDefinitions(saved.operation_id), "btn-primary"),
@@ -409,13 +422,14 @@ window.createWorkspaceCatalog = function (ui) {
     }
     async function offeringDefinitions(id, draft = { reason: "", choices: new Map() }) {
         const setup = await request(`/sis/catalog/offerings/${id}/publication-setup/`, "POST", {});
-        const body = openDrawer("Choose offering definitions", "DEFINITIONS → REVIEW → PUBLISH");
+        draft.dates ??= new Map();
+        const body = openDrawer("Choose offering definitions", "DEFINITIONS & DATES → REVIEW → PUBLISH");
         const form = node("form", {}),
             groups = new Map();
         const review = submit("Review definitions & publication");
         const missing = () =>
             setup.sections.some(
-                (row) => !row.was_bound && (!draft.choices.has(row.id) || row.has_student_records),
+                (row) => row.has_student_records || (!row.was_bound && !draft.choices.has(row.id)),
             );
         const update = () => {
             review.disabled = missing();
@@ -424,10 +438,92 @@ window.createWorkspaceCatalog = function (ui) {
             node(
                 "p",
                 {},
-                "Choose the published definition for each course. One selection applies to the empty drafts listed together. Confirmed publication retains those definitions and activates the sections in one step.",
+                "Choose the published definition for each course and review each section's instructional dates. Confirmed publication retains the course and offering versions and activates the empty drafts in one step.",
+            ),
+        );
+        const dates = node(
+            "fieldset",
+            { class: "surface p-3 mb-3" },
+            node("legend", { class: "h5" }, "Instructional dates"),
+            node(
+                "p",
+                { class: "form-text" },
+                `Term: ${setup.term.starts_on} through ${setup.term.ends_on}. Adjust individual sections when teaching dates differ. Registration and drop deadlines still follow term policy.`,
             ),
         );
         for (const row of setup.sections) {
+            if (!draft.dates.has(row.id))
+                draft.dates.set(row.id, {
+                    instruction_starts_on: row.instruction_starts_on,
+                    instruction_ends_on: row.instruction_ends_on,
+                });
+            const values = draft.dates.get(row.id);
+            const title = node("summary", {});
+            const warning = node("p", { class: "form-text", role: "status" });
+            const entry = node("details", { class: "mb-3" }, title);
+            const controls = {};
+            for (const [name, label] of [
+                ["instruction_starts_on", "Instruction starts"],
+                ["instruction_ends_on", "Instruction ends"],
+            ]) {
+                const input = node("input", {
+                    type: "date",
+                    class: "form-control mb-2",
+                    required: true,
+                    id: `offering-${row.id}-${name}`,
+                    readonly: Boolean(row.selected_offering),
+                });
+                input.value = values[name];
+                input.addEventListener("invalid", () => {
+                    entry.open = true;
+                });
+                controls[name] = input;
+                entry.append(
+                    node("label", { for: input.id, class: "form-label" }, `${label} for ${row.code}`),
+                    input,
+                );
+                input.addEventListener("input", () => {
+                    values[name] = input.value;
+                    updateDates();
+                });
+            }
+            function updateDates() {
+                title.textContent = `${row.code} · ${values.instruction_starts_on} through ${values.instruction_ends_on}`;
+                controls.instruction_ends_on.setCustomValidity(
+                    values.instruction_ends_on < values.instruction_starts_on
+                        ? "Instruction must end on or after its start date."
+                        : "",
+                );
+                warning.textContent =
+                    values.instruction_starts_on < setup.term.starts_on ||
+                    values.instruction_ends_on > setup.term.ends_on
+                        ? "These instructional dates extend beyond the term. Check them before confirming."
+                        : "";
+            }
+            updateDates();
+            entry.append(warning);
+            if (row.selected_offering)
+                entry.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "These dates belong to the already selected offering version. Review an offering amendment separately to change them.",
+                    ),
+                );
+            dates.append(entry);
+        }
+        form.append(dates);
+        for (const row of setup.sections) {
+            if (row.has_student_records) {
+                form.append(
+                    node(
+                        "p",
+                        { class: "alert alert-warning" },
+                        `${row.code} has student records. Offering-plan activation requires empty drafts; review those records separately.`,
+                    ),
+                );
+                continue;
+            }
             if (row.was_bound) {
                 form.append(
                     node(
@@ -440,16 +536,6 @@ window.createWorkspaceCatalog = function (ui) {
                         ),
                         definitionDetails(row.course_definition.definition),
                         reference(row.course_version_id),
-                    ),
-                );
-                continue;
-            }
-            if (row.has_student_records) {
-                form.append(
-                    node(
-                        "p",
-                        { class: "alert alert-warning" },
-                        `${row.code} already has student records and cannot receive a retrospective definition. Use a new offering.`,
                     ),
                 );
                 continue;
@@ -575,6 +661,10 @@ window.createWorkspaceCatalog = function (ui) {
                     .map((row) => ({ section_id: row.id, version_id: draft.choices.get(row.id).version_id }));
                 const reviewed = await request(`/sis/catalog/offerings/${id}/publication-review/`, "POST", {
                     course_versions: choices,
+                    section_dates: setup.sections.map((row) => ({
+                        section_id: row.id,
+                        ...draft.dates.get(row.id),
+                    })),
                     reason: draft.reason,
                 });
                 publication(reviewed, () => offeringDefinitions(id, draft));
@@ -593,15 +683,28 @@ window.createWorkspaceCatalog = function (ui) {
                 node(
                     "details",
                     { class: "surface p-3 mb-3" },
-                    node("summary", {}, `${row.code} · retained course definition`),
+                    node(
+                        "summary",
+                        {},
+                        `${row.code} · ${row.instruction_starts_on} through ${row.instruction_ends_on}`,
+                    ),
+                    offeringDetails(row.section_definition, row.faculty_name ?? "Not assigned"),
+                    node("h3", { class: "h5" }, "Retained course definition"),
                     definitionDetails(row.course_definition.definition),
                     reference(row.course_version_id),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        row.selected_offering
+                            ? "The already selected offering version will be retained."
+                            : "Publication will retain this offering version for future registrations.",
+                    ),
                 ),
             ),
             node(
                 "p",
                 { class: "alert alert-info" },
-                "Publication activates these sections and applies the reviewed self-registration choices. Term registration windows and normal eligibility checks still apply. Publication does not reserve rooms or charge students.",
+                "Publication retains these reviewed offering versions, activates the sections and applies the reviewed self-registration choices. Term registration windows and normal eligibility checks still apply. Publication does not reserve rooms or charge students.",
             ),
             button(
                 "Publish reviewed sections",

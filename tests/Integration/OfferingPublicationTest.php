@@ -119,7 +119,11 @@ final class OfferingPublicationTest extends TestCase
             [
                 "course-definition-was-published",
                 "section-course-version-was-bound",
+                "section-definition-was-published",
+                "section-offering-version-was-selected",
                 "section-course-version-was-bound",
+                "section-definition-was-published",
+                "section-offering-version-was-selected",
             ],
             array_column($f->sql->rows("sis_history_events"), "event_type"),
         );
@@ -202,7 +206,7 @@ final class OfferingPublicationTest extends TestCase
         $r = $this->service->reviewPublication($this->id, $choices, "Fictional offering approval");
         self::assertTrue($r["sections"][0]["was_bound"]);
         $this->service->publish($this->id, $r["review_token"]);
-        self::assertCount(3, $this->c->sis->sql->rows("sis_history_events"));
+        self::assertCount(7, $this->c->sis->sql->rows("sis_history_events"));
         self::assertCount(2, $this->c->sis->sql->rows("sis_section_course_versions"));
     }
 
@@ -235,6 +239,8 @@ final class OfferingPublicationTest extends TestCase
             "sis_history_operations",
             "sis_course_versions",
             "sis_section_course_versions",
+            "sis_section_versions",
+            "sis_section_offering_versions",
             "sis_catalog_operations",
             "sis_audit",
         ];
@@ -333,12 +339,12 @@ final class OfferingPublicationTest extends TestCase
         foreach ($this->choices as $key => $old) {
             $this->choices[$key] = $version;
         }
-        $reason = str_repeat("學", 1000);
+        $reason = str_repeat("🎓", 1000);
         $review = $this->service->reviewPublication($this->id, $this->choices, $reason);
         self::assertLessThan(65536, strlen($review["review_token"]));
         $standalone = $this->c->bindings()->review($this->plan->sections[0]->id, $version, $reason);
         self::assertLessThan(65536, strlen($standalone["review_token"]));
-        $f->clock->time = $f->clock->time->modify("+1 hour");
+        $f->clock->time = $f->clock->time->modify("+1 minute");
         $this->service->publish($this->id, $review["review_token"]);
         $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
             $f->sql,
@@ -358,6 +364,24 @@ final class OfferingPublicationTest extends TestCase
             self::assertSame($this->id->value, $event->context->correlation->value);
             self::assertSame($f->clock->now()->getTimestamp(), $event->context->effectiveAt->getTimestamp());
             self::assertSame($reason, $event->context->reason);
+            $retainedStreams = [
+                "section_publication" => \Domain\Registration\ValueObject\SectionPublicationId::class,
+                "section_offering_binding" => \Domain\Registration\ValueObject\SectionOfferingBindingId::class,
+            ];
+            foreach ($retainedStreams as $type => $idClass) {
+                $retained = $history->page(
+                    new \Domain\Shared\EventSourcing\StreamReference(
+                        new $idClass($section->id->value),
+                        $type,
+                    ),
+                )->events[0];
+                self::assertSame($this->id->value, $retained->context->causation->value);
+                self::assertSame(
+                    $f->clock->now()->getTimestamp(),
+                    $retained->context->effectiveAt->getTimestamp(),
+                );
+                self::assertSame($reason, $retained->context->reason);
+            }
         }
     }
 
@@ -394,6 +418,309 @@ final class OfferingPublicationTest extends TestCase
             self::assertSame([], $f->sql->rows("sis_section_course_versions"));
             self::assertNull($this->service->saved($this->id)["published_at"]);
         }
+    }
+
+    public function testPlanDatesAndOfferingReferencesReachEnrollmentAndCreditWithoutChargingAtActivation(): void
+    {
+        $f = $this->c->sis;
+        $first = $this->plan->sections[0]->id;
+        $dates = [
+            $first->value => ["instruction_starts_on" => "2026-09-01", "instruction_ends_on" => "2027-01-05"],
+        ];
+        $review = $this->service->reviewPublication(
+            $this->id,
+            $this->choices,
+            "Reviewed short teaching period",
+            $dates,
+        );
+        self::assertSame("2026-09-01", $review["sections"][0]["section_definition"]["instruction_starts_on"]);
+        self::assertSame("2026-08-01", $review["sections"][1]["instruction_starts_on"]);
+        self::assertSame([], $f->sql->rows("sis_section_versions"));
+        $receipt = $this->service->publish($this->id, $review["review_token"]);
+        self::assertSame([], $f->sql->rows("sis_student_accounts"));
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql);
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $f->sql,
+            $f->transactions,
+            $f->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                EventStoreFixture::config($f->connection->queryBuilder()),
+            ),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        foreach ($this->plan->sections as $index => $section) {
+            $retained = $versions->selected($section->id);
+            self::assertSame(
+                $receipt["review"]["sections"][$index]["section_version_id"],
+                $retained->publication->value,
+            );
+            self::assertSame($review["sections"][$index]["section_definition"], $retained->definition->data);
+            $student = $f->student();
+            $enrollment = $f->service->register($student->id, $section->id);
+            self::assertSame(
+                $retained->publication->value,
+                $versions->enrollmentVersion($enrollment->id)->value,
+            );
+            $credit = $f->sql->rows("sis_academic_credits", ["source_id" => $enrollment->id->value])[0];
+            $events = $history->page(
+                new \Domain\Shared\EventSourcing\StreamReference(
+                    new \Domain\AcademicRecord\ValueObject\AcademicCreditId($credit["id"]),
+                    "academic_credit",
+                ),
+            )->events;
+            self::assertCount(1, $events);
+            self::assertSame(
+                $retained->publication->value,
+                $events[0]->event->metadata()["section_version_id"],
+            );
+        }
+        self::assertCount(2, $f->sql->rows("sis_student_accounts"));
+    }
+
+    public function testCatalogPermissionIsRecheckedAfterThePlanLockWait(): void
+    {
+        $f = $this->c->sis;
+        $review = $this->review();
+        $transactions = new class ($f) implements \Domain\Shared\Persistence\UnitOfWork {
+            public function __construct(private SisFixture $fixture)
+            {
+            }
+            public function run(Closure $operation): mixed
+            {
+                return $this->fixture->transactions->run(function () use ($operation): mixed {
+                    $this->fixture->access->staff = false;
+                    $this->fixture->access->grants = [];
+                    return $operation();
+                });
+            }
+        };
+        $before = $this->digest("sis_history_events");
+        try {
+            $this->c->offerings(transactions: $transactions)->publish($this->id, $review["review_token"]);
+            self::fail("Permission revoked during the wait was ignored.");
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $this->digest("sis_history_events"));
+            self::assertSame([], $f->sql->rows("sis_section_offering_versions"));
+        }
+    }
+
+    public function testBoundDraftWithStudentRecordsCannotReceiveAnInferredOfferingSelection(): void
+    {
+        $f = $this->c->sis;
+        $first = $this->plan->sections[0]->id;
+        $binding = $this->c->bindings()->review($first, $this->version, "Earlier course binding");
+        $this->c->bindings()->commit($first, $binding["review_token"]);
+        $f->sql->update("sis_sections", ["active" => 1], ["id" => $first->value]);
+        $f->service->register($f->student()->id, $first, true);
+        $f->sql->update("sis_sections", ["active" => 0], ["id" => $first->value]);
+        $before = $this->digest("sis_history_events");
+        try {
+            $this->review();
+            self::fail("An earlier student was retrospectively assigned a section version.");
+        } catch (ValidationException) {
+            self::assertSame($before, $this->digest("sis_history_events"));
+            self::assertSame([], $f->sql->rows("sis_section_versions"));
+        }
+    }
+
+    public function testAlreadySelectedDraftIsRetainedWithoutDuplicatePublicationOrSelection(): void
+    {
+        $f = $this->c->sis;
+        $first = $this->plan->sections[0]->id;
+        $binding = $this->c->bindings()->review($first, $this->version, "Earlier binding");
+        $this->c->bindings()->commit($first, $binding["review_token"]);
+        $sections = $this->c->sectionPublications();
+        $review = $sections->review($first, "2026-09-01", "2026-11-30", "Earlier section publication");
+        $publication = $sections->publish($first, $review["review_token"]);
+        $selection = $sections->reviewSelection(
+            $first,
+            new EntityId($publication["operation_id"]),
+            "Earlier selection",
+        );
+        $sections->select($first, $selection["review_token"]);
+        // A later publication is available but does not replace the selected version or its default dates.
+        $later = $sections->review($first, "2026-10-01", "2026-11-30", "Unselected alternative");
+        $sections->publish($first, $later["review_token"]);
+        $before = $f->sql->rows("sis_history_events");
+        $review = $this->review();
+        self::assertSame("2026-09-01", $review["sections"][0]["instruction_starts_on"]);
+        $receipt = $this->service->publish($this->id, $review["review_token"]);
+        self::assertSame(
+            $publication["operation_id"],
+            $receipt["review"]["sections"][0]["section_version_id"],
+        );
+        self::assertSame($before, array_slice($f->sql->rows("sis_history_events"), 0, count($before)));
+        self::assertCount(count($before) + 3, $f->sql->rows("sis_history_events"));
+    }
+
+    public function testAnInterveningSectionPublicationInvalidatesThePlanReview(): void
+    {
+        $first = $this->plan->sections[0]->id;
+        $binding = $this->c->bindings()->review($first, $this->version, "Earlier binding");
+        $this->c->bindings()->commit($first, $binding["review_token"]);
+        $review = $this->review();
+        $sections = $this->c->sectionPublications();
+        $other = $sections->review(
+            $first,
+            "2026-08-01",
+            "2026-12-20",
+            "Intervening publication with matching dates",
+        );
+        $sections->publish($first, $other["review_token"]);
+        $before = $this->digest("sis_history_events");
+        try {
+            $this->service->publish($this->id, $review["review_token"]);
+            self::fail("An intervening section publication bypassed review.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->digest("sis_history_events"));
+            self::assertSame([], $this->c->sis->sql->rows("sis_section_offering_versions"));
+        }
+    }
+
+    public function testAnAlreadySelectedOfferingCannotBeAmendedImplicitlyDuringPlanActivation(): void
+    {
+        $first = $this->plan->sections[0]->id;
+        $binding = $this->c->bindings()->review($first, $this->version, "Earlier binding");
+        $this->c->bindings()->commit($first, $binding["review_token"]);
+        $sections = $this->c->sectionPublications();
+        $r = $sections->review($first, "2026-09-01", "2026-11-30", "Earlier publication");
+        $publication = $sections->publish($first, $r["review_token"]);
+        $r = $sections->reviewSelection(
+            $first,
+            new EntityId($publication["operation_id"]),
+            "Earlier selection",
+        );
+        $sections->select($first, $r["review_token"]);
+        $before = $this->digest("sis_history_events");
+        try {
+            $this->service->reviewPublication($this->id, $this->choices, "Change selected dates", [
+                $first->value => [
+                    "instruction_starts_on" => "2026-10-01",
+                    "instruction_ends_on" => "2026-11-30",
+                ],
+            ]);
+            self::fail("Activation silently amended an already selected offering.");
+        } catch (ValidationException) {
+            self::assertSame($before, $this->digest("sis_history_events"));
+        }
+    }
+
+    public function testPlanDatesRejectForeignSectionsInvalidDatesAndReversedPeriods(): void
+    {
+        $first = $this->plan->sections[0]->id->value;
+        $cases = [
+            [
+                EntityId::generate()->value => [
+                    "instruction_starts_on" => "2026-09-01",
+                    "instruction_ends_on" => "2026-11-30",
+                ],
+            ],
+            [$first => ["instruction_starts_on" => "2026-02-30", "instruction_ends_on" => "2026-11-30"]],
+            [$first => ["instruction_starts_on" => "2026-09-01", "instruction_ends_on" => "2026-08-31"]],
+        ];
+        $before = $this->digest("sis_history_events");
+        foreach ($cases as $dates) {
+            try {
+                $this->service->reviewPublication($this->id, $this->choices, "Invalid dates", $dates);
+                self::fail("Invalid instructional dates were accepted.");
+            } catch (ValidationException) {
+                self::assertSame($before, $this->digest("sis_history_events"));
+            }
+        }
+    }
+
+    public function testExpiredUnconfirmedPlanReviewFailsButAcceptedRetrySurvivesExpiryAndAmendments(): void
+    {
+        $f = $this->c->sis;
+        $expired = $this->review();
+        $f->clock->time = $f->clock->time->modify("+20 minutes");
+        $before = $this->digest("sis_history_events");
+        try {
+            $this->service->publish($this->id, $expired["review_token"]);
+            self::fail("An expired unconfirmed review was accepted.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->digest("sis_history_events"));
+        }
+        $review = $this->review();
+        $receipt = $this->service->publish($this->id, $review["review_token"]);
+        $first = $this->plan->sections[0]->id;
+        $sections = $this->c->sectionPublications();
+        $later = $sections->review($first, "2026-09-01", "2026-11-30", "Later publication");
+        $sections->publish($first, $later["review_token"]);
+        $f->clock->time = $f->clock->time->modify("+2 days");
+        $before = $this->digest("sis_history_events");
+        self::assertSame($receipt, $this->service->publish($this->id, $review["review_token"]));
+        self::assertSame($before, $this->digest("sis_history_events"));
+    }
+
+    public function testOldUnconfirmedProofRequiresReviewAndOldCompletedReceiptCreatesNoNewEvents(): void
+    {
+        $f = $this->c->sis;
+        $cipher = $this->c->fixture->cipher;
+        $r = $this->review();
+        $proof = json_decode($cipher->open($r["review_token"]), true, flags: JSON_THROW_ON_ERROR);
+        $proof["kind"] = "offering-publication-review.v1";
+        unset($proof["instruction_dates"], $proof["expires_at"]);
+        $token = $cipher->seal(json_encode($proof, JSON_THROW_ON_ERROR));
+        try {
+            $this->service->publish($this->id, $token);
+            self::fail("An old unconfirmed review activated a plan without section references.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $f->sql->rows("sis_section_versions"));
+        }
+        // Fictional fixture for a completed receipt from the preceding implementation.
+        $operation = $this->c->operations->operation($this->id);
+        $data = json_decode($cipher->open($operation["encrypted_content"]), true, flags: JSON_THROW_ON_ERROR);
+        $data["publication"] = [
+            "actor_id" => $f->access->actor->value,
+            "review_hash" => hash("sha256", $token),
+            "review" => $data["review"],
+        ];
+        $this->c->operations->published(
+            $this->id,
+            $f->clock->now()->format(DATE_ATOM),
+            $cipher->seal(json_encode($data, JSON_THROW_ON_ERROR)),
+        );
+        $before = $this->digest("sis_history_events");
+        $receipt = $this->service->publish($this->id, $token);
+        self::assertNotNull($receipt["published_at"]);
+        self::assertSame($before, $this->digest("sis_history_events"));
+        self::assertSame([], $f->sql->rows("sis_section_offering_versions"));
+    }
+
+    public function testMaximumPlanKeepsAllSectionReferencesAndBoundsItsReviewProof(): void
+    {
+        $f = $this->c->sis;
+        $sections = [];
+        foreach (range(1, 25) as $i) {
+            $sections[] = new Section(
+                EntityId::generate(),
+                $this->plan->sections[0]->courseId,
+                $f->term,
+                null,
+                "MATH.101.MAX." . $i,
+                20,
+                false,
+                true,
+                new \Domain\Finance\ValueObject\Money(0, "USD"),
+            );
+        }
+        $plan = new OfferingPlan($f->term, ...$sections);
+        $draft = $this->service->review($plan);
+        $id = new EntityId($draft["operation_id"]);
+        $this->service->save($id, $plan, $draft["revision"]);
+        $choices = array_fill_keys(
+            array_map(static fn(Section $s): string => $s->id->value, $sections),
+            $this->version,
+        );
+        $review = $this->service->reviewPublication($id, $choices, str_repeat("🎓", 1000));
+        self::assertLessThanOrEqual(65536, strlen($review["review_token"]));
+        $receipt = $this->service->publish($id, $review["review_token"]);
+        self::assertCount(
+            25,
+            array_filter(array_column($receipt["review"]["sections"], "section_version_id")),
+        );
+        self::assertCount(25, $f->sql->rows("sis_section_offering_versions"));
     }
 
     public function testChangedRetainedCacheStopsPublicationUntilProjectionRecovery(): void

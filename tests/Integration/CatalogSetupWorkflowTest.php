@@ -93,7 +93,8 @@ final class CatalogSetupWorkflowTest extends TestCase
         self::assertSame($published, $service->publish($id, $publication['review_token']));
         self::assertSame($published, $service->save($id, $plan, $review['revision']));
         self::assertSame(
-            ['course-definition-was-published', 'section-course-version-was-bound'],
+            ['course-definition-was-published', 'section-course-version-was-bound',
+                'section-definition-was-published', 'section-offering-version-was-selected'],
             array_column($f->sql->rows('sis_history_events'), 'event_type')
         );
         self::assertCount(1, $service->page()['items']);

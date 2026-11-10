@@ -108,11 +108,34 @@ final readonly class SisCatalogWorkflowController
             }
             $versions[$section->value] = $f->id("version_id");
         }
+        $dates = [];
+        $body = $request->getParsedBody();
+        if (is_array($body) && array_key_exists("section_dates", $body)) {
+            foreach ($this->list($request, "section_dates", 25) as $row) {
+                if (!is_array($row) || array_is_list($row)) {
+                    throw new ValidationException([
+                        ["field" => "section_dates", "message" => "Review valid section dates."],
+                    ]);
+                }
+                $f = new FormInput($row);
+                $section = $f->id("section_id");
+                if (isset($dates[$section->value])) {
+                    throw new ValidationException([
+                        ["field" => "section_dates", "message" => "Choose dates once per section."],
+                    ]);
+                }
+                $dates[$section->value] = [
+                    "instruction_starts_on" => $f->text("instruction_starts_on", 10),
+                    "instruction_ends_on" => $f->text("instruction_ends_on", 10),
+                ];
+            }
+        }
         return new JsonResponse(
             $this->offerings->reviewPublication(
                 new EntityId($operation),
                 $versions,
                 FormInput::from($request)->bodyText("reason"),
+                $dates,
             ),
         );
     }

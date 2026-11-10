@@ -8,6 +8,7 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogRevisionRepository;
 use Domain\Catalog\Repository\CatalogWorkflowRepository;
 use Domain\Catalog\Service\CoursePublicationService;
+use Domain\Catalog\ValueObject\PublishedCourseDefinition;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Registration\Event\SectionDefinitionWasPublished;
 use Domain\Registration\Repository\SectionCourseBindingRepository;
@@ -76,6 +77,7 @@ final readonly class SectionPublicationService
         string $startsOn,
         string $endsOn,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $causation = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $this->validateInput($startsOn, $endsOn, $reason, $actor, $section);
@@ -85,6 +87,7 @@ final readonly class SectionPublicationService
             $endsOn,
             $reason,
             $actor,
+            $causation,
         ): array {
             [$row, $term] = $this->lock($section);
             $this->authorize($actor);
@@ -111,6 +114,7 @@ final readonly class SectionPublicationService
                 "definition" => $definition,
                 "source_hash" => $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
                 "reason" => $reason,
+                "causation_id" => $causation?->value,
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             return $review + [
@@ -125,7 +129,7 @@ final readonly class SectionPublicationService
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         try {
-            if (strlen($token) > 16384) {
+            if (strlen($token) > 32768) {
                 throw new InvalidArgumentException();
             }
             $r = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
@@ -210,7 +214,13 @@ final readonly class SectionPublicationService
                 $this->stream($section),
                 $operation,
                 $root->playhead(),
-                new EventContext($actor, $this->clock->now(), $operation, reason: $r["reason"]),
+                new EventContext(
+                    $actor,
+                    $this->clock->now(),
+                    $operation,
+                    causation: isset($r["causation_id"]) ? new EntityId($r["causation_id"]) : null,
+                    reason: $r["reason"],
+                ),
                 [$event],
             );
             $this->versions->retain(
@@ -223,6 +233,81 @@ final readonly class SectionPublicationService
             );
             $this->audit->record($actor, "section.definition_published", $section);
             return $receipt;
+        });
+    }
+
+    /** Internal offering-plan preview. Reviewing creates no binding, publication or selection.
+     * @return array<string, mixed>
+     */
+    public function plannedOffering(
+        EntityId $section,
+        ?PublishedCourseDefinition $course,
+        ?string $start = null,
+        ?string $end = null,
+        bool $requireEmpty = true,
+    ): array {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        return $this->transactions->run(function () use (
+            $section,
+            $course,
+            $start,
+            $end,
+            $actor,
+            $requireEmpty,
+        ): array {
+            [$row, $term] = $this->lock($section);
+            $this->authorize($actor);
+            $bound = $this->verifiedCourse($section);
+            [$root] = $this->load($section);
+            $selected = SectionOfferingSelection::verify($section, $this->versions, $this->history);
+            if ($requireEmpty && $this->bindings->hasStudentRecords($section)) {
+                throw new ValidationException([
+                    [
+                        "field" => "sections",
+                        "message" =>
+                            "Offering-plan activation requires empty drafts. "
+                            . "Review existing student records separately.",
+                    ],
+                ]);
+            }
+            $latest = $root->latest();
+            $start ??=
+                $selected?->definition->data["instruction_starts_on"] ??
+                ($latest["definition"]["instruction_starts_on"] ?? (string) $term["starts_on"]);
+            $end ??=
+                $selected?->definition->data["instruction_ends_on"] ??
+                ($latest["definition"]["instruction_ends_on"] ?? (string) $term["ends_on"]);
+            $this->validateDates($start, $end);
+            if ($bound !== null && $course !== null && $bound !== $course->describe()) {
+                throw new CorruptHistoryException();
+            }
+            $definition =
+                $course === null ? null : $this->definition($row, $term, $course->describe(), $start, $end);
+            if ($course !== null && $course->courseId->value !== $row["course_id"]) {
+                throw new CorruptHistoryException();
+            }
+            if ($latest !== null && $definition !== null) {
+                $this->sameOwnership($latest["definition"], $definition);
+            }
+            if ($selected !== null && $definition !== null && $selected->definition->data !== $definition) {
+                throw new ValidationException([
+                    [
+                        "field" => "sections",
+                        "message" =>
+                            "An offering selection already exists with different details. "
+                            . "Review its amendment before activation.",
+                    ],
+                ]);
+            }
+            return [
+                "instruction_starts_on" => $start,
+                "instruction_ends_on" => $end,
+                "section_definition" => $definition,
+                "expected_publication_position" => $root->playhead(),
+                "selected_offering" => $selected?->describe(),
+                "expected_selection_position" => $this->versions->selectionPosition($section),
+                "faculty_person_id" => $this->faculty($row)["person_id"] ?? null,
+            ];
         });
     }
 
@@ -257,9 +342,16 @@ final readonly class SectionPublicationService
         EntityId $section,
         EntityId $publication,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $causation = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        return $this->transactions->run(function () use ($section, $publication, $reason, $actor): array {
+        return $this->transactions->run(function () use (
+            $section,
+            $publication,
+            $reason,
+            $actor,
+            $causation,
+        ): array {
             [$row, $term] = $this->lock($section);
             $this->authorize($actor);
             $this->canSelect($section);
@@ -297,6 +389,7 @@ final readonly class SectionPublicationService
                 "definition_hash" => $definition->fingerprint(),
                 "source_hash" => $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
                 "reason" => $reason,
+                "causation_id" => $causation?->value,
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             return $r + [
@@ -312,7 +405,7 @@ final readonly class SectionPublicationService
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         try {
-            if (strlen($token) > 16384) {
+            if (strlen($token) > 32768) {
                 throw new InvalidArgumentException();
             }
             $r = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
@@ -395,7 +488,13 @@ final readonly class SectionPublicationService
                 $stream,
                 $operation,
                 0,
-                new EventContext($actor, $this->clock->now(), $operation, reason: $r["reason"]),
+                new EventContext(
+                    $actor,
+                    $this->clock->now(),
+                    $operation,
+                    causation: isset($r["causation_id"]) ? new EntityId($r["causation_id"]) : null,
+                    reason: $r["reason"],
+                ),
                 [$event],
             );
             $this->versions->select($definition);
@@ -461,8 +560,8 @@ final readonly class SectionPublicationService
                     [
                         "field" => "version_id",
                         "message" =>
-                            "Publish the current offering details, then choose that publication "
-                            . "for future registrations.",
+                            "Publish the current offering details, then choose that publication " .
+                            "for future registrations.",
                     ],
                 ]);
             }
@@ -548,6 +647,25 @@ final readonly class SectionPublicationService
         EntityId $actor,
         EntityId $section,
     ): void {
+        $this->validateDates($start, $end);
+        try {
+            if (mb_strlen($reason) > 1000) {
+                throw new InvalidArgumentException();
+            }
+            new EventContext($actor, $this->clock->now(), $section, reason: $reason);
+        } catch (InvalidArgumentException) {
+            throw new ValidationException([
+                [
+                    "field" => "reason",
+                    "message" =>
+                        "Enter a reason of up to 1000 characters, without unsupported control characters.",
+                ],
+            ]);
+        }
+    }
+
+    private function validateDates(string $start, string $end): void
+    {
         $dates = ["instruction_starts_on" => $start, "instruction_ends_on" => $end];
         foreach ($dates as $field => $value) {
             try {
@@ -563,20 +681,6 @@ final readonly class SectionPublicationService
                 [
                     "field" => "instruction_ends_on",
                     "message" => "Instruction must end on or after its start date.",
-                ],
-            ]);
-        }
-        try {
-            if (mb_strlen($reason) > 1000) {
-                throw new InvalidArgumentException();
-            }
-            new EventContext($actor, $this->clock->now(), $section, reason: $reason);
-        } catch (InvalidArgumentException) {
-            throw new ValidationException([
-                [
-                    "field" => "reason",
-                    "message" =>
-                        "Enter a reason of up to 1000 characters, without unsupported control characters.",
                 ],
             ]);
         }

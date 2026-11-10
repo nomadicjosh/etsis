@@ -934,7 +934,35 @@ $catalogNoCsrf = new \Qubus\Http\ServerRequest(
 if ($app->router->match($catalogNoCsrf)->getStatusCode() !== 403) {
     throw new RuntimeException("Offering publication bypassed CSRF.");
 }
+$catalogDates = [
+    "section_id" => $catalogRows[0]["id"],
+    "instruction_starts_on" => "2026-09-01",
+    "instruction_ends_on" => "2026-11-30",
+];
+$catalogBadDates = [
+    [$catalogDates, $catalogDates],
+    [
+        $catalogDates,
+        [
+            "section_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+            "instruction_starts_on" => "2026-09-01",
+            "instruction_ends_on" => "2026-11-30",
+        ],
+    ],
+];
+foreach ($catalogBadDates as $badDates) {
+    if (
+        $teachingPost($catalogOperationPath . "/publication-review/", [
+            "course_versions" => [$catalogChoice],
+            "section_dates" => $badDates,
+            "reason" => "Fictional invalid dates",
+        ])->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException("Offering publication accepted duplicate or unrelated section dates.");
+    }
+}
 $catalogPublication = $teachingPost($catalogOperationPath . "/publication-review/", [
+    "section_dates" => [$catalogDates],
     "course_versions" => [
         ["section_id" => $catalogRows[0]["id"], "version_id" => $catalogDefinition["operation_id"]],
     ],
@@ -965,6 +993,25 @@ if (
         $catalogDefinition["operation_id"]
 ) {
     throw new RuntimeException("Offering publication did not retain a private, repeatable version binding.");
+}
+$catalogRetainedOffering = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository(
+    $sis->sql,
+)->selected(new \Domain\Shared\ValueObject\EntityId($catalogRows[0]["id"]));
+$catalogPublishedReceipt = json_decode(
+    (string) $catalogPublishedResponse->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    $catalogRetainedOffering === null ||
+    $catalogRetainedOffering->definition->data["instruction_starts_on"] !== "2026-09-01" ||
+    $catalogRetainedOffering->definition->data["instruction_ends_on"] !== "2026-11-30" ||
+    $catalogPublishedReceipt["review"]["sections"][0]["section_version_id"] !==
+        $catalogRetainedOffering->publication->value
+) {
+    throw new RuntimeException(
+        "Offering activation did not retain the reviewed instructional period and reference.",
+    );
 }
 $cloneReviewGet = $get->withUri(
     new \Laminas\Diactoros\Uri(
