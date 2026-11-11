@@ -1962,6 +1962,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
             ),
         );
+        const competition = groupCompetition({ ...data.allocation, context: data.context });
+        if (competition) body.append(competition);
         const policies = node(
             "details",
             { class: "audit-tree-section" },
@@ -2276,6 +2278,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     placementIssues[issue] || "A retained input needs review.",
                 ),
             );
+        const competition = groupCompetition(data);
+        if (competition) body.append(competition);
         body.append(node("h2", {}, "Course groups"));
         const groups = node("div", { class: "audit-library-grid" });
         for (const group of data.groups)
@@ -2363,6 +2367,73 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 button("Next work records", () => renderGroupAllocation(base, back, data, offset + 20)),
             );
         body.append(pages);
+    }
+    function groupCompetition(data) {
+        if (
+            data.outcome !== "infeasible" ||
+            data.context.group_reuse !== "one_group" ||
+            !data.competition?.conflicts.length
+        )
+            return null;
+        const names = new Map(data.groups.map((group) => [group.id, group.name]));
+        const section = node(
+            "section",
+            { class: "record-section", "aria-label": "Groups competing for completed courses" },
+            node("h2", {}, "Groups competing for completed courses"),
+            node(
+                "p",
+                {},
+                "These groups compete for eligible work under the retained one-group policy. Their combined requirements exceed the shared evidence available. No partial placements have been assigned.",
+            ),
+        );
+        const creditUnits = (value) => `${text(value)} credit${value === 1000 ? "" : "s"}`;
+        for (const conflict of data.competition.conflicts) {
+            const card = node(
+                "article",
+                { class: "audit-card" },
+                node("h3", {}, conflict.group_ids.map((id) => names.get(id)).join(" · ")),
+            );
+            if (conflict.credit_shortfall_milli > 0)
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        `Together these groups require ${creditUnits(conflict.required_credits_milli)}. Their eligible courses can supply at most ${creditUnits(conflict.credit_upper_bound_milli)} when each course is used once. The combined credit shortfall is at least ${creditUnits(conflict.credit_shortfall_milli)}.`,
+                    ),
+                );
+            if (conflict.course_shortfall > 0)
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        `Together these groups need at least ${conflict.required_courses} distinct course contributions. Only ${conflict.course_upper_bound} eligible course${conflict.course_upper_bound === 1 ? " is" : "s are"} available across them. The combined shortfall is at least ${conflict.course_shortfall} course contribution${conflict.course_shortfall === 1 ? "" : "s"}.`,
+                    ),
+                );
+            card.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Review the retained requirements and approved alternatives before planning additional work. These bounds do not select a course to take or change an academic record.",
+                ),
+            );
+            section.append(card);
+        }
+        if (data.competition.more_conflicts)
+            section.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    "More shared-course shortages were found. Showing the first 10 explanations.",
+                ),
+            );
+        section.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "These explanations cover supported shared shortages. Other rule conflicts may still require registrar review.",
+            ),
+        );
+        return section;
     }
     function groupGapSummary(group, outcome) {
         return !group.gaps

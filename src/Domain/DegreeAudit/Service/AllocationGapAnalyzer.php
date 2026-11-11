@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
+use Domain\DegreeAudit\ValueObject\CourseGroupReuse;
 
 /** Necessary bounds only: eligible evidence is not an assigned or achievable placement. */
 final readonly class AllocationGapAnalyzer
@@ -77,6 +78,133 @@ final readonly class AllocationGapAnalyzer
             ];
         }
         return $reports;
+    }
+
+    /** Proven cross-group shortages only; absence is not proof that a placement exists.
+     * Examine overlapping pairs and complete connected components, never all subsets.
+     * @return array{conflicts:list<array<string,mixed>>,more_conflicts:bool}
+     */
+    public function competition(AllocationProblem $problem): array
+    {
+        $result = ["conflicts" => [], "more_conflicts" => false];
+        if ($problem->reuse !== CourseGroupReuse::OneGroup) {
+            return $result;
+        }
+        $individual = $this->analyze($problem);
+        $waived = array_fill_keys($problem->waivedCourseIds, true);
+        $demands = [];
+        foreach ($problem->groups as $group) {
+            $all = [];
+            $count = max($group["min_courses"], $group["min_credits_milli"] > 0 ? 1 : 0);
+            foreach ($group["rules"] as $rule) {
+                if ($rule["mode"] === "all") {
+                    foreach ($rule["course_ids"] as $target) {
+                        if (!isset($waived[$target])) {
+                            $all[$target] = true;
+                        }
+                    }
+                } elseif ($rule["mode"] === "choose") {
+                    // Overlapping rules can share a placement within a group: never add their counts.
+                    $count = max($count, $rule["minimum_courses"]);
+                }
+            }
+            $count = max($count, count($all));
+            if ($count > 0 && !$individual[$group["id"]]["has_shortfall"]) {
+                $demands[$group["id"]] = ["credits" => $group["min_credits_milli"], "courses" => $count];
+            }
+        }
+        ksort($demands, SORT_STRING);
+        $resources = [];
+        foreach ($problem->courses as $course) {
+            foreach ($course["choices"] as $choice) {
+                if (isset($demands[$choice["group_id"]])) {
+                    $g = $choice["group_id"];
+                    $c = $course["course_id"];
+                    $resources[$g][$c] = max($resources[$g][$c] ?? 0, $choice["credits_milli"]);
+                }
+            }
+        }
+        $ids = array_keys($demands);
+        $edges = [];
+        $sets = [];
+        foreach ($ids as $i => $a) {
+            for ($j = $i + 1; $j < count($ids); $j++) {
+                $b = $ids[$j];
+                if (array_intersect_key($resources[$a] ?? [], $resources[$b] ?? []) !== []) {
+                    $edges[$a][$b] = true;
+                    $edges[$b][$a] = true;
+                    $sets[] = [$a, $b];
+                }
+            }
+        }
+        $seen = [];
+        foreach ($ids as $id) {
+            if (isset($seen[$id])) {
+                continue;
+            }
+            $component = [];
+            $pending = [$id];
+            while ($pending !== []) {
+                $at = array_pop($pending);
+                if (isset($seen[$at])) {
+                    continue;
+                }
+                $seen[$at] = true;
+                $component[] = $at;
+                foreach (array_keys($edges[$at] ?? []) as $neighbor) {
+                    if (!isset($seen[$neighbor])) {
+                        $pending[] = $neighbor;
+                    }
+                }
+            }
+            if (count($component) > 2) {
+                sort($component, SORT_STRING);
+                $sets[] = $component;
+            }
+        }
+        usort(
+            $sets,
+            static fn(array $a, array $b): int => count($a) <=> count($b) ?:
+            strcmp(implode(":", $a), implode(":", $b)),
+        );
+        foreach ($sets as $set) {
+            // A smaller explanation already demonstrates this larger set cannot be satisfied.
+            foreach ($result["conflicts"] as $prior) {
+                if (array_diff($prior["group_ids"], $set) === []) {
+                    continue 2;
+                }
+            }
+            $credits = $count = 0;
+            $available = [];
+            foreach ($set as $id) {
+                $credits += $demands[$id]["credits"];
+                $count += $demands[$id]["courses"];
+                foreach ($resources[$id] ?? [] as $course => $amount) {
+                    // An actual course contributes once across the set, at its most optimistic eligible amount.
+                    $available[$course] = max($available[$course] ?? 0, $amount);
+                }
+            }
+            $upper = $this->sum($available, $credits);
+            $creditGap = $credits - $upper;
+            $courseGap = max(0, $count - count($available));
+            if ($creditGap === 0 && $courseGap === 0) {
+                continue;
+            }
+            if (count($result["conflicts"]) === 10) {
+                $result["more_conflicts"] = true;
+                break;
+            }
+            $result["conflicts"][] = [
+                "group_ids" => $set,
+                "required_credits_milli" => $credits,
+                "credit_upper_bound_milli" => $upper,
+                "credit_shortfall_milli" => $creditGap,
+                "required_courses" => $count,
+                "course_upper_bound" => count($available),
+                "course_shortfall" => $courseGap,
+            ];
+        }
+        return $result;
     }
 
     /** @param array<string,int> $amounts */

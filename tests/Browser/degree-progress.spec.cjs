@@ -243,3 +243,25 @@ test("pending numeric limits and missing retained term labels never display inve
     await accessible(page);
     expect(f.errors).toEqual([]);
 });
+
+test("combined degree progress reuses the same shared-course explanation when opening group placement", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        allocationCompetition: true,
+        allocationOutcome: "infeasible",
+    });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(
+        studio.getByRole("region", { name: "Groups competing for completed courses", exact: true }),
+    ).toContainText("combined credit shortfall is at least 3 credits");
+    await studio.getByRole("button", { name: "Inspect course-group placement", exact: true }).click();
+    await expect(
+        studio.getByRole("region", { name: "Groups competing for completed courses", exact: true }),
+    ).toContainText("Professional studies <script>fictional</script>");
+    expect(f.calls.filter((c) => c.path.endsWith("/progress/"))).toHaveLength(1);
+    expect(f.calls.some((c) => c.path.endsWith("/allocation/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});

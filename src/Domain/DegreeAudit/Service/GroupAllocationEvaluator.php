@@ -168,6 +168,7 @@ final readonly class GroupAllocationEvaluator
             }
         }
         $outcome = "needs_review";
+        $competition = null;
         if ($issues === []) {
             $problem = new AllocationProblem(
                 $groups,
@@ -180,6 +181,9 @@ final readonly class GroupAllocationEvaluator
             }
             $planned = $this->planner->plan($problem);
             $outcome = $planned->outcome->value;
+            if ($outcome === "infeasible") {
+                $competition = $this->gaps->competition($problem);
+            }
             foreach ($planned->placements as $placement) {
                 $key =
                 $placement["course_id"] .
@@ -221,6 +225,7 @@ final readonly class GroupAllocationEvaluator
         ksort($issues, SORT_STRING);
         return [
             "outcome" => $outcome,
+            "competition" => $competition,
             "groups" => array_values($labels),
             "records" => array_values($records),
             "issues" => array_keys($issues),

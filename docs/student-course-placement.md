@@ -30,6 +30,20 @@ Relevant unknown grades/publications, conflicting approvals and unsupported reta
 
 The same explanations are available through **Degree progress → Inspect course-group placement** from the captured review, without an additional request. Evidence bounds use only the planner's already prepared, bounded inputs. They add no database queries, stream replay, additional search, stored evaluation or academic write, and expose no raw events or source references.
 
+## Shared-course shortages
+
+When a verified search finds no complete plan, **Groups competing for completed courses** explains supported shortages across overlapping groups. The same explanation appears in **Degree progress**, and opening the detailed placement view reuses that captured result.
+
+For example, two groups may each require six credits and each accept the same two completed three-credit courses. Each group can appear sufficient in isolation, but the retained one-group policy permits those courses to contribute only six credits across both groups. The combined twelve-credit requirement therefore has a shortage of at least six credits. The review names the affected groups without inventing a partial assignment.
+
+Explanations can show a credit shortage, a distinct-course contribution shortage, or both. Course-count bounds retain zero-credit completed courses. Required-course waivers remove their all-rule obligations but create no earned credit and do not lower group quantities or choose counts. Overlapping rules inside one group are not added as though they require separate copies of the same course. A course with different eligible repeat-award amounts is counted once at the most optimistic eligible amount, so a smaller alternative cannot create a false shortage.
+
+These are **lower bounds on a shared shortage**, not an exact plan for which courses a student must take. They do not change retained requirements, approvals, academic records, earned-credit/GPA totals or sharing policy. Groups with a simple individual shortage keep their existing local explanation. A multi-group sharing policy produces no one-group competition claim.
+
+The analyzer checks overlapping pairs and complete connected groups of competing evidence. It does not enumerate every subset or explain every possible target/rule conflict. It returns at most ten nonredundant explanations and indicates when more were found. No explanation does not mean that the groups can be satisfied; the exact search remains authoritative. Relevant unknown inputs, unsupported rules and interrupted/limited searches produce no cross-group shortage claim.
+
+This adds bounded comparisons over the already prepared inputs, with no database query, stream replay, additional placement search, stored evaluation or write. Existing student ownership/office checks, CSRF, private/no-store responses and debug suppression remain in force. Fictional tests compare reported shortages with exact searches across small deterministic cases, and cover published student selections, unchanged events/receipts/finance, sharing, escaped labels, mobile reflow and automated accessibility checks.
+
 ## Rules applied
 
 - Group eligibility uses retained passing-grade facts, exact course publications or approved substitution publications, and the group's effective per-course grade-point floor. Grade-point comparisons require compatible retained grading publications; no conversion or current 4.0 display default supplies missing evidence.

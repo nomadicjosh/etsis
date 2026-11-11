@@ -17,6 +17,8 @@ use Domain\DegreeAudit\Service\RequirementAdjustmentService;
 use Domain\DegreeAudit\Service\StudentGroupAllocationService;
 use Domain\DegreeAudit\Repository\AcademicInputRepository;
 use Domain\DegreeAudit\ValueObject\AcademicInputInventory;
+use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
+use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Section;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
@@ -156,6 +158,55 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame($receipts, $s->sql->rows("sis_history_operations"));
         self::assertArrayNotHasKey("references", $result);
         self::assertArrayNotHasKey("actor_id", $result);
+    }
+    public function testCompetingRetainedGroupsExplainTheSharedShortageWithoutWritingOrAssigningWork(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        $other = EntityId::generate();
+        $definition = $f->f->groupDefinition;
+        $definition["name"] = "Fictional professional foundations";
+        $f->f->groups->create($other, new CourseGroupDefinition($definition));
+        $review = $f->f->groups->review($other, "Fictional shared course-group approval.");
+        $publication = $f->f->groups->publish($other, $review["review_token"]);
+        $f->f->definition["groups"][] = ["group_id" => $other->value, "version_id" => $publication["operation_id"]];
+        $f->f->degrees->save(
+            $f->f->degree,
+            $f->f->degrees->view($f->f->degree)["revision"],
+            new AuditRequirementsV3($f->f->definition),
+        );
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        foreach ([0, 1, 2, 4] as $index) {
+            $this->work($f, $index);
+        }
+        $events = $s->sql->rows("sis_history_events");
+        $receipts = $s->sql->rows("sis_history_operations");
+        $finance = $s->financialEvents();
+        $r = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $r["outcome"]);
+        self::assertSame(12000, $r["competition"]["conflicts"][0]["credit_shortfall_milli"]);
+        self::assertSame(2, $r["competition"]["conflicts"][0]["course_shortfall"]);
+        foreach ($r["groups"] as $group) {
+            self::assertFalse($group["gaps"]["has_shortfall"]);
+            self::assertSame([], $group["placements"]);
+        }
+        self::assertSame($events, $s->sql->rows("sis_history_events"));
+        self::assertSame($receipts, $s->sql->rows("sis_history_operations"));
+        self::assertSame($finance, $s->financialEvents());
+        $f->f->definition["policies"]["group_reuse"] = "multiple_groups";
+        $f->f->degrees->save(
+            $f->f->degree,
+            $f->f->degrees->view($f->f->degree)["revision"],
+            new AuditRequirementsV3($f->f->definition),
+        );
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        $r = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $r["outcome"]);
+        self::assertNull($r["competition"]);
+        self::assertCount(4, $r["groups"][0]["placements"]);
+        self::assertCount(4, $r["groups"][1]["placements"]);
     }
     public function testWaiverDoesNotCreateCreditsAndSeparateApprovedMinimumReductionChangesPlacement(): void
     {

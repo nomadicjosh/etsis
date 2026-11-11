@@ -194,3 +194,60 @@ test("course-count shortages and unproved bounds remain distinct from a complete
     expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(0);
     expect(f.errors).toEqual([]);
 });
+
+for (const courseCount of [false, true]) {
+    test(`shared ${courseCount ? "course-count" : "credit"} shortages explain competing groups without partial placements`, async ({
+        page,
+    }) => {
+        const f = await fixture(page, {
+            assigned: true,
+            allocationOutcome: "infeasible",
+            allocationCompetition: true,
+            allocationCourseCount: courseCount,
+            competitionMore: true,
+        });
+        await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+        const studio = page.locator("dialog.degree-audit-studio");
+        const panel = studio.getByRole("region", {
+            name: "Groups competing for completed courses",
+            exact: true,
+        });
+        await expect(panel).toContainText("General education <b>fictional</b>");
+        await expect(panel).toContainText("Professional studies <script>fictional</script>");
+        await expect(panel).toContainText(
+            courseCount
+                ? "combined shortfall is at least 1 course contribution"
+                : "combined credit shortfall is at least 3 credits",
+        );
+        await expect(panel).toContainText("No partial placements have been assigned");
+        await expect(panel).toContainText("Showing the first 10 explanations");
+        await expect(panel.locator("script, b")).toHaveCount(0);
+        await page.setViewportSize({ width: 375, height: 812 });
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await studio
+            .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+            .click();
+        await studio.getByRole("button", { name: "Back to course groups", exact: true }).click();
+        await expect(panel).toBeVisible();
+        expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+        expect(f.calls.some((c) => /\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+        expect(f.errors).toEqual([]);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    });
+}
+for (const settings of [
+    { allocationOutcome: "needs_review" },
+    { allocationOutcome: "undetermined" },
+    { allocationOutcome: "infeasible", shareCourses: true },
+]) {
+    test(`shared-shortage explanations are suppressed for ${settings.shareCourses ? "multiple-group sharing" : settings.allocationOutcome}`, async ({
+        page,
+    }) => {
+        await fixture(page, { assigned: true, allocationCompetition: true, ...settings });
+        await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+        await expect(
+            page.getByRole("region", { name: "Groups competing for completed courses", exact: true }),
+        ).toHaveCount(0);
+    });
+}

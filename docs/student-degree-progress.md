@@ -30,7 +30,7 @@ GPA is compared at the supported three-decimal threshold precision without round
 
 An approved reduction shows the effective minimum and the original **published minimum** from the selected version. A later draft or publication cannot replace those displayed facts. Minimum exceptions remain specific to the approved degree version and pursuit; publishing another degree does not silently copy an exception.
 
-Minimum checks are independent components. A known cumulative GPA can be displayed alongside an unavailable overall GPA or earned-credit total. There is no aggregate “eligible to graduate” result. Meeting these minimums does not establish course-group, specialization, residency-policy or final award completion.
+Minimum checks are independent components. A known cumulative GPA can be displayed alongside an unavailable overall GPA or earned-credit total. Supported [shared-course shortages](student-course-placement.md#shared-course-shortages) now identify competing groups directly in this same review; the detailed group view reuses those explanations without another input request. There is no aggregate “eligible to graduate” result. Meeting these minimums does not establish course-group, specialization, residency-policy or final award completion.
 
 ## Inspecting the same result
 

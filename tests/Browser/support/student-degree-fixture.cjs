@@ -281,7 +281,7 @@ async function fixture(page, options = {}) {
                       shortfall_courses: rule.mode === "pool" ? 0 : Math.max(0, 2 - eligible.length),
                   })),
               };
-        return {
+        const result = {
             status: "review",
             outcome,
             input_status: options.allocationHistoryGaps ? "history_gaps" : "verified",
@@ -347,6 +347,40 @@ async function fixture(page, options = {}) {
                 uses: outcome !== "feasible" ? [] : [{ group_id: group, alternative: index === 0 }],
             })),
         };
+        if (options.allocationCompetition) {
+            const first = result.groups[0];
+            first.required_credits_milli = options.allocationCourseCount ? 0 : 6000;
+            first.required_courses = options.allocationCourseCount ? 2 : 0;
+            first.gaps = {
+                ...gaps,
+                has_shortfall: false,
+                credit_shortfall_milli: 0,
+                credit_upper_bound_milli: first.required_credits_milli,
+                course_shortfall: 0,
+                course_upper_bound: 3,
+                eligible_target_ids: courseIds.slice(0, 3),
+            };
+            result.groups.push({
+                ...first,
+                id: id(81),
+                name: "Professional studies <script>fictional</script>",
+            });
+            result.competition = {
+                conflicts: [
+                    {
+                        group_ids: [group, id(81)],
+                        required_credits_milli: options.allocationCourseCount ? 0 : 12000,
+                        credit_upper_bound_milli: options.allocationCourseCount ? 0 : 9000,
+                        credit_shortfall_milli: options.allocationCourseCount ? 0 : 3000,
+                        required_courses: options.allocationCourseCount ? 4 : 2,
+                        course_upper_bound: 3,
+                        course_shortfall: options.allocationCourseCount ? 1 : 0,
+                    },
+                ],
+                more_conflicts: !!options.competitionMore,
+            };
+        }
+        return result;
     }
     await page.route("**/sis/**", async (route) => {
         const req = route.request(),
