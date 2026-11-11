@@ -19,6 +19,7 @@ use Domain\DegreeAudit\ValueObject\StudentRequirementsId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -95,6 +96,40 @@ final readonly class StudentRequirementsService
                         $scope["cohort_binding_revision"] !== $selected["cohort_binding_revision"]),
             ];
         });
+    }
+    /** Internal calculation input: caller holds the student lock throughout this and academic collection.
+     * Reads the selected policy envelope without resolving unused course groups.
+     * @return array<string,mixed>|null
+     */
+    public function calculationContext(
+        EntityId $student,
+        EntityId $assignment,
+        HistoryReadBudget $budget,
+    ): ?array {
+        $scope = $this->scope($student, $assignment);
+        $selected = $this->state($assignment, $budget)->selection();
+        if ($selected === null) {
+            return null;
+        }
+        $this->assertStudentScope($scope, $selected);
+        $requirements = $this->published->calculationVersion(
+            new EntityId($selected["template_id"]),
+            new EntityId($selected["requirements_version_id"]),
+            $budget,
+        );
+        if (
+            $requirements["program_id"] !== $scope["program_id"] ||
+            $requirements["academic_year_id"] !== $selected["academic_year_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->scope($student, $assignment);
+        return [
+            "requirements" => $requirements,
+            "cohort_changed" =>
+                $scope["cohort_catalog_id"] !== $selected["cohort_catalog_id"] ||
+                $scope["cohort_binding_revision"] !== $selected["cohort_binding_revision"],
+        ];
     }
     /** Only the current matriculation cohort's published template is available for assignment.
      * @return array<string, mixed>
@@ -382,13 +417,16 @@ final readonly class StudentRequirementsService
             "student_degree_requirements",
         );
     }
-    private function state(EntityId $assignment): StudentRequirements
+    private function state(EntityId $assignment, ?HistoryReadBudget $budget = null): StudentRequirements
     {
         $s = $this->stream($assignment);
         $state = StudentRequirements::root($s->aggregateId);
         $cursor = null;
         do {
-            $page = $this->history->page($s, $cursor, 20);
+            $page =
+            $budget === null
+            ? $this->history->page($s, $cursor, 20)
+            : $budget->page($this->history, $s, $cursor);
             foreach ($page->events as $stored) {
                 $state->acceptHistorical($stored->event);
             }

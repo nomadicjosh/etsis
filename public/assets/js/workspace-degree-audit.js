@@ -1,4 +1,4 @@
-/* Independent reusable groups and version-pinned degree compositions. No student evaluation. */
+/* Reusable course groups, retained degree requirements and current-work review. */
 window.createWorkspaceDegreeAudit = function (ui) {
     "use strict";
     const { node, request, task } = ui;
@@ -1685,6 +1685,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(
             actions(
                 button("Academic work", () => academicWork(base, restore)),
+                button("Credits & GPA", () => academicCalculations(base, restore)),
                 button("Assignment history", () => studentHistory(base, restore)),
                 data.selection
                     ? button("Preview with approvals", () =>
@@ -1714,6 +1715,244 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 }),
             ),
         );
+    }
+    const calculationReasons = {
+        included: "Included once in this total",
+        no_earned_credit: "No eligible earned credit",
+        not_included: "Not included in GPA",
+        in_progress: "No final grade recorded",
+        grade_unknown: "The retained grade definition is unavailable",
+        late_drop: "Late drop earns no credit",
+        voided: "Voided award",
+        transfer_excluded: "Transfer awards are excluded by the selected policy",
+        default_drop_marker: "Ungraded drop marker adds no GPA weight",
+        grade_excludes_gpa: "The retained grade is excluded from GPA",
+        no_gpa_credits: "No attempted credits to weight in GPA",
+        policy_unknown: "The required policy choice was not recorded",
+        grading_policy_unknown: "The retained grading publication is unknown",
+        grading_policy_differs:
+            "The grade uses a different publication; compatibility has not been established",
+        repeat_not_selected: "Another eligible repeat supplies the contribution",
+        equivalent_credit_alternative: "Tied earned-credit alternative; counted once for this course",
+        equivalent_gpa_alternative: "Equivalent repeat alternative; one GPA contribution",
+        undetermined: "The complete total cannot be established",
+        eligible: "Eligible for review",
+    };
+    const calculationIssues = {
+        policy_unknown: "A required calculation policy was not recorded.",
+        grade_unknown: "A retained grade definition is unavailable.",
+        grading_policy_unknown: "A required grading publication is unknown.",
+        grading_policy_differs:
+            "Some grades use a different grading publication. Compatibility must be established before combining them.",
+        ordering_policy_unknown:
+            "The institutional choice for ordering repeat attempts was not retained. Current defaults cannot replace that missing choice.",
+        chronology_unknown:
+            "Retained academic-period or completion dates needed to compare repeats are unavailable.",
+        ambiguous_repeat: "Tied repeat attempts have different GPA weights; no winner has been assumed.",
+        arithmetic_limit: "The calculation reached its supported numeric limit.",
+    };
+    async function academicCalculations(base, back) {
+        const data = await post(`${base}academic-work/calculations/`, {});
+        renderCalculations(base, back, data);
+    }
+    function renderCalculations(base, back, data, offset = 0) {
+        const body = screen("Credits & GPA", "RETAINED ACADEMIC POLICIES");
+        body.append(
+            node(
+                "p",
+                {},
+                "Review current academic work using this pursuit's selected degree policies. These totals do not apply courses to requirements or determine degree completion, academic standing or graduation eligibility. This is not an issued transcript or a saved evaluation.",
+            ),
+        );
+        body.append(
+            actions(
+                button("Refresh credits & GPA", () => academicCalculations(base, back)),
+                button("Back to previous screen", back),
+            ),
+        );
+        if (data.status === "needs_selection") {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "Select published degree requirements for this pursuit before calculating credits and GPA. The system will use that publication's retained policies.",
+                ),
+            );
+            return;
+        }
+        if (data.status === "limited") {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "The review reached its work limit. No partial totals or records are shown. This is not a failed academic requirement; ask the registrar to arrange a controlled review.",
+                ),
+            );
+            return;
+        }
+        const context = data.context,
+            totals = data.totals;
+        body.append(
+            node(
+                "p",
+                { class: "audit-status" },
+                `${context.name} · ${context.academic_year_code} · Version ${context.version}`,
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                `${data.current_record_count} current academic records checked against available sources. This check does not certify that the historical archive is complete.`,
+            ),
+        );
+        if (context.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "The matriculation cohort changed. This review still uses the retained degree selection; ask the registrar to review it.",
+                ),
+            );
+        if (data.input_status === "history_gaps")
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "Earlier history is unknown for some current records. These are current-work calculations using known facts, not reconstructed earlier totals.",
+                ),
+            );
+        const institutional =
+            totals.institutional_minimum_milli === null
+                ? "Undetermined"
+                : totals.institutional_minimum_milli === totals.institutional_maximum_milli
+                  ? text(totals.institutional_minimum_milli)
+                  : `${text(totals.institutional_minimum_milli)}–${text(totals.institutional_maximum_milli)}`;
+        body.append(
+            node(
+                "div",
+                { class: "audit-library-grid" },
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", {}, "Earned credits"),
+                    node(
+                        "p",
+                        { class: "h3" },
+                        totals.credit_ready ? text(totals.earned_milli) : "Undetermined",
+                    ),
+                    node(
+                        "p",
+                        {},
+                        "After the retained repeat-credit policy. Course sharing and waivers create no additional credit.",
+                    ),
+                ),
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", {}, "GPA"),
+                    node(
+                        "p",
+                        { class: "h3" },
+                        !totals.gpa_ready
+                            ? "Undetermined"
+                            : totals.gpa_milli === null
+                              ? "Not applicable"
+                              : text(totals.gpa_milli),
+                    ),
+                    node(
+                        "p",
+                        {},
+                        !totals.gpa_ready
+                            ? "Review the missing or conflicting inputs below. No partial GPA is shown."
+                            : totals.gpa_milli === null
+                              ? "There are no eligible GPA credits. This is not a zero GPA."
+                              : `${text(totals.gpa_credits_milli)} GPA credits · ${text(totals.quality_points_milli)} quality points. Displayed to three decimals without rounding upward.`,
+                    ),
+                ),
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", {}, "Institutional-origin credits"),
+                    node("p", { class: "h3" }, institutional),
+                    node(
+                        "p",
+                        {},
+                        "An interval preserves tied institutional and transfer alternatives. This is not a final residency-policy determination.",
+                    ),
+                ),
+            ),
+        );
+        const policies = node(
+            "details",
+            { class: "audit-tree-section" },
+            node("summary", {}, "Policies used for this review"),
+        );
+        for (const key of ["repeat_credit", "repeat_gpa", "transfer_overall_gpa"])
+            policies.append(
+                node(
+                    "p",
+                    {},
+                    `${policyLabels[key]}: ${policyChoices[key].find(([value]) => value === data.policy[key])?.[1] || "Not recorded"}`,
+                ),
+            );
+        policies.append(
+            node(
+                "p",
+                {},
+                "Repeat ordering: " +
+                    ({
+                        academic_period: "Academic term / instructional period",
+                        completion_date: "Actual completion date",
+                    }[data.policy.attempt_order] || "Not recorded"),
+            ),
+        );
+        body.append(policies);
+        if (data.issues.length) {
+            const issues = node("section", { class: "audit-preview" }, node("h2", {}, "What needs review"));
+            for (const issue of data.issues)
+                issues.append(
+                    node(
+                        "p",
+                        {},
+                        `${issue.component === "credit" ? "Earned credits" : "GPA"}: ${calculationIssues[issue.code] || "A retained input needs review."}`,
+                    ),
+                );
+            body.append(issues);
+        }
+        body.append(node("h2", {}, "How current records contribute"));
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const record of data.records.slice(offset, offset + 20))
+            cards.append(
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h3", {}, `${record.course_code} · ${record.course_title}`),
+                    node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
+                    node("p", {}, `GPA: ${calculationReasons[record.gpa] || "Needs review"}.`),
+                ),
+            );
+        body.append(cards);
+        if (!data.records.length) body.append(node("p", {}, "No current academic work is recorded."));
+        body.append(
+            node(
+                "p",
+                { role: "status" },
+                data.records.length
+                    ? `Showing ${offset + 1}–${Math.min(offset + 20, data.records.length)} of ${data.records.length} records.`
+                    : "No contribution records to display.",
+            ),
+        );
+        const pages = actions();
+        if (offset > 0)
+            pages.append(
+                button("Previous contributions", () => renderCalculations(base, back, data, offset - 20)),
+            );
+        if (offset + 20 < data.records.length)
+            pages.append(
+                button("Next contributions", () => renderCalculations(base, back, data, offset + 20)),
+            );
+        body.append(pages);
     }
     async function verifyAcademicInputs(base, back) {
         const data = await post(`${base}academic-work/verify/`, {});
@@ -1781,6 +2020,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
                 button(matching ? "View academic work only" : "Check requirement matches", () =>
                     academicWork(base, back, after, stack, !matching),
+                ),
+                button("Credits & GPA", () =>
+                    academicCalculations(base, () => academicWork(base, back, after, stack, matching)),
                 ),
                 button("Verify academic inputs", () =>
                     verifyAcademicInputs(base, () => academicWork(base, back, after, stack, matching)),

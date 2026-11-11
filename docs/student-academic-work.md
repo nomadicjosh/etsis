@@ -55,3 +55,7 @@ Per-course matching, the [structural allocation core](degree-audit-allocation.md
 ## Verify academic inputs
 
 Choose **Verify academic inputs** to check the available current and historical references together. The result explains whether available records agree, earlier history is unknown, a work limit was reached, or a registrar needs to investigate a mismatch. Early removals stay out of current work and the visible count. This does not calculate GPA, apply courses or certify a complete archive. See [coverage, limits and next steps](academic-input-verification.md).
+
+## Credits & GPA
+
+Choose **Credits & GPA** from the degree-requirement or academic-work screen for a bounded current-work calculation using the pursuit’s retained policies. It explains each record’s contribution and distinguishes an unknown GPA from zero or no eligible GPA credits. This separate [review](student-credit-gpa-review.md) does not allocate courses to requirements, change standing or establish graduation eligibility.

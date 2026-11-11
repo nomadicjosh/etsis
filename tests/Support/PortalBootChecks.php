@@ -1881,8 +1881,25 @@ if (
 ) {
     throw new RuntimeException("Private academic input verification failed provider, privacy or CSRF checks.");
 }
+$academicCalculationResponse = $teachingPost($studentRequirementPath . "academic-work/calculations/", []);
+$academicCalculationBody = json_decode((string) $academicCalculationResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$academicCalculationNoCsrf = $academicWorkNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid" . $studentRequirementPath . "academic-work/calculations/",
+));
+if (
+    $academicCalculationResponse->getStatusCode() !== 200 ||
+    ($academicCalculationBody["status"] ?? null) !== "review" ||
+    ($academicCalculationBody["context"]["requirements_version_id"] ?? null) !== $requirementReceipt["operation_id"] ||
+    !is_array($academicCalculationBody["totals"] ?? null) ||
+    isset($academicCalculationBody["references"]) ||
+    !str_contains($academicCalculationResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $app->router->match($academicCalculationNoCsrf)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Private academic calculations failed provider, selection, privacy or CSRF checks.");
+}
 $sis->access->grants = [];
 if (
+    $teachingPost($studentRequirementPath . "academic-work/calculations/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/verify/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/matches/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/", [])->getStatusCode() !== 403

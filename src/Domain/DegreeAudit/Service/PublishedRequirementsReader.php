@@ -16,6 +16,7 @@ use Domain\DegreeAudit\RequirementsPublication;
 use Domain\DegreeAudit\ValueObject\CourseGroupPublicationId;
 use Domain\DegreeAudit\ValueObject\RequirementsPublicationId;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
@@ -47,9 +48,28 @@ final readonly class PublishedRequirementsReader
     /** @return array<string, mixed> */
     public function version(EntityId $template, EntityId $version): array
     {
+        return $this->readVersion($template, $version);
+    }
+    /** Only the retained policy/context envelope; no group/course resolution is needed for overall totals.
+     * @return array<string,mixed>
+     */
+    public function calculationVersion(
+        EntityId $template,
+        EntityId $version,
+        HistoryReadBudget $budget,
+    ): array {
+        return $this->readVersion($template, $version, $budget, false);
+    }
+    /** @return array<string,mixed> */
+    private function readVersion(
+        EntityId $template,
+        EntityId $version,
+        ?HistoryReadBudget $budget = null,
+        bool $includeGroups = true,
+    ): array {
         $stream = $this->degreeStream($template);
         $state = RequirementsPublication::root($stream->aggregateId);
-        $found = $this->selected($stream, $version, $state);
+        $found = $this->selected($stream, $version, $state, $budget);
         $p = $found["payload"];
         $program =
         $found["program_version_id"] === null
@@ -59,9 +79,10 @@ final readonly class PublishedRequirementsReader
             new EntityId($p["academic_year_id"]),
             new EntityId($found["program_version_id"]),
             $p["labels"],
+            $budget,
         );
         $groups = [];
-        if ($found["schema_version"] >= 3) {
+        if ($includeGroups && $found["schema_version"] >= 3) {
             $groups = $this->groups($p["definition"]["groups"]);
         }
         return [
@@ -87,9 +108,10 @@ final readonly class PublishedRequirementsReader
         EntityId $year,
         EntityId $version,
         array $labels = [],
+        ?HistoryReadBudget $budget = null,
     ): array {
         $stream = new StreamReference(new ProgramPublicationId($program->value), "program_publication");
-        $found = $this->selected($stream, $version, ProgramPublication::root($stream->aggregateId));
+        $found = $this->selected($stream, $version, ProgramPublication::root($stream->aggregateId), $budget);
         $payload = $found["payload"];
         if (
             $payload["academic_year_id"] !== $year->value ||
@@ -169,8 +191,9 @@ final readonly class PublishedRequirementsReader
         StreamReference $stream,
         EntityId $version,
         RequirementsPublication|CourseGroupPublication|CoursePublication|ProgramPublication $state,
+        ?HistoryReadBudget $budget = null,
     ): array {
-        return $this->selectedVersions($stream, [$version->value => true], $state)[$version->value];
+        return $this->selectedVersions($stream, [$version->value => true], $state, $budget)[$version->value];
     }
     /** Verify a complete frozen stream, keeping only the explicitly requested versions.
      * @param array<string, true> $versions
@@ -180,11 +203,15 @@ final readonly class PublishedRequirementsReader
         StreamReference $stream,
         array $versions,
         RequirementsPublication|CourseGroupPublication|CoursePublication|ProgramPublication $state,
+        ?HistoryReadBudget $budget = null,
     ): array {
         $cursor = null;
         $found = [];
         do {
-            $page = $this->history->page($stream, $cursor, 10);
+            $page =
+            $budget === null
+            ? $this->history->page($stream, $cursor, 10)
+            : $budget->page($this->history, $stream, $cursor);
             foreach ($page->events as $stored) {
                 $event = $stored->event;
                 $state->acceptHistorical($event);

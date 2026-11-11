@@ -7,6 +7,7 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\DegreeAudit\Service\AcademicWorkService;
 use Domain\DegreeAudit\Service\AcademicInputService;
+use Domain\DegreeAudit\Service\AcademicCalculationService;
 use Domain\DegreeAudit\Service\AcademicWorkMatchService;
 use Domain\DegreeAudit\ValueObject\AcademicInputStatus;
 use Domain\Shared\ValueObject\EntityId;
@@ -20,6 +21,7 @@ final readonly class SisAcademicWorkController
         private AcademicWorkService $service,
         private AcademicWorkMatchService $matches,
         private AcademicInputService $inputs,
+        private AcademicCalculationService $calculations,
     ) {
     }
 
@@ -42,6 +44,24 @@ final readonly class SisAcademicWorkController
                 FormInput::from($request)->optionalId("after"),
             ),
         );
+    }
+    public function calculations(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+    ): ResponseInterface {
+        $result = $this->calculations->preview(new EntityId($student), new EntityId($assignment));
+        if ($result["status"] === "inconsistent") {
+            return new JsonResponse(
+                [
+                    "error" =>
+                        "Credits and GPA could not be verified. Ask a registrar to review this record.",
+                    "status" => "inconsistent",
+                ],
+                409,
+            );
+        }
+        return new JsonResponse($result);
     }
     public function verify(ServerRequest $request, string $student, string $assignment): ResponseInterface
     {

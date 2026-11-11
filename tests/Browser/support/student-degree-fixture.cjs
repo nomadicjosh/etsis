@@ -314,7 +314,68 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
-        else if (path === `${base}academic-work/verify/`) {
+        else if (path === `${base}academic-work/calculations/`) {
+            if (options.rejectCalculations)
+                return route.fulfill({
+                    status: 409,
+                    json: {
+                        error: "Credits and GPA could not be verified. Ask a registrar to review this record.",
+                    },
+                });
+            if (!selection) response = { status: "needs_selection" };
+            else if (options.calculationLimit) response = { status: "limited" };
+            else
+                response = {
+                    status: "review",
+                    input_status: options.calculationHistoryGaps ? "history_gaps" : "verified",
+                    current_record_count: 21,
+                    context: {
+                        name: requirements.definition.name,
+                        academic_year_code: "2026-2027",
+                        version: 1,
+                        cohort_changed: Boolean(options.changed),
+                    },
+                    policy: {
+                        repeat_credit: "highest_earned",
+                        repeat_gpa: "all_eligible",
+                        transfer_overall_gpa: "exclude",
+                        attempt_order: null,
+                    },
+                    totals: {
+                        credit_ready: true,
+                        earned_milli: 3000,
+                        institutional_minimum_milli: 0,
+                        institutional_maximum_milli: 3000,
+                        gpa_ready: !options.unknownCalculationGpa,
+                        gpa_milli:
+                            options.unknownCalculationGpa || options.noGpaCredits
+                                ? null
+                                : options.zeroCalculationGpa
+                                  ? 0
+                                  : 3500,
+                        gpa_credits_milli: options.unknownCalculationGpa
+                            ? null
+                            : options.noGpaCredits
+                              ? 0
+                              : 6000,
+                        quality_points_milli: options.unknownCalculationGpa
+                            ? null
+                            : options.noGpaCredits || options.zeroCalculationGpa
+                              ? 0
+                              : 21000,
+                    },
+                    issues: options.unknownCalculationGpa
+                        ? [{ component: "gpa", code: "grading_policy_differs" }]
+                        : [],
+                    records: Array.from({ length: 21 }, (_, index) => ({
+                        id: id(100 + index),
+                        course_code: index === 20 ? "LAST.101" : `MATH.${100 + index}`,
+                        course_title: "Fictional algebra <b>unsafe</b>",
+                        credit: index === 20 ? "voided" : "equivalent_credit_alternative",
+                        gpa: options.unknownCalculationGpa ? "undetermined" : "included",
+                    })),
+                };
+        } else if (path === `${base}academic-work/verify/`) {
             if (options.rejectInputVerification)
                 return route.fulfill({
                     status: 409,
