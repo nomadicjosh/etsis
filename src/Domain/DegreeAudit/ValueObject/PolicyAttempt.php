@@ -71,7 +71,7 @@ final readonly class PolicyAttempt
     }
 
     /** @param array<string,mixed> $work Curated, verified work from the academic-work service. */
-    public static function fromAcademicWork(array $work): self
+    public static function fromAcademicWork(array $work, ?string $retainedAcademicOn = null): self
     {
         foreach (["id", "course_id", "credit_type", "status"] as $key) {
             if (!is_string($work[$key] ?? null)) {
@@ -103,6 +103,7 @@ final readonly class PolicyAttempt
             $work["grade_recorded"],
             $work["grade"] === null ? null : new GradeSnapshot($work["grade"]),
             $work["completed_on"],
+            $retainedAcademicOn,
         );
     }
 

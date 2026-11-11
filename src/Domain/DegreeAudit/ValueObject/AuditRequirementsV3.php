@@ -12,6 +12,7 @@ final readonly class AuditRequirementsV3
 {
     public AuditRequirementsV2 $settings;
     public CourseGroupReuse $groupReuse;
+    public ?RepeatAttemptOrder $attemptOrder;
     /** @param array<string, mixed> $definition */
     public function __construct(public array $definition)
     {
@@ -22,8 +23,13 @@ final readonly class AuditRequirementsV3
             );
         }
         $this->groupReuse = $policy;
+        $order = $definition["policies"]["repeat_attempt_order"] ?? null;
+        if ($order !== null && (!is_string($order) || RepeatAttemptOrder::tryFrom($order) === null)) {
+            throw new InvalidArgumentException("Choose academic-period or completion-date repeat ordering.");
+        }
+        $this->attemptOrder = $order === null ? null : RepeatAttemptOrder::from($order);
         $base = $definition;
-        unset($base["policies"]["group_reuse"]);
+        unset($base["policies"]["group_reuse"], $base["policies"]["repeat_attempt_order"]);
         $base["courses"] = [];
         $base["groups"] = [];
         $this->settings = new AuditRequirementsV2($base);
@@ -67,6 +73,7 @@ final readonly class AuditRequirementsV3
         $d = AuditRequirementsV2::blank($name)->definition;
         unset($d["courses"]);
         $d["policies"]["group_reuse"] = CourseGroupReuse::OneGroup->value;
+        $d["policies"]["repeat_attempt_order"] = RepeatAttemptOrder::AcademicPeriod->value;
         return new self($d);
     }
     /** @param array<string, mixed> $definition */
@@ -94,6 +101,22 @@ final readonly class AuditRequirementsV3
                     "Choose the institutional audit policies before publication.",
                 );
             }
+        }
+    }
+    /** New decisions must select chronology when it affects repeat GPA; old publications remain readable. */
+    public function assertNewPublication(): void
+    {
+        $this->assertPublishable();
+        if (
+            $this->definition["policies"]["repeat_gpa"] === RepeatGpaPolicy::LatestEligible->value &&
+            $this->attemptOrder === null
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "repeat_attempt_order",
+                    "message" => "Choose how to order repeated attempts before publishing latest-attempt GPA.",
+                ],
+            ]);
         }
     }
     public function hash(): string

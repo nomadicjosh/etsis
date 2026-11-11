@@ -322,6 +322,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ["highest_grade", "Highest eligible grade per course"],
             ["latest_eligible", "Latest eligible attempt per course"],
         ],
+        repeat_attempt_order: [
+            ["academic_period", "Academic term / instructional period"],
+            ["completion_date", "Actual completion date"],
+        ],
         transfer_overall_gpa: [
             ["exclude", "Exclude transfer awards"],
             ["include_eligible", "Include accepted GPA-eligible awards"],
@@ -331,6 +335,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         group_reuse: "Completed courses across requirement groups",
         repeat_credit: "Repeated-course earned credit",
         repeat_gpa: "Repeated-course GPA",
+        repeat_attempt_order: "How latest attempts are ordered",
         transfer_overall_gpa: "Transfer awards in overall GPA",
     };
     function degreeTree(item, approvals = null) {
@@ -1301,12 +1306,24 @@ window.createWorkspaceDegreeAudit = function (ui) {
             { class: "audit-tree", open: true },
             node("summary", {}, "Institutional audit policies"),
         );
+        let orderingPolicy = null;
         for (const [key, choices] of Object.entries(policyChoices)) {
             const group = node(
                 "fieldset",
                 { class: "audit-policy" },
                 node("legend", { class: "h6" }, policyLabels[key]),
             );
+            if (key === "repeat_attempt_order") {
+                orderingPolicy = group;
+                group.hidden = model.policies.repeat_gpa !== "latest_eligible";
+                group.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "Academic-period ordering uses the retained instructional start date, so posting or correcting an older grade later does not make it the latest period. Completion-date ordering needs actual retained completion dates; missing dates stay unknown.",
+                    ),
+                );
+            }
             for (const [value, label] of choices) {
                 const input = node("input", {
                     type: "radio",
@@ -1314,7 +1331,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     value,
                     checked: model.policies[key] === value,
                 });
-                input.addEventListener("change", () => (model.policies[key] = value));
+                input.addEventListener("change", () => {
+                    model.policies[key] = value;
+                    if (key === "repeat_gpa" && orderingPolicy) {
+                        orderingPolicy.hidden = value !== "latest_eligible";
+                    }
+                });
                 group.append(node("label", {}, input, " ", label));
             }
             policies.append(group);
@@ -1928,6 +1950,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h3", {}, `${record.course_code} · ${record.course_title}`),
+                    record.ordering_on
+                        ? node(
+                              "p",
+                              {},
+                              `${data.policy.attempt_order === "academic_period" ? "Retained instructional start" : "Retained completion date"}: ${record.ordering_on}.`,
+                          )
+                        : null,
                     node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
                     node("p", {}, `GPA: ${calculationReasons[record.gpa] || "Needs review"}.`),
                 ),

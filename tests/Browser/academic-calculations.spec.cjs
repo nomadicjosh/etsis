@@ -114,3 +114,20 @@ test("rejected calculations preserve academic work and announce a safe error", a
     await accessible(page);
     expect(f.errors).toEqual([]);
 });
+
+for (const ordering of ["academic_period", "completion_date"]) {
+    test(`contributions explain the retained ${ordering} date`, async ({ page }) => {
+        const f = await fixture(page, { assigned: true, retainedOrdering: ordering });
+        await page.getByRole("button", { name: "Credits & GPA", exact: true }).click();
+        const studio = page.locator("dialog.degree-audit-studio");
+        await expect(studio).toContainText(
+            `${ordering === "academic_period" ? "Retained instructional start" : "Retained completion date"}: 2026-08-24`,
+        );
+        await studio.getByText("Policies used for this review", { exact: true }).click();
+        await expect(studio).toContainText(
+            `Repeat ordering: ${ordering === "academic_period" ? "Academic term / instructional period" : "Actual completion date"}`,
+        );
+        await accessible(page);
+        expect(f.errors).toEqual([]);
+    });
+}

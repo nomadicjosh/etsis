@@ -118,6 +118,7 @@ final readonly class AcademicInputService
                 "credit_id" => $credit->value,
                 "academic_version" => $input["history_version"],
                 "registration_version" => $registration["history_version"] ?? null,
+                "section_id" => $registration["facts"]["section_id"] ?? null,
                 "removed" => $removed,
             ];
             if (!$removed) {

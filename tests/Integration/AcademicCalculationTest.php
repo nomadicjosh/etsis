@@ -46,6 +46,9 @@ final class AcademicCalculationTest extends TestCase
             $inputs,
             $f->service,
             new AcademicPolicyEvaluator(),
+            new \Domain\DegreeAudit\Service\RetainedAttemptReader(
+                new \Domain\Registration\Service\RetainedSectionReader($f->f->history),
+            ),
             $students,
             $s->transactions,
         );
@@ -87,18 +90,24 @@ final class AcademicCalculationTest extends TestCase
             ],
         ];
     }
-    private function institution(string $repeat = "all_eligible"): StudentRequirementsFixture
-    {
+    private function institution(
+        string $repeat = "all_eligible",
+        string $order = "academic_period",
+    ): StudentRequirementsFixture {
         $f = new StudentRequirementsFixture();
         $f->f->sis->gradeScale($this->grades());
-        $this->publish($f, $repeat);
+        $this->publish($f, $repeat, $order);
         $f->assign();
         return $f;
     }
-    private function publish(StudentRequirementsFixture $f, string $repeat = "all_eligible"): void
-    {
+    private function publish(
+        StudentRequirementsFixture $f,
+        string $repeat = "all_eligible",
+        string $order = "academic_period",
+    ): void {
         $d = $f->f->definition;
         $d["policies"]["repeat_gpa"] = $repeat;
+        $d["policies"]["repeat_attempt_order"] = $order;
         $row = $f->f->degrees->view($f->f->degree);
         $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($d));
         $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
@@ -148,7 +157,7 @@ final class AcademicCalculationTest extends TestCase
         self::assertSame($receipts, $s->sql->rows("sis_history_operations"));
         self::assertArrayNotHasKey("references", $result);
     }
-    public function testRepeatsShareCourseIdentityAndMissingRetainedOrderingIsExplicit(): void
+    public function testRepeatsShareCourseIdentityAndMissingRetainedDatesAreExplicit(): void
     {
         foreach (["all_eligible", "highest_grade", "latest_eligible"] as $repeat) {
             $f = $this->institution($repeat);
@@ -178,9 +187,9 @@ final class AcademicCalculationTest extends TestCase
             );
             if ($repeat === "latest_eligible") {
                 self::assertFalse($result["totals"]["gpa_ready"]);
-                self::assertNull($result["policy"]["attempt_order"]);
+                self::assertSame("academic_period", $result["policy"]["attempt_order"]);
                 self::assertContains(
-                    ["component" => "gpa", "code" => "ordering_policy_unknown"],
+                    ["component" => "gpa", "code" => "chronology_unknown"],
                     $result["issues"],
                 );
             }
@@ -384,5 +393,145 @@ final class AcademicCalculationTest extends TestCase
         };
         $this->expectException(AccessDeniedException::class);
         $this->service($f, $repository)->preview($f->student, $f->assignment);
+    }
+    private function datedOffering(StudentRequirementsFixture $f, string $start, string $end): array
+    {
+        $s = $f->f->sis;
+        $course = $f->f->groupDefinition["courses"][0];
+        $section = new \Domain\Registration\Section(
+            EntityId::generate(),
+            new EntityId($course["course_id"]),
+            $s->term,
+            $s->access->actor,
+            "FICTIONAL." . $start,
+            20,
+            true,
+            true,
+            new \Domain\Finance\ValueObject\Money(0, "USD"),
+        );
+        $s->registration->addSection($section);
+        $bindings = $f->f->catalog->bindings();
+        $binding = $bindings->review(
+            $section->id,
+            new EntityId($course["version_id"]),
+            "Fictional offering definition.",
+        );
+        $bindings->commit($section->id, $binding["review_token"]);
+        $publisher = $f->f->catalog->sectionPublications();
+        $review = $publisher->review($section->id, $start, $end, "Fictional instructional dates.");
+        $version = new EntityId($publisher->publish($section->id, $review["review_token"])["operation_id"]);
+        $selection = $publisher->reviewSelection($section->id, $version, "Fictional initial offering.");
+        $publisher->select($section->id, $selection["review_token"]);
+        return [$section, $version];
+    }
+
+    public function testLatestGpaUsesRetainedInstructionalDatesDespiteLaterCorrectionsAndOfferingChanges(): void
+    {
+        $f = $this->institution("latest_eligible");
+        [$older, $version] = $this->datedOffering($f, "2026-08-24", "2026-09-30");
+        [$newer] = $this->datedOffering($f, "2026-10-01", "2026-12-18");
+        [, $oldEnrollment, , $grades] = $this->work($f, "A", $older);
+        $this->work($f, "B", $newer);
+        $service = $this->service($f);
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame(3000, $result["totals"]["gpa_milli"]);
+        self::assertEqualsCanonicalizing(
+            ["2026-08-24", "2026-10-01"],
+            array_column($result["records"], "ordering_on"),
+        );
+        $s = $f->f->sis;
+        $s->clock->time = $s->clock->time->modify("+2 days");
+        $ledger = $s->academicCredits();
+        $correction = $ledger->review(
+            $f->student,
+            $older->id,
+            $oldEnrollment,
+            new EntityId($grades["F"]),
+            1,
+            reason: "Fictional older-period correction.",
+        );
+        $ledger->commit($f->student, $older->id, $correction["review_token"]);
+        $publisher = $f->f->catalog->sectionPublications();
+        $review = $publisher->review(
+            $older->id,
+            "2026-11-01",
+            "2026-12-18",
+            "Fictional future offering revision.",
+        );
+        $publisher->publish($older->id, $review["review_token"]);
+        $s->sql->update("sis_terms", ["starts_on" => "2026-11-01"], ["id" => $s->term->value]);
+        $before = $s->sql->rows("sis_history_events");
+        self::assertSame(3000, $service->preview($f->student, $f->assignment)["totals"]["gpa_milli"]);
+        self::assertSame($before, $s->sql->rows("sis_history_events"));
+        self::assertSame(
+            ["status" => "limited"],
+            $service->preview($f->student, $f->assignment, new HistoryReadBudget(maximumPages: 6)),
+        );
+        $stream = $s->sql->one("sis_history_streams", [
+            "stream_type" => "section_publication",
+            "aggregate_id" => $older->id->value,
+        ]);
+        $s->sql->update(
+            "sis_history_events",
+            ["event_hash" => str_repeat("0", 64)],
+            ["stream_id" => $stream["id"]],
+        );
+        self::assertSame(["status" => "inconsistent"], $service->preview($f->student, $f->assignment));
+    }
+
+    public function testSectionReplayIsSharedWithinTheReadButNotCachedBetweenReads(): void
+    {
+        $f = $this->institution("latest_eligible");
+        [$section, $version] = $this->datedOffering($f, "2026-08-24", "2026-12-18");
+        $store = $this->createMock(HistoricalEventStore::class);
+        $store
+            ->expects(self::exactly(2))
+            ->method("page")
+            ->willReturnCallback(
+                fn($stream, $cursor, $limit) => $f->f->history->page($stream, $cursor, $limit),
+            );
+        $reader = new \Domain\Registration\Service\RetainedSectionReader($store);
+        $ref = ["section_id" => $section->id->value, "version_id" => $version->value];
+        for ($i = 0; $i < 2; $i++) {
+            $result = $reader->periods([$ref, $ref], new HistoryReadBudget());
+            self::assertSame("2026-08-24", $result[$section->id->value][$version->value]["starts_on"]);
+        }
+    }
+
+    public function testCompletionOrderingDoesNotSubstituteInstructionalDatesAndLaterPoliciesDoNotReplaceSelection(): void
+    {
+        $f = $this->institution("latest_eligible", "completion_date");
+        [$first] = $this->datedOffering($f, "2026-08-24", "2026-09-30");
+        [$second] = $this->datedOffering($f, "2026-10-01", "2026-12-18");
+        $this->work($f, "A", $first);
+        $this->work($f, "B", $second);
+        $this->publish($f, "latest_eligible", "academic_period");
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("completion_date", $result["policy"]["attempt_order"]);
+        self::assertFalse($result["totals"]["gpa_ready"]);
+        self::assertSame([null, null], array_column($result["records"], "ordering_on"));
+        self::assertContains(["component" => "gpa", "code" => "chronology_unknown"], $result["issues"]);
+    }
+
+    public function testNewLatestPublicationRequiresAnOrderingChoiceWithoutChangingEarlierRecordedFacts(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $degree = $f->f->degrees;
+        $row = $degree->view($f->f->degree);
+        $d = $row["definition"];
+        unset($d["policies"]["repeat_attempt_order"]);
+        $d["policies"]["repeat_gpa"] = "latest_eligible";
+        $degree->save($f->f->degree, $row["revision"], new AuditRequirementsV3($d));
+        $before = $f->f->sis->sql->rows("sis_history_events");
+        try {
+            $degree->review($f->f->degree, "Fictional missing-order review.");
+            self::fail("A new latest-repeat publication omitted ordering.");
+        } catch (\Domain\Shared\Exception\ValidationException $e) {
+            self::assertSame("repeat_attempt_order", $e->errors[0]["field"]);
+            self::assertStringContainsString("Choose how to order", $e->errors[0]["message"]);
+        }
+        self::assertSame($before, $f->f->sis->sql->rows("sis_history_events"));
+        $old = new PublishedRequirementsReader($f->f->history)->version($f->f->degree, $f->version);
+        self::assertArrayNotHasKey("repeat_attempt_order", $old["definition"]["policies"]);
     }
 }

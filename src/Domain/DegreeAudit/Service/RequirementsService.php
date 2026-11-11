@@ -168,7 +168,7 @@ final readonly class RequirementsService
                     "Compose this degree from reusable course groups before publishing a new version.",
                 );
             }
-            $definition->assertPublishable();
+            $definition->assertNewPublication();
             $this->assertScale($row["program_id"], $definition);
             $details = $this->courseDetails($definition);
             [$state] = $this->load($id);
@@ -385,6 +385,7 @@ final readonly class RequirementsService
                     "The grading scale changed. Review this degree publication again.",
                 );
             }
+            new AuditRequirementsV3($data["definition"])->assertNewPublication();
             $this->assertScale($row["program_id"], new AuditRequirementsV3($data["definition"]));
             $this->courseDetails(AuditRequirementsV3::draft($data["definition"]));
             $this->groupDetails(AuditRequirementsV3::draft($data["definition"]));

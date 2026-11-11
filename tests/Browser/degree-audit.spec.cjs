@@ -101,6 +101,7 @@ async function fixture(page, options = {}) {
         policies: {
             repeat_credit: null,
             repeat_gpa: null,
+            repeat_attempt_order: "academic_period",
             transfer_overall_gpa: null,
             waiver: "waive_required_course_everywhere",
             group_reuse: "one_group",
@@ -118,7 +119,11 @@ async function fixture(page, options = {}) {
             courses: baseGroup.courses,
             groups: [{ id: id(11), ...baseGroup, courses: undefined }],
         };
-    if (options.legacy) delete definition.policies.group_reuse;
+    if (options.legacy) {
+        delete definition.policies.group_reuse;
+        delete definition.policies.repeat_attempt_order;
+    }
+    if (options.unknownOrdering) delete definition.policies.repeat_attempt_order;
     function detail(g, v) {
         const entry = groups.get(g);
         return v
@@ -314,6 +319,23 @@ async function fixture(page, options = {}) {
             degreeRevision++;
             response = row();
         } else if (path === `/sis/degree-audits/${template}/review/`) {
+            if (
+                definition.policies.repeat_gpa === "latest_eligible" &&
+                !["academic_period", "completion_date"].includes(definition.policies.repeat_attempt_order)
+            )
+                return route.fulfill({
+                    status: 422,
+                    json: {
+                        error: "Please correct the highlighted fields.",
+                        errors: [
+                            {
+                                field: "repeat_attempt_order",
+                                message:
+                                    "Choose how to order repeated attempts before publishing latest-attempt GPA.",
+                            },
+                        ],
+                    },
+                });
             if (!definition.groups.length || Object.values(definition.policies).includes(null))
                 return route.fulfill({
                     status: 422,
@@ -1047,6 +1069,79 @@ test("grading policy reason is visibly required and announced before sending a r
         page.getByLabel("Reason for grading scale change", { exact: true }),
     ).toHaveAccessibleDescription(/Required.*Enter a reason/);
     expect(f.calls.some((c) => c.path.endsWith("grading-scales/global/review/"))).toBe(false);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test("latest-attempt ordering is revealed only when needed and survives publication review", async ({
+    page,
+}) => {
+    const f = await fixture(page, { existing: true });
+    await openDegree(page, true);
+    const ordering = page.getByRole("group", { name: "How latest attempts are ordered", exact: true });
+    await expect(ordering).not.toBeVisible();
+    await page.getByLabel("Latest eligible attempt per course", { exact: true }).check();
+    await expect(ordering).toBeVisible();
+    await expect(page.getByLabel("Academic term / instructional period", { exact: true })).toBeChecked();
+    await page.getByLabel("Actual completion date", { exact: true }).check();
+    await page.getByLabel("Highest eligible grade per course", { exact: true }).check();
+    await expect(ordering).not.toBeVisible();
+    await page.getByLabel("Latest eligible attempt per course", { exact: true }).check();
+    await expect(page.getByLabel("Actual completion date", { exact: true })).toBeChecked();
+    await page.getByLabel("Highest earned award per course", { exact: true }).check();
+    await page.getByLabel("Exclude transfer awards", { exact: true }).check();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
+    await page
+        .getByLabel("Reason for publication", { exact: true })
+        .fill("Fictional repeat-order policy approval");
+    await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+        "How latest attempts are ordered: Actual completion date",
+    );
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    await page.getByRole("button", { name: "Inspect version 1", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+        "How latest attempts are ordered: Actual completion date",
+    );
+    const saved = f.calls.find((c) => c.path === `/sis/degree-audits/${f.template}/save/`);
+    expect(saved.body.definition.policies.repeat_attempt_order).toBe("completion_date");
+    expect(saved.csrf).toBe("fictional-test-token");
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test("opening an earlier draft never invents an ordering choice", async ({ page }) => {
+    const f = await fixture(page, { existing: true, unknownOrdering: true });
+    await openDegree(page, true);
+    await page.getByLabel("Latest eligible attempt per course", { exact: true }).check();
+    await expect(page.getByLabel("Academic term / instructional period", { exact: true })).not.toBeChecked();
+    await expect(page.getByLabel("Actual completion date", { exact: true })).not.toBeChecked();
+    await page.getByRole("button", { name: "Requirements preview", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("How latest attempts are ordered: Not recorded");
+    expect(f.calls.some((c) => c.path.endsWith("/save/"))).toBe(false);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test("a missing latest-attempt choice receives useful guidance instead of Invalid request", async ({
+    page,
+}) => {
+    const f = await fixture(page, { existing: true, unknownOrdering: true });
+    await openDegree(page, true);
+    await page.getByLabel("Latest eligible attempt per course", { exact: true }).check();
+    await page.getByLabel("Highest earned award per course", { exact: true }).check();
+    await page.getByLabel("Exclude transfer awards", { exact: true }).check();
+    await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
+    await page.getByLabel("Reason for publication", { exact: true }).fill("Fictional policy review");
+    await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Choose how to order repeated attempts");
+    await expect(page.getByRole("alert")).not.toContainText("Invalid request");
+    await expect(page.getByLabel("Reason for publication", { exact: true })).toHaveValue(
+        "Fictional policy review",
+    );
+    expect(f.calls.some((c) => c.path.endsWith("/publish/"))).toBe(false);
     await accessible(page);
     expect(f.errors).toEqual([]);
 });

@@ -31,12 +31,9 @@ final readonly class AuditCalculationPolicy
     }
 
     /** @param array<string,mixed> $requirements Already-verified retained publication, as returned by its reader.
-     * @param ?RepeatAttemptOrder $retainedAttemptOrder Retained institutional choice; absence stays unknown.
      */
-    public static function fromRequirements(
-        array $requirements,
-        ?RepeatAttemptOrder $retainedAttemptOrder = null,
-    ): self {
+    public static function fromRequirements(array $requirements): self
+    {
         $settings = $requirements["definition"]["policies"] ?? [];
         if (!is_array($settings)) {
             throw new InvalidArgumentException("Use retained audit policy choices.");
@@ -44,11 +41,13 @@ final readonly class AuditCalculationPolicy
         $credit = $settings["repeat_credit"] ?? null;
         $gpa = $settings["repeat_gpa"] ?? null;
         $transfer = $settings["transfer_overall_gpa"] ?? null;
+        $order = $settings["repeat_attempt_order"] ?? null;
         $version = $requirements["grade_scale"]["version_id"] ?? null;
         if (
             ($credit !== null && !is_string($credit)) ||
             ($gpa !== null && !is_string($gpa)) ||
             ($transfer !== null && !is_string($transfer)) ||
+            ($order !== null && !is_string($order)) ||
             ($version !== null && !is_string($version))
         ) {
             throw new InvalidArgumentException("Use retained audit policy choices.");
@@ -67,7 +66,10 @@ final readonly class AuditCalculationPolicy
                 : TransferGpaPolicy::tryFrom($transfer) ??
                     throw new InvalidArgumentException("Unknown transfer-GPA policy."),
             $version === null ? null : new EntityId($version),
-            $retainedAttemptOrder,
+            $order === null
+                ? null
+                : RepeatAttemptOrder::tryFrom($order) ??
+                    throw new InvalidArgumentException("Unknown repeat-attempt ordering policy."),
         );
     }
 }

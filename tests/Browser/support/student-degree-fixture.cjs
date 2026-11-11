@@ -339,7 +339,7 @@ async function fixture(page, options = {}) {
                         repeat_credit: "highest_earned",
                         repeat_gpa: "all_eligible",
                         transfer_overall_gpa: "exclude",
-                        attempt_order: null,
+                        attempt_order: options.retainedOrdering || null,
                     },
                     totals: {
                         credit_ready: true,
@@ -371,6 +371,7 @@ async function fixture(page, options = {}) {
                         id: id(100 + index),
                         course_code: index === 20 ? "LAST.101" : `MATH.${100 + index}`,
                         course_title: "Fictional algebra <b>unsafe</b>",
+                        ordering_on: options.retainedOrdering ? "2026-08-24" : null,
                         credit: index === 20 ? "voided" : "equivalent_credit_alternative",
                         gpa: options.unknownCalculationGpa ? "undetermined" : "included",
                     })),

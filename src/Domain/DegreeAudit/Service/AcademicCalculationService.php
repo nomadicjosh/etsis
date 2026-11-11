@@ -6,7 +6,7 @@ namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\ValueObject\AcademicInputStatus;
 use Domain\DegreeAudit\ValueObject\AuditCalculationPolicy;
-use Domain\DegreeAudit\ValueObject\PolicyAttempt;
+use Domain\DegreeAudit\ValueObject\RepeatAttemptOrder;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
@@ -23,6 +23,7 @@ final readonly class AcademicCalculationService
         private AcademicInputService $inputs,
         private StudentRequirementsService $requirements,
         private AcademicPolicyEvaluator $evaluator,
+        private RetainedAttemptReader $attempts,
         private StudentRecordRepository $students,
         private UnitOfWork $transactions,
     ) {
@@ -52,10 +53,16 @@ final readonly class AcademicCalculationService
                 }
                 $requirements = $context["requirements"];
                 $policy = AuditCalculationPolicy::fromRequirements($requirements);
-                $result = $this->evaluator->evaluate(
-                    array_map(PolicyAttempt::fromAcademicWork(...), $inputs->items),
-                    $policy,
-                );
+                $attempts = $this->attempts->forPolicy($inputs, $policy, $budget);
+                $result = $this->evaluator->evaluate($attempts, $policy);
+                $ordering = [];
+                foreach ($attempts as $attempt) {
+                    $ordering[$attempt->id->value] = match ($policy->attemptOrder) {
+                        RepeatAttemptOrder::AcademicPeriod => $attempt->academicOn,
+                        RepeatAttemptOrder::CompletionDate => $attempt->completedOn,
+                        null => null,
+                    };
+                }
                 $byId = array_column($inputs->items, null, "id");
                 $records = [];
                 foreach ($result->dispositions as $disposition) {
@@ -63,6 +70,7 @@ final readonly class AcademicCalculationService
                     $records[] = $disposition + [
                         "course_code" => $work["course_code"],
                         "course_title" => $work["course_title"],
+                        "ordering_on" => $ordering[$disposition["id"]],
                     ];
                 }
                 $issues = [];
