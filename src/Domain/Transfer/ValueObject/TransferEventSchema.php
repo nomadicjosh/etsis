@@ -10,6 +10,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
+use Domain\Transfer\Event\TransferCourseWasAccepted;
 use InvalidArgumentException;
 
 final class TransferEventSchema
@@ -24,6 +25,15 @@ final class TransferEventSchema
                 "previous_decision_id",
                 "previous_academic_on",
                 "academic_on",
+            ],
+            TransferCourseWasAccepted::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_course_version_id",
+                "course_version_id",
+                "course_id",
+                "course_code",
+                "course_title",
             ],
             TransferCreditWasChanged::class => [
                 "decision_id",
@@ -109,6 +119,35 @@ final class TransferEventSchema
                 self::invalid();
             }
             new EntityId($p["previous_decision_id"]);
+            if ($class === TransferCourseWasAccepted::class) {
+                foreach (["course_version_id", "course_id"] as $key) {
+                    if (!is_string($p[$key])) {
+                        self::invalid();
+                    }
+                    new EntityId($p[$key]);
+                }
+                if ($p["previous_course_version_id"] !== null) {
+                    if (!is_string($p["previous_course_version_id"])) {
+                        self::invalid();
+                    }
+                    new EntityId($p["previous_course_version_id"]);
+                }
+                if ($p["previous_course_version_id"] === $p["course_version_id"]) {
+                    self::invalid();
+                }
+                foreach (["course_code" => 96, "course_title" => 191] as $key => $max) {
+                    if (
+                        !is_string($p[$key]) ||
+                        trim($p[$key]) === "" ||
+                        mb_strlen($p[$key]) > $max ||
+                        !mb_check_encoding($p[$key], "UTF-8") ||
+                        preg_match('/[\x00-\x1F\x7F]/', $p[$key])
+                    ) {
+                        self::invalid();
+                    }
+                }
+                return;
+            }
             if ($class === TransferAcademicPeriodWasRecorded::class) {
                 foreach (["previous_academic_on", "academic_on"] as $key) {
                     if ($p[$key] !== null) {

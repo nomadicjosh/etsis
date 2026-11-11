@@ -11,6 +11,7 @@ use Domain\Shared\ValueObject\DateRange;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Service\TransferAwardService;
 use Domain\Transfer\Service\TransferService;
+use Domain\Transfer\Service\TransferCourseService;
 use Domain\Transfer\TransferEquivalency;
 use Infrastructure\Persistence\Repository\SqlGradebookRepository;
 use Infrastructure\Persistence\Repository\SqlTransferAwardRepository;
@@ -129,6 +130,20 @@ final class TransferAwardFixture
             $this->cipher,
             $f->clock,
             $f->transferCredits(),
+        );
+    }
+    public function courses(?AuditTrail $audit = null): TransferCourseService
+    {
+        $f = $this->sis;
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $f->sql, $f->transactions, $f->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($f->connection->queryBuilder())),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        return new \Domain\Transfer\Service\TransferCourseService(
+            $f->transferCredits(), new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository($f->sql),
+            $this->repository, $f->registration, new \Domain\Catalog\Service\PublishedCourseReader($history),
+            $history, $f->transactions, $f->access, $this->cipher, $f->clock, $audit ?? $f->audit,
         );
     }
     public function periods(?AuditTrail $audit = null): \Domain\Transfer\Service\TransferPeriodService

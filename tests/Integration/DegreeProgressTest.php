@@ -240,6 +240,24 @@ final class DegreeProgressTest extends TestCase
         self::assertSame($course["version_id"], $facts["course_version_id"]);
     }
 
+    public function testReviewedTransferAcceptanceCanResolveAnExactPublicationMismatch(): void
+    {
+        $f = $this->institution();
+        foreach ([1, 2, 4] as $i) {
+            $this->work($f, $i);
+        }
+        $course = $f->f->groupDefinition["courses"][0];
+        $different = $f->f->sis->publishCourse(new EntityId($course["course_id"]));
+        $t = new \TransferAwardFixture($f->f->sis, $f->f->catalog->fixture->cipher, $f->student,
+            course: new EntityId($course["course_id"]), courseVersion: $different);
+        self::assertNotSame("feasible", $this->service($f)->preview($f->student, $f->assignment)["allocation"]["outcome"]);
+        $review = $t->courses()->review($f->student, $t->award, new EntityId($course["version_id"]), 0,
+            "2026-08-01", "Fictional receiving-course evaluation.");
+        $t->courses()->commit($f->student, $t->award, $review["review_token"]);
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["allocation"]["outcome"]);
+        self::assertSame(12000, $result["minimums"][0]["actual_minimum_milli"]);
+    }
     public function testInstitutionalAndOverallGpaUseDifferentVerifiedTransferScopes(): void
     {
         $f = $this->institution();

@@ -112,10 +112,185 @@ window.createWorkspaceTransferAwards = function (ui) {
             ...(value.credit.status !== "V" && value.history_recorded
                 ? [button("Review source academic period", () => editPeriod(student, award, value))]
                 : []),
+            ...(value.credit.status !== "V"
+                ? [button("Review accepted course", () => editCourse(student, award, value))]
+                : []),
+            button("Course definition history", () => courseHistory(student, award)),
             button("Source period history", () => periodHistory(student, award)),
             button("Correction history", () => history(student, award)),
             button("Back to equivalency", () => ui.back(value.equivalency_id)),
         );
+        body.append(actions);
+    }
+    async function editCourse(student, award, value) {
+        const base = endpoint(student, award) + "accepted-course/";
+        const choices = await request(base + "choices/", "POST", {});
+        if (!choices.items.length)
+            throw new Error(
+                "Catalog staff must publish the receiving course before reviewing its acceptance.",
+            );
+        const label = (item) =>
+            `Version ${item.version} · ${item.code} · ${item.transcript_title} · ${item.credits_milli / 1000} catalog credits`;
+        const body = openDrawer("Accepted course definition", "REASONED TRANSFER REVIEW");
+        body.append(
+            identity(value),
+            node(
+                "p",
+                {},
+                "Select the receiving-course publication supported by your evaluation. Its code and transcript title will be applied to this award. The existing credits, grade, sending institution and posting term stay as recorded. Previous decisions remain in history.",
+            ),
+            button("Back to award", () => record(student, award)),
+        );
+        if (!value.course_version_id)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "The earlier accepted publication is unknown. This records a new reviewed acceptance; it does not reconstruct an earlier decision.",
+                ),
+            );
+        const fields = [
+            [
+                "course_version_id",
+                "Accepted course publication",
+                "choice",
+                choices.items.map((item) => ({ value: item.version_id, label: label(item) })),
+            ],
+            ["effective_on", "Effective date", "date"],
+            ["reason", "Reason and acceptance evidence", "textarea"],
+        ];
+        const form = await buildForm(fields, { effective_on: value.effective_on_default });
+        form.elements.effective_on.min = value.completed_on;
+        form.elements.effective_on.max = value.effective_on_default;
+        form.elements.reason.maxLength = 1000;
+        let cursor = choices.next_cursor;
+        const status = node(
+            "p",
+            { role: "status", class: "form-text" },
+            `${choices.items.length} publications loaded.`,
+        );
+        form.elements.course_version_id.parentElement.append(status);
+        if (cursor) {
+            const more = button("Load more accepted-course choices", async () => {
+                const next = await request(base + "choices/", "POST", { cursor });
+                if (!form.isConnected) return;
+                next.items.forEach((item) =>
+                    form.elements.course_version_id.append(
+                        node("option", { value: item.version_id }, label(item)),
+                    ),
+                );
+                cursor = next.next_cursor;
+                status.textContent = `${form.elements.course_version_id.options.length - 1} publications loaded.`;
+                if (!cursor) {
+                    more.remove();
+                    form.elements.course_version_id.focus();
+                }
+            });
+            form.elements.course_version_id.parentElement.append(more);
+        }
+        const submit = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review accepted definition",
+        );
+        form.append(submit);
+        body.append(form);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = formData(form, fields);
+                const review = await request(base + "review/", "POST", {
+                    ...data,
+                    version: value.credit.version,
+                });
+                const confirm = openDrawer("Confirm accepted course", "PRESERVE ORIGINAL ACCEPTANCE");
+                confirm.append(
+                    grid(
+                        ["Record", "Current", "After confirmation"],
+                        [
+                            ["Course code", review.before.course_code, review.after.course_code],
+                            ["Transcript title", review.before.course_title, review.after.course_title],
+                            [
+                                "Publication",
+                                review.previous_course_version_id ? "Retained" : "Unknown",
+                                "Explicitly selected",
+                            ],
+                            [
+                                "Awarded credits",
+                                value.credit.completed_milli / 1000,
+                                value.credit.completed_milli / 1000,
+                            ],
+                            ["Grade", value.grade_code || "—", value.grade_code || "—"],
+                        ],
+                        "Accepted course comparison",
+                    ),
+                    node("p", {}, `Effective ${review.effective_on}`),
+                    node("p", {}, review.reason),
+                    node(
+                        "p",
+                        {},
+                        "This can change course-group matching and the current transcript labels. Existing issued documents and earlier decisions remain preserved; a prepared transcript may need a fresh review.",
+                    ),
+                    button("Revise accepted course", () =>
+                        openDrawer("Accepted course definition", "REASONED TRANSFER REVIEW").append(form),
+                    ),
+                    button(
+                        "Confirm course acceptance",
+                        async () => {
+                            await request(base + "commit/", "POST", { review_token: review.review_token });
+                            await record(student, award);
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, submit);
+        });
+    }
+    async function courseHistory(student, award, cursor = null, stack = []) {
+        const data = await request(endpoint(student, award) + "accepted-course/history/", "POST", { cursor });
+        const body = openDrawer("Accepted course history", "RETAINED TRANSFER DECISIONS");
+        body.append(button("Back to award", () => record(student, award)));
+        if (data.earlier_history_unknown)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "Earlier acceptance decisions remain unknown. Observed facts and later reviewed acceptances are recorded separately.",
+                ),
+            );
+        body.append(
+            data.items.length
+                ? grid(
+                      ["Decision", "Accepted course", "Publication", "Effective", "Recorded"],
+                      data.items.map((item) => [
+                          {
+                              award: "Original award",
+                              observed_existing: "Earlier facts observed",
+                              course_accepted: "Course acceptance reviewed",
+                          }[item.action],
+                          `${item.course_code} · ${item.course_title}`,
+                          item.course_version_id ? "Retained" : "Unknown",
+                          item.effective_at || "Unknown",
+                          item.recorded_at,
+                      ]),
+                      "Accepted course decisions",
+                  )
+                : node("p", {}, "No course acceptance decisions on this page."),
+        );
+        const actions = node("div", { class: "inline-actions" });
+        if (stack.length)
+            actions.append(
+                button("Previous course history page", () =>
+                    courseHistory(student, award, stack.at(-1), stack.slice(0, -1)),
+                ),
+            );
+        if (data.next_cursor)
+            actions.append(
+                button("Next course history page", () =>
+                    courseHistory(student, award, data.next_cursor, [...stack, cursor]),
+                ),
+            );
         body.append(actions);
     }
     async function editPeriod(student, award, value) {
@@ -209,6 +384,7 @@ window.createWorkspaceTransferAwards = function (ui) {
                       ["Decision", "Source period change", "Effective", "Recorded"],
                       data.items.map((item) => [
                           {
+                              course_accepted: "Accepted course reviewed",
                               period_recorded: "Source period recorded",
                               award: "Award established",
                               observed_existing: "Earlier facts observed",

@@ -142,10 +142,10 @@ final class TransferAcademicPeriodTest extends TestCase
         $t->sis->transactions->run(function () use ($t): void {
             $t->sis->registration->lockStudent($t->student);
             try {
-                $t->sis->transferCredits()->periodRecord($t->student, $t->award, new HistoryReadBudget(maximumEvents: 1));
+                $t->sis->transferCredits()->decisionRecord($t->student, $t->award, new HistoryReadBudget(maximumEvents: 1));
                 self::fail("A partial transfer stream escaped its replay budget.");
             } catch (HistoryReadLimitException) { self::assertTrue(true); }
-            [$root] = $t->sis->transferCredits()->periodRecord($t->student, $t->award, new HistoryReadBudget());
+            [$root] = $t->sis->transferCredits()->decisionRecord($t->student, $t->award, new HistoryReadBudget());
             $event = \Domain\Transfer\Event\TransferAcademicPeriodWasRecorded::occur(
                 new \Domain\Transfer\ValueObject\TransferCreditId($t->award->value),
                 ["decision_id" => EntityId::generate()->value, "previous_decision_id" => $root->decision(), "previous_academic_on" => null, "academic_on" => "2026-02-01"],

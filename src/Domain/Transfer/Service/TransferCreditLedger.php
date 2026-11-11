@@ -66,7 +66,7 @@ final readonly class TransferCreditLedger
             $existing = $this->records->existing($student, $rule->id, $completed->format("Y-m-d"));
             if ($existing !== null) {
                 $retained = $this->load(new EntityId($existing["id"]), new HistoryReadBudget());
-                if ($retained->courseVersion() !== $courseVersion->value) {
+                if ($retained->originalCourseVersion() !== $courseVersion->value) {
                     throw new DomainException(
                         "This award retains a different or unknown course publication. " .
                         "Review the existing award; a retry cannot replace its history.",
@@ -267,9 +267,46 @@ final readonly class TransferCreditLedger
         EntityId $operation,
         DateTimeImmutable $effective,
     ): void {
+        $root = $this->observe($record, $actor, $operation);
+        $id = new EntityId($record["id"]);
+        $before = $this->records->credit(new EntityId($record["credit"]["id"]));
+        $event = TransferCreditWasChanged::occur(
+            new TransferCreditId($id->value),
+            [
+                "decision_id" => $operation->value,
+                "previous_decision_id" => $root->decision(),
+                "action" => $change->kind,
+                "credits_milli" => $change->credits,
+                "grade" => $grade === null ? null : GradeSnapshot::fromRow($grade)->facts,
+            ],
+            ["__aggregate_type" => "transfer_credit"],
+        )->withPlayhead($root->playhead() + 1);
+        $this->history->append(
+            $this->stream($id),
+            $operation,
+            $root->playhead(),
+            new EventContext(
+                $actor,
+                $effective,
+                $operation,
+                new EntityId($root->decision() ?? throw new CorruptHistoryException()),
+                $change->reason,
+            ),
+            [$event],
+        );
+        $root->acceptHistorical($event);
+        $facts = $root->credit() ?? throw new CorruptHistoryException();
+        $this->records->project($facts, $before["version"]);
+        $this->records->track($root->source() ?? throw new CorruptHistoryException(), $facts);
+    }
+    /** Internal: caller authorizes, locks and verifies the reviewed current record before observing it.
+     * @param array<string,mixed> $record
+     */
+    public function observe(#[\SensitiveParameter] array $record, EntityId $actor, EntityId $operation): TransferCredit
+    {
         $this->actor($actor);
         $id = new EntityId($record["id"]);
-        $root = $this->load($id);
+        $root = $this->load($id, new HistoryReadBudget());
         $before = $this->records->credit(new EntityId($record["credit"]["id"]));
         if ($root->playhead() === 0) {
             $observation = PublishedGradeId::forVersion($operation, "transfer.observation." . $id->value);
@@ -322,34 +359,7 @@ final readonly class TransferCreditLedger
             );
             $root->acceptHistorical($base);
         }
-        $event = TransferCreditWasChanged::occur(
-            new TransferCreditId($id->value),
-            [
-                "decision_id" => $operation->value,
-                "previous_decision_id" => $root->decision(),
-                "action" => $change->kind,
-                "credits_milli" => $change->credits,
-                "grade" => $grade === null ? null : GradeSnapshot::fromRow($grade)->facts,
-            ],
-            ["__aggregate_type" => "transfer_credit"],
-        )->withPlayhead($root->playhead() + 1);
-        $this->history->append(
-            $this->stream($id),
-            $operation,
-            $root->playhead(),
-            new EventContext(
-                $actor,
-                $effective,
-                $operation,
-                new EntityId($root->decision() ?? throw new CorruptHistoryException()),
-                $change->reason,
-            ),
-            [$event],
-        );
-        $root->acceptHistorical($event);
-        $facts = $root->credit() ?? throw new CorruptHistoryException();
-        $this->records->project($facts, $before["version"]);
-        $this->records->track($root->source() ?? throw new CorruptHistoryException(), $facts);
+        return $root;
     }
     /** Reconstruct only the requested receipt decisions in one bounded replay.
      * @param list<string> $operations
@@ -390,7 +400,7 @@ final readonly class TransferCreditLedger
     /** Internal command/read context; caller must authorize and hold the student lock.
      * @return array{TransferCredit,array<string,mixed>}
      */
-    public function periodRecord(EntityId $student, EntityId $award, HistoryReadBudget $budget): array
+    public function decisionRecord(EntityId $student, EntityId $award, HistoryReadBudget $budget): array
     {
         $row = $this->records->award($award);
         if ($row["student_id"] !== $student->value) {

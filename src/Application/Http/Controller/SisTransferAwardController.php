@@ -17,6 +17,7 @@ final readonly class SisTransferAwardController
     public function __construct(
         private TransferAwardService $service,
         private \Domain\Transfer\Service\TransferPeriodService $periods,
+        private \Domain\Transfer\Service\TransferCourseService $courses,
     ) {
     }
     public function show(string $student, string $award): ResponseInterface
@@ -94,6 +95,50 @@ final readonly class SisTransferAwardController
     {
         return new JsonResponse(
             $this->periods->history(
+                new EntityId($student),
+                new EntityId($award),
+                FormInput::from($request)->optionalText("cursor", 16384),
+            ),
+        );
+    }
+    public function courseChoices(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->courses->choices(
+                new EntityId($student),
+                new EntityId($award),
+                FormInput::from($request)->optionalText("cursor", 16384),
+            ),
+        );
+    }
+    public function reviewCourse(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->courses->review(
+                new EntityId($student),
+                new EntityId($award),
+                $f->id("course_version_id"),
+                $f->integer("version", 0),
+                $f->text("effective_on", 10),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+    public function commitCourse(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->courses->commit(
+                new EntityId($student),
+                new EntityId($award),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+    public function courseHistory(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->courses->history(
                 new EntityId($student),
                 new EntityId($award),
                 FormInput::from($request)->optionalText("cursor", 16384),

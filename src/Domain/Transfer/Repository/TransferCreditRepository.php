@@ -22,6 +22,7 @@ interface TransferCreditRepository
     /** @return array<string,mixed> */
     public function credit(EntityId $credit): array;
     public function courseVersion(EntityId $credit): ?EntityId;
+    public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void;
     /** @return array<string,mixed> */
     public function term(EntityId $term): array;
     /** @param array<string,mixed> $source

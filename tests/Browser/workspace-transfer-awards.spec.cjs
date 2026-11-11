@@ -14,6 +14,10 @@ async function fixture(page, options = {}) {
         creditId = id(47);
     let serial = 70,
         interrupted = false;
+    let courseReview,
+        courseCommitted = false,
+        courseInterrupted = false,
+        courseSerial = 0;
     let periodReview;
     let periodCommitted = false,
         periodInterrupted = false;
@@ -31,7 +35,7 @@ async function fixture(page, options = {}) {
         completed_on: "2026-05-01",
         term_code: "26/FA",
         effective_on_default: "2026-08-10",
-        earlier_history_unknown: !!options.legacy,
+        earlier_history_unknown: !!options.legacy || !!options.untracked,
         history_recorded: !options.legacy && !options.untracked,
         course_version_id: options.legacy || options.untracked ? null : id(50),
         academic_on: options.periodKnown ? "2026-01-12" : null,
@@ -130,6 +134,90 @@ async function fixture(page, options = {}) {
                 };
                 result = periodReview;
             }
+        } else if (path === endpoint + "accepted-course/choices/") {
+            result = {
+                items: options.noCourses
+                    ? []
+                    : [
+                          {
+                              version_id: data.cursor ? id(52) : id(51),
+                              version: data.cursor ? 1 : 2,
+                              code: "MATH.101",
+                              title: "Catalog Algebra",
+                              transcript_title: data.cursor
+                                  ? "Reviewed <script>algebra</script>"
+                                  : "Reviewed Algebra",
+                              credits_milli: 6000,
+                          },
+                      ],
+                next_cursor: options.moreCourses && !data.cursor ? "frozen-course-choices" : null,
+            };
+        } else if (path === endpoint + "accepted-course/review/") {
+            if (options.staleCourse) {
+                status = 409;
+                result = { error: "The award changed. Reload before reviewing." };
+            } else {
+                courseReview = {
+                    review_token: `fictional-course-review-${++courseSerial}`,
+                    course_version_id: data.course_version_id,
+                    previous_course_version_id: value.course_version_id,
+                    before: {
+                        course_code: value.credit.course_code,
+                        course_title: value.credit.course_title,
+                    },
+                    after: {
+                        course_code: "MATH.101",
+                        course_title:
+                            data.course_version_id === id(52)
+                                ? "Reviewed <script>algebra</script>"
+                                : "Reviewed Algebra",
+                    },
+                    effective_on: data.effective_on,
+                    reason: data.reason,
+                };
+                result = courseReview;
+            }
+        } else if (path === endpoint + "accepted-course/commit/") {
+            if (!courseCommitted) {
+                courseCommitted = true;
+                value.course_version_id = courseReview.course_version_id;
+                value.credit.course_code = courseReview.after.course_code;
+                value.credit.course_title = courseReview.after.course_title;
+                value.credit.version++;
+                value.history_recorded = true;
+            }
+            result = { operation_id: id(93), first_version: 2, last_version: 2, event_ids: [id(94)] };
+            if (options.interruptCourse && !courseInterrupted) {
+                courseInterrupted = true;
+                status = 500;
+                result = { error: "The confirmation response was interrupted. Try confirming again." };
+            }
+        } else if (path === endpoint + "accepted-course/history/") {
+            result = {
+                items: data.cursor
+                    ? [
+                          {
+                              action: "course_accepted",
+                              course_version_id: courseReview.course_version_id,
+                              course_code: courseReview.after.course_code,
+                              course_title: courseReview.after.course_title,
+                              effective_at: courseReview.effective_on,
+                              recorded_at: "2026-08-10",
+                          },
+                      ]
+                    : [
+                          {
+                              action: options.untracked ? "observed_existing" : "award",
+                              course_version_id: options.untracked ? null : id(50),
+                              course_code: "MATH.101",
+                              course_title: "Fictional algebra",
+                              effective_at: "2026-08-01",
+                              recorded_at: "2026-08-01",
+                          },
+                      ],
+                next_cursor: !data.cursor && courseCommitted ? "frozen-accepted-history" : null,
+                earlier_history_unknown: !!options.untracked,
+            };
         } else if (path === endpoint + "source-period/commit/") {
             if (!periodCommitted) {
                 periodDecisions.push({
@@ -254,7 +342,9 @@ test("registrar reviews a correction before saving and sees encrypted-history va
     page,
 }) => {
     const f = await fixture(page);
-    await expect(page.locator("#drawer-body")).toContainText("Accepted course publication: retained with this award.");
+    await expect(page.locator("#drawer-body")).toContainText(
+        "Accepted course publication: retained with this award.",
+    );
     await correction(page);
     await expect(
         page.getByRole("region", { name: "Transfer correction comparison", exact: true }),
@@ -511,5 +601,88 @@ test("an interrupted confirmation reuses the same reviewed source-period command
     const calls = f.calls.filter((c) => c.path.endsWith("source-period/commit/"));
     expect(calls).toHaveLength(2);
     expect(calls[0].data).toEqual(calls[1].data);
+    expect(f.errors).toEqual([]);
+});
+
+test("registrar resolves unknown acceptance with explicit choices, review and interrupted-retry recovery", async ({
+    page,
+}) => {
+    const f = await fixture(page, { untracked: true, moreCourses: true, interruptCourse: true });
+    await page.getByRole("button", { name: "Review accepted course", exact: true }).click();
+    const choice = page.getByLabel("Accepted course publication", { exact: false });
+    await expect(choice).toHaveValue("");
+    await expect(page.locator("#drawer-body")).toContainText("earlier accepted publication is unknown");
+    await page.getByRole("button", { name: "Load more accepted-course choices", exact: true }).click();
+    await expect(choice).toBeFocused();
+    await choice.selectOption(id(52));
+    await page.getByRole("textbox", { name: "Effective date", exact: true }).fill("2026-08-01");
+    await page
+        .getByRole("textbox", { name: "Reason and acceptance evidence", exact: true })
+        .fill("Fictional evidence <script>retained</script>");
+    await page.getByRole("button", { name: "Review accepted definition", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Accepted course comparison", exact: true })).toContainText(
+        "Reviewed <script>algebra</script>",
+    );
+    await expect(page.locator("#drawer-body script")).toHaveCount(0);
+    await page.getByRole("button", { name: "Revise accepted course", exact: true }).click();
+    await expect(choice).toHaveValue(id(52));
+    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue(
+        "2026-08-01",
+    );
+    await expect(
+        page.getByRole("textbox", { name: "Reason and acceptance evidence", exact: true }),
+    ).toHaveValue("Fictional evidence <script>retained</script>");
+    await page.getByRole("button", { name: "Review accepted definition", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    const a11y = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(a11y.violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Confirm course acceptance", exact: true }).click();
+    await expect(page.locator("#drawer-error")).toContainText("interrupted");
+    await page.getByRole("button", { name: "Confirm course acceptance", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Reviewed <script>algebra</script>");
+    await expect(page.getByRole("region", { name: "Current transfer award", exact: true })).toContainText(
+        "3",
+    );
+    const writes = f.calls.filter((c) => c.path.endsWith("accepted-course/commit/"));
+    expect(writes).toHaveLength(2);
+    expect(writes[0].data).toEqual(writes[1].data);
+    expect(writes[0].csrf).toBe("fictional-test-token");
+    await page.getByRole("button", { name: "Course definition history", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Earlier facts observed");
+    await page.getByRole("button", { name: "Next course history page", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Reviewed <script>algebra</script>");
+    await page.getByRole("button", { name: "Previous course history page", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Fictional algebra");
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test("stale accepted-course review preserves entered values and never submits a confirmation", async ({
+    page,
+}) => {
+    const f = await fixture(page, { staleCourse: true });
+    await page.getByRole("button", { name: "Review accepted course", exact: true }).click();
+    await page.getByLabel("Accepted course publication", { exact: false }).selectOption(id(51));
+    await page
+        .getByRole("textbox", { name: "Reason and acceptance evidence", exact: true })
+        .fill("Fictional source.");
+    await page.getByRole("button", { name: "Review accepted definition", exact: true }).click();
+    await expect(page.locator("#drawer-error")).toContainText("award changed");
+    await expect(page.getByLabel("Accepted course publication", { exact: false })).toHaveValue(id(51));
+    await expect(
+        page.getByRole("textbox", { name: "Reason and acceptance evidence", exact: true }),
+    ).toHaveValue("Fictional source.");
+    expect(f.calls.some((c) => c.path.endsWith("accepted-course/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("course acceptance explains missing publications without creating a review", async ({ page }) => {
+    const f = await fixture(page, { noCourses: true });
+    await page.getByRole("button", { name: "Review accepted course", exact: true }).click();
+    await expect(page.locator("#drawer-error")).toContainText("Catalog staff must publish");
+    expect(f.calls.some((c) => c.path.endsWith("accepted-course/review/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });

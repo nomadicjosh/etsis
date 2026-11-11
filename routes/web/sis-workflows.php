@@ -240,6 +240,22 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.transfer.award.history");
     $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/accepted-course/choices/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "courseChoices",
+        ])->name("sis.transfer.course.choices");
+    $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/accepted-course/review/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "reviewCourse",
+        ])->name("sis.transfer.course.review");
+    $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/accepted-course/commit/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "commitCourse",
+        ])->name("sis.transfer.course.commit");
+    $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/accepted-course/history/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "courseHistory",
+        ])->name("sis.transfer.course.history");
+    $router
         ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/source-period/review/", [
             \Application\Http\Controller\SisTransferAwardController::class, "reviewPeriod",
         ])->name("sis.transfer.period.review");

@@ -2439,6 +2439,41 @@ if ($teachingPost($periodPath . "history/", [])->getStatusCode() !== 403 ||
 }
 $sis->access->staff = true;
 
+// Existing transfer acceptance reviews use real providers, private transport and the same event store.
+$acceptedPath = $correctionPath . "accepted-course/";
+$nextAccepted = $sis->publishCourse($teachingSection->courseId);
+$sis->access->staff = false;
+$sis->access->grants = ["sis:transfer:manage", "sis:student:read"];
+$acceptedChoices = $teachingPost($acceptedPath . "choices/", []);
+$acceptedVersion = $sis->sql->one("sis_academic_credits", ["id" => $postedTransfer["credit_id"]])["version"];
+$acceptedReviewResponse = $teachingPost($acceptedPath . "review/", [
+    "course_version_id" => $nextAccepted->value, "version" => (int) $acceptedVersion,
+    "effective_on" => $sis->clock->now()->format("Y-m-d"), "reason" => "Fictional accepted course review.",
+]);
+$acceptedReview = json_decode((string) $acceptedReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($acceptedChoices->getStatusCode() !== 200 || $acceptedReviewResponse->getStatusCode() !== 200 ||
+    !isset($acceptedReview["review_token"])) {
+    throw new RuntimeException("Transfer acceptance choices/review failed real provider wiring.");
+}
+$acceptedData = ["review_token" => $acceptedReview["review_token"]];
+$acceptedCommit = $teachingPost($acceptedPath . "commit/", $acceptedData);
+$acceptedRetry = $teachingPost($acceptedPath . "commit/", $acceptedData);
+$acceptedHistoryResponse = $teachingPost($acceptedPath . "history/", []);
+$acceptedHistory = json_decode((string) $acceptedHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($acceptedCommit->getStatusCode() !== 200 || (string) $acceptedCommit->getBody() !== (string) $acceptedRetry->getBody() ||
+    $acceptedHistoryResponse->getStatusCode() !== 200 ||
+    !in_array("course_accepted", array_column($acceptedHistory["items"] ?? [], "action"), true) ||
+    str_contains((string) $acceptedHistoryResponse->getBody(), "Fictional accepted course review")) {
+    throw new RuntimeException("Transfer acceptance confirmation/retry or curated history failed.");
+}
+$sis->access->grants = ["sis:transfer:manage"];
+foreach (["choices", "history", "commit"] as $acceptedAction) {
+    if ($teachingPost($acceptedPath . $acceptedAction . "/", $acceptedData)->getStatusCode() !== 403) {
+        throw new RuntimeException("Transfer-only access exposed protected course-acceptance decisions.");
+    }
+}
+$sis->access->staff = true;
+
 // Registrar enrollment history is private, curated and protected by browser CSRF.
 $sis->access->staff = true;
 $registrationHistoryPath = "/sis/students/" . $teachingStudent->id->value . "/registration-history/";

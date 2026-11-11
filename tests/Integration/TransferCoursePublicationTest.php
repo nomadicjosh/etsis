@@ -136,6 +136,19 @@ final class TransferCoursePublicationTest extends TestCase
             );
         }
     }
+    public function testInitialRetryUsesItsOpeningPublicationAfterAReviewedAcceptanceChange(): void
+    {
+        $t = $this->fixture();
+        $later = $t->sis->publishCourse($t->course);
+        $review = $t->courses()->review($t->student, $t->award, $later, 0, "2026-08-01", "Fictional corrected acceptance.");
+        $t->courses()->commit($t->student, $t->award, $review["review_token"]);
+        $events = $t->sis->sql->rows("sis_history_events");
+        self::assertSame($t->credit->value, $this->award($t, $t->courseVersion, "2026-05-01")->value);
+        self::assertSame($later->value, $t->service()->view($t->student, $t->award)["course_version_id"]);
+        self::assertSame($events, $t->sis->sql->rows("sis_history_events"));
+        $this->expectException(DomainException::class);
+        $this->award($t, $later, "2026-05-01");
+    }
     public function testEarlierUnknownCourseVersionIsNeitherBackfilledNorTrustedFromAnInjectedIndex(): void
     {
         $t = $this->fixture(true);

@@ -63,7 +63,7 @@ final readonly class TransferPeriodService
             $actor,
         ): array {
             $this->lock($student, $award, $actor);
-            [$root, $facts] = $this->credits->periodRecord($student, $award, new HistoryReadBudget());
+            [$root, $facts] = $this->credits->decisionRecord($student, $award, new HistoryReadBudget());
             if ($facts["version"] !== $version) {
                 throw new ConcurrentModificationException(
                     "Reload the transfer award before reviewing its source period.",
@@ -150,7 +150,7 @@ final readonly class TransferPeriodService
         }
         return $this->transactions->run(function () use ($student, $award, $actor, $d): array {
             $this->lock($student, $award, $actor);
-            [$root, $facts] = $this->credits->periodRecord($student, $award, new HistoryReadBudget());
+            [$root, $facts] = $this->credits->decisionRecord($student, $award, new HistoryReadBudget());
             if ($facts["id"] !== $d["credit_id"]) {
                 throw new CorruptHistoryException();
             }
@@ -196,10 +196,7 @@ final readonly class TransferPeriodService
                 $root->acceptHistorical($event);
                 $current = $root->credit() ?? throw new CorruptHistoryException();
                 $this->records->project($current, $facts["version"]);
-                $this->records->track(
-                    $root->source() ?? throw new CorruptHistoryException(),
-                    $current,
-                );
+                $this->records->track($root->source() ?? throw new CorruptHistoryException(), $current);
                 $this->audit->record($actor, "transfer.source_period_recorded", $award);
             }
             $this->actor($actor);
@@ -216,7 +213,7 @@ final readonly class TransferPeriodService
         return $this->transactions->run(function () use ($student, $award, $cursor, $actor): array {
             $this->lock($student, $award, $actor);
             $budget = new HistoryReadBudget();
-            [$root] = $this->credits->periodRecord($student, $award, $budget);
+            [$root] = $this->credits->decisionRecord($student, $award, $budget);
             $page = $budget->page($this->history, $this->stream($award), $cursor);
             $items = [];
             foreach ($page->events as $stored) {
@@ -226,9 +223,11 @@ final readonly class TransferPeriodService
                 $items[] = [
                     "action" => $period
                         ? "period_recorded"
-                        : ($e instanceof \Domain\Transfer\Event\TransferCreditWasEstablished
-                            ? $p["provenance"]
-                            : $p["action"]),
+                        : ($e instanceof \Domain\Transfer\Event\TransferCourseWasAccepted
+                            ? "course_accepted"
+                            : ($e instanceof \Domain\Transfer\Event\TransferCreditWasEstablished
+                                ? $p["provenance"]
+                                : $p["action"])),
                     "previous_academic_on" => $period ? $p["previous_academic_on"] : null,
                     "academic_on" => $period ? $p["academic_on"] : null,
                     "effective_at" => $stored->context->describe()["effective_at"],
