@@ -84,7 +84,7 @@ Use **Academic catalog → Grading scales** for the global setup, and **Programs
 | Transfer awards in overall GPA | Exclude transfer awards; or include accepted awards explicitly marked GPA eligible. |
 | Course waivers | Remove a required course everywhere without creating earned credits or GPA points. Credit/GPA minimum changes require separate attributed exceptions. |
 
-The repeat-credit, repeat-GPA and transfer-GPA choices start unselected and must be explicit before degree publication. Group sharing defaults to one group in new compositions and can be changed before publication. These are frozen inputs for this program/year, not an installation-wide mutable profile. This stage does not recalculate students or apply policies. Unknown earlier policy inputs remain unknown.
+The repeat-credit, repeat-GPA and transfer-GPA choices start unselected and must be explicit before degree publication. Group sharing defaults to one group in new compositions and can be changed before publication. These are frozen inputs for this program/year, not an installation-wide mutable profile. The [calculation core](degree-audit-calculations.md) now processes these retained choices for supplied verified inputs. Student-service integration and complete-input checks remain outstanding; authoring never recalculates students. Unknown earlier policy inputs remain unknown.
 
 ## Course sharing across groups
 
@@ -96,7 +96,7 @@ The current composition model validates `policies.group_reuse` as `one_group` or
 
 Earlier inline publication contracts still omit this policy and display it as not recorded. Explicitly moving an inline working draft into a new reusable-group composition assigns the new-draft default; it does not rewrite an earlier publication. Legacy conversion/import of historical facts must not infer a missing allocation policy.
 
-This stage retains the policy input. Student course allocation, repeat/GPA calculations and completion evaluation remain on the roadmap; storing the choice alone does not implement them.
+This stage retains the policy input. The allocation and repeat/GPA domain cores now consume retained choices. Their student-service integration and completion evaluation remain on the roadmap; storing a choice alone does not calculate a student result.
 
 ## Existing inline drafts and publications
 
