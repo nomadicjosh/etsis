@@ -49,6 +49,11 @@ final readonly class StudentRequirementsService
         private Clock $clock,
     ) {
     }
+    /** Authorize the pursuit scope without replaying its selected catalog publications. */
+    public function authorizeRead(EntityId $student, EntityId $assignment): void
+    {
+        $this->scope($student, $assignment);
+    }
     /** @return array<string, mixed> */
     public function view(EntityId $student, EntityId $assignment): array
     {

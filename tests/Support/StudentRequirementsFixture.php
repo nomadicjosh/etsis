@@ -49,18 +49,21 @@ final class StudentRequirementsFixture
         );
         $this->service = $this->service();
     }
-    public function service(?\Domain\Audit\Repository\AuditTrail $audit = null): StudentRequirementsService
-    {
+    public function service(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+    ): StudentRequirementsService {
         $f = $this->f;
         $s = $f->sis;
+        $history ??= $f->history;
         return new StudentRequirementsService(
             new SqlStudentRequirementsRepository($s->sql),
             new SqlStudentRecordRepository($s->sql),
             $s->admissions,
             new SqlCatalogYearRepository($s->sql),
             new SqlRequirementsRepository($s->sql),
-            new PublishedRequirementsReader($f->history),
-            $f->history,
+            new PublishedRequirementsReader($history),
+            $history,
             $s->access,
             $s->transactions,
             $audit ?? $s->audit,

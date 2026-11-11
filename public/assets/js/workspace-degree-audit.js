@@ -1715,9 +1715,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
     }
-    async function academicWork(base, back, after = null, stack = []) {
-        const data = await post(`${base}academic-work/`, after ? { after } : {});
-        const body = screen("Academic work", "STUDENT ACADEMIC RECORDS");
+    async function academicWork(base, back, after = null, stack = [], matching = false) {
+        const data = await post(`${base}academic-work/${matching ? "matches/" : ""}`, after ? { after } : {});
+        const body = screen(matching ? "Requirement matches" : "Academic work", "STUDENT ACADEMIC RECORDS");
         body.append(
             node(
                 "p",
@@ -1730,10 +1730,57 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "Grades and credits use retained record facts. Earlier records may have unknown history. Term labels marked current are navigation labels, not retained historical definitions. The list is not ordered by completion date.",
             ),
             actions(
-                button("Refresh academic work", () => academicWork(base, back)),
+                button(matching ? "Refresh requirement matches" : "Refresh academic work", () =>
+                    academicWork(base, back, null, [], matching),
+                ),
+                button(matching ? "View academic work only" : "Check requirement matches", () =>
+                    academicWork(base, back, after, stack, !matching),
+                ),
                 button("Back to degree requirements", back),
             ),
         );
+        if (matching) {
+            const context = data.matches_context;
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "Matches identify potential uses of this page's work. Repeat, sharing, quantity, residency and GPA rules still need evaluation. No course is applied, no totals are calculated and no requirement is marked complete.",
+                ),
+            );
+            if (context) {
+                body.append(
+                    node(
+                        "p",
+                        { class: "audit-status" },
+                        `${context.name} · ${context.academic_year_code} · Version ${context.version}`,
+                    ),
+                );
+                if (context.cohort_changed)
+                    body.append(
+                        node(
+                            "p",
+                            { class: "alert alert-info", role: "status" },
+                            "The matriculation cohort changed. These matches still use the retained requirement selection; ask the registrar to review it.",
+                        ),
+                    );
+                if (context.approval_conflicts)
+                    body.append(
+                        node(
+                            "p",
+                            { class: "alert alert-warning", role: "status" },
+                            "Some course approvals conflict. Review Student exceptions before applying work.",
+                        ),
+                    );
+            } else
+                body.append(
+                    node(
+                        "p",
+                        { class: "alert alert-info", role: "status" },
+                        "Select published degree requirements for this pursuit before checking course matches.",
+                    ),
+                );
+        }
         const cards = node("div", { class: "audit-library-grid" });
         for (const item of data.items) {
             const grade = item.grade;
@@ -1802,13 +1849,60 @@ window.createWorkspaceDegreeAudit = function (ui) {
                               "Earlier history is unknown. This record cannot establish all prior academic facts.",
                           )
                         : null,
+                    matching && data.matches_context ? workMatches(item, data.match_limit) : null,
                 ),
             );
         }
         body.append(cards);
         if (!data.items.length)
             body.append(node("p", { class: "audit-empty" }, "No current academic work on this page."));
-        pager(body, data, after, stack, (a, s) => academicWork(base, back, a, s));
+        pager(body, data, after, stack, (a, s) => academicWork(base, back, a, s, matching));
+    }
+    function workMatches(item, limit) {
+        const section = node(
+            "section",
+            { class: "audit-tree-section", "aria-label": "Course requirement matches" },
+            node("h3", { class: "h6" }, "Requirement matches"),
+        );
+        const matches = item.requirement_matches || [];
+        if (!matches.length)
+            section.append(
+                node(
+                    "p",
+                    {},
+                    "Not listed in the selected requirements or their approved alternatives. This does not decide whether the work counts toward overall credits or GPA.",
+                ),
+            );
+        for (const match of matches)
+            section.append(
+                node(
+                    "div",
+                    { class: "mb-3" },
+                    node("h4", { class: "h6" }, match.group_name),
+                    node(
+                        "p",
+                        {},
+                        `${match.via_substitution ? "Approved alternative for" : "Listed course:"} ${match.required_course_code} · ${match.required_course_title}`,
+                    ),
+                    node("p", {}, match.explanation),
+                    match.minimum_grade_points_milli != null
+                        ? node(
+                              "p",
+                              { class: "form-text" },
+                              `Group minimum per-course grade points: ${text(match.minimum_grade_points_milli)}`,
+                          )
+                        : null,
+                ),
+            );
+        if (item.more_requirement_matches)
+            section.append(
+                node(
+                    "p",
+                    { class: "audit-status" },
+                    `Showing the first ${limit} matches for this record. More matches exist; this is not a complete allocation.`,
+                ),
+            );
+        return section;
     }
     async function studentChoices(base, current, back) {
         const initial = await post(`${base}choices/`);

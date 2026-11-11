@@ -60,7 +60,7 @@ final readonly class RequirementAdjustmentService
     /** @return array<string,mixed> */
     private function read(EntityId $student, EntityId $assignment, bool $includeRequirements): array
     {
-        $this->requirements->view($student, $assignment);
+        $this->requirements->authorizeRead($student, $assignment);
         return $this->transactions->run(function () use ($student, $assignment, $includeRequirements): array {
             $this->students->lock($student);
             $parent = $this->requirements->view($student, $assignment);

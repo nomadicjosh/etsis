@@ -149,3 +149,7 @@ Fictional SQLite integration tests cover group reuse across programs/years, sele
 Browser checks exercise standalone group creation, course/version checkboxes, direct rule-type controls, block composition, native drag-and-drop and button alternatives, preserved degree fields while editing groups, publication review, escaped titles, mobile reflow, focus restoration and automated accessibility scans. All 97 SIS table definitions compile through the five installed framework dialects; runtime integration here uses SQLite only. Other database engines still require live locking/LOB verification.
 
 The student program now has a **Degree requirements** action for inspecting its retained selection and, with explicit office permission, reviewing a new one. [Student requirement assignment](student-degree-requirements.md) documents its migration, permissions and historical controls.
+
+## Inspecting student work against requirements
+
+After assigning a published degree to a student pursuit, use **Degree requirements → Academic work → Check requirement matches** for [per-course candidate explanations](student-academic-work.md#checking-requirement-matches). The view uses retained course/grading references and applicable exceptions. It identifies possible uses without allocating courses, calculating GPA or deciding degree completion.

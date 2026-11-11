@@ -6,6 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\DegreeAudit\Service\AcademicWorkService;
+use Domain\DegreeAudit\Service\AcademicWorkMatchService;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -13,14 +14,26 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisAcademicWorkController
 {
-    public function __construct(private AcademicWorkService $service)
-    {
+    public function __construct(
+        private AcademicWorkService $service,
+        private AcademicWorkMatchService $matches,
+    ) {
     }
 
     public function page(ServerRequest $request, string $student, string $assignment): ResponseInterface
     {
         return new JsonResponse(
             $this->service->page(
+                new EntityId($student),
+                new EntityId($assignment),
+                FormInput::from($request)->optionalId("after"),
+            ),
+        );
+    }
+    public function matches(ServerRequest $request, string $student, string $assignment): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->matches->page(
                 new EntityId($student),
                 new EntityId($assignment),
                 FormInput::from($request)->optionalId("after"),

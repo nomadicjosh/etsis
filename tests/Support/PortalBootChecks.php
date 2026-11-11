@@ -1829,8 +1829,24 @@ if (
 ) {
     throw new RuntimeException("Private academic-work paging failed provider or CSRF checks.");
 }
+$academicMatchResponse = $teachingPost($studentRequirementPath . "academic-work/matches/", []);
+$academicMatchBody = json_decode((string) $academicMatchResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$academicMatchNoCsrf = $academicWorkNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid" . $studentRequirementPath . "academic-work/matches/",
+));
+if (
+    $academicMatchResponse->getStatusCode() !== 200 ||
+    ($academicMatchBody["matches_context"]["requirements_version_id"] ?? null) !== $requirementReceipt["operation_id"] ||
+    !str_contains($academicMatchResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $app->router->match($academicMatchNoCsrf)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Private course matching failed provider, selection or CSRF checks.");
+}
 $sis->access->grants = [];
-if ($teachingPost($studentRequirementPath . "academic-work/", [])->getStatusCode() !== 403) {
+if (
+    $teachingPost($studentRequirementPath . "academic-work/matches/", [])->getStatusCode() !== 403 ||
+    $teachingPost($studentRequirementPath . "academic-work/", [])->getStatusCode() !== 403
+) {
     throw new RuntimeException("Academic-work paging exposed another student's records.");
 }
 $sis->access->staff = true;

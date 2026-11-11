@@ -314,8 +314,12 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
-        else if (path === `${base}academic-work/`) {
+        else if (path === `${base}academic-work/` || path === `${base}academic-work/matches/`) {
+            if (path.endsWith("/matches/") && options.rejectAcademicMatches)
+                return route.fulfill({ status: 403, json: { message: "Access denied." } });
             const record = {
+                course_version_id: id(12),
+                section_version_id: id(13),
                 id: id(40),
                 course_id: course,
                 course_code: "MATH.101",
@@ -384,8 +388,49 @@ async function fixture(page, options = {}) {
                       ],
                 next_after: body?.after ? null : id(41),
             };
-        }
-        else if (path === `${base}choices/`) {
+            if (path.endsWith("/matches/")) {
+                response.match_limit = 25;
+                response.matches_context = selection
+                    ? {
+                          requirements_version_id: version,
+                          version: 1,
+                          name: "B.S. Computing <b>fictional</b>",
+                          academic_year_code: "2026-2027",
+                          cohort_changed: Boolean(options.changed),
+                          approval_conflicts: Boolean(options.approvalConflicts),
+                          group_reuse: "one_group",
+                      }
+                    : null;
+                response.items = response.items.map((item) => ({
+                    ...item,
+                    requirement_matches:
+                        item.id === id(41)
+                            ? []
+                            : [
+                                  {
+                                      group_name: "General education",
+                                      required_course_code: "MATH.101",
+                                      required_course_title: "Algebra <b>fictional</b>",
+                                      via_substitution: item.credit_type === "transfer",
+                                      minimum_grade_points_milli: 2700,
+                                      status:
+                                          item.status === "V"
+                                              ? "voided"
+                                              : item.status === "W"
+                                                ? "dropped"
+                                                : "candidate",
+                                      explanation:
+                                          item.status === "V"
+                                              ? "A voided award cannot satisfy a course requirement."
+                                              : item.status === "W"
+                                                ? "A dropped course cannot satisfy a completed-course requirement."
+                                                : "Candidate for allocation; this work has not been applied to the requirement.",
+                                  },
+                              ],
+                    more_requirement_matches: Boolean(options.moreMatches) && item.id === id(40),
+                }));
+            }
+        } else if (path === `${base}choices/`) {
             cursorCount++;
             response = {
                 template_id: template,
