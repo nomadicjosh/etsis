@@ -68,7 +68,7 @@ A completed confirmation remains safe to retry after expiry or later publication
    Degree publication reviews expire after 20 minutes. **Refresh publication review** retains your reason and prepares the current saved definition for another review. Confirmation records the actual publication time. A completed confirmation remains safe to retry after expiry; it returns its original result without publishing again.
 7. **Published requirements → Inspect version** resolves original published groups and course labels. **Clone version … to another academic year** creates a fresh draft retaining the exact group-version references and policy inputs; it does not copy or give ownership to the groups. Existing target drafts cannot be overwritten. Review and publish the clone independently.
 
-Two groups may reference the same course with different course publications. Each block retains its own approved definition. Resolving overlapping eligible work and allocation belongs to the future student audit engine; authoring does not assume a greedy allocation or sum group minimums as proof of degree feasibility.
+Two groups may reference the same course with different course publications. Each block retains its own approved definition. The [student course-group placement review](student-course-placement.md) now resolves overlapping eligible work with bounded exact search. Authoring never assumes a greedy allocation or sums group minimums as proof of degree feasibility. Complete degree evaluation remains a later stage.
 
 ## Grading scales
 

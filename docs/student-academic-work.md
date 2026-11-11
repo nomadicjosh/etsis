@@ -59,3 +59,7 @@ Choose **Verify academic inputs** to check the available current and historical 
 ## Credits & GPA
 
 Choose **Credits & GPA** from the degree-requirement or academic-work screen for a bounded current-work calculation using the pursuit’s retained policies. It explains each record’s contribution and distinguishes an unknown GPA from zero or no eligible GPA credits. This separate [review](student-credit-gpa-review.md) does not allocate courses to requirements, change standing or establish graduation eligibility.
+
+## Review course placement
+
+Choose **Review course placement** from the degree or academic-work screen to review proposed placements across the selected course groups with approved exceptions. The [review](student-course-placement.md) verifies all supplied current inputs together; it does not combine paged candidate matches. It explains missing evidence, group grade floors, repeat treatment and sharing, without assigning a partial plan or establishing graduation eligibility.

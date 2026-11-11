@@ -9,6 +9,7 @@ use Domain\DegreeAudit\Service\AcademicWorkService;
 use Domain\DegreeAudit\Service\AcademicInputService;
 use Domain\DegreeAudit\Service\AcademicCalculationService;
 use Domain\DegreeAudit\Service\AcademicWorkMatchService;
+use Domain\DegreeAudit\Service\StudentGroupAllocationService;
 use Domain\DegreeAudit\ValueObject\AcademicInputStatus;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -22,6 +23,7 @@ final readonly class SisAcademicWorkController
         private AcademicWorkMatchService $matches,
         private AcademicInputService $inputs,
         private AcademicCalculationService $calculations,
+        private StudentGroupAllocationService $allocations,
     ) {
     }
 
@@ -44,6 +46,21 @@ final readonly class SisAcademicWorkController
                 FormInput::from($request)->optionalId("after"),
             ),
         );
+    }
+    public function allocation(ServerRequest $request, string $student, string $assignment): ResponseInterface
+    {
+        $result = $this->allocations->preview(new EntityId($student), new EntityId($assignment));
+        if ($result["status"] === "inconsistent") {
+            return new JsonResponse(
+                [
+                    "error" =>
+                        "Course-group placement could not be verified. Ask a registrar to review this record.",
+                    "status" => "inconsistent",
+                ],
+                409,
+            );
+        }
+        return new JsonResponse($result);
     }
     public function calculations(
         ServerRequest $request,

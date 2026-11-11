@@ -314,7 +314,87 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
-        else if (path === `${base}academic-work/calculations/`) {
+        else if (path === `${base}academic-work/allocation/`) {
+            if (options.rejectAllocation)
+                return route.fulfill({
+                    status: 409,
+                    json: {
+                        error: "Course-group placement could not be verified. Ask a registrar to review this record.",
+                    },
+                });
+            if (!selection) response = { status: "needs_selection" };
+            else if (options.allocationLimit) response = { status: "limited" };
+            else {
+                const outcome = options.allocationOutcome || "feasible";
+                const courseIds = Array.from({ length: 21 }, (_, index) => id(200 + index));
+                response = {
+                    status: "review",
+                    outcome,
+                    input_status: options.allocationHistoryGaps ? "history_gaps" : "verified",
+                    current_record_count: 21,
+                    context: {
+                        name: requirements.definition.name,
+                        academic_year_code: "2026-2027",
+                        version: 1,
+                        cohort_changed: Boolean(options.changed),
+                        group_reuse: options.shareCourses ? "multiple_groups" : "one_group",
+                    },
+                    issues:
+                        outcome === "unsupported"
+                            ? ["group_average_gpa_unsupported"]
+                            : outcome === "needs_review"
+                              ? ["course_version_unknown"]
+                              : [],
+                    groups: [
+                        {
+                            id: group,
+                            name: "General education <b>fictional</b>",
+                            version_id: id(8),
+                            requirement_type: "credits",
+                            required_credits_milli: 63000,
+                            required_courses: 0,
+                            minimum_grade_points_milli: 2000,
+                            waived_courses: [courseIds[0]],
+                            courses: Object.fromEntries(
+                                courseIds.map((id, i) => [
+                                    id,
+                                    { code: `REQ.${i}`, title: "Retained requirement <b>fictional</b>" },
+                                ]),
+                            ),
+                            rules: [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }],
+                            placements:
+                                outcome !== "feasible"
+                                    ? []
+                                    : courseIds.map((target, index) => ({
+                                          course_id: id(300 + index),
+                                          course_code: index === 20 ? "LAST.101" : `MATH.${index}`,
+                                          course_title: "Actual course <b>fictional</b>",
+                                          target_course_id: target,
+                                          target_code: `REQ.${index}`,
+                                          target_title: "Retained requirement <b>fictional</b>",
+                                          via_substitution: index === 0,
+                                          credits_milli: 3000,
+                                          work_options:
+                                              index === 0 ? [[id(100)], [id(101)]] : [[id(100 + index)]],
+                                      })),
+                        },
+                    ],
+                    records: courseIds.map((target, index) => ({
+                        id: id(100 + index),
+                        course_code: index === 20 ? "LAST.101" : `MATH.${index}`,
+                        course_title: "Retained work <b>fictional</b>",
+                        statuses: [
+                            outcome === "needs_review"
+                                ? "course_version_unknown"
+                                : outcome === "infeasible"
+                                  ? "in_progress"
+                                  : "candidate",
+                        ],
+                        uses: outcome !== "feasible" ? [] : [{ group_id: group, alternative: index === 0 }],
+                    })),
+                };
+            }
+        } else if (path === `${base}academic-work/calculations/`) {
             if (options.rejectCalculations)
                 return route.fulfill({
                     status: 409,

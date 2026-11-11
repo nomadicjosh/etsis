@@ -42,6 +42,38 @@ final readonly class CourseMatchEvaluator
         return $items;
     }
 
+    /** Complete bounded eligibility for structural placement; never use truncated candidate pages.
+     * Earned work for a waived target can still meet quantity constraints.
+     * @param list<array<string,mixed>> $work
+     * @param array<string,mixed> $requirements
+     * @param array<string,mixed> $effective
+     * @return list<array<string,mixed>>
+     */
+    public function allocation(array $work, array $requirements, array $effective): array
+    {
+        if (count($work) > 200) {
+            throw new \Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException();
+        }
+        $index = $this->index($requirements, $effective);
+        $items = [];
+        $checks = 0;
+        foreach ($work as $item) {
+            $matches = [];
+            foreach ($index[$item["course_id"]] ?? [] as $candidate) {
+                if (++$checks > 5000) {
+                    throw new \Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException();
+                }
+                $eligibility = array_replace($candidate, ["waived" => false]);
+                $status = $this->status($item, $eligibility, $requirements["grade_scale"] ?? null);
+                if ($status === Status::InProgress && $item["quality_points_milli"] !== 0) {
+                    $status = Status::GradeUnknown;
+                }
+                $matches[] = $candidate + ["status" => $status->value];
+            }
+            $items[] = array_replace($item, ["requirement_matches" => $matches]);
+        }
+        return $items;
+    }
     /** @param array<string,mixed> $requirements
      * @param array<string,mixed> $effective
      * @return array<string,list<array<string,mixed>>>

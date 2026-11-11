@@ -1708,6 +1708,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             actions(
                 button("Academic work", () => academicWork(base, restore)),
                 button("Credits & GPA", () => academicCalculations(base, restore)),
+                button("Review course placement", () => groupAllocation(base, restore)),
                 button("Assignment history", () => studentHistory(base, restore)),
                 data.selection
                     ? button("Preview with approvals", () =>
@@ -1737,6 +1738,332 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 }),
             ),
         );
+    }
+    const placementIssues = {
+        policy_unknown: "A required sharing or repeat-credit policy was not recorded.",
+        grade_unknown: "A relevant retained grade definition is unknown.",
+        course_version_unknown:
+            "Relevant earned work has no retained course publication. Review its equivalence.",
+        course_version_differs:
+            "Relevant work uses a different course publication. Review its equivalence before placement.",
+        scale_unknown: "A required retained grading publication is unknown.",
+        scale_differs:
+            "A group grade minimum and the work use different grading publications. No conversion is assumed.",
+        approval_conflict: "Resolve conflicting course waivers or substitutions in Student exceptions.",
+        group_average_gpa_unsupported:
+            "An earlier group uses an average-GPA rule. This placement review cannot yet evaluate that constraint.",
+    };
+    const placementStatuses = {
+        candidate: "Eligible after course-publication and group-grade checks",
+        in_progress: "No final grade recorded",
+        insufficient_grade: "Below a group's minimum course grade points",
+        not_passing: "The retained grade is not passing",
+        no_credit: "No eligible completed award",
+        dropped: "Dropped work cannot satisfy completed-course requirements",
+        voided: "Voided award",
+        repeat_not_selected: "Another eligible repeat supplies the credit contribution",
+    };
+    async function groupAllocation(base, back) {
+        const data = await post(`${base}academic-work/allocation/`, {});
+        renderGroupAllocation(base, back, data);
+    }
+    function renderGroupAllocation(base, back, data, offset = 0) {
+        const body = screen("Course-group placement", "RETAINED REQUIREMENTS & APPROVALS");
+        const restore = () => renderGroupAllocation(base, back, data, offset);
+        body.append(
+            node(
+                "p",
+                {},
+                "Review a proposed placement of current work against course-group quantities and required courses, including approved exceptions. Overall GPA, residency, specialization rules and graduation eligibility are not evaluated here. This review saves no academic changes or audit result.",
+            ),
+        );
+        body.append(
+            actions(
+                button("Refresh course placement", () => groupAllocation(base, back)),
+                button("Back to previous screen", back),
+            ),
+        );
+        if (data.status === "needs_selection" || data.status === "limited") {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    data.status === "needs_selection"
+                        ? "Select published degree requirements for this pursuit before reviewing course placement."
+                        : "The review reached its work limit. No partial placements or records are shown. Ask the registrar to arrange a controlled review; this is not an academic failure.",
+                ),
+            );
+            return;
+        }
+        const headings = {
+            feasible: "A complete group placement was found",
+            infeasible: "No complete group placement found",
+            undetermined: "The placement search reached its limit",
+            needs_review: "Some academic inputs need review",
+            unsupported: "These retained rules need additional support",
+        };
+        body.append(node("h2", {}, headings[data.outcome] || "Placement needs review"));
+        body.append(
+            node(
+                "p",
+                { role: "status" },
+                data.outcome === "feasible"
+                    ? "The proposed placements meet the supplied course-group constraints. This is not a completed degree audit."
+                    : "No placements have been assigned. A missing, uncertain or incomplete plan does not change the student's academic status.",
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                { class: "audit-status" },
+                `${data.context.name} · ${data.context.academic_year_code} · Version ${data.context.version}`,
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                `${data.current_record_count} current academic records checked against available sources. This does not certify a complete historical archive.`,
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                data.context.group_reuse === "multiple_groups"
+                    ? "A completed course may satisfy multiple groups. Overall earned credit and GPA still count actual work once under their own policies."
+                    : "A completed course can be placed in one group. The search considers the groups together.",
+            ),
+        );
+        if (data.input_status === "history_gaps")
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "Earlier history is unknown for some current work. Only supplied verified facts are used.",
+                ),
+            );
+        if (data.context.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "The matriculation cohort changed. This review uses the retained degree selection; ask the registrar to review it.",
+                ),
+            );
+        for (const issue of data.issues)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    placementIssues[issue] || "A retained input needs review.",
+                ),
+            );
+        body.append(node("h2", {}, "Course groups"));
+        const groups = node("div", { class: "audit-library-grid" });
+        for (const group of data.groups)
+            groups.append(
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h3", {}, group.name),
+                    node(
+                        "p",
+                        {},
+                        group.requirement_type === "courses"
+                            ? `${group.required_courses} required courses`
+                            : `${text(group.required_credits_milli)} required credits`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        data.outcome === "feasible"
+                            ? `${group.placements.length} proposed course placements`
+                            : "Placement not established",
+                    ),
+                    button(`Inspect group ${group.name}`, () => groupPlacementDetails(data, group, restore)),
+                ),
+            );
+        body.append(groups, node("h2", {}, "How current work was considered"));
+        const names = new Map(data.groups.map((g) => [g.id, g.name]));
+        const records = node("div", { class: "audit-library-grid" });
+        for (const record of data.records.slice(offset, offset + 20)) {
+            const card = node(
+                "article",
+                { class: "audit-card" },
+                node("h3", {}, `${record.course_code} · ${record.course_title}`),
+            );
+            for (const use of record.uses)
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        `${use.alternative ? "Equivalent eligible evidence for" : "Proposed placement in"} ${names.get(use.group_id)}.`,
+                    ),
+                );
+            if (!record.uses.length)
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        data.outcome !== "feasible"
+                            ? "No partial placement is assigned."
+                            : record.statuses.includes("candidate")
+                              ? "Eligible work not used in this complete placement; repeat and sharing rules still apply."
+                              : "No eligible completed placement in these groups.",
+                    ),
+                );
+            for (const status of record.statuses)
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        placementStatuses[status] ||
+                            placementIssues[status] ||
+                            "Review this record's eligibility.",
+                    ),
+                );
+            records.append(card);
+        }
+        body.append(records);
+        if (!data.records.length) body.append(node("p", {}, "No current contribution records to display."));
+        else
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    `Showing ${offset + 1}–${Math.min(offset + 20, data.records.length)} of ${data.records.length} records.`,
+                ),
+            );
+        const pages = actions();
+        if (offset > 0)
+            pages.append(
+                button("Previous work records", () => renderGroupAllocation(base, back, data, offset - 20)),
+            );
+        if (offset + 20 < data.records.length)
+            pages.append(
+                button("Next work records", () => renderGroupAllocation(base, back, data, offset + 20)),
+            );
+        body.append(pages);
+    }
+    function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
+        const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
+        body.append(
+            node(
+                "p",
+                {},
+                `${group.requirement_type === "courses" ? `${group.required_courses} required courses` : `${text(group.required_credits_milli)} required credits`}${group.minimum_grade_points_milli == null ? "" : ` · Minimum course grade points: ${text(group.minimum_grade_points_milli)}`}`,
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                `${group.waived_courses.length} approved course waivers in this group. Waivers create no earned credit and do not reduce quantity minimums.`,
+            ),
+        );
+        body.append(actions(button("Back to course groups", back)));
+        if (data.outcome !== "feasible")
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    "No complete placement was established. No speculative partial plan is shown.",
+                ),
+            );
+        body.append(node("h2", {}, "Retained course requirements"));
+        for (const rule of group.rules.slice(ruleOffset, ruleOffset + 20)) {
+            const detail = node(
+                "details",
+                { class: "audit-tree-section" },
+                node(
+                    "summary",
+                    {},
+                    `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
+                ),
+            );
+            let loaded = false;
+            detail.addEventListener("toggle", () => {
+                if (!detail.open || loaded) return;
+                loaded = true;
+                const list = node("ul", {});
+                for (const id of rule.course_ids) {
+                    const course = group.courses[id];
+                    const waived = group.waived_courses.includes(id);
+                    const placed =
+                        data.outcome === "feasible" &&
+                        group.placements.some((p) => p.target_course_id === id);
+                    list.append(
+                        node(
+                            "li",
+                            {},
+                            `${course.code} · ${course.title}${waived ? " · Course requirement waived" : placed ? " · Proposed placement" : ""}`,
+                        ),
+                    );
+                }
+                detail.append(list);
+            });
+            body.append(detail);
+        }
+        const rulePages = actions();
+        if (ruleOffset > 0)
+            rulePages.append(
+                button("Previous requirement cards", () =>
+                    groupPlacementDetails(data, group, back, offset, ruleOffset - 20),
+                ),
+            );
+        if (ruleOffset + 20 < group.rules.length)
+            rulePages.append(
+                button("Next requirement cards", () =>
+                    groupPlacementDetails(data, group, back, offset, ruleOffset + 20),
+                ),
+            );
+        body.append(rulePages, node("h2", {}, "Proposed placements"));
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const p of group.placements.slice(offset, offset + 20))
+            cards.append(
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", {}, `${p.course_code} · ${p.course_title}`),
+                    node("p", {}, `${text(p.credits_milli)} actual earned credits · One distinct course`),
+                    node(
+                        "p",
+                        {},
+                        `${p.via_substitution ? "Approved alternative for" : "Supports requirement"} ${p.target_code} · ${p.target_title}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        p.work_options.length > 1
+                            ? `${p.work_options.length} equivalent earned-credit evidence alternatives remain available. No overall credit or GPA winner is selected here.`
+                            : `${p.work_options[0].length} eligible award${p.work_options[0].length === 1 ? "" : "s"} support this placement.`,
+                    ),
+                ),
+            );
+        body.append(cards);
+        if (group.placements.length)
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    `Showing ${offset + 1}–${Math.min(offset + 20, group.placements.length)} of ${group.placements.length} placements.`,
+                ),
+            );
+        const pages = actions();
+        if (offset > 0)
+            pages.append(
+                button("Previous placements", () =>
+                    groupPlacementDetails(data, group, back, offset - 20, ruleOffset),
+                ),
+            );
+        if (offset + 20 < group.placements.length)
+            pages.append(
+                button("Next placements", () =>
+                    groupPlacementDetails(data, group, back, offset + 20, ruleOffset),
+                ),
+            );
+        body.append(pages);
     }
     const calculationReasons = {
         included: "Included once in this total",
@@ -2052,6 +2379,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
                 button("Credits & GPA", () =>
                     academicCalculations(base, () => academicWork(base, back, after, stack, matching)),
+                ),
+                button("Review course placement", () =>
+                    groupAllocation(base, () => academicWork(base, back, after, stack, matching)),
                 ),
                 button("Verify academic inputs", () =>
                     verifyAcademicInputs(base, () => academicWork(base, back, after, stack, matching)),

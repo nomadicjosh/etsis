@@ -1897,8 +1897,25 @@ if (
 ) {
     throw new RuntimeException("Private academic calculations failed provider, selection, privacy or CSRF checks.");
 }
+$groupAllocationResponse = $teachingPost($studentRequirementPath . "academic-work/allocation/", []);
+$groupAllocationBody = json_decode((string) $groupAllocationResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$groupAllocationNoCsrf = $academicWorkNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid" . $studentRequirementPath . "academic-work/allocation/",
+));
+if (
+    $groupAllocationResponse->getStatusCode() !== 200 ||
+    ($groupAllocationBody["status"] ?? null) !== "review" ||
+    ($groupAllocationBody["context"]["requirements_version_id"] ?? null) !== $requirementReceipt["operation_id"] ||
+    !is_array($groupAllocationBody["groups"] ?? null) ||
+    isset($groupAllocationBody["references"]) ||
+    !str_contains($groupAllocationResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $app->router->match($groupAllocationNoCsrf)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Private group allocation failed provider, selection, privacy or CSRF checks.");
+}
 $sis->access->grants = [];
 if (
+    $teachingPost($studentRequirementPath . "academic-work/allocation/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/calculations/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/verify/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/matches/", [])->getStatusCode() !== 403 ||

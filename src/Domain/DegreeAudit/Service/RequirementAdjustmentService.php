@@ -16,6 +16,7 @@ use Domain\DegreeAudit\ValueObject\RequirementAdjustmentsId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -56,6 +57,20 @@ final readonly class RequirementAdjustmentService
     public function preview(EntityId $student, EntityId $assignment): array
     {
         return $this->read($student, $assignment, true);
+    }
+    /** Internal allocation input; the caller holds the student lock and shared read budget.
+     * @return array<string,mixed>
+     */
+    public function allocationContext(
+        EntityId $student,
+        EntityId $assignment,
+        HistoryReadBudget $budget,
+    ): array {
+        $parent = $this->requirements->view($student, $assignment, $budget);
+        $state = $this->state($assignment, $parent, $budget);
+        $effective = $this->effective($parent, $state->active(), $budget);
+        $this->requirements->authorizeRead($student, $assignment);
+        return $parent + ["effective_minimums" => $effective];
     }
     /** @return array<string,mixed> */
     private function read(EntityId $student, EntityId $assignment, bool $includeRequirements): array
@@ -523,7 +538,7 @@ final readonly class RequirementAdjustmentService
     /** @param array<string, mixed> $parent
      * @param array<string, array<string, mixed>> $active
      * @return array<string, mixed> */
-    private function effective(array $parent, array $active): array
+    private function effective(array $parent, array $active, ?HistoryReadBudget $budget = null): array
     {
         if ($parent["requirements"] === null) {
             return ["degree" => [], "groups" => [], "waived_course_ids" => [], "substitutions" => []];
@@ -567,6 +582,7 @@ final readonly class RequirementAdjustmentService
                 $this->published->courseVersion(
                     new EntityId($d["replacement_course_id"]),
                     new EntityId($d["replacement_version_id"]),
+                    $budget,
                 );
                 $substitutions[$d["course_id"]] = [
                     "course_id" => $d["replacement_course_id"],
@@ -692,13 +708,19 @@ final readonly class RequirementAdjustmentService
         );
     }
     /** @param array<string, mixed> $parent */
-    private function state(EntityId $assignment, array $parent): RequirementAdjustments
-    {
+    private function state(
+        EntityId $assignment,
+        array $parent,
+        ?HistoryReadBudget $budget = null,
+    ): RequirementAdjustments {
         $s = $this->stream($assignment);
         $state = RequirementAdjustments::root($s->aggregateId);
         $cursor = null;
         do {
-            $page = $this->history->page($s, $cursor, 20);
+            $page =
+            $budget === null
+            ? $this->history->page($s, $cursor, 20)
+            : $budget->page($this->history, $s, $cursor);
             foreach ($page->events as $stored) {
                 $state->acceptHistorical($stored->event);
             }

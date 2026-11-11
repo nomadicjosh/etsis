@@ -56,13 +56,13 @@ final readonly class StudentRequirementsService
         $this->scope($student, $assignment);
     }
     /** @return array<string, mixed> */
-    public function view(EntityId $student, EntityId $assignment): array
+    public function view(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array
     {
         $this->scope($student, $assignment);
-        return $this->transactions->run(function () use ($student, $assignment): array {
+        return $this->transactions->run(function () use ($student, $assignment, $budget): array {
             $this->records->lock($student);
             $scope = $this->scope($student, $assignment);
-            $state = $this->state($assignment);
+            $state = $this->state($assignment, $budget);
             $selected = $state->selection();
             $requirements = null;
             $completion = null;
@@ -71,6 +71,7 @@ final readonly class StudentRequirementsService
                 $requirements = $this->published->version(
                     new EntityId($selected["template_id"]),
                     new EntityId($selected["requirements_version_id"]),
+                    $budget,
                 );
                 if (
                     $requirements["program_id"] !== $scope["program_id"] ||

@@ -1,0 +1,327 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration;
+
+require_once dirname(__DIR__) . "/Support/StudentRequirementsFixture.php";
+
+use Domain\DegreeAudit\Service\AcademicInputService;
+use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
+use Domain\DegreeAudit\Service\CourseAllocationPlanner;
+use Domain\DegreeAudit\Service\CourseMatchEvaluator;
+use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
+use Domain\DegreeAudit\Service\PublishedRequirementsReader;
+use Domain\DegreeAudit\Service\RequirementAdjustmentService;
+use Domain\DegreeAudit\Service\StudentGroupAllocationService;
+use Domain\DegreeAudit\Repository\AcademicInputRepository;
+use Domain\DegreeAudit\ValueObject\AcademicInputInventory;
+use Domain\Finance\ValueObject\Money;
+use Domain\Registration\Section;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
+use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\RecordNotFoundException;
+use Domain\Shared\ValueObject\EntityId;
+use Infrastructure\Persistence\Repository\SqlAcademicInputRepository;
+use Infrastructure\Persistence\Repository\SqlReplacementCourseRepository;
+use Infrastructure\Persistence\Repository\SqlRequirementAdjustmentRepository;
+use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
+use PHPUnit\Framework\TestCase;
+use StudentRequirementsFixture;
+
+final class StudentGroupAllocationTest extends TestCase
+{
+    private function adjustments(StudentRequirementsFixture $f): RequirementAdjustmentService
+    {
+        $s = $f->f->sis;
+        return new RequirementAdjustmentService(
+            new SqlRequirementAdjustmentRepository($s->sql),
+            $f->service,
+            new SqlStudentRecordRepository($s->sql),
+            $f->f->history,
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $f->f->catalog->fixture->cipher,
+            $s->clock,
+            new PublishedRequirementsReader($f->f->history),
+            new SqlReplacementCourseRepository($s->sql),
+        );
+    }
+    private function service(
+        StudentRequirementsFixture $f,
+        ?AcademicInputRepository $repository = null,
+        int $steps = 100000,
+    ): StudentGroupAllocationService {
+        $s = $f->f->sis;
+        $students = new SqlStudentRecordRepository($s->sql);
+        return new StudentGroupAllocationService(
+            new AcademicInputService(
+                $repository ?? new SqlAcademicInputRepository($s->sql),
+                $s->academicCredits(),
+                $s->transferCredits(),
+                $s->enrollmentLedger(),
+                $students,
+                $f->service,
+                $s->transactions,
+            ),
+            $f->service,
+            $this->adjustments($f),
+            new GroupAllocationEvaluator(
+                new CourseMatchEvaluator(),
+                new AcademicPolicyEvaluator(),
+                new CourseAllocationPlanner($steps),
+            ),
+            $students,
+            $s->transactions,
+        );
+    }
+    private function institution(): StudentRequirementsFixture
+    {
+        $f = new StudentRequirementsFixture();
+        $f->f->sis->gradeScale([
+            [
+                "code" => "A",
+                "min_score_milli" => 90000,
+                "max_score_milli" => 100000,
+                "points_milli" => 4000,
+                "passes" => true,
+                "counts_gpa" => true,
+            ],
+        ]);
+        $f->assign();
+        return $f;
+    }
+    private function work(StudentRequirementsFixture $f, int $index, bool $graded = true): array
+    {
+        $s = $f->f->sis;
+        $course = $f->f->groupDefinition["courses"][$index];
+        $section = new Section(
+            EntityId::generate(),
+            new EntityId($course["course_id"]),
+            $s->term,
+            $s->access->actor,
+            "FICTIONAL." . $index,
+            20,
+            true,
+            true,
+            new Money(0, "USD"),
+        );
+        $s->registration->addSection($section);
+        $bindings = $f->f->catalog->bindings();
+        $review = $bindings->review(
+            $section->id,
+            new EntityId($course["version_id"]),
+            "Fictional retained offering.",
+        );
+        $bindings->commit($section->id, $review["review_token"]);
+        $enrollment = $s->service->register($f->student, $section->id)->id;
+        if ($graded) {
+            $ledger = $s->academicCredits();
+            $grade = new EntityId($ledger->choices($f->student, $section->id, $enrollment)["items"][0]["id"]);
+            $review = $ledger->review($f->student, $section->id, $enrollment, $grade, 0);
+            $ledger->commit($f->student, $section->id, $review["review_token"]);
+        }
+        return [
+            $section,
+            $enrollment,
+            new EntityId($s->sql->one("sis_academic_credits", ["source_id" => $enrollment->value])["id"]),
+        ];
+    }
+    private function grant(StudentRequirementsFixture $f, array $definition): array
+    {
+        $s = $this->adjustments($f);
+        $r = $s->reviewGrant($f->student, $f->assignment, $definition, "Fictional registrar exception.");
+        return $s->commit($f->student, $f->assignment, $r["review_token"]);
+    }
+    public function testRetainedRequirementsAndVerifiedWorkProduceAReadOnlyCompleteGroupPlacement(): void
+    {
+        $f = $this->institution();
+        foreach ([0, 1, 2, 4] as $index) {
+            $this->work($f, $index);
+        }
+        $s = $f->f->sis;
+        $before = $s->sql->rows("sis_history_events");
+        $receipts = $s->sql->rows("sis_history_operations");
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("review", $result["status"]);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame($f->version->value, $result["context"]["requirements_version_id"]);
+        self::assertCount(4, $result["groups"][0]["placements"]);
+        self::assertSame(12000, array_sum(array_column($result["groups"][0]["placements"], "credits_milli")));
+        self::assertSame($before, $s->sql->rows("sis_history_events"));
+        self::assertSame($receipts, $s->sql->rows("sis_history_operations"));
+        self::assertArrayNotHasKey("references", $result);
+        self::assertArrayNotHasKey("actor_id", $result);
+    }
+    public function testWaiverDoesNotCreateCreditsAndSeparateApprovedMinimumReductionChangesPlacement(): void
+    {
+        $f = $this->institution();
+        foreach ([1, 2, 4] as $index) {
+            $this->work($f, $index);
+        }
+        $service = $this->service($f);
+        self::assertSame("infeasible", $service->preview($f->student, $f->assignment)["outcome"]);
+        $this->grant($f, [
+            "kind" => "waiver",
+            "course_id" => $f->f->groupDefinition["courses"][0]["course_id"],
+        ]);
+        self::assertSame("infeasible", $service->preview($f->student, $f->assignment)["outcome"]);
+        $this->grant($f, [
+            "kind" => "minimum",
+            "group_id" => $f->f->group->value,
+            "minimum" => "min_credits_milli",
+            "required_milli" => 9000,
+        ]);
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertCount(3, $result["groups"][0]["placements"]);
+        self::assertSame(9000, $result["groups"][0]["required_credits_milli"]);
+        self::assertSame(1, count($result["groups"][0]["waived_courses"]));
+    }
+    public function testUngradedWorkIsExplainedAndNoSpeculativePartialPlacementIsReturned(): void
+    {
+        $f = $this->institution();
+        $this->work($f, 0, false);
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertContains("in_progress", $result["records"][0]["statuses"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+    public function testNewCatalogPublicationsDoNotReplaceTheSelectedGroupCourseReferences(): void
+    {
+        $f = $this->institution();
+        foreach ([0, 1, 2, 4] as $index) {
+            $this->work($f, $index);
+        }
+        $s = $f->f->sis;
+        $course = new EntityId($f->f->groupDefinition["courses"][0]["course_id"]);
+        $s->sql->update("sis_courses", ["title" => "Changed today"], ["id" => $course->value]);
+        $review = $f->f->catalog->publications()->review($course, "Fictional future catalog revision.");
+        $f->f->catalog->publications()->publish($course, $review["review_token"]);
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertStringNotContainsString("Changed today", json_encode($result, JSON_THROW_ON_ERROR));
+    }
+    public function testSharedReplayAndSearchLimitsProduceDistinctControlledResults(): void
+    {
+        $f = $this->institution();
+        foreach ([0, 1, 2, 4] as $index) {
+            $this->work($f, $index);
+        }
+        self::assertSame(
+            ["status" => "limited"],
+            $this->service($f)->preview($f->student, $f->assignment, new HistoryReadBudget(maximumPages: 2)),
+        );
+        $result = $this->service($f, steps: 1)->preview($f->student, $f->assignment);
+        self::assertSame("undetermined", $result["outcome"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+    public function testMissingProjectionAndDamagedApprovalHistoryCannotBecomePartialPlacement(): void
+    {
+        foreach (["projection", "approval"] as $kind) {
+            $f = $this->institution();
+            [, , $credit] = $this->work($f, 0);
+            $s = $f->f->sis;
+            if ($kind === "projection") {
+                $s->sql->execute("DELETE FROM sis_academic_credits WHERE id = ?", [$credit->value]);
+            } else {
+                $this->grant($f, [
+                    "kind" => "waiver",
+                    "course_id" => $f->f->groupDefinition["courses"][0]["course_id"],
+                ]);
+                $head = $s->sql->one("sis_history_streams", [
+                    "stream_type" => "student_requirement_adjustments",
+                    "aggregate_id" => $f->assignment->value,
+                ]);
+                $s->sql->update(
+                    "sis_history_events",
+                    ["event_hash" => str_repeat("0", 64)],
+                    ["stream_id" => $head["id"]],
+                );
+            }
+            self::assertSame(
+                ["status" => "inconsistent"],
+                $this->service($f)->preview($f->student, $f->assignment),
+            );
+        }
+    }
+    public function testEarlyRemovedWorkNeverAppearsInPlacementOrCounts(): void
+    {
+        $f = $this->institution();
+        [$section, $enrollment, $credit] = $this->work($f, 0, false);
+        $s = $f->f->sis;
+        $r = $s->drops->review($f->student, $section->id);
+        $s->drops->commit(
+            $f->student,
+            $section->id,
+            new EntityId($r["enrollment_id"]),
+            $r["version"],
+            new EntityId($r["operation_id"]),
+            $r["revision"],
+            $r["effective_on"],
+        );
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame(0, $result["current_record_count"]);
+        self::assertSame([], $result["records"]);
+        self::assertStringNotContainsString($credit->value, json_encode($result, JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString($enrollment->value, json_encode($result, JSON_THROW_ON_ERROR));
+    }
+    public function testOwnerOfficeAndPursuitScopeAreVerifiedAndRevokedAccessCannotReturnAResult(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        $s->access->staff = false;
+        self::assertSame("review", $this->service($f)->preview($f->student, $f->assignment)["status"]);
+        $s->access->actor = $s->user();
+        $s->access->grants = ["sis:student:read"];
+        try {
+            $this->service($f)->preview($f->student, EntityId::generate());
+            self::fail("Foreign pursuit accepted.");
+        } catch (RecordNotFoundException) {
+            self::assertTrue(true);
+        }
+        $repository = new class ($s) implements AcademicInputRepository {
+            public function __construct(private \SisFixture $s) {}
+            public function inventory(EntityId $student): AcademicInputInventory
+            {
+                $inventory = new SqlAcademicInputRepository($this->s->sql)->inventory($student);
+                $this->s->access->grants = [];
+                return $inventory;
+            }
+        };
+        $this->expectException(AccessDeniedException::class);
+        $this->service($f, $repository)->preview($f->student, $f->assignment);
+    }
+    public function testMissingSelectionIsSetupGuidanceInsteadOfAnEmptyCompletedAudit(): void
+    {
+        $f = new StudentRequirementsFixture();
+        self::assertSame(
+            ["status" => "needs_selection"],
+            $this->service($f)->preview($f->student, $f->assignment),
+        );
+    }
+    public function testApprovedAlternativeIsVerifiedAndPlacedWithoutConsumingItsOriginalTargetTwice(): void
+    {
+        $f = $this->institution();
+        foreach ([0, 1, 2, 3] as $index) {
+            $this->work($f, $index);
+        }
+        $service = $this->service($f);
+        self::assertSame("infeasible", $service->preview($f->student, $f->assignment)["outcome"]);
+        $required = $f->f->groupDefinition["courses"][4];
+        $replacement = $f->f->groupDefinition["courses"][3];
+        $this->grant($f, ["kind" => "substitution", "course_id" => $required["course_id"],
+            "replacement_course_id" => $replacement["course_id"], "replacement_version_id" => $replacement["version_id"]]);
+        $before = $f->f->sis->sql->rows("sis_history_events");
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertCount(4, $result["groups"][0]["placements"]);
+        $alternative = array_values(array_filter($result["groups"][0]["placements"], fn($p) => $p["via_substitution"]));
+        self::assertCount(1, $alternative);
+        self::assertSame($replacement["course_id"], $alternative[0]["course_id"]);
+        self::assertSame($required["course_id"], $alternative[0]["target_course_id"]);
+        self::assertSame($before, $f->f->sis->sql->rows("sis_history_events"));
+    }
+
+}

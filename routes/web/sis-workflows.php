@@ -911,6 +911,10 @@ return static function (Psr7Router $router): void {
         SisRequirementAdjustmentController::class,
         "history",
     ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/academic-work/allocation/", [
+        \Application\Http\Controller\SisAcademicWorkController::class,
+        "allocation",
+    ]);
     $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/academic-work/calculations/", [
         \Application\Http\Controller\SisAcademicWorkController::class,
         "calculations",

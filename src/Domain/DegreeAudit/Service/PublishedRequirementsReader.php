@@ -46,9 +46,9 @@ final readonly class PublishedRequirementsReader
         return ["items" => $items, "next_cursor" => $page->nextCursor];
     }
     /** @return array<string, mixed> */
-    public function version(EntityId $template, EntityId $version): array
+    public function version(EntityId $template, EntityId $version, ?HistoryReadBudget $budget = null): array
     {
-        return $this->readVersion($template, $version);
+        return $this->readVersion($template, $version, $budget);
     }
     /** Only the retained policy/context envelope; no group/course resolution is needed for overall totals.
      * @return array<string,mixed>
@@ -83,7 +83,7 @@ final readonly class PublishedRequirementsReader
         );
         $groups = [];
         if ($includeGroups && $found["schema_version"] >= 3) {
-            $groups = $this->groups($p["definition"]["groups"]);
+            $groups = $this->groups($p["definition"]["groups"], $budget);
         }
         return [
             "template_id" => $template->value,
@@ -133,7 +133,7 @@ final readonly class PublishedRequirementsReader
      * @param list<array{group_id:string, version_id:string}> $references
      * @return array<string, array<string,mixed>>
      */
-    private function groups(array $references): array
+    private function groups(array $references, ?HistoryReadBudget $budget = null): array
     {
         $groups = [];
         $requested = [];
@@ -144,7 +144,12 @@ final readonly class PublishedRequirementsReader
                 new CourseGroupPublicationId($id->value),
                 "course_group_publication",
             );
-            $found = $this->selected($stream, $version, CourseGroupPublication::root($stream->aggregateId));
+            $found = $this->selected(
+                $stream,
+                $version,
+                CourseGroupPublication::root($stream->aggregateId),
+                $budget,
+            );
             $definition = $found["payload"]["definition"];
             $groups[$id->value] = [
                 "definition" => $definition,
@@ -164,6 +169,7 @@ final readonly class PublishedRequirementsReader
                 $stream,
                 $versions,
                 CoursePublication::root($stream->aggregateId),
+                $budget,
             );
             foreach ($selected as $versionId => $item) {
                 $published = PublishedCourseDefinition::fromPublication(
@@ -257,12 +263,15 @@ final readonly class PublishedRequirementsReader
         return ["items" => $items, "next_cursor" => $page->nextCursor];
     }
     /** @return array<string, mixed> */
-    public function courseVersion(EntityId $course, EntityId $version): array
-    {
+    public function courseVersion(
+        EntityId $course,
+        EntityId $version,
+        ?HistoryReadBudget $budget = null,
+    ): array {
         $s = new StreamReference(new CoursePublicationId($course->value), "course_publication");
         return $this->courseItem(
             $course,
-            $this->selected($s, $version, CoursePublication::root($s->aggregateId)),
+            $this->selected($s, $version, CoursePublication::root($s->aggregateId), $budget),
         );
     }
     /** @param array<string,mixed> $item
