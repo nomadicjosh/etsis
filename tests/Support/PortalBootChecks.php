@@ -2936,6 +2936,28 @@ if (
         "Course text draft editing did not resolve through protected provider bindings.",
     );
 }
+// Optional assistance resolves through the real provider without making any upstream request.
+$assistancePath = "/sis/courses/" . $publicationCourse . "/assistance/";
+$app->configContainer->setConfigKey("assistance", ["enabled" => false]);
+$assistanceResponse = $app->router->match(
+    $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $assistancePath)),
+);
+$assistancePreview = json_decode((string) $assistanceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $assistanceResponse->getStatusCode() !== 200 || $assistancePreview["enabled"] !== false ||
+    !str_contains($assistanceResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $teachingPost($assistancePath, ["task" => "readiness", "consent" => false, "revision" => $assistancePreview["revision"]])->getStatusCode() !== 422 ||
+    $teachingPost($assistancePath, ["task" => "readiness", "consent" => true, "revision" => $assistancePreview["revision"]])->getStatusCode() !== 503
+) {
+    throw new RuntimeException("Optional assistance failed protected provider/CSRF/disabled checks.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:catalog:manage"];
+if ($teachingPost($assistancePath, ["task" => "description", "consent" => true, "revision" => $assistancePreview["revision"]])->getStatusCode() !== 403) {
+    throw new RuntimeException("Catalog editing alone granted access to an AI action.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $expiredCourseReview = json_decode(
     (string) $teachingPost($publicationPath . "review/", [
         "reason" => "Fictional expiring course approval",

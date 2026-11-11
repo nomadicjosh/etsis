@@ -147,10 +147,18 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Complete source-linked adjustment/refund cases, institution-defined refund schedules and installment arrangements. Account credit and a cash refund remain separate decisions.
 - [ ] Complete automatic student-account-to-GL mappings, controlled period closing and reconciliation against retained postings.
 - [ ] Verify gateway checkout, uncertain outcomes, duplicate notifications, refunds and settlement reconciliation through selected provider test environments before any live use.
-- [ ] Build deep Moodle LMS integration: institutional single sign-on, authorized course-section/enrollment synchronization and gradebook synchronization. Establish identity matching and source-of-truth policies; preserve academic approval/history boundaries and make external synchronization idempotent.
+- [ ] Build deep Moodle LMS integration: institutional single sign-on, authorized background course-section/enrollment synchronization and background gradebook synchronization. Establish identity matching and source-of-truth policies; preserve academic approval/history boundaries and make external synchronization idempotent.
 - [ ] Add authorized operational workers, a durable outbox and idempotent consumers for external effects where needed. Store protected references rather than student payloads in jobs.
 
 **Done when:** internal balances and external settlements reconcile; retries and replay cannot repeat charges/refunds; pricing and approval changes preserve the policy used for prior transactions. Installed SDKs and fictional gateway tests do not establish operational readiness.
+
+### Optional AI assistance
+
+- [x] Add a disabled-by-default, provider-independent course authoring contract, exact business-payload preview and per-request consent. Course readiness and description actions have separate protected permissions. See [setup and safeguards](optional-authoring-assistance.md).
+- [x] Keep network calls outside transactions; validate bounded structured results, recheck draft/provider/actor changes, and require staff to copy/save/publish explicitly. Use an isolated client without framework HTTP debug hooks.
+- [ ] Verify institution-selected OpenAI/Azure/local deployments and approved no-training/retention terms before enabling a real service.
+- [ ] Extend reviewed suggestions to section and degree authoring; support additional editor rewrite/expand/image actions with appropriate action permissions and consent.
+- [ ] Design student progress assistance and movable assistants with separate privacy/consent boundaries, minimized authorized inputs and no automated academic decisions.
 
 ## 7. Scheduling, employment and office workflows
 

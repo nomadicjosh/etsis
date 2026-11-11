@@ -22,6 +22,10 @@ async function fixture(page, options = {}) {
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/operation-id/') result = { id: section };
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/courses/') ? [{ id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }] : path.includes('/terms/') ? [termRow] : path.includes('/sections/') ? [{ id: section, code: 'MATH.101.A', course_title: 'Algebra', course_code: 'MATH.101', term_code: '26/FA', capacity: 20, enrolled: 0, active: true }] : [], next_after: null };
+        else if (path === `/sis/courses/${course}/assistance/`) {
+            if (data && options.assistanceFailure) { await route.fulfill({ status: 503, json: { error: 'Optional assistance is unavailable. Your draft is unchanged.' } }); return; }
+            result = data ? { task: data.task, advice: { summary: '<script>window.aiExecuted = true</script> Review this suggestion.', suggestions: ['Verify learning outcomes.'], description: data.task === 'description' ? 'A fictional introduction to algebra.' : null } } : { enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: ['readiness', 'description'], revision: 'a'.repeat(64), draft: { code: 'MATH.101', title: 'Algebra', transcript_title: courseText.transcript_title, description: courseText.description, credits_milli: 3000, prerequisite_count: 0, subject: null, classifications: {} } };
+        }
         else if (path === `/sis/courses/${course}/text/`) {
             if (data) { courseText = { transcript_title: data.transcript_title, description: data.description }; result = { status: 'saved' }; }
             else result = { id: course, code: 'MATH.101', title: 'Algebra', ...courseText, revision: 'fictional-text-revision' };
@@ -340,4 +344,58 @@ test('an expired course review can be refreshed without losing its reason or pub
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.errors).toEqual([]);
+});
+
+
+test('optional assistance requires consent and explicit copy and save, with accessible private results', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Titles & description', exact: true }).click();
+    await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+    await page.getByText('Inspect exactly what will be sent', { exact: true }).click();
+    await expect(page.locator('#drawer-body pre')).toContainText('"code": "MATH.101"');
+    await page.getByRole('button', { name: 'Suggest a course description', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toHaveLength(0);
+    const consent = page.getByRole('checkbox', { name: /I agree to send/ });
+    await consent.check();
+    await page.getByRole('button', { name: 'Suggest a course description', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Use suggested description in this editor' })).toBeVisible();
+    await expect(consent).not.toBeChecked();
+    await expect(page.getByLabel('Catalog description (optional)', { exact: true })).toHaveValue('');
+    expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toEqual([{ path: `/sis/courses/${f.course}/assistance/`, csrf: 'fictional-test-token', data: { task: 'description', consent: true, revision: 'a'.repeat(64) } }]);
+    expect(f.calls.filter(call => call.path.endsWith('/text/'))).toHaveLength(0);
+    expect(await page.evaluate(() => window.aiExecuted)).toBeUndefined();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Use suggested description in this editor' }).click();
+    await expect(page.getByLabel('Catalog description (optional)', { exact: true })).toHaveValue('A fictional introduction to algebra.');
+    expect(f.calls.filter(call => call.path.endsWith('/text/'))).toHaveLength(0);
+    await page.getByRole('button', { name: 'Save course text draft', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Your text is saved as a draft.');
+    expect(f.calls.filter(call => call.path.endsWith('/publication/commit/'))).toHaveLength(0);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('disabled or failed assistance leaves normal editing available', async ({ page }) => {
+    for (const options of [{ assistanceDisabled: true }, { assistanceFailure: true }]) {
+        await page.unroute('**/sis/**');
+        const f = await fixture(page, options);
+        await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+        await page.getByRole('button', { name: 'Titles & description', exact: true }).click();
+        await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+        if (options.assistanceFailure) {
+            await page.getByRole('checkbox', { name: /I agree to send/ }).check();
+            await page.getByRole('button', { name: 'Suggest publication checks', exact: true }).click();
+            await expect(page.locator('#drawer-body')).toContainText('No suggestion was applied.');
+        } else {
+            await expect(page.locator('#drawer-body')).toContainText('Optional assistance is disabled.');
+            expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toHaveLength(0);
+        }
+        await page.getByLabel('Catalog description (optional)', { exact: true }).fill('Staff-authored description.');
+        await page.getByRole('button', { name: 'Save course text draft', exact: true }).click();
+        await expect(page.locator('#drawer-body')).toContainText('Your text is saved as a draft.');
+        expect(f.errors).toEqual([]);
+    }
 });

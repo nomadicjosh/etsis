@@ -9,6 +9,7 @@ use Application\Http\Controller\SisCourseGroupController;
 use Application\Http\Controller\SisRegistrationController;
 use Application\Http\Controller\SisCoursePublicationController;
 use Application\Http\Controller\SisCourseTextController;
+use Application\Http\Controller\SisCourseAssistanceController;
 use Application\Http\Controller\SisSectionCourseBindingController;
 use Application\Http\Controller\SisCatalogWorkflowController;
 use Application\Http\Controller\SisFinancialReviewController;
@@ -765,6 +766,8 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/catalog/subjects/save/", [$subjectController, "save"]);
     $router->get("/sis/courses/{id}/subject/", [$subjectController, "showCourse"]);
     $router->post("/sis/courses/{id}/subject/", [$subjectController, "assign"]);
+    $router->get("/sis/courses/{id}/assistance/", [SisCourseAssistanceController::class, "preview"]);
+    $router->post("/sis/courses/{id}/assistance/", [SisCourseAssistanceController::class, "suggest"]);
     $router->get("/sis/courses/{id}/text/", [SisCourseTextController::class, "show"]);
     $router->post("/sis/courses/{id}/text/", [SisCourseTextController::class, "save"]);
     $router->post("/sis/courses/{id}/publication/review/", [SisCoursePublicationController::class, "review"]);

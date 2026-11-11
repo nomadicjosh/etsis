@@ -813,6 +813,149 @@ window.createWorkspaceCatalog = function (ui) {
             }, save);
         });
         body.append(node("p", {}, `${draft.code} · ${draft.title}`), form);
+        let assistantPanel = null;
+        body.append(
+            button("Optional AI help", async () => {
+                if (
+                    description.value !== (draft.description || "") ||
+                    title.value !== (draft.transcript_title || "")
+                ) {
+                    throw new Error("Save your text changes before reviewing optional assistance.");
+                }
+                const preview = await request(`/sis/courses/${course}/assistance/`);
+                if (assistantPanel) assistantPanel.remove();
+                assistantPanel = node(
+                    "section",
+                    { class: "record-section", "aria-label": "Optional course assistance" },
+                    node("h3", {}, "Optional course assistance"),
+                );
+                body.append(assistantPanel);
+                if (!preview.enabled || !preview.tasks.length) {
+                    assistantPanel.append(
+                        node(
+                            "p",
+                            { role: "status" },
+                            "Optional assistance is disabled. Your normal editing and publication workflow remains available.",
+                        ),
+                    );
+                    return;
+                }
+                if (
+                    (preview.draft.description || "") !== description.value ||
+                    (preview.draft.transcript_title || "") !== title.value ||
+                    preview.draft.code !== draft.code ||
+                    preview.draft.title !== draft.title
+                ) {
+                    throw new Error(
+                        "The saved course changed. Reload this editor before requesting assistance.",
+                    );
+                }
+                assistantPanel.append(
+                    node(
+                        "p",
+                        {},
+                        `Provider: ${preview.label}. Only the displayed saved course facts will be sent for this request. Inspect free text and remove any personal or confidential information before consenting. Suggestions are optional and may be incorrect.`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        "No student records, publication reasons, internal identifiers or histories are selected. Saving and publication still require your normal review.",
+                    ),
+                );
+                const input = node(
+                    "details",
+                    {},
+                    node("summary", {}, "Inspect exactly what will be sent"),
+                    node("pre", { class: "text-wrap" }, JSON.stringify(preview.draft, null, 2)),
+                );
+                const consentId = "course-assistance-consent";
+                const consent = node("input", {
+                    type: "checkbox",
+                    id: consentId,
+                    class: "form-check-input",
+                    required: true,
+                });
+                const results = node("div", { "aria-live": "polite" });
+                const progress = node("p", { role: "status", class: "form-text" });
+                const run = async (task) => {
+                    if (!consent.reportValidity()) return;
+                    if (
+                        description.value !== (preview.draft.description || "") ||
+                        title.value !== (preview.draft.transcript_title || "")
+                    ) {
+                        throw new Error(
+                            "Your text changed. Save it and inspect a fresh preview before requesting assistance.",
+                        );
+                    }
+                    controls.disabled = true;
+                    consent.checked = false;
+                    progress.textContent = "Requesting suggestions… Your draft is not being changed.";
+                    results.replaceChildren();
+                    try {
+                        const response = await request(`/sis/courses/${course}/assistance/`, "POST", {
+                            task,
+                            consent: true,
+                            revision: preview.revision,
+                        });
+                        if (!results.isConnected) return;
+                        results.append(
+                            node("h4", {}, "Suggestions to review"),
+                            node("p", {}, response.advice.summary),
+                        );
+                        const suggestions = node("ul");
+                        response.advice.suggestions.forEach((value) =>
+                            suggestions.append(node("li", {}, value)),
+                        );
+                        results.append(suggestions);
+                        if (task === "description" && response.advice.description) {
+                            results.append(
+                                node("p", {}, response.advice.description),
+                                button("Use suggested description in this editor", () => {
+                                    if (description.value !== (preview.draft.description || "")) {
+                                        throw new Error(
+                                            "Your description has changed. Review it before replacing any text.",
+                                        );
+                                    }
+                                    description.value = response.advice.description;
+                                    description.dispatchEvent(new Event("input", { bubbles: true }));
+                                    description.focus();
+                                    progress.textContent =
+                                        "Suggestion copied into the editor. Review it and use Save course text draft when ready; publication is a separate decision.";
+                                }),
+                            );
+                        }
+                        progress.textContent = "Suggestions received. No text has been saved or published.";
+                    } finally {
+                        controls.disabled = false;
+                        if (!results.childNodes.length)
+                            progress.textContent =
+                                "No suggestion was applied. Normal editing remains available; another request requires fresh consent.";
+                    }
+                };
+                const controls = node(
+                    "fieldset",
+                    { class: "border-0 p-0" },
+                    node("legend", { class: "h5" }, "Consent for one request"),
+                    node(
+                        "div",
+                        { class: "form-check mb-3" },
+                        consent,
+                        node(
+                            "label",
+                            { for: consentId, class: "form-check-label" },
+                            `I agree to send the displayed saved course draft to ${preview.label} for this request.`,
+                        ),
+                    ),
+                    ...(preview.tasks.includes("readiness")
+                        ? [button("Suggest publication checks", () => run("readiness"))]
+                        : []),
+                    ...(preview.tasks.includes("description")
+                        ? [button("Suggest a course description", () => run("description"))]
+                        : []),
+                );
+                assistantPanel.append(input, controls, progress, results);
+            }),
+        );
     }
     function definitionDetails(definition) {
         const subject = definition.subject

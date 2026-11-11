@@ -44,6 +44,19 @@ final readonly class CoursePublicationService
     ) {
     }
 
+    /** Authorized, consistent saved-draft snapshot. This does not publish or replay prior definitions. */
+    public function workingDefinition(EntityId $course): CourseDefinition
+    {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        return $this->transactions->run(function () use ($course, $actor): CourseDefinition {
+            $this->catalog->lock("courses", $course);
+            $this->authorize($actor);
+            $definition = $this->definition($course);
+            $this->authorize($actor);
+            return $definition;
+        });
+    }
+
     /** @return array<string, mixed> */
     public function review(EntityId $course, #[\SensitiveParameter] string $reason): array
     {
