@@ -2169,6 +2169,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
         scale_differs:
             "A group grade minimum and the work use different grading publications. No conversion is assumed.",
         approval_conflict: "Resolve conflicting course waivers or substitutions in Student exceptions.",
+        placement_restricted:
+            "An approved placement preference reserves this course for another group in this pursuit.",
         group_average_gpa_unsupported:
             "An earlier group uses an average-GPA rule. This placement review cannot yet evaluate that constraint.",
     };
@@ -2315,6 +2317,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 { class: "audit-card" },
                 node("h3", {}, `${record.course_code} · ${record.course_title}`),
             );
+            if (record.preferred_group_id)
+                card.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `Approved placement preference: ${names.get(record.preferred_group_id) || "Retained group"}. Eligibility and requirement rules still apply.`,
+                    ),
+                );
             for (const use of record.uses)
                 card.append(
                     node(
@@ -3319,6 +3329,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function adjustmentLabel(p, data) {
         const d = p.definition;
+        if (d.kind === "placement") {
+            if (p.subject_label) return `${p.subject_label} → ${p.scope_label}`;
+            if (p.applicable === false)
+                return "Course placement · retained approval for an earlier degree publication";
+            const course = data?.courses?.find((c) => c.course_id === d.course_id);
+            const group = course?.placement_groups?.find((g) => g.id === d.group_id);
+            return `Course placement · ${group ? `${group.course_code} · ${group.course_title}` : "Retained course"} → ${group?.name || data?.group_labels?.[d.group_id] || "Retained group"}`;
+        }
         if (d.kind === "substitution") {
             const required = data?.courses?.find((c) => c.course_id === d.course_id),
                 replacement = data?.substitution_details?.[p.adjustment_id];
@@ -3560,6 +3578,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             query = "",
             page = 0,
             replacement = null,
+            placementGroup = null,
             replacementSerial = 0;
         const restore = () => {
             const old = body;
@@ -3601,6 +3620,44 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 page = 0;
                 render();
             });
+        const placementPanel = panel(
+                "Choose the preferred group",
+                "This reserves eligible work for this course identity to one group in this selected degree publication. It does not choose a retake, grant credit or bypass eligibility.",
+            ),
+            placementChoices = node("div", { class: "audit-version-list" });
+        placementPanel.append(placementChoices);
+        placementPanel.hidden = true;
+        const placementButton = button("Course placement", () => {
+            kind = "placement";
+            selected = null;
+            placementGroup = null;
+            page = 0;
+            render();
+        });
+        function renderPlacementGroups() {
+            placementChoices.replaceChildren();
+            if (!selected) {
+                placementChoices.append(
+                    node("p", {}, "Choose a curriculum course first. No group is selected automatically."),
+                );
+                return;
+            }
+            for (const group of selected.placement_groups || []) {
+                const choose = button(`Use in ${group.name}`, () => {
+                    placementGroup = group.id;
+                    renderPlacementGroups();
+                });
+                choose.setAttribute("aria-pressed", String(placementGroup === group.id));
+                placementChoices.append(
+                    node(
+                        "article",
+                        { class: "audit-source-card" },
+                        node("p", {}, `${group.course_code} · ${group.course_title}`),
+                        choose,
+                    ),
+                );
+            }
+        }
         const replacementPanel = panel(
                 "Choose the replacement publication",
                 "Search current catalog entries, then explicitly choose a published version. No completed course is required to approve the substitution.",
@@ -3622,7 +3679,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             await replacementCourses();
         });
         source.append(
-            actions(waiverButton, substitutionButton, minimumButton),
+            actions(waiverButton, substitutionButton, placementButton, minimumButton),
             search("Search exception targets", "", (q) => {
                 query = q;
                 page = 0;
@@ -3634,6 +3691,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             description,
             valueField,
             replacementPanel,
+            placementPanel,
             node(
                 "p",
                 { class: "form-text" },
@@ -3646,6 +3704,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     async () => {
                         if (!selected || !reason.trim())
                             throw new Error("Choose an exception target and enter its approval reason.");
+                        if (kind === "placement" && !placementGroup)
+                            throw new Error(
+                                "Choose the group that should receive this course's eligible work.",
+                            );
                         if (kind === "substitution" && !replacement)
                             throw new Error("Choose an explicit published replacement course version.");
                         if (
@@ -3657,19 +3719,21 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         const definition =
                             kind === "waiver"
                                 ? { kind, course_id: selected.course_id }
-                                : kind === "substitution"
-                                  ? {
-                                        kind,
-                                        course_id: selected.course_id,
-                                        replacement_course_id: replacement.course_id,
-                                        replacement_version_id: replacement.version_id,
-                                    }
-                                  : {
-                                        kind,
-                                        group_id: selected.group_id,
-                                        minimum: selected.minimum,
-                                        required_milli: milli(value),
-                                    };
+                                : kind === "placement"
+                                  ? { kind, course_id: selected.course_id, group_id: placementGroup }
+                                  : kind === "substitution"
+                                    ? {
+                                          kind,
+                                          course_id: selected.course_id,
+                                          replacement_course_id: replacement.course_id,
+                                          replacement_version_id: replacement.version_id,
+                                      }
+                                    : {
+                                          kind,
+                                          group_id: selected.group_id,
+                                          minimum: selected.minimum,
+                                          required_milli: milli(value),
+                                      };
                         const reviewed = await post(`${base}review/`, { definition, reason });
                         exceptionConfirmation(base, reviewed, data, back, restore);
                     },
@@ -3680,6 +3744,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         function render() {
             replacementPanel.hidden = kind !== "substitution";
+            placementPanel.hidden = kind !== "placement";
+            placementButton.setAttribute("aria-pressed", String(kind === "placement"));
+            renderPlacementGroups();
             substitutionButton.setAttribute("aria-pressed", String(kind === "substitution"));
             waiverButton.setAttribute("aria-pressed", String(kind === "waiver"));
             minimumButton.setAttribute("aria-pressed", String(kind === "minimum"));
@@ -3704,12 +3771,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         { class: "audit-source-card" },
                         button(label, () => {
                             selected = t;
+                            placementGroup = null;
+                            renderPlacementGroups();
                             description.textContent =
                                 kind === "waiver"
                                     ? `Waive ${courseLabel(t)} for this program. Appears in: ${t.groups.join(", ")}.`
-                                    : kind === "substitution"
-                                      ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
-                                      : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
+                                    : kind === "placement"
+                                      ? `Choose which retained group may use eligible ${courseLabel(t)} work. Other groups will not use this course identity while the preference is active.`
+                                      : kind === "substitution"
+                                        ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
+                                        : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
                             valueField.hidden = kind !== "minimum";
                             if (kind === "minimum") {
                                 value = text(t.original_milli);
@@ -3865,6 +3936,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     reviewed.action === "revoke"
                         ? "Revoking this waiver restores the course requirement wherever it applies in this program."
                         : `This course waiver applies throughout this program. It currently appears in: ${reviewed.affected_groups.join(", ")}. Earned credit, grades and GPA points stay unchanged.`,
+                ),
+            );
+        if (p.definition.kind === "placement")
+            body.append(
+                node(
+                    "p",
+                    {},
+                    reviewed.action === "revoke"
+                        ? "Revoking this preference restores normal eligible group choices under the retained sharing policy. No course is applied automatically."
+                        : "Eligible work for this course will be considered only in the chosen group for this selected degree publication. Other courses retain their normal sharing rules. This does not guarantee a complete placement, override a grade/publication requirement, or change earned credits, GPA or charges. The same rule applies to eligible retake evidence; it does not select a particular attempt.",
                 ),
             );
         if (p.definition.kind === "substitution") {

@@ -8,6 +8,7 @@ namespace Domain\DegreeAudit\ValueObject;
 enum CourseMatchStatus: string
 {
     case Candidate = "candidate";
+    case PlacementRestricted = "placement_restricted";
     case Waived = "waived";
     case ApprovalConflict = "approval_conflict";
     case Voided = "voided";
@@ -25,6 +26,8 @@ enum CourseMatchStatus: string
     public function explanation(): string
     {
         return match ($this) {
+            self::PlacementRestricted
+            => "An approved placement preference reserves this course for another group in this pursuit.",
             self::Candidate => "Candidate for allocation; this work has not been applied to the requirement.",
             self::Waived
             => "This course requirement is waived for this pursuit. The waiver creates no earned credit.",

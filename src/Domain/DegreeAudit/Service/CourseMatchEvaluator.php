@@ -28,7 +28,12 @@ final readonly class CourseMatchEvaluator
             $candidates = $index[$item["course_id"]] ?? [];
             $matches = [];
             foreach (array_slice($candidates, 0, self::MATCH_LIMIT) as $candidate) {
-                $status = $this->status($item, $candidate, $requirements["grade_scale"] ?? null);
+                $status = $this->status(
+                    $item,
+                    $candidate,
+                    $requirements["grade_scale"] ?? null,
+                    $effective["placements"][$item["course_id"]]["group_id"] ?? null
+                );
                 $matches[] = $candidate + [
                     "status" => $status->value,
                     "explanation" => $status->explanation(),
@@ -64,7 +69,12 @@ final readonly class CourseMatchEvaluator
                     throw new \Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException();
                 }
                 $eligibility = array_replace($candidate, ["waived" => false]);
-                $status = $this->status($item, $eligibility, $requirements["grade_scale"] ?? null);
+                $status = $this->status(
+                    $item,
+                    $eligibility,
+                    $requirements["grade_scale"] ?? null,
+                    $effective["placements"][$item["course_id"]]["group_id"] ?? null
+                );
                 if ($status === Status::InProgress && $item["quality_points_milli"] !== 0) {
                     $status = Status::GradeUnknown;
                 }
@@ -127,7 +137,7 @@ final readonly class CourseMatchEvaluator
      * @param array<string,mixed> $candidate
      * @param array<string,mixed>|null $scale
      */
-    private function status(array $work, array $candidate, ?array $scale): Status
+    private function status(array $work, array $candidate, ?array $scale, ?string $preferredGroup = null): Status
     {
         if ($candidate["approval_conflict"]) {
             return Status::ApprovalConflict;
@@ -140,6 +150,9 @@ final readonly class CourseMatchEvaluator
         }
         if (in_array($work["status"], ["W", "D"], true)) {
             return Status::Dropped;
+        }
+        if ($preferredGroup !== null && $candidate["group_id"] !== $preferredGroup) {
+            return Status::PlacementRestricted;
         }
         if (!$work["grade_recorded"] && $work["completed_milli"] === 0) {
             return Status::InProgress;

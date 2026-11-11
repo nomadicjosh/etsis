@@ -133,6 +133,12 @@ final readonly class RequirementAdjustmentService
                 "definition" => $definition->definition,
             ];
             $previous = $state->forKey(RequirementAdjustments::key($p));
+            if (
+                $previous !== null && $definition->definition["kind"] === "placement" &&
+                $this->same($previous["definition"], $definition->definition)
+            ) {
+                throw new InvalidArgumentException("This course already has that placement preference.");
+            }
             $p["supersedes_adjustment_id"] = $previous["adjustment_id"] ?? null;
             $active = $state->active();
             if ($previous !== null) {
@@ -185,7 +191,16 @@ final readonly class RequirementAdjustmentService
                 "student_id" => $student->value,
                 "program_id" => $parent["scope"]["program_id"],
             ];
-            return $this->review($assignment, $actor, $state->playhead(), $parent, "revoke", $p, $reason) + [
+            return $this->review(
+                $assignment,
+                $actor,
+                $state->playhead(),
+                $parent,
+                "revoke",
+                $p,
+                $reason,
+                $existing["definition"]["kind"] === "placement"
+            ) + [
                 "previous" => $existing,
                 "effective_minimums" => $effective,
                 "affected_groups" => [],
@@ -209,7 +224,11 @@ final readonly class RequirementAdjustmentService
                 !is_array($d) ||
                 !in_array(
                     $d["kind"] ?? null,
-                    ["requirement-adjustment-review.v1", "requirement-adjustment-review.v2"],
+                    [
+                        "requirement-adjustment-review.v1",
+                        "requirement-adjustment-review.v2",
+                        "requirement-placement-review",
+                    ],
                     true,
                 ) ||
                 ($d["assignment_id"] ?? null) !== $assignment->value ||
@@ -236,6 +255,12 @@ final readonly class RequirementAdjustmentService
                     ? RequirementAdjustmentWasGranted::class
                     : RequirementAdjustmentWasRevoked::class;
             $metadata = ["__aggregate_type" => "student_requirement_adjustments"];
+            if ($d["action"] === "grant" && $p["definition"]["kind"] === "placement") {
+                if ($d["kind"] !== "requirement-placement-review") {
+                    throw new InvalidArgumentException("Review this placement preference again.");
+                }
+                $metadata["schema_version"] = 2;
+            }
             if ($d["action"] === "grant" && $p["definition"]["kind"] === "substitution") {
                 if ($d["kind"] !== "requirement-adjustment-review.v2") {
                     throw new InvalidArgumentException("Review this substitution again.");
@@ -258,6 +283,14 @@ final readonly class RequirementAdjustmentService
                 [$event],
             );
             if ($receipt["event_ids"] === [(string) $event->eventId()]) {
+                if (
+                    $d["kind"] === "requirement-placement-review" &&
+                    (!is_int($d["expires_at"] ?? null) || $d["expires_at"] <= $this->clock->now()->getTimestamp())
+                ) {
+                    throw new ConcurrentModificationException(
+                        "Review this placement preference again; its review expired.",
+                    );
+                }
                 $this->writable($parent);
                 if ($parent["selection"]["decision_id"] !== $d["selection_decision_id"]) {
                     throw new ConcurrentModificationException(
@@ -305,19 +338,26 @@ final readonly class RequirementAdjustmentService
                     throw new CorruptHistoryException();
                 }
                 $definition = $p["definition"];
-                if (in_array($definition["kind"], ["waiver", "substitution"], true)) {
-                    foreach ($source["group_details"] as $group) {
+                if (in_array($definition["kind"], ["waiver", "substitution", "placement"], true)) {
+                    $subjectGroups = $definition["kind"] === "placement"
+                    ? [$source["group_details"][$definition["group_id"]]] : $source["group_details"];
+                    foreach ($subjectGroups as $group) {
                         $course = $group["course_details"][$definition["course_id"]] ?? null;
                         if ($course !== null) {
                             $labels["subject_label"] =
                             ($definition["kind"] === "waiver"
                             ? "Course waiver · "
-                            : "Course substitution · ") .
+                            : ($definition["kind"] === "placement"
+                                ? "Course placement · " : "Course substitution · ")) .
                             $course["code"] .
                             " · " .
                             $course["title"];
                             break;
                         }
+                    }
+                    if ($definition["kind"] === "placement") {
+                        $labels["scope_label"] =
+                        $source["group_details"][$definition["group_id"]]["definition"]["name"];
                     }
                     if ($definition["kind"] === "substitution") {
                         $replacement = $this->published->courseVersion(
@@ -431,6 +471,20 @@ final readonly class RequirementAdjustmentService
      * @param array<string, mixed> $r */
     private function proposal(array $parent, array $r): Definition
     {
+        if (($r["kind"] ?? null) === "placement") {
+            Definition::keys($r, ["kind", "course_id", "group_id"]);
+            if (!is_string($r["course_id"]) || !is_string($r["group_id"])) {
+                throw new InvalidArgumentException("Choose a course and its published group.");
+            }
+            $group = $parent["requirements"]["group_details"][$r["group_id"]] ?? null;
+            foreach ($group["definition"]["courses"] ?? [] as $course) {
+                if ($course["course_id"] === $r["course_id"]) {
+                    return new Definition($r + ["course_version_id" => $course["version_id"],
+                        "group_version_id" => $group["version_id"]]);
+                }
+            }
+            throw new InvalidArgumentException("Choose a course included in that retained curriculum group.");
+        }
         if (in_array($r["kind"] ?? null, ["waiver", "substitution"], true)) {
             $d = new Definition($r);
             if ($this->affected($parent, $d) === []) {
@@ -501,7 +555,10 @@ final readonly class RequirementAdjustmentService
                     "code" => $detail["code"],
                     "title" => $detail["title"],
                     "groups" => [],
+                    "placement_groups" => [],
                 ];
+                $courses[$course]["placement_groups"][] = ["id" => $id, "name" => $g["definition"]["name"],
+                    "course_code" => $detail["code"], "course_title" => $detail["title"]];
                 $courses[$course]["groups"][] = $g["definition"]["name"];
             }
         }
@@ -514,7 +571,7 @@ final readonly class RequirementAdjustmentService
         $groups = [];
         foreach ($parent["requirements"]["group_details"] ?? [] as $id => $g) {
             if (
-                (in_array($d->definition["kind"], ["waiver", "substitution"], true) &&
+                (in_array($d->definition["kind"], ["waiver", "substitution", "placement"], true) &&
                     isset($g["course_details"][$d->definition["course_id"]])) ||
                 ($d->definition["kind"] === "minimum" && $d->definition["group_id"] === $id)
             ) {
@@ -548,6 +605,7 @@ final readonly class RequirementAdjustmentService
         $groups = [];
         $waived = [];
         $substitutions = [];
+        $placements = [];
         $waiverApprovals = [];
         foreach ($active as $p) {
             if ($p["definition"]["kind"] === "waiver") {
@@ -573,6 +631,19 @@ final readonly class RequirementAdjustmentService
             $d = $p["definition"];
             if ($d["kind"] === "waiver") {
                 $waived[] = $d["course_id"];
+                continue;
+            }
+            if ($d["kind"] === "placement") {
+                $group = $r["group_details"][$d["group_id"]] ?? null;
+                $references = array_column($group["definition"]["courses"] ?? [], "version_id", "course_id");
+                if (
+                    ($group["version_id"] ?? null) !== $d["group_version_id"] ||
+                    ($references[$d["course_id"]] ?? null) !== $d["course_version_id"]
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $placements[$d["course_id"]] = ["group_id" => $d["group_id"],
+                    "group_version_id" => $d["group_version_id"], "course_version_id" => $d["course_version_id"]];
                 continue;
             }
             if ($d["kind"] === "substitution") {
@@ -639,6 +710,7 @@ final readonly class RequirementAdjustmentService
             "groups" => $groups,
             "waived_course_ids" => array_values(array_unique($waived)),
             "substitutions" => $substitutions,
+            "placements" => $placements,
             "substitution_conflicts" => $conflicts,
         ];
     }
@@ -653,6 +725,7 @@ final readonly class RequirementAdjustmentService
         string $action,
         array $p,
         #[\SensitiveParameter] string $reason,
+        bool $expiring = false,
     ): array {
         if (mb_strlen($reason) > 1000) {
             throw new InvalidArgumentException("Use a reason of at most 1000 characters.");
@@ -674,6 +747,10 @@ final readonly class RequirementAdjustmentService
             "reason" => $reason,
             "effective_at" => $context->describe()["effective_at"],
         ];
+        if ($expiring || ($p["definition"]["kind"] ?? null) === "placement") {
+            $d["kind"] = "requirement-placement-review";
+            $d["expires_at"] = $this->clock->now()->getTimestamp() + 1200;
+        }
         return [
             "action" => $action,
             "adjustment" => $p,

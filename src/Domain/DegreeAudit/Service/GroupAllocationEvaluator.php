@@ -105,6 +105,7 @@ final readonly class GroupAllocationEvaluator
                 "course_title" => $item["course_title"],
                 "statuses" => [],
                 "uses" => [],
+                "preferred_group_id" => $effective["placements"][$item["course_id"]]["group_id"] ?? null,
             ];
             foreach ($item["requirement_matches"] as $match) {
                 $status = $match["status"];

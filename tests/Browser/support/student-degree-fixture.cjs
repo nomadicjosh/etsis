@@ -189,7 +189,20 @@ async function fixture(page, options = {}) {
         );
     }
     const courses = [
-        { course_id: course, code: "MATH.101", title: "Algebra", groups: ["General education"] },
+        {
+            course_id: course,
+            code: "MATH.101",
+            title: "Algebra",
+            groups: ["General education"],
+            placement_groups: [
+                {
+                    id: group,
+                    name: "General education",
+                    course_code: "MATH.101",
+                    course_title: "Retained <b>Algebra</b>",
+                },
+            ],
+        },
     ];
     function effective(items = activeAdjustments) {
         const out = {
@@ -212,12 +225,19 @@ async function fixture(page, options = {}) {
             },
             waived_course_ids: [],
             substitutions: {},
+            placements: {},
             substitution_conflicts: {},
         };
         for (const p of items) {
             if (p.applicable === false) continue;
             const d = p.definition;
             if (d.kind === "waiver") out.waived_course_ids.push(d.course_id);
+            else if (d.kind === "placement")
+                out.placements[d.course_id] = {
+                    group_id: d.group_id,
+                    group_version_id: d.group_version_id,
+                    course_version_id: d.course_version_id,
+                };
             else if (d.kind === "substitution")
                 out.substitutions[d.course_id] = {
                     course_id: d.replacement_course_id,
@@ -345,6 +365,7 @@ async function fixture(page, options = {}) {
                           : "candidate",
                 ],
                 uses: outcome !== "feasible" ? [] : [{ group_id: group, alternative: index === 0 }],
+                preferred_group_id: options.allocationPreference && index === 0 ? group : null,
             })),
         };
         if (options.allocationCompetition) {
@@ -905,15 +926,17 @@ async function fixture(page, options = {}) {
                             : p.definition.group_id === d.group_id && p.definition.minimum === d.minimum),
                 );
             const enriched =
-                d.kind !== "minimum"
-                    ? d
-                    : {
-                          ...d,
-                          original_milli: targets.find(
-                              (t) => t.group_id === d.group_id && t.minimum === d.minimum,
-                          ).original_milli,
-                          group_version_id: d.group_id ? id(8) : null,
-                      };
+                d.kind === "placement"
+                    ? { ...d, course_version_id: id(14), group_version_id: id(8) }
+                    : d.kind !== "minimum"
+                      ? d
+                      : {
+                            ...d,
+                            original_milli: targets.find(
+                                (t) => t.group_id === d.group_id && t.minimum === d.minimum,
+                            ).original_milli,
+                            group_version_id: d.group_id ? id(8) : null,
+                        };
             const p = {
                 adjustment_id: id(nextAdjustment++),
                 supersedes_adjustment_id: previous?.adjustment_id || null,

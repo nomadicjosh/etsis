@@ -84,6 +84,18 @@ final class CourseMatchEvaluatorTest extends TestCase
         self::assertSame("candidate", $this->first($work, $requirements, $effective)["status"]);
     }
 
+    public function testPlacementPreferenceExplainsRestrictionButCannotOverrideTheChosenGroupsEligibility(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $e["placements"][$work["course_id"]] = ["group_id" => self::id(99)];
+        self::assertSame("placement_restricted", $this->first($work, $r, $e)["status"]);
+        $e["placements"][$work["course_id"]]["group_id"] = self::id(4);
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+        $work["grade"]["points_milli"] = 2000;
+        self::assertSame("insufficient_grade", $this->first($work, $r, $e)["status"]);
+        $work["course_version_id"] = self::id(77);
+        self::assertSame("course_version_differs", $this->first($work, $r, $e)["status"]);
+    }
     public static function states(): array
     {
         return [

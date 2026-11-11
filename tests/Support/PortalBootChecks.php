@@ -2138,6 +2138,33 @@ if (
 $sis->access->staff = true;
 $sis->access->grants = [];
 
+// A registrar can reserve a curriculum course for its retained group through the existing private API.
+$placementView = json_decode((string) $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+        "https://campus.example.invalid" . $adjustmentPath)))->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$placementGroup = $placementView["courses"][0]["placement_groups"][0]["id"];
+$sis->access->staff = false;
+$sis->access->grants = ["sis:degree-audit:adjust", "sis:student:read"];
+$placementReviewResponse = $teachingPost($adjustmentPath . "review/", [
+    "definition" => ["kind" => "placement", "course_id" => $catalogCourse->courseId->value, "group_id" => $placementGroup],
+    "reason" => "Fictional reviewed group placement.",
+]);
+$placementReview = json_decode((string) $placementReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($placementReviewResponse->getStatusCode() !== 200 || !isset($placementReview["review_token"])) {
+    throw new RuntimeException("Placement preference review failed the real provider boundary.");
+}
+$placementCommit = ["review_token" => $placementReview["review_token"]];
+$placementSaved = $teachingPost($adjustmentPath . "commit/", $placementCommit);
+$placementRetry = $teachingPost($adjustmentPath . "commit/", $placementCommit);
+if ($placementSaved->getStatusCode() !== 200 || (string) $placementSaved->getBody() !== (string) $placementRetry->getBody()) {
+    throw new RuntimeException("Placement preference confirmation/retry failed.");
+}
+$sis->access->grants = ["sis:student:read"];
+if ($teachingPost($adjustmentPath . "commit/", $placementCommit)->getStatusCode() !== 403) {
+    throw new RuntimeException("Student-read authority alone approved a placement preference.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+
 // Joined Report Studio plans remain typed, private and independently authorized at execution.
 $studioDefinition = [
     "dataset" => "programs",

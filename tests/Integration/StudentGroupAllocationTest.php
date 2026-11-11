@@ -207,6 +207,25 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertNull($r["competition"]);
         self::assertCount(4, $r["groups"][0]["placements"]);
         self::assertCount(4, $r["groups"][1]["placements"]);
+        $academic = $s->sql->rows("sis_academic_credits");
+        $finance = $s->financialEvents();
+        $approvals = $this->adjustments($f);
+        $course = $f->f->groupDefinition["courses"][0]["course_id"];
+        $review = $approvals->reviewGrant($f->student, $f->assignment,
+            ["kind" => "placement", "course_id" => $course, "group_id" => $f->f->group->value],
+            "Fictional registrar placement preference.");
+        $approvals->commit($f->student, $f->assignment, $review["review_token"]);
+        $r = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $r["outcome"]);
+        self::assertContains("placement_restricted", array_merge(...array_column($r["records"], "statuses")));
+        foreach ($r["groups"] as $group) self::assertSame([], $group["placements"]);
+        self::assertSame($academic, $s->sql->rows("sis_academic_credits"));
+        self::assertSame($finance, $s->financialEvents());
+        $revoke = $approvals->reviewRevoke($f->student, $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]), "Fictional restore normal sharing.");
+        $approvals->commit($f->student, $f->assignment, $revoke["review_token"]);
+        self::assertSame("feasible", $this->service($f)->preview($f->student, $f->assignment)["outcome"]);
+
     }
     public function testWaiverDoesNotCreateCreditsAndSeparateApprovedMinimumReductionChangesPlacement(): void
     {

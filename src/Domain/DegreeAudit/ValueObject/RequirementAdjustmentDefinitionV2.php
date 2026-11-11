@@ -7,7 +7,7 @@ namespace Domain\DegreeAudit\ValueObject;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
-/** Adds explicit substitutions to the shared minimum and waiver forms. */
+/** Current approval grammar: substitutions and placement preferences extend minimums and waivers. */
 final readonly class RequirementAdjustmentDefinitionV2
 {
     public const array DEGREE_MINIMUMS = RequirementAdjustmentDefinition::DEGREE_MINIMUMS;
@@ -15,6 +15,22 @@ final readonly class RequirementAdjustmentDefinitionV2
     /** @param array<string, mixed> $definition */
     public function __construct(public array $definition)
     {
+        if (($definition["kind"] ?? null) === "placement") {
+            self::keys($definition, [
+                "kind",
+                "course_id",
+                "course_version_id",
+                "group_id",
+                "group_version_id",
+            ]);
+            foreach (["course_id", "course_version_id", "group_id", "group_version_id"] as $key) {
+                if (!is_string($definition[$key])) {
+                    throw new InvalidArgumentException("Choose a retained course and group publication.");
+                }
+                new EntityId($definition[$key]);
+            }
+            return;
+        }
         if (($definition["kind"] ?? null) !== "substitution") {
             new RequirementAdjustmentDefinition($definition);
             return;
@@ -32,6 +48,9 @@ final readonly class RequirementAdjustmentDefinitionV2
     }
     public function key(): string
     {
+        if ($this->definition["kind"] === "placement") {
+            return "placement:" . $this->definition["course_id"];
+        }
         return $this->definition["kind"] === "substitution"
         ? "substitution:" . $this->definition["course_id"]
         : new RequirementAdjustmentDefinition($this->definition)->key();

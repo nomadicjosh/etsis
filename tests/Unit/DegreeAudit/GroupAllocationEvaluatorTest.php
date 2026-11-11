@@ -130,6 +130,35 @@ final class GroupAllocationEvaluatorTest extends TestCase
             new AllocationGapAnalyzer(),
         );
     }
+    public function testApprovedPreferenceRestrictsTheCourseWithoutBypassingEligibilityOrOtherGroupSharing(): void
+    {
+        foreach (["one_group", "multiple_groups"] as $sharing) {
+            $r = $this->requirements([self::id(10) => $this->group(10, [1, 2]), self::id(11) => $this->group(11, [1, 2])], $sharing);
+            $e = $this->effective($r);
+            $e["placements"][self::id(1)] = ["group_id" => self::id(11)];
+            $work = [$this->work(1001), $this->work(1002, 2)];
+            $result = $this->evaluator()->evaluate($work, $r, $e);
+            self::assertSame("feasible", $result["outcome"]);
+            $record = array_column($result["records"], null, "id")[self::id(1001)];
+            self::assertSame(self::id(11), $record["preferred_group_id"]);
+            foreach ($record["uses"] as $use) self::assertSame(self::id(11), $use["group_id"]);
+            self::assertContains("placement_restricted", $record["statuses"]);
+            $work[0]["course_version_id"] = self::id(999);
+            self::assertSame("needs_review", $this->evaluator()->evaluate($work, $r, $e)["outcome"]);
+        }
+    }
+    public function testPreferenceDoesNotChooseARetakeOrTurnAFailingGradeIntoEarnedCredit(): void
+    {
+        $r = $this->requirements([self::id(10) => $this->group(10, [1], floor: 3000), self::id(11) => $this->group(11, [1], count: 0)], "multiple_groups");
+        $e = $this->effective($r);
+        $e["placements"][self::id(1)] = ["group_id" => self::id(10)];
+        $low = $this->work(1001, credits: 4000, points: 2000);
+        $passing = $this->work(1002, credits: 3000, points: 4000);
+        $result = $this->evaluator()->evaluate([$low, $passing], $r, $e);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame([[self::id(1002)]], $result["groups"][0]["placements"][0]["work_options"]);
+        self::assertSame("infeasible", $this->evaluator()->evaluate([$low], $r, $e)["outcome"]);
+    }
     public function testGroupGradeEligibilityPrecedesRepeatCreditRankingAndCatalogCreditsAreNotUsed(): void
     {
         $r = $this->requirements([self::id(10) => $this->group(10, credits: 3000, floor: 2000)]);
