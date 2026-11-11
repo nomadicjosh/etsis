@@ -10,6 +10,7 @@ require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
 use Domain\DegreeAudit\Repository\AcademicInputRepository;
 use Domain\DegreeAudit\Service\AcademicInputService;
 use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
+use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\DegreeMinimumEvaluator;
@@ -82,6 +83,7 @@ final class DegreeProgressTest extends TestCase
                 new CourseMatchEvaluator(),
                 new AcademicPolicyEvaluator(),
                 new CourseAllocationPlanner($steps),
+                new AllocationGapAnalyzer(),
             ),
             $students,
             $s->transactions,

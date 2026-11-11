@@ -18,6 +18,7 @@ final readonly class GroupAllocationEvaluator
         private CourseMatchEvaluator $matches,
         private AcademicPolicyEvaluator $credits,
         private CourseAllocationPlanner $planner,
+        private AllocationGapAnalyzer $gaps,
     ) {
     }
 
@@ -77,6 +78,7 @@ final readonly class GroupAllocationEvaluator
                     ),
                 ),
                 "placements" => [],
+                "gaps" => null,
             ];
         }
         if ($issues !== []) {
@@ -167,14 +169,16 @@ final readonly class GroupAllocationEvaluator
         }
         $outcome = "needs_review";
         if ($issues === []) {
-            $planned = $this->planner->plan(
-                new AllocationProblem(
-                    $groups,
-                    array_values($resources),
-                    $sharing,
-                    $effective["waived_course_ids"],
-                ),
+            $problem = new AllocationProblem(
+                $groups,
+                array_values($resources),
+                $sharing,
+                $effective["waived_course_ids"],
             );
+            foreach ($this->gaps->analyze($problem) as $id => $report) {
+                $labels[$id]["gaps"] = $report;
+            }
+            $planned = $this->planner->plan($problem);
             $outcome = $planned->outcome->value;
             foreach ($planned->placements as $placement) {
                 $key =

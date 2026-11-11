@@ -8,6 +8,7 @@ require_once dirname(__DIR__) . "/Support/StudentRequirementsFixture.php";
 
 use Domain\DegreeAudit\Service\AcademicInputService;
 use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
+use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
@@ -71,6 +72,7 @@ final class StudentGroupAllocationTest extends TestCase
                 new CourseMatchEvaluator(),
                 new AcademicPolicyEvaluator(),
                 new CourseAllocationPlanner($steps),
+                new AllocationGapAnalyzer(),
             ),
             $students,
             $s->transactions,
@@ -149,6 +151,7 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame($f->version->value, $result["context"]["requirements_version_id"]);
         self::assertCount(4, $result["groups"][0]["placements"]);
         self::assertSame(12000, array_sum(array_column($result["groups"][0]["placements"], "credits_milli")));
+        self::assertFalse($result["groups"][0]["gaps"]["has_shortfall"]);
         self::assertSame($before, $s->sql->rows("sis_history_events"));
         self::assertSame($receipts, $s->sql->rows("sis_history_operations"));
         self::assertArrayNotHasKey("references", $result);
@@ -187,6 +190,9 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame("infeasible", $result["outcome"]);
         self::assertContains("in_progress", $result["records"][0]["statuses"]);
         self::assertSame([], $result["groups"][0]["placements"]);
+        self::assertTrue($result["groups"][0]["gaps"]["has_shortfall"]);
+        self::assertSame(12000, $result["groups"][0]["gaps"]["credit_shortfall_milli"]);
+        self::assertSame([], $result["groups"][0]["gaps"]["eligible_target_ids"]);
     }
     public function testNewCatalogPublicationsDoNotReplaceTheSelectedGroupCourseReferences(): void
     {

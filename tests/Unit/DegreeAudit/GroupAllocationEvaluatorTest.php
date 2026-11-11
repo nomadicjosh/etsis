@@ -6,6 +6,7 @@ namespace Tests\Unit\DegreeAudit;
 
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
+use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
@@ -126,6 +127,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
             new CourseMatchEvaluator(),
             new AcademicPolicyEvaluator(),
             new CourseAllocationPlanner($steps),
+            new AllocationGapAnalyzer(),
         );
     }
     public function testGroupGradeEligibilityPrecedesRepeatCreditRankingAndCatalogCreditsAreNotUsed(): void
@@ -140,6 +142,16 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertSame(3000, $result["groups"][0]["placements"][0]["credits_milli"]);
         self::assertSame([[self::id(1002)]], $result["groups"][0]["placements"][0]["work_options"]);
         self::assertContains("insufficient_grade", $result["records"][0]["statuses"]);
+        self::assertSame(3000, $result["groups"][0]["gaps"]["credit_upper_bound_milli"]);
+        $e = $this->effective($r);
+        $e["groups"][self::id(10)]["min_credits_milli"] = 3500;
+        $short = $this->evaluator()->evaluate(
+            [$this->work(1001, credits: 4000, points: 1000), $this->work(1002, points: 3000)],
+            $r,
+            $e,
+        );
+        self::assertSame("infeasible", $short["outcome"]);
+        self::assertSame(500, $short["groups"][0]["gaps"]["credit_shortfall_milli"]);
     }
     public function testSharingAndTargetCollisionsAreSolvedAcrossAllGroupsWithoutPartialPlacements(): void
     {
@@ -152,6 +164,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
             self::assertSame($expected, $result["outcome"]);
             self::assertCount($sharing === "one_group" ? 0 : 2, $result["records"][0]["uses"]);
             self::assertCount($sharing === "one_group" ? 0 : 1, $result["groups"][0]["placements"]);
+            self::assertFalse($result["groups"][0]["gaps"]["has_shortfall"]);
         }
     }
     public function testWaiverRemovesNamedObligationButCreatesNeitherCreditsNorQuantityReduction(): void
@@ -199,6 +212,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
             $result = $this->evaluator()->evaluate([$w], $r, $this->effective($r));
             self::assertSame("needs_review", $result["outcome"]);
             self::assertSame([], $result["groups"][0]["placements"]);
+            self::assertNull($result["groups"][0]["gaps"]);
         }
         $e = $this->effective($r);
         $e["substitution_conflicts"][self::id(1)] = "Fictional overlapping approvals.";
@@ -243,10 +257,12 @@ final class GroupAllocationEvaluatorTest extends TestCase
         $result = $this->evaluator()->evaluate([$this->work(1001)], $r, $this->effective($r));
         self::assertSame("unsupported", $result["outcome"]);
         self::assertContains("group_average_gpa_unsupported", $result["issues"]);
+        self::assertNull($result["groups"][0]["gaps"]);
         unset($r["group_details"][self::id(10)]["definition"]["min_gpa_milli"]);
         $result = $this->evaluator(1)->evaluate([$this->work(1001)], $r, $this->effective($r));
         self::assertSame("undetermined", $result["outcome"]);
         self::assertSame([], $result["groups"][0]["placements"]);
+        self::assertFalse($result["groups"][0]["gaps"]["has_shortfall"]);
     }
     public function testAllocationNeverUsesTheTwentyFiveMatchDisplayTruncation(): void
     {

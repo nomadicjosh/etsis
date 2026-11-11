@@ -84,6 +84,11 @@ for (const outcome of ["infeasible", "needs_review", "unsupported", "undetermine
             .click();
         await expect(studio).toContainText("No speculative partial plan is shown");
         await expect(studio).not.toContainText("actual earned credits");
+        if (["needs_review", "unsupported"].includes(outcome)) {
+            await expect(studio).toContainText("Shortfalls cannot be assessed");
+            await expect(studio).not.toContainText("more eligible credits are needed");
+            await expect(studio).not.toContainText("No eligible completed evidence");
+        }
         await studio.locator("summary").filter({ hasText: "Eligible course pool" }).click();
         await expect(studio).toContainText("REQ.0");
         await accessible(page);
@@ -119,5 +124,73 @@ test("inconsistent placement preserves current work and announces a safe error",
     await expect(studio.getByRole("alert")).toContainText("Ask a registrar to review this record");
     await expect(studio).toContainText("MATH.101");
     await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test("group shortages explain named and choose evidence without assigning missing courses or partial credit", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        allocationOutcome: "infeasible",
+        allocationNamedRules: true,
+    });
+    await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio).toContainText("Current eligible work falls short");
+    await studio
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    await expect(studio).toContainText("At most 3 credits toward the 63-credit minimum");
+    await expect(studio).toContainText("At least 60 more eligible credits are needed");
+    await expect(studio).toContainText("not applied credits or a partial placement");
+    await studio.locator("summary").filter({ hasText: "All listed courses" }).click();
+    const all = studio.locator("details").filter({ hasText: "All listed courses" });
+    await expect(all).toContainText(
+        "Required course contributions: 2 · Required courses with eligible evidence: 1",
+    );
+    await expect(all).toContainText("At least 1 more listed course requirement needs eligible evidence");
+    await expect(all).toContainText(
+        "REQ.1 · Retained requirement <b>fictional</b> · Eligible completed evidence available",
+    );
+    await expect(all).toContainText(
+        "REQ.2 · Retained requirement <b>fictional</b> · No eligible completed evidence",
+    );
+    await studio.locator("summary").filter({ hasText: "Choose 2 courses" }).click();
+    const choose = studio.locator("details").filter({ hasText: "Choose 2 courses" });
+    await expect(choose).toContainText("Required course contributions: 2");
+    await expect(studio).not.toContainText("Supports requirement");
+    await expect(studio.locator("b")).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await studio.getByRole("button", { name: "Back to course groups", exact: true }).click();
+    expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.calls.some((c) => /\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("course-count shortages and unproved bounds remain distinct from a complete placement", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        allocationOutcome: "infeasible",
+        allocationCourseCount: true,
+    });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await studio.getByRole("button", { name: "Inspect course-group placement", exact: true }).click();
+    await studio
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    await expect(studio).toContainText("At most 0 distinct course contributions toward the 4-course minimum");
+    await expect(studio).toContainText("At least 4 more eligible course contributions are needed");
+    await expect(studio).not.toContainText("more eligible credits are needed");
+    await accessible(page);
+    expect(f.calls.filter((c) => c.path.endsWith("/progress/"))).toHaveLength(1);
+    expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(0);
     expect(f.errors).toEqual([]);
 });

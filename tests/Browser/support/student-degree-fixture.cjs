@@ -253,6 +253,34 @@ async function fixture(page, options = {}) {
     function allocationReview() {
         const outcome = options.allocationOutcome || "feasible";
         const courseIds = Array.from({ length: 21 }, (_, index) => id(200 + index));
+        const rules = options.allocationNamedRules
+            ? [
+                  { id: id(99), mode: "all", minimum_courses: 3, course_ids: courseIds.slice(0, 3) },
+                  { id: id(98), mode: "choose", minimum_courses: 2, course_ids: courseIds.slice(0, 3) },
+              ]
+            : [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }];
+        const eligible =
+            outcome === "infeasible" ? (options.allocationNamedRules ? [courseIds[1]] : []) : courseIds;
+        const gaps = ["needs_review", "unsupported"].includes(outcome)
+            ? null
+            : {
+                  has_shortfall: outcome === "infeasible",
+                  credit_upper_bound_milli: options.allocationCourseCount
+                      ? 0
+                      : Math.min(63000, eligible.length * 3000),
+                  credit_shortfall_milli: options.allocationCourseCount
+                      ? 0
+                      : Math.max(0, 63000 - eligible.length * 3000),
+                  course_upper_bound: eligible.length,
+                  course_shortfall: options.allocationCourseCount ? Math.max(0, 4 - eligible.length) : 0,
+                  eligible_target_ids: eligible,
+                  rules: rules.map((rule) => ({
+                      id: rule.id,
+                      required_courses: rule.mode === "all" ? 2 : rule.mode === "choose" ? 2 : 0,
+                      eligible_target_count: eligible.length,
+                      shortfall_courses: rule.mode === "pool" ? 0 : Math.max(0, 2 - eligible.length),
+                  })),
+              };
         return {
             status: "review",
             outcome,
@@ -276,9 +304,9 @@ async function fixture(page, options = {}) {
                     id: group,
                     name: "General education <b>fictional</b>",
                     version_id: id(8),
-                    requirement_type: "credits",
-                    required_credits_milli: 63000,
-                    required_courses: 0,
+                    requirement_type: options.allocationCourseCount ? "courses" : "credits",
+                    required_credits_milli: options.allocationCourseCount ? 0 : 63000,
+                    required_courses: options.allocationCourseCount ? 4 : 0,
                     minimum_grade_points_milli: 2000,
                     waived_courses: [courseIds[0]],
                     courses: Object.fromEntries(
@@ -287,7 +315,8 @@ async function fixture(page, options = {}) {
                             { code: `REQ.${i}`, title: "Retained requirement <b>fictional</b>" },
                         ]),
                     ),
-                    rules: [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }],
+                    rules,
+                    gaps,
                     placements:
                         outcome !== "feasible"
                             ? []

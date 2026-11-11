@@ -38,6 +38,8 @@ Minimum checks are independent components. A known cumulative GPA can be display
 
 **Inspect course-group placement** opens the [existing placement review](student-course-placement.md) from this same captured result. Staff can inspect group quantities, retained named-course lists, waivers, approved substitutions, grade floors, repeat/sharing treatment and equivalent evidence alternatives. Returning to degree progress does not rerun the read.
 
+The placement review also [explains clear shortfalls](student-course-placement.md#understanding-shortfalls) in eligible credits, distinct-course quantities and named/choose evidence. These optimistic evidence bounds do not assign partial placements or declare groups complete. Missing/conflicting inputs remain needs-review outcomes.
+
 **Refresh degree progress** requests a fresh review after registration, grade or approval changes. A grade correction changes refreshed current calculations; it does not mutate a previously returned snapshot. The snapshots are not retained audit evidence and must not be reused for a later command as if the student were still locked.
 
 Earlier unknown history and a changed matriculation cohort have explicit notices. The review checks available surviving sources, not absolute completeness of the historical archive. Missing historical equivalence, unsupported group rules and incomplete search results remain visible. A group search limit can leave independent minimum comparisons available, while returning no speculative group placement.

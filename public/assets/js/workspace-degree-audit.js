@@ -2163,6 +2163,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             ? `${group.placements.length} proposed course placements`
                             : "Placement not established",
                     ),
+                    node("p", {}, groupGapSummary(group, data.outcome)),
                     button(`Inspect group ${group.name}`, () => groupPlacementDetails(data, group, restore)),
                 ),
             );
@@ -2228,6 +2229,56 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         body.append(pages);
     }
+    function groupGapSummary(group, outcome) {
+        return !group.gaps
+            ? "Shortfalls cannot be assessed until the retained inputs and rules are verified."
+            : group.gaps.has_shortfall
+              ? "Current eligible work falls short of this group's requirements."
+              : outcome === "feasible"
+                ? "The proposed placement meets this group's supported requirements."
+                : "No simple shortage found. Courses must still fit together in a complete placement.";
+    }
+    function groupGapDetails(group, outcome) {
+        const section = node(
+            "section",
+            { class: "audit-preview" },
+            node("h2", {}, "What current work can support"),
+            node("p", {}, groupGapSummary(group, outcome)),
+        );
+        const gaps = group.gaps;
+        if (!gaps) return section;
+        section.append(
+            node(
+                "p",
+                {},
+                "These are optimistic bounds on eligible completed evidence, not applied credits or a partial placement. Alternatives, target collisions and sharing can reduce what can actually be placed. In-progress, insufficient-grade, dropped and voided work supply no completed contribution.",
+            ),
+        );
+        if (group.required_credits_milli > 0)
+            section.append(
+                node(
+                    "p",
+                    {},
+                    `At most ${text(gaps.credit_upper_bound_milli)} credits toward the ${text(group.required_credits_milli)}-credit minimum.${gaps.credit_shortfall_milli > 0 ? ` At least ${text(gaps.credit_shortfall_milli)} more eligible credits are needed.` : " This bound does not establish completion."}`,
+                ),
+            );
+        if (group.required_courses > 0)
+            section.append(
+                node(
+                    "p",
+                    {},
+                    `At most ${gaps.course_upper_bound} distinct course contributions toward the ${group.required_courses}-course minimum.${gaps.course_shortfall > 0 ? ` At least ${gaps.course_shortfall} more eligible course contributions are needed.` : " This bound does not establish completion."}`,
+                ),
+            );
+        section.append(
+            node(
+                "p",
+                {},
+                "Course waivers remove named obligations only. They create no credits, completed courses or reduction to choose counts. Approved quantity reductions are already included in the required minimums above.",
+            ),
+        );
+        return section;
+    }
     function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
         const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
         body.append(
@@ -2253,8 +2304,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "No complete placement was established. No speculative partial plan is shown.",
                 ),
             );
-        body.append(node("h2", {}, "Retained course requirements"));
+        body.append(groupGapDetails(group, data.outcome), node("h2", {}, "Retained course requirements"));
         for (const rule of group.rules.slice(ruleOffset, ruleOffset + 20)) {
+            const gap = group.gaps?.rules.find((r) => r.id === rule.id);
             const detail = node(
                 "details",
                 { class: "audit-tree-section" },
@@ -2264,6 +2316,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
                 ),
             );
+            if (gap && rule.mode !== "pool")
+                detail.append(
+                    node(
+                        "p",
+                        {},
+                        `Required course contributions: ${gap.required_courses} · ${rule.mode === "all" ? "Required courses" : "Listed options"} with eligible evidence: ${gap.eligible_target_count}.${gap.shortfall_courses > 0 ? ` At least ${gap.shortfall_courses} more listed course requirement${gap.shortfall_courses === 1 ? " needs" : "s need"} eligible evidence.` : " Eligible choices may still compete for the same actual course or another group."}`,
+                    ),
+                );
             let loaded = false;
             detail.addEventListener("toggle", () => {
                 if (!detail.open || loaded) return;
@@ -2279,7 +2339,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         node(
                             "li",
                             {},
-                            `${course.code} · ${course.title}${waived ? " · Course requirement waived" : placed ? " · Proposed placement" : ""}`,
+                            `${course.code} · ${course.title}${waived ? " · Course requirement waived" : placed ? " · Proposed placement" : ""}${group.gaps ? (group.gaps.eligible_target_ids.includes(id) ? " · Eligible completed evidence available" : " · No eligible completed evidence") : ""}`,
                         ),
                     );
                 }

@@ -14,6 +14,22 @@ A proposed placement shows the actual course, the required-course target, any ap
 
 **How current work was considered** explains eligible work, insufficient grades, in-progress work, drops, voids, unknown publications and repeat/sharing effects. Work and placement pages use the same captured result without another request. **Refresh course placement** performs a fresh bounded review; **Back to previous screen** returns to the degree or work screen.
 
+## Understanding shortfalls
+
+Group cards now identify clear shortages in current eligible work. Choose **Inspect group … → What current work can support** for details:
+
+- The credit bound shows the most eligible credit that could count toward the effective minimum, capped at that minimum. A 12-credit group with at most 9 eligible credits needs at least 3 more. The bound uses actual retained awards after group grade floors and repeat-credit treatment, never today's catalog credit values.
+- The course-count bound uses distinct actual courses and distinct required targets. Repeated awards for one course, or an original course and its alternative for one target, cannot inflate that bound.
+- Required-course and choose cards show how many listed requirements need contributions and how many have eligible evidence. Expand a card to see which retained courses have eligible completed evidence. A missing course on a choose card is an option, not an instruction to complete every listed course.
+
+A waiver removes an **all** card's named obligation wherever applicable. It supplies no completed course or credits and does not reduce a choose count. Real earned work for a waived course can still support an unchanged quantity minimum. Approved minimum reductions are already included in the comparison.
+
+These are optimistic bounds, not applied credits, a best partial plan or a complete placement. Alternatives can compete for one required target; one actual course can compete for several targets or groups. No clear shortage therefore does **not** establish that a group is satisfied. The existing combined placement search remains responsible for those decisions. A shared-course conflict can produce no complete plan even when each group has no simple local shortage.
+
+Relevant unknown grades/publications, conflicting approvals and unsupported retained rules suppress these shortage comparisons. The screen asks for review rather than treating unknown evidence as zero. A search limit still shows no partial placements; independently established evidence bounds may remain visible, without changing the interrupted search into academic failure. A collection/preparation/replay limit returns no partial result.
+
+The same explanations are available through **Degree progress → Inspect course-group placement** from the captured review, without an additional request. Evidence bounds use only the planner's already prepared, bounded inputs. They add no database queries, stream replay, additional search, stored evaluation or academic write, and expose no raw events or source references.
+
 ## Rules applied
 
 - Group eligibility uses retained passing-grade facts, exact course publications or approved substitution publications, and the group's effective per-course grade-point floor. Grade-point comparisons require compatible retained grading publications; no conversion or current 4.0 display default supplies missing evidence.

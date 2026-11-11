@@ -35,6 +35,10 @@ Group credit sums use integer thousandths. Internal credit bounds saturate at th
 
 The engine returns the first complete feasible plan in its deterministic search order. It does not promise a minimum-size plan, institutional preference optimization or a best partial plan. Infeasible and undetermined results contain no speculative placements.
 
+`AllocationGapAnalyzer` separately explains necessary group bounds from the same validated `AllocationProblem`. For credits it takes the tighter of per-actual-course and per-target maximum sums, saturating at the effective minimum. Distinct-course count is bounded by both actual resources and eligible targets. Named/choose counts compare eligible distinct targets with their retained obligations; only all-card obligations are reduced by applicable waivers. Zero-credit evidence remains a real course contribution. These optimistic bounds may prove shortages, but cannot establish a feasible plan or account for all target/sharing collisions. They never return partial placements or replace the exact search. The adapter suppresses diagnostics when relevant evidence or rules are unknown/unsupported.
+
+Diagnostic preparation traverses the existing bounded choices, resources and named rules, without another search or I/O. It retains at most one eligible-target list and one bounded rule-report list per group. Both the standalone and combined progress reviews consume it within their existing verified read boundary.
+
 GPA, residency, specialization exclusions and other constraints outside this input contract are not silently evaluated. Unknown extra group fields are rejected. A future adapter must explicitly refuse unsupported retained requirements, such as an older average group-GPA constraint, rather than drop those fields. Constraints affecting which placement is valid must enter the appropriate evaluator/search; rejecting a student merely because one structural plan fails a later omitted constraint would be incorrect.
 
 ## Resource limits and reproducibility
