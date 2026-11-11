@@ -63,3 +63,7 @@ Choose **Credits & GPA** from the degree-requirement or academic-work screen for
 ## Review course placement
 
 Choose **Review course placement** from the degree or academic-work screen to review proposed placements across the selected course groups with approved exceptions. The [review](student-course-placement.md) verifies all supplied current inputs together; it does not combine paged candidate matches. It explains missing evidence, group grade floors, repeat treatment and sharing, without assigning a partial plan or establishing graduation eligibility.
+
+## Combined degree progress
+
+Open **Degree requirements → Degree progress** to compare approved general credit/GPA minimums and course-group placement from the same verified current inputs. The [combined review](student-degree-progress.md) distinguishes institutional cumulative GPA from overall GPA and keeps undefined, unknown and below-minimum values separate. Its local contribution and placement drilldowns do not reread the student.

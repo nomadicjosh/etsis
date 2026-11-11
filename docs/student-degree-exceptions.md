@@ -4,7 +4,7 @@ A **course waiver belongs to one student-program pursuit**. It removes the requi
 
 A **minimum exception** explicitly reduces a published credit/GPA threshold for that student. It is separate from a waiver and applies to the exact degree publication reviewed. Neither action changes the institution's published curriculum or another student's requirements.
 
-These controls retain approved inputs and show their effective thresholds. The [course-group placement review](student-course-placement.md) now applies approved waivers, substitutions and group minimum/grade-floor reductions. Overall degree completion and specialization exclusions remain subsequent stages; these controls do not award credentials or manufacture academic facts.
+These controls retain approved inputs and show their effective thresholds. The [course-group placement review](student-course-placement.md) now applies approved waivers, substitutions and group minimum/grade-floor reductions. Approved general minimum reductions now also appear in the [combined degree-progress review](student-degree-progress.md), alongside their original published thresholds. Complete degree evaluation and specialization exclusions remain subsequent stages; these controls do not award credentials or manufacture academic facts.
 
 ## Setup and permissions
 

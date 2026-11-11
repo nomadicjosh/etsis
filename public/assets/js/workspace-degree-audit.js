@@ -1706,6 +1706,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         body.append(
             actions(
+                button("Degree progress", () => degreeProgress(base, restore), "btn-primary"),
                 button("Academic work", () => academicWork(base, restore)),
                 button("Credits & GPA", () => academicCalculations(base, restore)),
                 button("Review course placement", () => groupAllocation(base, restore)),
@@ -1738,6 +1739,287 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 }),
             ),
         );
+    }
+    const degreeMinimumLabels = {
+        min_credits_milli: "Total earned credits",
+        min_resident_milli: "Resident credits (institutional origin)",
+        min_cumulative_gpa_milli: "Cumulative GPA",
+        min_overall_gpa_milli: "Overall GPA",
+    };
+    const degreeMinimumStatuses = {
+        satisfied: "Minimum met",
+        below_minimum: "Below minimum",
+        unknown: "Needs review",
+        not_required: "No minimum required",
+    };
+    async function degreeProgress(base, back) {
+        const data = await post(`${base}progress/`, {});
+        renderDegreeProgress(base, back, data);
+    }
+    function renderDegreeProgress(base, back, data) {
+        const body = screen("Degree progress review", "GENERAL MINIMUMS & COURSE GROUPS");
+        const restore = () => renderDegreeProgress(base, back, data);
+        body.append(
+            node(
+                "p",
+                {},
+                "Review current work against the selected degree's general minimums and course groups, including approved exceptions. All checks use one verified read. This is not a completed degree audit or graduation decision, and it saves no academic changes.",
+            ),
+        );
+        body.append(
+            actions(
+                button("Refresh degree progress", () => degreeProgress(base, back)),
+                button("Back to degree requirements", back),
+            ),
+        );
+        if (data.status !== "review") {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    data.status === "needs_selection"
+                        ? "Select published degree requirements for this pursuit before reviewing degree progress."
+                        : "The review reached its work limit. No partial minimum checks, records or placements are shown. Ask the registrar to arrange a controlled review.",
+                ),
+            );
+            return;
+        }
+        body.append(
+            node(
+                "p",
+                { class: "audit-status" },
+                `${data.context.name} · ${data.context.academic_year_code} · Version ${data.context.version}`,
+            ),
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                `${data.current_record_count} current academic records checked against available sources. This does not certify that the historical archive is complete.`,
+            ),
+        );
+        if (data.input_status === "history_gaps")
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "Earlier history is unknown for some records. These checks use known current facts and do not reconstruct earlier totals.",
+                ),
+            );
+        if (data.context.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "The matriculation cohort changed. The retained degree selection still applies; ask the registrar to review it.",
+                ),
+            );
+        body.append(node("h2", {}, "General degree minimums"));
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const check of data.minimums) {
+            const gpa =
+                check.key === "min_cumulative_gpa_milli"
+                    ? data.gpa.cumulative
+                    : check.key === "min_overall_gpa_milli"
+                      ? data.gpa.overall
+                      : null;
+            const actual =
+                check.actual_minimum_milli === null
+                    ? "Unavailable"
+                    : check.actual_minimum_milli === check.actual_maximum_milli
+                      ? text(check.actual_minimum_milli)
+                      : `${text(check.actual_minimum_milli)}–${text(check.actual_maximum_milli)}`;
+            const card = node(
+                "article",
+                { class: "audit-card" },
+                node("h3", {}, degreeMinimumLabels[check.key]),
+                node(
+                    "p",
+                    { class: "audit-status" },
+                    gpa?.ready && gpa.credits_milli === 0 && check.status === "unknown"
+                        ? "GPA not yet established"
+                        : degreeMinimumStatuses[check.status],
+                ),
+                node("p", { class: "h3" }, actual),
+                node(
+                    "p",
+                    {},
+                    check.required_milli == null
+                        ? "No published minimum"
+                        : `Required: ${text(check.required_milli)}`,
+                ),
+            );
+            if (check.adjusted)
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        `Approved minimum reduction · Published minimum: ${text(check.published_milli)}`,
+                    ),
+                );
+            if (check.key === "min_resident_milli")
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        "Uses institutional-origin credit bounds. A tied institutional/transfer award is not silently chosen to satisfy this minimum; richer residency exclusions still need evaluation.",
+                    ),
+                );
+            if (gpa) {
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        check.key === "min_cumulative_gpa_milli"
+                            ? "Institutional work only; transfer attempts are excluded before repeat selection."
+                            : "Uses the retained transfer-GPA policy and each grade's recorded GPA treatment.",
+                    ),
+                );
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        !gpa.ready
+                            ? "Required GPA inputs are missing or conflicting. No partial GPA is shown."
+                            : gpa.credits_milli === 0
+                              ? "No eligible GPA credits are recorded. This is not a zero GPA."
+                              : `${text(gpa.credits_milli)} GPA credits · ${text(gpa.quality_points_milli)} quality points. GPA is not rounded upward at minimum boundaries.`,
+                    ),
+                );
+            }
+            cards.append(card);
+        }
+        body.append(cards);
+        for (const issue of data.issues)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    `${issue.component === "credits" ? "Earned credits" : issue.component === "institutional" ? "Cumulative GPA" : "Overall GPA"}: ${calculationIssues[issue.code] || "A retained input needs review."}`,
+                ),
+            );
+        const outcomes = {
+            feasible: "A complete course-group placement was found",
+            infeasible: "No complete course-group placement found",
+            undetermined: "The course-group search reached its limit",
+            needs_review: "Course-group inputs need review",
+            unsupported: "Some retained course-group rules are not yet supported",
+        };
+        body.append(
+            node(
+                "section",
+                { class: "audit-preview" },
+                node("h2", {}, "Course groups"),
+                node(
+                    "p",
+                    { role: "status" },
+                    outcomes[data.allocation.outcome] || "Course-group placement needs review",
+                ),
+                node(
+                    "p",
+                    {},
+                    "General minimums and course-group placement are separate checks. Missing equivalence, unsupported rules, specialization exclusions and retained final evaluations still need completion.",
+                ),
+                actions(
+                    button("Inspect course-group placement", () =>
+                        renderGroupAllocation(base, restore, {
+                            status: "review",
+                            input_status: data.input_status,
+                            current_record_count: data.current_record_count,
+                            context: data.context,
+                            ...data.allocation,
+                        }),
+                    ),
+                ),
+            ),
+        );
+        const policies = node(
+            "details",
+            { class: "audit-tree-section" },
+            node("summary", {}, "Retained calculation policies"),
+        );
+        for (const key of ["repeat_credit", "repeat_gpa", "transfer_overall_gpa"])
+            policies.append(
+                node(
+                    "p",
+                    {},
+                    `${policyLabels[key]}: ${policyChoices[key].find(([value]) => value === data.policy[key])?.[1] || "Not recorded"}`,
+                ),
+            );
+        policies.append(
+            node(
+                "p",
+                {},
+                "Repeat ordering: " +
+                    ({
+                        academic_period: "Academic term / instructional period",
+                        completion_date: "Actual completion date",
+                    }[data.policy.attempt_order] || "Not recorded"),
+            ),
+        );
+        body.append(
+            policies,
+            actions(
+                button("Inspect credit and GPA contributions", () =>
+                    degreeProgressContributions(data, restore),
+                ),
+            ),
+        );
+    }
+    function degreeProgressContributions(data, back, offset = 0) {
+        const body = screen("Degree progress contributions", "SAME VERIFIED CURRENT WORK");
+        body.append(
+            node(
+                "p",
+                {},
+                "Earned credit, cumulative GPA and overall GPA have separate retained rules. A course-group placement does not create another contribution to these totals.",
+            ),
+            actions(button("Back to degree progress", back)),
+        );
+        const cards = node("div", { class: "audit-library-grid" });
+        for (const record of data.records.slice(offset, offset + 20))
+            cards.append(
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", {}, `${record.course_code} · ${record.course_title}`),
+                    node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
+                    node(
+                        "p",
+                        {},
+                        `Cumulative GPA: ${record.cumulative_gpa === "transfer_excluded" ? "Transfer attempts are outside cumulative GPA" : calculationReasons[record.cumulative_gpa] || "Needs review"}.`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Overall GPA: ${calculationReasons[record.overall_gpa] || "Needs review"}.`,
+                    ),
+                ),
+            );
+        body.append(
+            cards,
+            node(
+                "p",
+                { role: "status" },
+                data.records.length
+                    ? `Showing ${offset + 1}–${Math.min(offset + 20, data.records.length)} of ${data.records.length} records.`
+                    : "No current contribution records to display.",
+            ),
+        );
+        const pages = actions();
+        if (offset > 0)
+            pages.append(
+                button("Previous contribution records", () =>
+                    degreeProgressContributions(data, back, offset - 20),
+                ),
+            );
+        if (offset + 20 < data.records.length)
+            pages.append(
+                button("Next contribution records", () =>
+                    degreeProgressContributions(data, back, offset + 20),
+                ),
+            );
+        body.append(pages);
     }
     const placementIssues = {
         policy_unknown: "A required sharing or repeat-credit policy was not recorded.",

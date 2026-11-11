@@ -1,6 +1,6 @@
 # Retained repeat-credit and GPA calculations
 
-`AcademicPolicyEvaluator` now calculates credit and GPA contributions for a supplied set of retained academic facts. It is a pure domain component: it performs no database reads, changes no academic records and retains no evaluation. The [student Credits & GPA review](student-credit-gpa-review.md) now uses this engine under a shared student lock and replay budget. The separate candidate-matching screen and existing transcript/report calculations keep their existing behavior.
+`AcademicPolicyEvaluator` now calculates credit and GPA contributions for a supplied set of retained academic facts. It is a pure domain component: it performs no database reads, changes no academic records and retains no evaluation. The [student Credits & GPA review](student-credit-gpa-review.md) now uses this engine under a shared student lock and replay budget. The [combined degree-progress review](student-degree-progress.md) now adds general minimum comparisons and distinct GPA scopes from the same verified inputs. The separate candidate-matching screen and existing transcript/report calculations keep their existing behavior.
 
 `AuditCalculationPolicy::fromRequirements()` reads the repeat-credit, repeat-GPA and transfer-GPA choices and grading-publication reference from an already verified requirement publication. Missing choices remain unknown; unsupported values are rejected. It never substitutes today's installation settings. The result retains these supplied policy choices.
 
@@ -17,7 +17,7 @@ Tied highest awards can have different institutional origins. The result therefo
 
 ## GPA treatment
 
-GPA uses retained **credit-weighted quality points** divided by eligible attempted credits. Per-grade points determine highest-grade selection; percentage score boundaries are not GPA units.
+GPA uses retained **credit-weighted quality points** divided by eligible attempted credits. `AcademicGpaScope::Overall` follows the retained transfer-GPA policy; `Institutional` supplies cumulative GPA by excluding transfers before repeat selection. Credit totals and resident-origin bounds retain their full award scope in both results, and the original policy object is unchanged. Per-grade points determine highest-grade selection; percentage score boundaries are not GPA units.
 
 | Retained setting | Calculation |
 | --- | --- |

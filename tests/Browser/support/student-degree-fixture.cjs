@@ -250,6 +250,75 @@ async function fixture(page, options = {}) {
         );
     let cursorCount = 0;
     page.on("pageerror", (e) => errors.push(e.message));
+    function allocationReview() {
+        const outcome = options.allocationOutcome || "feasible";
+        const courseIds = Array.from({ length: 21 }, (_, index) => id(200 + index));
+        return {
+            status: "review",
+            outcome,
+            input_status: options.allocationHistoryGaps ? "history_gaps" : "verified",
+            current_record_count: 21,
+            context: {
+                name: requirements.definition.name,
+                academic_year_code: "2026-2027",
+                version: 1,
+                cohort_changed: Boolean(options.changed),
+                group_reuse: options.shareCourses ? "multiple_groups" : "one_group",
+            },
+            issues:
+                outcome === "unsupported"
+                    ? ["group_average_gpa_unsupported"]
+                    : outcome === "needs_review"
+                      ? ["course_version_unknown"]
+                      : [],
+            groups: [
+                {
+                    id: group,
+                    name: "General education <b>fictional</b>",
+                    version_id: id(8),
+                    requirement_type: "credits",
+                    required_credits_milli: 63000,
+                    required_courses: 0,
+                    minimum_grade_points_milli: 2000,
+                    waived_courses: [courseIds[0]],
+                    courses: Object.fromEntries(
+                        courseIds.map((id, i) => [
+                            id,
+                            { code: `REQ.${i}`, title: "Retained requirement <b>fictional</b>" },
+                        ]),
+                    ),
+                    rules: [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }],
+                    placements:
+                        outcome !== "feasible"
+                            ? []
+                            : courseIds.map((target, index) => ({
+                                  course_id: id(300 + index),
+                                  course_code: index === 20 ? "LAST.101" : `MATH.${index}`,
+                                  course_title: "Actual course <b>fictional</b>",
+                                  target_course_id: target,
+                                  target_code: `REQ.${index}`,
+                                  target_title: "Retained requirement <b>fictional</b>",
+                                  via_substitution: index === 0,
+                                  credits_milli: 3000,
+                                  work_options: index === 0 ? [[id(100)], [id(101)]] : [[id(100 + index)]],
+                              })),
+                },
+            ],
+            records: courseIds.map((target, index) => ({
+                id: id(100 + index),
+                course_code: index === 20 ? "LAST.101" : `MATH.${index}`,
+                course_title: "Retained work <b>fictional</b>",
+                statuses: [
+                    outcome === "needs_review"
+                        ? "course_version_unknown"
+                        : outcome === "infeasible"
+                          ? "in_progress"
+                          : "candidate",
+                ],
+                uses: outcome !== "feasible" ? [] : [{ group_id: group, alternative: index === 0 }],
+            })),
+        };
+    }
     await page.route("**/sis/**", async (route) => {
         const req = route.request(),
             path = new URL(req.url()).pathname,
@@ -314,7 +383,113 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
-        else if (path === `${base}academic-work/allocation/`) {
+        else if (path === `${base}progress/`) {
+            if (options.rejectProgress)
+                return route.fulfill({
+                    status: 409,
+                    json: {
+                        error: "Degree progress could not be verified. Ask a registrar to review this record.",
+                    },
+                });
+            if (!selection) response = { status: "needs_selection" };
+            else if (options.progressLimit) response = { status: "limited" };
+            else {
+                const allocation = allocationReview();
+                const none = options.progressNoGpa,
+                    zero = options.progressZeroGpa;
+                if (none) {
+                    allocation.outcome = "infeasible";
+                    allocation.groups.forEach((g) => {
+                        g.placements = [];
+                    });
+                }
+                const gpa = (overall) => ({
+                    ready: !overall || !options.progressUnknownOverall,
+                    milli:
+                        (overall && options.progressUnknownOverall) || none
+                            ? null
+                            : zero
+                              ? 0
+                              : overall
+                                ? 3000
+                                : 4000,
+                    credits_milli: overall && options.progressUnknownOverall ? null : none ? 0 : 6000,
+                    quality_points_milli:
+                        overall && options.progressUnknownOverall
+                            ? null
+                            : none || zero
+                              ? 0
+                              : overall
+                                ? 18000
+                                : 24000,
+                });
+                response = {
+                    status: "review",
+                    input_status: options.progressHistoryGaps ? "history_gaps" : "verified",
+                    current_record_count: 21,
+                    context: allocation.context,
+                    allocation,
+                    minimums: [
+                        {
+                            key: "min_credits_milli",
+                            required_milli: 12000,
+                            published_milli: 12000,
+                            adjusted: false,
+                            actual_minimum_milli: none || zero ? 0 : 63000,
+                            actual_maximum_milli: none || zero ? 0 : 63000,
+                            status: none || zero ? "below_minimum" : "satisfied",
+                        },
+                        {
+                            key: "min_resident_milli",
+                            required_milli: 6000,
+                            published_milli: 6000,
+                            adjusted: false,
+                            actual_minimum_milli: options.progressResidentRange ? 3000 : 6000,
+                            actual_maximum_milli: options.progressResidentRange ? 9000 : 6000,
+                            status: options.progressResidentRange ? "unknown" : "satisfied",
+                        },
+                        {
+                            key: "min_cumulative_gpa_milli",
+                            required_milli: 3500,
+                            published_milli: 3750,
+                            adjusted: true,
+                            actual_minimum_milli: none ? null : zero ? 0 : 4000,
+                            actual_maximum_milli: none ? null : zero ? 0 : 4000,
+                            status: none ? "unknown" : zero ? "below_minimum" : "satisfied",
+                        },
+                        {
+                            key: "min_overall_gpa_milli",
+                            required_milli: 3500,
+                            published_milli: 3500,
+                            adjusted: false,
+                            actual_minimum_milli:
+                                options.progressUnknownOverall || none ? null : zero ? 0 : 3000,
+                            actual_maximum_milli:
+                                options.progressUnknownOverall || none ? null : zero ? 0 : 3000,
+                            status: options.progressUnknownOverall || none ? "unknown" : "below_minimum",
+                        },
+                    ],
+                    gpa: { cumulative: gpa(false), overall: gpa(true) },
+                    issues: options.progressUnknownOverall
+                        ? [{ component: "overall", code: "grading_policy_differs" }]
+                        : [],
+                    records: allocation.records.map((r, index) => ({
+                        id: r.id,
+                        course_code: r.course_code,
+                        course_title: r.course_title,
+                        credit: "included",
+                        cumulative_gpa: index === 1 ? "transfer_excluded" : "included",
+                        overall_gpa: options.progressUnknownOverall ? "undetermined" : "included",
+                    })),
+                    policy: {
+                        repeat_credit: "highest_earned",
+                        repeat_gpa: "all_eligible",
+                        transfer_overall_gpa: "include_eligible",
+                        attempt_order: "academic_period",
+                    },
+                };
+            }
+        } else if (path === `${base}academic-work/allocation/`) {
             if (options.rejectAllocation)
                 return route.fulfill({
                     status: 409,
@@ -325,74 +500,7 @@ async function fixture(page, options = {}) {
             if (!selection) response = { status: "needs_selection" };
             else if (options.allocationLimit) response = { status: "limited" };
             else {
-                const outcome = options.allocationOutcome || "feasible";
-                const courseIds = Array.from({ length: 21 }, (_, index) => id(200 + index));
-                response = {
-                    status: "review",
-                    outcome,
-                    input_status: options.allocationHistoryGaps ? "history_gaps" : "verified",
-                    current_record_count: 21,
-                    context: {
-                        name: requirements.definition.name,
-                        academic_year_code: "2026-2027",
-                        version: 1,
-                        cohort_changed: Boolean(options.changed),
-                        group_reuse: options.shareCourses ? "multiple_groups" : "one_group",
-                    },
-                    issues:
-                        outcome === "unsupported"
-                            ? ["group_average_gpa_unsupported"]
-                            : outcome === "needs_review"
-                              ? ["course_version_unknown"]
-                              : [],
-                    groups: [
-                        {
-                            id: group,
-                            name: "General education <b>fictional</b>",
-                            version_id: id(8),
-                            requirement_type: "credits",
-                            required_credits_milli: 63000,
-                            required_courses: 0,
-                            minimum_grade_points_milli: 2000,
-                            waived_courses: [courseIds[0]],
-                            courses: Object.fromEntries(
-                                courseIds.map((id, i) => [
-                                    id,
-                                    { code: `REQ.${i}`, title: "Retained requirement <b>fictional</b>" },
-                                ]),
-                            ),
-                            rules: [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }],
-                            placements:
-                                outcome !== "feasible"
-                                    ? []
-                                    : courseIds.map((target, index) => ({
-                                          course_id: id(300 + index),
-                                          course_code: index === 20 ? "LAST.101" : `MATH.${index}`,
-                                          course_title: "Actual course <b>fictional</b>",
-                                          target_course_id: target,
-                                          target_code: `REQ.${index}`,
-                                          target_title: "Retained requirement <b>fictional</b>",
-                                          via_substitution: index === 0,
-                                          credits_milli: 3000,
-                                          work_options:
-                                              index === 0 ? [[id(100)], [id(101)]] : [[id(100 + index)]],
-                                      })),
-                        },
-                    ],
-                    records: courseIds.map((target, index) => ({
-                        id: id(100 + index),
-                        course_code: index === 20 ? "LAST.101" : `MATH.${index}`,
-                        course_title: "Retained work <b>fictional</b>",
-                        statuses: [
-                            outcome === "needs_review"
-                                ? "course_version_unknown"
-                                : outcome === "infeasible"
-                                  ? "in_progress"
-                                  : "candidate",
-                        ],
-                        uses: outcome !== "feasible" ? [] : [{ group_id: group, alternative: index === 0 }],
-                    })),
-                };
+                response = allocationReview();
             }
         } else if (path === `${base}academic-work/calculations/`) {
             if (options.rejectCalculations)

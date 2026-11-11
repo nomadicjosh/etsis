@@ -32,8 +32,7 @@ final readonly class RetainedAttemptReader
         $attempts = array_map(PolicyAttempt::fromAcademicWork(...), $inputs->items);
         if (
             $policy->gpa !== RepeatGpaPolicy::LatestEligible ||
-            $policy->attemptOrder !== RepeatAttemptOrder::AcademicPeriod ||
-            $policy->transferGpa === null
+            $policy->attemptOrder !== RepeatAttemptOrder::AcademicPeriod
         ) {
             return $attempts;
         }
@@ -46,7 +45,7 @@ final readonly class RetainedAttemptReader
                 !in_array($a->status, ["D", "V"], true) &&
                 $policy->gradeScaleVersion !== null &&
                 $a->grade->facts["scale_version_id"] === $policy->gradeScaleVersion->value &&
-                !($a->origin === "transfer" && $policy->transferGpa === TransferGpaPolicy::Exclude)
+                !($a->origin === "transfer" && $policy->transferGpa !== TransferGpaPolicy::IncludeEligible)
             ) {
                 $competing[$a->courseId->value][] = $a;
             }

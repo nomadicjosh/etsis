@@ -22,7 +22,7 @@ A proposed placement shows the actual course, the required-course target, any ap
 - A pursuit-wide waiver removes a required course wherever required. It creates no earned credit and does not reduce group quantities or choose counts. Actual earned work for that waived course can still meet unchanged quantity requirements when eligible.
 - Applicable approved group credit/course minimum and per-course grade-floor reductions affect the search. An approved substitution supplies an alternative for the original target; the original and alternative cannot inflate that target into two distinct completions. Conflicting approvals require registrar review.
 
-Overall degree minimum exceptions remain retained inputs for later complete evaluation; they are not silently treated as satisfied here. Earlier average group-GPA requirements are explicitly unsupported by this structural review. A group cannot be declared satisfied after dropping an unsupported constraint.
+The separate [combined degree-progress review](student-degree-progress.md) now compares approved general credit/GPA minimums alongside this placement result from the same verified read. This standalone placement screen does not silently treat those minimums as satisfied. Earlier average group-GPA requirements are explicitly unsupported by this structural review. A group cannot be declared satisfied after dropping an unsupported constraint.
 
 ## Unknown facts and historical protection
 

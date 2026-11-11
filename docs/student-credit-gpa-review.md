@@ -33,3 +33,7 @@ Valid early-drop references are checked internally. Removed records, their ident
 The private POST endpoint is `/sis/students/{student}/programs/{assignment}/degree-requirements/academic-work/calculations/`. It retains framework CSRF protection, private/no-store responses and debug suppression. This change needs no migration, event-shape conversion or new event table.
 
 See the [calculation core](degree-audit-calculations.md) for exact repeat, GPA and arithmetic rules, and the [roadmap](development-roadmap.md) for allocation, institutional policy/chronology integration, reproducible retained evaluations and graduation decisions still to be completed.
+
+## General degree minimums and distinct GPA scopes
+
+Use [Degree progress](student-degree-progress.md) for the combined general-minimum and group-placement review. It shows institutional-only cumulative GPA separately from policy-controlled overall GPA, approved threshold reductions and unresolved resident-credit bounds. The standalone Credits & GPA screen continues showing its existing overall-GPA calculation.

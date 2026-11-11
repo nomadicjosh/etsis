@@ -22,6 +22,7 @@ final readonly class AcademicPolicyResult
         public ?int $residentMinimumMilli = null,
         public ?int $residentMaximumMilli = null,
         public ?GpaTotals $gpa = null,
+        public AcademicGpaScope $gpaScope = AcademicGpaScope::Overall,
     ) {
     }
 }

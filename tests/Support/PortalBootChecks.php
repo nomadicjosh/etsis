@@ -1913,8 +1913,27 @@ if (
 ) {
     throw new RuntimeException("Private group allocation failed provider, selection, privacy or CSRF checks.");
 }
+$degreeProgressResponse = $teachingPost($studentRequirementPath . "progress/", []);
+$degreeProgressBody = json_decode((string) $degreeProgressResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$degreeProgressNoCsrf = $academicWorkNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid" . $studentRequirementPath . "progress/",
+));
+if (
+    $degreeProgressResponse->getStatusCode() !== 200 ||
+    ($degreeProgressBody["status"] ?? null) !== "review" ||
+    ($degreeProgressBody["context"]["requirements_version_id"] ?? null) !== $requirementReceipt["operation_id"] ||
+    count($degreeProgressBody["minimums"] ?? []) !== 4 ||
+    !is_array($degreeProgressBody["allocation"] ?? null) ||
+    isset($degreeProgressBody["references"]) ||
+    isset($degreeProgressBody["graduation_eligible"]) ||
+    !str_contains($degreeProgressResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $app->router->match($degreeProgressNoCsrf)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Private degree progress failed provider, selection, privacy or CSRF checks.");
+}
 $sis->access->grants = [];
 if (
+    $teachingPost($studentRequirementPath . "progress/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/allocation/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/calculations/", [])->getStatusCode() !== 403 ||
     $teachingPost($studentRequirementPath . "academic-work/verify/", [])->getStatusCode() !== 403 ||

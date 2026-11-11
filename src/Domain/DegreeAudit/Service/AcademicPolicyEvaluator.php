@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\ValueObject\AcademicPolicyResult;
+use Domain\DegreeAudit\ValueObject\AcademicGpaScope;
 use Domain\DegreeAudit\ValueObject\AuditCalculationPolicy;
 use Domain\DegreeAudit\ValueObject\GpaTotals;
 use Domain\DegreeAudit\ValueObject\PolicyAttempt;
@@ -19,11 +20,17 @@ use OverflowException;
 final readonly class AcademicPolicyEvaluator
 {
     /** @param list<PolicyAttempt> $attempts */
-    public function evaluate(array $attempts, AuditCalculationPolicy $policy): AcademicPolicyResult
-    {
+    public function evaluate(
+        array $attempts,
+        AuditCalculationPolicy $policy,
+        AcademicGpaScope $scope = AcademicGpaScope::Overall,
+    ): AcademicPolicyResult {
         if (count($attempts) > 1000) {
             throw new InvalidArgumentException("Evaluate at most 1,000 supplied academic records.");
         }
+        // Cumulative GPA excludes transfers before repeat selection; earned credit keeps its full scope.
+        $transferGpa =
+        $scope === AcademicGpaScope::Institutional ? TransferGpaPolicy::Exclude : $policy->transferGpa;
         $byCourse = [];
         $dispositions = [];
         foreach ($attempts as $a) {
@@ -54,7 +61,7 @@ final readonly class AcademicPolicyEvaluator
         if ($policy->credit === null) {
             $issues[] = self::issue("credit", "policy_unknown");
         }
-        if ($policy->gpa === null || $policy->transferGpa === null) {
+        if ($policy->gpa === null || $transferGpa === null) {
             $issues[] = self::issue("gpa", "policy_unknown");
         }
         foreach ($byCourse as $id => $course) {
@@ -84,7 +91,7 @@ final readonly class AcademicPolicyEvaluator
                     $creditEligible[] = $a;
                     $d["credit"] = $policy->credit === null ? "policy_unknown" : "eligible";
                 }
-                if ($a->origin === "transfer" && $policy->transferGpa === TransferGpaPolicy::Exclude) {
+                if ($a->origin === "transfer" && $transferGpa === TransferGpaPolicy::Exclude) {
                     $d["gpa"] = "transfer_excluded";
                 } elseif ($pending) {
                     $d["gpa"] = $lateDrop ? "default_drop_marker" : "in_progress";
@@ -95,7 +102,7 @@ final readonly class AcademicPolicyEvaluator
                     $d["gpa"] = "grade_excludes_gpa";
                 } elseif ($a->attemptedMilli === 0) {
                     $d["gpa"] = "no_gpa_credits";
-                } elseif ($policy->gpa === null || $policy->transferGpa === null) {
+                } elseif ($policy->gpa === null || $transferGpa === null) {
                     $d["gpa"] = "policy_unknown";
                 } elseif (
                     $policy->gradeScaleVersion === null ||
@@ -181,6 +188,7 @@ final readonly class AcademicPolicyEvaluator
         unset($d);
         return new AcademicPolicyResult(
             policy: $policy,
+            gpaScope: $scope,
             creditPools: $creditKnown ? $creditPools : [],
             gpaGroups: $gpaKnown ? $gpaGroups : [],
             dispositions: array_values($dispositions),
