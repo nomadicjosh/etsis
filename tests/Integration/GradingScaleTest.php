@@ -42,6 +42,20 @@ final class GradingScaleTest extends TestCase
         $r = $s->review($program, $d, "Fictional grading policy approval");
         return $s->commit($program, $r["review_token"]);
     }
+    public function testARequiredReasonHasAFieldErrorAndCreatesNoPolicyHistory(): void
+    {
+        $f = new ReusableGroupFixture();
+        $before = $f->sis->sql->rows("sis_history_events");
+        foreach (["", " \n", "invalid\0reason"] as $reason) {
+            try {
+                $f->gradingScales()->review(null, $this->definition(), $reason);
+                self::fail("An absent or invalid reason was accepted.");
+            } catch (\Domain\Shared\Exception\ValidationException $e) {
+                self::assertSame("reason", $e->errors[0]["field"]);
+            }
+        }
+        self::assertSame($before, $f->sis->sql->rows("sis_history_events"));
+    }
     public function testDefaultGlobalAndProgramHierarchyWithIndependentCompleteDefinitions(): void
     {
         $f = new ReusableGroupFixture();

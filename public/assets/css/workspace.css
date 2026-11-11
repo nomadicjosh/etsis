@@ -483,6 +483,7 @@ h3 { font-size: .9rem; font-weight: 650; }
 .audit-empty { padding: 2rem 1rem; border: 2px dashed #b5c6d8; border-radius: .8rem; color: #40566b; margin-top: 1rem; }
 .degree-audit-studio :is(button, summary, input):focus-visible { outline: 3px solid #174f88; outline-offset: 3px; }
 .degree-audit-studio .btn { white-space: normal; overflow-wrap: anywhere; }
+.degree-audit-studio .audit-field-error { color: #84232a; }
 @media (max-width: 1150px) {
     .audit-builder-grid { grid-template-columns: minmax(230px, 1fr) minmax(300px, 1.5fr); }
     .audit-panel:last-child { grid-column: 1 / -1; }

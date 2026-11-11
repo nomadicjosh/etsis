@@ -1311,6 +1311,30 @@ if (
 ) {
     throw new RuntimeException("Global grading setup bypassed CSRF.");
 }
+$overlappingScale = ["grades" => [
+    ["code" => "D", "min_score_milli" => 65000, "max_score_milli" => 66000,
+        "points_milli" => 1000, "passes" => true, "counts_gpa" => true],
+    ["code" => "F", "min_score_milli" => 0, "max_score_milli" => 65000,
+        "points_milli" => 0, "passes" => false, "counts_gpa" => true],
+]];
+$scaleEventsBefore = $sis->sql->rows("sis_history_events");
+$overlapResponse = $teachingPost("/sis/grading-scales/global/review/", [
+    "definition" => $overlappingScale, "reason" => "Fictional boundary check",
+]);
+$overlapBody = json_decode((string) $overlapResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$missingReasonResponse = $teachingPost("/sis/grading-scales/global/review/", ["definition" => $gradeScaleDefinition]);
+$missingReasonBody = json_decode((string) $missingReasonResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $overlapResponse->getStatusCode() !== 422 ||
+    ($overlapBody["errors"][0]["field"] ?? null) !== "definition.grades.1.max_score_milli" ||
+    !str_contains($overlapBody["errors"][0]["message"] ?? "", "F and D both include 65%") ||
+    !str_contains($overlapResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $missingReasonResponse->getStatusCode() !== 422 ||
+    ($missingReasonBody["errors"][0]["field"] ?? null) !== "reason" ||
+    $sis->sql->rows("sis_history_events") !== $scaleEventsBefore
+) {
+    throw new RuntimeException("Global grading validation hid field errors or wrote rejected policy history.");
+}
 $gradeScaleReviewResponse = $teachingPost("/sis/grading-scales/global/review/", [
     "definition" => $gradeScaleDefinition,
     "reason" => "Fictional global grading setup",

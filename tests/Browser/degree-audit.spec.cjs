@@ -166,6 +166,24 @@ async function fixture(page, options = {}) {
             return route.fulfill({ json: response });
         }
         if (path.includes("/grading-scale/review/") || path === "/sis/grading-scales/global/review/") {
+            if (options.rejectScaleOverlap && body.definition?.grades[1]?.max_score_milli === 65000)
+                return route.fulfill({
+                    status: 422,
+                    json: {
+                        error: "Please correct the highlighted fields.",
+                        errors: [
+                            {
+                                field: "definition.grades.1.max_score_milli",
+                                message:
+                                    "Grades F and D both include 65%. Score ranges include both endpoints; adjust one boundary.",
+                            },
+                            {
+                                field: "definition.grades.0.min_score_milli",
+                                message: "Grade D shares that score range with F.",
+                            },
+                        ],
+                    },
+                });
             const token = `scale-review-${sequence++}`;
             scaleDecisions.set(token, { base: path.replace("review/", ""), definition: body.definition });
             return route.fulfill({ json: { ...body, review_token: token } });
@@ -930,5 +948,105 @@ test("course sharing defaults to one group and its chosen publication policy rem
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test("grading range conflicts open and describe the affected boundary without losing the scale", async ({
+    page,
+}) => {
+    const f = await fixture(page, { rejectScaleOverlap: true });
+    await page.getByRole("button", { name: "Grading scales", exact: true }).click();
+    await page.getByRole("button", { name: "Add grade", exact: true }).click();
+    await page.getByLabel("Grade", { exact: true }).fill("D");
+    await page.getByLabel("Minimum score (%)", { exact: true }).fill("65");
+    await page.getByLabel("Maximum score (%)", { exact: true }).fill("66");
+    await page.getByLabel("Grade points", { exact: true }).fill("1");
+    await page.getByLabel("Earns course credit", { exact: true }).check();
+    await page.getByRole("button", { name: "Add grade", exact: true }).click();
+    await page.getByLabel("Grade", { exact: true }).fill("F");
+    await page.getByLabel("Minimum score (%)", { exact: true }).fill("0");
+    await page.getByLabel("Maximum score (%)", { exact: true }).fill("65");
+    await page.getByLabel("Grade points", { exact: true }).fill("0");
+    await page.getByLabel("Reason for grading scale change", { exact: true }).fill("Fictional initial scale");
+    await page.getByRole("button", { name: "Edit grade D", exact: true }).click();
+    await page.getByRole("button", { name: "Review grading scale", exact: true }).click();
+    const alert = page.getByRole("dialog").getByRole("alert");
+    await expect(alert).toContainText("F and D both include 65%");
+    await expect(alert).toBeFocused();
+    await expect(page.getByLabel("Grade", { exact: true })).toHaveValue("F");
+    await expect(page.getByLabel("Maximum score (%)", { exact: true })).toHaveAttribute(
+        "aria-invalid",
+        "true",
+    );
+    await expect(page.getByLabel("Maximum score (%)", { exact: true })).toHaveAccessibleDescription(
+        /both include 65%/,
+    );
+    await expect(page.getByLabel("Reason for grading scale change", { exact: true })).toHaveValue(
+        "Fictional initial scale",
+    );
+    await page.getByRole("button", { name: "Edit grade D", exact: true }).click();
+    await expect(page.getByLabel("Minimum score (%)", { exact: true })).toHaveAttribute(
+        "aria-invalid",
+        "true",
+    );
+    await expect(page.getByLabel("Minimum score (%)", { exact: true })).toHaveAccessibleDescription(
+        /Grade D shares/,
+    );
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole("button", { name: "Edit grade F", exact: true }).click();
+    await page.getByLabel("Maximum score (%)", { exact: true }).fill("64.999");
+    await expect(page.getByLabel("Maximum score (%)", { exact: true })).not.toHaveAttribute(
+        "aria-invalid",
+        "true",
+    );
+    expect(f.calls.some((c) => c.path.endsWith("grading-scales/global/commit/"))).toBe(false);
+    await page.getByRole("button", { name: "Review grading scale", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("F: 0–64.999%");
+    await expect(page.getByRole("dialog")).toContainText("D: 65–66%");
+    await page.getByRole("button", { name: "Approve reviewed grading scale", exact: true }).click();
+    const reviews = f.calls.filter((c) => c.path.endsWith("grading-scales/global/review/"));
+    expect(reviews).toHaveLength(2);
+    expect(reviews[1].body.definition.grades).toEqual([
+        {
+            code: "D",
+            min_score_milli: 65000,
+            max_score_milli: 66000,
+            points_milli: 1000,
+            passes: true,
+            counts_gpa: true,
+        },
+        {
+            code: "F",
+            min_score_milli: 0,
+            max_score_milli: 64999,
+            points_milli: 0,
+            passes: false,
+            counts_gpa: true,
+        },
+    ]);
+    expect(reviews.every((c) => c.csrf === "fictional-test-token")).toBe(true);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test("grading policy reason is visibly required and announced before sending a review", async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole("button", { name: "Grading scales", exact: true }).click();
+    await expect(page.getByLabel("Reason for grading scale change", { exact: true })).toHaveAttribute(
+        "required",
+        "",
+    );
+    await page.getByRole("button", { name: "Review grading scale", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Enter a reason");
+    await expect(page.getByLabel("Reason for grading scale change", { exact: true })).toHaveAttribute(
+        "aria-invalid",
+        "true",
+    );
+    await expect(
+        page.getByLabel("Reason for grading scale change", { exact: true }),
+    ).toHaveAccessibleDescription(/Required.*Enter a reason/);
+    expect(f.calls.some((c) => c.path.endsWith("grading-scales/global/review/"))).toBe(false);
+    await accessible(page);
     expect(f.errors).toEqual([]);
 });

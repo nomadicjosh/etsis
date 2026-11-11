@@ -19,6 +19,7 @@ use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
@@ -138,12 +139,28 @@ final readonly class GradingScaleService
             trim($reason) === "" ||
             mb_strlen($reason) > 1000 ||
             !mb_check_encoding($reason, "UTF-8") ||
+            preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $reason)
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "reason",
+                    "message" => "Enter a reason for this grading policy change, up to 1,000 characters.",
+                ],
+            ]);
+        }
+        if (
             ($definition !== null && $definition->definition["grades"] === []) ||
             ($program === null && $definition === null)
         ) {
-            throw new InvalidArgumentException(
-                "Supply a reason and a complete nonempty program scale, or choose the global scale.",
-            );
+            throw new ValidationException([
+                [
+                    "field" => "definition",
+                    "message" =>
+                        $program === null
+                            ? "Add at least one grade to the global scale."
+                            : "Add at least one grade to the program scale, or choose the global scale.",
+                ],
+            ]);
         }
         return $this->transactions->run(function () use ($program, $definition, $reason, $actor): array {
             $this->repository->lockScope($program);

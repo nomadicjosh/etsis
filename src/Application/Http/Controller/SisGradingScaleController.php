@@ -37,11 +37,20 @@ final readonly class SisGradingScaleController
                 "Supply a grading definition or null to inherit the global scale.",
             );
         }
+        $reason = $body["reason"] ?? "";
+        if (!is_string($reason)) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "reason",
+                    "message" => "Enter a reason for this grading policy change.",
+                ],
+            ]);
+        }
         return new JsonResponse(
             $this->service->review(
                 $program === null ? null : new EntityId($program),
                 $body["definition"] === null ? null : new GradingScaleDefinition($body["definition"]),
-                FormInput::from($request)->bodyText("reason"),
+                $reason,
             ),
         );
     }

@@ -2838,6 +2838,46 @@ window.createWorkspaceDegreeAudit = function (ui) {
             active = state?.active ?? 0;
         const restore = () => gradingScale(program, back, { data, rows, inherit, reason, active });
         const body = screen(program ? "Program grading scale" : "Global grading scale", "GRADING POLICY");
+        let validationErrors = [];
+        function markScaleErrors() {
+            for (const input of dialog.querySelectorAll("input[name]")) {
+                const errorId = `${input.id}-scale-error`;
+                document.getElementById(errorId)?.remove();
+                input.classList.remove("is-invalid");
+                input.removeAttribute("aria-invalid");
+                const descriptions = (input.getAttribute("aria-describedby") || "")
+                    .split(" ")
+                    .filter((id) => id && id !== errorId);
+                const error = validationErrors.find((entry) => entry.field === input.name);
+                if (error) {
+                    input.classList.add("is-invalid");
+                    input.setAttribute("aria-invalid", "true");
+                    descriptions.push(errorId);
+                    input.parentElement.append(
+                        node("p", { id: errorId, class: "invalid-feedback d-block audit-field-error" }, error.message),
+                    );
+                }
+                if (descriptions.length) input.setAttribute("aria-describedby", descriptions.join(" "));
+                else input.removeAttribute("aria-describedby");
+            }
+        }
+        function clearScaleErrors() {
+            validationErrors = [];
+            markScaleErrors();
+            dialog.querySelector('[role="alert"]').hidden = true;
+        }
+        function showScaleErrors(error) {
+            validationErrors = error.fields || [];
+            const firstGrade = validationErrors
+                .map((entry) => /^definition\.grades\.(\d+)\./.exec(entry.field))
+                .find(Boolean);
+            if (firstGrade && rows[Number(firstGrade[1])]) {
+                active = Number(firstGrade[1]);
+                render();
+            } else markScaleErrors();
+            fail(error);
+        }
+
         body.append(
             node(
                 "p",
@@ -2930,9 +2970,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             grade[key],
                             (v) => {
                                 grade[key] = key === "code" ? v.toUpperCase() : v;
+                                clearScaleErrors();
                                 summary();
                             },
-                            options,
+                            {
+                                ...options,
+                                name: `definition.grades.${active}.${key}`,
+                                required: key === "code" || key === "points_milli",
+                            },
                         ),
                     );
                 for (const [key, label] of [
@@ -2967,6 +3012,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 );
             }
             summary();
+            markScaleErrors();
         }
         function summary() {
             const visible = inherit
@@ -2997,24 +3043,49 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 );
         }
         body.append(
-            field("Reason for grading scale change", reason, (v) => (reason = v), { maxlength: 1000 }),
+            field(
+                "Reason for grading scale change",
+                reason,
+                (v) => {
+                    reason = v;
+                    clearScaleErrors();
+                },
+                { maxlength: 1000, required: true, name: "reason", "aria-describedby": "scale-reason-help" },
+            ),
+            node(
+                "p",
+                { id: "scale-reason-help", class: "form-text" },
+                "Required. Briefly explain why this grading policy is being set or changed.",
+            ),
             actions(
                 button(
                     "Review grading scale",
                     async () => {
-                        const definition = inherit
-                            ? null
-                            : {
-                                  grades: rows.map((g) => ({
-                                      code: g.code.trim(),
-                                      min_score_milli: milli(g.min_score_milli, true),
-                                      max_score_milli: milli(g.max_score_milli, true),
-                                      points_milli: milli(g.points_milli),
-                                      passes: g.passes,
-                                      counts_gpa: g.counts_gpa,
-                                  })),
-                              };
-                        const reviewed = await post(base + "review/", { definition, reason });
+                        let reviewed;
+                        try {
+                            clearScaleErrors();
+                            if (!reason.trim()) {
+                                const error = new Error("Enter a reason for this grading policy change.");
+                                error.fields = [{ field: "reason", message: error.message }];
+                                throw error;
+                            }
+                            const definition = inherit
+                                ? null
+                                : {
+                                      grades: rows.map((g) => ({
+                                          code: g.code.trim(),
+                                          min_score_milli: milli(g.min_score_milli, true),
+                                          max_score_milli: milli(g.max_score_milli, true),
+                                          points_milli: milli(g.points_milli),
+                                          passes: g.passes,
+                                          counts_gpa: g.counts_gpa,
+                                      })),
+                                  };
+                            reviewed = await post(base + "review/", { definition, reason });
+                        } catch (error) {
+                            showScaleErrors(error);
+                            return;
+                        }
                         const confirmation = screen("Review grading scale");
                         confirmation.append(
                             node(

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Gradebook\ValueObject;
 
 use InvalidArgumentException;
+use Domain\Shared\Exception\ValidationException;
 
 /** A complete scale, not a partial merge with another policy. */
 final readonly class GradingScaleDefinition
@@ -22,7 +23,7 @@ final readonly class GradingScaleDefinition
         }
         $seen = [];
         $ranges = [];
-        foreach ($definition["grades"] as $g) {
+        foreach ($definition["grades"] as $index => $g) {
             if (
                 !is_array($g) ||
                 count($g) !== 6 ||
@@ -54,16 +55,45 @@ final readonly class GradingScaleDefinition
                 self::invalid();
             }
             if ($lo !== null) {
-                foreach ($ranges as [$a, $b]) {
+                foreach ($ranges as [$a, $b, $otherIndex, $otherCode]) {
                     if ($lo <= $b && $hi >= $a) {
-                        throw new InvalidArgumentException(
-                            "Grade score ranges overlap. Each score must identify at most one grade.",
-                        );
+                        $start = max($lo, $a);
+                        $end = min($hi, $b);
+                        $scores = self::score($start) . ($start === $end ? "" : "–" . self::score($end));
+                        $message =
+                        "Grades " .
+                        $g["code"] .
+                        " and " .
+                        $otherCode .
+                        " both include " .
+                        $scores .
+                        "%. Score ranges include both endpoints; adjust one boundary.";
+                        throw new ValidationException([
+                            [
+                                "field" =>
+                                    "definition.grades." .
+                                    $index .
+                                    ($lo <= $a ? ".max_score_milli" : ".min_score_milli"),
+                                "message" => $message,
+                            ],
+                            [
+                                "field" =>
+                                    "definition.grades." .
+                                    $otherIndex .
+                                    ($lo <= $a ? ".min_score_milli" : ".max_score_milli"),
+                                "message" =>
+                                    "Grade " .
+                                    $otherCode .
+                                    " shares that score range with " .
+                                    $g["code"] .
+                                    ".",
+                            ],
+                        ]);
                     }
                 }
             }
             if ($lo !== null) {
-                $ranges[] = [$lo, $hi];
+                $ranges[] = [$lo, $hi, $index, $g["code"]];
             }
             $seen[$g["code"]] = true;
         }
@@ -92,10 +122,19 @@ final readonly class GradingScaleDefinition
         $points = array_column($this->definition["grades"], "points_milli");
         return $points === [] ? 4000 : max($points);
     }
+    private static function score(int $milli): string
+    {
+        $fraction = rtrim(str_pad((string) ($milli % 1000), 3, "0", STR_PAD_LEFT), "0");
+        return (string) intdiv($milli, 1000) . ($fraction === "" ? "" : "." . $fraction);
+    }
     private static function invalid(): never
     {
-        throw new InvalidArgumentException(
-            "Use at most 200 distinct grade codes with valid point values and credit/GPA choices.",
-        );
+        throw new ValidationException([
+            [
+                "field" => "definition",
+                "message" =>
+                    "Use at most 200 distinct grade codes with valid point values and credit/GPA choices.",
+            ],
+        ]);
     }
 }

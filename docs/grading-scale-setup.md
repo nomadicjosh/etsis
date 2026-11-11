@@ -15,7 +15,9 @@ Apply `20261109000001_CreateSisGradingScales` and then `20261109000002_CreateSis
 
 The maximum grade-point value is derived from the largest configured grade-point value. It has no editable maximum field. Only an empty grading setup displays a default maximum of **4.0**. A configured zero-point-only scale has maximum zero; a configured 4.3 or 5.0 scale retains that maximum. The optional course-group minimum is chosen by staff and must fit its selected authoring context. A program’s degree publication also validates group floors and general GPA minimums against its resolved scale. Points are not silently normalized between scales.
 
-Score boundaries are inclusive, support three decimal places, and must lie between 0 and 100. Ranges cannot overlap, including shared endpoints. For adjacent continuous ranges use boundaries such as 93.000–96.999 and 97.000–100.000. Gaps are allowed and stay unmatched; there is no implicit rounding or guessed grade. The pure lookup returns a matching grade definition or an unknown result, without writing an award. A complete nonempty scale is required for approval.
+The reason field is required and identified as such in the editor. A rejected review preserves the entered scale; field errors open the affected grade and describe the correction next to its input.
+
+Score boundaries are inclusive, support three decimal places, and must lie between 0 and 100. Ranges cannot overlap, including shared endpoints. For adjacent continuous ranges use boundaries such as 93.000–96.999 and 97.000–100.000. Gaps are allowed and stay unmatched; there is no implicit rounding or guessed grade. The pure lookup returns a matching grade definition or an unknown result, without writing an award. A complete nonempty scale is required for approval. For example, D at 65–66% and F at 0–65% conflict at 65%. If 65% earns D, set F’s maximum to 64.999%; if 65% earns F, move D’s minimum above 65%. The institution chooses the boundary; the system never changes it automatically.
 
 ## Preservation and staged academic integration
 
