@@ -30,7 +30,7 @@ final class AcademicWorkView
             "grade" => $input["grade"],
             "grade_recorded" => $facts["grade_id"] !== null,
             "status" => $facts["status"],
-            "course_version_id" => $facts["course_version_id"] ?? null,
+            "course_version_id" => $facts["course_version_id"] ?? ($input["course_version_id"] ?? null),
             "section_version_id" => $input["section_version_id"],
             "history_recorded" => $input["history_recorded"],
             "earlier_history_unknown" => $input["earlier_history_unknown"],

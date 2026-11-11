@@ -292,8 +292,12 @@ window.createWorkspaceTransfer = function (ui) {
           );
           constrain(form);
         }),
-        button("Award transfer credit", () => award(id), "btn-primary"),
       );
+      if (can("sis:student:read")) {
+        body.append(
+          button("Award transfer credit", () => award(id), "btn-primary"),
+        );
+      }
       const panel = node(
         "section",
         { class: "record-section", "aria-label": "Transfer awards" },
@@ -327,9 +331,16 @@ window.createWorkspaceTransfer = function (ui) {
                   `${Number(row.credits_milli) / 1000} · ${row.status === "V" ? "Voided" : row.grade_code || "—"}`,
                   row.status === "V" ? "Voided" : "Awarded",
                   can("sis:student:read")
-                    ? node("div", { class: "inline-actions" },
-                        button("Review award", () => ui.awards().record(row.student_id, row.id)),
-                        button("Open student record", () => openRecord("students", { id: row.student_id })))
+                    ? node(
+                        "div",
+                        { class: "inline-actions" },
+                        button("Review award", () =>
+                          ui.awards().record(row.student_id, row.id),
+                        ),
+                        button("Open student record", () =>
+                          openRecord("students", { id: row.student_id }),
+                        ),
+                      )
                     : "—",
                 ]),
                 "Transfer awards",
@@ -344,6 +355,17 @@ window.createWorkspaceTransfer = function (ui) {
   }
   async function award(id) {
     const reviewed = await request(`/sis/ui/transfer/equivalencies/${id}/`);
+    const publications = await request(
+      `/sis/transfer-equivalencies/${id}/course-versions/`,
+      "POST",
+      {},
+    );
+    if (!publications.items.length)
+      throw new Error(
+        "Catalog staff must publish the institutional course before transfer credit can be awarded.",
+      );
+    const label = (item) =>
+      `Version ${item.version} · ${item.code} · ${item.transcript_title} · ${item.credits_milli / 1000} catalog credits`;
     const form = await flow(
       "Confirm transfer award",
       [
@@ -351,6 +373,15 @@ window.createWorkspaceTransfer = function (ui) {
         ["term_id", "Posting term", "lookup", "terms"],
         ["completed_on", "External course completion date", "date"],
         ["grade_rank", "External grade rank (0–10000)", "number"],
+        [
+          "course_version_id",
+          "Accepted institutional course publication",
+          "choice",
+          publications.items.map((item) => ({
+            value: item.version_id,
+            label: label(item),
+          })),
+        ],
       ],
       "/sis/transfer-awards/",
       (data) => ({
@@ -364,6 +395,43 @@ window.createWorkspaceTransfer = function (ui) {
       "Review the recipient, completion date and numeric grade rank using your institution’s mapping. Credits and the grade come from the reviewed equivalency. Changes to that context require a fresh review.",
     );
     form.prepend(summary(reviewed));
+    form.prepend(
+      node(
+        "p",
+        {},
+        "Select the receiving course definition accepted for this award. Its published code and transcript title are retained. Awarded credits come from the reviewed equivalency, independently of catalog default credits. No publication is selected automatically.",
+      ),
+    );
+    const publicationStatus = node(
+      "p",
+      { role: "status", class: "form-text" },
+      `${publications.items.length} publications loaded.`,
+    );
+    form.elements.course_version_id.parentElement.append(publicationStatus);
+    let cursor = publications.next_cursor;
+    if (cursor) {
+      const more = button("Load more course publications", async () => {
+        const next = await request(
+          `/sis/transfer-equivalencies/${id}/course-versions/`,
+          "POST",
+          {
+            cursor,
+          },
+        );
+        next.items.forEach((item) =>
+          form.elements.course_version_id.append(
+            node("option", { value: item.version_id }, label(item)),
+          ),
+        );
+        cursor = next.next_cursor;
+        publicationStatus.textContent = `${form.elements.course_version_id.options.length - 1} publications loaded.`;
+        if (!cursor) {
+          more.remove();
+          form.elements.course_version_id.focus();
+        }
+      });
+      form.elements.course_version_id.parentElement.append(more);
+    }
     form.elements.completed_on.min = reviewed.starts_on;
     if (reviewed.ends_on) form.elements.completed_on.max = reviewed.ends_on;
     form.elements.grade_rank.min = reviewed.minimum_grade_rank;

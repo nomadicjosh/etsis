@@ -97,6 +97,7 @@ final class TransferAwardCorrectionTest extends TestCase
                 3,
                 $reviewed,
                 $f->access->actor,
+                $t->courseVersion,
             );
             self::fail("A voided award was silently resubmitted.");
         } catch (DomainException) {

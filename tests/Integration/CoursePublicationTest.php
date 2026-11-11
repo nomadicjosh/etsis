@@ -503,7 +503,7 @@ final class CoursePublicationTest extends TestCase
         $f = $this->f;
         $this->saveText("Transfer Algebra", "Published transfer description");
         $review = $this->service->review($this->course, "Fictional approved publication");
-        $this->service->publish($this->course, $review["review_token"]);
+        $published = $this->service->publish($this->course, $review["review_token"]);
         $student = $f->student();
         $grade = EntityId::generate();
         $f->sql->insert("sis_grades", [
@@ -555,6 +555,7 @@ final class CoursePublicationTest extends TestCase
             new DateTimeImmutable("2026-05-01"),
             2,
             $revision,
+            new EntityId($published["operation_id"]),
         );
         $before = $transfer->transcript($student->id);
         self::assertSame("Transfer Algebra", $before[0]["course_title"]);

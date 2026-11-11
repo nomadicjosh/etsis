@@ -6,6 +6,7 @@ namespace Infrastructure\Persistence\Repository;
 
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Catalog\ValueObject\PublishedCourseDefinition;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Repository\TransferCreditRepository;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
@@ -50,22 +51,33 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
             array_intersect_key($r, array_flip(TransferCreditFacts::FIELDS)),
         )->facts;
     }
-    public function course(EntityId $course): array
+    public function courseVersion(EntityId $credit): ?EntityId
     {
-        $c = $this->sql->one("sis_courses", ["id" => $course->value]);
-        $c["transcript_title"] =
-        $this->sql->rows("sis_course_descriptions", ["course_id" => $course->value], 1)[0][
-        "published_transcript_title"
-        ] ?? $c["title"];
-        return $c;
+        $row = $this->sql->rows("sis_credit_course_versions", ["id" => $credit->value], 1)[0] ?? null;
+        return $row === null ? null : new EntityId($row["course_version_id"]);
     }
     public function term(EntityId $term): array
     {
         return $this->sql->one("sis_terms", ["id" => $term->value]);
     }
-    public function create(array $source, array $credit): void
-    {
+    public function create(
+        array $source,
+        array $credit,
+        ?PublishedCourseDefinition $definition = null,
+    ): void {
+        if ($definition !== null && $credit["course_id"] !== $definition->courseId->value) {
+            throw new CorruptHistoryException();
+        }
+        if ($definition !== null) {
+            new SqlCourseVersionProjection($this->sql)->retain($definition);
+        }
         $this->sql->insert("sis_academic_credits", $credit);
+        if ($definition !== null) {
+            $this->sql->insert("sis_credit_course_versions", [
+                "id" => $credit["id"],
+                "course_version_id" => $definition->versionId->value,
+            ]);
+        }
         $this->sql->insert("sis_transfer_awards", [
             "id" => $source["award_id"],
             "student_id" => $source["student_id"],

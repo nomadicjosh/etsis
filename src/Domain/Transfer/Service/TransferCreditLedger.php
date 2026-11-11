@@ -7,6 +7,7 @@ namespace Domain\Transfer\Service;
 use DateTimeImmutable;
 use DomainException;
 use Domain\AcademicRecord\ValueObject\GradeSnapshot;
+use Domain\Catalog\Service\PublishedCourseReader;
 use Domain\Gradebook\Service\AcademicGradeCatalog;
 use Domain\Gradebook\ValueObject\PublishedGradeId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
@@ -37,6 +38,7 @@ final readonly class TransferCreditLedger
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private Clock $clock,
+        private PublishedCourseReader $courses,
     ) {
     }
     /** @param array<string,mixed> $reviewed */
@@ -48,6 +50,7 @@ final readonly class TransferCreditLedger
         int $rank,
         #[\SensitiveParameter] array $reviewed,
         EntityId $actor,
+        EntityId $courseVersion,
     ): EntityId {
         return $this->transactions->run(function () use (
             $student,
@@ -57,11 +60,18 @@ final readonly class TransferCreditLedger
             $rank,
             $reviewed,
             $actor,
+            $courseVersion,
         ): EntityId {
             $this->actor($actor);
             $existing = $this->records->existing($student, $rule->id, $completed->format("Y-m-d"));
             if ($existing !== null) {
-                $this->load(new EntityId($existing["id"]));
+                $retained = $this->load(new EntityId($existing["id"]), new HistoryReadBudget());
+                if ($retained->courseVersion() !== $courseVersion->value) {
+                    throw new DomainException(
+                        "This award retains a different or unknown course publication. " .
+                        "Review the existing award; a retry cannot replace its history.",
+                    );
+                }
                 $credit = $this->records->credit(new EntityId($existing["credit_id"]));
                 if (
                     $credit["source_id"] !== $existing["id"] ||
@@ -82,7 +92,12 @@ final readonly class TransferCreditLedger
             }
             $id = EntityId::generate();
             $creditId = EntityId::generate();
-            $course = $this->records->course($rule->institutionalCourseId);
+            $publication = $this->courses->version(
+                $rule->institutionalCourseId,
+                $courseVersion,
+                new HistoryReadBudget(),
+            );
+            $definition = $publication->definition;
             $termRow = $this->records->term($term);
             $grade = GradeSnapshot::fromRow($this->grades->byCode($rule->awardedGrade, $student))->facts;
             if (!$grade["passes"]) {
@@ -94,7 +109,7 @@ final readonly class TransferCreditLedger
                 "award_id" => $id->value,
                 "student_id" => $student->value,
                 "equivalency_id" => $rule->id->value,
-                "course_id" => $course["id"],
+                "course_id" => $rule->institutionalCourseId->value,
                 "term_id" => $term->value,
                 "completed_on" => $completed->format("Y-m-d"),
                 "institution_id" => $reviewed["institution_id"],
@@ -120,12 +135,12 @@ final readonly class TransferCreditLedger
             $credit = new TransferCreditFacts([
                 "id" => $creditId->value,
                 "student_id" => $student->value,
-                "course_id" => $course["id"],
+                "course_id" => $rule->institutionalCourseId->value,
                 "term_id" => $term->value,
                 "source_id" => $id->value,
                 "credit_type" => "transfer",
-                "course_code" => $course["code"],
-                "course_title" => $course["transcript_title"],
+                "course_code" => $definition->code,
+                "course_title" => $definition->text->transcriptTitle ?? $definition->title,
                 "attempted_milli" => $rule->creditThousandths,
                 "completed_milli" => $rule->creditThousandths,
                 "grade_points_milli" => $grade["counts_gpa"]
@@ -144,7 +159,7 @@ final readonly class TransferCreditLedger
                     "credit" => $credit->facts,
                     "grade" => $grade,
                 ],
-                ["__aggregate_type" => "transfer_credit"],
+                ["__aggregate_type" => "transfer_credit", "course_version_id" => $courseVersion->value],
             )->withPlayhead(1);
             $this->history->append(
                 $this->stream($id),
@@ -163,6 +178,7 @@ final readonly class TransferCreditLedger
             $this->records->create(
                 $root->source() ?? throw new CorruptHistoryException(),
                 $root->credit() ?? throw new CorruptHistoryException(),
+                $publication,
             );
             return $creditId;
         });
@@ -199,6 +215,7 @@ final readonly class TransferCreditLedger
         }
         $record["retained_grade_id"] = $root->grade()["id"] ?? $record["credit"]["grade_id"];
         $record["academic_on"] = $root->academicOn();
+        $record["course_version_id"] = $root->courseVersion();
         $record["history_recorded"] = $known;
         $record["earlier_history_unknown"] = !$known || $root->provenance() === "observed_existing";
         $record["effective_on_default"] = $this->clock->now()->format("Y-m-d");
@@ -235,6 +252,7 @@ final readonly class TransferCreditLedger
             "section_version_id" => null,
             "completed_on" => $root->source()["completed_on"] ?? $row["completed_on"],
             "academic_on" => $root->academicOn(),
+            "course_version_id" => $root->courseVersion(),
             "retained_term_code" => $root->source()["term_code"] ?? null,
         ];
     }
@@ -412,9 +430,16 @@ final readonly class TransferCreditLedger
             if ($m !== null) {
                 throw new CorruptHistoryException();
             }
+            $row = $this->records->award($award);
+            if ($this->records->courseVersion(new EntityId($row["credit_id"])) !== null) {
+                throw new CorruptHistoryException();
+            }
             return;
         }
         $s = $root->source() ?? throw new CorruptHistoryException();
+        if ($this->records->courseVersion(new EntityId($c["id"]))?->value !== $root->courseVersion()) {
+            throw new CorruptHistoryException();
+        }
         $a = $this->records->award($award);
         if (
             $m === null ||
@@ -450,6 +475,13 @@ final readonly class TransferCreditLedger
         if ($actor->value !== $this->access->authenticatedUserId()->value) {
             throw new \Domain\Shared\Exception\AccessDeniedException("The transfer decision actor changed.");
         }
+    }
+    /** Internal curated choices; the calling transfer workflow authorizes its staff scope.
+     * @return array<string,mixed>
+     */
+    public function courseChoices(EntityId $course, ?string $cursor = null): array
+    {
+        return $this->courses->page($course, $cursor);
     }
     private function stream(EntityId $id): StreamReference
     {

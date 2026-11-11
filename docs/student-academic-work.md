@@ -14,7 +14,7 @@ Each card shows retained course code/title, attempted and awarded credits, sourc
 - A voided transfer award remains visible as voided with zero earned credit and no current grade. Its former grade is not presented as current.
 - Older records without recorded history display observed current facts and an explicit earlier-history warning. An existing grade ID alone does not establish its historical points, passing treatment or GPA treatment. Today's grade definitions are never used to fill that gap.
 
-Course and section publication references remain known or unknown as actually retained. A history verification does not invent missing publication references. Transfer completion dates and posting-term labels use retained source facts when available. Other term labels are marked **current label**; they are navigation context, not immutable academic definitions.
+Course and section publication references remain known or unknown as actually retained. New [transfer awards](transfer-course-publications.md) expose their explicitly accepted course version for exact requirement matching; earlier unbound awards remain unknown. A history verification does not invent missing publication references. Transfer completion dates and posting-term labels use retained source facts when available. Other term labels are marked **current label**; they are navigation context, not immutable academic definitions.
 
 ## Checking requirement matches
 

@@ -44,7 +44,7 @@ The separate [combined degree-progress review](student-degree-progress.md) now c
 
 Relevant unknown grades, missing/different course publications, incompatible grading context and conflicting approvals produce **needs review**, with no definitive placements. A work record unrelated to every selected course group does not block this structural check merely because its grade is unknown; overall GPA/degree evaluation has a separate scope.
 
-Older unbound institutional work and transfer awards without retained accepted-course publication/equivalence evidence are not automatically matched to today's curriculum. That context still needs additional capture/review support. The reviewer never creates a historical publication binding from today's catalog.
+Older unbound institutional work and transfer awards without retained accepted-course publication/equivalence evidence are not automatically matched to today's curriculum. New [transfer awards retain a deliberately selected receiving-course publication](transfer-course-publications.md) and can match that exact version. Earlier unknowns and cross-publication equivalence still need explicit review support. The reviewer never creates a historical publication binding from today's catalog.
 
 Known in-progress, non-passing, late-drop and voided work cannot supply completed-course placement. Early-drop references are verified internally and omitted from current records, counts and returned evidence. Unknown earlier history and a changed matriculation cohort are identified. The check covers available surviving current/history references; it does not certify a complete archive or reconstruct earlier cumulative results.
 

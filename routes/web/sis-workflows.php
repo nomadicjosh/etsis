@@ -218,6 +218,10 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.transfer.award.show");
     $router
+        ->map(["POST"], "/sis/transfer-equivalencies/{id}/course-versions/", [
+            \Application\Http\Controller\SisTransferController::class, "courseVersions",
+        ])->name("sis.transfer.courseversions");
+    $router
         ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/preview/", [
             \Application\Http\Controller\SisTransferAwardController::class,
             "preview",

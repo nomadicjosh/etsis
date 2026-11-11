@@ -24,6 +24,7 @@ final class TransferAwardFixture
     public EntityId $course;
     public EntityId $award;
     public EntityId $credit;
+    public ?EntityId $courseVersion = null;
     public TransferEquivalency $equivalency;
     public SqlTransferAwardRepository $repository;
 
@@ -34,6 +35,7 @@ final class TransferAwardFixture
         bool $legacy = false,
         ?EntityId $course = null,
         ?DateTimeImmutable $completedOn = null,
+        ?EntityId $courseVersion = null,
     ) {
         $f = $sis;
         $this->student = $student ?? $f->student()->id;
@@ -97,6 +99,7 @@ final class TransferAwardFixture
                 "credit_id" => $this->credit->value,
             ]);
         } else {
+            $this->courseVersion = $courseVersion ?? $f->publishCourse($this->course);
             $this->credit = $transfer->award(
                 $this->student,
                 $this->equivalency->id,
@@ -105,6 +108,7 @@ final class TransferAwardFixture
                 $completedOn ?? new DateTimeImmutable("2026-05-01"),
                 3,
                 TransferRevision::of("equivalencies", $catalog->get("equivalencies", $this->equivalency->id)),
+                $this->courseVersion,
             );
         }
         $this->award = new EntityId(

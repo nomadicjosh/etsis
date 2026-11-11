@@ -43,6 +43,13 @@ window.createWorkspaceTransferAwards = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
+                record.course_version_id
+                    ? "Accepted course publication: retained with this award."
+                    : "Accepted course publication: unknown; no definition has been inferred from today's catalog.",
+            ),
+            node(
+                "p",
+                { class: "form-text" },
                 `Sending institution's period start: ${record.academic_on || "Unknown"}`,
             ),
         );

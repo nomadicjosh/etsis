@@ -33,6 +33,7 @@ async function fixture(page, options = {}) {
         effective_on_default: "2026-08-10",
         earlier_history_unknown: !!options.legacy,
         history_recorded: !options.legacy && !options.untracked,
+        course_version_id: options.legacy || options.untracked ? null : id(50),
         academic_on: options.periodKnown ? "2026-01-12" : null,
         grade_code: "TR",
         counts_gpa: false,
@@ -253,6 +254,7 @@ test("registrar reviews a correction before saving and sees encrypted-history va
     page,
 }) => {
     const f = await fixture(page);
+    await expect(page.locator("#drawer-body")).toContainText("Accepted course publication: retained with this award.");
     await correction(page);
     await expect(
         page.getByRole("region", { name: "Transfer correction comparison", exact: true }),
@@ -365,6 +367,7 @@ test("earlier saved receipts show their limited provenance without an invented e
 }) => {
     const f = await fixture(page, { legacy: true });
     await expect(page.locator("#drawer-body")).toContainText("Earlier award decisions are unknown");
+    await expect(page.locator("#drawer-body")).toContainText("Accepted course publication: unknown");
     await page.getByRole("button", { name: "Correction history", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText(
         "Earlier saved receipt · effective time unknown",

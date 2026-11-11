@@ -598,7 +598,35 @@ $awardData = [
     "term_id" => $sis->term->value,
     "completed_on" => "2026-05-01",
     "grade_rank" => 2,
+    "course_version_id" => $sis->publishCourse($teachingSection->courseId)->value,
 ];
+$courseChoicesPath = "/sis/transfer-equivalencies/" . $equivalencyId . "/course-versions/";
+$sis->access->staff = false;
+$sis->access->grants = ["sis:transfer:manage", "sis:student:read"];
+$choiceResponse = $teachingPost($courseChoicesPath, []);
+$choiceData = json_decode((string) $choiceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $choiceResponse->getStatusCode() !== 200 ||
+    !in_array($awardData["course_version_id"], array_column($choiceData["items"] ?? [], "version_id"), true) ||
+    str_contains((string) $choiceResponse->getBody(), "actor_id") ||
+    str_contains((string) $choiceResponse->getBody(), '"reason"')
+) {
+    throw new RuntimeException("Curated course choices failed transfer-office provider boundaries.");
+}
+$sis->access->grants = ["sis:transfer:manage"];
+if (
+    $teachingPost($courseChoicesPath, [])->getStatusCode() !== 403 ||
+    $teachingPost("/sis/transfer-awards/", $awardData + ["revision" => $reviewed["revision"]])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Transfer-only access exposed or created protected student awards.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+$withoutPublication = $awardData + ["revision" => $reviewed["revision"]];
+unset($withoutPublication["course_version_id"]);
+if ($teachingPost("/sis/transfer-awards/", $withoutPublication)->getStatusCode() !== 422) {
+    throw new RuntimeException("A new transfer award omitted its selected course publication.");
+}
 if (
     $institutionResponse->getStatusCode() !== 201 ||
     $externalResponse->getStatusCode() !== 201 ||

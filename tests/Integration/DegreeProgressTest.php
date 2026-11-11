@@ -215,6 +215,31 @@ final class DegreeProgressTest extends TestCase
         self::assertSame($events, $s->sql->rows("sis_history_events"));
         self::assertSame($receipts, $s->sql->rows("sis_history_operations"));
     }
+    public function testPublishedTransferCourseCanMeetItsRetainedGroupWithoutUsingTodaysCatalogLabels(): void
+    {
+        $f = $this->institution();
+        foreach ([1, 2, 4] as $i) {
+            $this->work($f, $i);
+        }
+        $course = $f->f->groupDefinition["courses"][0];
+        $t = new \TransferAwardFixture(
+            $f->f->sis,
+            $f->f->catalog->fixture->cipher,
+            $f->student,
+            course: new EntityId($course["course_id"]),
+            courseVersion: new EntityId($course["version_id"])
+        );
+        $f->f->sis->sql->update("sis_courses", ["title" => "Changed today"], ["id" => $course["course_id"]]);
+        $f->f->sis->publishCourse(new EntityId($course["course_id"]));
+        $r = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $r["allocation"]["outcome"]);
+        self::assertSame(12000, $r["minimums"][0]["actual_minimum_milli"]);
+        self::assertCount(4, $r["allocation"]["groups"][0]["placements"]);
+        self::assertStringNotContainsString("Changed today", json_encode($r, JSON_THROW_ON_ERROR));
+        $facts = $f->f->sis->transferCredits()->auditFacts($t->credit, $f->student);
+        self::assertSame($course["version_id"], $facts["course_version_id"]);
+    }
+
     public function testInstitutionalAndOverallGpaUseDifferentVerifiedTransferScopes(): void
     {
         $f = $this->institution();

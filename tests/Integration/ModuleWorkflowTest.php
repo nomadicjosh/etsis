@@ -214,10 +214,11 @@ final class ModuleWorkflowTest extends TestCase
             )->get("equivalencies", $equivalency->id),
         );
         $on = new DateTimeImmutable("2026-05-01");
-        $credit = $service->award($student->id, $equivalency->id, $institution, $f->term, $on, 2, $revision);
+        $courseVersion = $f->publishCourse($equivalency->institutionalCourseId);
+        $credit = $service->award($student->id, $equivalency->id, $institution, $f->term, $on, 2, $revision, $courseVersion);
         self::assertSame(
             $credit->value,
-            $service->award($student->id, $equivalency->id, $institution, $f->term, $on, 2, $revision)->value,
+            $service->award($student->id, $equivalency->id, $institution, $f->term, $on, 2, $revision, $courseVersion)->value,
         );
         self::assertCount(1, $f->sql->rows("sis_transfer_awards"));
         self::assertSame("N", $f->service->register($student->id, $advanced->id)->status->value);

@@ -229,6 +229,7 @@ final class VersionedGradeWorkflowTest extends TestCase
                 3,
                 $reviewed,
                 $f->access->actor,
+                $t->courseVersion,
             );
         $award = new EntityId($f->sql->one("sis_academic_credits", ["id" => $credit->value])["source_id"]);
         self::assertSame(

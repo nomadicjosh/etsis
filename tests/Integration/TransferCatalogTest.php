@@ -33,6 +33,7 @@ final class TransferCatalogTest extends TestCase
     private SqlTransferCatalogRepository $repository;
     private EntityId $institution;
     private EntityId $external;
+    private EntityId $courseVersion;
     private TransferEquivalency $equivalency;
     private \Domain\Student\Student $student;
 
@@ -43,6 +44,7 @@ final class TransferCatalogTest extends TestCase
         );
         $this->student = $f->student();
         $course = $f->section();
+        $this->courseVersion = $f->publishCourse($course->courseId);
         $grades = new SqlGradebookRepository($f->sql);
         $f->legacyGrade(new GradeDefinition(EntityId::generate(), "TR", 0, true, false));
         $f->legacyGrade(new GradeDefinition(EntityId::generate(), "B", 3000, true, true));
@@ -106,6 +108,7 @@ final class TransferCatalogTest extends TestCase
             new DateTimeImmutable($on),
             $rank,
             $revision ?? $this->reviewed()["revision"],
+            $this->courseVersion,
         );
     }
 
@@ -218,6 +221,7 @@ final class TransferCatalogTest extends TestCase
                 new DateTimeImmutable("2026-05-01"),
                 2,
                 $reviewed["revision"],
+                $this->courseVersion,
             );
             self::fail("An award used context read before the catalog locks.");
         } catch (ConcurrentModificationException) {
@@ -299,6 +303,7 @@ final class TransferCatalogTest extends TestCase
                 new DateTimeImmutable("2026-05-01"),
                 2,
                 $this->reviewed()["revision"],
+                $this->courseVersion,
             );
             self::fail("Wrong sending institution accepted.");
         } catch (DomainException) {
@@ -334,6 +339,7 @@ final class TransferCatalogTest extends TestCase
                 new DateTimeImmutable("2026-05-01"),
                 2,
                 $this->reviewed()["revision"],
+                $this->courseVersion,
             );
             self::fail("An unaudited award committed.");
         } catch (RuntimeException) {
@@ -377,7 +383,15 @@ final class TransferCatalogTest extends TestCase
         self::assertSame($this->student->id->value, $recipient["id"]);
         self::assertArrayNotHasKey("primary_program_id", $recipient);
         self::assertArrayNotHasKey("entry_term_id", $recipient);
+        try {
+            $this->award();
+            self::fail("Transfer-only authority awarded a private student credit.");
+        } catch (AccessDeniedException) {
+            self::assertTrue(true);
+        }
+        $f->access->grants[] = "sis:student:read";
         self::assertNotEmpty($this->award()->value);
+        $f->access->grants = ["admin:dashboard", "sis:transfer:manage"];
         self::assertCount(1, $this->catalog->awards($this->equivalency->id)["items"]);
         foreach (["students", "transcripts", "sections", "people", "accounts", "employees"] as $dataset) {
             try {

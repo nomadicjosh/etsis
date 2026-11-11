@@ -283,7 +283,7 @@ final class TransferCreditHistoryTest extends TestCase
     }
     public function testProjectionCanBeRebuiltInAnIsolatedDatabaseWithoutHistoryOrFinancialWrites(): void
     {
-        $t = $this->fixture();
+        $t = $this->fixture(true);
         $this->post($t, new AwardChange("amend", 4125, "B", "Fictional rebuild sample."));
         $root = $this->replay($t);
         $events = $t->sis->sql->rows("sis_history_events");
@@ -391,6 +391,7 @@ final class TransferCreditHistoryTest extends TestCase
                 new DateTimeImmutable("2026-05-02"),
                 3,
                 \Domain\Transfer\ValueObject\TransferRevision::of("equivalencies", $row),
+                $t->courseVersion,
             );
             self::fail("Partial initial award committed.");
         } catch (RuntimeException $e) {

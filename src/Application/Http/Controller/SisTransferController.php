@@ -63,7 +63,8 @@ final readonly class SisTransferController
             $f->id('term_id'),
             $f->date('completed_on'),
             $f->integer('grade_rank', 0, 10000),
-            $f->text('revision', 64)
+            $f->text('revision', 64),
+            $f->id('course_version_id'),
         );
 
         return new JsonResponse(['credit_id' => $id->value], 201);
@@ -72,5 +73,12 @@ final readonly class SisTransferController
     public function transcript(string $id): ResponseInterface
     {
         return new JsonResponse(['credits' => $this->service->transcript(new EntityId($id))]);
+    }
+    public function courseVersions(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->courseVersions(
+            new EntityId($id),
+            FormInput::from($request)->optionalText('cursor', 16384)
+        ));
     }
 }

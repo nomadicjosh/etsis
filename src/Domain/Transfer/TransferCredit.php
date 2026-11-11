@@ -15,13 +15,17 @@ use Domain\Transfer\ValueObject\TransferCreditFacts;
 
 final class TransferCredit extends EventSourcedAggregate
 {
-    /** @var array<string,mixed>|null */ private ?array $credit = null;
-    /** @var array<string,mixed>|null */ private ?array $source = null;
+    /** @var array<string,mixed>|null */
+    private ?array $credit = null;
+    /** @var array<string,mixed>|null */
+    private ?array $source = null;
     /** Last retained grading policy survives a void.
-     * @var array<string,mixed>|null */ private ?array $grade = null;
+     * @var array<string,mixed>|null */
+    private ?array $grade = null;
     private ?string $decision = null;
     private ?string $provenance = null;
     private ?string $academicOn = null;
+    private ?string $courseVersion = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -39,6 +43,13 @@ final class TransferCredit extends EventSourcedAggregate
         $p = $event->payload();
         if ($this->credit !== null || $p["source"]["award_id"] !== (string) $this->aggregateId()) {
             throw new CorruptHistoryException();
+        }
+        $this->courseVersion = $event->metaParam("course_version_id", null);
+        if ($this->courseVersion !== null) {
+            new \Domain\Shared\ValueObject\EntityId($this->courseVersion);
+            if ($p["provenance"] !== "award") {
+                throw new CorruptHistoryException();
+            }
         }
         $this->credit = $p["credit"];
         $this->source = $p["source"];
@@ -105,15 +116,22 @@ final class TransferCredit extends EventSourcedAggregate
     {
         return $this->academicOn;
     }
-    /** @return array<string,mixed>|null */ public function credit(): ?array
+    public function courseVersion(): ?string
+    {
+        return $this->courseVersion;
+    }
+    /** @return array<string,mixed>|null */
+    public function credit(): ?array
     {
         return $this->credit;
     }
-    /** @return array<string,mixed>|null */ public function source(): ?array
+    /** @return array<string,mixed>|null */
+    public function source(): ?array
     {
         return $this->source;
     }
-    /** @return array<string,mixed>|null */ public function grade(): ?array
+    /** @return array<string,mixed>|null */
+    public function grade(): ?array
     {
         return $this->grade;
     }
@@ -125,7 +143,8 @@ final class TransferCredit extends EventSourcedAggregate
     {
         return $this->provenance;
     }
-    /** @return array<string,mixed> */ public function display(): array
+    /** @return array<string,mixed> */
+    public function display(): array
     {
         $c = $this->credit ?? throw new CorruptHistoryException();
         return $c + [

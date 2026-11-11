@@ -81,9 +81,11 @@ final readonly class TransferService
         DateTimeImmutable $completedOn,
         int $gradeRank,
         string $revision,
+        EntityId $courseVersion,
     ): EntityId {
         $actor = $this->access->requirePermission("sis:transfer:manage");
         $initial = $this->catalog->get("equivalencies", $equivalencyId);
+        $this->access->requirePermission("sis:student:read");
 
         return $this->transactions->run(function () use (
             $student,
@@ -95,6 +97,7 @@ final readonly class TransferService
             $actor,
             $revision,
             $initial,
+            $courseVersion,
         ): EntityId {
             $this->registration->lockStudent($student);
             TransferCatalogLock::acquire($this->catalog, "equivalencies", $initial);
@@ -122,12 +125,7 @@ final readonly class TransferService
                 $reviewed["awarded_grade"],
             );
             $equivalency->assertEligible($institution, $completedOn, $gradeRank);
-            $currentActor = $this->access->requirePermission("sis:transfer:manage");
-            if ($currentActor->value !== $actor->value) {
-                throw new \Domain\Shared\Exception\AccessDeniedException(
-                    "The transfer decision actor changed.",
-                );
-            }
+            $this->awardActor($actor);
             $credit = $this->credits->award(
                 $student,
                 $equivalency,
@@ -136,8 +134,10 @@ final readonly class TransferService
                 $gradeRank,
                 $reviewed,
                 $actor,
+                $courseVersion,
             );
             $this->audit->record($actor, "transfer.awarded", $credit);
+            $this->awardActor($actor);
 
             return $credit;
         });
@@ -152,5 +152,25 @@ final readonly class TransferService
         $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:student:read");
 
         return $this->repository->transcript($studentId);
+    }
+    /** Curated choices require transfer/student access rather than catalog-edit authority.
+     * @return array<string,mixed>
+     */
+    public function courseVersions(EntityId $equivalency, ?string $cursor = null): array
+    {
+        $actor = $this->access->requirePermission("sis:transfer:manage");
+        $this->access->requirePermission("sis:student:read");
+        $row = $this->catalog->get("equivalencies", $equivalency);
+        $page = $this->credits->courseChoices(new EntityId($row["course_id"]), $cursor);
+        $this->awardActor($actor);
+        return $page;
+    }
+    private function awardActor(EntityId $actor): void
+    {
+        $current = $this->access->requirePermission("sis:transfer:manage");
+        $this->access->requirePermission("sis:student:read");
+        if ($current->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException("The transfer decision actor changed.");
+        }
     }
 }

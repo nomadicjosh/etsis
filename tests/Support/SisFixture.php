@@ -479,7 +479,38 @@ final class SisFixture
             $this->access,
             $this->transactions,
             $this->clock,
+            new \Domain\Catalog\Service\PublishedCourseReader($history),
         );
+    }
+    public function coursePublications(): \Domain\Catalog\Service\CoursePublicationService
+    {
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql,
+            $this->transactions,
+            $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        return new \Domain\Catalog\Service\CoursePublicationService(
+            new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogWorkflowRepository($this->sql),
+            $history,
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->dropCipher,
+            $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlCourseTextProjection($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlSubjectRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($this->sql),
+        );
+    }
+    /** Deliberate fictional publication setup, never a production default selection. */
+    public function publishCourse(EntityId $course): EntityId
+    {
+        $service = $this->coursePublications();
+        $review = $service->review($course, "Fictional accepted course definition.");
+        return new EntityId($service->publish($course, $review["review_token"])["operation_id"]);
     }
     public function gradeCatalog(): \Domain\Gradebook\Service\AcademicGradeCatalog
     {
