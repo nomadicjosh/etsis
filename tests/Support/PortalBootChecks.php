@@ -1924,6 +1924,7 @@ if (
     ($degreeProgressBody["context"]["requirements_version_id"] ?? null) !== $requirementReceipt["operation_id"] ||
     count($degreeProgressBody["minimums"] ?? []) !== 4 ||
     !is_array($degreeProgressBody["allocation"] ?? null) ||
+    !is_array($degreeProgressBody["work_summary"] ?? null) ||
     isset($degreeProgressBody["references"]) ||
     isset($degreeProgressBody["graduation_eligible"]) ||
     !str_contains($degreeProgressResponse->getHeaderLine("Cache-Control"), "no-store") ||

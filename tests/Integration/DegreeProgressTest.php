@@ -14,6 +14,7 @@ use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\DegreeMinimumEvaluator;
+use Domain\DegreeAudit\Service\DegreeWorkReview;
 use Domain\DegreeAudit\Service\DegreeProgressService;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
 use Domain\DegreeAudit\Service\PublishedRequirementsReader;
@@ -85,6 +86,7 @@ final class DegreeProgressTest extends TestCase
                 new CourseAllocationPlanner($steps),
                 new AllocationGapAnalyzer(),
             ),
+            new DegreeWorkReview(),
             $students,
             $s->transactions,
         );
@@ -137,10 +139,10 @@ final class DegreeProgressTest extends TestCase
         $f->assign();
         return $f;
     }
-    private function work(StudentRequirementsFixture $f, int $index = 0, ?string $grade = "A"): array
+    private function work(StudentRequirementsFixture $f, int $index = 0, ?string $grade = "A", ?array $course = null): array
     {
         $s = $f->f->sis;
-        $c = $f->f->groupDefinition["courses"][$index];
+        $c = $course ?? $f->f->groupDefinition["courses"][$index];
         $section = new Section(
             EntityId::generate(),
             new EntityId($c["course_id"]),
@@ -203,6 +205,8 @@ final class DegreeProgressTest extends TestCase
             array_column($result["minimums"], "status"),
         );
         self::assertSame("feasible", $result["allocation"]["outcome"]);
+        self::assertSame(0, $result["work_summary"]["unused_completed_count"]);
+        self::assertSame(0, $result["work_summary"]["awaiting_grade_milli"]);
         self::assertSame(4000, $result["gpa"]["cumulative"]["milli"]);
         self::assertSame(4000, $result["gpa"]["overall"]["milli"]);
         self::assertSame($f->version->value, $result["context"]["requirements_version_id"]);
@@ -228,6 +232,52 @@ final class DegreeProgressTest extends TestCase
         $credit = array_values(array_filter($result["records"], fn($r) => $r["id"] === $t->credit->value))[0];
         self::assertSame("transfer_excluded", $credit["cumulative_gpa"]);
         self::assertSame("included", $credit["overall_gpa"]);
+    }
+    public function testUnusedCompletedCourseStillContributesToTheIndependentEarnedTotal(): void
+    {
+        $f = $this->institution();
+        foreach ([0, 1, 2, 4] as $i) {
+            $this->work($f, $i);
+        }
+        $outside = EntityId::generate();
+        $f->f->sis->registration->addCourse(new \Domain\Catalog\Course($outside, "ART.100", "Fictional elective", 3000));
+        $publication = $f->f->catalog->publications();
+        $review = $publication->review($outside, "Fictional elective publication.");
+        $version = $publication->publish($outside, $review["review_token"]);
+        $this->work($f, 5, course: ["course_id" => $outside->value, "version_id" => $version["operation_id"]]);
+        $events = $f->f->sis->sql->rows("sis_history_events");
+        $r = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $r["allocation"]["outcome"]);
+        self::assertSame(1, $r["work_summary"]["unused_completed_count"]);
+        $unused = array_values(array_filter($r["records"], fn($w) => $w["academic_state"] === "completed" && $w["placement"] === "not_used"));
+        self::assertCount(1, $unused);
+        self::assertSame("included", $unused[0]["credit"]);
+        self::assertSame("included", $unused[0]["overall_gpa"]);
+        self::assertSame(15000, $r["minimums"][0]["actual_minimum_milli"]);
+        self::assertSame($events, $f->f->sis->sql->rows("sis_history_events"));
+    }
+    public function testPendingFinalGradeRefreshesWithoutTreatingFailureAsPendingOrMutatingTheCapturedReview(): void
+    {
+        $f = $this->institution();
+        [$section, $enrollment, $credit, $choices] = $this->work($f, 0, null);
+        $this->work($f, 1, "F");
+        $service = $this->service($f);
+        $before = $service->preview($f->student, $f->assignment);
+        self::assertSame(1, $before["work_summary"]["awaiting_grade_count"]);
+        self::assertSame(3000, $before["work_summary"]["awaiting_grade_milli"]);
+        self::assertNull($before["work_summary"]["unused_completed_count"]);
+        self::assertSame(0, $before["minimums"][0]["actual_minimum_milli"]);
+        $ledger = $f->f->sis->academicCredits();
+        $review = $ledger->review($f->student, $section->id, $enrollment, new EntityId($choices["A"]), 0);
+        $ledger->commit($f->student, $section->id, $review["review_token"]);
+        $after = $service->preview($f->student, $f->assignment);
+        self::assertSame(0, $after["work_summary"]["awaiting_grade_count"]);
+        self::assertSame(0, $after["work_summary"]["awaiting_grade_milli"]);
+        self::assertSame(3000, $after["minimums"][0]["actual_minimum_milli"]);
+        $record = array_column($after["records"], null, "id")[$credit->value];
+        self::assertSame("completed", $record["academic_state"]);
+        self::assertSame("not_established", $record["placement"]);
+        self::assertSame(3000, $before["work_summary"]["awaiting_grade_milli"]);
     }
     public function testApprovedGeneralMinimumReductionPreservesThePublishedThresholdAndSelectedVersion(): void
     {
@@ -303,6 +353,7 @@ final class DegreeProgressTest extends TestCase
         $result = $this->service($f)->preview($f->student, $f->assignment);
         self::assertSame(0, $result["current_record_count"]);
         self::assertSame([], $result["records"]);
+        self::assertSame(0, $result["work_summary"]["awaiting_grade_count"]);
         self::assertTrue($result["gpa"]["cumulative"]["ready"]);
         self::assertNull($result["gpa"]["cumulative"]["milli"]);
         self::assertSame("unknown", $result["minimums"][2]["status"]);
@@ -323,6 +374,8 @@ final class DegreeProgressTest extends TestCase
         $result = $this->service($f, steps: 1)->preview($f->student, $f->assignment);
         self::assertSame("review", $result["status"]);
         self::assertSame("undetermined", $result["allocation"]["outcome"]);
+        self::assertNull($result["work_summary"]["unused_completed_count"]);
+        self::assertSame(["not_established"], array_values(array_unique(array_column($result["records"], "placement"))));
         self::assertSame("satisfied", $result["minimums"][0]["status"]);
         self::assertSame([], $result["allocation"]["groups"][0]["placements"]);
     }

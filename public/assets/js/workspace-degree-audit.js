@@ -1890,6 +1890,35 @@ window.createWorkspaceDegreeAudit = function (ui) {
             cards.append(card);
         }
         body.append(cards);
+        body.append(
+            node(
+                "section",
+                { class: "audit-preview" },
+                node("h2", {}, "Unused and pending work"),
+                node(
+                    "p",
+                    {},
+                    `${data.work_summary.awaiting_grade_count} institutional records awaiting final grades · ${data.work_summary.awaiting_grade_milli === null ? "Credit total unavailable within the supported numeric limit" : `${text(data.work_summary.awaiting_grade_milli)} attempted credits`}.`,
+                ),
+                node(
+                    "p",
+                    {},
+                    "Pending credits cover all posting terms in this review. They are not earned credits, completed requirements or a current-term enrollment-load calculation.",
+                ),
+                node(
+                    "p",
+                    {},
+                    data.work_summary.placement_established
+                        ? `${data.work_summary.unused_completed_count} completed records are unused in this proposed group placement. Their earned-credit and GPA treatment remains separate; another valid plan may use different courses.`
+                        : "Unused courses cannot be identified until a complete group placement is established. No unplaced course is treated as unnecessary.",
+                ),
+                actions(
+                    button("Review unused and pending work", () =>
+                        degreeProgressContributions(data, restore),
+                    ),
+                ),
+            ),
+        );
         for (const issue of data.issues)
             body.append(
                 node(
@@ -1966,7 +1995,23 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
     }
-    function degreeProgressContributions(data, back, offset = 0) {
+    const degreeWorkStates = {
+        awaiting_grade: "Awaiting a final grade",
+        completed: "Completed passing work",
+        grade_unknown: "Retained grade evidence needs review",
+        not_passing: "Non-passing grade",
+        late_drop: "Late drop",
+        voided: "Voided transfer award",
+        no_earned_credit: "No completed earned award",
+    };
+    const degreeWorkPlacements = {
+        proposed: "Proposed course-group placement",
+        alternative: "Equivalent evidence alternative; no single award chosen",
+        not_used: "Unused in this proposed course-group placement",
+        unplaced: "No proposed course-group placement",
+        not_established: "Course-group placement not established",
+    };
+    function degreeProgressContributions(data, back, offset = 0, filter = "all", term = "all") {
         const body = screen("Degree progress contributions", "SAME VERIFIED CURRENT WORK");
         body.append(
             node(
@@ -1976,13 +2021,102 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
             actions(button("Back to degree progress", back)),
         );
+        const termRecords = data.records.filter((r) => term === "all" || r.term_id === term);
+        const filters = {
+            all: ["All work", () => true],
+            unused: [
+                "Unused completed",
+                (r) => r.academic_state === "completed" && r.placement === "not_used",
+            ],
+            pending: ["Awaiting grades", (r) => r.academic_state === "awaiting_grade"],
+            placed: ["Placed or alternatives", (r) => ["proposed", "alternative"].includes(r.placement)],
+            other: ["Other outcomes", (r) => !["completed", "awaiting_grade"].includes(r.academic_state)],
+        };
+        const controls = actions();
+        controls.setAttribute("role", "group");
+        controls.setAttribute("aria-label", "Filter academic work");
+        for (const [key, [label, test]] of Object.entries(filters)) {
+            const count = termRecords.filter(test).length;
+            const control = button(
+                `${label} (${count})`,
+                () => {
+                    degreeProgressContributions(data, back, 0, key, term);
+                    dialog.querySelector(`[data-work-filter="${key}"]`)?.focus();
+                },
+                key === filter ? "btn-primary" : "btn-outline-primary",
+            );
+            control.setAttribute("data-work-filter", key);
+            control.setAttribute("aria-pressed", String(key === filter));
+            if (["unused", "placed"].includes(key) && !data.work_summary.placement_established)
+                control.disabled = true;
+            controls.append(control);
+        }
+        body.append(controls);
+        const terms = new Map();
+        for (const record of data.records) {
+            if (!terms.has(record.term_id)) terms.set(record.term_id, new Set());
+            terms.get(record.term_id).add(record.term_code || "Label not retained");
+        }
+        if (terms.size > 1) {
+            const select = node(
+                "select",
+                { id: "degree-work-term", class: "form-select" },
+                node("option", { value: "all" }, "All posting terms"),
+            );
+            for (const [id, labels] of terms)
+                select.append(node("option", { value: id }, [...labels].sort().join(" / ")));
+            select.value = term;
+            select.addEventListener("change", () => {
+                degreeProgressContributions(data, back, 0, filter, select.value);
+                dialog.querySelector("#degree-work-term")?.focus();
+            });
+            body.append(
+                node(
+                    "div",
+                    { class: "mb-3" },
+                    node("label", { for: "degree-work-term", class: "form-label" }, "Posting term"),
+                    select,
+                ),
+            );
+        }
+        if (!data.work_summary.placement_established)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "No complete placement was established. Unused and placed filters are unavailable; pending grades and recorded outcomes can still be inspected.",
+                ),
+            );
+        body.append(
+            node(
+                "p",
+                {},
+                "Unused means not used in this proposed group plan. Repeat and grading rules still govern totals. Equal-credit placement alternatives remain alternatives, and no future credit or GPA is projected.",
+            ),
+        );
+        const records = termRecords.filter(filters[filter][1]);
+        const names = new Map(data.allocation.groups.map((g) => [g.id, g.name]));
         const cards = node("div", { class: "audit-library-grid" });
-        for (const record of data.records.slice(offset, offset + 20))
+        for (const record of records.slice(offset, offset + 20)) {
             cards.append(
                 node(
                     "article",
                     { class: "audit-card" },
                     node("h2", {}, `${record.course_code} · ${record.course_title}`),
+                    node("p", {}, degreeWorkStates[record.academic_state]),
+                    node(
+                        "p",
+                        {},
+                        `${text(record.attempted_milli)} recorded attempted credits · ${record.term_label_retained ? "Retained posting term" : "Posting term label not retained"}${record.term_code ? `: ${record.term_code}` : ""}.`,
+                    ),
+                    node("p", {}, degreeWorkPlacements[record.placement]),
+                    ...record.uses.map((use) =>
+                        node(
+                            "p",
+                            {},
+                            `${use.alternative ? "Eligible evidence alternative for" : "Proposed placement in"} ${names.get(use.group_id)}.`,
+                        ),
+                    ),
                     node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
                     node(
                         "p",
@@ -1996,27 +2130,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     ),
                 ),
             );
+        }
         body.append(
             cards,
             node(
                 "p",
                 { role: "status" },
-                data.records.length
-                    ? `Showing ${offset + 1}–${Math.min(offset + 20, data.records.length)} of ${data.records.length} records.`
-                    : "No current contribution records to display.",
+                records.length
+                    ? `Showing ${offset + 1}–${Math.min(offset + 20, records.length)} of ${records.length} records.`
+                    : "No records match this view. This does not establish degree completion.",
             ),
         );
         const pages = actions();
         if (offset > 0)
             pages.append(
                 button("Previous contribution records", () =>
-                    degreeProgressContributions(data, back, offset - 20),
+                    degreeProgressContributions(data, back, offset - 20, filter, term),
                 ),
             );
-        if (offset + 20 < data.records.length)
+        if (offset + 20 < records.length)
             pages.append(
                 button("Next contribution records", () =>
-                    degreeProgressContributions(data, back, offset + 20),
+                    degreeProgressContributions(data, back, offset + 20, filter, term),
                 ),
             );
         body.append(pages);

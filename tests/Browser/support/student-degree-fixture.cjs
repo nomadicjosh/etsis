@@ -432,6 +432,21 @@ async function fixture(page, options = {}) {
                         g.placements = [];
                     });
                 }
+                if (options.progressWorkMix) {
+                    allocation.records.forEach((r, i) => {
+                        if (i >= 18) r.uses = [];
+                    });
+                    allocation.groups.forEach((g) => {
+                        g.required_credits_milli = 54000;
+                        g.placements = g.placements.slice(0, 18);
+                        g.rules[0].course_ids = g.rules[0].course_ids.slice(0, 18);
+                        g.courses = Object.fromEntries(Object.entries(g.courses).slice(0, 18));
+                        if (g.gaps) {
+                            g.gaps.credit_upper_bound_milli = 54000;
+                            g.gaps.eligible_target_ids = g.gaps.eligible_target_ids.slice(0, 18);
+                        }
+                    });
+                }
                 const gpa = (overall) => ({
                     ready: !overall || !options.progressUnknownOverall,
                     milli:
@@ -506,10 +521,55 @@ async function fixture(page, options = {}) {
                         id: r.id,
                         course_code: r.course_code,
                         course_title: r.course_title,
-                        credit: "included",
+                        credit:
+                            options.progressWorkMix && index === 18
+                                ? "grade_unknown"
+                                : options.progressWorkMix && index === 19
+                                  ? "in_progress"
+                                  : "included",
                         cumulative_gpa: index === 1 ? "transfer_excluded" : "included",
                         overall_gpa: options.progressUnknownOverall ? "undetermined" : "included",
+                        academic_state:
+                            options.progressWorkMix && index === 19
+                                ? "awaiting_grade"
+                                : options.progressWorkMix && index === 18
+                                  ? "grade_unknown"
+                                  : "completed",
+                        placement:
+                            allocation.outcome !== "feasible"
+                                ? "not_established"
+                                : options.progressWorkMix && index >= 18
+                                  ? index === 20
+                                      ? "not_used"
+                                      : "unplaced"
+                                  : index === 0
+                                    ? "alternative"
+                                    : "proposed",
+                        uses:
+                            allocation.outcome !== "feasible" || (options.progressWorkMix && index >= 18)
+                                ? []
+                                : [{ group_id: group, alternative: index === 0 }],
+                        attempted_milli: 3000,
+                        term_id: options.progressWorkMix && index === 20 ? id(600) : id(601),
+                        term_code:
+                            options.progressWorkMix && index === 20
+                                ? options.progressUnknownTerm
+                                    ? null
+                                    : "27/SP"
+                                : "26/FA",
+                        term_label_retained: !(options.progressUnknownTerm && index === 20),
                     })),
+                    work_summary: {
+                        placement_established: allocation.outcome === "feasible",
+                        unused_completed_count:
+                            allocation.outcome === "feasible" ? (options.progressWorkMix ? 1 : 0) : null,
+                        awaiting_grade_count: options.progressWorkMix ? 1 : 0,
+                        awaiting_grade_milli: options.progressWorkMix
+                            ? options.progressPendingLimit
+                                ? null
+                                : 3000
+                            : 0,
+                    },
                     policy: {
                         repeat_credit: "highest_earned",
                         repeat_gpa: "all_eligible",

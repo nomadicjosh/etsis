@@ -28,6 +28,7 @@ final readonly class DegreeProgressService
         private RetainedAttemptReader $attempts,
         private DegreeMinimumEvaluator $minimums,
         private GroupAllocationEvaluator $groups,
+        private DegreeWorkReview $workReview,
         private StudentRecordRepository $students,
         private UnitOfWork $transactions,
     ) {
@@ -80,11 +81,12 @@ final readonly class DegreeProgressService
                     $context["effective_minimums"],
                 );
                 $byId = array_column($inputs->items, null, "id");
+                $workReview = $this->workReview->review($inputs->items, $allocation);
                 $cumulative = array_column($institutional->dispositions, null, "id");
                 $records = [];
                 foreach ($overall->dispositions as $d) {
                     $work = $byId[$d["id"]];
-                    $records[] = [
+                    $records[] = $workReview["records"][$d["id"]] + [
                         "id" => $d["id"],
                         "course_code" => $work["course_code"],
                         "course_title" => $work["course_title"],
@@ -121,6 +123,7 @@ final readonly class DegreeProgressService
                     "allocation" => $allocation,
                     "issues" => array_values($issues),
                     "records" => $records,
+                    "work_summary" => $workReview["summary"],
                     "gpa" => [
                         "cumulative" => [
                             "ready" => $institutional->gpa !== null,

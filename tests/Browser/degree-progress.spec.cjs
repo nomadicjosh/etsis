@@ -142,3 +142,104 @@ test("rejected progress preserves the retained degree view and announces the err
     await accessible(page);
     expect(f.errors).toEqual([]);
 });
+
+test("unused and pending work filters keep placement, totals and posting terms separate without rereading", async ({
+    page,
+}) => {
+    const f = await fixture(page, { assigned: true, readOnly: true, progressWorkMix: true });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio).toContainText("1 institutional records awaiting final grades · 3 attempted credits");
+    await expect(studio).toContainText("1 completed records are unused in this proposed group placement");
+    await expect(studio).toContainText(
+        "not earned credits, completed requirements or a current-term enrollment-load calculation",
+    );
+    await studio.getByRole("button", { name: "Review unused and pending work", exact: true }).click();
+    await studio.getByRole("button", { name: "Unused completed (1)", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(studio.getByRole("button", { name: "Unused completed (1)", exact: true })).toBeFocused();
+    await expect(studio).toContainText("LAST.101");
+    await expect(studio).toContainText("Earned credit: Included once in this total");
+    await expect(studio.getByRole("article")).toHaveCount(1);
+    await expect(studio).toContainText("Retained posting term: 27/SP");
+    await studio.getByRole("button", { name: "Awaiting grades (1)", exact: true }).click();
+    await expect(studio.getByRole("article")).toHaveCount(1);
+    await expect(studio.getByRole("article")).toContainText("Awaiting a final grade");
+    await expect(studio.getByRole("article")).not.toContainText("Unused in this proposed");
+    await studio.getByRole("button", { name: "Other outcomes (1)", exact: true }).click();
+    await expect(studio.getByRole("article")).toContainText("Retained grade evidence needs review");
+    await studio.getByRole("button", { name: "Placed or alternatives (18)", exact: true }).click();
+    await expect(studio).toContainText("Equivalent evidence alternative; no single award chosen");
+    await expect(studio.locator("b")).toHaveCount(0);
+    await studio.getByRole("button", { name: "All work (21)", exact: true }).click();
+    await studio.getByRole("button", { name: "Next contribution records", exact: true }).click();
+    await expect(studio).toContainText("Showing 21–21 of 21 records");
+    await studio.getByLabel("Posting term", { exact: true }).selectOption({ label: "27/SP" });
+    await expect(studio.getByLabel("Posting term", { exact: true })).toBeFocused();
+    await expect(studio).toContainText("Showing 1–1 of 1 records");
+    await expect(studio.getByRole("button", { name: "Awaiting grades (0)", exact: true })).toBeVisible();
+    await studio.getByRole("button", { name: "Awaiting grades (0)", exact: true }).click();
+    await expect(studio).toContainText(
+        "No records match this view. This does not establish degree completion",
+    );
+    await expect(studio.getByRole("article")).toHaveCount(0);
+    await studio.getByLabel("Posting term", { exact: true }).selectOption("all");
+    await expect(studio.getByRole("button", { name: "Awaiting grades (1)", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+    );
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await studio.getByRole("button", { name: "Back to degree progress", exact: true }).click();
+    expect(f.calls.filter((c) => c.path === `${f.base}progress/`)).toHaveLength(1);
+    expect(f.calls.some((c) => c.path.includes("/academic-work/"))).toBe(false);
+    expect(f.calls.some((c) => /\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+for (const outcome of ["infeasible", "undetermined", "needs_review", "unsupported"]) {
+    test(`a ${outcome} placement cannot classify completed work as unused`, async ({ page }) => {
+        const f = await fixture(page, { assigned: true, progressWorkMix: true, allocationOutcome: outcome });
+        await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+        const studio = page.locator("dialog.degree-audit-studio");
+        await expect(studio).toContainText(
+            "Unused courses cannot be identified until a complete group placement is established",
+        );
+        await studio.getByRole("button", { name: "Review unused and pending work", exact: true }).click();
+        await expect(
+            studio.getByRole("button", { name: "Unused completed (0)", exact: true }),
+        ).toBeDisabled();
+        await expect(
+            studio.getByRole("button", { name: "Placed or alternatives (0)", exact: true }),
+        ).toBeDisabled();
+        await studio.getByRole("button", { name: "Awaiting grades (1)", exact: true }).click();
+        await expect(studio.getByRole("article")).toContainText("Course-group placement not established");
+        await expect(studio.getByRole("article")).not.toContainText("Unused in this proposed");
+        await accessible(page);
+        expect(f.errors).toEqual([]);
+    });
+}
+
+test("pending numeric limits and missing retained term labels never display invented totals or labels", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        progressWorkMix: true,
+        progressPendingLimit: true,
+        progressUnknownTerm: true,
+    });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio).toContainText(
+        "1 institutional records awaiting final grades · Credit total unavailable within the supported numeric limit",
+    );
+    await studio.getByRole("button", { name: "Review unused and pending work", exact: true }).click();
+    await studio.getByLabel("Posting term", { exact: true }).selectOption({ label: "Label not retained" });
+    await expect(studio.getByRole("article")).toContainText("Posting term label not retained");
+    await expect(studio).not.toContainText("27/SP");
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});

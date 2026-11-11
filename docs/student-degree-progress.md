@@ -36,6 +36,26 @@ Minimum checks are independent components. A known cumulative GPA can be display
 
 **Inspect credit and GPA contributions** shows each current record's earned-credit, cumulative-GPA and overall-GPA treatment. Transfer exclusion in the cumulative column describes the institutional-only scope; it does not claim that the institution's overall transfer policy excludes transfers. Contribution cards page 20 records at a time.
 
+## Unused and pending work
+
+**Review unused and pending work** opens the same contribution workspace with local filters:
+
+- **All work:** every current record in the captured review.
+- **Unused completed:** completed passing records not used in the proposed complete course-group plan. A different valid plan may use different courses. This is not a decision that these courses are unnecessary, excluded from a degree or excluded from earned credits/GPA.
+- **Awaiting grades:** known ungraded institutional attempts with no completed award or quality points. The summary totals their recorded attempted credits across all posting terms, including repeated attempts; it does not predict future earned credits, repeat-policy winners, GPA or current-term enrollment load.
+- **Placed or alternatives:** records supporting proposed group placements, with tied evidence alternatives identified. An alternative is not a uniquely chosen award, and group placement does not create another overall credit/GPA contribution.
+- **Other outcomes:** non-passing work, late drops, voided transfer awards, unavailable grade evidence and records without a completed earned award. These are not silently relabeled pending or unused completed courses.
+
+Unused/placed filters are unavailable unless the combined group search found a complete supported plan. Infeasible, interrupted, unsupported and needs-review outcomes return no speculative placements or unused-course count. Independently known pending-grade facts remain inspectable. Zero-credit passing completions can still be completed work; count labels refer to academic records rather than deduplicated course identities or credit awards.
+
+When the review spans several posting terms, **Posting term** narrows the local work list. It does not change the degree minimums, calculated GPA, original all-term pending summary or group search. Each card identifies whether its posting-term label was retained; missing labels are not replaced from today's calendar. Filters, term changes and paging reuse the same captured read and reset paging when their scope changes. No additional request or event replay is performed.
+
+Known ungraded attempts remain distinct from recorded grades whose retained definitions are unavailable, and from unexplained quality points. Such unknown evidence does not enter the pending total. A numeric limit leaves that total unavailable rather than returning a partial amount or zero. Failed input verification still returns no partial work review.
+
+The workspace retains keyboard access, pressed-state filter labels, focus after filter/term changes, narrow-screen reflow and escaped course/group labels. No work is stored in browser storage or used to authorize a later academic mutation.
+
+## Inspecting group placement and refreshing
+
 **Inspect course-group placement** opens the [existing placement review](student-course-placement.md) from this same captured result. Staff can inspect group quantities, retained named-course lists, waivers, approved substitutions, grade floors, repeat/sharing treatment and equivalent evidence alternatives. Returning to degree progress does not rerun the read.
 
 The placement review also [explains clear shortfalls](student-course-placement.md#understanding-shortfalls) in eligible credits, distinct-course quantities and named/choose evidence. These optimistic evidence bounds do not assign partial placements or declare groups complete. Missing/conflicting inputs remain needs-review outcomes.
