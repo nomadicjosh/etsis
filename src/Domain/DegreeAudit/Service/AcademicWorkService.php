@@ -7,6 +7,7 @@ namespace Domain\DegreeAudit\Service;
 use Domain\AcademicRecord\Service\InstitutionalCreditLedger;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\DegreeAudit\Repository\AcademicWorkRepository;
+use Domain\DegreeAudit\ValueObject\AcademicWorkView;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -49,28 +50,7 @@ final readonly class AcademicWorkService
                 if ($facts["id"] !== $id->value || $facts["source_id"] !== $row["source_id"]) {
                     throw new CorruptHistoryException();
                 }
-                $items[] = [
-                    "id" => $id->value,
-                    "course_id" => $facts["course_id"],
-                    "course_code" => $facts["course_code"],
-                    "course_title" => $facts["course_title"],
-                    "credit_type" => $facts["credit_type"],
-                    "term_id" => $facts["term_id"],
-                    "term_code" => $input["retained_term_code"] ?? $row["term_code"],
-                    "term_label_retained" => $input["retained_term_code"] !== null,
-                    "completed_on" => $input["completed_on"],
-                    "attempted_milli" => $facts["attempted_milli"],
-                    "completed_milli" => $facts["completed_milli"],
-                    "quality_points_milli" => $facts["grade_points_milli"],
-                    "grade" => $input["grade"],
-                    "grade_recorded" => $facts["grade_id"] !== null,
-                    "status" => $facts["status"],
-                    "course_version_id" => $facts["course_version_id"] ?? null,
-                    "section_version_id" => $input["section_version_id"],
-                    "history_recorded" => $input["history_recorded"],
-                    "earlier_history_unknown" => $input["earlier_history_unknown"],
-                    "history_version" => $input["history_version"],
-                ];
+                $items[] = AcademicWorkView::fromLedger($id->value, $input, $row["term_code"]);
             }
             $this->authorize($student, $assignment);
             return [

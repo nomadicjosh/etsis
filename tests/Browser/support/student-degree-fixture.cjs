@@ -314,7 +314,23 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
-        else if (path === `${base}academic-work/` || path === `${base}academic-work/matches/`) {
+        else if (path === `${base}academic-work/verify/`) {
+            if (options.rejectInputVerification)
+                return route.fulfill({
+                    status: 409,
+                    json: {
+                        error: "Academic records and their history could not be verified. Ask a registrar to review this record.",
+                    },
+                });
+            response = {
+                status: options.inputLimit
+                    ? "limited"
+                    : options.inputHistoryGaps
+                      ? "history_gaps"
+                      : "verified",
+                current_record_count: options.inputLimit ? null : 2,
+            };
+        } else if (path === `${base}academic-work/` || path === `${base}academic-work/matches/`) {
             if (path.endsWith("/matches/") && options.rejectAcademicMatches)
                 return route.fulfill({ status: 403, json: { message: "Access denied." } });
             const record = {

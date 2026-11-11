@@ -12,6 +12,7 @@ use Domain\Gradebook\ValueObject\PublishedGradeId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
@@ -205,7 +206,7 @@ final readonly class TransferCreditLedger
     /** Internal audit input, after the caller authorizes and locks the student.
      * @return array<string,mixed>
      */
-    public function auditFacts(EntityId $credit, EntityId $student): array
+    public function auditFacts(EntityId $credit, EntityId $student, ?HistoryReadBudget $budget = null): array
     {
         $facts = $this->records->credit($credit);
         if ($facts["student_id"] !== $student->value) {
@@ -222,7 +223,7 @@ final readonly class TransferCreditLedger
         ) {
             throw new CorruptHistoryException();
         }
-        $root = $this->load($award);
+        $root = $this->load($award, $budget);
         return [
             "credit" => $root->credit() ?? $facts,
             "grade" => $facts["grade_id"] === null ? null : $root->grade(),
@@ -366,12 +367,14 @@ final readonly class TransferCreditLedger
         $this->verify($award, $root);
         return $items;
     }
-    private function load(EntityId $award): TransferCredit
+    private function load(EntityId $award, ?HistoryReadBudget $budget = null): TransferCredit
     {
         $root = TransferCredit::root(new TransferCreditId($award->value));
         $cursor = null;
         do {
-            $page = $this->history->page($this->stream($award), $cursor, 20);
+            $page = $budget === null
+            ? $this->history->page($this->stream($award), $cursor, 20)
+            : $budget->page($this->history, $this->stream($award), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
             }

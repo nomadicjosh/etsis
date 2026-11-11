@@ -23,6 +23,7 @@ use Domain\Registration\Enrollment;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -489,6 +490,28 @@ final readonly class InstitutionalCreditLedger
             "retained_term_code" => null,
         ];
     }
+    /** Internal verification only; the caller authorizes and locks the student.
+     * Unlike the paged work read, this also verifies a retained early-removal reference.
+     * @return array<string,mixed>
+     */
+    public function evaluationFacts(EntityId $credit, EntityId $student, HistoryReadBudget $budget): array
+    {
+        $root = $this->load($credit, $budget);
+        $facts = $root->credit() ?? $this->records->projection($credit) ?? throw new CorruptHistoryException();
+        if ($facts["student_id"] !== $student->value || $facts["credit_type"] !== "institutional") {
+            throw new CorruptHistoryException();
+        }
+        return [
+            "credit" => $facts,
+            "grade" => $root->grade(),
+            "history_recorded" => $root->playhead() > 0,
+            "earlier_history_unknown" => $root->playhead() === 0 || $root->provenance() === "observed_existing",
+            "history_version" => $root->playhead(),
+            "section_version_id" => $root->sectionVersion(),
+            "completed_on" => null,
+            "retained_term_code" => null,
+        ];
+    }
     /** Caller authorizes owner/assigned faculty/academic reader before requesting curated history.
      * @return array<string,mixed>
      */
@@ -543,12 +566,14 @@ final readonly class InstitutionalCreditLedger
         throw new RecordNotFoundException("Current academic record not found.");
         return [$id, $root, $facts];
     }
-    private function load(EntityId $id): AcademicCredit
+    private function load(EntityId $id, ?HistoryReadBudget $budget = null): AcademicCredit
     {
         $root = AcademicCredit::root(new AcademicCreditId($id->value));
         $cursor = null;
         do {
-            $page = $this->history->page($this->stream($id), $cursor, 20);
+            $page = $budget === null
+            ? $this->history->page($this->stream($id), $cursor, 20)
+            : $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $e) {
                 $root->acceptHistorical($e->event);
             }

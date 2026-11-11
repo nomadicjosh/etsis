@@ -1715,6 +1715,52 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
     }
+    async function verifyAcademicInputs(base, back) {
+        const data = await post(`${base}academic-work/verify/`, {});
+        const body = screen("Academic input verification", "STUDENT ACADEMIC RECORDS");
+        const limited = data.status === "limited";
+        const gaps = data.status === "history_gaps";
+        body.append(
+            node(
+                "p",
+                {},
+                "Check current academic records against available registration, academic and transfer history references. This does not calculate degree completion, GPA or graduation eligibility, or certify a complete historical archive.",
+            ),
+            node(
+                "article",
+                { class: "audit-card" },
+                node(
+                    "h2",
+                    {},
+                    limited
+                        ? "Verification reached its work limit"
+                        : gaps
+                          ? "Earlier history is unknown"
+                          : "Available references checked",
+                ),
+                node(
+                    "p",
+                    { role: "status" },
+                    limited
+                        ? "No complete input set was produced. This is not a failed academic requirement. Ask the registrar to arrange a larger, controlled review."
+                        : `${data.current_record_count} current academic record${data.current_record_count === 1 ? "" : "s"} checked.`,
+                ),
+                node(
+                    "p",
+                    {},
+                    limited
+                        ? "Verification has limits on records and history replay to keep requests responsive. A partial count or partial calculation is never shown."
+                        : gaps
+                          ? "Current records and their available references agree, but some earlier history was not recorded. Missing history has not been invented."
+                          : "The checked records agree with their available history references. Grading, repeat and degree-allocation policies still need evaluation.",
+                ),
+            ),
+            actions(
+                button("Refresh verification", () => verifyAcademicInputs(base, back)),
+                button("Back to academic work", back),
+            ),
+        );
+    }
     async function academicWork(base, back, after = null, stack = [], matching = false) {
         const data = await post(`${base}academic-work/${matching ? "matches/" : ""}`, after ? { after } : {});
         const body = screen(matching ? "Requirement matches" : "Academic work", "STUDENT ACADEMIC RECORDS");
@@ -1735,6 +1781,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
                 button(matching ? "View academic work only" : "Check requirement matches", () =>
                     academicWork(base, back, after, stack, !matching),
+                ),
+                button("Verify academic inputs", () =>
+                    verifyAcademicInputs(base, () => academicWork(base, back, after, stack, matching)),
                 ),
                 button("Back to degree requirements", back),
             ),

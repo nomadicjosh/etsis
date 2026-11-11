@@ -17,6 +17,7 @@ use Domain\Registration\ValueObject\EnrollmentHistoryId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
@@ -211,12 +212,32 @@ final readonly class EnrollmentLedger
             "items" => $items,
         ];
     }
-    private function load(EntityId $id): EnrollmentHistory
+    /** Internal verification, after the caller authorizes and locks the student.
+     * Includes removed enrollment facts for cross-checking, never for ordinary display.
+     * @return array<string,mixed>
+     */
+    public function evaluationFacts(EntityId $enrollment, EntityId $student, HistoryReadBudget $budget): array
+    {
+        $root = $this->load($enrollment, $budget);
+        $facts = $root->facts() ?? $this->records->current($enrollment) ?? throw new CorruptHistoryException();
+        if ($facts["student_id"] !== $student->value) {
+            throw new CorruptHistoryException();
+        }
+        return [
+            "facts" => $facts,
+            "history_recorded" => $root->playhead() > 0,
+            "earlier_history_unknown" => $root->playhead() === 0 || $root->provenance() === "observed_existing",
+            "history_version" => $root->playhead(),
+        ];
+    }
+    private function load(EntityId $id, ?HistoryReadBudget $budget = null): EnrollmentHistory
     {
         $root = EnrollmentHistory::root(new EnrollmentHistoryId($id->value));
         $cursor = null;
         do {
-            $page = $this->history->page($this->stream($id), $cursor, 20);
+            $page = $budget === null
+            ? $this->history->page($this->stream($id), $cursor, 20)
+            : $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
             }

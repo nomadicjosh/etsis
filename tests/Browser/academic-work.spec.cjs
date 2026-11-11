@@ -128,3 +128,63 @@ test("denied matching retains the academic-work screen and announces the error",
     await accessible(page);
     expect(f.errors).toEqual([]);
 });
+
+for (const state of ["verified", "history_gaps", "limited"]) {
+    test(`academic input verification is on demand and explains ${state} without calculating or changing records`, async ({
+        page,
+    }) => {
+        const f = await fixture(page, {
+            readOnly: true,
+            inputHistoryGaps: state === "history_gaps",
+            inputLimit: state === "limited",
+        });
+        await page.getByRole("button", { name: "Academic work", exact: true }).click();
+        expect(f.calls.some((c) => c.path.endsWith("academic-work/verify/"))).toBe(false);
+        await page.getByRole("button", { name: "Verify academic inputs", exact: true }).click();
+        const studio = page.locator("dialog.degree-audit-studio");
+        await expect(
+            studio.getByRole("heading", { name: "Academic input verification", exact: true }),
+        ).toBeVisible();
+        await expect(studio).toContainText("does not calculate degree completion");
+        await expect(studio).toContainText("certify a complete historical archive");
+        if (state === "limited") {
+            await expect(studio).toContainText("Verification reached its work limit");
+            await expect(studio).toContainText("No complete input set was produced");
+            await expect(studio).not.toContainText("0 current academic records");
+        } else {
+            await expect(studio).toContainText("2 current academic records checked");
+            await expect(studio).toContainText(
+                state === "history_gaps"
+                    ? "Missing history has not been invented"
+                    : "Available references checked",
+            );
+        }
+        await page.setViewportSize({ width: 375, height: 812 });
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await studio.getByRole("button", { name: "Refresh verification", exact: true }).click();
+        await studio.getByRole("button", { name: "Back to academic work", exact: true }).click();
+        await expect(studio).toContainText("MATH.101");
+        const calls = f.calls.filter((c) => c.path === `${f.base}academic-work/verify/`);
+        expect(calls).toHaveLength(2);
+        expect(calls.every((c) => c.csrf === "fictional-test-token")).toBe(true);
+        expect(calls.map((c) => c.body)).toEqual([{}, {}]);
+        expect(f.calls.some((c) => /\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(f.errors).toEqual([]);
+    });
+}
+
+test("inconsistent academic inputs keep the academic work visible and announce a safe error", async ({
+    page,
+}) => {
+    const f = await fixture(page, { rejectInputVerification: true });
+    await page.getByRole("button", { name: "Academic work", exact: true }).click();
+    await page.getByRole("button", { name: "Verify academic inputs", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio.getByRole("heading", { name: "Academic work", exact: true })).toBeVisible();
+    await expect(studio.getByRole("alert")).toContainText("Ask a registrar to review this record");
+    await expect(studio).toContainText("MATH.101");
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
