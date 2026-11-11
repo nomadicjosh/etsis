@@ -157,6 +157,8 @@ final readonly class InstitutionalCreditLedger
             "needs_assignment" => $needs,
             "effective_on_default" => $this->clock->now()->format("Y-m-d"),
             "current_version" => $facts["version"],
+            "enrollment_id" => $enrollment->value,
+            "completed_on" => $root->completedOn(),
             "can_amend" => $this->canAmend(),
             "history_recorded" => $root->playhead() > 0,
             "posted" => new CreditSnapshot($facts)->posted(),
@@ -486,7 +488,7 @@ final readonly class InstitutionalCreditLedger
                 $root->playhead() === 0 || $root->provenance() === "observed_existing",
             "history_version" => $root->playhead(),
             "section_version_id" => $root->sectionVersion(),
-            "completed_on" => null,
+            "completed_on" => $root->completedOn(),
             "retained_term_code" => null,
         ];
     }
@@ -497,7 +499,8 @@ final readonly class InstitutionalCreditLedger
     public function evaluationFacts(EntityId $credit, EntityId $student, HistoryReadBudget $budget): array
     {
         $root = $this->load($credit, $budget);
-        $facts = $root->credit() ?? $this->records->projection($credit) ?? throw new CorruptHistoryException();
+        $facts =
+        $root->credit() ?? ($this->records->projection($credit) ?? throw new CorruptHistoryException());
         if ($facts["student_id"] !== $student->value || $facts["credit_type"] !== "institutional") {
             throw new CorruptHistoryException();
         }
@@ -505,10 +508,11 @@ final readonly class InstitutionalCreditLedger
             "credit" => $facts,
             "grade" => $root->grade(),
             "history_recorded" => $root->playhead() > 0,
-            "earlier_history_unknown" => $root->playhead() === 0 || $root->provenance() === "observed_existing",
+            "earlier_history_unknown" =>
+                $root->playhead() === 0 || $root->provenance() === "observed_existing",
             "history_version" => $root->playhead(),
             "section_version_id" => $root->sectionVersion(),
-            "completed_on" => null,
+            "completed_on" => $root->completedOn(),
             "retained_term_code" => null,
         ];
     }
@@ -535,9 +539,13 @@ final readonly class InstitutionalCreditLedger
                 "action" =>
                     $e instanceof InstitutionalCreditWasEstablished
                         ? $p["provenance"]
-                        : ($e instanceof FinalGradeWasDecided
-                            ? "grade_decided"
-                            : "dropped"),
+                        : ($e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded
+                            ? "completion_recorded"
+                            : ($e instanceof FinalGradeWasDecided
+                                ? "grade_decided"
+                                : "dropped")),
+                "completed_on" => $p["completed_on"] ?? null,
+                "previous_completed_on" => $p["previous_completed_on"] ?? null,
                 "grade_code" => $p["grade"]["code"] ?? ($p["outcome"]["grade_code"] ?? null),
                 "grade_points_milli" => $p["grade"]["points_milli"] ?? null,
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
@@ -551,8 +559,12 @@ final readonly class InstitutionalCreditLedger
         ];
     }
     /** @return array{EntityId,AcademicCredit,array<string,mixed>} */
-    private function source(EntityId $enrollment, EntityId $student, EntityId $section): array
-    {
+    private function source(
+        EntityId $enrollment,
+        EntityId $student,
+        EntityId $section,
+        ?HistoryReadBudget $budget = null,
+    ): array {
         $m =
         $this->records->forEnrollment($enrollment) ??
         throw new RecordNotFoundException("Academic record not found.");
@@ -560,18 +572,26 @@ final readonly class InstitutionalCreditLedger
             throw new AccessDeniedException("The academic record belongs to another scope.");
         }
         $id = new EntityId($m["id"]);
-        $root = $this->load($id);
+        $root = $this->load($id, $budget);
         $facts =
         $this->records->projection($id) ??
         throw new RecordNotFoundException("Current academic record not found.");
         return [$id, $root, $facts];
+    }
+    /** Internal command context. Caller must authorize and hold student/section locks.
+     * @return array{EntityId,AcademicCredit,array<string,mixed>}
+     */
+    public function decisionRecord(EntityId $student, EntityId $section, EntityId $enrollment): array
+    {
+        return $this->source($enrollment, $student, $section, new HistoryReadBudget());
     }
     private function load(EntityId $id, ?HistoryReadBudget $budget = null): AcademicCredit
     {
         $root = AcademicCredit::root(new AcademicCreditId($id->value));
         $cursor = null;
         do {
-            $page = $budget === null
+            $page =
+            $budget === null
             ? $this->history->page($this->stream($id), $cursor, 20)
             : $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $e) {

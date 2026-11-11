@@ -7,6 +7,7 @@ namespace Domain\AcademicRecord\ValueObject;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished;
 use Domain\AcademicRecord\Event\FinalGradeWasDecided;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
+use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
@@ -25,6 +26,12 @@ final class AcademicEventSchema
                 "grade",
             ],
             FinalGradeWasDecided::class => ["decision_id", "previous_decision_id", "grade", "assignment_id"],
+            AcademicCompletionWasRecorded::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_completed_on",
+                "completed_on",
+            ],
             InstitutionalCreditWasDropped::class => [
                 "decision_id",
                 "previous_decision_id",
@@ -81,7 +88,24 @@ final class AcademicEventSchema
                 self::invalid();
             }
             new EntityId($payload["previous_decision_id"]);
-            if ($class === FinalGradeWasDecided::class) {
+            if ($class === AcademicCompletionWasRecorded::class) {
+                foreach (["previous_completed_on", "completed_on"] as $key) {
+                    $date = $payload[$key];
+                    if ($date === null) {
+                        continue;
+                    }
+                    if (!is_string($date) || preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) !== 1) {
+                        self::invalid();
+                    }
+                    $parsed = \DateTimeImmutable::createFromFormat("!Y-m-d", $date);
+                    if ($parsed === false || $parsed->format("Y-m-d") !== $date) {
+                        self::invalid();
+                    }
+                }
+                if ($payload["completed_on"] === $payload["previous_completed_on"]) {
+                    self::invalid();
+                }
+            } elseif ($class === FinalGradeWasDecided::class) {
                 if (!is_array($payload["grade"])) {
                     self::invalid();
                 }

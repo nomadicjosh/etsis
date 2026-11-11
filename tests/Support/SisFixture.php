@@ -301,6 +301,19 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
+    public function academicCompletions(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicCompletionService
+    {
+        return new \Domain\AcademicRecord\Service\AcademicCompletionService(
+            $this->academicCredits(),
+            new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql, $this->transactions, $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            ),
+            $this->transactions, $this->access, $this->dropCipher, $this->clock, $audit ?? $this->audit,
+        );
+    }
     public function activityLedger(): \Domain\Student\Service\StudentActivityLedger
     {
         return new \Domain\Student\Service\StudentActivityLedger(

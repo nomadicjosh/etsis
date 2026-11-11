@@ -3,7 +3,7 @@
 In the **Degree audit builder → Degree settings → Institutional audit policies**, choose **Latest eligible attempt per course** to reveal **How latest attempts are ordered**.
 
 - **Academic term / instructional period** is the default for a newly created blank degree draft. It orders institutional attempts by the instructional **start date** from the exact section publication retained at registration. Short/non-standard offerings can therefore have distinct instructional periods within a term.
-- **Actual completion date** uses an explicitly retained source completion date. It does not substitute an instructional end date, grade-posting time or correction time. Institutional completion-date capture is still pending; selecting this policy can leave competing institutional attempts undetermined until that evidence exists.
+- **Actual completion date** uses an explicitly retained source completion date. It does not substitute an instructional end date, grade-posting time or correction time. Authorized registrars can now [record or correct institutional completion dates](academic-completion-dates.md); missing required dates still leave competing attempts undetermined.
 
 Changing to all-attempt or highest-grade GPA hides this extra choice while retaining the draft's explicit value. Review and publication show the chosen policy. Cloning retains the source definition's choice; opening or cloning an earlier definition with no choice leaves it unknown. Only a new blank draft receives the default.
 
@@ -33,4 +33,4 @@ The composition's existing JSON policy object now accepts `repeat_attempt_order`
 
 A bounded, read-only inventory of the configured application database found one composition draft without this field and no degree-publication streams/events before this extension. No stored row or event was changed. The existing JSON columns and registered event format support the additive policy field; no table migration, numbered model wrapper or parallel event store was introduced.
 
-Full degree allocation, retained evaluation results, institutional completion-date capture and transfer academic-period evidence remain later stages. This ordering integration changes current-work review, not standing, issued transcripts or graduation decisions.
+Full degree constraints, retained evaluation results and transfer academic-period evidence remain later stages. Institutional completion dates now have a separate reviewed workflow. This ordering integration changes current-work review, not standing, issued transcripts or graduation decisions.

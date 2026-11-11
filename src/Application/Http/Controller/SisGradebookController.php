@@ -14,8 +14,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisGradebookController
 {
-    public function __construct(private GradebookService $service)
-    {
+    public function __construct(
+        private GradebookService $service,
+        private \Domain\AcademicRecord\Service\AcademicCompletionService $completion,
+    ) {
     }
 
     public function assignment(ServerRequest $request, string $id): ResponseInterface
@@ -130,6 +132,39 @@ final readonly class SisGradebookController
                 new EntityId($student),
                 new EntityId($id),
                 FormInput::from($request)->optionalText("cursor", 16384),
+            ),
+        );
+    }
+    public function reviewCompletion(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !array_key_exists("completed_on", $body)) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "completed_on",
+                    "message" => "Enter an actual completion date or explicitly clear the date.",
+                ],
+            ]);
+        }
+        return new JsonResponse(
+            $this->completion->review(
+                new EntityId($student),
+                new EntityId($id),
+                $f->id("enrollment_id"),
+                $f->optionalText("completed_on", 10),
+                $f->integer("version", 0),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+    public function commitCompletion(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->completion->commit(
+                new EntityId($student),
+                new EntityId($id),
+                FormInput::from($request)->text("review_token", 16384),
             ),
         );
     }

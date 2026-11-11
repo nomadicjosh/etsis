@@ -251,7 +251,16 @@ window.createWorkspaceTeaching = function (ui) {
         body.append(
             button("Back to record", back, "btn-link"),
             node("p", {}, `Current grade: ${choices.current_grade_code || "Not graded"}`),
+            node("p", {}, `Actual completion date: ${choices.completed_on || "Unknown"}`),
         );
+        if (choices.posted && choices.can_amend)
+            body.append(
+                button("Review actual completion date", () =>
+                    completionDate(sectionRow, student, choices, () =>
+                        recordFinalGrade(sectionRow, student, back, assignment),
+                    ),
+                ),
+            );
         if (choices.posted && !choices.can_amend) {
             body.append(
                 node(
@@ -349,6 +358,76 @@ window.createWorkspaceTeaching = function (ui) {
             }, reviewButton);
         });
     }
+    async function completionDate(sectionRow, student, choices, back) {
+        const body = openDrawer("Actual course completion date", "REVIEWED ACADEMIC CORRECTION");
+        body.append(
+            node(
+                "p",
+                {},
+                "Record when this attempt actually completed, including a non-passing attempt. This is separate from instructional end dates, grade posting and correction dates. Leave the date blank only to explicitly mark it unknown.",
+            ),
+            node("p", {}, `Current completion date: ${choices.completed_on || "Unknown"}`),
+            button("Back to grade record", back, "btn-link"),
+        );
+        const descriptors = [
+            ["completed_on", "Actual completion date (blank marks unknown)", "date", "", false],
+            ["reason", "Reason for recording or correcting this date", "textarea", "", true],
+        ];
+        const form = await buildForm(descriptors, { completed_on: choices.completed_on || "" });
+        form.elements.completed_on.max = choices.effective_on_default;
+        form.elements.reason.maxLength = 1000;
+        body.append(form);
+        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review completion date");
+        form.append(submit);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            if (!form.reportValidity()) return;
+            task(async () => {
+                const values = formData(form, descriptors);
+                const base = `/sis/sections/${sectionRow.id}/students/${student.student_id}/completion-date/`;
+                const review = await request(`${base}review/`, "POST", {
+                    enrollment_id: choices.enrollment_id,
+                    version: choices.current_version,
+                    completed_on: values.completed_on || null,
+                    reason: values.reason,
+                });
+                const confirmation = openDrawer(
+                    "Confirm completion date",
+                    "PRESERVE THE ORIGINAL ACADEMIC FACTS",
+                );
+                confirmation.append(
+                    node(
+                        "p",
+                        {},
+                        `${review.previous_completed_on || "Unknown"} → ${review.completed_on || "Unknown"}`,
+                    ),
+                    node("p", {}, review.reason),
+                    node(
+                        "p",
+                        {},
+                        "This records a reasoned academic decision. Grades, earned credits and charges stay as recorded. The retained repeat policy may change GPA ordering when it uses actual completion dates.",
+                    ),
+                    button(
+                        "Revise completion date",
+                        () =>
+                            openDrawer(
+                                "Actual course completion date",
+                                "REVIEWED ACADEMIC CORRECTION",
+                            ).append(form),
+                        "btn-link",
+                    ),
+                    button(
+                        "Confirm completion date",
+                        async () => {
+                            await request(`${base}commit/`, "POST", { review_token: review.review_token });
+                            await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, submit);
+        });
+    }
     async function gradeHistory(sectionRow, student, back) {
         const body = openDrawer("Grade history", "ACADEMIC RECORD");
         body.append(button("Back to record", back, "btn-link"));
@@ -375,15 +454,19 @@ window.createWorkspaceTeaching = function (ui) {
                         : null,
                     page.items.length
                         ? grid(
-                              ["Decision", "Grade", "Effective", "Recorded"],
+                              ["Decision", "Grade", "Completion date change", "Effective", "Recorded"],
                               page.items.map((item) => [
                                   {
                                       registration: "Registration accepted",
                                       observed_existing: "Existing facts observed",
                                       grade_decided: "Grade decision",
+                                      completion_recorded: "Actual completion date recorded",
                                       dropped: "Course dropped",
                                   }[item.action] || "Academic decision",
                                   item.grade_code || "—",
+                                  item.action === "completion_recorded"
+                                      ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
+                                      : "—",
                                   item.effective_at,
                                   item.recorded_at,
                               ]),

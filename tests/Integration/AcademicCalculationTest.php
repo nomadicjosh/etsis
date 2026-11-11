@@ -513,6 +513,37 @@ final class AcademicCalculationTest extends TestCase
         self::assertContains(["component" => "gpa", "code" => "chronology_unknown"], $result["issues"]);
     }
 
+    public function testActualCompletionCorrectionsDriveRetainedOrderingWithoutUsingGradePostingTime(): void
+    {
+        $f = $this->institution("latest_eligible", "completion_date");
+        [$first] = $this->datedOffering($f, "2026-08-24", "2026-09-30");
+        [$second] = $this->datedOffering($f, "2026-10-01", "2026-12-18");
+        [, $oldEnrollment, , $grades] = $this->work($f, "A", $first);
+        [, $newEnrollment] = $this->work($f, "B", $second);
+        $s = $f->f->sis;
+        $s->clock->time = new \DateTimeImmutable("2027-01-10T10:00:00-07:00");
+        $completion = $s->academicCompletions();
+        foreach ([[$first, $oldEnrollment, "2026-11-20"], [$second, $newEnrollment, "2026-12-20"]] as [$section, $enrollment, $date]) {
+            $review = $completion->review($f->student, $section->id, $enrollment, $date, 1, "Fictional confirmed actual completion.");
+            $completion->commit($f->student, $section->id, $review["review_token"]);
+        }
+        $calculation = $this->service($f);
+        $original = $calculation->preview($f->student, $f->assignment);
+        self::assertSame(3000, $original["totals"]["gpa_milli"]);
+        $grade = $s->academicCredits()->review($f->student, $first->id, $oldEnrollment, new EntityId($grades["F"]), 2, reason: "Fictional later grade correction.");
+        $s->academicCredits()->commit($f->student, $first->id, $grade["review_token"]);
+        self::assertSame(3000, $calculation->preview($f->student, $f->assignment)["totals"]["gpa_milli"]);
+        $changed = $completion->review($f->student, $first->id, $oldEnrollment, "2027-01-02", 3, "Fictional source completion correction.");
+        $completion->commit($f->student, $first->id, $changed["review_token"]);
+        $after = $calculation->preview($f->student, $f->assignment);
+        self::assertSame(0, $after["totals"]["gpa_milli"]);
+        self::assertSame(3000, $after["totals"]["earned_milli"]);
+        self::assertSame(3000, $original["totals"]["gpa_milli"]);
+        $clear = $completion->review($f->student, $first->id, $oldEnrollment, null, 4, "Fictional completion evidence withdrawn.");
+        $completion->commit($f->student, $first->id, $clear["review_token"]);
+        self::assertFalse($calculation->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
+    }
+
     public function testNewLatestPublicationRequiresAnOrderingChoiceWithoutChangingEarlierRecordedFacts(): void
     {
         $f = new StudentRequirementsFixture();

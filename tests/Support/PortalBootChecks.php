@@ -1491,6 +1491,30 @@ if (
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+$completionBase = "/sis/sections/" . $gradingSection->id->value . "/students/" . $gradingStudent->id->value . "/completion-date/";
+$completionData = ["enrollment_id" => $gradingEnrollment->id->value, "version" => 2, "completed_on" => "2026-08-09", "reason" => "Fictional verified completion date."];
+$completionNoCsrf = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $completionBase . "review/", "POST");
+if ($app->router->match($completionNoCsrf->withParsedBody($completionData))->getStatusCode() !== 403) {
+    throw new RuntimeException("Completion-date review bypassed CSRF.");
+}
+$completionReviewResponse = $teachingPost($completionBase . "review/", $completionData);
+$completionReview = json_decode((string) $completionReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($completionReviewResponse->getStatusCode() !== 200 || !isset($completionReview["review_token"]) ||
+    !str_contains($completionReviewResponse->getHeaderLine("Cache-Control"), "no-store")) {
+    throw new RuntimeException("Completion-date review failed its real provider/privacy boundary.");
+}
+$completionCommit = ["review_token" => $completionReview["review_token"]];
+if ($teachingPost($completionBase . "commit/", $completionCommit)->getStatusCode() !== 200 ||
+    $teachingPost($completionBase . "commit/", $completionCommit)->getStatusCode() !== 200) {
+    throw new RuntimeException("Completion-date confirmation or original retry failed.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:gradebook:manage", "sis:student:read"];
+if ($teachingPost($completionBase . "commit/", $completionCommit)->getStatusCode() !== 403) {
+    throw new RuntimeException("Ordinary faculty confirmed a registrar completion-date decision.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $removedGradeApi = $teachingPost("/sis/grade-definitions/", [
     "code" => "UNSAFE",
     "points_milli" => 4000,

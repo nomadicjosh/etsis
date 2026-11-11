@@ -69,6 +69,18 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.gradebook.choices");
     $router
+        ->map(["POST"], "/sis/sections/{id}/students/{student}/completion-date/review/", [
+            SisGradebookController::class,
+            "reviewCompletion",
+        ])
+        ->name("sis.gradebook.completion.review");
+    $router
+        ->map(["POST"], "/sis/sections/{id}/students/{student}/completion-date/commit/", [
+            SisGradebookController::class,
+            "commitCompletion",
+        ])
+        ->name("sis.gradebook.completion.commit");
+    $router
         ->map(["GET"], "/sis/programs/{program}/grading-scale/", [
             \Application\Http\Controller\SisGradingScaleController::class,
             "view",

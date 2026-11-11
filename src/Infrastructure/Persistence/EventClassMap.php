@@ -49,6 +49,7 @@ final class EventClassMap
             \Domain\Transfer\Event\TransferCreditWasChanged::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished::class,
             \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
+            \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class,
             \Domain\Gradebook\Event\GradingScaleWasChanged::class,
             \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class,

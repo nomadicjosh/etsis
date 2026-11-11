@@ -9,6 +9,7 @@ use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished;
 use Domain\AcademicRecord\Event\FinalGradeWasDecided;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
+use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 
 final class AcademicCredit extends EventSourcedAggregate
@@ -23,6 +24,7 @@ final class AcademicCredit extends EventSourcedAggregate
     private ?string $decision = null;
     private ?string $provenance = null;
     private ?string $sectionVersion = null;
+    private ?string $completedOn = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -32,6 +34,7 @@ final class AcademicCredit extends EventSourcedAggregate
                     InstitutionalCreditWasEstablished::class,
                     FinalGradeWasDecided::class,
                     InstitutionalCreditWasDropped::class,
+                    AcademicCompletionWasRecorded::class,
                 ],
                 true,
             ) ||
@@ -50,10 +53,10 @@ final class AcademicCredit extends EventSourcedAggregate
         if ($this->credit !== null || $p["credit"]["id"] !== (string) $this->aggregateId()) {
             throw new CorruptHistoryException();
         }
-        $this->sectionVersion = $event->metaParam('section_version_id', null);
+        $this->sectionVersion = $event->metaParam("section_version_id", null);
         if ($this->sectionVersion !== null) {
             new \Domain\Shared\ValueObject\EntityId($this->sectionVersion);
-            if ($p['provenance'] !== 'registration') {
+            if ($p["provenance"] !== "registration") {
                 throw new CorruptHistoryException();
             }
         }
@@ -81,6 +84,24 @@ final class AcademicCredit extends EventSourcedAggregate
         ++$this->credit["version"];
         new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
         $this->decision = $p["decision_id"];
+    }
+    public function whenAcademicCompletionWasRecorded(AcademicCompletionWasRecorded $event): void
+    {
+        $p = $event->payload();
+        $this->assertNext($p);
+        if (
+            $this->credit === null ||
+            !in_array($this->credit["status"], ["A", "N"], true) ||
+            $this->grade === null ||
+            $this->credit["grade_id"] === null ||
+            $p["previous_completed_on"] !== $this->completedOn
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->completedOn = $p["completed_on"];
+        ++$this->credit["version"];
+        $this->decision = $p["decision_id"];
+        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
     }
     public function whenInstitutionalCreditWasDropped(InstitutionalCreditWasDropped $event): void
     {
@@ -148,5 +169,9 @@ final class AcademicCredit extends EventSourcedAggregate
     public function sectionVersion(): ?string
     {
         return $this->sectionVersion;
+    }
+    public function completedOn(): ?string
+    {
+        return $this->completedOn;
     }
 }

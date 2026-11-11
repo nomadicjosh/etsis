@@ -200,6 +200,11 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
                 "fields" => ["decision_id", "previous_decision_id", "grade", "assignment_id"],
             ],
+            \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class => [
+                "type" => "academic_credit",
+                "root" => \Domain\AcademicRecord\AcademicCredit::class,
+                "fields" => ["decision_id", "previous_decision_id", "previous_completed_on", "completed_on"],
+            ],
             \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class => [
                 "type" => "academic_credit",
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
