@@ -153,3 +153,5 @@ The student program now has a **Degree requirements** action for inspecting its 
 ## Inspecting student work against requirements
 
 After assigning a published degree to a student pursuit, use **Degree requirements → Academic work → Check requirement matches** for [per-course candidate explanations](student-academic-work.md#checking-requirement-matches). The view uses retained course/grading references and applicable exceptions. It identifies possible uses without allocating courses, calculating GPA or deciding degree completion.
+
+The [structural allocation engine](degree-audit-allocation.md) now handles normalized eligible courses, named/quantity constraints and the retained sharing choice. It remains separate from the student-screen candidate preview until complete verified inputs and repeat/GPA evaluation are integrated.
