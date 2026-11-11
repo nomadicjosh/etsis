@@ -309,7 +309,7 @@ final class AcademicWorkTest extends TestCase
             public function __construct(private SisFixture $f)
             {
             }
-            public function page(EntityId $student, ?EntityId $after): array
+            public function page(EntityId $student, ?EntityId $after = null): array
             {
                 $rows = new SqlAcademicWorkRepository($this->f->sql)->page($student, $after);
                 $this->f->access->grants = [];

@@ -13,7 +13,7 @@ final readonly class SqlReplacementCourseRepository implements ReplacementCourse
     public function __construct(private SqlRecords $sql)
     {
     }
-    public function page(string $search, ?EntityId $after): array
+    public function page(string $search, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $where = [];

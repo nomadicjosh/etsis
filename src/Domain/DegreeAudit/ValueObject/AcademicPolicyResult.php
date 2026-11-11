@@ -10,18 +10,18 @@ final readonly class AcademicPolicyResult
     /** @param list<array<string,mixed>> $creditPools Equal-credit alternatives are retained without guessing a winner.
      * @param list<array<string,mixed>> $gpaGroups Numerically equivalent alternatives contribute only once.
      * @param list<array{id:string,credit:string,gpa:string}> $dispositions
-     * @param list<array{component:string,code:string,course_id:?string,work_ids:list<string>}> $issues
+     * @param list<array{component:string,code:string,course_id:null|string,work_ids:list<string>}> $issues
      */
     public function __construct(
         public AuditCalculationPolicy $policy,
-        public ?int $earnedMilli,
-        public ?int $residentMinimumMilli,
-        public ?int $residentMaximumMilli,
-        public ?GpaTotals $gpa,
         public array $creditPools,
         public array $gpaGroups,
         public array $dispositions,
         public array $issues,
+        public ?int $earnedMilli = null,
+        public ?int $residentMinimumMilli = null,
+        public ?int $residentMaximumMilli = null,
+        public ?GpaTotals $gpa = null,
     ) {
     }
 }

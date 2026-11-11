@@ -8,6 +8,7 @@ use Domain\DegreeAudit\Repository\CourseGroupRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
+use JsonException;
 use PDOException;
 
 final readonly class SqlCourseGroupRepository implements CourseGroupRepository
@@ -15,6 +16,9 @@ final readonly class SqlCourseGroupRepository implements CourseGroupRepository
     public function __construct(private SqlRecords $sql)
     {
     }
+    /**
+     * @throws JsonException
+     */
     public function get(EntityId $id): array
     {
         $r = $this->sql->one("sis_course_groups", ["id" => $id->value]);
@@ -28,7 +32,7 @@ final readonly class SqlCourseGroupRepository implements CourseGroupRepository
     {
         $this->sql->lock("sis_course_groups", $id->value, "id");
     }
-    public function page(string $search, ?EntityId $after, bool $publishedOnly): array
+    public function page(string $search, bool $publishedOnly, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $where = [];
@@ -68,6 +72,9 @@ final readonly class SqlCourseGroupRepository implements CourseGroupRepository
             51,
         );
     }
+    /**
+     * @throws JsonException
+     */
     public function create(EntityId $id, array $definition): void
     {
         try {
@@ -90,6 +97,9 @@ final readonly class SqlCourseGroupRepository implements CourseGroupRepository
             throw $error;
         }
     }
+    /**
+     * @throws JsonException
+     */
     public function save(EntityId $id, int $revision, array $definition): void
     {
         if (

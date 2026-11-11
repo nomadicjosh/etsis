@@ -11,11 +11,11 @@ use InvalidArgumentException;
 final readonly class AuditCalculationPolicy
 {
     public function __construct(
-        public ?RepeatCreditPolicy $credit,
-        public ?RepeatGpaPolicy $gpa,
-        public ?TransferGpaPolicy $transferGpa,
-        public ?EntityId $gradeScaleVersion,
-        public ?RepeatAttemptOrder $attemptOrder,
+        public ?RepeatCreditPolicy $credit = null,
+        public ?RepeatGpaPolicy $gpa = null,
+        public ?TransferGpaPolicy $transferGpa = null,
+        public ?EntityId $gradeScaleVersion = null,
+        public ?RepeatAttemptOrder $attemptOrder = null,
     ) {
     }
 
@@ -24,7 +24,7 @@ final readonly class AuditCalculationPolicy
         RepeatCreditPolicy $credit,
         RepeatGpaPolicy $gpa,
         TransferGpaPolicy $transferGpa,
-        ?EntityId $gradeScaleVersion,
+        ?EntityId $gradeScaleVersion = null,
         RepeatAttemptOrder $attemptOrder = RepeatAttemptOrder::AcademicPeriod,
     ): self {
         return new self($credit, $gpa, $transferGpa, $gradeScaleVersion, $attemptOrder);

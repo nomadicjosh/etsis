@@ -8,6 +8,7 @@ use Domain\DegreeAudit\Repository\RequirementsRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
+use JsonException;
 
 final readonly class SqlRequirementsRepository implements RequirementsRepository
 {
@@ -35,6 +36,9 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
     {
         $this->sql->lock("sis_degree_audit_templates", $id->value, "id");
     }
+    /**
+     * @throws JsonException
+     */
     public function find(EntityId $program, EntityId $year): ?array
     {
         $r =
@@ -45,11 +49,14 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
         )[0] ?? null;
         return $r === null ? null : $this->decode($r);
     }
+    /**
+     * @throws JsonException
+     */
     public function get(EntityId $id): array
     {
         return $this->decode($this->sql->one("sis_degree_audit_templates", ["id" => $id->value]));
     }
-    public function page(EntityId $program, ?EntityId $after): array
+    public function page(EntityId $program, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $columns = array_map(static fn(string $column): string => "t." . $q($column), [
@@ -92,6 +99,9 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
         unset($row);
         return $rows;
     }
+    /**
+     * @throws JsonException
+     */
     public function create(EntityId $id, EntityId $program, EntityId $year, array $definition): void
     {
         $this->sql->insert("sis_degree_audit_templates", [
@@ -124,8 +134,10 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
             ["id" => $id->value],
         );
     }
-    /** @param array<string, mixed> $row
+    /**
+     * @param array<string, mixed> $row
      * @return array<string, mixed>
+     * @throws JsonException
      */
     private function decode(array $row): array
     {

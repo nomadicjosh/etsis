@@ -10,5 +10,5 @@ use Domain\Shared\ValueObject\EntityId;
 interface ReplacementCourseRepository
 {
     /** @return list<array<string, mixed>> */
-    public function page(string $search, ?EntityId $after): array;
+    public function page(string $search, ?EntityId $after = null): array;
 }

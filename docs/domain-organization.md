@@ -34,3 +34,9 @@ The protected journal port and immutable context/page DTOs live in `Domain/Share
 During alpha, evolve one current domain model rather than introducing numbered wrapper classes for each field addition. CourseDefinition owns course facts, CourseText, an optional SubjectSnapshot and CourseClassifications; PublishedCourseDefinition adds publication identity. Publication revisions remain historical business facts. Necessary schema changes and migrations are authorized, and external compatibility is stabilized during release-candidate planning.
 
 `ProgramDefinition` and `ProgramClassifications` describe the working/published program facts. `ProgramPublicationService` coordinates authorized draft saves and academic-year publication through domain ports; `PublishedProgramReader` verifies the year-specific definition inside authorized entry commands. SQL repositories maintain the catalog/reference projections, and the HTTP controller parses inputs without owning publication rules. Degree-audit requirement composition remains a separate domain workflow.
+
+## Nullable and optional parameters
+
+Use an explicit `= null` for nullable inputs that callers may omit. A nullable type alone accepts an explicit null but still requires an argument; omission raises `ArgumentCountError`, a subtype of `TypeError`. Put optional parameters after required parameters, and use named arguments when reordering DTO constructors. An optional calculation value stays unknown when omitted; do not turn it into zero or today's policy.
+
+Required nullable inputs still have a purpose. For example, an expected projection version or owner identity can require the caller to deliberately pass a value or null. Preserve those concurrency and authorization contracts rather than making every nullable command input optional. The read-cursor and calculation DTO contracts in `Domain/DegreeAudit` explicitly allow appropriate omissions.

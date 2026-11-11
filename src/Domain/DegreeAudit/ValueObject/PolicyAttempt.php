@@ -22,7 +22,7 @@ final readonly class PolicyAttempt
         public int $earnedMilli,
         public int $qualityMilli,
         public bool $gradeRecorded,
-        public ?GradeSnapshot $grade,
+        public ?GradeSnapshot $grade = null,
         public ?string $completedOn = null,
         public ?string $academicOn = null,
     ) {

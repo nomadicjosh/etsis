@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\ValueObject;
 
+use DateMalformedStringException;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
@@ -18,7 +19,11 @@ final readonly class PursuitStart
             throw new InvalidArgumentException("Provide a valid program pursuit start date.");
         }
     }
-    public function anticipatedCompletion(?int $months): ?string
+
+    /**
+     * @throws DateMalformedStringException
+     */
+    public function anticipatedCompletion(?int $months = null): ?string
     {
         if ($months === null) {
             return null;

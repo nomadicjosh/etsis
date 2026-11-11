@@ -14,7 +14,7 @@ final readonly class SqlAcademicWorkRepository implements AcademicWorkRepository
     {
     }
 
-    public function page(EntityId $student, ?EntityId $after): array
+    public function page(EntityId $student, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $parameters = [$student->value];

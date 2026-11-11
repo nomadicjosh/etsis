@@ -180,15 +180,15 @@ final readonly class AcademicPolicyEvaluator
         }
         unset($d);
         return new AcademicPolicyResult(
-            $policy,
-            $creditKnown ? $earned : null,
-            $creditKnown ? $residentMin : null,
-            $creditKnown ? $residentMax : null,
-            $gpaKnown ? new GpaTotals($quality, $gpaCredits) : null,
-            $creditKnown ? $creditPools : [],
-            $gpaKnown ? $gpaGroups : [],
-            array_values($dispositions),
-            $issues,
+            policy: $policy,
+            creditPools: $creditKnown ? $creditPools : [],
+            gpaGroups: $gpaKnown ? $gpaGroups : [],
+            dispositions: array_values($dispositions),
+            issues: $issues,
+            earnedMilli: $creditKnown ? $earned : null,
+            residentMinimumMilli: $creditKnown ? $residentMin : null,
+            residentMaximumMilli: $creditKnown ? $residentMax : null,
+            gpa: $gpaKnown ? new GpaTotals($quality, $gpaCredits) : null,
         );
     }
 

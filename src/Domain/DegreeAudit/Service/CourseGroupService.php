@@ -51,7 +51,7 @@ final readonly class CourseGroupService
         if (mb_strlen($search) > 80 || !mb_check_encoding($search, "UTF-8")) {
             throw new InvalidArgumentException("Use a bounded group search.");
         }
-        $rows = $this->groups->page(trim($search), $after, $publishedOnly);
+        $rows = $this->groups->page(search: trim($search), publishedOnly: $publishedOnly, after: $after);
         return [
             "items" => array_slice($rows, 0, 50),
             "grade_point_scale" => $this->gradePointScale(),

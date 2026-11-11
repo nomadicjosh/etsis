@@ -17,7 +17,7 @@ interface RequirementsRepository
     /** @return array<string, mixed> */
     public function get(EntityId $id): array;
     /** @return list<array<string, mixed>> */
-    public function page(EntityId $program, ?EntityId $after): array;
+    public function page(EntityId $program, ?EntityId $after = null): array;
     /** @param array<string, mixed> $definition */
     public function create(EntityId $id, EntityId $program, EntityId $year, array $definition): void;
     /** @param array<string, mixed> $definition */

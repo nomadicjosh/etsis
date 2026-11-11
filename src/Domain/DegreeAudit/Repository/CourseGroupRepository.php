@@ -12,7 +12,7 @@ interface CourseGroupRepository
     public function get(EntityId $id): array;
     public function lock(EntityId $id): void;
     /** @return list<array<string, mixed>> */
-    public function page(string $search, ?EntityId $after, bool $publishedOnly): array;
+    public function page(string $search, bool $publishedOnly, ?EntityId $after = null): array;
     /** @param array<string, mixed> $definition */
     public function create(EntityId $id, array $definition): void;
     /** @param array<string, mixed> $definition */
