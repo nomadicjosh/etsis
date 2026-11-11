@@ -185,6 +185,11 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Transfer\TransferCredit::class,
                 "fields" => ["decision_id", "provenance", "source", "credit", "grade"],
             ],
+            \Domain\Transfer\Event\TransferAcademicPeriodWasRecorded::class => [
+                "type" => "transfer_credit",
+                "root" => \Domain\Transfer\TransferCredit::class,
+                "fields" => ["decision_id", "previous_decision_id", "previous_academic_on", "academic_on"],
+            ],
             \Domain\Transfer\Event\TransferCreditWasChanged::class => [
                 "type" => "transfer_credit",
                 "root" => \Domain\Transfer\TransferCredit::class,

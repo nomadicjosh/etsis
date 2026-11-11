@@ -115,6 +115,22 @@ test("rejected calculations preserve academic work and announce a safe error", a
     expect(f.errors).toEqual([]);
 });
 
+test("transfer contributions distinguish sending periods from institutional instructional starts", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        retainedOrdering: "academic_period",
+        transferOrdering: true,
+    });
+    await page.getByRole("button", { name: "Credits & GPA", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio).toContainText("Retained source period start: 2026-08-24");
+    await expect(studio).toContainText("Retained instructional start: 2026-08-24");
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
 for (const ordering of ["academic_period", "completion_date"]) {
     test(`contributions explain the retained ${ordering} date`, async ({ page }) => {
         const f = await fixture(page, { assigned: true, retainedOrdering: ordering });

@@ -1,5 +1,7 @@
 # Transfer credit and retained award decisions
 
+The separate [source academic-period review](transfer-academic-periods.md) now records or corrects the sending institution's instructional start in this same transfer-credit stream. It preserves earlier period facts without changing awarded credits, grade, completion date or local posting term. Source period history is curated and paged separately from credit/grade correction receipts. The selected degree's academic-period repeat policy can use this verified source evidence; unknown periods are never filled from today's calendar.
+
 New transfer awards, reasoned credit/grade amendments, voids and reinstatements now use the existing **`sis_history_events`** journal. `TransferCredit` owns one stream per award ULID, retaining the linked credit ULID throughout its lifetime. Current academic-credit and award rows are projections of recorded decisions. This extends [institutional credit history](academic-credit-history.md); it does not introduce another event store.
 
 ## Registrar workflow

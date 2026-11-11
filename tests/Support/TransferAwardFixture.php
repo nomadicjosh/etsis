@@ -32,10 +32,12 @@ final class TransferAwardFixture
         public MessageCipher $cipher,
         ?EntityId $student = null,
         bool $legacy = false,
+        ?EntityId $course = null,
+        ?DateTimeImmutable $completedOn = null,
     ) {
         $f = $sis;
         $this->student = $student ?? $f->student()->id;
-        $this->course = $f->section(20, 0)->courseId;
+        $this->course = $course ?? $f->section(20, 0)->courseId;
         $grades = new SqlGradebookRepository($f->sql);
         $cases1 = [["TR", 0, true, false], ["B", 3000, true, true], ["F", 0, false, true]];
         foreach ($cases1 as [$code, $points, $passes, $gpa]) {
@@ -100,7 +102,7 @@ final class TransferAwardFixture
                 $this->equivalency->id,
                 $institution,
                 $f->term,
-                new DateTimeImmutable("2026-05-01"),
+                $completedOn ?? new DateTimeImmutable("2026-05-01"),
                 3,
                 TransferRevision::of("equivalencies", $catalog->get("equivalencies", $this->equivalency->id)),
             );
@@ -123,6 +125,19 @@ final class TransferAwardFixture
             $this->cipher,
             $f->clock,
             $f->transferCredits(),
+        );
+    }
+    public function periods(?AuditTrail $audit = null): \Domain\Transfer\Service\TransferPeriodService
+    {
+        $f = $this->sis;
+        return new \Domain\Transfer\Service\TransferPeriodService(
+            $f->transferCredits(), new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository($f->sql),
+            $this->repository, $f->registration,
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $f->sql, $f->transactions, $f->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($f->connection->queryBuilder())),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            ), $f->transactions, $f->access, $this->cipher, $f->clock, $audit ?? $f->audit,
         );
     }
 }

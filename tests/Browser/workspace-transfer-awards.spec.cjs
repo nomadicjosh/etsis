@@ -14,6 +14,10 @@ async function fixture(page, options = {}) {
         creditId = id(47);
     let serial = 70,
         interrupted = false;
+    let periodReview;
+    let periodCommitted = false,
+        periodInterrupted = false;
+    const periodDecisions = [];
     const value = {
         id: award,
         student_id: student,
@@ -28,6 +32,8 @@ async function fixture(page, options = {}) {
         term_code: "26/FA",
         effective_on_default: "2026-08-10",
         earlier_history_unknown: !!options.legacy,
+        history_recorded: !options.legacy && !options.untracked,
+        academic_on: options.periodKnown ? "2026-01-12" : null,
         grade_code: "TR",
         counts_gpa: false,
         credit: {
@@ -110,7 +116,49 @@ async function fixture(page, options = {}) {
                 next_after: null,
             };
         else if (path === endpoint) result = structuredClone(value);
-        else if (path === endpoint + "preview/") {
+        else if (path === endpoint + "source-period/review/") {
+            if (options.rejectPeriod) {
+                status = 409;
+                result = { error: "The transfer award changed. Reload before reviewing its period." };
+            } else {
+                periodReview = {
+                    previous_academic_on: value.academic_on,
+                    academic_on: data.academic_on,
+                    reason: data.reason,
+                    review_token: "fictional-source-period-review",
+                };
+                result = periodReview;
+            }
+        } else if (path === endpoint + "source-period/commit/") {
+            if (!periodCommitted) {
+                periodDecisions.push({
+                    previous_academic_on: periodReview.previous_academic_on,
+                    academic_on: periodReview.academic_on,
+                    action: "period_recorded",
+                    effective_at: periodReview.academic_on || "2026-08-10",
+                    recorded_at: "2026-08-10",
+                });
+                value.academic_on = periodReview.academic_on;
+                value.credit.version++;
+                periodCommitted = true;
+            }
+            result = { operation_id: id(90), first_version: 2, last_version: 2, event_ids: [id(91)] };
+            if (options.interruptPeriod && !periodInterrupted) {
+                periodInterrupted = true;
+                status = 500;
+                result = { error: "The confirmation response was interrupted. Try confirming again." };
+            }
+        } else if (path === endpoint + "source-period/history/") {
+            result = {
+                items: options.untracked
+                    ? []
+                    : data.cursor
+                      ? periodDecisions
+                      : [{ action: "award", effective_at: "2026-05-01", recorded_at: "2026-08-01" }],
+                next_cursor: !data.cursor && periodDecisions.length ? "fictional-frozen-source-cursor" : null,
+                earlier_history_unknown: !!options.untracked,
+            };
+        } else if (path === endpoint + "preview/") {
             const before = { ...value.credit, grade_code: value.grade_code, counts_gpa: value.counts_gpa };
             const after = {
                 ...before,
@@ -323,5 +371,142 @@ test("earlier saved receipts show their limited provenance without an invented e
     );
     await expect(page.locator("#drawer-body")).toContainText("Earlier fictional receipt.");
     expect(f.calls.some((c) => c.path.endsWith("/confirm/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("registrar reviews a source period independently from completion, credits and the posting term", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
+    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
+    const date = page.getByLabel("Sending institution's period start (blank marks unknown)", { exact: true });
+    await expect(date).toHaveJSProperty("required", false);
+    await expect(date).toHaveAttribute("max", "2026-05-01");
+    await date.fill("2026-01-12");
+    const reason = page.getByRole("textbox", { name: "Reason and source evidence", exact: true });
+    await expect(reason).toHaveJSProperty("required", true);
+    await reason.fill("Fictional <b>source</b> transcript verification.");
+    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Unknown → 2026-01-12");
+    await expect(page.locator("#drawer-body b")).toHaveCount(0);
+    expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
+    await page.getByRole("button", { name: "Revise source period", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Reason and source evidence", exact: true })).toHaveValue(
+        "Fictional <b>source</b> transcript verification.",
+    );
+    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const audit = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(audit.violations).toEqual([]);
+    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText(
+        "Sending institution's period start: 2026-01-12",
+    );
+    await expect(page.locator("#drawer-body")).toContainText("Completed 2026-05-01 · Posting term 26/FA");
+    const review = f.calls.find((c) => c.path.endsWith("source-period/review/"));
+    expect(review).toMatchObject({
+        data: {
+            version: 0,
+            academic_on: "2026-01-12",
+            reason: "Fictional <b>source</b> transcript verification.",
+        },
+        csrf: "fictional-test-token",
+    });
+    expect(f.calls.find((c) => c.path.endsWith("source-period/commit/"))).toMatchObject({
+        data: { review_token: "fictional-source-period-review" },
+        csrf: "fictional-test-token",
+    });
+    expect(f.calls.some((c) => c.path === f.endpoint + "confirm/")).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("clearing source period is explicit and curated history pages preserve the previous date", async ({
+    page,
+}) => {
+    const f = await fixture(page, { periodKnown: true });
+    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
+    await page
+        .getByLabel("Sending institution's period start (blank marks unknown)", { exact: true })
+        .fill("");
+    await page
+        .getByRole("textbox", { name: "Reason and source evidence", exact: true })
+        .fill("Fictional source evidence withdrawn.");
+    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
+    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
+    await page.getByRole("button", { name: "Source period history", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Award established");
+    await page.getByRole("button", { name: "Next source history page", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
+    await expect(page.locator("#drawer-body")).not.toContainText("Fictional source evidence withdrawn");
+    await page.getByRole("button", { name: "Previous source history page", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Award established");
+    expect(f.calls.find((c) => c.path.endsWith("source-period/review/"))?.data.academic_on).toBeNull();
+    expect(
+        f.calls.some(
+            (c) =>
+                c.path.endsWith("source-period/history/") &&
+                c.data.cursor === "fictional-frozen-source-cursor",
+        ),
+    ).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test("untracked source history cannot invent a sending period", async ({ page }) => {
+    const f = await fixture(page, { untracked: true });
+    await expect(
+        page.getByRole("button", { name: "Review source academic period", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Source period history", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Earlier source history is unknown");
+    await expect(page.locator("#drawer-body")).toContainText("No recorded source decisions on this page");
+    expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("a stale source review keeps entered fields and never confirms the date", async ({ page }) => {
+    const f = await fixture(page, { rejectPeriod: true });
+    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
+    await page
+        .getByLabel("Sending institution's period start (blank marks unknown)", { exact: true })
+        .fill("2026-01-12");
+    await page
+        .getByRole("textbox", { name: "Reason and source evidence", exact: true })
+        .fill("Fictional concurrent source review.");
+    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await expect(page.locator("#drawer-error")).toContainText("The transfer award changed");
+    await expect(
+        page.getByLabel("Sending institution's period start (blank marks unknown)", { exact: true }),
+    ).toHaveValue("2026-01-12");
+    expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("an interrupted confirmation reuses the same reviewed source-period command", async ({ page }) => {
+    const f = await fixture(page, { interruptPeriod: true });
+    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
+    await page
+        .getByLabel("Sending institution's period start (blank marks unknown)", { exact: true })
+        .fill("2026-01-12");
+    await page
+        .getByRole("textbox", { name: "Reason and source evidence", exact: true })
+        .fill("Fictional reviewed source.");
+    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await expect(page.locator("#drawer-error")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText(
+        "Sending institution's period start: 2026-01-12",
+    );
+    const calls = f.calls.filter((c) => c.path.endsWith("source-period/commit/"));
+    expect(calls).toHaveLength(2);
+    expect(calls[0].data).toEqual(calls[1].data);
     expect(f.errors).toEqual([]);
 });

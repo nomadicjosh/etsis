@@ -92,6 +92,11 @@ final readonly class PolicyAttempt
         ) {
             self::invalid();
         }
+        $academicOn =
+        $retainedAcademicOn ?? ($work["credit_type"] === "transfer" ? ($work["academic_on"] ?? null) : null);
+        if ($academicOn !== null && !is_string($academicOn)) {
+            self::invalid();
+        }
         return new self(
             new EntityId($work["id"]),
             new EntityId($work["course_id"]),
@@ -103,7 +108,7 @@ final readonly class PolicyAttempt
             $work["grade_recorded"],
             $work["grade"] === null ? null : new GradeSnapshot($work["grade"]),
             $work["completed_on"],
-            $retainedAcademicOn,
+            $academicOn,
         );
     }
 

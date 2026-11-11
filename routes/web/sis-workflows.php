@@ -236,6 +236,18 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.transfer.award.history");
     $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/source-period/review/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "reviewPeriod",
+        ])->name("sis.transfer.period.review");
+    $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/source-period/commit/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "commitPeriod",
+        ])->name("sis.transfer.period.commit");
+    $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/source-period/history/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "periodHistory",
+        ])->name("sis.transfer.period.history");
+    $router
         ->map(["GET"], "/sis/students/{student}/transfer-awards/{award}/changes/{operation}/", [
             \Application\Http\Controller\SisTransferAwardController::class,
             "receipt",

@@ -2758,7 +2758,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         ? node(
                               "p",
                               {},
-                              `${data.policy.attempt_order === "academic_period" ? "Retained instructional start" : "Retained completion date"}: ${record.ordering_on}.`,
+                              `${data.policy.attempt_order === "academic_period" ? (record.credit_type === "transfer" ? "Retained source period start" : "Retained instructional start") : "Retained completion date"}: ${record.ordering_on}.`,
                           )
                         : null,
                     node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
@@ -2934,7 +2934,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node(
                         "p",
                         {},
-                        `Term: ${item.term_code || "Unknown"}${item.term_code ? (item.term_label_retained ? " (retained)" : " (current label)") : ""}${item.completed_on ? ` · Completed ${item.completed_on}` : ""}`,
+                        `Term: ${item.term_code || "Unknown"}${item.term_code ? (item.term_label_retained ? " (retained)" : " (current label)") : ""}${item.completed_on ? ` · Completed ${item.completed_on}` : ""}${item.credit_type === "transfer" && item.academic_on ? ` · Sending period began ${item.academic_on}` : ""}`,
                     ),
                     node(
                         "p",

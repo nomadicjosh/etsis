@@ -198,6 +198,7 @@ final readonly class TransferCreditLedger
             $record["counts_gpa"] = $display["counts_gpa"];
         }
         $record["retained_grade_id"] = $root->grade()["id"] ?? $record["credit"]["grade_id"];
+        $record["academic_on"] = $root->academicOn();
         $record["history_recorded"] = $known;
         $record["earlier_history_unknown"] = !$known || $root->provenance() === "observed_existing";
         $record["effective_on_default"] = $this->clock->now()->format("Y-m-d");
@@ -233,6 +234,7 @@ final readonly class TransferCreditLedger
             "history_version" => $root->playhead(),
             "section_version_id" => null,
             "completed_on" => $root->source()["completed_on"] ?? $row["completed_on"],
+            "academic_on" => $root->academicOn(),
             "retained_term_code" => $root->source()["term_code"] ?? null,
         ];
     }
@@ -366,6 +368,25 @@ final readonly class TransferCreditLedger
         } while ($cursor !== null);
         $this->verify($award, $root);
         return $items;
+    }
+    /** Internal command/read context; caller must authorize and hold the student lock.
+     * @return array{TransferCredit,array<string,mixed>}
+     */
+    public function periodRecord(EntityId $student, EntityId $award, HistoryReadBudget $budget): array
+    {
+        $row = $this->records->award($award);
+        if ($row["student_id"] !== $student->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException("The transfer award belongs to another student.");
+        }
+        $root = $this->load($award, $budget);
+        $credit = $root->credit() ?? $this->records->credit(new EntityId($row["credit_id"]));
+        if (
+            $credit["student_id"] !== $student->value || $credit["source_id"] !== $award->value ||
+            $credit["id"] !== $row["credit_id"] || $credit["term_id"] !== $row["term_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        return [$root, $credit];
     }
     private function load(EntityId $award, ?HistoryReadBudget $budget = null): TransferCredit
     {

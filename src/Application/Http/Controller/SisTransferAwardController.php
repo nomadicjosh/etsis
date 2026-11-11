@@ -14,8 +14,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisTransferAwardController
 {
-    public function __construct(private TransferAwardService $service)
-    {
+    public function __construct(
+        private TransferAwardService $service,
+        private \Domain\Transfer\Service\TransferPeriodService $periods,
+    ) {
     }
     public function show(string $student, string $award): ResponseInterface
     {
@@ -54,6 +56,48 @@ final readonly class SisTransferAwardController
     {
         return new JsonResponse(
             $this->service->receipt(new EntityId($student), new EntityId($award), new EntityId($operation)),
+        );
+    }
+    public function reviewPeriod(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !array_key_exists("academic_on", $body)) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "academic_on",
+                    "message" => "Enter the source period start or explicitly clear a known date.",
+                ],
+            ]);
+        }
+        return new JsonResponse(
+            $this->periods->review(
+                new EntityId($student),
+                new EntityId($award),
+                $f->optionalText("academic_on", 10),
+                $f->integer("version", 0),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+    public function commitPeriod(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->periods->commit(
+                new EntityId($student),
+                new EntityId($award),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+    public function periodHistory(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->periods->history(
+                new EntityId($student),
+                new EntityId($award),
+                FormInput::from($request)->optionalText("cursor", 16384),
+            ),
         );
     }
     private function change(ServerRequest $request): AwardChange

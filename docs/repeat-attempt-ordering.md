@@ -19,7 +19,7 @@ For example, a course taken in an August instructional period remains earlier th
 
 Only eligible GPA attempts compete: GPA-excluded transfers, voids, zero-credit attempts and grades from unknown/incompatible publications do not acquire a new ordering rule through this read. A sole eligible attempt needs no chronological comparison. Equal dates retain the calculation core's existing tie behavior: numerically equivalent contributions can remain alternatives for one contribution; different weights remain undetermined.
 
-Older unbound institutional work has no retained offering dates. Transfer awards retain actual source completion dates, but currently do not retain a separate source academic-period start date. The review leaves these gaps explicit. It never uses today's posting-term dates or treats transfer completion as academic-period chronology. A required missing date leaves GPA undetermined, while independent known earned credits remain available.
+Older unbound institutional work has no retained offering dates. Transfer awards retain actual source completion dates, and authorized registrars can now [record a separate sending-institution period start](transfer-academic-periods.md). Older missing period evidence stays unknown. The review leaves these gaps explicit. It never uses today's posting-term dates or treats transfer completion as academic-period chronology. A required missing date leaves GPA undetermined, while independent known earned credits remain available.
 
 ## Bounded historical reads
 
@@ -33,4 +33,4 @@ The composition's existing JSON policy object now accepts `repeat_attempt_order`
 
 A bounded, read-only inventory of the configured application database found one composition draft without this field and no degree-publication streams/events before this extension. No stored row or event was changed. The existing JSON columns and registered event format support the additive policy field; no table migration, numbered model wrapper or parallel event store was introduced.
 
-Full degree constraints, retained evaluation results and transfer academic-period evidence remain later stages. Institutional completion dates now have a separate reviewed workflow. This ordering integration changes current-work review, not standing, issued transcripts or graduation decisions.
+Full degree constraints, retained evaluation results and accepted-course publication/equivalence capture remain later stages. Sending-institution period starts now have a separate reviewed workflow. Institutional completion dates now have a separate reviewed workflow. This ordering integration changes current-work review, not standing, issued transcripts or graduation decisions.

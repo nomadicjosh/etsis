@@ -544,6 +544,42 @@ final class AcademicCalculationTest extends TestCase
         self::assertFalse($calculation->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
     }
 
+    public function testSendingPeriodEvidenceOrdersTransferRepeatsWithoutUsingLocalPostingOrCompletionDates(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $s = $f->f->sis;
+        $s->gradeScale($this->grades());
+        $f->f->definition["policies"]["transfer_overall_gpa"] = "include_eligible";
+        $this->publish($f, "latest_eligible", "academic_period");
+        $f->assign();
+        [$section] = $this->datedOffering($f, "2026-08-24", "2026-12-18");
+        $this->work($f, "A", $section);
+        $t = new TransferAwardFixture($s, $f->f->catalog->fixture->cipher, $f->student,
+            course: $section->courseId, completedOn: new \DateTimeImmutable("2026-12-31"));
+        $s->clock->time = new \DateTimeImmutable("2027-01-10T10:00:00-07:00");
+        $change = new \Domain\Transfer\ValueObject\AwardChange("amend", 3000, "B", "Fictional accepted GPA grade.");
+        $grade = $t->service()->preview($f->student, $t->award, $change);
+        $t->service()->confirm($f->student, $t->award, EntityId::generate(), $change, $grade["revision"]);
+        $calculation = $this->service($f);
+        self::assertFalse($calculation->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
+        $first = $t->periods()->review($f->student, $t->award, "2026-01-15", 1, "Fictional earlier sending period.");
+        $t->periods()->commit($f->student, $t->award, $first["review_token"]);
+        $before = $calculation->preview($f->student, $f->assignment);
+        self::assertSame(4000, $before["totals"]["gpa_milli"]);
+        $next = $t->periods()->review($f->student, $t->award, "2026-09-01", 2, "Fictional corrected sending period.");
+        $t->periods()->commit($f->student, $t->award, $next["review_token"]);
+        $after = $calculation->preview($f->student, $f->assignment);
+        self::assertSame(3000, $after["totals"]["gpa_milli"]);
+        self::assertSame(3000, $after["totals"]["earned_milli"]);
+        $records = array_column($after["records"], null, "id");
+        self::assertSame("2026-09-01", $records[$t->credit->value]["ordering_on"]);
+        self::assertSame("transfer", $records[$t->credit->value]["credit_type"]);
+        self::assertSame(4000, $before["totals"]["gpa_milli"]);
+        $clear = $t->periods()->review($f->student, $t->award, null, 3, "Fictional source evidence withdrawn.");
+        $t->periods()->commit($f->student, $t->award, $clear["review_token"]);
+        self::assertFalse($calculation->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
+    }
+
     public function testNewLatestPublicationRequiresAnOrderingChoiceWithoutChangingEarlierRecordedFacts(): void
     {
         $f = new StudentRequirementsFixture();

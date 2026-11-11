@@ -2379,6 +2379,38 @@ if (
 }
 $sis->access->staff = true;
 
+// Transfer source-period decisions resolve through real providers and browser privacy guards.
+$periodPath = $correctionPath . "source-period/";
+$periodData = ["academic_on" => $postedTransfer["completed_on"], "version" => 1, "reason" => "Fictional confirmed sending period."];
+$periodNoCsrf = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $periodPath . "review/", "POST");
+if ($app->router->match($periodNoCsrf->withParsedBody($periodData))->getStatusCode() !== 403) {
+    throw new RuntimeException("Transfer period review bypassed CSRF.");
+}
+$periodReviewResponse = $teachingPost($periodPath . "review/", $periodData);
+$periodReview = json_decode((string) $periodReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($periodReviewResponse->getStatusCode() !== 200 || !isset($periodReview["review_token"]) ||
+    !str_contains($periodReviewResponse->getHeaderLine("Cache-Control"), "no-store")) {
+    throw new RuntimeException("Transfer source-period review failed its provider/privacy boundary.");
+}
+$periodCommit = ["review_token" => $periodReview["review_token"]];
+$periodSaved = $teachingPost($periodPath . "commit/", $periodCommit);
+$periodRetry = $teachingPost($periodPath . "commit/", $periodCommit);
+$periodHistoryResponse = $teachingPost($periodPath . "history/", []);
+$periodHistory = json_decode((string) $periodHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($periodSaved->getStatusCode() !== 200 || (string) $periodSaved->getBody() !== (string) $periodRetry->getBody() ||
+    $periodHistoryResponse->getStatusCode() !== 200 || !str_contains($periodHistoryResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    str_contains((string) $periodHistoryResponse->getBody(), "Fictional confirmed sending period") ||
+    ($periodHistory["items"][array_key_last($periodHistory["items"])]["action"] ?? null) !== "period_recorded") {
+    throw new RuntimeException("Source period confirmation, retry or curated history failed.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:transfer:manage"];
+if ($teachingPost($periodPath . "history/", [])->getStatusCode() !== 403 ||
+    $teachingPost($periodPath . "commit/", $periodCommit)->getStatusCode() !== 403) {
+    throw new RuntimeException("Transfer-only authority exposed source history or confirmed a period decision.");
+}
+$sis->access->staff = true;
+
 // Registrar enrollment history is private, curated and protected by browser CSRF.
 $sis->access->staff = true;
 $registrationHistoryPath = "/sis/students/" . $teachingStudent->id->value . "/registration-history/";

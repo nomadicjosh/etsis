@@ -9,6 +9,7 @@ use Domain\AcademicRecord\ValueObject\GradeSnapshot;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
+use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use InvalidArgumentException;
 
 final class TransferEventSchema
@@ -18,6 +19,12 @@ final class TransferEventSchema
     {
         $keys = match ($class) {
             TransferCreditWasEstablished::class => ["decision_id", "provenance", "source", "credit", "grade"],
+            TransferAcademicPeriodWasRecorded::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_academic_on",
+                "academic_on",
+            ],
             TransferCreditWasChanged::class => [
                 "decision_id",
                 "previous_decision_id",
@@ -98,14 +105,24 @@ final class TransferEventSchema
                 self::invalid();
             }
         } else {
-            if (
-                !is_string($p["previous_decision_id"]) ||
-                $p["previous_decision_id"] === $p["decision_id"] ||
-                !in_array($p["action"], ["amend", "void", "reinstate"], true)
-            ) {
+            if (!is_string($p["previous_decision_id"]) || $p["previous_decision_id"] === $p["decision_id"]) {
                 self::invalid();
             }
             new EntityId($p["previous_decision_id"]);
+            if ($class === TransferAcademicPeriodWasRecorded::class) {
+                foreach (["previous_academic_on", "academic_on"] as $key) {
+                    if ($p[$key] !== null) {
+                        self::date($p[$key]);
+                    }
+                }
+                if ($p["previous_academic_on"] === $p["academic_on"]) {
+                    self::invalid();
+                }
+                return;
+            }
+            if (!in_array($p["action"], ["amend", "void", "reinstate"], true)) {
+                self::invalid();
+            }
             if ($p["action"] === "void") {
                 if ($p["credits_milli"] !== null || $p["grade"] !== null) {
                     self::invalid();
@@ -150,7 +167,13 @@ final class TransferEventSchema
             self::invalid();
         }
         $identities = [
-            "award_id", "student_id", "equivalency_id", "course_id", "term_id", "institution_id", "external_course_id",
+            "award_id",
+            "student_id",
+            "equivalency_id",
+            "course_id",
+            "term_id",
+            "institution_id",
+            "external_course_id",
         ];
         foreach ($identities as $key) {
             if (!is_string($s[$key])) {
@@ -158,7 +181,7 @@ final class TransferEventSchema
             }
             new EntityId($s[$key]);
         }
-        $labels = ["institution_code","institution_name","external_code","external_title","term_code"];
+        $labels = ["institution_code", "institution_name", "external_code", "external_title", "term_code"];
         foreach ($labels as $key) {
             if (
                 !is_string($s[$key]) ||
@@ -217,6 +240,7 @@ final class TransferEventSchema
     {
         if (
             !is_string($s) ||
+            preg_match('/^\d{4}-\d{2}-\d{2}$/D', $s) !== 1 ||
             !($d = DateTimeImmutable::createFromFormat("!Y-m-d", $s)) ||
             $d->format("Y-m-d") !== $s
         ) {

@@ -649,6 +649,7 @@ async function fixture(page, options = {}) {
                         course_code: index === 20 ? "LAST.101" : `MATH.${100 + index}`,
                         course_title: "Fictional algebra <b>unsafe</b>",
                         ordering_on: options.retainedOrdering ? "2026-08-24" : null,
+                        credit_type: options.transferOrdering && index === 0 ? "transfer" : "institutional",
                         credit: index === 20 ? "voided" : "equivalent_credit_alternative",
                         gpa: options.unknownCalculationGpa ? "undetermined" : "included",
                     })),

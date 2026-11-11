@@ -9,6 +9,7 @@ use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
+use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\ValueObject\TransferEventSchema;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
 
@@ -20,6 +21,7 @@ final class TransferCredit extends EventSourcedAggregate
      * @var array<string,mixed>|null */ private ?array $grade = null;
     private ?string $decision = null;
     private ?string $provenance = null;
+    private ?string $academicOn = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -80,6 +82,28 @@ final class TransferCredit extends EventSourcedAggregate
         }
         $this->decision = $p["decision_id"];
         new TransferCreditFacts($this->credit);
+    }
+    public function whenTransferAcademicPeriodWasRecorded(TransferAcademicPeriodWasRecorded $event): void
+    {
+        $p = $event->payload();
+        if (
+            $this->credit === null ||
+            $this->source === null ||
+            !in_array($this->credit["status"], ["A", "N"], true) ||
+            $p["previous_decision_id"] !== $this->decision ||
+            $p["previous_academic_on"] !== $this->academicOn ||
+            ($p["academic_on"] !== null && $p["academic_on"] > $this->source["completed_on"])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->academicOn = $p["academic_on"];
+        ++$this->credit["version"];
+        $this->decision = $p["decision_id"];
+        new TransferCreditFacts($this->credit);
+    }
+    public function academicOn(): ?string
+    {
+        return $this->academicOn;
     }
     /** @return array<string,mixed>|null */ public function credit(): ?array
     {

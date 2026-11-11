@@ -40,6 +40,11 @@ window.createWorkspaceTransferAwards = function (ui) {
                 { class: "form-text" },
                 `${record.institution_name} · ${record.external_code} · Completed ${record.completed_on} · Posting term ${record.term_code}`,
             ),
+            node(
+                "p",
+                { class: "form-text" },
+                `Sending institution's period start: ${record.academic_on || "Unknown"}`,
+            ),
         );
     }
     function comparison(before, after) {
@@ -97,9 +102,136 @@ window.createWorkspaceTransferAwards = function (ui) {
             actions.append(button(title(action), () => edit(student, award, value, action))),
         );
         actions.append(
+            ...(value.credit.status !== "V" && value.history_recorded
+                ? [button("Review source academic period", () => editPeriod(student, award, value))]
+                : []),
+            button("Source period history", () => periodHistory(student, award)),
             button("Correction history", () => history(student, award)),
             button("Back to equivalency", () => ui.back(value.equivalency_id)),
         );
+        body.append(actions);
+    }
+    async function editPeriod(student, award, value) {
+        const body = openDrawer("Source academic period", "REVIEWED SENDING-INSTITUTION FACT");
+        body.append(
+            identity(value),
+            node(
+                "p",
+                {},
+                "Enter the sending institution's actual academic-period start for this course. Do not use the local posting term or infer it from completion. Leave blank only to explicitly mark a known date unknown.",
+            ),
+            button("Back to award", () => record(student, award)),
+        );
+        const fields = [
+            ["academic_on", "Sending institution's period start (blank marks unknown)", "date", "", false],
+            ["reason", "Reason and source evidence", "textarea"],
+        ];
+        const form = await buildForm(fields, { academic_on: value.academic_on || "" });
+        form.elements.academic_on.max =
+            value.completed_on < value.effective_on_default ? value.completed_on : value.effective_on_default;
+        form.elements.reason.maxLength = 1000;
+        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review source period");
+        form.append(submit);
+        body.append(form);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = formData(form, fields);
+                const base = endpoint(student, award) + "source-period/";
+                const review = await request(base + "review/", "POST", {
+                    academic_on: data.academic_on || null,
+                    reason: data.reason,
+                    version: value.credit.version,
+                });
+                const confirm = openDrawer(
+                    "Confirm source academic period",
+                    "PRESERVE EARLIER SOURCE EVIDENCE",
+                );
+                confirm.append(
+                    node(
+                        "p",
+                        {},
+                        `${review.previous_academic_on || "Unknown"} → ${review.academic_on || "Unknown"}`,
+                    ),
+                    node("p", {}, review.reason),
+                    node(
+                        "p",
+                        {},
+                        "Awarded credits, grade, completion date and posting term stay as recorded. This source date can change repeat-GPA ordering only when the selected degree policy uses academic periods.",
+                    ),
+                    button("Revise source period", () =>
+                        openDrawer("Source academic period", "REVIEWED SENDING-INSTITUTION FACT").append(
+                            form,
+                        ),
+                    ),
+                    button(
+                        "Confirm source period",
+                        async () => {
+                            await request(base + "commit/", "POST", { review_token: review.review_token });
+                            await record(student, award);
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, submit);
+        });
+    }
+    async function periodHistory(student, award, cursor = null, stack = []) {
+        const data = await request(endpoint(student, award) + "source-period/history/", "POST", { cursor });
+        const body = openDrawer("Source period history", "PRIVATE TRANSFER CHRONOLOGY");
+        body.append(
+            button("Back to award", () => record(student, award)),
+            node(
+                "p",
+                {},
+                "Award and credit decisions are included for context. Only an explicit source-period decision changes this date; other decisions retain its prior value. Protected reasons and actors are omitted.",
+            ),
+        );
+        if (data.earlier_history_unknown)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "Earlier source history is unknown. No period start has been reconstructed from today's calendar.",
+                ),
+            );
+        body.append(
+            data.items.length
+                ? grid(
+                      ["Decision", "Source period change", "Effective", "Recorded"],
+                      data.items.map((item) => [
+                          {
+                              period_recorded: "Source period recorded",
+                              award: "Award established",
+                              observed_existing: "Earlier facts observed",
+                              amend: "Award corrected",
+                              void: "Award voided",
+                              reinstate: "Award reinstated",
+                          }[item.action],
+                          item.action === "period_recorded"
+                              ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
+                              : "No period change",
+                          item.effective_at || "Unknown",
+                          item.recorded_at,
+                      ]),
+                      "Source academic-period decisions",
+                  )
+                : node("p", {}, "No recorded source decisions on this page."),
+        );
+        const actions = node("div", { class: "inline-actions" });
+        if (stack.length)
+            actions.append(
+                button("Previous source history page", () =>
+                    periodHistory(student, award, stack.at(-1), stack.slice(0, -1)),
+                ),
+            );
+        if (data.next_cursor)
+            actions.append(
+                button("Next source history page", () =>
+                    periodHistory(student, award, data.next_cursor, [...stack, cursor]),
+                ),
+            );
         body.append(actions);
     }
     async function edit(student, award, value, action, preset = null) {

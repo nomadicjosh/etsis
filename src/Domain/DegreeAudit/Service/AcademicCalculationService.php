@@ -70,6 +70,7 @@ final readonly class AcademicCalculationService
                     $records[] = $disposition + [
                         "course_code" => $work["course_code"],
                         "course_title" => $work["course_title"],
+                        "credit_type" => $work["credit_type"],
                         "ordering_on" => $ordering[$disposition["id"]],
                     ];
                 }

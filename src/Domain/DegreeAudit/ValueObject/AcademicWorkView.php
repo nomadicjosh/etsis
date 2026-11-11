@@ -23,6 +23,7 @@ final class AcademicWorkView
             "term_code" => $input["retained_term_code"] ?? $currentTermCode,
             "term_label_retained" => $input["retained_term_code"] !== null,
             "completed_on" => $input["completed_on"],
+            "academic_on" => $facts["credit_type"] === "transfer" ? ($input["academic_on"] ?? null) : null,
             "attempted_milli" => $facts["attempted_milli"],
             "completed_milli" => $facts["completed_milli"],
             "quality_points_milli" => $facts["grade_points_milli"],
