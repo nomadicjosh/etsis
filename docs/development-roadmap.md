@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-12**, after adding bounded, preview-first cleanup of expired sign-in and Moodle launch references. Native deployment acceptance, institutional OIDC, automatic eligibility and academic synchronization remain open.
+Last reviewed: **2026-11-12**, after adding the etSIS alpha developer installation guide, interactive initial administrator setup and fresh-install database checks. Native deployment acceptance, institutional OIDC, automatic eligibility and academic synchronization remain open.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -196,7 +196,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Exercise competing final-seat requests, large cohorts, long histories, reporting/export limits and failed/retried background work using bounded realistic fixtures.
 - [ ] Complete independent authorization, privacy, upload, CSRF and security review; test keyboard/screen-reader flows, contrast, focus, errors, reflow and reduced motion against WCAG 2.2 AA.
 - [ ] Exercise encrypted artifact and database backup/restore together, key loss/rotation recovery, failed rebuilds and deployment rollback/recovery procedures.
-- [ ] Finish installation/upgrade/operations guides, office setup guides, policy configuration, safe monitoring and incident procedures.
+- [x] Add the [etSIS-only alpha developer setup](../README.md#install-and-setup-for-alpha-testing), with DDEV configuration, private key creation, migrations/assets, ordinary registration, hidden-email/confirmed first-super bootstrap and feedback guidance. Verify empty SQLite and isolated MariaDB migration/registration/admin access; fix SQLite compiler state so legacy auto-increment tables cannot remove later ULID primary keys. Preserve existing databases.
+- [ ] Finish upgrade/operations guides, office setup guides, policy configuration, safe monitoring and incident procedures.
 - [ ] Run representative admissions-to-graduation and registration-to-billing-to-refund scenarios with fictional records, then institution-led acceptance of the agreed initial release scope.
 
 **Done when:** the intended release scope is explicit and accepted, recovery is demonstrated, and operational/security/accessibility checks pass. Event sourcing supports evidence; it does not by itself certify legal compliance.

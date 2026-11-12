@@ -6,6 +6,91 @@
 
 The application is in active alpha. Breaking changes and necessary database migrations are expected. We evolve one current domain model instead of maintaining a new class for each development-era field addition. Release compatibility will be stabilized during release-candidate planning. Historical publications and student/financial decisions remain distinct, preserved facts.
 
+## Install and setup for alpha testing
+
+Developers are welcome to try etSIS and help improve it. Use a separate local installation with fictional data: alpha code and schemas can change between updates. The walkthrough below uses the included DDEV configuration, which provides PHP 8.4, MariaDB and Node.js 24. Install Git, DDEV and a supported container provider before starting.
+
+>> You will need to follow this along with the [CodefyPHP docs](https://codefyphp.com/docs/getting-started/installation/) as well for an installation with or without DDEV.
+
+### 1. Get the project and install dependencies
+
+```sh
+git clone https://github.com/nomadicjosh/etsis.git
+cd etsis
+ddev start
+ddev composer install
+ddev composer setup-environment
+```
+
+`setup-environment` creates `.env` from `.env.example` when needed and fills `APP_BASE_PATH` with the project path inside the container. Keep that generated path. The command preserves an existing configured environment.
+
+### 2. Configure the local environment
+
+Edit `.env` for the included DDEV project:
+
+```dotenv
+APP_NAME=etsis
+APP_BASE_URL=https://etsis.ddev.site
+APP_DEBUG=false
+DB_CONNECTION=mysql
+DB_DSN="mysql:host=db;port=3306;dbname=db;charset=utf8mb4"
+DB_USER=db
+DB_PASSWORD=db
+COOKIE_SECURE=true
+COOKIE_DOMAIN=''
+COOKIE_PATH=/
+COOKIE_SAMESITE=lax
+```
+
+`db`/`db` are DDEV's local database credentials. Set `APP_KEY` to your own generated value; `ddev exec openssl rand -hex 32` generates a suitable value in your terminal. Keep `.env` private. If you change the DDEV project name, use its corresponding HTTPS URL in `APP_BASE_URL`. Optional external services can remain disabled.
+
+### 3. Create the encryption key, database tables and frontend assets
+
+```sh
+ddev codex generate:key:file
+ddev codex migrate
+ddev exec npm ci
+ddev exec npm run build:assets
+```
+
+Generate `.enc.key` **once for a new installation**. Reuse it when it already exists, retain it with your database backups, and keep it outside version control. Recorded encrypted history cannot be recovered simply by generating a replacement key. The application requires writable `storage/` directories; DDEV handles the normal local permissions.
+
+### 4. Register your account and grant initial administrator access
+
+Open [the registration page](https://etsis.ddev.site/register/) and create your own account using a fictional name/email and a password of at least **26 characters**. Usernames use 6–20 lowercase letters, underscores or hyphens; for example, `alpha_tester`. Registration creates an ordinary account.
+
+Then run:
+
+```sh
+ddev codex sis:access:bootstrap
+```
+
+Enter that account's email at the hidden prompt, then confirm granting the first `super` administrator role. No password is requested by this command. Bootstrap refuses further grants once a super administrator exists; subsequent access changes belong in **Roles & access**.
+
+Sign in at [the etSIS login page](https://etsis.ddev.site/login/) and open [the staff workspace](https://etsis.ddev.site/admin/). Explore the public portal at [Campus portal](https://etsis.ddev.site/portal/). A fresh installation has system roles and permissions, but no demonstration student/course records. Start with [academic calendar setup](docs/academic-calendar-setup.md) and [grading scales](docs/grading-scale-setup.md), then create fictional catalog and student data as you explore.
+
+### 5. Test, update and give feedback
+
+Run the PHP checks with a bounded memory limit:
+
+```sh
+ddev exec php -d memory_limit=192M vendor/bin/phpunit
+```
+
+For an existing alpha checkout, review the [roadmap](docs/development-roadmap.md) and relevant migration/setup notes, then update dependencies, migrations and assets:
+
+```sh
+git pull
+ddev composer install
+ddev codex migrate
+ddev exec npm ci
+ddev exec npm run build:assets
+```
+
+Preserve your encryption key and environment when updating. Some alpha changes may require an explicit data conversion or a new disposable test database; a fresh-install walkthrough is not a data-upgrade procedure.
+
+Please [open a GitHub issue](https://github.com/nomadicjosh/etsis/issues) with your commit (`git rev-parse --short HEAD`), environment, steps to reproduce, expected result and actual result. Include a sanitized error or screenshot using fictional data when useful. Workflow and accessibility feedback are welcome. Keep passwords, keys, tokens and real student/staff data out of reports; use a private reporting channel for security findings.
+
 ## Screenshots
 
 Screenshots use a test campus and demonstration data. No real student or staff records are shown.
