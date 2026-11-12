@@ -68,6 +68,7 @@ final readonly class MoodleAccountRequestService
             "enabled" => $enabled,
             "installation_approved" => $binding !== null,
             "processing_available" => $this->policy->processingEnabled(),
+            "receipt_inspection_available" => $this->reader->enabled(),
             "defaults" => $defaults,
             "person" => [
                 "id" => $id->value,

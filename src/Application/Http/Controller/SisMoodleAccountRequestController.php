@@ -8,6 +8,7 @@ use Application\Http\FormInput;
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\Service\MoodleAccountRequestService;
 use Domain\Lms\Service\MoodleAccountResolutionService;
+use Domain\Lms\Service\MoodleAccountReconciliationService;
 use Domain\Lms\ValueObject\MoodleAccountDraft;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -19,6 +20,7 @@ final readonly class SisMoodleAccountRequestController
     public function __construct(
         private MoodleAccountRequestService $service,
         private MoodleAccountResolutionService $resolutions,
+        private MoodleAccountReconciliationService $reconciliation,
     ) {
     }
     public function status(string $person): ResponseInterface
@@ -73,5 +75,14 @@ final readonly class SisMoodleAccountRequestController
                 FormInput::from($request)->text("review_token", 16384),
             ),
         );
+    }
+
+    public function inspectReceipt(string $person): ResponseInterface
+    {
+        try {
+            return new JsonResponse($this->reconciliation->inspect(new EntityId($person)));
+        } catch (MoodleConnectionUnavailableException $error) {
+            return new JsonResponse(["error" => $error->getMessage()], 503);
+        }
     }
 }

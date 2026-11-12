@@ -15,7 +15,8 @@ async function fixture(page, options = {}) {
         else if (path.startsWith('/sis/ui/data/people/')) result = { items: [{ id: person, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/ui/people/${person}/`) result = { person: { id: { value: person }, givenName: 'Alex', familyName: 'Example', institutionalId: { value: 'S-FICTIONAL' }, ownerUserId: null }, students: [], applications: [], employees: [], accounts: [] };
         else if (path.endsWith('/moodle/account-request/')) result = { enabled: !options.disabled, installation_approved: true,
-            processing_available: Boolean(options.processing), request: saved, link: options.link || null, defaults: { username: 'alex_example', email: 'fictional@example.invalid' },
+            processing_available: Boolean(options.processing), receipt_inspection_available: !options.connectionDisabled,
+            request: saved, link: options.link || null, defaults: { username: 'alex_example', email: 'fictional@example.invalid' },
             person: { id: person, name: 'Alex Example', institutional_id: 'S-FICTIONAL' } };
         else if (path.endsWith('/account-request/resolution/review/')) result = {
             review_token: 'fictional-private-resolution-review', person_name: 'Alex Example', moodle_user_id: '123', reason: data.reason,
@@ -24,6 +25,15 @@ async function fixture(page, options = {}) {
             saved = { ...saved, state: 'completed', issue_code: 'email_resolved', issue: 'Staff recorded that access was resolved. No email was resent.' };
             if (options.resolutionInterrupted) { await route.fulfill({ status: 503, json: { error: 'Fictional interrupted resolution.' } }); return; }
             result = { state: 'completed' };
+        }
+        else if (path.endsWith('/account-request/receipt/')) {
+            if (options.receiptFailed) { await route.fulfill({ status: 503, json: { error: 'Fictional receipt check failed.' } }); return; }
+            const status = options.receiptStatus || 'recorded';
+            result = { status, moodle_user_id: status === 'recorded' ? '123' : null,
+                sign_in_status: status === 'recorded' ? 'email_review_required' : null, profile_changed: true,
+                message: status === 'recorded' ? 'Moodle retained an account for the original request. This check does not link it or retry creation.' :
+                    status === 'restricted' ? 'Receipt restricted. Ask a Moodle administrator to review it; do not create a replacement.' :
+                        'No receipt observed. The outcome remains unknown; do not create a replacement account.' };
         }
         else if (path.endsWith('/account-request/review/')) result = { review_token: 'fictional-private-account-review', person_name: 'Alex Example',
             username: data.username, email: data.email, sign_in: data.sign_in, expires_at: 1794410000, processing_available: false };
@@ -47,6 +57,56 @@ const emailReview = {
     saved: { id: '00000000000000000000000002', state: 'review_required', issue_code: 'email_delivery',
         issue: 'Account linked; setup email needs review. Use Moodle password recovery, keeping this account.' },
 };
+
+const uncertainRequest = {
+    disabled: true,
+    saved: { id: '00000000000000000000000002', state: 'review_required', issue_code: 'attempt_limit', issue: 'Reconcile the original operation first.' },
+};
+
+for (const receiptStatus of ['recorded', 'not_observed', 'restricted']) {
+    test(`inspect ${receiptStatus} original receipt without retrying creation or changing local status`, async ({ page }) => {
+        const f = await fixture(page, { ...uncertainRequest, receiptStatus });
+        await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+        const check = page.getByRole('button', { name: 'Check original Moodle operation', exact: true });
+        await expect(check).toBeEnabled();
+        expect(f.calls.filter(c => c.path.endsWith('/receipt/'))).toHaveLength(0);
+        await check.focus(); await page.keyboard.press('Enter');
+        await expect(page.getByRole('heading', { name: 'Original operation check', exact: true })).toBeFocused();
+        await expect(page.locator('#drawer-body')).toContainText(receiptStatus === 'recorded' ? 'Retained Moodle account ID: 123' : 'replacement');
+        await expect(page.locator('#drawer-body')).toContainText('person or account defaults changed');
+        await expect(page.locator('[data-account-request-status]')).toContainText('saved request is unchanged');
+        expect(f.calls.find(c => c.path.endsWith('/receipt/'))).toMatchObject({ method: 'POST', data: {}, csrf: 'fictional-test-token' });
+        expect(f.calls.some(c => c.path.endsWith('/confirm/'))).toBe(false);
+        if (receiptStatus === 'recorded') {
+            await page.setViewportSize({ width: 375, height: 812 });
+            const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+            expect(scan.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        await page.getByRole('button', { name: 'Refresh request status', exact: true }).click();
+        await expect(page.locator('[data-account-request-status]')).toContainText('review_required');
+        expect(f.errors).toEqual([]);
+    });
+}
+
+test('unavailable receipt read keeps the original operation and exposes no retry action', async ({ page }) => {
+    const f = await fixture(page, { ...uncertainRequest, receiptFailed: true });
+    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
+    await expect(page.locator('[data-account-request-status]')).toContainText('do not create a replacement');
+    await expect(page.getByRole('heading', { name: 'Original operation check', exact: true })).toHaveCount(0);
+    expect(f.calls.some(c => c.path.endsWith('/confirm/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('disabled connection makes no original-operation request', async ({ page }) => {
+    const f = await fixture(page, { ...uncertainRequest, connectionDisabled: true });
+    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Check original Moodle operation', exact: true })).toBeDisabled();
+    expect(f.calls.some(c => c.path.endsWith('/receipt/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
 
 test('resolve existing-account access with keyboard approval and accessible narrow layout while processing is disabled', async ({ page }) => {
     const f = await fixture(page, emailReview);

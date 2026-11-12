@@ -32,6 +32,10 @@ window.createWorkspaceMoodleRequests = function (ui) {
             if (data.link && data.request.state === 'review_required' && data.request.issue_code === 'email_delivery') {
                 resolution();
             }
+            if (!data.link && ((data.request.state === 'processing' && data.request.issue_code === 'connection_uncertain') ||
+                (data.request.state === 'review_required' && ['attempt_limit', 'request_changed'].includes(data.request.issue_code)))) {
+                receiptCheck();
+            }
             return;
         }
         if (!data.enabled || !data.installation_approved) {
@@ -116,6 +120,43 @@ window.createWorkspaceMoodleRequests = function (ui) {
                 clear(); form.remove(); preview.remove(); queued(result.request, result.processing_available); status.focus();
             }));
         });
+
+        function receiptCheck() {
+            const check = node('button', { type: 'button', class: 'btn btn-outline-primary', disabled: data.receipt_inspection_available === false }, 'Check original Moodle operation');
+            const result = node('div', { class: 'mt-3', 'aria-live': 'polite' });
+            body.append(node('section', { class: 'mt-4', 'aria-labelledby': 'moodle-receipt-heading' },
+                node('h4', { id: 'moodle-receipt-heading' }, 'Check the original creation outcome'),
+                node('p', {}, 'Read Moodle’s retained receipt for this exact request. This does not create an account, send email, change a link or restart processing.'),
+                check,
+                data.receipt_inspection_available === false ? node('p', { class: 'form-text' }, 'Enable the institutional Moodle connection to inspect its receipts. Account processing can remain disabled.') : node('span'),
+                result));
+            check.addEventListener('click', () => task(async () => {
+                if (busy || !body.isConnected) return;
+                busy = true; check.disabled = true; refresh.disabled = true; check.setAttribute('aria-busy', 'true');
+                result.replaceChildren();
+                status.textContent = 'Checking the original operation receipt without retrying creation…';
+                try {
+                    const observed = await request(`/sis/people/${id}/moodle/account-request/receipt/`, 'POST', {});
+                    if (!body.isConnected) return;
+                    result.append(node('h5', { tabindex: '-1' }, 'Original operation check'), node('p', {}, observed.message));
+                    if (observed.status === 'recorded') {
+                        result.append(node('p', {}, `Retained Moodle account ID: ${observed.moodle_user_id}`),
+                            node('p', {}, observed.sign_in_status === 'sso_ready' ? 'Institutional SSO account setup was recorded.' :
+                                observed.sign_in_status === 'email_sent' ? 'Moodle recorded accepting the setup email; this does not prove delivery.' :
+                                    'Password-setup email needs separate review. No message was resent.'));
+                    }
+                    if (observed.profile_changed) result.append(node('p', { class: 'alert alert-warning' }, 'The person or account defaults changed after the original approval. This check does not approve those changes or transfer an account.'));
+                    status.textContent = 'Original operation check finished. The saved request is unchanged.';
+                    result.querySelector('h5').focus();
+                } catch (error) {
+                    if (!body.isConnected) return;
+                    result.replaceChildren();
+                    status.textContent = 'The original outcome could not be checked. Refresh request status; keep the original operation and do not create a replacement account.';
+                    status.focus();
+                    throw error;
+                } finally { busy = false; check.disabled = false; refresh.disabled = false; check.removeAttribute('aria-busy'); }
+            }));
+        }
 
         function resolution() {
             const section = node('section', { class: 'mt-4', 'aria-labelledby': 'moodle-resolution-heading' });

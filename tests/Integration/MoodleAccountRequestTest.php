@@ -169,6 +169,220 @@ final class MoodleAccountRequestTest extends TestCase
         $access->assign(GrantKind::UserRole, $this->f->access->actor, $access->roleNamed("super")->id, true);
     }
 
+    private function receiptReader(): \Domain\Lms\Service\MoodleAccountReceiptReader
+    {
+        return new class ($this->f) implements \Domain\Lms\Service\MoodleAccountReceiptReader {
+            public int $calls = 0;
+            public ?Closure $duringCall = null;
+            public string $status = "recorded";
+            public function __construct(private SisFixture $f) {}
+            public function receipt(
+                MoodleBinding $binding,
+                EntityId $operation,
+                string $requestHash,
+            ): \Domain\Lms\ValueObject\MoodleAccountReceipt {
+                TestCase::assertFalse($this->f->connection->pdo->inTransaction());
+                $row = $this->f->sql->one("sis_moodle_account_requests", ["id" => $operation->value]);
+                $data = json_decode($this->f->dropCipher->open($row["encrypted_approval"]), true);
+                $remote = [
+                    "instance_hash" => $binding->instanceFingerprint,
+                    "policy_hash" => $data["policy_hash"],
+                    "operation" => $operation->value,
+                    "username" => $data["username"],
+                    "email" => $data["email"],
+                    "firstname" => $data["firstname"],
+                    "lastname" => $data["lastname"],
+                    "sign_in" => $data["sign_in"],
+                ];
+                TestCase::assertSame(hash("sha256", json_encode($remote, JSON_THROW_ON_ERROR)), $requestHash);
+                $this->calls++;
+                if ($this->duringCall !== null) {
+                    ($this->duringCall)();
+                }
+                return new \Domain\Lms\ValueObject\MoodleAccountReceipt(
+                    $this->status,
+                    $this->status === "recorded"
+                        ? new \Domain\Lms\ValueObject\MoodleProvisionedAccount(
+                            new MoodleExternalId("500"),
+                            "sso_ready",
+                        )
+                        : null,
+                );
+            }
+        };
+    }
+
+    private function inspector(
+        \Domain\Lms\Service\MoodleAccountReceiptReader $reader,
+        ?AuditTrail $audit = null,
+    ): \Domain\Lms\Service\MoodleAccountReconciliationService {
+        return new \Domain\Lms\Service\MoodleAccountReconciliationService(
+            $this->requests,
+            new \Infrastructure\Lms\SqlMoodleProvisioningQueue($this->f->sql),
+            $this->bindings,
+            $this->links,
+            new \Domain\Lms\Service\MoodleAccountApprovalReader($this->f->dropCipher),
+            $reader,
+            $this->reader,
+            $this->f->admissions,
+            new \Domain\Lms\Service\MoodleAccountProfile($this->defaults),
+            new UserAccountAccess(
+                new SqlAccessRepository($this->f->sql),
+                $this->f->access,
+                $this->f->transactions,
+            ),
+            $this->f->access,
+            $audit ?? $this->f->audit,
+        );
+    }
+
+    private function uncertainRequest(): void
+    {
+        $this->permitWorker();
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $remote = $this->remote();
+        $remote->loseResponse = true;
+        self::assertSame("retry_pending", $this->worker($remote)->runOne());
+        self::assertCount(1, $remote->operations);
+    }
+
+    public function testOriginalReceiptInspectionKeepsLocalFactsAndJobsUnchangedWithoutProcessing(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        $this->policy->active = false;
+        $before = [];
+        foreach (
+            [
+                "sis_moodle_account_requests",
+                "sis_moodle_provisioning_outbox",
+                "sis_moodle_person_links",
+                "sis_history_events",
+            ]
+            as $table
+        ) {
+            $before[$table] = $this->f->sql->rows($table);
+        }
+        $result = $this->inspector($reader)->inspect($this->person->id);
+        self::assertSame("recorded", $result["status"]);
+        self::assertSame("500", $result["moodle_user_id"]);
+        self::assertFalse($result["profile_changed"]);
+        self::assertSame(1, $reader->calls);
+        foreach ($before as $table => $rows) {
+            self::assertSame($rows, $this->f->sql->rows($table));
+        }
+        $encoded = json_encode($result);
+        foreach (
+            ["fictional@example.invalid", "alex_example", "policy_hash", "request_hash", "encrypted_approval"]
+            as $private
+        ) {
+            self::assertStringNotContainsString($private, $encoded);
+        }
+    }
+
+    public function testMissingReceiptAndRestrictedReceiptNeverAuthorizeReplacementOrClaimCompletion(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        foreach (["not_observed", "restricted"] as $status) {
+            $reader->status = $status;
+            $result = $this->inspector($reader)->inspect($this->person->id);
+            self::assertSame($status, $result["status"]);
+            self::assertNull($result["moodle_user_id"]);
+            self::assertStringContainsString("replacement", $result["message"]);
+            self::assertSame("processing", $this->service->status($this->person->id)["request"]["state"]);
+            self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+        }
+    }
+
+    public function testChangedProfileCanInspectOriginalReceiptButIsFlaggedForSeparateReview(): void
+    {
+        $this->uncertainRequest();
+        $this->defaults->email = "changed@example.invalid";
+        $reader = $this->receiptReader();
+        $result = $this->inspector($reader)->inspect($this->person->id);
+        self::assertTrue($result["profile_changed"]);
+        self::assertSame("recorded", $result["status"]);
+        self::assertSame(1, $reader->calls);
+    }
+
+    public function testReceiptInspectionRejectsProfileOrQueueChangesDuringRemoteRead(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        $reader->duringCall = function (): void {
+            $this->defaults->email = "changed@example.invalid";
+        };
+        try {
+            $this->inspector($reader)->inspect($this->person->id);
+            self::fail("Stale receipt observation returned.");
+        } catch (ConcurrentModificationException) {
+            $this->defaults->email = "fictional@example.invalid";
+        }
+        $reader->duringCall = function (): void {
+            $row = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+            $this->f->sql->update(
+                "sis_moodle_provisioning_outbox",
+                ["version" => (int) $row["version"] + 1],
+                ["id" => $row["id"]],
+            );
+        };
+        $this->expectException(ConcurrentModificationException::class);
+        $this->inspector($reader)->inspect($this->person->id);
+    }
+
+    public function testReceiptInspectionRechecksAuthorityAfterRemoteRead(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        $reader->duringCall = function (): void {
+            $this->f->access->staff = false;
+        };
+        $this->expectException(AccessDeniedException::class);
+        $this->inspector($reader)->inspect($this->person->id);
+    }
+
+    public function testDisabledIntegrationAndTamperedApprovalNeverReadRemoteReceipt(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        $this->reader->active = false;
+        try {
+            $this->inspector($reader)->inspect($this->person->id);
+            self::fail("Disabled integration read remote receipt.");
+        } catch (\Domain\Lms\Exception\MoodleConnectionUnavailableException) {
+            self::assertSame(0, $reader->calls);
+        }
+        $this->reader->active = true;
+        $row = $this->f->sql->rows("sis_moodle_account_requests")[0];
+        $this->f->sql->update(
+            "sis_moodle_account_requests",
+            ["encrypted_approval" => "fictional-tampered-approval"],
+            ["id" => $row["id"]],
+        );
+        try {
+            $this->inspector($reader)->inspect($this->person->id);
+            self::fail("Tampered approval read remote receipt.");
+        } catch (Throwable) {
+            self::assertSame(0, $reader->calls);
+        }
+    }
+
+    public function testReceiptInspectionAuditFailurePreventsRemoteRead(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willThrowException(new RuntimeException("Fictional audit failure."));
+        try {
+            $this->inspector($reader, $audit)->inspect($this->person->id);
+            self::fail("Unrecorded receipt check proceeded.");
+        } catch (RuntimeException) {
+            self::assertSame(0, $reader->calls);
+        }
+    }
+
     private function resolutions(
         ?AuditTrail $audit = null,
     ): \Domain\Lms\Service\MoodleAccountResolutionService {
@@ -407,7 +621,11 @@ final class MoodleAccountRequestTest extends TestCase
     {
         $this->emailReview();
         $row = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
-        $this->f->sql->update("sis_moodle_provisioning_outbox", ["issue_code" => "fictional-private-upstream"], ["id" => $row["id"]]);
+        $this->f->sql->update(
+            "sis_moodle_provisioning_outbox",
+            ["issue_code" => "fictional-private-upstream"],
+            ["id" => $row["id"]],
+        );
         try {
             $this->service->status($this->person->id);
             self::fail("Unrecognized issue must be refused.");

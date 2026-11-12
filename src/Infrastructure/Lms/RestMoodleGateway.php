@@ -10,6 +10,8 @@ use Domain\Lms\Service\MoodleRecordReader as Reader;
 use Domain\Lms\Service\MoodleInstanceReader as IdentityReader;
 use Domain\Lms\Service\MoodleBoundRecordReader as BoundReader;
 use Domain\Lms\Service\MoodleAccountProvisioner as Provisioner;
+use Domain\Lms\Service\MoodleAccountReceiptReader as ReceiptReader;
+use Domain\Lms\ValueObject\MoodleAccountReceipt;
 use Domain\Lms\ValueObject\MoodleAccountPolicy;
 use Domain\Lms\ValueObject\MoodleAccountDraft;
 use Domain\Lms\ValueObject\MoodleProvisionedAccount;
@@ -31,7 +33,7 @@ use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 /** Isolated client deliberately bypasses framework HTTP debug and observer hooks. */
-final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader, BoundReader, Provisioner
+final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader, BoundReader, Provisioner, ReceiptReader
 {
     public function __construct(private ConfigContainer $config, private Client $http = new Client())
     {
@@ -145,6 +147,63 @@ final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader,
             throw new MoodleConnectionUnavailableException();
         }
     }
+
+    public function receipt(
+        MoodleBinding $binding,
+        EntityId $operation,
+        string $requestHash,
+    ): MoodleAccountReceipt {
+        try {
+            if (preg_match('/^[a-f0-9]{64}$/D', $requestHash) !== 1) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $settings = $this->settings();
+            $deadline = microtime(true) + 30;
+            $this->handshake($settings, $deadline);
+            if (!hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value))) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $this->assertCurrent($settings);
+            $result = $this->request(
+                $settings,
+                "local_etsis_get_account_receipt",
+                [
+                    "instance_hash" => $binding->instanceFingerprint,
+                    "operation" => $operation->value,
+                    "request_hash" => $requestHash,
+                ],
+                $deadline,
+            );
+            $this->assertCurrent($settings);
+            if (
+                count($result) !== 7 ||
+                ($result["protocol"] ?? null) !== 1 ||
+                ($result["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                ($result["operation"] ?? null) !== $operation->value ||
+                ($result["request_hash"] ?? null) !== $requestHash ||
+                !is_string($result["status"] ?? null) ||
+                !is_string($result["user_id"] ?? null) ||
+                !is_string($result["sign_in_status"] ?? null)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            if ($result["status"] !== "recorded") {
+                if ($result["user_id"] !== "0" || $result["sign_in_status"] !== "unknown") {
+                    throw new MoodleConnectionUnavailableException();
+                }
+                return new MoodleAccountReceipt($result["status"], null);
+            }
+            return new MoodleAccountReceipt(
+                "recorded",
+                new MoodleProvisionedAccount(
+                    new MoodleExternalId($result["user_id"]),
+                    $result["sign_in_status"],
+                ),
+            );
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
     public function provision(
         MoodleBinding $binding,
         EntityId $operation,
@@ -193,7 +252,7 @@ final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader,
             ) {
                 throw new MoodleConnectionUnavailableException();
             }
-            if (($draft->signIn === 'sso') !== ($result['sign_in_status'] === 'sso_ready')) {
+            if (($draft->signIn === "sso") !== ($result["sign_in_status"] === "sso_ready")) {
                 throw new MoodleConnectionUnavailableException();
             }
             return new MoodleProvisionedAccount(

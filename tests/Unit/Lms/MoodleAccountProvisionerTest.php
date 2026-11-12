@@ -11,6 +11,137 @@ use PHPUnit\Framework\TestCase;
 use Qubus\Config\Collection;
 final class MoodleAccountProvisionerTest extends TestCase
 {
+    public function testReceiptReadWorksWithProcessingDisabledAndSendsOnlyExactReferences(): void
+    {
+        $config = $this->config();
+        $config->setConfigKey("moodle", ["provisioning_enabled" => false]);
+        $binding = $this->binding();
+        $operation = EntityId::generate();
+        $hash = str_repeat("c", 64);
+        $history = [];
+        $handler = HandlerStack::create(
+            new MockHandler([
+                $this->handshake(),
+                new Response(
+                    200,
+                    [],
+                    json_encode([
+                        "protocol" => 1,
+                        "instance_hash" => $binding->instanceFingerprint,
+                        "operation" => $operation->value,
+                        "request_hash" => $hash,
+                        "status" => "recorded",
+                        "user_id" => "123",
+                        "sign_in_status" => "email_review_required",
+                    ]),
+                ),
+            ]),
+        );
+        $handler->push(Middleware::history($history));
+        $receipt = new RestMoodleGateway($config, new Client(["handler" => $handler]))->receipt(
+            $binding,
+            $operation,
+            $hash,
+        );
+        self::assertSame("recorded", $receipt->status);
+        self::assertSame("123", $receipt->account->user->value);
+        self::assertSame("email_review_required", $receipt->account->signInStatus);
+        self::assertCount(2, $history);
+        parse_str((string) $history[1]["request"]->getBody(), $body);
+        self::assertSame("local_etsis_get_account_receipt", $body["wsfunction"]);
+        self::assertSame($operation->value, $body["operation"]);
+        self::assertSame($hash, $body["request_hash"]);
+        foreach (
+            ["firstname", "lastname", "username", "email", "password", "reason", "policy_hash"]
+            as $field
+        ) {
+            self::assertArrayNotHasKey($field, $body);
+        }
+        self::assertSame("", $history[1]["request"]->getUri()->getQuery());
+        self::assertSame("POST", $history[1]["request"]->getMethod());
+        self::assertTrue($history[1]["options"]["verify"]);
+        self::assertFalse($history[1]["options"]["allow_redirects"]);
+    }
+
+    public function testReceiptReaderAcceptsUnknownAndRestrictedWithoutInventingAnAccount(): void
+    {
+        foreach (["not_observed", "restricted"] as $status) {
+            $binding = $this->binding();
+            $operation = EntityId::generate();
+            $hash = str_repeat("c", 64);
+            $mock = new MockHandler([
+                $this->handshake(),
+                new Response(
+                    200,
+                    [],
+                    json_encode([
+                        "protocol" => 1,
+                        "instance_hash" => $binding->instanceFingerprint,
+                        "operation" => $operation->value,
+                        "request_hash" => $hash,
+                        "status" => $status,
+                        "user_id" => "0",
+                        "sign_in_status" => "unknown",
+                    ]),
+                ),
+            ]);
+            $receipt = new RestMoodleGateway($this->config(), new Client(["handler" => $mock]))->receipt(
+                $binding,
+                $operation,
+                $hash,
+            );
+            self::assertSame($status, $receipt->status);
+            self::assertNull($receipt->account);
+        }
+    }
+
+    public function testReceiptReaderRejectsMalformedOrCrossOperationResultsWithoutProviderDetails(): void
+    {
+        $binding = $this->binding();
+        $operation = EntityId::generate();
+        $hash = str_repeat("c", 64);
+        $result = [
+            "protocol" => 1,
+            "instance_hash" => $binding->instanceFingerprint,
+            "operation" => $operation->value,
+            "request_hash" => $hash,
+            "status" => "recorded",
+            "user_id" => "123",
+            "sign_in_status" => "email_sent",
+        ];
+        foreach (
+            [
+                ["operation" => EntityId::generate()->value],
+                ["request_hash" => str_repeat("d", 64)],
+                ["instance_hash" => str_repeat("d", 64)],
+                ["protocol" => 2],
+                ["status" => "fictional-private-upstream"],
+                ["user_id" => 123],
+                ["user_id" => "0"],
+                ["sign_in_status" => "email_pending"],
+                ["status" => "not_observed"],
+                ["private" => "fictional-private-upstream"],
+            ]
+            as $changes
+        ) {
+            $mock = new MockHandler([
+                $this->handshake(),
+                new Response(200, [], json_encode(array_replace($result, $changes))),
+            ]);
+            try {
+                new RestMoodleGateway($this->config(), new Client(["handler" => $mock]))->receipt(
+                    $binding,
+                    $operation,
+                    $hash,
+                );
+                self::fail("Malformed receipt accepted.");
+            } catch (MoodleConnectionUnavailableException $error) {
+                self::assertNull($error->getPrevious());
+                self::assertStringNotContainsString("fictional-private-upstream", $error->getMessage());
+            }
+        }
+    }
+
     private function config(): Collection
     {
         $config = Collection::factory([]);

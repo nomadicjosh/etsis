@@ -20,10 +20,64 @@ final class MoodleConnectorProvisioningTest extends TestCase
             self::assertSame($value, $data[$key], $scenario . " " . $key);
         }
         self::assertSame(0, $data["external_password_updates"]);
+        self::assertTrue($data["receipt_read_unchanged"]);
     }
     public static function scenarios(): array
     {
         return [
+            [
+                "receipt_recorded",
+                [
+                    "users" => 1,
+                    "receipts" => 1,
+                    "sent" => 1,
+                    "status" => "recorded",
+                    "receipt_account" => "1",
+                ],
+            ],
+            [
+                "receipt_missing",
+                [
+                    "users" => 0,
+                    "receipts" => 0,
+                    "sent" => 0,
+                    "status" => "not_observed",
+                    "receipt_account" => "0",
+                ],
+            ],
+            [
+                "receipt_pending",
+                [
+                    "users" => 1,
+                    "receipts" => 1,
+                    "sent" => 1,
+                    "status" => "recorded",
+                    "receipt_sign_in" => "email_review_required",
+                ],
+            ],
+            [
+                "receipt_attempting",
+                [
+                    "users" => 1,
+                    "receipts" => 1,
+                    "sent" => 1,
+                    "status" => "recorded",
+                    "receipt_sign_in" => "email_review_required",
+                ],
+            ],
+            [
+                "receipt_restricted",
+                ["status" => "restricted", "receipt_account" => "0", "receipt_sign_in" => "unknown"],
+            ],
+            [
+                "receipt_siteadmin",
+                ["status" => "restricted", "receipt_account" => "0", "receipt_sign_in" => "unknown"],
+            ],
+            ["receipt_erased", ["refused" => true]],
+            ["receipt_denied", ["refused" => true]],
+            ["receipt_disabled", ["refused" => true]],
+            ["receipt_hash_changed", ["refused" => true]],
+            ["receipt_instance_changed", ["refused" => true]],
             ["retry", ["users" => 1, "receipts" => 1, "sent" => 1, "same" => true, "status" => "email_sent"]],
             [
                 "sso",

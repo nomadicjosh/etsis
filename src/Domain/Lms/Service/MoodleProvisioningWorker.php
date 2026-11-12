@@ -52,7 +52,7 @@ final readonly class MoodleProvisioningWorker
         }
         try {
             $row = $this->queue->approval(new EntityId($claim["request_id"]));
-            $data = $this->approval($row);
+            $data = new MoodleAccountApprovalReader($this->cipher)->read($row);
             $binding = $this->bindings->current();
             if ($binding === null) {
                 throw new AccessDeniedException("Installation approval required.");
@@ -126,37 +126,6 @@ final readonly class MoodleProvisioningWorker
             $this->audit->record($actor, "moodle.account_provisioned", $person);
             return $state;
         });
-    }
-    /** @param array<string,mixed> $row
-     * @return array<string,string> */
-    private function approval(#[\SensitiveParameter] array $row): array
-    {
-        $data = json_decode($this->cipher->open($row["encrypted_approval"]), true, 8, JSON_THROW_ON_ERROR);
-        if (
-            !is_array($data) ||
-            ($data["kind"] ?? null) !== "moodle-account-request" ||
-            !hash_equals($row["review_hash"], hash("sha256", json_encode($data, JSON_THROW_ON_ERROR)))
-        ) {
-            throw new AccessDeniedException("Invalid account approval.");
-        }
-        $fields = ["id", "actor_id", "person_id", "binding_id", "binding_hash", "person_revision",
-            "firstname", "lastname", "username", "email", "sign_in", "policy_hash"];
-        foreach ($fields as $field) {
-            if (!is_string($data[$field] ?? null)) {
-                throw new AccessDeniedException("Review the account policy again.");
-            }
-        }
-        $references = ["id" => "id", "requested_by" => "actor_id", "person_id" => "person_id",
-            "binding_id" => "binding_id"];
-        foreach ($references as $column => $field) {
-            if ($row[$column] !== $data[$field]) {
-                throw new AccessDeniedException("Invalid approval reference.");
-            }
-        }
-        if (preg_match('/^[a-f0-9]{64}$/D', $data["policy_hash"]) !== 1) {
-            throw new AccessDeniedException("Invalid account policy.");
-        }
-        return array_filter($data, is_string(...));
     }
     /** @param array<string,mixed> $row
      * @param array<string,string> $data */

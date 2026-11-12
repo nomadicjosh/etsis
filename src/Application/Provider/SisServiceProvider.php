@@ -35,6 +35,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Lms\SqlMoodleProvisioningQueue::class,
             \Domain\Lms\Service\MoodleAccountProvisioner::class =>
                 \Infrastructure\Lms\RestMoodleGateway::class,
+            \Domain\Lms\Service\MoodleAccountReceiptReader::class =>
+                \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Lms\Repository\MoodleAccountRequestRepository::class =>
                 \Infrastructure\Lms\SqlMoodleAccountRequestRepository::class,
             \Domain\Lms\Repository\MoodleAccountDefaults::class =>

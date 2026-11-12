@@ -12,6 +12,17 @@ $app->delegate(\Domain\Shared\Persistence\UnitOfWork::class, static fn() => $sis
 $app->delegate(\Domain\Shared\Security\StudentAccess::class, static fn() => $sis->access);
 $app->delegate(\Domain\Shared\Service\Clock::class, static fn() => $sis->clock);
 $app->delegate(\Domain\Communications\Service\MessageCipher::class, static fn() => $sis->dropCipher);
+$receiptReader = new class ($sis) implements \Domain\Lms\Service\MoodleAccountReceiptReader {
+    public int $calls = 0;
+    public function __construct(private SisFixture $sis) {}
+    public function receipt(\Domain\Lms\ValueObject\MoodleBinding $binding, \Domain\Shared\ValueObject\EntityId $operation, string $requestHash): \Domain\Lms\ValueObject\MoodleAccountReceipt
+    {
+        if ($this->sis->connection->pdo->inTransaction()) throw new RuntimeException('Receipt read held a write lock.');
+        $this->calls++;
+        return new \Domain\Lms\ValueObject\MoodleAccountReceipt('not_observed', null);
+    }
+};
+$app->define(\Domain\Lms\Service\MoodleAccountReconciliationService::class, [':remote' => $receiptReader]);
 $app->booting(static function () use ($app): void {
     $app->configContainer->getConfigKey('vihzhuo');
     $app->configContainer->setConfigKey('vihzhuo', ['router' => ['use_router' => false]]);
@@ -43,13 +54,14 @@ new \Infrastructure\Lms\SqlMoodlePersonLinkRepository($sis->sql)->add(
         new \Domain\Lms\ValueObject\MoodleExternalId('123'), $sis->access->actor, '2026-08-10T17:00:00Z',
     ), 'fictional-link-review',
 );
-$send = static function (string $action, array $data, bool $csrf = true) use ($app, $id): \Psr\Http\Message\ResponseInterface {
-    $request = new \Qubus\Http\ServerRequest([], [], '/sis/people/' . $id->value . '/moodle/account-request/resolution/' . $action . '/', 'POST')
+$send = static function (string $action, array $data, bool $csrf = true) use ($app, &$id): \Psr\Http\Message\ResponseInterface {
+    $suffix = $action === 'receipt' ? 'receipt/' : 'resolution/' . $action . '/';
+    $request = new \Qubus\Http\ServerRequest([], [], '/sis/people/' . $id->value . '/moodle/account-request/' . $suffix, 'POST')
         ->withHeader('Content-Type', 'application/x-www-form-urlencoded')->withHeader('Accept', 'application/json')
         ->withHeader('X-CSRF-Token', $csrf ? 'fictionalcsrftoken' : 'invalidtoken')
         ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE, 'fictionalcsrftoken')
         ->withBody(new \Laminas\Diactoros\Stream('php://temp', 'w+'));
-    $request->getBody()->write(http_build_query(['_workspace_json' => json_encode($data, JSON_THROW_ON_ERROR)]));
+    $request->getBody()->write(http_build_query(['_workspace_json' => json_encode((object) $data, JSON_THROW_ON_ERROR)]));
     $request->getBody()->rewind();
     $response = $app->router->match($request);
     if (!str_contains($response->getHeaderLine('Cache-Control'), 'no-store') ||
@@ -76,4 +88,38 @@ $sis->access->staff = true;
 if ($send('confirm', ['review_token' => $review['review_token']])->getStatusCode() !== 200 ||
     $requests->processing($operation->id)['state'] !== 'completed') {
     throw new RuntimeException('Moodle access resolution did not complete through its real route.');
+}
+
+$app->configContainer->setConfigKey('moodle', ['enabled' => true]);
+$id = \Domain\Shared\ValueObject\EntityId::generate();
+$person = new \Domain\Person\Person($id, null, 'Alex', 'Example', new \Domain\Person\ValueObject\InstitutionalId('FICTIONAL-02'));
+$sis->admissions->addPerson($person);
+$operationId = \Domain\Shared\ValueObject\EntityId::generate();
+$approval = [
+    'kind' => 'moodle-account-request', 'id' => $operationId->value, 'actor_id' => $sis->access->actor->value,
+    'person_id' => $id->value, 'binding_id' => $binding->id->value,
+    'binding_hash' => hash('sha256', json_encode($binding->describe(), JSON_THROW_ON_ERROR)),
+    'person_revision' => $app->make(\Domain\Lms\Service\MoodleAccountProfile::class)->revision($person),
+    'firstname' => 'Alex', 'lastname' => 'Example', 'username' => 'alex_example', 'email' => 'fictional@example.invalid',
+    'sign_in' => 'sso', 'reason' => 'Fictional review.', 'policy_hash' => str_repeat('a', 64), 'expires_at' => 1790000000,
+];
+$encoded = json_encode($approval, JSON_THROW_ON_ERROR);
+$requests->add(new \Domain\Lms\ValueObject\MoodleAccountRequest(
+    $operationId, $binding->id, $id, $sis->access->actor, '2026-08-10T17:00:00Z', hash('sha256', $encoded),
+), $sis->dropCipher->seal($encoded));
+$requests->enqueue($operationId, '2026-08-10T17:00:00Z');
+$sis->sql->update('sis_moodle_provisioning_outbox', ['state' => 'processing', 'issue_code' => 'connection_uncertain'], ['request_id' => $operationId->value]);
+if ($send('receipt', [], false)->getStatusCode() !== 403 || $receiptReader->calls !== 0) {
+    throw new RuntimeException('Original receipt check bypassed CSRF.');
+}
+$sis->access->staff = false;
+if ($send('receipt', [])->getStatusCode() !== 403 || $receiptReader->calls !== 0) {
+    throw new RuntimeException('Original receipt check bypassed current permissions.');
+}
+$sis->access->staff = true;
+$response = $send('receipt', []);
+$data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($response->getStatusCode() !== 200 || ($data['status'] ?? null) !== 'not_observed' ||
+    $receiptReader->calls !== 1 || $requests->processing($operationId)['state'] !== 'processing') {
+    throw new RuntimeException('Original receipt route did not return a private read-only observation.');
 }

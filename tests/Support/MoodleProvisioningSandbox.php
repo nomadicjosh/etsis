@@ -108,7 +108,7 @@ namespace {
     }
     function is_siteadmin(object $user): bool
     {
-        return false;
+        return $GLOBALS["fictionalSiteAdmin"] ?? false;
     }
     function has_capability(string $cap, mixed $context, int $user): bool
     {
@@ -142,10 +142,10 @@ namespace {
             );
             $this->pdo->exec("CREATE TABLE user_password_resets (id INTEGER PRIMARY KEY, userid INTEGER)");
         }
-        public function get_record(string $table, array $criteria): object|false
+        public function get_record(string $table, array $criteria, string $fields = "*"): object|false
         {
             $q = $this->pdo->prepare(
-                "SELECT * FROM " .
+                "SELECT " . $fields . " FROM " .
                     $table .
                     " WHERE " .
                     implode(" AND ", array_map(static fn($key) => $key . " = ?", array_keys($criteria))),
@@ -226,6 +226,7 @@ namespace {
     require $plugin . "/classes/local/instance_identity.php";
     require $plugin . "/classes/local/account_policy.php";
     require $plugin . "/classes/local/account_provisioner.php";
+    require $plugin . "/classes/local/account_receipt.php";
     $instance = hash("sha256", $settings["instanceid"]);
     $policy = \local_etsis\local\account_policy::read($instance);
     $data = [
@@ -242,35 +243,90 @@ namespace {
     $refused = false;
     $same = false;
     $status = "none";
+    $receiptBefore = null;
+    $receiptAccount = null;
+    $receiptSignIn = null;
+    $snapshot = static function () use ($DB, &$sent): string {
+        return json_encode(
+            [
+                $DB->pdo->query("SELECT * FROM user ORDER BY id")->fetchAll(PDO::FETCH_ASSOC),
+                $DB->pdo->query("SELECT * FROM local_etsis_accounts ORDER BY id")->fetchAll(PDO::FETCH_ASSOC),
+                $sent,
+            ],
+            JSON_THROW_ON_ERROR,
+        );
+    };
     try {
-        if ($scenario === "sso") {
-            $data["sign_in"] = "sso";
+        if (str_starts_with($scenario, "receipt_")) {
+            if ($scenario !== "receipt_missing") {
+                \local_etsis\local\account_provisioner::execute($data);
+            }
+            $hash = hash("sha256", json_encode($data, JSON_THROW_ON_ERROR));
+            $settings["provisioning"] = 0;
+            $settings["policyrevision"] = "changed-after-creation";
+            if ($scenario === "receipt_pending") {
+                $DB->set_field("local_etsis_accounts", "signinstatus", "email_pending", []);
+            }
+            if ($scenario === "receipt_attempting") {
+                $DB->set_field("local_etsis_accounts", "signinstatus", "email_attempting", []);
+            }
+            if ($scenario === "receipt_restricted") {
+                $DB->set_field("user", "suspended", 1, []);
+            }
+            if ($scenario === "receipt_erased") {
+                $DB->set_field("local_etsis_accounts", "userid", 0, []);
+                $DB->set_field("local_etsis_accounts", "requesthash", str_repeat("0", 64), []);
+            }
+            if ($scenario === "receipt_siteadmin") {
+                $GLOBALS["fictionalSiteAdmin"] = true;
+            }
+            if ($scenario === "receipt_denied") {
+                $authorized = false;
+            }
+            if ($scenario === "receipt_disabled") {
+                $settings["enabled"] = 0;
+            }
+            if ($scenario === "receipt_hash_changed") {
+                $hash = str_repeat("f", 64);
+            }
+            if ($scenario === "receipt_instance_changed") {
+                $instance = str_repeat("f", 64);
+            }
+            $receiptBefore = $snapshot();
+            $observed = \local_etsis\local\account_receipt::read($instance, $data["operation"], $hash);
+            $status = $observed["status"];
+            $receiptAccount = $observed["user_id"];
+            $receiptSignIn = $observed["sign_in_status"];
+        } else {
+            if ($scenario === "sso") {
+                $data["sign_in"] = "sso";
+            }
+            if ($scenario === "rollback") {
+                $DB->failReceipt = true;
+            }
+            if ($scenario === "denied") {
+                $authorized = false;
+            }
+            if ($scenario === "mail_failure") {
+                $sendResult = false;
+            }
+            $first = \local_etsis\local\account_provisioner::execute($data);
+            if ($scenario === "changed") {
+                $data["email"] = "changed@example.invalid";
+            }
+            if ($scenario === "policy") {
+                $settings["policyrevision"] = "2";
+            }
+            if ($scenario === "uncertain_mail") {
+                $DB->set_field("local_etsis_accounts", "signinstatus", "email_attempting", []);
+            }
+            if ($scenario === "erased") {
+                $DB->set_field("local_etsis_accounts", "userid", 0, []);
+            }
+            $second = \local_etsis\local\account_provisioner::execute($data);
+            $same = $first === $second;
+            $status = $second["sign_in_status"];
         }
-        if ($scenario === "rollback") {
-            $DB->failReceipt = true;
-        }
-        if ($scenario === "denied") {
-            $authorized = false;
-        }
-        if ($scenario === "mail_failure") {
-            $sendResult = false;
-        }
-        $first = \local_etsis\local\account_provisioner::execute($data);
-        if ($scenario === "changed") {
-            $data["email"] = "changed@example.invalid";
-        }
-        if ($scenario === "policy") {
-            $settings["policyrevision"] = "2";
-        }
-        if ($scenario === "uncertain_mail") {
-            $DB->set_field("local_etsis_accounts", "signinstatus", "email_attempting", []);
-        }
-        if ($scenario === "erased") {
-            $DB->set_field("local_etsis_accounts", "userid", 0, []);
-        }
-        $second = \local_etsis\local\account_provisioner::execute($data);
-        $same = $first === $second;
-        $status = $second["sign_in_status"];
     } catch (Throwable) {
         $refused = true;
     }
@@ -287,6 +343,9 @@ namespace {
             "same" => $same,
             "status" => $status,
             "refused" => $refused,
+            "receipt_read_unchanged" => $receiptBefore === null || $receiptBefore === $snapshot(),
+            "receipt_account" => $receiptAccount,
+            "receipt_sign_in" => $receiptSignIn,
             "sso_password_uncached" => $password === AUTH_PASSWORD_NOT_CACHED,
         ],
         JSON_THROW_ON_ERROR,
