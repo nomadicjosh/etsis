@@ -61,6 +61,17 @@ final class CourseAssistanceTest extends TestCase
             $this->f->audit,
         );
     }
+    public function testSectionTaskCannotBeUsedThroughCourseAssistance(): void
+    {
+        $preview = $this->service->preview($this->course);
+        self::assertNotContains('section_readiness', $preview['tasks']);
+        try {
+            $this->service->suggest($this->course, AuthoringTask::SectionReadiness, true, $preview['revision']);
+            self::fail('A section action was accepted through a course endpoint.');
+        } catch (InvalidArgumentException) {
+            self::assertSame([], $this->assistant->calls);
+        }
+    }
     public function testRewriteAndExpandRequireSavedTextAndIndependentActionGrants(): void
     {
         foreach ([AuthoringTask::Rewrite, AuthoringTask::Expand] as $task) {

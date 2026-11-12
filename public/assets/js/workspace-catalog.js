@@ -1367,6 +1367,104 @@ window.createWorkspaceCatalog = function (ui) {
         let currentDraft = draft;
         const body = openDrawer("Published section details", "ACADEMIC CATALOG");
         body.append(node("p", {}, `Section: ${setup.section.code}`));
+        let assistancePanel = null;
+        body.append(
+            button("Optional section AI help", async () => {
+                const preview = await request(`/sis/sections/${section}/assistance/`);
+                if (!body.isConnected) return;
+                if (assistancePanel) assistancePanel.remove();
+                assistancePanel = node(
+                    "section",
+                    { "aria-label": "Optional section assistance", class: "record-section" },
+                    node("h3", { tabindex: "-1" }, "Saved section readiness"),
+                );
+                body.append(assistancePanel);
+                assistancePanel.querySelector("h3").focus();
+                if (!preview.enabled) {
+                    assistancePanel.append(
+                        node(
+                            "p",
+                            { role: "status" },
+                            "Optional assistance is disabled. Normal publication remains available.",
+                        ),
+                    );
+                    return;
+                }
+                const consentId = "section-assistance-consent";
+                const consent = node("input", {
+                    type: "checkbox",
+                    id: consentId,
+                    class: "form-check-input",
+                    required: true,
+                });
+                const results = node("div", { "aria-live": "polite" });
+                const status = node("p", { role: "status", class: "form-text" });
+                const controls = node(
+                    "fieldset",
+                    { class: "border-0 p-0" },
+                    node("legend", { class: "h5" }, "Consent for one section request"),
+                    node(
+                        "div",
+                        { class: "form-check mb-3" },
+                        consent,
+                        node(
+                            "label",
+                            { for: consentId, class: "form-check-label" },
+                            `I agree to send the displayed saved section facts to ${preview.label} for this request.`,
+                        ),
+                    ),
+                    button("Suggest saved section checks", async () => {
+                        if (!consent.reportValidity()) return;
+                        controls.disabled = true;
+                        consent.checked = false;
+                        results.replaceChildren();
+                        status.textContent = "Requesting suggestions… No section settings are being changed.";
+                        try {
+                            const response = await request(`/sis/sections/${section}/assistance/`, "POST", {
+                                consent: true,
+                                revision: preview.revision,
+                            });
+                            if (!results.isConnected) return;
+                            const list = node("ul");
+                            response.advice.suggestions.forEach((value) => list.append(node("li", {}, value)));
+                            results.append(
+                                node("h4", {}, "Suggestions to review"),
+                                node("p", {}, response.advice.summary),
+                                list,
+                            );
+                            status.textContent =
+                                "Suggestions received. Publication, offering selection and registration are unchanged.";
+                        } finally {
+                            controls.disabled = false;
+                            if (!results.childNodes.length)
+                                status.textContent =
+                                    "No suggestion was applied. Another request requires fresh consent.";
+                        }
+                    }),
+                );
+                assistancePanel.append(
+                    node(
+                        "p",
+                        {},
+                        `Provider: ${preview.label}. Inspect the displayed saved facts. Do not consent if they contain confidential content. Suggestions may be incorrect.`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        "This checks saved setup only. Unsaved instructional dates and publication reasons below are excluded; verify them separately. Student records, faculty identities and fees are not sent. No changes are made automatically.",
+                    ),
+                    node(
+                        "details",
+                        {},
+                        node("summary", {}, "Inspect saved section facts to be sent"),
+                        node("pre", { class: "text-wrap" }, JSON.stringify(preview.draft, null, 2)),
+                    ),
+                    controls,
+                    status,
+                    results,
+                );
+            }),
+        );
         body.append(
             node(
                 "p",

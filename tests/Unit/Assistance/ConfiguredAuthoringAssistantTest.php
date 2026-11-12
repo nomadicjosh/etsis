@@ -62,6 +62,21 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             ],
         ];
     }
+    public function testSectionReadinessHasItsOwnInstructionsAndRejectsDescriptionOutput(): void
+    {
+        $draft = ['section_code' => 'MATH.101.A', 'delivery_mode' => 'online'];
+        $mock = new MockHandler([new Response(200, [], json_encode(self::response()))]);
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(['handler' => $mock]));
+        self::assertNull($service->suggest(AuthoringTask::SectionReadiness, $draft)->description);
+        $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
+        self::assertStringContainsString('Review saved section readiness only.', $body['input'][0]['content']);
+        self::assertStringContainsString('Do not require rooms for online sections', $body['input'][0]['content']);
+        self::assertSame($draft, json_decode($body['input'][1]['content'], true));
+        $bad = new MockHandler([new Response(200, [], json_encode(self::response(['summary' => 'Review.', 'suggestions' => [], 'description' => 'Unauthorized replacement text.'])))]);
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(['handler' => $bad]));
+        $this->expectException(AssistanceUnavailableException::class);
+        $service->suggest(AuthoringTask::SectionReadiness, $draft);
+    }
     public function testEditingTasksSendDistinctBoundedInstructionsAndOnlyReviewedFacts(): void
     {
         foreach ([AuthoringTask::Rewrite, AuthoringTask::Expand] as $task) {

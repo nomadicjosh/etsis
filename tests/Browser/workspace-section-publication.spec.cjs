@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
 
-async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false } = {}) {
+async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false, aiEnabled = true, aiFailure = false } = {}) {
   const section = id(1),
     course = id(2),
     term = id(3),
@@ -71,6 +71,14 @@ async function fixture(page, { bound = true, paged = false, unavailable = false,
         items: path.includes("/sections/") ? [row] : [],
         next_after: null,
       };
+    else if (path.endsWith('/assistance/')) {
+      if (data && aiFailure) {
+        await route.fulfill({ status: 503, json: { error: 'Optional assistance is unavailable.' } });
+        return;
+      }
+      result = data ? { advice: { summary: '<script>window.sectionAiExecuted = true</script> Review saved delivery.', suggestions: ['Verify publication dates separately.'], description: null } } :
+        { enabled: aiEnabled, label: 'Fictional provider', revision: 'a'.repeat(64), draft: { section_code: row.code, capacity: 20, delivery_mode: 'online', teaching_assignment_present: false, retained_course: bound ? { code: 'MATH.101', title: 'Fictional Algebra' } : null, term: { code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20' } } };
+    }
     else if (path.endsWith("/publication/setup/"))
       result = {
         section: row,
@@ -379,4 +387,44 @@ test('future offering amendments show prior and proposed terms without rebinding
     await accessible(page);
     expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
     expect(f.errors).toEqual([]);
+});
+
+
+test('section readiness is explicitly consented, text-only and preserves unsaved publication inputs', async ({ page }) => {
+  const f = await fixture(page);
+  await page.getByLabel('Instruction starts on').fill('2026-09-02');
+  await page.getByLabel('Reason for section publication').fill('Fictional private reason.');
+  await page.getByRole('button', { name: 'Optional section AI help', exact: true }).click();
+  await expect(page.getByText(/This checks saved setup only/)).toBeVisible();
+  await page.getByText('Inspect saved section facts to be sent', { exact: true }).click();
+  await expect(page.locator('#drawer-body pre')).not.toContainText('Fictional private reason.');
+  const send = page.getByRole('button', { name: 'Suggest saved section checks', exact: true });
+  await send.click();
+  expect(f.calls.filter(c => c.path.endsWith('/assistance/'))).toHaveLength(0);
+  const consent = page.getByRole('checkbox', { name: /I agree to send the displayed saved section facts/ });
+  await consent.check();
+  await send.click();
+  await expect(page.getByText('Suggestions to review', { exact: true })).toBeVisible();
+  await expect(consent).not.toBeChecked();
+  await expect(page.getByLabel('Instruction starts on')).toHaveValue('2026-09-02');
+  await expect(page.getByLabel('Reason for section publication')).toHaveValue('Fictional private reason.');
+  expect(f.calls.filter(c => c.path.endsWith('/assistance/'))).toEqual([{ path: `/sis/sections/${f.section}/assistance/`, csrf: 'fictional-test-token', data: { consent: true, revision: 'a'.repeat(64) } }]);
+  expect(f.calls.some(c => c.path.endsWith('/commit/'))).toBe(false);
+  expect(await page.evaluate(() => window.sectionAiExecuted)).toBeUndefined();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await accessible(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(f.errors).toEqual([]);
+});
+
+test('section assistance works before course binding and remains optional during outages', async ({ page }) => {
+  const f = await fixture(page, { bound: false, aiFailure: true });
+  await page.getByRole('button', { name: 'Optional section AI help', exact: true }).click();
+  await page.getByRole('checkbox', { name: /I agree to send the displayed saved section facts/ }).check();
+  await page.getByRole('button', { name: 'Suggest saved section checks', exact: true }).click();
+  await expect(page.getByText('No suggestion was applied. Another request requires fresh consent.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Choose course definition', exact: true })).toBeVisible();
+  expect(f.calls.some(c => c.path.endsWith('/commit/'))).toBe(false);
+  expect(f.errors).toEqual([]);
 });

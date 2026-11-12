@@ -3075,6 +3075,22 @@ if (
 }
 // Section publications use the actual router/providers and keep browser CSRF and private reads.
 $sectionPublicationPath = '/sis/sections/' . $bindingSection->id->value . '/publication/';
+$sectionAssistancePath = '/sis/sections/' . $bindingSection->id->value . '/assistance/';
+$sectionAssistanceResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $sectionAssistancePath)));
+$sectionAssistance = json_decode((string) $sectionAssistanceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($sectionAssistanceResponse->getStatusCode() !== 200 || $sectionAssistance['enabled'] !== false ||
+    !str_contains($sectionAssistanceResponse->getHeaderLine('Cache-Control'), 'no-store') ||
+    $teachingPost($sectionAssistancePath, ['consent' => false, 'revision' => $sectionAssistance['revision']])->getStatusCode() !== 422 ||
+    $teachingPost($sectionAssistancePath, ['consent' => true, 'revision' => $sectionAssistance['revision']])->getStatusCode() !== 503) {
+    throw new RuntimeException('Section assistance did not preserve provider, CSRF and private response boundaries.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:catalog:manage', 'sis:ai:course:readiness'];
+if ($teachingPost($sectionAssistancePath, ['consent' => true, 'revision' => $sectionAssistance['revision']])->getStatusCode() !== 403) {
+    throw new RuntimeException('Course assistance granted section assistance.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $sectionPublicationInput = [
     'instruction_starts_on' => '2026-08-24', 'instruction_ends_on' => '2026-12-18',
     'reason' => 'Fictional section publication',

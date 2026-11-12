@@ -50,6 +50,44 @@ final readonly class SectionPublicationService
     ) {
     }
 
+    /** Minimized saved setup. No replay, publication, roster, fees or faculty identity disclosure.
+     * @return array{draft:array<string,mixed>,revision:string}
+     */
+    public function assistanceSnapshot(EntityId $section): array
+    {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        return $this->transactions->run(function () use ($section, $actor): array {
+            [$row, $term] = $this->lock($section);
+            $this->authorize($actor);
+            $bound = $this->bindings->bound($section);
+            $definition = $bound?->definition;
+            $draft = [
+                "section_code" => $row["code"],
+                "capacity" => (int) $row["capacity"],
+                "delivery_mode" => $row["delivery_mode"],
+                "teaching_assignment_present" => $row["faculty_user_id"] !== null,
+                "term" => [
+                    "code" => $term["code"],
+                    "starts_on" => $term["starts_on"],
+                    "ends_on" => $term["ends_on"],
+                ],
+                "retained_course" =>
+                    $definition === null
+                        ? null
+                        : [
+                            "code" => $definition->code,
+                            "title" => $definition->title,
+                            "credits_milli" => $definition->creditsMilli,
+                            "transcript_title" => $definition->text->transcriptTitle,
+                            "description" => $definition->text->description,
+                            "prerequisite_count" => count($definition->prerequisites),
+                        ],
+            ];
+            $this->authorize($actor);
+            return ["draft" => $draft, "revision" => $this->fingerprint([$row, $term, $bound?->describe()])];
+        });
+    }
+
     /** @return array<string, mixed> */
     public function setup(EntityId $section): array
     {
@@ -265,8 +303,8 @@ final readonly class SectionPublicationService
                     [
                         "field" => "sections",
                         "message" =>
-                            "Offering-plan activation requires empty drafts. "
-                            . "Review existing student records separately.",
+                            "Offering-plan activation requires empty drafts. " .
+                            "Review existing student records separately.",
                     ],
                 ]);
             }
@@ -294,8 +332,8 @@ final readonly class SectionPublicationService
                     [
                         "field" => "sections",
                         "message" =>
-                            "An offering selection already exists with different details. "
-                            . "Review its amendment before activation.",
+                            "An offering selection already exists with different details. " .
+                            "Review its amendment before activation.",
                     ],
                 ]);
             }

@@ -36,6 +36,9 @@ final readonly class CourseAssistanceService
         $ready = $this->assistant->availability();
         $tasks = [];
         foreach (AuthoringTask::cases() as $task) {
+            if ($task === AuthoringTask::SectionReadiness) {
+                continue;
+            }
             if ($task->requiresExistingDescription() && $definition->text->description === null) {
                 continue;
             }
@@ -61,6 +64,9 @@ final readonly class CourseAssistanceService
     public function suggest(EntityId $course, AuthoringTask $task, bool $consent, string $revision): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
+        if ($task === AuthoringTask::SectionReadiness) {
+            throw new InvalidArgumentException("Use section assistance for section readiness.");
+        }
         $this->actor($actor, $task);
         if (!$consent) {
             throw new InvalidArgumentException(

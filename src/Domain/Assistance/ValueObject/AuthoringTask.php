@@ -10,6 +10,7 @@ enum AuthoringTask: string
     case Description = "description";
     case Rewrite = "rewrite";
     case Expand = "expand";
+    case SectionReadiness = "section_readiness";
 
     public function requiresExistingDescription(): bool
     {
