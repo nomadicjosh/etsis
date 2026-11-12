@@ -1,15 +1,17 @@
 # Optional course authoring assistance
 
-Catalog editors can request publication-readiness suggestions or a description draft from **Titles & description → Optional AI help**. Assistance is disabled by default. This first stage supports saved course drafts; section authoring, degree authoring, student progress and editor images remain future work.
+Catalog editors can request publication-readiness suggestions, generate a description draft, or rewrite/expand an existing description from **Titles & description → Optional AI help**. Assistance is disabled by default. This first stage supports saved course drafts; section authoring, degree authoring, and student progress remain future work.
 
-Staff inspect the exact course facts, select consent for one request, and choose an action. Results are plain text. **Use suggested description in this editor** copies text into the editor; **Save course text draft** remains an explicit, separate action. Publication retains the existing reviewed, immutable workflow. Readiness suggestions are advisory and do not decide whether publication is permitted.
+Staff inspect the exact course facts, select consent for one request, and choose an action. Rewrite improves clarity while preserving the source meaning; expand asks for fuller explanations of supplied facts. Both require a saved, nonblank description and have their own action grants. Missing facts should be raised as questions rather than invented. Suggestions can still be inaccurate and require staff review.
+
+Results are plain text. **Use suggested description in this editor** copies text into the editor; **Save course text draft** remains an explicit, separate action. Publication retains the existing reviewed, immutable workflow. Readiness suggestions are advisory and do not decide whether publication is permitted.
 
 ## Institutional setup
 
 1. Review the service's data processing, retention, location and no-training terms. Use an institution-operated service if those requirements cannot be met externally. The application cannot enforce a remote provider's training or retention practices through a request parameter.
 2. Configure the provider through deployment settings, keeping its key out of source control. Set `SIS_AI_DATA_POLICY_APPROVED=true` only after that review, then enable the feature. Both settings must be true.
-3. Run the normal migration process. `20261111000001_CreateSisCourseAssistancePermissions.php` adds two protected permissions without changing existing grants. It uses portable query-builder operations and ULIDs; it makes no schema changes. Test coverage exercises SQLite; other configured databases still need deployment verification.
-4. A super administrator or authorized access administrator grants **sis:ai:course:readiness** and/or **sis:ai:course:description** through Access administration, using an institution-created role or direct user grants. Each action also requires **sis:catalog:manage**. Existing protected system roles remain unchanged; super authority includes these actions. Ordinary catalog permission alone cannot call a provider.
+3. Run the normal migration process. `20261111000001_CreateSisCourseAssistancePermissions.php` adds readiness/generation permissions; `20261111000002_CreateSisCourseTextAssistancePermissions.php` adds rewrite/expand permissions. Both preserve existing grants. They use portable query-builder operations and ULIDs, without schema changes. Test coverage exercises SQLite; other configured databases still need deployment verification.
+4. A super administrator or authorized access administrator grants the appropriate **sis:ai:course:readiness**, **sis:ai:course:description**, **sis:ai:course:rewrite** or **sis:ai:course:expand** permission through Access administration, using an institution-created role or direct user grants. Each action also requires **sis:catalog:manage**. Existing protected system roles remain unchanged; super authority includes these actions. Ordinary catalog permission alone cannot call a provider, and description generation does not also grant rewrite or expand.
 5. Exercise the configured service in the institution's test environment. Automated tests use fictional data and injected providers; they do not verify a live account, deployment or model.
 
 OpenAI Responses configuration:
@@ -33,6 +35,8 @@ For Azure's v1 API, set `SIS_AI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com/
 For an institution-operated OpenAI-compatible server, configure its base URL and model. `SIS_AI_PROTOCOL=chat` uses `/chat/completions` and strict `response_format`; `responses` uses `/responses` and strict `text.format`. The server must support that protocol, structured output, output token limits and `store: false`; unsupported services fail safely. Use `SIS_AI_AUTH=none` only where institutional network controls make unauthenticated service access appropriate. HTTP requires an explicit `SIS_AI_ALLOW_HTTP=true`; HTTPS remains the default.
 
 Additional providers implement `Domain\Assistance\Service\AuthoringAssistant` and replace its provider binding. Their availability fingerprint must change whenever the destination, model, credentials or data policy changes. Browser clients never supply those settings. Changing configuration invalidates existing consent previews without changing ordinary course editing.
+
+To rewrite or expand, save the current description, reopen **Optional AI help**, inspect the preview and consent to the selected action. The original editor text remains until staff select **Use suggested description in this editor**. If staff have edited the description since the preview, copying is blocked so the later edits are preserved. Each further request requires a fresh consent check.
 
 ## Data and historical safeguards
 

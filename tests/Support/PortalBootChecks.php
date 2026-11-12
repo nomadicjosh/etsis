@@ -2951,6 +2951,11 @@ if (
 ) {
     throw new RuntimeException("Optional assistance failed protected provider/CSRF/disabled checks.");
 }
+foreach (["rewrite", "expand"] as $textTask) {
+    if ($teachingPost($assistancePath, ["task" => $textTask, "consent" => true, "revision" => $assistancePreview["revision"]])->getStatusCode() !== 503) {
+        throw new RuntimeException("Optional text assistance did not resolve through the protected route.");
+    }
+}
 $sis->access->staff = false;
 $sis->access->grants = ["sis:catalog:manage"];
 if ($teachingPost($assistancePath, ["task" => "description", "consent" => true, "revision" => $assistancePreview["revision"]])->getStatusCode() !== 403) {

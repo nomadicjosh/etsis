@@ -157,7 +157,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] Add a disabled-by-default, provider-independent course authoring contract, exact business-payload preview and per-request consent. Course readiness and description actions have separate protected permissions. See [setup and safeguards](optional-authoring-assistance.md).
 - [x] Keep network calls outside transactions; validate bounded structured results, recheck draft/provider/actor changes, and require staff to copy/save/publish explicitly. Use an isolated client without framework HTTP debug hooks.
 - [ ] Verify institution-selected OpenAI/Azure/local deployments and approved no-training/retention terms before enabling a real service.
-- [ ] Extend reviewed suggestions to section and degree authoring; support additional editor rewrite/expand/image actions with appropriate action permissions and consent.
+- [x] Add saved-description rewrite and expansion, independent action grants, source-text validation and explicit copying that protects later staff edits.
+- [ ] Extend reviewed suggestions to section and degree authoring with appropriate action permissions and consent.
 - [ ] Design student progress assistance and movable assistants with separate privacy/consent boundaries, minimized authorized inputs and no automated academic decisions.
 
 ## 7. Scheduling, employment and office workflows

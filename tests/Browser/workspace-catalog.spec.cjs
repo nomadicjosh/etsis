@@ -10,7 +10,7 @@ async function fixture(page, options = {}) {
     const termRow = { id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20', add_drop_ends_on: '2026-08-15' };
     const calls = [], errors = []; let published = false, rows = options.rows || [], saved = options.saved || false, definitionPublished = false;
     let sectionBound = false, acceptedReview = null, courseReviewCount = 0, courseCommitCount = 0;
-    let courseText = { transcript_title: null, description: null };
+    let courseText = { transcript_title: null, description: options.description || null };
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname, raw = route.request().postData();
@@ -24,7 +24,7 @@ async function fixture(page, options = {}) {
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/courses/') ? [{ id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }] : path.includes('/terms/') ? [termRow] : path.includes('/sections/') ? [{ id: section, code: 'MATH.101.A', course_title: 'Algebra', course_code: 'MATH.101', term_code: '26/FA', capacity: 20, enrolled: 0, active: true }] : [], next_after: null };
         else if (path === `/sis/courses/${course}/assistance/`) {
             if (data && options.assistanceFailure) { await route.fulfill({ status: 503, json: { error: 'Optional assistance is unavailable. Your draft is unchanged.' } }); return; }
-            result = data ? { task: data.task, advice: { summary: '<script>window.aiExecuted = true</script> Review this suggestion.', suggestions: ['Verify learning outcomes.'], description: data.task === 'description' ? 'A fictional introduction to algebra.' : null } } : { enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: ['readiness', 'description'], revision: 'a'.repeat(64), draft: { code: 'MATH.101', title: 'Algebra', transcript_title: courseText.transcript_title, description: courseText.description, credits_milli: 3000, prerequisite_count: 0, subject: null, classifications: {} } };
+            result = data ? { task: data.task, advice: { summary: '<script>window.aiExecuted = true</script> Review this suggestion.', suggestions: ['Verify learning outcomes.'], description: data.task !== 'readiness' ? 'A fictional introduction to algebra.' : null } } : { enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: options.assistanceTasks || ['readiness', 'description', ...(courseText.description ? ['rewrite', 'expand'] : [])], revision: 'a'.repeat(64), draft: { code: 'MATH.101', title: 'Algebra', transcript_title: courseText.transcript_title, description: courseText.description, credits_milli: 3000, prerequisite_count: 0, subject: null, classifications: {} } };
         }
         else if (path === `/sis/courses/${course}/text/`) {
             if (data) { courseText = { transcript_title: data.transcript_title, description: data.description }; result = { status: 'saved' }; }
@@ -398,4 +398,49 @@ test('disabled or failed assistance leaves normal editing available', async ({ p
         await expect(page.locator('#drawer-body')).toContainText('Your text is saved as a draft.');
         expect(f.errors).toEqual([]);
     }
+});
+
+
+for (const [task, label] of [['rewrite', 'Rewrite description'], ['expand', 'Expand description']]) {
+    test(`${task} needs fresh consent and protects text edited while suggestions are reviewed`, async ({ page }) => {
+        const source = 'An introduction to algebra.';
+        const f = await fixture(page, { description: source });
+        await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+        await page.getByRole('button', { name: 'Titles & description', exact: true }).click();
+        await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+        const consent = page.getByRole('checkbox', { name: /I agree to send/ });
+        await page.getByRole('button', { name: label, exact: true }).click();
+        expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toHaveLength(0);
+        await consent.check();
+        await page.getByRole('button', { name: label, exact: true }).click();
+        const copy = page.getByRole('button', { name: 'Use suggested description in this editor' });
+        await expect(copy).toBeVisible();
+        await expect(consent).not.toBeChecked();
+        const editor = page.getByLabel('Catalog description (optional)', { exact: true });
+        await expect(editor).toHaveValue(source);
+        expect(f.calls.filter(call => call.path.endsWith('/assistance/'))[0]).toMatchObject({ csrf: 'fictional-test-token', data: { task, consent: true } });
+        await editor.fill('Staff has changed this draft.');
+        await copy.click();
+        await expect(editor).toHaveValue('Staff has changed this draft.');
+        expect(f.calls.filter(call => call.path.endsWith('/text/'))).toHaveLength(0);
+        await editor.fill(source);
+        await copy.click();
+        await expect(editor).toHaveValue('A fictional introduction to algebra.');
+        expect(f.calls.filter(call => call.path.endsWith('/text/'))).toHaveLength(0);
+        await page.setViewportSize({ width: 375, height: 812 });
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(f.errors).toEqual([]);
+    });
+}
+
+test('description generation permission does not display rewrite or expand controls', async ({ page }) => {
+    await fixture(page, { description: 'A saved description.', assistanceTasks: ['description'] });
+    await page.getByRole('button', { name: 'Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Titles & description', exact: true }).click();
+    await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Suggest a course description', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Rewrite description', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Expand description', exact: true })).toHaveCount(0);
 });

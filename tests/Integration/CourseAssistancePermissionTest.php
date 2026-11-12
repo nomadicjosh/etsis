@@ -6,6 +6,9 @@ require_once dirname(__DIR__) . "/Support/SisFixture.php";
 require_once dirname(__DIR__, 2) .
     "/database/migrations/20261111000001_CreateSisCourseAssistancePermissions.php";
 
+require_once dirname(__DIR__, 2) .
+    "/database/migrations/20261111000002_CreateSisCourseTextAssistancePermissions.php";
+
 use PHPUnit\Framework\TestCase;
 use Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter;
 
@@ -21,13 +24,36 @@ final class CourseAssistancePermissionTest extends TestCase
         );
         $migration->up();
     }
+    private function migrateText(SisFixture $f): void
+    {
+        $migration = new CreateSisCourseTextAssistancePermissions("text-assistance");
+        $migration->setObjectMap(
+            new ArrayObject([
+                "phpmig.adapter" => new DbalMigrationAdapter($f->connection, "test_migrations"),
+            ]),
+        );
+        $migration->up();
+    }
+    public function testTextMigrationRejectsCustomDefinitionWithoutPromotingIt(): void
+    {
+        $f = new SisFixture();
+        $f->sql->update("sis_access_permissions", ["is_system" => 0], ["name" => "sis:ai:course:expand"]);
+        $before = $f->sql->rows("sis_access_permissions");
+        try {
+            $this->migrateText($f);
+            self::fail();
+        } catch (LogicException) {
+            self::assertSame($before, $f->sql->rows("sis_access_permissions"));
+        }
+    }
     public function testMigrationIsIdempotentAndCreatesOnlyIndependentProtectedPermissions(): void
     {
         $f = new SisFixture();
         $before = $f->sql->rows("sis_access_permissions");
         $this->migrate($f);
+        $this->migrateText($f);
         self::assertSame($before, $f->sql->rows("sis_access_permissions"));
-        foreach (["readiness", "description"] as $action) {
+        foreach (["readiness", "description", "rewrite", "expand"] as $action) {
             $permission = $f->sql->rows(
                 "sis_access_permissions",
                 ["name" => "sis:ai:course:" . $action],

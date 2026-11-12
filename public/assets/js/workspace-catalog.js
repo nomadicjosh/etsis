@@ -907,7 +907,7 @@ window.createWorkspaceCatalog = function (ui) {
                             suggestions.append(node("li", {}, value)),
                         );
                         results.append(suggestions);
-                        if (task === "description" && response.advice.description) {
+                        if (task !== "readiness" && response.advice.description) {
                             results.append(
                                 node("p", {}, response.advice.description),
                                 button("Use suggested description in this editor", () => {
@@ -951,6 +951,12 @@ window.createWorkspaceCatalog = function (ui) {
                         : []),
                     ...(preview.tasks.includes("description")
                         ? [button("Suggest a course description", () => run("description"))]
+                        : []),
+                    ...(preview.tasks.includes("rewrite")
+                        ? [button("Rewrite description", () => run("rewrite"))]
+                        : []),
+                    ...(preview.tasks.includes("expand")
+                        ? [button("Expand description", () => run("expand"))]
                         : []),
                 );
                 assistantPanel.append(input, controls, progress, results);

@@ -36,6 +36,9 @@ final readonly class CourseAssistanceService
         $ready = $this->assistant->availability();
         $tasks = [];
         foreach (AuthoringTask::cases() as $task) {
+            if ($task->requiresExistingDescription() && $definition->text->description === null) {
+                continue;
+            }
             try {
                 $this->actor($actor, $task);
                 $tasks[] = $task->value;
@@ -73,6 +76,9 @@ final readonly class CourseAssistanceService
             throw new ConcurrentModificationException(
                 "The saved course changed. Review its assistance preview again.",
             );
+        }
+        if ($task->requiresExistingDescription() && $definition->text->description === null) {
+            throw new InvalidArgumentException("Save a course description before rewriting or expanding it.");
         }
         // Metadata-only consent evidence: no prompt, response, reason, credentials or model payload.
         $this->audit->record($actor, "catalog.assistance_requested." . $task->value, $course);

@@ -5,6 +5,8 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:ai:course:rewrite" => ["description" => "Request optional rewrites of saved course descriptions."],
+        "sis:ai:course:expand" => ["description" => "Request optional expansion of saved course descriptions."],
         "sis:ai:course:readiness" => [
             "description" => "Request optional course publication-readiness suggestions.",
         ],

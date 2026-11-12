@@ -35,7 +35,11 @@ final class FictionalCourseAssistant implements AuthoringAssistant
         if ($this->duringCall !== null) {
             ($this->duringCall)();
         }
-        return new AuthoringAdvice("Verify this draft.", ["Check prerequisites."]);
+        return new AuthoringAdvice(
+            "Verify this draft.",
+            ["Check prerequisites."],
+            $task === AuthoringTask::Readiness ? null : "A clearer fictional description.",
+        );
     }
 }
 final class CourseAssistanceTest extends TestCase
@@ -56,6 +60,49 @@ final class CourseAssistanceTest extends TestCase
             $this->f->access,
             $this->f->audit,
         );
+    }
+    public function testRewriteAndExpandRequireSavedTextAndIndependentActionGrants(): void
+    {
+        foreach ([AuthoringTask::Rewrite, AuthoringTask::Expand] as $task) {
+            $preview = $this->service->preview($this->course);
+            self::assertNotContains($task->value, $preview["tasks"]);
+            try {
+                $this->service->suggest($this->course, $task, true, $preview["revision"]);
+                self::fail("An empty description was sent.");
+            } catch (InvalidArgumentException) {
+                self::assertSame([], $this->assistant->calls);
+            }
+        }
+        $this->f->sql->insert("sis_course_descriptions", [
+            "id" => EntityId::generate()->value,
+            "course_id" => $this->course->value,
+            "description" => "An introduction to algebra.",
+        ]);
+        $this->f->access->staff = false;
+        $this->f->access->grants = ["sis:catalog:manage", "sis:ai:course:description"];
+        $preview = $this->service->preview($this->course);
+        self::assertSame(["description"], $preview["tasks"]);
+        foreach ([AuthoringTask::Rewrite, AuthoringTask::Expand] as $task) {
+            try {
+                $this->service->suggest($this->course, $task, true, $preview["revision"]);
+                self::fail("Description generation incorrectly granted another action.");
+            } catch (AccessDeniedException) {
+                self::assertSame([], $this->assistant->calls);
+            }
+            $this->f->access->grants = ["sis:catalog:manage", "sis:ai:course:" . $task->value];
+            $preview = $this->service->preview($this->course);
+            self::assertSame([$task->value], $preview["tasks"]);
+            $before = $this->f->coursePublications()->workingDefinition($this->course)->describe();
+            $result = $this->service->suggest($this->course, $task, true, $preview["revision"]);
+            self::assertSame("A clearer fictional description.", $result["advice"]["description"]);
+            self::assertSame("An introduction to algebra.", $this->assistant->calls[0][1]["description"]);
+            self::assertSame(
+                $before,
+                $this->f->coursePublications()->workingDefinition($this->course)->describe(),
+            );
+            $this->assistant->calls = [];
+            $this->f->access->grants = ["sis:catalog:manage", "sis:ai:course:description"];
+        }
     }
     public function testPreviewIsLocalAndRequestRunsOutsideTransactionWithoutEditingCourse(): void
     {

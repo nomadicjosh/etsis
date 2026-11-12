@@ -62,6 +62,41 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             ],
         ];
     }
+    public function testEditingTasksSendDistinctBoundedInstructionsAndOnlyReviewedFacts(): void
+    {
+        foreach ([AuthoringTask::Rewrite, AuthoringTask::Expand] as $task) {
+            $payload = self::response([
+                "summary" => "Review the wording.",
+                "suggestions" => [],
+                "description" => "A clearer description.",
+            ]);
+            $mock = new MockHandler([new Response(200, [], json_encode($payload))]);
+            $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
+            $draft = ["title" => "Algebra", "description" => "An introduction to algebra."];
+            self::assertSame("A clearer description.", $service->suggest($task, $draft)->description);
+            $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
+            self::assertStringContainsString(
+                ucfirst($task->value) . " the existing description",
+                $body["input"][0]["content"],
+            );
+            self::assertSame($draft, json_decode($body["input"][1]["content"], true));
+            self::assertFalse($body["store"]);
+            self::assertSame(2000, $body["max_output_tokens"]);
+        }
+    }
+    public function testEditingTasksCannotCallProviderWithoutSourceText(): void
+    {
+        foreach ([AuthoringTask::Rewrite, AuthoringTask::Expand] as $task) {
+            $mock = new MockHandler([]);
+            $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
+            try {
+                $service->suggest($task, ["description" => "   "]);
+                self::fail("An empty description was accepted.");
+            } catch (AssistanceUnavailableException) {
+                self::assertNull($mock->getLastRequest());
+            }
+        }
+    }
     public function testResponsesRequestIsBoundedPrivateAndStrict(): void
     {
         $mock = new MockHandler([new Response(200, [], json_encode(self::response()))]);

@@ -8,4 +8,11 @@ enum AuthoringTask: string
 {
     case Readiness = "readiness";
     case Description = "description";
+    case Rewrite = "rewrite";
+    case Expand = "expand";
+
+    public function requiresExistingDescription(): bool
+    {
+        return $this === self::Rewrite || $this === self::Expand;
+    }
 }

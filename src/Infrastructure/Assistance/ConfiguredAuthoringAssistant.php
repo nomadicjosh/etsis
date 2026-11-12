@@ -32,7 +32,15 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
         }
         $settings = [];
         $names = [
-            "enabled", "data_policy_approved", "label", "endpoint", "protocol", "auth", "key", "model", "allow_http",
+            "enabled",
+            "data_policy_approved",
+            "label",
+            "endpoint",
+            "protocol",
+            "auth",
+            "key",
+            "model",
+            "allow_http",
         ];
         foreach ($names as $name) {
             $settings[$name] = $this->config->getConfigKey("assistance." . $name, null);
@@ -112,13 +120,29 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                 "Return summary (at most 1200 characters), suggestions (at most 8 strings of 800 characters each),",
                 "and description (null or at most 10000 characters).",
             ]);
-            if ($task === AuthoringTask::Description) {
-                $instructions .= " Suggest a catalog description only when the supplied facts support one."
-                . " Otherwise return null and explain the missing facts.";
-            } else {
-                $instructions .= " Review publication readiness, distinguishing optional enrichment from missing facts."
-                . " Return description as null.";
+            if (
+                $task->requiresExistingDescription() &&
+                (!is_string($draft["description"] ?? null) || trim($draft["description"]) === "")
+            ) {
+                throw new AssistanceUnavailableException();
             }
+            $instructions .=
+            " " .
+            match ($task) {
+                AuthoringTask::Readiness
+                => "Review publication readiness, distinguishing optional enrichment from missing facts." .
+                " Return description as null.",
+                AuthoringTask::Description
+                => "Suggest a catalog description only when supplied facts support one." .
+                " Otherwise return null and explain the missing facts.",
+                AuthoringTask::Rewrite
+                => "Rewrite the existing description for clarity and readability, preserving its meaning and scope." .
+                " Do not add facts or claims. Return the proposed replacement as description.",
+                AuthoringTask::Expand
+                => "Expand the existing description by explaining only the supplied facts more fully." .
+                " Preserve meaning and scope; do not invent topics, outcomes, promises or requirements." .
+                " If useful expansion needs additional facts, return description as null and ask staff for them.",
+            };
             $data = json_encode($draft, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
             if (strlen($data) > 65536) {
                 throw new AssistanceUnavailableException();
