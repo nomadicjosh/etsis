@@ -30,12 +30,12 @@ final class MoodleCheckCommand extends ConsoleCommand
             $capabilities = $this->probe->check();
         } catch (Throwable) {
             $this->terminalError(
-                "Moodle check failed. Verify endpoint, TLS trust, REST service and token settings.",
+                "Moodle check failed. Verify the configured site URL, TLS trust, REST service and token settings.",
             );
             return self::FAILURE;
         }
         $this->terminalRaw(
-            "Moodle REST connection verified. Function discovery only; SSO and synchronization are not enabled.",
+            "Moodle site URL and REST connection verified. Discovery only; SSO and synchronization are not enabled.",
         );
         foreach ($capabilities->describe() as $name => $available) {
             $this->terminalRaw($name . ": " . ($available ? "available" : "not advertised"));

@@ -7,6 +7,7 @@ namespace Infrastructure\Lms;
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\Service\MoodleConnectionProbe;
 use Domain\Lms\ValueObject\MoodleCapabilities;
+use Domain\Lms\ValueObject\MoodleSiteUrl;
 use GuzzleHttp\Client;
 use Qubus\Config\ConfigContainer;
 use Throwable;
@@ -41,18 +42,7 @@ final readonly class RestMoodleConnectionProbe implements MoodleConnectionProbe
             ) {
                 throw new MoodleConnectionUnavailableException();
             }
-            $url = parse_url($base);
-            if (
-                $url === false ||
-                ($url["scheme"] ?? "") !== "https" ||
-                empty($url["host"]) ||
-                isset($url["user"]) ||
-                isset($url["pass"]) ||
-                isset($url["query"]) ||
-                isset($url["fragment"])
-            ) {
-                throw new MoodleConnectionUnavailableException();
-            }
+            $site = new MoodleSiteUrl($base);
             $verify = true;
             if ($ca !== "") {
                 $verify = realpath($ca);
@@ -61,7 +51,7 @@ final readonly class RestMoodleConnectionProbe implements MoodleConnectionProbe
                 }
             }
             $deadline = microtime(true) + 15;
-            $response = $this->http->request("POST", rtrim($base, "/") . "/webservice/rest/server.php", [
+            $response = $this->http->request("POST", $site->value . "/webservice/rest/server.php", [
                 "headers" => ["Accept" => "application/json"],
                 "form_params" => [
                     "wstoken" => $token,
@@ -105,6 +95,12 @@ final readonly class RestMoodleConnectionProbe implements MoodleConnectionProbe
                 !is_array($body["functions"] ?? null) ||
                 !array_is_list($body["functions"]) ||
                 count($body["functions"]) > 2000
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            if (
+                !is_string($body["siteurl"] ?? null) ||
+                !$site->matches(new MoodleSiteUrl($body["siteurl"]))
             ) {
                 throw new MoodleConnectionUnavailableException();
             }

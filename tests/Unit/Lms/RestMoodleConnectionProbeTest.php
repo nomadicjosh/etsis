@@ -31,7 +31,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
         );
         return $config;
     }
-    private function response(): Response
+    private function response(string $siteUrl = "https://moodle.example.invalid/campus"): Response
     {
         return new Response(
             200,
@@ -40,7 +40,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
                 "username" => "fictional-private-username",
                 "fullname" => "Fictional Private Name",
                 "userid" => 999,
-                "siteurl" => "https://private.example.invalid",
+                "siteurl" => $siteUrl,
                 "functions" => [
                     ["name" => "core_webservice_get_site_info", "version" => "20260101"],
                     ["name" => "core_course_create_courses"],
@@ -88,6 +88,31 @@ final class RestMoodleConnectionProbeTest extends TestCase
             self::assertStringNotContainsString($private, print_r($probe, true));
         }
     }
+    public function testReportedSiteMustMatchConfiguredInstallationBeforeDiscoveryIsReturned(): void
+    {
+        $valid = new MockHandler([$this->response("https://MOODLE.EXAMPLE.INVALID:443/campus/")]);
+        $probe = new RestMoodleConnectionProbe($this->config(), new Client(["handler" => $valid]));
+        self::assertTrue($probe->check()->describe()["core_webservice_get_site_info"]);
+        foreach (
+            [
+                "https://other.example.invalid/campus",
+                "https://moodle.example.invalid/other",
+                "https://moodle.example.invalid:8443/campus",
+                "http://moodle.example.invalid/campus",
+            ]
+            as $site
+        ) {
+            $mock = new MockHandler([$this->response($site)]);
+            $probe = new RestMoodleConnectionProbe($this->config(), new Client(["handler" => $mock]));
+            try {
+                $probe->check();
+                self::fail("Mismatched installation accepted.");
+            } catch (MoodleConnectionUnavailableException $error) {
+                self::assertNull($error->getPrevious());
+                self::assertStringNotContainsString($site, $error->getMessage());
+            }
+        }
+    }
     public static function unsafeConfiguration(): iterable
     {
         yield [["enabled" => false]];
@@ -115,6 +140,20 @@ final class RestMoodleConnectionProbeTest extends TestCase
     }
     public static function invalidResponses(): iterable
     {
+        yield [
+            new Response(
+                200,
+                [],
+                json_encode(["functions" => [["name" => "core_webservice_get_site_info"]]]),
+            ),
+        ];
+        yield [
+            new Response(
+                200,
+                [],
+                json_encode(["siteurl" => 123, "functions" => [["name" => "core_webservice_get_site_info"]]]),
+            ),
+        ];
         yield [new Response(302, ["Location" => "https://other.example.invalid"])];
         yield [new Response(401, [], "fictional-private-token")];
         yield [new Response(200, [], "not json")];
@@ -130,8 +169,23 @@ final class RestMoodleConnectionProbeTest extends TestCase
             ),
         ];
         yield [new Response(200, [], str_repeat("x", 524289))];
-        yield [new Response(200, [], json_encode(["functions" => []]))];
-        yield [new Response(200, [], json_encode(["functions" => [["name" => "<script>private</script>"]]]))];
+        yield [
+            new Response(
+                200,
+                [],
+                json_encode(["siteurl" => "https://moodle.example.invalid/campus", "functions" => []]),
+            ),
+        ];
+        yield [
+            new Response(
+                200,
+                [],
+                json_encode([
+                    "siteurl" => "https://moodle.example.invalid/campus",
+                    "functions" => [["name" => "<script>private</script>"]],
+                ]),
+            ),
+        ];
         yield [
             new Response(
                 200,
