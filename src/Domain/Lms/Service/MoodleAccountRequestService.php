@@ -385,9 +385,11 @@ final readonly class MoodleAccountRequestService
     /** @return array<string,string> */
     private function describe(MoodleAccountRequest $request): array
     {
+        $processing = $this->requests->processing($request->id);
         return $request->describe() + [
-            "state" => $this->requests->state($request->id),
-            "issue" => $this->requests->issue($request->id),
+            "state" => $processing["state"],
+            "issue_code" => $processing["issue_code"],
+            "issue" => $processing["issue"],
         ];
     }
 

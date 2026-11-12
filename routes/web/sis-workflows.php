@@ -781,6 +781,8 @@ return static function (Psr7Router $router): void {
     $router->get('/sis/people/{person}/moodle/account-request/', [SisMoodleAccountRequestController::class, 'status']);
     $router->post('/sis/people/{person}/moodle/account-request/review/', [SisMoodleAccountRequestController::class, 'review']);
     $router->post('/sis/people/{person}/moodle/account-request/confirm/', [SisMoodleAccountRequestController::class, 'confirm']);
+    $router->post('/sis/people/{person}/moodle/account-request/resolution/review/', [SisMoodleAccountRequestController::class, 'reviewResolution']);
+    $router->post('/sis/people/{person}/moodle/account-request/resolution/confirm/', [SisMoodleAccountRequestController::class, 'confirmResolution']);
     $router->post('/sis/people/{person}/moodle/review/', [SisMoodlePersonLinkController::class, 'review']);
     $router->post('/sis/people/{person}/moodle/confirm/', [SisMoodlePersonLinkController::class, 'confirm']);
     $router->post("/sis/moodle/installation/review/", [SisMoodleBindingController::class, "review"]);

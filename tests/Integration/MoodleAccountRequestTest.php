@@ -168,6 +168,253 @@ final class MoodleAccountRequestTest extends TestCase
         $access = new SqlAccessRepository($this->f->sql);
         $access->assign(GrantKind::UserRole, $this->f->access->actor, $access->roleNamed("super")->id, true);
     }
+
+    private function resolutions(
+        ?AuditTrail $audit = null,
+    ): \Domain\Lms\Service\MoodleAccountResolutionService {
+        return new \Domain\Lms\Service\MoodleAccountResolutionService(
+            $this->requests,
+            $this->bindings,
+            $this->links,
+            $this->f->admissions,
+            new \Domain\Lms\Service\MoodleAccountProfile($this->defaults),
+            new UserAccountAccess(
+                new SqlAccessRepository($this->f->sql),
+                $this->f->access,
+                $this->f->transactions,
+            ),
+            new SqlAccessRepository($this->f->sql),
+            $this->f->access,
+            $this->f->transactions,
+            $audit ?? $this->f->audit,
+            $this->f->dropCipher,
+            $this->f->clock,
+        );
+    }
+
+    private function emailReview(): array
+    {
+        $this->permitWorker();
+        $review = $this->review("password_email");
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $remote = $this->remote();
+        $remote->status = "email_review_required";
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        return $this->resolutions()->review(
+            $this->person->id,
+            "Verified access through institutional support.",
+        );
+    }
+
+    public function testEmailResolutionPreservesApprovalLinkAndOperationWithoutNetworkOrHistoryChanges(): void
+    {
+        $review = $this->emailReview();
+        $approval = $this->f->sql->rows("sis_moodle_account_requests")[0];
+        $outbox = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        $links = $this->f->sql->rows("sis_moodle_person_links");
+        $history = $this->f->sql->rows("sis_history_events");
+        $this->policy->active = false;
+        $this->reader->active = false;
+        $calls = $this->reader->calls;
+        self::assertSame(
+            ["state" => "completed"],
+            $this->resolutions()->confirm($this->person->id, $review["review_token"]),
+        );
+        $saved = $this->f->sql->rows("sis_moodle_account_requests")[0];
+        foreach ($approval as $field => $value) {
+            if (!in_array($field, ["resolution_hash", "encrypted_resolution"], true)) {
+                self::assertSame($value, $saved[$field]);
+            }
+        }
+        $evidence = json_decode($this->f->dropCipher->open($saved["encrypted_resolution"]), true);
+        self::assertSame($this->f->access->actor->value, $evidence["review"]["actor_id"]);
+        self::assertSame($approval["id"], $evidence["review"]["request_id"]);
+        self::assertSame($links[0]["id"], $evidence["review"]["link_id"]);
+        self::assertSame("Verified access through institutional support.", $evidence["review"]["reason"]);
+        self::assertSame("2026-08-10T17:00:00Z", $evidence["resolved_at"]);
+        self::assertStringNotContainsString($evidence["review"]["reason"], $saved["encrypted_resolution"]);
+        $after = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        foreach (["request_id", "attempts", "created_at", "lease_until"] as $field) {
+            self::assertSame($outbox[$field], $after[$field]);
+        }
+        self::assertSame("email_resolved", $after["issue_code"]);
+        self::assertArrayNotHasKey("encrypted_resolution", $after);
+        self::assertSame($links, $this->f->sql->rows("sis_moodle_person_links"));
+        self::assertSame($history, $this->f->sql->rows("sis_history_events"));
+        self::assertSame($calls, $this->reader->calls);
+        self::assertStringNotContainsString(
+            "Verified access",
+            json_encode($this->service->status($this->person->id)),
+        );
+    }
+
+    public function testResolutionRepeatAfterExpiryReturnsOriginalResultAndRejectsCompetingReview(): void
+    {
+        $review = $this->emailReview();
+        $other = $this->resolutions()->review($this->person->id, "Another independently reviewed outcome.");
+        $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+        $audit = $this->f->audit->forSubject($this->person->id);
+        $row = $this->f->sql->rows("sis_moodle_account_requests");
+        $this->f->clock->time = $this->f->clock->time->modify("+21 minutes");
+        self::assertSame(
+            ["state" => "completed"],
+            $this->resolutions()->confirm($this->person->id, $review["review_token"]),
+        );
+        self::assertSame($audit, $this->f->audit->forSubject($this->person->id));
+        self::assertSame($row, $this->f->sql->rows("sis_moodle_account_requests"));
+        $this->expectException(ConcurrentModificationException::class);
+        $this->resolutions()->confirm($this->person->id, $other["review_token"]);
+    }
+
+    public function testResolutionAuditFailureRollsBackStateAndEvidence(): void
+    {
+        $review = $this->emailReview();
+        $rows = $this->f->sql->rows("sis_moodle_account_requests");
+        $outbox = $this->f->sql->rows("sis_moodle_provisioning_outbox");
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willThrowException(new RuntimeException("Fictional failure."));
+        try {
+            $this->resolutions($audit)->confirm($this->person->id, $review["review_token"]);
+            self::fail("Audit failure must abort resolution.");
+        } catch (RuntimeException) {
+            self::assertSame($rows, $this->f->sql->rows("sis_moodle_account_requests"));
+            self::assertSame($outbox, $this->f->sql->rows("sis_moodle_provisioning_outbox"));
+        }
+        self::assertSame(
+            ["state" => "completed"],
+            $this->resolutions()->confirm($this->person->id, $review["review_token"]),
+        );
+    }
+
+    public function testResolutionRefusesExpiredTamperedAndCreationPurposeTokens(): void
+    {
+        $creation = $this->review();
+        $review = $this->emailReview();
+        $this->f->clock->time = $this->f->clock->time->modify("+20 minutes");
+        foreach (
+            [$review["review_token"], $review["review_token"] . "tampered", $creation["review_token"]]
+            as $token
+        ) {
+            try {
+                $this->resolutions()->confirm($this->person->id, $token);
+                self::fail("Invalid or expired review accepted.");
+            } catch (ValidationException) {
+                self::assertSame(
+                    "review_required",
+                    $this->service->status($this->person->id)["request"]["state"],
+                );
+            }
+        }
+    }
+
+    public function testResolutionRefusesActorSwitchAndPermissionLoss(): void
+    {
+        $review = $this->emailReview();
+        $actor = $this->f->access->actor;
+        $this->f->access->actor = $this->f->user();
+        try {
+            $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+            self::fail("Another actor must not confirm.");
+        } catch (AccessDeniedException) {
+            $this->f->access->actor = $actor;
+        }
+        $this->f->access->staff = false;
+        $this->f->access->grants = ["sis:person:manage"];
+        $this->expectException(AccessDeniedException::class);
+        $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+    }
+
+    public function testResolutionStillRequiresOwnerAccountPermission(): void
+    {
+        $this->person = $this->person($this->f->access->actor);
+        $review = $this->emailReview();
+        $this->f->access->staff = false;
+        $this->f->access->grants = [MoodleAccountRequestService::CREATE, "sis:person:manage"];
+        $this->expectException(AccessDeniedException::class);
+        $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+    }
+
+    public function testResolutionRetainsSuperAccountProtectionAfterReviewerLosesSuper(): void
+    {
+        $owner = $this->f->user();
+        $this->person = $this->person($owner);
+        $access = new SqlAccessRepository($this->f->sql);
+        $super = $access->roleNamed("super")->id;
+        $access->assign(GrantKind::UserRole, $owner, $super, true);
+        $review = $this->emailReview();
+        $access->assign(GrantKind::UserRole, $this->f->access->actor, $super, false);
+        $this->expectException(AccessDeniedException::class);
+        $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+    }
+
+    public function testResolutionRefusesChangedVersionAndUncertainCreationOutcome(): void
+    {
+        $review = $this->emailReview();
+        $row = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        $this->f->sql->update(
+            "sis_moodle_provisioning_outbox",
+            ["version" => (int) $row["version"] + 1],
+            ["id" => $row["id"]],
+        );
+        try {
+            $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+            self::fail("Stale review accepted.");
+        } catch (ConcurrentModificationException) {
+            self::assertNull($this->f->sql->rows("sis_moodle_account_requests")[0]["encrypted_resolution"]);
+        }
+        foreach (["connection_uncertain", "attempt_limit", "request_changed"] as $issue) {
+            $this->f->sql->update(
+                "sis_moodle_provisioning_outbox",
+                ["issue_code" => $issue],
+                ["id" => $row["id"]],
+            );
+            try {
+                $this->resolutions()->review($this->person->id, "Verified support outcome.");
+                self::fail("Uncertain creation cannot be marked resolved here.");
+            } catch (ConcurrentModificationException) {
+                self::assertNull($this->f->sql->rows("sis_moodle_account_requests")[0]["resolution_hash"]);
+            }
+        }
+    }
+
+    public function testResolutionRefusesChangedLinkProfileAndBlankReason(): void
+    {
+        $review = $this->emailReview();
+        try {
+            $this->resolutions()->review($this->person->id, "  ");
+            self::fail("A reason is required.");
+        } catch (ValidationException) {
+            self::assertNull($this->f->sql->rows("sis_moodle_account_requests")[0]["resolution_hash"]);
+        }
+        $link = $this->f->sql->rows("sis_moodle_person_links")[0];
+        $this->f->sql->update("sis_moodle_person_links", ["moodle_user_id" => "999"], ["id" => $link["id"]]);
+        try {
+            $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+            self::fail("Changed link accepted.");
+        } catch (ConcurrentModificationException) {
+            $this->f->sql->update(
+                "sis_moodle_person_links",
+                ["moodle_user_id" => $link["moodle_user_id"]],
+                ["id" => $link["id"]],
+            );
+        }
+        $this->f->sql->update("sis_persons", ["given_name" => "Changed"], ["id" => $this->person->id->value]);
+        $this->expectException(ConcurrentModificationException::class);
+        $this->resolutions()->confirm($this->person->id, $review["review_token"]);
+    }
+
+    public function testUnknownQueueIssueNeverBecomesPublicStatusText(): void
+    {
+        $this->emailReview();
+        $row = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        $this->f->sql->update("sis_moodle_provisioning_outbox", ["issue_code" => "fictional-private-upstream"], ["id" => $row["id"]]);
+        try {
+            $this->service->status($this->person->id);
+            self::fail("Unrecognized issue must be refused.");
+        } catch (RuntimeException $error) {
+            self::assertStringNotContainsString("fictional-private-upstream", $error->getMessage());
+        }
+    }
     public function testWorkerBothModesRetainLinkAndAuditWithNoHistoryMutation(): void
     {
         $this->permitWorker();

@@ -17,6 +17,13 @@ interface MoodleAccountRequestRepository
     ): void;
     /** Atomically add a reference-only outbox item in the caller's transaction. */
     public function enqueue(EntityId $request, string $createdAt): void;
-    public function state(EntityId $request): string;
-    public function issue(EntityId $request): string;
+    /** @return array{version:int,state:string,issue_code:string,issue:string,resolution_hash:?string} */
+    public function processing(EntityId $request): array;
+    /** Caller owns the transaction; retain the original approval and operation reference. */
+    public function resolveEmail(
+        EntityId $request,
+        int $expectedVersion,
+        string $reviewHash,
+        #[\SensitiveParameter] string $encryptedResolution,
+    ): void;
 }

@@ -7,6 +7,7 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\Service\MoodleAccountRequestService;
+use Domain\Lms\Service\MoodleAccountResolutionService;
 use Domain\Lms\ValueObject\MoodleAccountDraft;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -15,8 +16,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisMoodleAccountRequestController
 {
-    public function __construct(private MoodleAccountRequestService $service)
-    {
+    public function __construct(
+        private MoodleAccountRequestService $service,
+        private MoodleAccountResolutionService $resolutions,
+    ) {
     }
     public function status(string $person): ResponseInterface
     {
@@ -53,5 +56,22 @@ final readonly class SisMoodleAccountRequestController
         } catch (MoodleConnectionUnavailableException $error) {
             return new JsonResponse(["error" => $error->getMessage()], 503);
         }
+    }
+
+    public function reviewResolution(ServerRequest $request, string $person): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->resolutions->review(new EntityId($person), FormInput::from($request)->text("reason", 500)),
+        );
+    }
+
+    public function confirmResolution(ServerRequest $request, string $person): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->resolutions->confirm(
+                new EntityId($person),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
     }
 }

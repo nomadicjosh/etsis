@@ -94,6 +94,39 @@ require_once $registrationCompilerMigrations . "20261112000003_CreateSisMoodleLa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testMoodleResolutionUpgradeAddsNullableEvidenceWithoutChangingOriginalFacts(): void
+    {
+        require_once dirname(__DIR__, 2) . "/database/migrations/20261112000004_CreateSisMoodleAccountResolutions.php";
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method("alter")->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definition): void {
+                self::assertSame("sis_moodle_account_requests", $name);
+                $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($definition);
+            },
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method("getSchema")->willReturn($schema);
+        $migration = new CreateSisMoodleAccountResolutions("resolutions");
+        $migration->setObjectMap(new ArrayObject([
+            "phpmig.adapter" => new DbalMigrationAdapter($connection, "test_migrations"),
+        ]));
+        $migration->up();
+        foreach (["MySQL", "PostgreSQL", "SQLite", "SQLServer", "Oracle"] as $driver) {
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method("quoteIdentifier")->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $commands = new $class($dialect)->alter($definition);
+            self::assertCount(2, $commands, $driver);
+            $sql = json_encode($commands, JSON_THROW_ON_ERROR);
+            self::assertStringContainsString("resolution_hash", $sql);
+            self::assertStringContainsString("encrypted_resolution", $sql);
+            self::assertStringNotContainsString("NOT NULL", strtoupper($sql));
+            self::assertStringNotContainsString("DROP", strtoupper($sql));
+        }
+    }
+
     public function testMoodleOwnerLookupIndexCompilesForEverySupportedDialect(): void
     {
         $schema = $this->createMock(Schema::class);
