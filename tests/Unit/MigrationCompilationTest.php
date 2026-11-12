@@ -91,6 +91,29 @@ require_once $registrationCompilerMigrations . '20261112000000_CreateSisMoodleAc
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testMoodleProvisioningLeaseUpgradePreservesRequestsAndCompilesAcrossDialects(): void
+    {
+        require_once dirname(__DIR__, 2).'/database/migrations/20261112000001_CreateSisMoodleProvisioningLeases.php';
+        $definition=null;
+        $schema=$this->createMock(Schema::class);
+        $schema->expects(self::once())->method('alter')->willReturnCallback(static function(string $name,callable $callback) use (&$definition): void {
+            $definition=new \Qubus\Expressive\Schema\AlterTable($name);$callback($definition);
+        });
+        $connection=$this->createStub(Connection::class);$connection->method('getSchema')->willReturn($schema);
+        $migration=new CreateSisMoodleProvisioningLeases('leases');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter'=>new DbalMigrationAdapter($connection,'test_migrations')]));
+        $migration->up();
+        foreach (['MySQL','PostgreSQL','SQLite','SQLServer','Oracle'] as $driver) {
+            $class='Qubus\\Expressive\\Schema\\Compiler\\'.$driver;
+            $dialect=$this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"'.$name.'"');
+            $commands=new $class($dialect)->alter($definition);
+            self::assertNotEmpty($commands);
+            self::assertStringContainsString('lease_until',json_encode($commands,JSON_THROW_ON_ERROR));
+            self::assertStringContainsString('attempts',json_encode($commands,JSON_THROW_ON_ERROR));
+            self::assertStringContainsString('issue_code',json_encode($commands,JSON_THROW_ON_ERROR));
+        }
+    }
     public function testTransferReadIndexesCompileAcrossDialectsAndRollbackOnSqlite(): void
     {
         require_once dirname(__DIR__) . "/Support/SisFixture.php";

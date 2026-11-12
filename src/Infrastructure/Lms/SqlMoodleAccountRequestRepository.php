@@ -68,6 +68,21 @@ final readonly class SqlMoodleAccountRequestRepository implements MoodleAccountR
         ]);
     }
 
+    public function issue(EntityId $request): string
+    {
+        $row = $this->sql->one("sis_moodle_provisioning_outbox", ["request_id" => $request->value]);
+        return match ($row["issue_code"]) {
+            "request_changed"
+            => "The person or approved setup changed. Ask an integration administrator to review this request.",
+            "connection_uncertain"
+            => "Outcome uncertain. The worker will reconcile this operation after its lease expires.",
+            "attempt_limit"
+            => "Attempts stopped. An integration administrator must reconcile this operation before a new request.",
+            "email_delivery"
+            => "Account linked; setup email needs review. Use Moodle password recovery, keeping this account.",
+            default => "",
+        };
+    }
     public function state(EntityId $request): string
     {
         $row = $this->sql->one("sis_moodle_provisioning_outbox", ["request_id" => $request->value]);

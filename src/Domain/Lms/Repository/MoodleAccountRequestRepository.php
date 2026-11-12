@@ -18,4 +18,5 @@ interface MoodleAccountRequestRepository
     /** Atomically add a reference-only outbox item in the caller's transaction. */
     public function enqueue(EntityId $request, string $createdAt): void;
     public function state(EntityId $request): string;
+    public function issue(EntityId $request): string;
 }

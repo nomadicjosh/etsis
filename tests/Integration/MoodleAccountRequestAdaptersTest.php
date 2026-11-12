@@ -27,6 +27,11 @@ final class MoodleAccountRequestAdaptersTest extends TestCase
             $config->setConfigKey("moodle", ["enabled" => $moodle, "account_requests_enabled" => $intake]);
             $policy = new ConfiguredMoodleAccountRequestPolicy($config);
             self::assertSame($expected, $policy->enabled());
+            self::assertFalse($policy->processingEnabled());
+            $config->setConfigKey("moodle", ["provisioning_enabled" => true]);
+            self::assertSame($expected, $policy->processingEnabled());
+            $config->setConfigKey("moodle", ["provisioning_enabled" => "true"]);
+            self::assertFalse($policy->processingEnabled());
             $config->setConfigKey("moodle", ["account_requests_enabled" => false]);
             self::assertFalse($policy->enabled());
         }

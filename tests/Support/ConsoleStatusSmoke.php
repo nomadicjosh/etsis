@@ -101,6 +101,11 @@ try {
             if ($tester->execute([]) !== 0 || !str_contains($tester->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle diagnostic did not complete.');
             }
+            $worker = $app->make(\Domain\Lms\Service\MoodleProvisioningWorker::class);
+            $provision = new \Symfony\Component\Console\Tester\CommandTester(new \Application\Console\Commands\MoodleProvisionCommand($app, $worker));
+            if ($provision->execute([]) !== 0 || !str_contains($provision->getDisplay(), 'disabled')) {
+                throw new RuntimeException('Disabled Moodle worker did not resolve without network or queue access.');
+            }
             $reader = $app->make(\Domain\Lms\Service\MoodleRecordReader::class);
             $inspect = new \Symfony\Component\Console\Tester\CommandTester(
                 new \Application\Console\Commands\MoodleInspectCommand($app, $reader),

@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Infrastructure\Lms;
 
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
-use Domain\Lms\Service\MoodleConnectionProbe as ConnectionProbe;
-use Domain\Lms\Service\MoodleRecordReader as RecordReader;
-use Domain\Lms\Service\MoodleInstanceReader as InstanceReader;
-use Domain\Lms\Service\MoodleBoundRecordReader as BoundRecordReader;
+use Domain\Lms\Service\MoodleConnectionProbe as Probe;
+use Domain\Lms\Service\MoodleRecordReader as Reader;
+use Domain\Lms\Service\MoodleInstanceReader as IdentityReader;
+use Domain\Lms\Service\MoodleBoundRecordReader as BoundReader;
+use Domain\Lms\Service\MoodleAccountProvisioner as Provisioner;
+use Domain\Lms\ValueObject\MoodleAccountPolicy;
+use Domain\Lms\ValueObject\MoodleAccountDraft;
+use Domain\Lms\ValueObject\MoodleProvisionedAccount;
+use Domain\Shared\ValueObject\EntityId;
 use Domain\Lms\ValueObject\MoodleBinding;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
 use Domain\Lms\ValueObject\MoodleInstallation;
@@ -26,7 +31,7 @@ use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 /** Isolated client deliberately bypasses framework HTTP debug and observer hooks. */
-final readonly class RestMoodleGateway implements ConnectionProbe, RecordReader, InstanceReader, BoundRecordReader
+final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader, BoundReader, Provisioner
 {
     public function __construct(private ConfigContainer $config, private Client $http = new Client())
     {
@@ -104,6 +109,97 @@ final readonly class RestMoodleGateway implements ConnectionProbe, RecordReader,
             return $record;
         } catch (MoodleConnectionUnavailableException $error) {
             throw new MoodleConnectionUnavailableException($error->setupIssue);
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+
+    public function policy(MoodleBinding $binding): MoodleAccountPolicy
+    {
+        try {
+            $settings = $this->settings();
+            $deadline = microtime(true) + 30;
+            $this->handshake($settings, $deadline);
+            if (!hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value))) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $result = $this->request(
+                $settings,
+                "local_etsis_get_account_policy",
+                ["instance_hash" => $binding->instanceFingerprint],
+                $deadline,
+            );
+            $this->assertCurrent($settings);
+            if (
+                count($result) !== 5 ||
+                ($result["protocol"] ?? null) !== 1 ||
+                ($result["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                !is_string($result["policy_hash"] ?? null) ||
+                !is_bool($result["sso"] ?? null) ||
+                !is_bool($result["password_email"] ?? null)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return new MoodleAccountPolicy($result["policy_hash"], $result["sso"], $result["password_email"]);
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+    public function provision(
+        MoodleBinding $binding,
+        EntityId $operation,
+        string $policyHash,
+        #[\SensitiveParameter] MoodleAccountDraft $draft,
+        #[\SensitiveParameter] string $firstName,
+        #[\SensitiveParameter] string $lastName,
+    ): MoodleProvisionedAccount {
+        try {
+            if ($this->config->getConfigKey("moodle.provisioning_enabled", false) !== true) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $settings = $this->settings();
+            $deadline = microtime(true) + 30;
+            $this->handshake($settings, $deadline);
+            if (!hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value))) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $this->assertCurrent($settings);
+            if ($this->config->getConfigKey("moodle.provisioning_enabled", false) !== true) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $result = $this->request(
+                $settings,
+                "local_etsis_provision_account",
+                [
+                    "instance_hash" => $binding->instanceFingerprint,
+                    "policy_hash" => $policyHash,
+                    "operation" => $operation->value,
+                    "username" => $draft->username,
+                    "email" => $draft->email,
+                    "firstname" => $firstName,
+                    "lastname" => $lastName,
+                    "sign_in" => $draft->signIn,
+                ],
+                $deadline,
+            );
+            $this->assertCurrent($settings);
+            if (
+                count($result) !== 5 ||
+                ($result["protocol"] ?? null) !== 1 ||
+                ($result["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                ($result["operation"] ?? null) !== $operation->value ||
+                !is_string($result["user_id"] ?? null) ||
+                !is_string($result["sign_in_status"] ?? null)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            if (($draft->signIn === 'sso') !== ($result['sign_in_status'] === 'sso_ready')) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return new MoodleProvisionedAccount(
+                new MoodleExternalId($result["user_id"]),
+                $result["sign_in_status"],
+            );
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }

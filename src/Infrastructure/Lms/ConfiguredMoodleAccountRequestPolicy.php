@@ -13,6 +13,11 @@ final readonly class ConfiguredMoodleAccountRequestPolicy implements MoodleAccou
     {
     }
 
+    public function processingEnabled(): bool
+    {
+        return $this->enabled() && $this->config->getConfigKey("moodle.provisioning_enabled", false) === true;
+    }
+
     public function enabled(): bool
     {
         return $this->config->getConfigKey("moodle.enabled", false) === true &&

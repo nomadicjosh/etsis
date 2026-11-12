@@ -8,4 +8,5 @@ namespace Domain\Lms\Service;
 interface MoodleAccountRequestPolicy
 {
     public function enabled(): bool;
+    public function processingEnabled(): bool;
 }

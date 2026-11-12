@@ -3,7 +3,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const person = '00000000000000000000000001';
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let saved = null;
+    let saved = options.saved || null;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -15,7 +15,7 @@ async function fixture(page, options = {}) {
         else if (path.startsWith('/sis/ui/data/people/')) result = { items: [{ id: person, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/ui/people/${person}/`) result = { person: { id: { value: person }, givenName: 'Alex', familyName: 'Example', institutionalId: { value: 'S-FICTIONAL' }, ownerUserId: null }, students: [], applications: [], employees: [], accounts: [] };
         else if (path.endsWith('/moodle/account-request/')) result = { enabled: !options.disabled, installation_approved: true,
-            processing_available: false, request: saved, link: null, defaults: { username: 'alex_example', email: 'fictional@example.invalid' },
+            processing_available: Boolean(options.processing), request: saved, link: options.link || null, defaults: { username: 'alex_example', email: 'fictional@example.invalid' },
             person: { id: person, name: 'Alex Example', institutional_id: 'S-FICTIONAL' } };
         else if (path.endsWith('/account-request/review/')) result = { review_token: 'fictional-private-account-review', person_name: 'Alex Example',
             username: data.username, email: data.email, sign_in: data.sign_in, expires_at: 1794410000, processing_available: false };
@@ -107,3 +107,22 @@ test('existing-link permission alone does not expose creation action', async ({ 
     expect(f.calls.some(c => c.path.includes('account-request'))).toBe(false);
     expect(f.errors).toEqual([]);
 });
+
+for (const state of ['queued', 'completed', 'review_required']) {
+    test(`enabled processing shows ${state} and retained link or actionable issue`, async ({ page }) => {
+        const issue = state === 'review_required' ? 'Account linked; setup email needs review. Use Moodle password recovery, keeping this account.' : '';
+        const f = await fixture(page, { processing: true,
+            saved: { id: '00000000000000000000000002', state, issue },
+            link: state === 'queued' ? null : { moodle_user_id: '123' } });
+        await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+        await expect(page.locator('[data-account-request-status]')).toContainText(state);
+        const body = page.locator('#drawer-body');
+        if (state === 'queued') await expect(body).toContainText('background worker will verify and process');
+        else await expect(body).toContainText('Moodle account linked (ID 123)');
+        if (issue) await expect(body).toContainText(issue);
+        await expect(body).not.toContainText('Automatic processing is disabled');
+        await expect(page.getByLabel('Moodle username', { exact: true })).toHaveCount(0);
+        expect(f.calls.some(c => c.path.includes('account-request') && c.method === 'POST')).toBe(false);
+        expect(f.errors).toEqual([]);
+    });
+}

@@ -61,6 +61,11 @@ final class MoodleAccountRequestTest extends TestCase
         );
         $this->policy = new class implements MoodleAccountRequestPolicy {
             public bool $active = true;
+            public bool $processing = false;
+            public function processingEnabled(): bool
+            {
+                return $this->active && $this->processing;
+            }
             public function enabled(): bool
             {
                 return $this->active;
@@ -97,6 +102,243 @@ final class MoodleAccountRequestTest extends TestCase
         $this->service = $this->service();
     }
 
+    private function remote(): \Domain\Lms\Service\MoodleAccountProvisioner
+    {
+        return new class ($this->f) implements \Domain\Lms\Service\MoodleAccountProvisioner {
+            public int $calls = 0;
+            public int $nextId = 500;
+            public array $operations = [];
+            public bool $loseResponse = false;
+            public ?Closure $duringCall = null;
+            public string $status = "sso_ready";
+            public function __construct(private SisFixture $f) {}
+            public function policy(MoodleBinding $binding): \Domain\Lms\ValueObject\MoodleAccountPolicy
+            {
+                return new \Domain\Lms\ValueObject\MoodleAccountPolicy(str_repeat("a", 64), true, true);
+            }
+            public function provision(
+                MoodleBinding $binding,
+                EntityId $operation,
+                string $policyHash,
+                MoodleAccountDraft $draft,
+                string $firstName,
+                string $lastName,
+            ): \Domain\Lms\ValueObject\MoodleProvisionedAccount {
+                TestCase::assertFalse($this->f->connection->pdo->inTransaction());
+                TestCase::assertSame(str_repeat("a", 64), $policyHash);
+                TestCase::assertSame("Alex", $firstName);
+                $this->calls++;
+                $this->operations[$operation->value] ??= new \Domain\Lms\ValueObject\MoodleProvisionedAccount(
+                    new MoodleExternalId((string) ($this->nextId + count($this->operations))),
+                    $this->status,
+                );
+                if ($this->duringCall !== null) {
+                    ($this->duringCall)();
+                }
+                if ($this->loseResponse) {
+                    $this->loseResponse = false;
+                    throw new \Domain\Lms\Exception\MoodleConnectionUnavailableException();
+                }
+                return $this->operations[$operation->value];
+            }
+        };
+    }
+    private function worker(
+        \Domain\Lms\Service\MoodleAccountProvisioner $remote,
+        ?AuditTrail $audit = null,
+    ): \Domain\Lms\Service\MoodleProvisioningWorker {
+        return new \Domain\Lms\Service\MoodleProvisioningWorker(
+            $this->policy,
+            new \Infrastructure\Lms\SqlMoodleProvisioningQueue($this->f->sql),
+            $this->bindings,
+            $this->links,
+            $this->f->admissions,
+            new SqlAccessRepository($this->f->sql),
+            new \Domain\Lms\Service\MoodleAccountProfile($this->defaults),
+            $remote,
+            $this->f->dropCipher,
+            $this->f->transactions,
+            $audit ?? $this->f->audit,
+            $this->f->clock,
+        );
+    }
+    private function permitWorker(): void
+    {
+        $this->policy->processing = true;
+        $access = new SqlAccessRepository($this->f->sql);
+        $access->assign(GrantKind::UserRole, $this->f->access->actor, $access->roleNamed("super")->id, true);
+    }
+    public function testWorkerBothModesRetainLinkAndAuditWithNoHistoryMutation(): void
+    {
+        $this->permitWorker();
+        $history = $this->f->sql->rows("sis_history_events");
+        foreach (["sso_ready", "email_sent", "email_review_required"] as $index => $status) {
+            $this->person = $this->person();
+            $review = $this->review($status === "sso_ready" ? "sso" : "password_email");
+            $this->service->confirm($this->person->id, $review["review_token"]);
+            $remote = $this->remote();
+            $remote->status = $status;
+            $remote->nextId = 500 + $index;
+            $expected = $status === "email_review_required" ? "review_required" : "completed";
+            self::assertSame($expected, $this->worker($remote)->runOne());
+            self::assertSame("idle", $this->worker($remote)->runOne());
+            self::assertSame(1, $remote->calls);
+            $saved = $this->service->status($this->person->id);
+            self::assertSame((string) (500 + $index), $saved["link"]["moodle_user_id"]);
+            self::assertSame($expected, $saved["request"]["state"]);
+            if ($status === "email_review_required") {
+                self::assertStringContainsString("password recovery", $saved["request"]["issue"]);
+            }
+        }
+        self::assertSame($history, $this->f->sql->rows("sis_history_events"));
+    }
+    public function testWorkerUncertainResultReconcilesOriginalOperationAfterLease(): void
+    {
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $remote = $this->remote();
+        $remote->loseResponse = true;
+        self::assertSame("disabled", $this->worker($remote)->runOne());
+        self::assertSame(0, $remote->calls);
+        $this->permitWorker();
+        self::assertSame("retry_pending", $this->worker($remote)->runOne());
+        self::assertSame("idle", $this->worker($remote)->runOne());
+        self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+        $this->f->clock->time = $this->f->clock->time->modify("+301 seconds");
+        self::assertSame("completed", $this->worker($remote)->runOne());
+        self::assertSame(2, $remote->calls);
+        self::assertCount(1, $remote->operations);
+        self::assertCount(1, $this->f->sql->rows("sis_moodle_person_links"));
+    }
+    public function testWorkerRefusesRevokedAuthorityAndChangedProfileBeforeRemoteWrite(): void
+    {
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $this->policy->processing = true;
+        $remote = $this->remote();
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        self::assertSame(0, $remote->calls);
+        $this->permitWorker();
+        $this->person = $this->person();
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $this->defaults->email = "changed@example.invalid";
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        self::assertSame(0, $remote->calls);
+    }
+    public function testWorkerRefusesPolicylessEarlierIntakeWithoutFabricatingPolicy(): void
+    {
+        $this->permitWorker();
+        $review = $this->review();
+        $saved = $this->service->confirm($this->person->id, $review["review_token"]);
+        $row = $this->f->sql->one("sis_moodle_account_requests", ["id" => $saved["request"]["id"]]);
+        $data = json_decode($this->f->dropCipher->open($row["encrypted_approval"]), true);
+        unset($data["policy_hash"]);
+        $encoded = json_encode($data, JSON_THROW_ON_ERROR);
+        $this->f->sql->update(
+            "sis_moodle_account_requests",
+            [
+                "encrypted_approval" => $this->f->dropCipher->seal($encoded),
+                "review_hash" => hash("sha256", $encoded),
+            ],
+            ["id" => $row["id"]],
+        );
+        $remote = $this->remote();
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        self::assertSame(0, $remote->calls);
+    }
+    public function testWorkerChecksAuthorityAgainAfterRemoteResult(): void
+    {
+        $this->permitWorker();
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $remote = $this->remote();
+        $remote->duringCall = function (): void {
+            $this->policy->active = false;
+        };
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        self::assertCount(1, $remote->operations);
+        self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+    }
+    public function testWorkerAuditFailureRollsBackLinkAndCompletionAndRetryReconciles(): void
+    {
+        $this->permitWorker();
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $audit = new class implements AuditTrail {
+            public function record(EntityId $actor, string $action, EntityId $subject): void
+            {
+                throw new RuntimeException("Fictional audit failure");
+            }
+            public function forSubject(EntityId $subject): array
+            {
+                return [];
+            }
+        };
+        $remote = $this->remote();
+        try {
+            $this->worker($remote, $audit)->runOne();
+            self::fail();
+        } catch (RuntimeException) {
+            self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+        }
+        $this->f->clock->time = $this->f->clock->time->modify("+301 seconds");
+        self::assertSame("completed", $this->worker($remote)->runOne());
+        self::assertCount(1, $remote->operations);
+    }
+    public function testWorkerStopsAfterFiveUncertainAttempts(): void
+    {
+        $this->permitWorker();
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $remote = $this->remote();
+        $remote->duringCall = static function (): void {
+            throw new \Domain\Lms\Exception\MoodleConnectionUnavailableException();
+        };
+        for ($i = 0; $i < 5; $i++) {
+            self::assertSame("retry_pending", $this->worker($remote)->runOne());
+            $this->f->clock->time = $this->f->clock->time->modify("+301 seconds");
+        }
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        self::assertSame(5, $remote->calls);
+        self::assertCount(1, $remote->operations);
+    }
+    public function testWorkerProtectsSuperOwnerAfterRequesterLosesSuperAuthority(): void
+    {
+        $this->permitWorker();
+        $owner = $this->f->user();
+        $this->person = $this->person($owner);
+        $access = new SqlAccessRepository($this->f->sql);
+        $super = $access->roleNamed("super")->id;
+        $access->assign(GrantKind::UserRole, $owner, $super, true);
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        foreach ([MoodleAccountRequestService::CREATE, "sis:person:manage", "admin:edit:user"] as $name) {
+            $permission = $this->f->sql->one("sis_access_permissions", ["name" => $name]);
+            $access->assign(
+                GrantKind::UserPermission,
+                $this->f->access->actor,
+                new EntityId($permission["id"]),
+                true,
+            );
+        }
+        $access->assign(GrantKind::UserRole, $this->f->access->actor, $super, false);
+        $remote = $this->remote();
+        self::assertSame("review_required", $this->worker($remote)->runOne());
+        self::assertSame(0, $remote->calls);
+    }
+    public function testLeaseReclaimInvalidatesOlderWorkerCompletion(): void
+    {
+        $review = $this->review();
+        $this->service->confirm($this->person->id, $review["review_token"]);
+        $queue = new \Infrastructure\Lms\SqlMoodleProvisioningQueue($this->f->sql);
+        $first = $queue->claim(1000);
+        self::assertNull($queue->claim(1001));
+        $second = $queue->claim(1301);
+        self::assertSame($first["id"], $second["id"]);
+        $this->expectException(ConcurrentModificationException::class);
+        $queue->finish(new EntityId($first["id"]), $first["version"], "completed", "none");
+    }
     private function person(?EntityId $owner = null): Person
     {
         $person = new Person(
@@ -115,6 +357,22 @@ final class MoodleAccountRequestTest extends TestCase
         return new MoodleAccountRequestService(
             $this->policy,
             $this->reader,
+            new class implements \Domain\Lms\Service\MoodleAccountProvisioner {
+                public function policy(MoodleBinding $binding): \Domain\Lms\ValueObject\MoodleAccountPolicy
+                {
+                    return new \Domain\Lms\ValueObject\MoodleAccountPolicy(str_repeat("a", 64), true, true);
+                }
+                public function provision(
+                    MoodleBinding $binding,
+                    EntityId $operation,
+                    string $policyHash,
+                    MoodleAccountDraft $draft,
+                    string $firstName,
+                    string $lastName,
+                ): \Domain\Lms\ValueObject\MoodleProvisionedAccount {
+                    throw new LogicException("Intake must not provision.");
+                }
+            },
             $this->requests,
             $this->defaults,
             $this->bindings,
@@ -171,7 +429,16 @@ final class MoodleAccountRequestTest extends TestCase
                 "request_id" => $result["request"]["id"],
             ]);
             self::assertEqualsCanonicalizing(
-                ["id", "request_id", "state", "version", "created_at"],
+                [
+                    "id",
+                    "request_id",
+                    "state",
+                    "version",
+                    "created_at",
+                    "lease_until",
+                    "attempts",
+                    "issue_code",
+                ],
                 array_keys($job),
             );
             foreach (

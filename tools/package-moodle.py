@@ -15,14 +15,21 @@ FILES = (
     "COPYING.txt",
     "README.md",
     "classes/external/get_instance_info.php",
+    "classes/external/get_account_policy.php",
+    "classes/external/provision_account.php",
+    "classes/local/account_policy.php",
+    "classes/local/account_provisioner.php",
     "classes/local/instance_identity.php",
     "classes/privacy/provider.php",
     "db/access.php",
     "db/install.php",
+    "db/install.xml",
+    "db/upgrade.php",
     "db/services.php",
     "lang/en/local_etsis.php",
     "settings.php",
     "tests/instance_identity_test.php",
+    "tests/account_provisioner_test.php",
     "version.php",
 )
 
@@ -43,8 +50,9 @@ def build(source: Path, output: Path) -> tuple[Path, str]:
             raise ValueError("Plugin sources exceed the package size limit.")
         contents[name] = content
     version = contents["version.php"].decode("utf-8")
-    match = re.search(r"\$plugin->release\s*=\s*'([0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9.]+)?)';", version)
-    if not match or "'local_etsis'" not in version:
+    match = re.search(r"""\$plugin->release\s*=\s*['"]([0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9.]+)?)['"];""", version)
+    component = re.search(r"""\$plugin->component\s*=\s*['"]local_etsis['"];""", version)
+    if not match or not component:
         raise ValueError("Invalid plugin release metadata.")
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f"local_etsis-{match[1]}.zip"

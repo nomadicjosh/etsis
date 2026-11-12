@@ -36,6 +36,7 @@ final readonly class MoodleAccountRequestService
     public function __construct(
         private MoodleAccountRequestPolicy $policy,
         private MoodleInstanceReader $reader,
+        private MoodleAccountProvisioner $provisioner,
         private MoodleAccountRequestRepository $requests,
         private MoodleAccountDefaults $defaults,
         private MoodleBindingRepository $bindings,
@@ -66,7 +67,7 @@ final readonly class MoodleAccountRequestService
         return [
             "enabled" => $enabled,
             "installation_approved" => $binding !== null,
-            "processing_available" => false,
+            "processing_available" => $this->policy->processingEnabled(),
             "defaults" => $defaults,
             "person" => [
                 "id" => $id->value,
@@ -91,6 +92,14 @@ final readonly class MoodleAccountRequestService
         $this->available($binding, $id);
         $revision = $this->revision($person);
         $this->verify($actor, $id, $binding);
+        $policy = $this->provisioner->policy($binding);
+        if (!$policy->permits($draft->signIn)) {
+            self::invalid(
+                "sign_in",
+                "This sign-in workflow is not enabled in the approved Moodle installation.",
+            );
+        }
+        $this->enabled();
         $this->current($actor, $id, $binding, $revision);
         $this->available($binding, $id);
         $data = [
@@ -107,6 +116,7 @@ final readonly class MoodleAccountRequestService
             "email" => $draft->email,
             "sign_in" => $draft->signIn,
             "reason" => $reason,
+            "policy_hash" => $policy->hash,
             "expires_at" => $this->clock->now()->getTimestamp() + 1200,
         ];
         return [
@@ -116,7 +126,7 @@ final readonly class MoodleAccountRequestService
             "email" => $draft->email,
             "sign_in" => $draft->signIn,
             "expires_at" => $data["expires_at"],
-            "processing_available" => false,
+            "processing_available" => $this->policy->processingEnabled(),
         ];
     }
 
@@ -148,6 +158,10 @@ final readonly class MoodleAccountRequestService
         $this->unexpired($data["expires_at"]);
         $this->current($actor, $id, $binding, $data["person_revision"]);
         $this->verify($actor, $id, $binding);
+        $policy = $this->provisioner->policy($binding);
+        if (!hash_equals($data["policy_hash"], $policy->hash) || !$policy->permits($data["sign_in"])) {
+            self::invalid("sign_in", "Moodle authentication setup changed. Review the request again.");
+        }
         $save = function () use ($actor, $id, $binding, $data, $hash): MoodleAccountRequest {
             $this->people->lockPerson($id);
             $this->actor($actor, $id);
@@ -296,22 +310,7 @@ final readonly class MoodleAccountRequestService
 
     private function revision(Person $person): string
     {
-        return hash(
-            "sha256",
-            json_encode(
-                [
-                    $person->id->value,
-                    $person->ownerUserId?->value,
-                    $person->givenName,
-                    $person->familyName,
-                    $person->institutionalId->value,
-                    $person->identityVersion,
-                    $person->directoryRestricted,
-                    $this->defaults->forOwner($person->ownerUserId),
-                ],
-                JSON_THROW_ON_ERROR,
-            ),
-        );
+        return new MoodleAccountProfile($this->defaults)->revision($person);
     }
 
     private function bindingHash(MoodleBinding $binding): string
@@ -341,7 +340,7 @@ final readonly class MoodleAccountRequestService
             $data = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($data) ||
-                count($data) !== 14 ||
+                count($data) !== 15 ||
                 ($data["kind"] ?? null) !== "moodle-account-request" ||
                 !is_int($data["expires_at"] ?? null)
             ) {
@@ -360,6 +359,7 @@ final readonly class MoodleAccountRequestService
                 "email",
                 "sign_in",
                 "reason",
+                "policy_hash",
             ];
             foreach ($fields as $field) {
                 if (!is_string($data[$field] ?? null)) {
@@ -369,7 +369,7 @@ final readonly class MoodleAccountRequestService
             foreach (["id", "actor_id", "person_id", "binding_id"] as $field) {
                 new EntityId($data[$field]);
             }
-            foreach (["binding_hash", "person_revision"] as $field) {
+            foreach (["binding_hash", "person_revision", "policy_hash"] as $field) {
                 if (preg_match('/^[a-f0-9]{64}$/D', $data[$field]) !== 1) {
                     throw new InvalidArgumentException();
                 }
@@ -385,13 +385,19 @@ final readonly class MoodleAccountRequestService
     /** @return array<string,string> */
     private function describe(MoodleAccountRequest $request): array
     {
-        return $request->describe() + ["state" => $this->requests->state($request->id)];
+        return $request->describe() + [
+            "state" => $this->requests->state($request->id),
+            "issue" => $this->requests->issue($request->id),
+        ];
     }
 
     /** @return array{request:array<string,string>,processing_available:bool} */
     private function result(MoodleAccountRequest $request): array
     {
-        return ["request" => $this->describe($request), "processing_available" => false];
+        return [
+            "request" => $this->describe($request),
+            "processing_available" => $this->policy->processingEnabled(),
+        ];
     }
 
     private function unexpired(int $expires): void

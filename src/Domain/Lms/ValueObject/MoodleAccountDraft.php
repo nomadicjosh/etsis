@@ -23,7 +23,7 @@ final readonly class MoodleAccountDraft implements \JsonSerializable
             ]);
         }
         if (
-            strlen($email) > 254 ||
+            strlen($email) > 100 ||
             filter_var($email, FILTER_VALIDATE_EMAIL) === false ||
             preg_match('/[\x00-\x20\x7F]/', $email)
         ) {

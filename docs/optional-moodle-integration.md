@@ -30,7 +30,7 @@ The institution must configure its supported Moodle authentication arrangements 
 
 Removing a teaching assignment or registration should reconcile that section's access according to institutional policy. Losing one role must not disable a person who remains eligible through another student/faculty context. Preserve existing learning and academic history; do not hard-delete accounts or historical academic facts as an automatic cleanup action. Gradebook synchronization remains separately staged for authorized academic review.
 
-**Current implementation status:** installation approval, bounded reads and manual links to existing Moodle accounts are implemented. [Reviewed creation-request intake](moodle-person-links.md#review-a-creation-request-implemented) now provides **Create a Moodle account**, both sign-in intents, independent authorization, encrypted approval storage and an atomic reference-only SQL outbox. Intake is separately disabled by default. Saving a request creates no Moodle account, sends no email and reports processing unavailable. Remote creation/reconciliation, automatic eligibility, authentication execution, the shared worker, initial reconciliation, section-course mappings and course-role synchronization remain open. Enabling the diagnostic, intake or connector does not start these background processes. The delivered Moodle connector remains an identity-verification component.
+**Current implementation status:** installation approval, bounded reads and manual links to existing Moodle accounts are implemented. [Reviewed creation-request intake](moodle-person-links.md#review-a-creation-request-implemented) now provides **Create a Moodle account**, both sign-in intents, independent authorization, encrypted approval storage and an atomic reference-only SQL outbox. Intake and remote processing are separately disabled by default. A bounded [provisioning worker](moodle-person-links.md#process-a-reviewed-account-request-implemented-opt-in) now creates staff-requested accounts through the 0.2.0-alpha connector, reconciles the original operation after uncertain responses, retains the returned Moodle ID and reports password-setup delivery issues. Automatic eligibility, initial reconciliation, section-course mappings, course-role synchronization and full institutional SSO remain open. Upgrading the connector or enabling the diagnostic/intake does not enable workers; institutions must configure the restricted provisioning service, supported authentication modes, processing flag and scheduler explicitly.
 
 ## Enable the connection diagnostic
 
@@ -41,6 +41,7 @@ Set deployment secrets through the institution's protected environment or secret
 ```dotenv
 SIS_MOODLE_ENABLED=true
 SIS_MOODLE_ACCOUNT_REQUESTS_ENABLED=false
+SIS_MOODLE_PROVISIONING_ENABLED=false
 SIS_MOODLE_URL=https://moodle.example.edu
 SIS_MOODLE_TOKEN=
 SIS_MOODLE_CA_FILE=
@@ -115,7 +116,7 @@ The shared read-only gateway uses the same bounded, no-redirect, TLS-verified tr
 
 ## Installable Moodle connector and instance verification
 
-The optional [connector ZIP](../dist/moodle/local_etsis-0.1.0-alpha.zip) is ready to distribute with its [checksum](../dist/moodle/local_etsis-0.1.0-alpha.zip.sha256). Its [installation guide](../integrations/moodle/local/etsis/README.md) covers Moodle's ZIP upload, explicit settings/service enablement, dedicated account permissions and token configuration. It adds no institutional academic tables and defaults to disabled, with a disabled restricted service and no automatic account, token or role grants. Native Moodle REST checks remain usable without it.
+The optional [connector ZIP](../dist/moodle/local_etsis-0.2.0-alpha.zip) is ready to distribute with its [checksum](../dist/moodle/local_etsis-0.2.0-alpha.zip.sha256). Its [installation guide](../integrations/moodle/local/etsis/README.md) covers Moodle's ZIP upload, explicit settings/service enablement, dedicated account permissions and token configuration. It adds no institutional academic tables and defaults to disabled, with a disabled restricted service and no automatic account, token or role grants. Native Moodle REST checks remain usable without it.
 
 After an administrator installs and explicitly enables the plugin and restricted service, an etSIS deployment operator can run:
 
@@ -147,7 +148,7 @@ The private routes are GET `/sis/moodle/installation/` and POST `/sis/moodle/ins
 
 A site or identity mismatch blocks verification and leaves the approval untouched. There is intentionally no replace/delete button. Keep clones disconnected: a cloned Moodle database inherits the same identifier and cannot be distinguished solely by this check. Planned recovery/replacement workflows must explicitly assess existing links and preserve their provenance. Restoring the same installation should retain its original identity. Disabling integration stops new remote checks/approvals and does not erase the recorded approval.
 
-Installation approval alone creates no person/section links and performs no SSO, enrollment or grade synchronization. The separate [reviewed person-link workflow](moodle-person-links.md) now creates explicit person references using an installation-bound single-ID reader. Existing connection/single-ID console diagnostics remain setup tools and are not bound synchronization operations. Future SSO and workers must use the saved binding and fresh installation checks before external effects; this release has no such workers. Tests use fictional gateway responses and never use real Moodle student records as fixtures.
+Installation approval alone creates no person/section links and performs no SSO, enrollment or grade synchronization. The separate [reviewed person-link workflow](moodle-person-links.md) now creates explicit person references using an installation-bound single-ID reader. Existing connection/single-ID console diagnostics remain setup tools and are not bound synchronization operations. Future SSO and workers must use the saved binding and fresh installation checks before external effects; the staff-requested account worker now follows those boundaries; academic synchronization remains open. Tests use fictional gateway responses and never use real Moodle student records as fixtures.
 
 
 ## Troubleshooting installation review

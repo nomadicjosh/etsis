@@ -31,7 +31,7 @@ final readonly class SisMoodleAccountRequestController
                     new EntityId($person),
                     new MoodleAccountDraft(
                         $input->text("username", 100),
-                        $input->text("email", 254),
+                        $input->text("email", 100),
                         $input->text("sign_in", 20),
                     ),
                     $input->text("reason", 500),

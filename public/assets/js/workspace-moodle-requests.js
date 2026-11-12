@@ -16,13 +16,16 @@ window.createWorkspaceMoodleRequests = function (ui) {
                 node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => task(() => openPerson(id)) }, 'Back to person'), refresh));
         const status = node('p', { role: 'status', 'aria-live': 'polite', tabindex: '-1', 'data-account-request-status': '' });
         body.append(status);
-        if (data.link) {
+        if (data.link && !data.request) {
             status.textContent = `A Moodle account is already linked (ID ${data.link.moodle_user_id}). Another account request is not needed.`;
             return;
         }
-        function queued(value) {
-            status.textContent = `Account creation request saved. Status: ${value.state}. No Moodle account has been created by this request intake.`;
-            body.append(node('p', { class: 'muted-text' }, 'Automatic processing is not available yet. The saved request remains private and can be checked here.'));
+        function queued(value, processing = data.processing_available) {
+            status.textContent = `Account creation request saved. Status: ${value.state}.`;
+            if (data.link) body.append(node('p', {}, `Moodle account linked (ID ${data.link.moodle_user_id}).`));
+            if (value.issue) body.append(node('p', { role: 'status' }, value.issue));
+            if (!processing) body.append(node('p', { class: 'muted-text' }, 'Automatic processing is disabled. Saving a request does not create an account or send an email.'));
+            else if (value.state === 'queued' || value.state === 'processing') body.append(node('p', { class: 'muted-text' }, 'The background worker will verify and process this request. Refresh here to check progress.'));
         }
         if (data.request) { queued(data.request); return; }
         if (!data.enabled || !data.installation_approved) {
@@ -30,9 +33,9 @@ window.createWorkspaceMoodleRequests = function (ui) {
                 : 'Ask a Moodle administrator to approve the installation before requesting an account.';
             return;
         }
-        status.textContent = 'You can save a reviewed creation request. Automatic processing is not available yet; saving will not create an account or send an email.';
+        status.textContent = data.processing_available ? 'Review this account request before the background worker creates the account and retains its Moodle link.' : 'You can save a reviewed creation request. Automatic processing is disabled; saving will not create an account or send an email.';
         const username = node('input', { id: 'moodle-create-username', name: 'username', class: 'form-control', type: 'text', maxlength: 100, required: true, autocomplete: 'off', value: data.defaults.username });
-        const email = node('input', { id: 'moodle-create-email', name: 'email', class: 'form-control', type: 'email', maxlength: 254, required: true, autocomplete: 'off', value: data.defaults.email });
+        const email = node('input', { id: 'moodle-create-email', name: 'email', class: 'form-control', type: 'email', maxlength: 100, required: true, autocomplete: 'off', value: data.defaults.email });
         const reason = node('input', { id: 'moodle-create-reason', name: 'reason', class: 'form-control', type: 'text', maxlength: 500, required: true, autocomplete: 'off' });
         const sso = node('input', { id: 'moodle-create-sso', name: 'sign_in', type: 'radio', class: 'form-check-input', value: 'sso', required: true });
         const password = node('input', { id: 'moodle-create-password-email', name: 'sign_in', type: 'radio', class: 'form-check-input', value: 'password_email', required: true });
@@ -87,7 +90,7 @@ window.createWorkspaceMoodleRequests = function (ui) {
                         node('div', {}, node('dt', {}, 'Username'), node('dd', { class: 'text-break' }, result.username)),
                         node('div', {}, node('dt', {}, 'Email'), node('dd', { class: 'text-break' }, result.email)),
                         node('div', {}, node('dt', {}, 'Sign-in'), node('dd', {}, result.sign_in === 'sso' ? 'Institutional SSO' : 'Moodle password-setup email'))),
-                    node('p', {}, 'This review expires after 20 minutes. Saving records a private request for future processing; it does not create an account or send an email.'),
+                    node('p', {}, data.processing_available ? 'This review expires after 20 minutes. Saving queues account creation and the selected sign-in setup for the background worker.' : 'This review expires after 20 minutes. Saving records a private request; processing is disabled, so no account or email is created.'),
                     node('div', { class: 'form-check mb-3' }, acknowledge, node('label', { for: acknowledge.id, class: 'form-check-label' }, 'I reviewed this person, destination address and sign-in choice and authorize this account request.')),
                     node('div', { class: 'd-flex flex-wrap gap-2' }, confirm, cancel));
                 preview.hidden = false;
@@ -104,7 +107,7 @@ window.createWorkspaceMoodleRequests = function (ui) {
                 status.textContent = 'Rechecking and saving the private account request…';
                 const result = await request(`/sis/people/${id}/moodle/account-request/confirm/`, 'POST', { review_token: token });
                 if (!body.isConnected) return;
-                clear(); form.remove(); preview.remove(); queued(result.request); status.focus();
+                clear(); form.remove(); preview.remove(); queued(result.request, result.processing_available); status.focus();
             }));
         });
     }
