@@ -2,6 +2,25 @@
 
 Moodle integration is optional and disabled by default. An institution must explicitly enable and configure it. Normal SIS workflows do not require Moodle. The current implementation provides a private administrator status screen, an operator REST diagnostic and a single-ID mapping preflight. SSO and background course/enrollment/gradebook synchronization remain separate development stages.
 
+## Direct Moodle launch and coordinated sessions
+
+**Requested direction:** provide **Open Moodle** from a signed-in etSIS session without a second password prompt. Keep institutional OpenID Connect as an additional option. LDAP and `saml2` are examples of external Moodle authentication plugins, not required SSO choices. The delivered provisioning settings choose an account's authentication method; they do not yet implement this browser launch or session coordination.
+
+The applications should keep their own host-scoped cookies and native session formats. etSIS currently uses a framework-encrypted authentication envelope with a server-checked expiry; Moodle uses its own server-side session manager. Giving these cookies the same name, lifetime or parent domain would not make their authentication state equivalent. Sharing an application encryption key or PHP session store is not the integration contract.
+
+The planned launch must use the signed-in person's approved Moodle link and installation, never a browser-supplied target user or an email/name match. A short-lived, single-use launch credential establishes a Moodle session linked to the originating etSIS browser sign-in. The launch credential's expiry and the authenticated session's expiry are separate controls. The existing [User key authentication plugin](https://github.com/catalyst/moodle-auth_userkey) supports a one-way launch, but its key lifetime alone does not synchronize the resulting session's expiry. Evaluate its supported extension points before selecting it or extending the existing connector with equivalent native Moodle session APIs.
+
+Session coordination needs an explicit server-side authority and acceptance tests:
+
+- Retain a revocable reference for each browser sign-in, with its actual authentication deadline. The user's reusable account token is not a browser-session identifier. Preserve concurrent browser/device sessions according to institutional policy.
+- Link each launched Moodle session to that reference. Enforce its deadline and revocation before Moodle serves a protected read or mutation, including AJAX/file requests; a homepage redirect or JavaScript timer is insufficient.
+- Revoke linked access when that etSIS sign-in is logged out or invalidated. Deleting a browser cookie alone is insufficient server-side revocation. A browser may retain a Moodle cookie, but that cookie must no longer authorize a request after the originating session ends.
+- Coordinate idle renewal separately from the absolute maximum lifetime. Whether Moodle activity renews the shared deadline is a policy choice still being clarified. Matching independent timeout settings does not provide this behavior. Moodle's own earlier session timeout must also be accounted for.
+- Define and test revocation-check latency and unavailable-authority behavior before claiming simultaneous logout. Strict checks must refuse protected access when validity cannot be established; any cached validation window must be explicit. Already displayed pages cannot be remotely erased, and expiry enforcement happens when another protected request is made.
+- Keep launch credentials, session IDs and authentication envelopes out of logs, browser storage, ordinary reporting and background job payloads. Use protected server-to-server validation, bounded requests and private responses. Preserve browser CSRF protection, fixed approved destinations and login-CSRF defenses.
+
+This is the agreed integration direction and acceptance scope, not a feature enabled by the current connector. No cookie-domain, session-timeout, credential or deployment setting has been changed to simulate shared sessions.
+
 ## Automatic account provisioning and section access
 
 **Adopted workflow:** eligible student and faculty accounts should be created automatically in Moodle through background synchronization once the institution enables provisioning. For all other people, authorized staff must have a choice in the etSIS person workspace: **Link an existing Moodle account** by its ID, or **Create a Moodle account** and save its returned ID automatically. Staff must not have to create the account separately in Moodle and then come back to link it. The current manual-link tool's statement that it does not create accounts describes that tool's delivered scope, not a permanent restriction on Moodle integration.
