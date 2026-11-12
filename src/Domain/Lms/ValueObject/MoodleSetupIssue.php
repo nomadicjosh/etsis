@@ -11,10 +11,16 @@ enum MoodleSetupIssue: string
     case FunctionUnavailable = "function_unavailable";
     case PermissionDenied = "permission_denied";
     case IdentityUnavailable = "identity_unavailable";
+    case InstallationMismatch = 'installation_mismatch';
+    case LookupUnavailable = 'lookup_unavailable';
 
     public function message(): string
     {
         return match ($this) {
+            self::LookupUnavailable => 'Moodle does not advertise the required single-record lookup. '
+            . 'Review the authorized functions in the restricted integration service before linking.',
+            self::InstallationMismatch => 'Moodle differs from the approved installation. '
+            . 'Review the server configuration before continuing.',
             self::VerificationDisabled =>
             'Moodle instance verification is disabled. In Moodle, open Site administration > Plugins > '
             . 'Local plugins > etSIS connector, enable "Enable instance verification" and save changes.',

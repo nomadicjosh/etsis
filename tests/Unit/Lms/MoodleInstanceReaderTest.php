@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
+use Domain\Lms\ValueObject\MoodleSetupIssue;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\Psr7\Response;
@@ -84,8 +85,54 @@ final class MoodleInstanceReaderTest extends TestCase
             $gateway->identify();
             self::fail("Missing plugin accepted.");
         } catch (MoodleConnectionUnavailableException $error) {
+            self::assertSame(MoodleSetupIssue::FunctionUnavailable, $error->setupIssue);
             self::assertNull($error->getPrevious());
             self::assertCount(1, $mock);
+        }
+    }
+
+    public static function setupErrors(): iterable
+    {
+        yield ["integrationdisabled", MoodleSetupIssue::VerificationDisabled];
+        yield ["identityunavailable", MoodleSetupIssue::IdentityUnavailable];
+        yield ["nopermissions", MoodleSetupIssue::PermissionDenied];
+        yield ["accesscontrol", MoodleSetupIssue::PermissionDenied];
+        yield ["unrecognized-private-error", null];
+    }
+
+    #[DataProvider("setupErrors")]
+    public function testOnlyAllowlistedSetupGuidanceSurvivesWithoutUpstreamDetails(
+        string $code,
+        ?MoodleSetupIssue $issue,
+    ): void {
+        $mock = new MockHandler([
+            $this->handshake(),
+            new Response(
+                200,
+                [],
+                json_encode([
+                    "errorcode" => $code,
+                    "exception" => "Fictional upstream exception",
+                    "message" => "fictional-secret <script>upstream</script>",
+                    "debuginfo" => "fictional-secret private paths",
+                ]),
+            ),
+        ]);
+        try {
+            new RestMoodleGateway($this->config(), new Client(["handler" => $mock]))->identify();
+            self::fail("Rejected setup was accepted.");
+        } catch (MoodleConnectionUnavailableException $error) {
+            self::assertSame($issue, $error->setupIssue);
+            self::assertNull($error->getPrevious());
+            if ($issue !== null) {
+                self::assertSame($issue->message(), $error->getMessage());
+            }
+            foreach (
+                ["fictional-secret", "<script>", "private paths", "unrecognized-private-error"]
+                as $private
+            ) {
+                self::assertStringNotContainsString($private, $error->getMessage());
+            }
         }
     }
 

@@ -184,6 +184,7 @@
     const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
     const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
+    const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
@@ -540,6 +541,7 @@
             if (key === 'overview') {
                 panel.append(node('dl', { class: 'detail-list' }, node('div', {}, node('dt', {}, 'Institutional ID'), node('dd', {}, person.institutionalId.value)), node('div', {}, node('dt', {}, 'Sign-in access'), node('dd', {}, person.ownerUserId ? 'Enabled' : 'Not enabled'))));
                 const actions = node('div', { class: 'inline-actions' });
+                if (can('sis:moodle:link-person')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => moodlePeople.open(person.id.value)) }, 'Moodle account link'));
                 if (can('sis:person:manage') && (!person.ownerUserId || can('admin:edit:user'))) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.editProfile(person)) }, 'Edit person profile'));
                 if (person.ownerUserId && can('admin:edit:user')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.account(person)) }, 'Manage sign-in account'));
                 if (can('sis:person:assign-id')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => editInstitutionalId(person)) }, 'Change institutional ID'));

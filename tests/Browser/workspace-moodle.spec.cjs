@@ -16,6 +16,10 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/moodle/status/') result = { enabled: !options.disabled };
         else if (path === '/sis/moodle/installation/') result = { binding };
         else if (path === '/sis/moodle/installation/review/') {
+            if (options.connectorDisabled) {
+                await route.fulfill({ status: 503, json: { error: 'Moodle instance verification is disabled. In Moodle, enable "Enable instance verification" and save changes.' } });
+                return;
+            }
             if (options.delayReview) await new Promise(resolve => setTimeout(resolve, 250));
             result = { review_token: 'fictional-private-review-token', instance_fingerprint: approved.instance_fingerprint, site_fingerprint: approved.site_fingerprint, expires_at: 1794410000 };
         }
@@ -124,6 +128,18 @@ test('installation review requires explicit keyboard confirmation and keeps its 
     }
     await page.getByRole('button', { name: 'Verify approved installation', exact: true }).click();
     await expect(page.locator('#moodle-installation-status')).toContainText('matches the saved approval');
+    expect(f.errors).toEqual([]);
+});
+
+test('disabled connector guidance is shown in the review panel without creating an approval', async ({ page }) => {
+    const f = await fixture(page, { connectorDisabled: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByLabel('Reason for approving this installation').fill('Fictional institutional setup.');
+    await page.getByRole('button', { name: 'Review installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-status')).toContainText('Enable instance verification');
+    await expect(page.locator('#workspace-alert')).toContainText('Enable instance verification');
+    await expect(page.locator('#moodle-installation-approval')).toBeHidden();
+    expect(f.calls.some(c => c.path.endsWith('/confirm/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });
 

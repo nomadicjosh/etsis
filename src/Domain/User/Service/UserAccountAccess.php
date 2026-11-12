@@ -22,12 +22,16 @@ final readonly class UserAccountAccess
     ) {
     }
 
-    public function update(EntityId $target, Closure $operation): void
+    /** @template T
+     * @param Closure():T $operation
+     * @return T
+     */
+    public function update(EntityId $target, Closure $operation): mixed
     {
-        $this->transactions->run(function () use ($target, $operation): void {
+        return $this->transactions->run(function () use ($target, $operation): mixed {
             $this->repository->lock();
             $this->authorizeUpdate($target);
-            $operation();
+            return $operation();
         });
     }
 

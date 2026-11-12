@@ -8,6 +8,8 @@ use Domain\Lms\Service\MoodleInstanceReader;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
 use Domain\Lms\ValueObject\MoodleInstallation;
 use Domain\Lms\ValueObject\MoodleSiteUrl;
+use Domain\Lms\ValueObject\MoodleSetupIssue;
+use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -54,6 +56,21 @@ final class MoodleInstanceCommandTest extends TestCase
         self::assertSame(1, $tester->execute([], ["verbosity" => 256]));
         self::assertStringNotContainsString("fictional-secret", $tester->getDisplay());
         self::assertStringContainsString("verification failed", $tester->getDisplay());
+    }
+
+    public function testKnownDisabledConnectorGetsActionableLocalGuidance(): void
+    {
+        $reader = $this->createStub(MoodleInstanceReader::class);
+        $reader->method("enabled")->willReturn(true);
+        $reader
+            ->method("identify")
+            ->willThrowException(
+                new MoodleConnectionUnavailableException(MoodleSetupIssue::VerificationDisabled),
+            );
+        $tester = $this->command($reader);
+        self::assertSame(1, $tester->execute([]));
+        self::assertStringContainsString("Enable instance verification", $tester->getDisplay());
+        self::assertStringNotContainsString("TLS trust", $tester->getDisplay());
     }
 
     private function command(MoodleInstanceReader $reader): CommandTester

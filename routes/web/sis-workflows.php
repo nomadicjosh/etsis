@@ -14,6 +14,7 @@ use Application\Http\Controller\SisSectionAssistanceController;
 use Application\Http\Controller\SisDegreeAssistanceController;
 use Application\Http\Controller\SisMoodleController;
 use Application\Http\Controller\SisMoodleBindingController;
+use Application\Http\Controller\SisMoodlePersonLinkController;
 use Application\Http\Controller\SisSectionCourseBindingController;
 use Application\Http\Controller\SisCatalogWorkflowController;
 use Application\Http\Controller\SisFinancialReviewController;
@@ -775,6 +776,9 @@ return static function (Psr7Router $router): void {
     $router->get("/sis/moodle/status/", [SisMoodleController::class, "status"]);
     $router->post("/sis/moodle/check/", [SisMoodleController::class, "check"]);
     $router->get("/sis/moodle/installation/", [SisMoodleBindingController::class, "status"]);
+    $router->get('/sis/people/{person}/moodle/', [SisMoodlePersonLinkController::class, 'status']);
+    $router->post('/sis/people/{person}/moodle/review/', [SisMoodlePersonLinkController::class, 'review']);
+    $router->post('/sis/people/{person}/moodle/confirm/', [SisMoodlePersonLinkController::class, 'confirm']);
     $router->post("/sis/moodle/installation/review/", [SisMoodleBindingController::class, "review"]);
     $router->post("/sis/moodle/installation/confirm/", [SisMoodleBindingController::class, "confirm"]);
     $router->post("/sis/moodle/installation/verify/", [SisMoodleBindingController::class, "verify"]);

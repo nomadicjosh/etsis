@@ -12,6 +12,7 @@ use Domain\Lms\ValueObject\MoodleBinding;
 use Domain\Lms\ValueObject\MoodleInstallation;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
 use Domain\Lms\ValueObject\MoodleSiteUrl;
+use Domain\Lms\ValueObject\MoodleSetupIssue;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
@@ -363,6 +364,28 @@ final class MoodleBindingTest extends TestCase
                 self::assertSame(0, $this->reader->calls);
             }
         }
+    }
+
+    public function testKnownSetupFailureReachesReviewResponseWithoutSavingAnApproval(): void
+    {
+        $this->reader->duringCall = static function (): never {
+            throw new MoodleConnectionUnavailableException(MoodleSetupIssue::VerificationDisabled);
+        };
+        $controller = new \Application\Http\Controller\SisMoodleBindingController($this->service);
+        $response = $controller->review(
+            new \Qubus\Http\ServerRequest()->withParsedBody(["reason" => "Fictional institutional setup."]),
+        );
+        self::assertSame(503, $response->getStatusCode());
+        $data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame(["error" => MoodleSetupIssue::VerificationDisabled->message()], $data);
+        self::assertNull($this->bindings->current());
+        // A revoked administrator must still receive access denial, not the setup detail.
+        $this->reader->duringCall = function (): never {
+            $this->f->access->staff = false;
+            throw new MoodleConnectionUnavailableException(MoodleSetupIssue::VerificationDisabled);
+        };
+        $this->expectException(AccessDeniedException::class);
+        $this->review();
     }
 
     public function testMetadataAuditFailurePreventsExternalRead(): void

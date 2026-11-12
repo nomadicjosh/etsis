@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Infrastructure\Lms;
 
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
-use Domain\Lms\Service\MoodleConnectionProbe;
-use Domain\Lms\Service\MoodleRecordReader;
-use Domain\Lms\Service\MoodleInstanceReader;
+use Domain\Lms\Service\MoodleConnectionProbe as ConnectionProbe;
+use Domain\Lms\Service\MoodleRecordReader as RecordReader;
+use Domain\Lms\Service\MoodleInstanceReader as InstanceReader;
+use Domain\Lms\Service\MoodleBoundRecordReader as BoundRecordReader;
+use Domain\Lms\ValueObject\MoodleBinding;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
 use Domain\Lms\ValueObject\MoodleInstallation;
 use Domain\Lms\ValueObject\MoodleExternalId;
@@ -24,7 +26,7 @@ use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 /** Isolated client deliberately bypasses framework HTTP debug and observer hooks. */
-final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleRecordReader, MoodleInstanceReader
+final readonly class RestMoodleGateway implements ConnectionProbe, RecordReader, InstanceReader, BoundRecordReader
 {
     public function __construct(private ConfigContainer $config, private Client $http = new Client())
     {
@@ -52,21 +54,13 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
         try {
             $settings = $this->settings();
             $capabilities = $this->handshake($settings)->describe();
-            if (!$capabilities['local_etsis_get_instance_info']) {
+            if (!$capabilities["local_etsis_get_instance_info"]) {
                 throw new MoodleConnectionUnavailableException(MoodleSetupIssue::FunctionUnavailable);
             }
             $this->assertCurrent($settings);
-            $result = $this->request($settings, 'local_etsis_get_instance_info');
-            if (
-                count($result) !== 2 ||
-                ($result['protocol'] ?? null) !== 1 ||
-                !is_string($result['instance_id'] ?? null)
-            ) {
-                throw new MoodleConnectionUnavailableException();
-            }
-            $identity = new MoodleInstanceIdentity($result['instance_id']);
+            $installation = $this->installation($settings);
             $this->assertCurrent($settings);
-            return new MoodleInstallation($settings['site'], $identity);
+            return $installation;
         } catch (MoodleConnectionUnavailableException $error) {
             throw new MoodleConnectionUnavailableException($error->setupIssue);
         } catch (Throwable) {
@@ -78,57 +72,118 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
         try {
             $settings = $this->settings();
             $capabilities = $this->handshake($settings)->describe();
-            $function =
-            $kind === MoodleResourceKind::User
-            ? "core_user_get_users_by_field"
-            : "core_course_get_courses_by_field";
-            if (!$capabilities[$function]) {
-                throw new MoodleConnectionUnavailableException();
-            }
-            $this->assertCurrent($settings);
-            $parameters =
-            $kind === MoodleResourceKind::User
-            ? ["field" => "id", "values" => [$id->value]]
-            : ["field" => "id", "value" => $id->value];
-            $result = $this->request($settings, $function, $parameters);
-            $records = $kind === MoodleResourceKind::User ? $result : $result["courses"] ?? null;
-            if (
-                $kind === MoodleResourceKind::Course &&
-                (!is_array($result["warnings"] ?? null) || $result["warnings"] !== [])
-            ) {
-                throw new MoodleConnectionUnavailableException();
-            }
-            if (!is_array($records) || !array_is_list($records) || count($records) > 1) {
-                throw new MoodleConnectionUnavailableException();
-            }
-            $this->assertCurrent($settings);
-            if ($records === []) {
-                return new MoodleRecordCheck($kind, false);
-            }
-            $record = $records[0];
-            if (!is_array($record)) {
-                throw new MoodleConnectionUnavailableException();
-            }
-            $returnedId = $record["id"] ?? null;
-            if (
-                (!is_int($returnedId) && !is_string($returnedId)) ||
-                new MoodleExternalId((string) $returnedId)->value !== $id->value
-            ) {
-                throw new MoodleConnectionUnavailableException();
-            }
-            $flags = $kind === MoodleResourceKind::User ? ["suspended", "deleted"] : ["visible"];
-            $status = [];
-            foreach ($flags as $flag) {
-                $value = $record[$flag] ?? null;
-                if ($value !== null && !in_array($value, [true, false, 0, 1], true)) {
-                    throw new MoodleConnectionUnavailableException();
-                }
-                $status[$flag] = $value === null ? null : (bool) $value;
-            }
-            return new MoodleRecordCheck($kind, true, $status);
+            return $this->lookup($settings, $capabilities, $kind, $id);
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }
+    }
+
+    public function inspectBound(
+        MoodleBinding $binding,
+        MoodleResourceKind $kind,
+        MoodleExternalId $id,
+    ): MoodleRecordCheck {
+        try {
+            $deadline = microtime(true) + 30;
+            $settings = $this->settings();
+            $capabilities = $this->handshake($settings, $deadline)->describe();
+            if (!$capabilities["local_etsis_get_instance_info"]) {
+                throw new MoodleConnectionUnavailableException(MoodleSetupIssue::FunctionUnavailable);
+            }
+            $this->assertCurrent($settings);
+            $before = $this->installation($settings, $deadline);
+            if (!$binding->matches($before)) {
+                throw new MoodleConnectionUnavailableException(MoodleSetupIssue::InstallationMismatch);
+            }
+            $record = $this->lookup($settings, $capabilities, $kind, $id, $deadline);
+            $after = $this->installation($settings, $deadline);
+            if (!$binding->matches($after)) {
+                throw new MoodleConnectionUnavailableException(MoodleSetupIssue::InstallationMismatch);
+            }
+            $this->assertCurrent($settings);
+            return $record;
+        } catch (MoodleConnectionUnavailableException $error) {
+            throw new MoodleConnectionUnavailableException($error->setupIssue);
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+
+    /** @param array{site:MoodleSiteUrl,token:string,verify:true|string} $settings
+     * @phpstan-impure Reads the remote installation again; never memoize across a record lookup.
+     */
+    private function installation(
+        #[\SensitiveParameter] array $settings,
+        ?float $deadline = null,
+    ): MoodleInstallation {
+        $result = $this->request($settings, "local_etsis_get_instance_info", operationDeadline: $deadline);
+        if (
+            count($result) !== 2 ||
+            ($result["protocol"] ?? null) !== 1 ||
+            !is_string($result["instance_id"] ?? null)
+        ) {
+            throw new MoodleConnectionUnavailableException();
+        }
+        return new MoodleInstallation($settings["site"], new MoodleInstanceIdentity($result["instance_id"]));
+    }
+
+    /** @param array{site:MoodleSiteUrl,token:string,verify:true|string} $settings
+     * @param array<string,bool> $capabilities
+     */
+    private function lookup(
+        #[\SensitiveParameter] array $settings,
+        array $capabilities,
+        MoodleResourceKind $kind,
+        MoodleExternalId $id,
+        ?float $deadline = null,
+    ): MoodleRecordCheck {
+        if ($kind === MoodleResourceKind::User) {
+            $function = "core_user_get_users_by_field";
+            $parameters = ["field" => "id", "values" => [$id->value]];
+        } else {
+            $function = "core_course_get_courses_by_field";
+            $parameters = ["field" => "id", "value" => $id->value];
+        }
+        if (!$capabilities[$function]) {
+            throw new MoodleConnectionUnavailableException(MoodleSetupIssue::LookupUnavailable);
+        }
+        $this->assertCurrent($settings);
+        $result = $this->request($settings, $function, $parameters, $deadline);
+        $records = $kind === MoodleResourceKind::User ? $result : $result["courses"] ?? null;
+        if (
+            $kind === MoodleResourceKind::Course &&
+            (!is_array($result["warnings"] ?? null) || $result["warnings"] !== [])
+        ) {
+            throw new MoodleConnectionUnavailableException();
+        }
+        if (!is_array($records) || !array_is_list($records) || count($records) > 1) {
+            throw new MoodleConnectionUnavailableException();
+        }
+        $this->assertCurrent($settings);
+        if ($records === []) {
+            return new MoodleRecordCheck($kind, false);
+        }
+        $record = $records[0];
+        if (!is_array($record)) {
+            throw new MoodleConnectionUnavailableException();
+        }
+        $returnedId = $record["id"] ?? null;
+        if (
+            (!is_int($returnedId) && !is_string($returnedId)) ||
+            new MoodleExternalId((string) $returnedId)->value !== $id->value
+        ) {
+            throw new MoodleConnectionUnavailableException();
+        }
+        $flags = $kind === MoodleResourceKind::User ? ["suspended", "deleted"] : ["visible"];
+        $status = [];
+        foreach ($flags as $flag) {
+            $value = $record[$flag] ?? null;
+            if ($value !== null && !in_array($value, [true, false, 0, 1], true)) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $status[$flag] = $value === null ? null : (bool) $value;
+        }
+        return new MoodleRecordCheck($kind, true, $status);
     }
     /**
      * @return array{site:MoodleSiteUrl,token:string,verify:true|string}
@@ -189,8 +244,13 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
         #[\SensitiveParameter] array $settings,
         string $function,
         array $parameters = [],
+        ?float $operationDeadline = null,
     ): array {
-        $deadline = microtime(true) + 15;
+        $timeout = $operationDeadline === null ? 15 : min(15, $operationDeadline - microtime(true));
+        if ($timeout <= 0) {
+            throw new MoodleConnectionUnavailableException();
+        }
+        $deadline = microtime(true) + $timeout;
         $response = $this->http->request("POST", $settings["site"]->value . "/webservice/rest/server.php", [
             "headers" => ["Accept" => "application/json"],
             "form_params" =>
@@ -205,9 +265,9 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             "debug" => false,
             "cookies" => false,
             "stream" => true,
-            "connect_timeout" => 3,
-            "timeout" => 15,
-            "read_timeout" => 5,
+            "connect_timeout" => min(3, $timeout),
+            "timeout" => $timeout,
+            "read_timeout" => min(5, $timeout),
         ]);
         $stream = $response->getBody();
         try {
@@ -229,11 +289,11 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             $stream->close();
         }
         $body = json_decode($raw, true, 16, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
-        if (is_array($body) && $function === 'local_etsis_get_instance_info') {
-            $issue = match ($body['errorcode'] ?? null) {
-                'integrationdisabled' => MoodleSetupIssue::VerificationDisabled,
-                'identityunavailable' => MoodleSetupIssue::IdentityUnavailable,
-                'nopermissions', 'accesscontrol' => MoodleSetupIssue::PermissionDenied,
+        if (is_array($body) && $function === "local_etsis_get_instance_info") {
+            $issue = match ($body["errorcode"] ?? null) {
+                "integrationdisabled" => MoodleSetupIssue::VerificationDisabled,
+                "identityunavailable" => MoodleSetupIssue::IdentityUnavailable,
+                "nopermissions", "accesscontrol" => MoodleSetupIssue::PermissionDenied,
                 default => null,
             };
             if ($issue !== null) {
@@ -250,9 +310,11 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
      * @throws JsonException
      * @throws GuzzleException
      */
-    private function handshake(#[\SensitiveParameter] array $settings): MoodleCapabilities
-    {
-        $body = $this->request($settings, "core_webservice_get_site_info");
+    private function handshake(
+        #[\SensitiveParameter] array $settings,
+        ?float $deadline = null,
+    ): MoodleCapabilities {
+        $body = $this->request($settings, "core_webservice_get_site_info", operationDeadline: $deadline);
         if (
             !is_array($body["functions"] ?? null) ||
             !array_is_list($body["functions"]) ||

@@ -194,6 +194,15 @@ $teachingPost = static function (
     return $response;
 };
 $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
+$moodlePersonPath = '/sis/people/' . $sis->admissions->student($teachingStudent->id)->personId->value . '/moodle/';
+$moodlePersonStatus = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $moodlePersonPath)));
+if ($moodlePersonStatus->getStatusCode() !== 200 ||
+    json_decode((string) $moodlePersonStatus->getBody(), true, flags: JSON_THROW_ON_ERROR)['link'] !== null ||
+    !str_contains($moodlePersonStatus->getHeaderLine('Cache-Control'), 'no-store') ||
+    $teachingPost($moodlePersonPath . 'review/', ['moodle_user_id' => '123', 'reason' => 'Fictional review.'])->getStatusCode() !== 503 ||
+    $teachingPost($moodlePersonPath . 'confirm/', ['review_token' => 'fictional-review'])->getStatusCode() !== 422) {
+    throw new RuntimeException('Moodle person routes did not preserve private reads, disabled mode, review validation and CSRF.');
+}
 $bindingResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/installation/')));
 if ($bindingResponse->getStatusCode() !== 200 ||
     json_decode((string) $bindingResponse->getBody(), true, flags: JSON_THROW_ON_ERROR) !== ['binding' => null] ||
@@ -216,6 +225,11 @@ if ($moodleResponse->getStatusCode() !== 200 || $moodleStatus !== ['enabled' => 
 }
 $sis->access->staff = false;
 $sis->access->grants = ['admin:dashboard', 'sis:catalog:manage'];
+if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $moodlePersonPath)))->getStatusCode() !== 403 ||
+    $teachingPost($moodlePersonPath . 'review/', ['moodle_user_id' => '123', 'reason' => 'Fictional review.'])->getStatusCode() !== 403 ||
+    $teachingPost($moodlePersonPath . 'confirm/', ['review_token' => 'fictional-review'])->getStatusCode() !== 403) {
+    throw new RuntimeException('Unrelated grants accessed or changed Moodle person links.');
+}
 if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/installation/')))->getStatusCode() !== 403) {
     throw new RuntimeException('Unrelated grants disclosed Moodle installation approvals.');
 }
