@@ -91,6 +91,7 @@ final class MoodlePersonLinkTest extends TestCase
             $this->reader,
             $this->bindings,
             $this->links,
+            new \Infrastructure\Lms\SqlMoodleAccountRequestRepository($this->f->sql),
             $this->f->admissions,
             new UserAccountAccess(
                 new SqlAccessRepository($this->f->sql),

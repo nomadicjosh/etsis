@@ -1,6 +1,6 @@
 # Reviewed Moodle person links
 
-The intended person workspace offers two choices: **Link an existing Moodle account** and **Create a Moodle account**. Staff should complete either task in etSIS. Creation must save the returned Moodle ID automatically, without a second linking task. The existing manual-link tool implements the first choice; the creation choice still needs the provisioning service and background worker.
+The person workspace offers **Moodle account link** for an existing account and **Create a Moodle account** for reviewed request intake. Existing-account linking is operational. Creation requests can now be reviewed and saved, but the remote provisioning worker is not implemented: saving a request creates no Moodle account and sends no email. Request intake is separately disabled by default. The completed creation workflow must retain the returned Moodle ID automatically, without a second linking task.
 
 The intended integration automatically provisions eligible **students** and **faculty** in the background when the institution enables that capability. An accepted teaching assignment must request provisioning of the instructor and the appropriate role in that specific Moodle course; committed registrations drive student course access. For all other people, staff choose creation or existing-account linking on an as-needed basis. Such people do not need a student or faculty role just to receive a Moodle account. See the [provisioning policy](optional-moodle-integration.md#automatic-account-provisioning-and-section-access) for the intended workflow and current implementation status. Normal SIS work remains available without Moodle.
 
@@ -31,19 +31,35 @@ Missing records and records outside the service account's scope are both describ
 
 Saved references have no ordinary replace/unlink action. A correction needs a separate reviewed workflow that preserves the previous decision and checks any dependent mappings. Changing an institutional person ID continues to resolve through the same person ULID; it does not move the Moodle reference to a different person.
 
-## Create an account from etSIS (planned)
+## Review a creation request (implemented)
 
-1. Open the person and choose **Create a Moodle account** when the person needs access and does not already have a reviewed Moodle reference.
-2. Reuse the existing person details and supply only missing account information required by the institution's approved Moodle authentication arrangement. Do not ask staff to reenter a complete profile or copy SIS credentials.
-3. Review the intended account and submit an authorized creation request. This does not require assigning the person a faculty or student role, and must not grant Moodle administrative privileges implicitly.
-4. The shared provisioning worker verifies the installation and current request authority, creates the account using its retry-safe operation reference, and retains the returned Moodle ID against the same person. Normal faculty/student auto-provisioning uses this service without an individual staff request.
-5. Follow progress or resolve an exception in the same person workspace. Staff do not need to open Moodle to create the account or return to the existing-account linking form afterward.
+Creation intake requires the independent protected permission **sis:moodle:create-person** together with **sis:person:manage**. Existing-account link permission and Moodle administration do not imply creation authority. The same local-account and super-account protections described above apply. The migration adds no role/user grants. This workflow supports people without student or faculty roles.
 
-An existing account or conflicting identity requires review rather than silent adoption or duplicate creation. An interrupted result must reconcile the original creation operation before retrying. Existing-account link permission alone must not authorize creation; the creation feature needs its own controlled authority and the existing account-protection checks. These steps describe the approved target workflow and are not enabled by the current manual-link implementation.
+For development of request intake, explicitly set `SIS_MOODLE_ACCOUNT_REQUESTS_ENABLED=true` alongside the enabled integration and approved installation. Leave it false for ordinary operation until remote processing is delivered. This switch enables saving requests only; it does not enable a worker, SSO or email delivery. Status and confirmation responses explicitly return `processing_available: false`.
+
+1. Search **People**, open the person and choose **Create a Moodle account**. Status reads stay local. An existing link or saved creation request prevents another request.
+2. Review the person's canonical name. Username and email are prefilled from their local sign-in account when available; enter or correct only those account attributes. No password is requested or copied.
+3. Select **Institutional SSO** or **Moodle password-setup email**, and give a short administrative reason. Both choices are supported request intents. They do not establish that the institution's authentication arrangement is configured.
+4. Select **Review account request**. etSIS verifies the approved installation and displays the exact name, username, email and sign-in choice. Acknowledgement is required before **Save reviewed creation request**. Reviews expire after 20 minutes and cannot be used by a different administrator or for another person.
+5. Confirmation verifies the installation again, checks the current permissions, profile, account defaults and reviewed binding, then saves the encrypted approval, reference-only outbox entry and audit atomically. No remote write occurs. The workspace clearly reports **queued** and that account processing is not yet available.
+
+**Cancel review** saves nothing. **Refresh request status** rereads local state after an interrupted response. Repeating the same successful confirmation returns the saved request without another approval audit or remote check, even after review expiry or intake disablement; current authorization and the original binding still apply. A saved request blocks a competing manual link, including a link reviewed before the request was saved. There is no saved-request cancellation or replacement workflow yet.
+
+## Complete account provisioning (next stage)
+
+The shared worker must verify the installation, current request authority, profile and institution-approved authentication policy, create or reconcile the account using a retry-safe operation reference, and retain its Moodle ID against the same person. Automatic student/faculty provisioning will use that service without requiring individual staff approval. Older intake requests must not execute automatically merely because a worker is later installed; their intent must still match current policy and authorization.
+
+The institution must be able to offer both approved sign-in arrangements. SSO requires its configured identity provider; password-email mode requires a password-setup link workflow. Moodle's native `createpassword` option sends a generated password and must not be treated as the requested reset-link workflow. Neither authentication execution nor email sending is implemented by this intake stage.
+
+An existing account or conflicting identity needs review rather than silent adoption or duplicate creation. An uncertain result must reconcile the original operation before another attempt. The completed workspace should show progress and actionable exceptions; staff should never need a separate Moodle creation step or a second manual-link form.
 
 ## Security and persistence
 
 `20261111000007_CreateSisMoodlePersonLinks.php` adds `sis_moodle_person_links` and the independent protected permission. Its primary key is a ULID; Moodle's numeric identifier is an external string reference. Foreign keys retain the person and installation approval. Unique constraints on `(binding_id, person_id)` and `(binding_id, moodle_user_id)` protect both sides against competing approvals. The reason, reviewed status and local-person revision are encrypted; ordinary status responses omit that review evidence. The table is excluded from ordinary reporting sources.
+
+`20261112000000_CreateSisMoodleAccountRequests.php` adds ULID-keyed `sis_moodle_account_requests` and `sis_moodle_provisioning_outbox`, plus the independent creation permission. Request approvals contain encrypted reviewed attributes and reason, with actor/time, binding/person references and a review hash. Unique `(binding_id, person_id)` prevents duplicate requests. The outbox contains only its ID, request reference, state, version and creation time; it contains no profile, credential or upstream response. The SQL outbox shares the approval/audit transaction; filesystem queue dispatch alone would not provide that atomicity. These private tables are excluded from ordinary reporting sources. Application encryption keys must be retained securely for approved evidence to remain readable.
+
+Creation routes are GET `/sis/people/{person}/moodle/account-request/` and POST `/review/`, `/confirm/` beneath it. They preserve private/no-store responses, framework CSRF protection and suppressed debug collectors. Attribute previews are transient browser memory only. Network checks happen before the short person/account-lock transaction, never while holding those locks. Request saving does not change an academic record or add events to the authoritative event store.
 
 These are audited integration references, using the existing permission and account boundaries. No academic record, person profile, local account, role grant or authoritative event is rewritten, and no parallel event store is introduced. Tokens, Moodle profiles, raw responses and installation identifiers are never saved in the link table or returned to the browser. The user-entered Moodle ID is visible only in this authorized person workflow and must remain out of logs and public URLs.
 
@@ -56,3 +72,5 @@ A different site/installation stops the operation. A full Moodle database clone 
 ## Validation
 
 Tests use fictional Moodle responses and isolated SQLite fixtures. They cover installation changes around a lookup, configuration changes, unknown flags, stale/expired reviews, actor/permission changes, protected super accounts, uniqueness on both sides, atomic audit rollback, owned-account authorization and repeat confirmation. The schema compiles for MySQL, PostgreSQL, SQLite, SQL Server and Oracle. Browser checks cover explicit keyboard approval, narrow-screen accessibility, cancellation, private transient state and recovery after an interrupted response. No live Moodle person record was used as a test fixture or linked automatically.
+
+Creation-intake checks additionally cover both sign-in intents, encrypted approval storage, reference-only outbox fields, competing requests/manual links, strict opt-in flags and rollback on audit failure. The current full PHP suite passes 1,515 tests; the Moodle administration, person-link, creation-intake and person-workspace browser checks pass 23 tests. These checks do not establish remote creation or email acceptance.

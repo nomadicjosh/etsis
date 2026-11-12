@@ -11,6 +11,7 @@ use Domain\Communications\Service\MessageCipher;
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\Repository\MoodleBindingRepository;
 use Domain\Lms\Repository\MoodlePersonLinkRepository;
+use Domain\Lms\Repository\MoodleAccountRequestRepository;
 use Domain\Lms\ValueObject\MoodleBinding;
 use Domain\Lms\ValueObject\MoodleExternalId;
 use Domain\Lms\ValueObject\MoodlePersonLink;
@@ -37,6 +38,7 @@ final readonly class MoodlePersonLinkService
         private MoodleBoundRecordReader $reader,
         private MoodleBindingRepository $bindings,
         private MoodlePersonLinkRepository $links,
+        private MoodleAccountRequestRepository $requests,
         private AdmissionsRepository $people,
         private UserAccountAccess $accounts,
         private StudentAccess $access,
@@ -251,6 +253,11 @@ final readonly class MoodlePersonLinkService
 
     private function available(MoodleBinding $binding, EntityId $person, MoodleExternalId $external): void
     {
+        if ($this->requests->forPerson($binding->id, $person) !== null) {
+            throw new ConcurrentModificationException(
+                'An account creation request exists. Review its status before linking another account.'
+            );
+        }
         if (
             $this->links->forPerson($binding->id, $person) !== null ||
             $this->links->forExternal($binding->id, $external) !== null

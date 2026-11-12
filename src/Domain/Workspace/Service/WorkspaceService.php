@@ -48,6 +48,7 @@ final readonly class WorkspaceService
     public const array PERMISSIONS = [
         "sis:moodle:manage",
         "sis:moodle:link-person",
+        'sis:moodle:create-person',
         "sis:person:manage",
         "sis:person:assign-id",
         "sis:admissions:manage",
