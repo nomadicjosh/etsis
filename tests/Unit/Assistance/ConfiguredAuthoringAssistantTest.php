@@ -62,6 +62,15 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             ],
         ];
     }
+    public function testDegreeSetupInstructionsDoNotClaimToReviewGroupsOrStudentEligibility(): void
+    {
+        $mock = new MockHandler([new Response(200, [], json_encode(self::response()))]);
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(['handler' => $mock]));
+        self::assertNull($service->suggest(AuthoringTask::DegreeReadiness, ['min_credits_milli' => 120000])->description);
+        $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
+        self::assertStringContainsString('Group contents and student records are not supplied.', $body['input'][0]['content']);
+        self::assertStringContainsString('Return description as null.', $body['input'][0]['content']);
+    }
     public function testSectionReadinessHasItsOwnInstructionsAndRejectsDescriptionOutput(): void
     {
         $draft = ['section_code' => 'MATH.101.A', 'delivery_mode' => 'online'];

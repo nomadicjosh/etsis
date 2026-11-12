@@ -12,6 +12,9 @@ require_once dirname(__DIR__, 2) .
 require_once dirname(__DIR__, 2) .
     "/database/migrations/20261111000003_CreateSisSectionAssistancePermission.php";
 
+require_once dirname(__DIR__, 2) .
+    "/database/migrations/20261111000004_CreateSisDegreeAssistancePermission.php";
+
 use PHPUnit\Framework\TestCase;
 use Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter;
 
@@ -40,6 +43,27 @@ final class CourseAssistancePermissionTest extends TestCase
         $migration->up();
         self::assertSame($before, $f->sql->rows("sis_access_permissions"));
         $permission = $f->sql->rows("sis_access_permissions", ["name" => "sis:ai:section:readiness"], 1)[0];
+        self::assertSame(1, (int) $permission["is_system"]);
+        $implications = $f->sql->rows("sis_access_implications", ["descendant_id" => $permission["id"]]);
+        self::assertCount(1, $implications);
+        self::assertSame($permission["id"], $implications[0]["ancestor_id"]);
+        $f->sql->update("sis_access_permissions", ["is_system" => 0], ["id" => $permission["id"]]);
+        $this->expectException(LogicException::class);
+        $migration->up();
+    }
+    public function testDegreePermissionIsProtectedIndependentAndIdempotent(): void
+    {
+        $f = new SisFixture();
+        $migration = new CreateSisDegreeAssistancePermission("degree-assistance");
+        $migration->setObjectMap(
+            new ArrayObject([
+                "phpmig.adapter" => new DbalMigrationAdapter($f->connection, "test_migrations"),
+            ]),
+        );
+        $before = $f->sql->rows("sis_access_permissions");
+        $migration->up();
+        self::assertSame($before, $f->sql->rows("sis_access_permissions"));
+        $permission = $f->sql->rows("sis_access_permissions", ["name" => "sis:ai:degree:readiness"], 1)[0];
         self::assertSame(1, (int) $permission["is_system"]);
         $implications = $f->sql->rows("sis_access_implications", ["descendant_id" => $permission["id"]]);
         self::assertCount(1, $implications);

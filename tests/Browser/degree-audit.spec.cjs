@@ -306,6 +306,14 @@ async function fixture(page, options = {}) {
             opened = true;
             response = row();
         } else if (path === `/sis/degree-audits/${template}/`) response = row();
+        else if (path === `/sis/degree-audits/${template}/assistance/`) {
+            if (body && options.aiFailure) {
+                await route.fulfill({ status: 503, json: { error: 'Optional assistance is unavailable.' } });
+                return;
+            }
+            response = body ? { advice: { summary: '<script>window.degreeAiExecuted = true</script> Review policies.', suggestions: ['Verify group contents separately.'], description: null } } :
+                { enabled: !options.aiDisabled, label: 'Fictional provider', saved_revision: degreeRevision, revision: 'a'.repeat(64), draft: { name: definition.name, min_credits_milli: definition.min_credits_milli, policies: definition.policies, groups: definition.groups.map(g => ({ published_version_selected: g.version_id !== null })) } };
+        }
         else if (path === `/sis/degree-audits/${template}/save/`) {
             definition = body.definition;
             degreeRevision++;
@@ -1143,5 +1151,46 @@ test("a missing latest-attempt choice receives useful guidance instead of Invali
     );
     expect(f.calls.some((c) => c.path.endsWith("/publish/"))).toBe(false);
     await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('degree assistance requires saved setup and fresh consent without changing requirements', async ({ page }) => {
+    const f = await fixture(page, { existing: true });
+    await openDegree(page, true);
+    await page.getByRole('button', { name: 'Optional degree AI help', exact: true }).click();
+    await page.getByText('Inspect saved degree facts to be sent', { exact: true }).click();
+    await expect(page.locator('[data-degree-assistance] pre')).not.toContainText(f.groupVersion);
+    const send = page.getByRole('button', { name: 'Suggest saved degree checks', exact: true });
+    await send.click();
+    expect(f.calls.filter(c => c.path.endsWith('/assistance/') && c.body)).toHaveLength(0);
+    const consent = page.getByRole('checkbox', { name: /I agree to send the displayed saved degree setup/ });
+    await consent.check();
+    await send.click();
+    await expect(page.getByText('Suggestions to review', { exact: true })).toBeVisible();
+    await expect(consent).not.toBeChecked();
+    expect(f.calls.filter(c => c.path.endsWith('/assistance/') && c.body)[0]).toMatchObject({ body: { consent: true, revision: 'a'.repeat(64) } });
+    expect(f.calls.some(c => c.path.endsWith('/save/') || c.path.endsWith('/publish/'))).toBe(false);
+    expect(await page.evaluate(() => window.degreeAiExecuted)).toBeUndefined();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('unsaved degree edits cannot be submitted for assistance and failures preserve editing', async ({ page }) => {
+    const f = await fixture(page, { existing: true, aiFailure: true });
+    await openDegree(page, true);
+    await page.getByLabel('Requirement title').fill('Unsaved title');
+    await page.getByRole('button', { name: 'Optional degree AI help', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Suggest saved degree checks', exact: true })).toHaveCount(0);
+    await page.getByLabel('Requirement title').fill('B.S. Computing');
+    await page.getByRole('button', { name: 'Optional degree AI help', exact: true }).click();
+    await page.getByRole('checkbox', { name: /I agree to send the displayed saved degree setup/ }).check();
+    await page.getByRole('button', { name: 'Suggest saved degree checks', exact: true }).click();
+    await expect(page.getByText('No suggestion was applied. Another request requires fresh consent.', { exact: true })).toBeVisible();
+    await page.getByLabel('Requirement title').fill('Staff-edited title');
+    expect(f.calls.some(c => c.path.endsWith('/save/') || c.path.endsWith('/publish/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });

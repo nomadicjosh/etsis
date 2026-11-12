@@ -47,6 +47,55 @@ final readonly class RequirementsService
     ) {
     }
 
+    /** Minimized saved degree setup, without student reads or publication-history replay.
+     * @return array{draft:array<string,mixed>,revision:string,saved_revision:int}
+     */
+    public function assistanceSnapshot(EntityId $id): array
+    {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        return $this->transactions->run(function () use ($id, $actor): array {
+            $row = $this->lock($id);
+            $this->authorize($actor);
+            $definition = AuditRequirementsV3::draft($row["definition"]);
+            if (!($definition instanceof AuditRequirementsV3)) {
+                throw new InvalidArgumentException(
+                    "Convert embedded groups before requesting degree assistance.",
+                );
+            }
+            $context = $this->templates->context(
+                new EntityId($row["program_id"]),
+                new EntityId($row["academic_year_id"]),
+            );
+            $keys = [
+                "name",
+                "length_months",
+                "min_credits_milli",
+                "min_resident_milli",
+                "min_cumulative_gpa_milli",
+                "min_overall_gpa_milli",
+                "policies",
+            ];
+            $draft = array_intersect_key($definition->definition, array_flip($keys));
+            $draft["context"] = [
+                "program_code" => $context["program_code"],
+                "program_title" => $context["program_title"],
+                "academic_year" => $context["academic_year_code"],
+            ];
+            $draft["groups"] = array_map(
+                static fn(array $group): array => [
+                    "published_version_selected" => $group["version_id"] !== null,
+                ],
+                $definition->definition["groups"],
+            );
+            $this->authorize($actor);
+            return [
+                "draft" => $draft,
+                "saved_revision" => $row["revision"],
+                "revision" => hash("sha256", json_encode([$row, $context], JSON_THROW_ON_ERROR)),
+            ];
+        });
+    }
+
     /** @return array<string, mixed> */
     public function page(EntityId $program, ?EntityId $after = null): array
     {
@@ -568,8 +617,7 @@ final readonly class RequirementsService
             $definition["policies"] ??= AuditRequirementsV2::blank($definition["name"])->definition[
                 "policies"
             ];
-            $definition["policies"]["group_reuse"] =
-                CourseGroupReuse::OneGroup->value;
+            $definition["policies"]["group_reuse"] = CourseGroupReuse::OneGroup->value;
             $draft = new AuditRequirementsV3($definition);
             $this->templates->save($id, $revision, $draft->definition);
             $this->audit->record($actor, "degree_audit.groups_moved_to_library", $id);

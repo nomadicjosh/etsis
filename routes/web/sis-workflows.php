@@ -11,6 +11,7 @@ use Application\Http\Controller\SisCoursePublicationController;
 use Application\Http\Controller\SisCourseTextController;
 use Application\Http\Controller\SisCourseAssistanceController;
 use Application\Http\Controller\SisSectionAssistanceController;
+use Application\Http\Controller\SisDegreeAssistanceController;
 use Application\Http\Controller\SisSectionCourseBindingController;
 use Application\Http\Controller\SisCatalogWorkflowController;
 use Application\Http\Controller\SisFinancialReviewController;
@@ -1007,6 +1008,8 @@ return static function (Psr7Router $router): void {
     ]);
     $router->post("/sis/programs/{program}/degree-audits/page/", [SisDegreeAuditController::class, "page"]);
     $router->post("/sis/programs/{program}/degree-audits/open/", [SisDegreeAuditController::class, "open"]);
+    $router->get("/sis/degree-audits/{id}/assistance/", [SisDegreeAssistanceController::class, "preview"]);
+    $router->post("/sis/degree-audits/{id}/assistance/", [SisDegreeAssistanceController::class, "suggest"]);
     $router->get("/sis/degree-audits/{id}/", [SisDegreeAuditController::class, "view"]);
     $router->post("/sis/degree-audits/{id}/save/", [SisDegreeAuditController::class, "save"]);
     $router->post("/sis/degree-audits/{id}/clone/", [SisDegreeAuditController::class, "clone"]);

@@ -159,7 +159,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Verify institution-selected OpenAI/Azure/local deployments and approved no-training/retention terms before enabling a real service.
 - [x] Add saved-description rewrite and expansion, independent action grants, source-text validation and explicit copying that protects later staff edits.
 - [x] Add optional saved-section readiness with a minimized preview, independent action permission, fresh consent, stale-source checks and no automatic publication changes. Unsaved dates/reasons remain outside this review.
-- [ ] Extend reviewed suggestions to degree authoring with appropriate action permissions and consent.
+- [x] Add optional saved-degree setup readiness for minimums, institutional policy selections and group-publication selections, with independent permission, exact preview and no student data. Group-content/coverage analysis remains outside this first review.
 - [ ] Design student progress assistance and movable assistants with separate privacy/consent boundaries, minimized authorized inputs and no automated academic decisions.
 
 ## 7. Scheduling, employment and office workflows

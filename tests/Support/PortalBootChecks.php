@@ -1244,6 +1244,23 @@ if (
     throw new RuntimeException("Degree requirement builder did not resolve privately.");
 }
 $requirementPath = "/sis/degree-audits/" . $requirementOpened["id"] . "/";
+$app->configContainer->setConfigKey('assistance', ['enabled' => false]);
+$degreeAssistancePath = $requirementPath . 'assistance/';
+$degreeAssistanceResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $degreeAssistancePath)));
+$degreeAssistance = json_decode((string) $degreeAssistanceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($degreeAssistanceResponse->getStatusCode() !== 200 || $degreeAssistance['enabled'] !== false ||
+    !str_contains($degreeAssistanceResponse->getHeaderLine('Cache-Control'), 'no-store') ||
+    $teachingPost($degreeAssistancePath, ['consent' => false, 'revision' => $degreeAssistance['revision']])->getStatusCode() !== 422 ||
+    $teachingPost($degreeAssistancePath, ['consent' => true, 'revision' => $degreeAssistance['revision']])->getStatusCode() !== 503) {
+    throw new RuntimeException('Degree assistance lost private routes, provider binding or CSRF protection.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:catalog:manage', 'sis:ai:section:readiness'];
+if ($teachingPost($degreeAssistancePath, ['consent' => true, 'revision' => $degreeAssistance['revision']])->getStatusCode() !== 403) {
+    throw new RuntimeException('Section assistance granted degree assistance.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $requirementDefinition = $requirementOpened["definition"];
 $requirementDefinition["min_credits_milli"] = 3000;
 $requirementDefinition["policies"] = [
