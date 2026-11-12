@@ -1875,6 +1875,83 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const data = await post(`${base}progress/`, {});
         renderDegreeProgress(base, back, data);
     }
+    function progressNextSteps(data) {
+        const steps = [];
+        const add = (title, description) =>
+            steps.push(
+                node(
+                    "li",
+                    { class: "list-group-item" },
+                    node("strong", {}, title),
+                    node("p", { class: "mb-0 mt-1" }, description),
+                ),
+            );
+        if (data.status === "needs_selection") {
+            add(
+                "Arrange a requirements selection",
+                "Ask an authorized registrar to review and select published requirements for this program pursuit, then refresh degree progress.",
+            );
+        } else if (data.status !== "review") {
+            add(
+                "Arrange a controlled record review",
+                data.status === "inconsistent"
+                    ? "The academic facts could not be verified. Ask the registrar to resolve the discrepancy before relying on progress results."
+                    : "This review reached its work limit. Ask the registrar to arrange a bounded review; no partial results should be used to make a decision.",
+            );
+        } else {
+            if (data.input_status === "history_gaps")
+                add(
+                    "Verify earlier history",
+                    "Ask the registrar to check missing earlier evidence. Available current records do not establish that the historical archive is complete.",
+                );
+            if (data.context?.cohort_changed)
+                add(
+                    "Confirm the selected requirements",
+                    "The matriculation context changed. Ask an authorized registrar to review the retained requirements selection; do not assume today's program requirements apply.",
+                );
+            const checks = data.minimums || [];
+            if (checks.some((check) => check.status === "unknown"))
+                add(
+                    "Resolve unavailable minimum checks",
+                    "Review the affected minimum cards and credit/GPA contributions with the registrar. Missing evidence or a GPA not yet established must not be treated as zero.",
+                );
+            if (checks.some((check) => check.status === "below_minimum"))
+                add(
+                    "Review minimum shortfalls",
+                    "Use the minimum cards and credit/GPA contributions to discuss the known shortfalls with the appropriate academic office. This guide does not prescribe courses or override institutional policy.",
+                );
+            if (data.allocation?.outcome !== "feasible")
+                add(
+                    "Review course-group placement",
+                    "Use Inspect course-group placement to review shortages, competing uses or unavailable evidence. A search limit or unsupported rule does not prove that completion is impossible.",
+                );
+            if ((data.work_summary?.awaiting_grade_count || 0) > 0)
+                add(
+                    "Review pending grades",
+                    "Use Review unused and pending work to inspect recorded ungraded attempts. Refresh after grades are posted; attempted credits do not predict earned credits or GPA.",
+                );
+            if ((data.work_summary?.unused_completed_count || 0) > 0)
+                add(
+                    "Inspect unused completed work",
+                    "These records were not used in the proposed complete group plan. They may still count toward earned credits or GPA, and another valid plan may use them.",
+                );
+            add(
+                "Confirm remaining requirements with the registrar",
+                "Review group contents, specializations, residency policy and final award requirements with the appropriate office. Meeting displayed minimums or finding a group plan is not a graduation decision.",
+            );
+        }
+        return node(
+            "details",
+            { class: "record-section", "data-progress-next-steps": "" },
+            node("summary", { class: "h5" }, "Next steps for this review"),
+            node(
+                "p",
+                {},
+                "Local guidance from this captured review. No AI provider is used, no extra records are loaded and no academic changes are saved.",
+            ),
+            node("ol", { class: "list-group list-group-numbered" }, ...steps),
+        );
+    }
     function renderDegreeProgress(base, back, data) {
         const body = screen("Degree progress review", "GENERAL MINIMUMS & COURSE GROUPS");
         const restore = () => renderDegreeProgress(base, back, data);
@@ -1891,6 +1968,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 button("Back to degree requirements", back),
             ),
         );
+        body.append(progressNextSteps(data));
         if (data.status !== "review") {
             body.append(
                 node(

@@ -32,6 +32,12 @@ An approved reduction shows the effective minimum and the original **published m
 
 Minimum checks are independent components. A known cumulative GPA can be displayed alongside an unavailable overall GPA or earned-credit total. Supported [shared-course shortages](student-course-placement.md#shared-course-shortages) now identify competing groups directly in this same review; the detailed group view reuses those explanations without another input request. There is no aggregate “eligible to graduate” result. Meeting these minimums does not establish course-group, specialization, residency-policy or final award completion.
 
+## Next steps for this review
+
+Expand **Next steps for this review** for local guidance based on the same captured result. It points to earlier-history checks, changed matriculation context, unavailable minimum checks, known shortfalls, course-group placement, pending grades and unused completed work when those conditions are present. An unavailable or limited review offers a controlled-review path without interpreting partial academic facts.
+
+Student progress guidance stays inside etsis by project direction. The guide does not load more records, call an AI service, recalculate totals, recommend specific courses or save decisions. Catalog-authoring AI permissions do not authorize sending this review to a provider. Returning from contribution or placement views reuses the same guidance and snapshot; **Refresh degree progress** obtains a new result. Even when displayed minimums and group placements are satisfied, the guide directs staff to verify remaining institutional requirements with the registrar rather than declaring graduation eligibility.
+
 ## Inspecting the same result
 
 **Inspect credit and GPA contributions** shows each current record's earned-credit, cumulative-GPA and overall-GPA treatment. Transfer exclusion in the cumulative column describes the institutional-only scope; it does not claim that the institution's overall transfer policy excludes transfers. Contribution cards page 20 records at a time.

@@ -265,3 +265,40 @@ test("combined degree progress reuses the same shared-course explanation when op
     expect(f.calls.some((c) => c.path.endsWith("/allocation/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });
+
+
+test('local next steps explain gaps, shortfalls and pending work without new requests or decisions', async ({ page }) => {
+    const f = await fixture(page, { assigned: true, changed: true, progressHistoryGaps: true, progressWorkMix: true, progressUnknownOverall: true });
+    await page.getByRole('button', { name: 'Degree progress', exact: true }).click();
+    const before = f.calls.length;
+    await page.getByText('Next steps for this review', { exact: true }).click();
+    const guide = page.locator('[data-progress-next-steps]');
+    await expect(guide).toContainText('No AI provider is used');
+    await expect(guide).toContainText('Verify earlier history');
+    await expect(guide).toContainText('Confirm the selected requirements');
+    await expect(guide).toContainText('Resolve unavailable minimum checks');
+    await expect(guide).toContainText('Review pending grades');
+    await expect(guide).toContainText('Inspect unused completed work');
+    await expect(guide).toContainText('not a graduation decision');
+    expect(f.calls.length).toBe(before);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.calls.filter(c => c.path === `${f.base}progress/`)).toHaveLength(1);
+    expect(f.calls.some(c => /\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('local next steps keep a work-limit result separate from academic shortfalls', async ({ page }) => {
+    const f = await fixture(page, { assigned: true, progressLimit: true });
+    await page.getByRole('button', { name: 'Degree progress', exact: true }).click();
+    await page.getByText('Next steps for this review', { exact: true }).click();
+    const guide = page.locator('[data-progress-next-steps]');
+    await expect(guide).toContainText('Arrange a controlled record review');
+    await expect(guide).not.toContainText('Review minimum shortfalls');
+    await expect(guide).not.toContainText('Inspect unused completed work');
+    expect(f.calls.filter(c => c.path === `${f.base}progress/`)).toHaveLength(1);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});

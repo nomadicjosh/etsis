@@ -160,7 +160,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] Add saved-description rewrite and expansion, independent action grants, source-text validation and explicit copying that protects later staff edits.
 - [x] Add optional saved-section readiness with a minimized preview, independent action permission, fresh consent, stale-source checks and no automatic publication changes. Unsaved dates/reasons remain outside this review.
 - [x] Add optional saved-degree setup readiness for minimums, institutional policy selections and group-publication selections, with independent permission, exact preview and no student data. Group-content/coverage analysis remains outside this first review.
-- [ ] Design student progress assistance and movable assistants with separate privacy/consent boundaries, minimized authorized inputs and no automated academic decisions.
+- [x] Add local next-step guidance to the captured degree-progress review, with no provider calls, extra record reads or academic mutations. External AI data sharing remains separate.
+- [ ] Design contextual/movable student helpers that keep degree-progress data inside etsis. External student-progress AI is deferred by project direction; catalog-authoring AI remains separate. No automated academic decisions.
 
 ## 7. Scheduling, employment and office workflows
 

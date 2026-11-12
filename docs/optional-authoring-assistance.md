@@ -1,6 +1,6 @@
 # Optional catalog authoring assistance
 
-Catalog editors can request publication-readiness suggestions, generate a description draft, or rewrite/expand an existing description from **Titles & description → Optional AI help**. Assistance is disabled by default. Course assistance supports saved drafts. Sections also have a saved-setup readiness review; degrees have a saved-setup readiness review; student progress assistance remains future work.
+Catalog editors can request publication-readiness suggestions, generate a description draft, or rewrite/expand an existing description from **Titles & description → Optional AI help**. Assistance is disabled by default. Course assistance supports saved drafts. Sections also have a saved-setup readiness review; degrees have a saved-setup readiness review; student progress guidance stays inside etsis and does not use an AI provider.
 
 Staff inspect the exact course facts, select consent for one request, and choose an action. Rewrite improves clarity while preserving the source meaning; expand asks for fuller explanations of supplied facts. Both require a saved, nonblank description and have their own action grants. Missing facts should be raised as questions rather than invented. Suggestions can still be inaccurate and require staff review.
 
@@ -53,6 +53,12 @@ In the **Degree audit builder → Optional degree AI help**, save the current dr
 The summary includes the requirement title, program code/title, academic year, duration, credit/GPA minimums, institution-selected policy values and a publication-selection flag for each group. Internal IDs, group contents, courses, students, academic work and publication reasons are excluded. This is a setup review, not a coverage check, degree evaluation, accreditation review or eligibility decision. Verify group contents and institutional requirements separately.
 
 Only saved composition drafts using reusable course groups are supported. Earlier embedded-group drafts must be converted through the existing builder first. Short program/year/template locks protect the snapshot; assistance does not replay group or degree history. Provider calls run after the transaction ends. Changed saved context, provider settings or revoked permissions invalidate the result. The browser also discards suggestions if the editor changes during the request. Suggestions cannot modify a draft, publish requirements or assign requirements to a student.
+
+## Student progress stays local
+
+Student progress guidance runs inside etsis using the already authorized, captured [degree-progress review](student-degree-progress.md#next-steps-for-this-review). Do not send student progress, grades, earned-credit totals or group-placement results to an AI provider. This includes institution-operated model endpoints: no student-progress model calls are implemented or enabled by the catalog assistance configuration. Any future change to this boundary requires a new explicit project decision.
+
+Catalog readiness and description actions remain separate. Their action grants and institutional provider approval do not authorize student-record processing.
 
 ## Data and historical safeguards
 
