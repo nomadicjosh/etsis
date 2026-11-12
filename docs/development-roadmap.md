@@ -149,6 +149,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Verify gateway checkout, uncertain outcomes, duplicate notifications, refunds and settlement reconciliation through selected provider test environments before any live use.
 - [x] Add the disabled-by-default [Moodle REST connection diagnostic](optional-moodle-integration.md), with bounded requests, fixed capability output and no enrollment/grade writes. Institutions explicitly opt in; Moodle is not required for SIS workflows.
 - [x] Verify the enabled local Moodle REST handshake, reject a missing/mismatched canonical installation address, and discover targeted lookup functions without requesting user/course records. Stable instance/identity links remain a subsequent stage.
+- [x] Add an operator-only, single-ID user/course mapping preflight with exact-ID validation, known/unknown status flags and no matching/link creation. Reuse one bounded read gateway for handshake and targeted reads; persistent mappings and SSO remain open.
 - [ ] Build optional deep Moodle LMS integration: institutional single sign-on, authorized background course-section/enrollment synchronization and background gradebook synchronization. Establish identity matching and source-of-truth policies; preserve academic approval/history boundaries and make external synchronization idempotent.
 - [ ] Add authorized operational workers, a durable outbox and idempotent consumers for external effects where needed. Store protected references rather than student payloads in jobs.
 

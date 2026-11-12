@@ -93,13 +93,21 @@ try {
             $kernel->bootstrap();
             $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
             $probe = $app->make(\Domain\Lms\Service\MoodleConnectionProbe::class);
-            if (!$probe instanceof \Infrastructure\Lms\RestMoodleConnectionProbe || $probe->enabled()) {
+            if (!$probe instanceof \Infrastructure\Lms\RestMoodleGateway || $probe->enabled()) {
                 throw new RuntimeException('Moodle diagnostic provider failed to resolve in disabled mode.');
             }
             $command = new \Application\Console\Commands\MoodleCheckCommand($app, $probe);
             $tester = new \Symfony\Component\Console\Tester\CommandTester($command);
             if ($tester->execute([]) !== 0 || !str_contains($tester->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle diagnostic did not complete.');
+            }
+            $reader = $app->make(\Domain\Lms\Service\MoodleRecordReader::class);
+            $inspect = new \Symfony\Component\Console\Tester\CommandTester(
+                new \Application\Console\Commands\MoodleInspectCommand($app, $reader),
+            );
+            if ($inspect->execute(['resource' => 'user', 'remote_id' => '123']) !== 0 ||
+                !str_contains($inspect->getDisplay(), 'disabled')) {
+                throw new RuntimeException('Disabled Moodle record reader did not resolve without network access.');
             }
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-authentication') {

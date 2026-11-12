@@ -50,3 +50,23 @@ Automated tests use fictional responses and injected clients. The disabled comma
 - Add reviewed enablement, mappings, retry/reconciliation screens and operational acceptance. Any required etSIS or Moodle plugin must preserve these boundaries.
 
 These stages must honor institutional opt-in throughout. Moodle configuration does not authorize sending student data to an AI service; student progress guidance remains inside etSIS.
+
+## Read-only mapping preflight
+
+Deployment operators can inspect one explicit Moodle-owned user or course ID before designing an identity or section link:
+
+```sh
+# Fictional examples; use an explicitly authorized Moodle record ID.
+ddev codex sis:moodle:inspect user 123
+ddev codex sis:moodle:inspect course 456
+```
+
+The command extends Codefy's `ConsoleCommand` and has no browser route. It accepts only `user` or `course` and a canonical positive Moodle numeric ID. These are external references; etSIS people and sections retain their ULID primary keys. It never searches by email, username, course name or institution-assigned ID, and it cannot list all records.
+
+Before a lookup, etSIS verifies the canonical site handshake and confirms that the token advertises the corresponding `core_user_get_users_by_field` or `core_course_get_courses_by_field` function. Requests fix the lookup field to `id` and supply exactly one value. The configured URL, token, TLS trust and enabled state must remain unchanged through the operation. Missing advertised functions cause refusal before any record lookup. Do not broaden the service merely to make discovery flags appear available; authorize these functions only when this preflight is required.
+
+A successful lookup must return at most one record with the exact requested ID. etSIS discards names, email addresses, profile fields, course descriptions and other upstream data. Output is limited to whether a matching record was returned, user suspended/deleted flags, or course visibility. Missing flags remain **unknown** rather than becoming false. An empty response means **no matching record returned**: the record may be missing or hidden from the service account. A record match or visible course does not establish identity ownership, login eligibility, enrollment authority or academic standing.
+
+This preflight creates no persistent links and makes no course, account, enrollment or grade changes. Actual reviewed mappings, instance bindings, SSO and background synchronization remain subsequent stages. No live student or course records were used as test fixtures; automated lookup tests use fictional responses. Live checks are restricted to site-info metadata and disabled-mode command wiring.
+
+The shared read-only gateway uses the same bounded, no-redirect, TLS-verified transport as the connection diagnostic. Preflight makes up to two requests: handshake and single-ID lookup. Each has the existing 15-second deadline/request budget and 5-second read timeout, so the complete operation can take approximately 40 seconds at those limits. It does not retry automatically or store profiles, raw responses, tokens or lookup results in application tables, caches or jobs. Protect terminal access and shell history as operator access; IDs are arguments, while tokens remain only in protected deployment settings. Verbose mode still returns fixed errors without upstream exception details.

@@ -7,12 +7,12 @@ use Domain\Lms\ValueObject\MoodleCapabilities;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\Psr7\Response;
-use Infrastructure\Lms\RestMoodleConnectionProbe;
+use Infrastructure\Lms\RestMoodleGateway;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Qubus\Config\Collection;
 
-final class RestMoodleConnectionProbeTest extends TestCase
+final class RestMoodleGatewayTest extends TestCase
 {
     private function config(array $changes = []): Collection
     {
@@ -52,7 +52,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
     public function testOnlySafeCapabilityFlagsAreReturnedAndTokenNeverAppearsInUrl(): void
     {
         $mock = new MockHandler([$this->response()]);
-        $probe = new RestMoodleConnectionProbe($this->config(), new Client(["handler" => $mock]));
+        $probe = new RestMoodleGateway($this->config(), new Client(["handler" => $mock]));
         $result = $probe->check();
         self::assertSame(MoodleCapabilities::FUNCTIONS, array_keys($result->describe()));
         self::assertTrue($result->describe()["core_course_create_courses"]);
@@ -91,7 +91,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
     public function testReportedSiteMustMatchConfiguredInstallationBeforeDiscoveryIsReturned(): void
     {
         $valid = new MockHandler([$this->response("https://MOODLE.EXAMPLE.INVALID:443/campus/")]);
-        $probe = new RestMoodleConnectionProbe($this->config(), new Client(["handler" => $valid]));
+        $probe = new RestMoodleGateway($this->config(), new Client(["handler" => $valid]));
         self::assertTrue($probe->check()->describe()["core_webservice_get_site_info"]);
         foreach (
             [
@@ -103,7 +103,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
             as $site
         ) {
             $mock = new MockHandler([$this->response($site)]);
-            $probe = new RestMoodleConnectionProbe($this->config(), new Client(["handler" => $mock]));
+            $probe = new RestMoodleGateway($this->config(), new Client(["handler" => $mock]));
             try {
                 $probe->check();
                 self::fail("Mismatched installation accepted.");
@@ -129,7 +129,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
     public function testDisabledOrUnsafeConfigurationCannotCallUpstream(array $changes): void
     {
         $mock = new MockHandler([]);
-        $probe = new RestMoodleConnectionProbe($this->config($changes), new Client(["handler" => $mock]));
+        $probe = new RestMoodleGateway($this->config($changes), new Client(["handler" => $mock]));
         try {
             $probe->check();
             self::fail();
@@ -201,7 +201,7 @@ final class RestMoodleConnectionProbeTest extends TestCase
     public function testFailuresAreSanitizedAndResponseStreamsAreClosed(Response|Throwable $response): void
     {
         $stream = $response instanceof Response ? $response->getBody() : null;
-        $probe = new RestMoodleConnectionProbe(
+        $probe = new RestMoodleGateway(
             $this->config(),
             new Client(["handler" => new MockHandler([$response])]),
         );
