@@ -15,6 +15,7 @@ use Domain\Lms\ValueObject\MoodleRecordCheck;
 use Domain\Lms\ValueObject\MoodleResourceKind;
 use Domain\Lms\ValueObject\MoodleCapabilities;
 use Domain\Lms\ValueObject\MoodleSiteUrl;
+use Domain\Lms\ValueObject\MoodleSetupIssue;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use JsonException;
@@ -52,7 +53,7 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             $settings = $this->settings();
             $capabilities = $this->handshake($settings)->describe();
             if (!$capabilities['local_etsis_get_instance_info']) {
-                throw new MoodleConnectionUnavailableException();
+                throw new MoodleConnectionUnavailableException(MoodleSetupIssue::FunctionUnavailable);
             }
             $this->assertCurrent($settings);
             $result = $this->request($settings, 'local_etsis_get_instance_info');
@@ -66,6 +67,8 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             $identity = new MoodleInstanceIdentity($result['instance_id']);
             $this->assertCurrent($settings);
             return new MoodleInstallation($settings['site'], $identity);
+        } catch (MoodleConnectionUnavailableException $error) {
+            throw new MoodleConnectionUnavailableException($error->setupIssue);
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }
@@ -226,6 +229,17 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             $stream->close();
         }
         $body = json_decode($raw, true, 16, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
+        if (is_array($body) && $function === 'local_etsis_get_instance_info') {
+            $issue = match ($body['errorcode'] ?? null) {
+                'integrationdisabled' => MoodleSetupIssue::VerificationDisabled,
+                'identityunavailable' => MoodleSetupIssue::IdentityUnavailable,
+                'nopermissions', 'accesscontrol' => MoodleSetupIssue::PermissionDenied,
+                default => null,
+            };
+            if ($issue !== null) {
+                throw new MoodleConnectionUnavailableException($issue);
+            }
+        }
         if (!is_array($body) || isset($body["exception"]) || isset($body["errorcode"])) {
             throw new MoodleConnectionUnavailableException();
         }

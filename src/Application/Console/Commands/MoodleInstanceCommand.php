@@ -7,6 +7,7 @@ namespace Application\Console\Commands;
 use Codefy\Framework\Application;
 use Codefy\Framework\Console\ConsoleCommand;
 use Domain\Lms\Service\MoodleInstanceReader;
+use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Throwable;
 
 /** Operator diagnostic only; this does not save or approve an instance binding. */
@@ -28,6 +29,9 @@ final class MoodleInstanceCommand extends ConsoleCommand
                 return self::SUCCESS;
             }
             $identity = $this->reader->identify();
+        } catch (MoodleConnectionUnavailableException $error) {
+            $this->terminalError($error->getMessage());
+            return self::FAILURE;
         } catch (Throwable) {
             $this->terminalError(
                 "Moodle instance verification failed. Review the plugin, service scope and configuration.",

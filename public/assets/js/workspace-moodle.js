@@ -152,7 +152,8 @@ window.createWorkspaceMoodle = function (ui) {
             await action(current);
         } catch (error) {
             if (current !== version || panel.hidden) return;
-            installationStatus.textContent = failure;
+            installationStatus.textContent = error.status === 503 && typeof error.message === 'string'
+                ? `${failure} ${error.message}` : failure;
             clearReview();
             throw error;
         } finally {

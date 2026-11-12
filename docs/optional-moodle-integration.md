@@ -117,3 +117,14 @@ The private routes are GET `/sis/moodle/installation/` and POST `/sis/moodle/ins
 A site or identity mismatch blocks verification and leaves the approval untouched. There is intentionally no replace/delete button. Keep clones disconnected: a cloned Moodle database inherits the same identifier and cannot be distinguished solely by this check. Planned recovery/replacement workflows must explicitly assess existing links and preserve their provenance. Restoring the same installation should retain its original identity. Disabling integration stops new remote checks/approvals and does not erase the recorded approval.
 
 This stage creates no person/section links and performs no SSO, enrollment or grade synchronization. Existing connection/single-ID diagnostics remain setup tools and are not bound synchronization operations. Future SSO and workers must use the saved binding and fresh installation checks before external effects; this release has no such workers. Tests use fictional gateway responses; no installation approval or real Moodle student lookup was performed against the configured environment.
+
+
+## Troubleshooting installation review
+
+A successful **Check Moodle connection** establishes the canonical HTTPS connection and token authentication. Installation review additionally calls the connector and checks its own enablement and capability requirements. Enabling an external service or adding authorized users does not enable the connector's separate setting.
+
+If Moodle returns `integrationdisabled`, open **Site administration → Plugins → Local plugins → etSIS connector**, check **Enable instance verification** and save changes. Then retry **Review installation** in etSIS. A token that already authenticates and reaches this function does not need replacement to resolve that disabled-setting error. Do not disable TLS verification.
+
+A new token is needed when moving to a different restricted service: authorize the integration account for **etSIS instance verification**, create a token for that service and update `SIS_MOODLE_TOKEN` securely. Merely installing the plugin does not move an existing token to the new service. Keep the token out of screenshots, URLs, logs and command arguments.
+
+Known installation setup failures now display fixed local guidance for disabled verification, missing advertised function, denied permission or unavailable identity. etSIS never forwards Moodle's raw message, exception details or debugging information. Unexpected errors retain the generic connection failure. Console and administrator review paths preserve the same safe guidance; permission checks still run before any detail is returned.

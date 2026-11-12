@@ -151,6 +151,9 @@ final readonly class MoodleBindingService
         $this->enabled();
         try {
             $installation = $this->reader->identify();
+        } catch (MoodleConnectionUnavailableException $error) {
+            $this->actor($actor);
+            throw new MoodleConnectionUnavailableException($error->setupIssue);
         } catch (Throwable) {
             $this->actor($actor);
             throw new MoodleConnectionUnavailableException();
