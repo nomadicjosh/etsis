@@ -9,6 +9,7 @@ use Domain\Lms\Service\MoodleConnectionProbe;
 use Domain\Lms\Service\MoodleRecordReader;
 use Domain\Lms\Service\MoodleInstanceReader;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
+use Domain\Lms\ValueObject\MoodleInstallation;
 use Domain\Lms\ValueObject\MoodleExternalId;
 use Domain\Lms\ValueObject\MoodleRecordCheck;
 use Domain\Lms\ValueObject\MoodleResourceKind;
@@ -45,7 +46,7 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             throw new MoodleConnectionUnavailableException();
         }
     }
-    public function identify(): MoodleInstanceIdentity
+    public function identify(): MoodleInstallation
     {
         try {
             $settings = $this->settings();
@@ -64,7 +65,7 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             }
             $identity = new MoodleInstanceIdentity($result['instance_id']);
             $this->assertCurrent($settings);
-            return $identity;
+            return new MoodleInstallation($settings['site'], $identity);
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }

@@ -13,6 +13,7 @@ use Application\Http\Controller\SisCourseAssistanceController;
 use Application\Http\Controller\SisSectionAssistanceController;
 use Application\Http\Controller\SisDegreeAssistanceController;
 use Application\Http\Controller\SisMoodleController;
+use Application\Http\Controller\SisMoodleBindingController;
 use Application\Http\Controller\SisSectionCourseBindingController;
 use Application\Http\Controller\SisCatalogWorkflowController;
 use Application\Http\Controller\SisFinancialReviewController;
@@ -773,6 +774,10 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/sections/{id}/assistance/", [SisSectionAssistanceController::class, "suggest"]);
     $router->get("/sis/moodle/status/", [SisMoodleController::class, "status"]);
     $router->post("/sis/moodle/check/", [SisMoodleController::class, "check"]);
+    $router->get("/sis/moodle/installation/", [SisMoodleBindingController::class, "status"]);
+    $router->post("/sis/moodle/installation/review/", [SisMoodleBindingController::class, "review"]);
+    $router->post("/sis/moodle/installation/confirm/", [SisMoodleBindingController::class, "confirm"]);
+    $router->post("/sis/moodle/installation/verify/", [SisMoodleBindingController::class, "verify"]);
     $router->get("/sis/courses/{id}/assistance/", [SisCourseAssistanceController::class, "preview"]);
     $router->post("/sis/courses/{id}/assistance/", [SisCourseAssistanceController::class, "suggest"]);
     $router->get("/sis/courses/{id}/text/", [SisCourseTextController::class, "show"]);

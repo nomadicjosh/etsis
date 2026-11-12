@@ -34,7 +34,7 @@ final class MoodleInstanceCommand extends ConsoleCommand
             );
             return self::FAILURE;
         }
-        $this->terminalRaw("Installation fingerprint (SHA-256): " . $identity->fingerprint());
+        $this->terminalRaw("Installation fingerprint (SHA-256): " . $identity->instanceFingerprint());
         $this->terminalRaw("No instance binding, identity link or synchronization was created.");
         return self::SUCCESS;
     }

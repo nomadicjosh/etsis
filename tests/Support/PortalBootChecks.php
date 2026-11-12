@@ -194,6 +194,19 @@ $teachingPost = static function (
     return $response;
 };
 $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
+$bindingResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/installation/')));
+if ($bindingResponse->getStatusCode() !== 200 ||
+    json_decode((string) $bindingResponse->getBody(), true, flags: JSON_THROW_ON_ERROR) !== ['binding' => null] ||
+    !str_contains($bindingResponse->getHeaderLine('Cache-Control'), 'no-store')) {
+    throw new RuntimeException('Moodle installation approval status did not remain private and local.');
+}
+foreach (['review' => ['reason' => 'Fictional institutional setup.'],
+    'confirm' => ['review_token' => 'fictional-token'], 'verify' => []] as $action => $data) {
+    $response = $teachingPost('/sis/moodle/installation/' . $action . '/', $data);
+    if ($response->getStatusCode() !== ($action === 'review' ? 503 : 422)) {
+        throw new RuntimeException('Moodle installation approval route did not enforce disabled mode and review requirements.');
+    }
+}
 $moodleResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/status/')));
 $moodleStatus = json_decode((string) $moodleResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if ($moodleResponse->getStatusCode() !== 200 || $moodleStatus !== ['enabled' => false] ||
@@ -203,6 +216,15 @@ if ($moodleResponse->getStatusCode() !== 200 || $moodleStatus !== ['enabled' => 
 }
 $sis->access->staff = false;
 $sis->access->grants = ['admin:dashboard', 'sis:catalog:manage'];
+if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/installation/')))->getStatusCode() !== 403) {
+    throw new RuntimeException('Unrelated grants disclosed Moodle installation approvals.');
+}
+foreach (['review' => ['reason' => 'Fictional institutional setup.'],
+    'confirm' => ['review_token' => 'fictional-token'], 'verify' => []] as $action => $data) {
+    if ($teachingPost('/sis/moodle/installation/' . $action . '/', $data)->getStatusCode() !== 403) {
+        throw new RuntimeException('Unrelated grants changed Moodle installation approvals.');
+    }
+}
 if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/status/')))->getStatusCode() !== 403 ||
     $teachingPost('/sis/moodle/check/', [])->getStatusCode() !== 403) {
     throw new RuntimeException('Unrelated permissions granted Moodle administration.');

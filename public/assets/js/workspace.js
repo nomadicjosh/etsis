@@ -211,6 +211,7 @@
 
     async function navigate(section, push = true) {
         if (dirty && current === 'forms' && section !== 'forms') { pendingNavigation = () => navigate(section, push); leaveModal.show(); return; }
+        if (section !== 'moodle') moodleStudio.leave();
         if (current !== section) $one('#directory-search').value = '';
         current = section;
         generation++;

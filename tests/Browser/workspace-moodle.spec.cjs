@@ -3,6 +3,8 @@ const AxeBuilder = require('@axe-core/playwright').default;
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
     let checks = 0;
+    const approved = { id: '01K9Q4S3E5W4Y3P2F1R6V7N8M9', instance_fingerprint: 'a'.repeat(64), site_fingerprint: 'b'.repeat(64), approved_at: '2026-11-11T12:00:00Z' };
+    let binding = options.bound ? approved : null;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -12,6 +14,26 @@ async function fixture(page, options = {}) {
         let result = {};
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/moodle/status/') result = { enabled: !options.disabled };
+        else if (path === '/sis/moodle/installation/') result = { binding };
+        else if (path === '/sis/moodle/installation/review/') {
+            if (options.delayReview) await new Promise(resolve => setTimeout(resolve, 250));
+            result = { review_token: 'fictional-private-review-token', instance_fingerprint: approved.instance_fingerprint, site_fingerprint: approved.site_fingerprint, expires_at: 1794410000 };
+        }
+        else if (path === '/sis/moodle/installation/confirm/') {
+            binding = approved;
+            if (options.uncertainApproval) {
+                await route.fulfill({ status: 503, json: { error: 'Fictional response interrupted.' } });
+                return;
+            }
+            result = { binding };
+        }
+        else if (path === '/sis/moodle/installation/verify/') {
+            if (options.mismatch) {
+                await route.fulfill({ status: 409, json: { error: 'This record changed. Reload it before trying again.' } });
+                return;
+            }
+            result = { binding, verified: true };
+        }
         else if (path === '/sis/moodle/check/') {
             checks++;
             if (options.failure && checks === 1) {
@@ -61,9 +83,93 @@ test('disabled integration does not allow a check and refreshing status makes no
     await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
     await expect(page.locator('#moodle-status')).toContainText('disabled');
     await expect(page.getByRole('button', { name: 'Check Moodle connection', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Review installation', exact: true })).toBeDisabled();
+    await expect(page.getByLabel('Reason for approving this installation')).toBeDisabled();
     await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
     await expect(page.locator('#moodle-status')).toContainText('disabled');
     expect(f.calls.filter(c => c.path === '/sis/moodle/check/')).toHaveLength(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('installation review requires explicit keyboard confirmation and keeps its token out of storage', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await expect(page.locator('#moodle-installation-status')).toContainText('No installation approved');
+    expect(f.calls.filter(c => /installation\/(review|confirm|verify)/.test(c.path))).toHaveLength(0);
+    await page.getByLabel('Reason for approving this installation').fill('Institution-approved teaching platform.');
+    await page.getByRole('button', { name: 'Review installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-preview h3')).toBeFocused();
+    await expect(page.locator('#moodle-installation-preview')).toContainText('a'.repeat(64));
+    const confirm = page.getByRole('button', { name: 'Approve reviewed installation', exact: true });
+    await expect(confirm).toBeDisabled();
+    expect(f.calls.some(c => c.path.endsWith('/confirm/'))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const acknowledgement = page.getByRole('checkbox', { name: 'I checked the fingerprint', exact: false });
+    await acknowledgement.focus();
+    await page.keyboard.press('Space');
+    await expect(confirm).toBeEnabled();
+    await page.keyboard.press('Tab');
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#moodle-installation-status')).toContainText('Installation approved');
+    await expect(page.locator('#moodle-installation-status')).toBeFocused();
+    await expect(page.locator('#moodle-installation-form')).toBeHidden();
+    await expect(page.locator('#moodle-installation-preview')).toBeEmpty();
+    await expect(page.locator('body')).not.toContainText('fictional-private-review-token');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    for (const call of f.calls.filter(c => /installation\/(review|confirm)\//.test(c.path))) {
+        expect(call).toMatchObject({ method: 'POST', csrf: 'fictional-test-token' });
+    }
+    await page.getByRole('button', { name: 'Verify approved installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-status')).toContainText('matches the saved approval');
+    expect(f.errors).toEqual([]);
+});
+
+test('canceling and leaving a review clear pending approval without a write', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    const reason = page.getByLabel('Reason for approving this installation');
+    await reason.fill('Fictional initial setup.');
+    await page.getByRole('button', { name: 'Review installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-approval')).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel review', exact: true }).click();
+    await expect(reason).toBeFocused();
+    await expect(page.locator('#moodle-installation-preview')).toBeEmpty();
+    await page.getByRole('button', { name: 'Review installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-approval')).toBeVisible();
+    await page.getByRole('link', { name: 'Overview', exact: true }).click();
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await expect(reason).toHaveValue('');
+    await expect(page.locator('#moodle-installation-approval')).toBeHidden();
+    expect(f.calls.some(c => c.path.endsWith('/confirm/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('refresh discovers an approval after an interrupted response without automatically confirming twice', async ({ page }) => {
+    const f = await fixture(page, { uncertainApproval: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByLabel('Reason for approving this installation').fill('Fictional initial setup.');
+    await page.getByRole('button', { name: 'Review installation', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'I checked the fingerprint', exact: false }).check();
+    await page.getByRole('button', { name: 'Approve reviewed installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-status')).toContainText('Refresh saved details');
+    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+    await expect(page.locator('#moodle-installation-saved')).toBeVisible();
+    await expect(page.locator('#moodle-installation-form')).toBeHidden();
+    expect(f.calls.filter(c => c.path.endsWith('/confirm/'))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test('a failed verification retains the saved approval without offering replacement', async ({ page }) => {
+    const f = await fixture(page, { bound: true, mismatch: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByRole('button', { name: 'Verify approved installation', exact: true }).click();
+    await expect(page.locator('#moodle-installation-status')).toContainText('has not been replaced');
+    await expect(page.locator('#moodle-installation-saved')).toContainText('a'.repeat(64));
+    await expect(page.locator('#moodle-installation-form')).toBeHidden();
+    expect(f.calls.some(c => /\/(review|confirm)\//.test(c.path))).toBe(false);
     expect(f.errors).toEqual([]);
 });
 test('outage permits retry while disabling during a check leaves the control disabled', async ({ page }) => {

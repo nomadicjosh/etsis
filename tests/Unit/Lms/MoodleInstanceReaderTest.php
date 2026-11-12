@@ -62,7 +62,7 @@ final class MoodleInstanceReaderTest extends TestCase
             new Response(200, [], json_encode(["protocol" => 1, "instance_id" => self::ID])),
         ]);
         $gateway = new RestMoodleGateway($this->config(), new Client(["handler" => $mock]));
-        self::assertTrue($gateway->identify()->matches(new MoodleInstanceIdentity(self::ID)));
+        self::assertSame(hash("sha256", self::ID), $gateway->identify()->instanceFingerprint());
         parse_str((string) $mock->getLastRequest()->getBody(), $body);
         self::assertSame(
             [

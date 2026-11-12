@@ -6,6 +6,8 @@ use Application\Console\Commands\MoodleInstanceCommand;
 use Codefy\Framework\Application;
 use Domain\Lms\Service\MoodleInstanceReader;
 use Domain\Lms\ValueObject\MoodleInstanceIdentity;
+use Domain\Lms\ValueObject\MoodleInstallation;
+use Domain\Lms\ValueObject\MoodleSiteUrl;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -26,7 +28,14 @@ final class MoodleInstanceCommandTest extends TestCase
         $id = "0123456789abcdef0123456789abcdef";
         $reader = $this->createStub(MoodleInstanceReader::class);
         $reader->method("enabled")->willReturn(true);
-        $reader->method("identify")->willReturn(new MoodleInstanceIdentity($id));
+        $reader
+            ->method("identify")
+            ->willReturn(
+                new MoodleInstallation(
+                    new MoodleSiteUrl("https://moodle.example.invalid"),
+                    new MoodleInstanceIdentity($id),
+                ),
+            );
         $tester = $this->command($reader);
         self::assertSame(0, $tester->execute([]));
         self::assertStringContainsString(hash("sha256", $id), $tester->getDisplay());
