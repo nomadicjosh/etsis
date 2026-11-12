@@ -44,7 +44,9 @@ final readonly class AuthController
         if ($this->gate->isLoggedIn()) {
             return new RedirectResponse("/portal/sign-in/" . ($continue ? "?continue=apply" : ""));
         }
-        return $this->renderer->render("auth", "Welcome back", [
+        $failed = ($request->getQueryParams()["notice"] ?? null) === "credentials";
+        return $this->renderer->render("auth", $failed ? "Check your sign-in details" : "Welcome back", [
+            "signInFailed" => $failed,
             "mode" => "login",
             "url" => $this->router->url("auth"),
             "continue" => $continue,

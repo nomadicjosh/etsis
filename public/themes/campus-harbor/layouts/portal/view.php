@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 use Vihzhuo\Core\ThemeContext;
 
-$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-$portalName = $portalName ?? \Codefy\Framework\Helpers\config('portal.name', 'etsis');
-$portalSection = $portalSection ?? 'home';
-$loginUrl = $loginUrl ?? '/' . trim(\Codefy\Framework\Helpers\config('auth.login_route', 'login'), '/') . '/';
+$esc = static fn(mixed $value): string => htmlspecialchars(
+    (string) $value,
+    ENT_QUOTES | ENT_SUBSTITUTE,
+    "UTF-8",
+);
+$portalName = $portalName ?? \Codefy\Framework\Helpers\config("portal.name", "etsis");
+$portalSection = $portalSection ?? "home";
+$loginUrl = $loginUrl ?? "/" . trim(\Codefy\Framework\Helpers\config("auth.login_route", "login"), "/") . "/";
 $signedIn = $signedIn ?? \Codefy\Framework\Helpers\gate()->isLoggedIn();
-$staffAccess = $staffAccess ?? ($signedIn && \Codefy\Framework\Helpers\gate('sis:person:manage'));
+$staffAccess = $staffAccess ?? $signedIn && \Codefy\Framework\Helpers\gate("sis:person:manage");
 $theme = ThemeContext::current();
-$themeAsset = $theme?->getAssetPath('public/css/theme.css') ?? '/themes/campus-harbor/public/css/theme.css';
-$title = $page->getTranslation('meta_title', 'en') ?: $portalName;
+$themeAsset = $theme?->getAssetPath("public/css/theme.css") ?? "/themes/campus-harbor/public/css/theme.css";
+$title = $page->getTranslation("meta_title", "en") ?: $portalName;
 ?>
 <!doctype html>
 <html lang="en">
@@ -20,12 +24,12 @@ $title = $page->getTranslation('meta_title', 'en') ?: $portalName;
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="referrer" content="same-origin" />
-        <title><?= $esc($title); ?> · <?= $esc($portalName); ?></title>
+        <title><?= $esc($title) ?> · <?= $esc($portalName) ?></title>
         <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
         <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
         <link rel="stylesheet" href="/assets/css/portal.css" />
-        <link rel="stylesheet" href="<?= $esc($themeAsset); ?>" />
+        <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
         <script defer src="/assets/js/portal.js"></script>
     </head>
@@ -45,7 +49,7 @@ $title = $page->getTranslation('meta_title', 'en') ?: $portalName;
                 <a class="campus-brand" href="/">
                     <span class="campus-crest" aria-hidden="true"><i class="bi bi-book"></i></span>
                     <span>
-                        <?= $esc($portalName); ?>
+                        <?= $esc($portalName) ?>
                         <small>LEARNING. POSSIBILITY. YOU.</small>
                     </span>
                 </a>
@@ -69,16 +73,21 @@ $title = $page->getTranslation('meta_title', 'en') ?: $portalName;
                         <?php if ($staffAccess): ?>
                             <li class="nav-item"><a class="nav-link" href="/admin/">Staff workspace</a></li>
                         <?php endif; ?>
+                        <?php if ($signedIn && ($moodleLaunchEnabled ?? false)): ?>
+                            <li class="nav-item"><a class="nav-link" href="/portal/moodle/">Moodle</a></li>
+                        <?php endif; ?>
                         <?php if ($signedIn): ?>
                             <li class="nav-item"><a class="nav-link" href="/portal/student/">My campus</a></li>
                             <li class="nav-item">
                                 <form method="post" action="/logout/" class="m-0">
-                                    <?= $csrfMarkup ?? csrf_field(); ?>
+                                    <?= $csrfMarkup ?? csrf_field() ?>
                                     <button class="nav-link" type="submit">Sign out</button>
                                 </form>
                             </li>
                         <?php else: ?>
-                            <li class="nav-item"><a class="nav-link" href="<?= $esc($loginUrl); ?>">Sign in</a></li>
+                            <li class="nav-item"><a class="nav-link" href="<?= $esc(
+                                $loginUrl,
+                            ) ?>">Sign in</a></li>
                         <?php endif; ?>
                         <li class="nav-item">
                             <a class="btn campus-button" href="/portal/apply/">
@@ -90,13 +99,13 @@ $title = $page->getTranslation('meta_title', 'en') ?: $portalName;
                 </div>
             </nav>
         </header>
-        <main id="campus-main" tabindex="-1"><?= $body; ?></main>
+        <main id="campus-main" tabindex="-1"><?= $body ?></main>
         <footer class="campus-footer">
             <div class="campus-container campus-footer-grid">
                 <div>
                     <a class="campus-brand" href="/">
                         <span class="campus-crest" aria-hidden="true"><i class="bi bi-book"></i></span>
-                        <span><?= $esc($portalName); ?></span>
+                        <span><?= $esc($portalName) ?></span>
                     </a>
                     <p>
                         Big ideas. New beginnings.
@@ -118,7 +127,7 @@ $title = $page->getTranslation('meta_title', 'en') ?: $portalName;
                 </div>
             </div>
             <div class="campus-container campus-footer-bottom">
-                <span>© <?= date('Y'); ?> <?= $esc($portalName); ?></span>
+                <span>© <?= date("Y") ?> <?= $esc($portalName) ?></span>
                 <span>Built for curious minds. Designed for everyone.</span>
             </div>
         </footer>

@@ -169,3 +169,16 @@ test('published course descriptions remain keyboard accessible plain text on nar
         delete course.description;
     }
 });
+
+
+test('failed campus sign-in shows a generic accessible notice without retaining credentials', async ({ page }) => {
+    await page.goto('/login/?guest=1&notice=credentials');
+    await expect(page.getByRole('alert')).toContainText('Check your email address and password');
+    await expect(page.getByLabel('Email address')).toBeFocused();
+    await expect(page.getByLabel('Email address')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
+    await accessible(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});

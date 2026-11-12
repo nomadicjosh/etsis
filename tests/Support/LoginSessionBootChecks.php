@@ -28,11 +28,14 @@ $app->booting(static function () use ($app): void {
     $app->configContainer->setConfigKey("vihzhuo", ["router" => ["use_router" => false]]);
 });
 $kernel->bootstrap();
+// Several independent sign-in scenarios share this fixture's one address; production remains five attempts.
+$app->configContainer->setConfigKey("throttle", ["max_attempts" => 10, "ttl" => 600]);
 $app->configContainer->setConfigKey("app", [
     "crypto_key" => \Defuse\Crypto\Key::createNewRandomKey()->saveToAsciiSafeString(),
 ]);
 $app->router->baseMiddleware = [
     "sis.privacy",
+    "moodle.session.channel",
     "csrf.protection",
     "user.cookie.decrypt",
     "auth.session.authority",
@@ -107,6 +110,119 @@ if ($probe->getStatusCode() !== 200) {
     throw new RuntimeException("The real Gate could not register its sign-in reference.");
 }
 $firstRef = json_decode((string) $probe->getBody(), true, flags: JSON_THROW_ON_ERROR)["reference"];
+
+// This fixture supplies CSRF proof directly; initialize the view helper without changing that proof.
+$app->make(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::class);
+// Exercise direct launch through real providers, Gate, CSRF and route middleware.
+$app->configContainer->setConfigKey("moodle", [
+    "enabled" => true,
+    "launch_enabled" => true,
+    "launch_secret" => str_repeat("c", 64),
+    "url" => "https://learning.example.invalid",
+]);
+$person = new \Domain\Person\Person(
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    $sis->access->actor,
+    "Alex",
+    "Example",
+    new \Domain\Person\ValueObject\InstitutionalId("FICTIONAL-SSO"),
+);
+$sis->admissions->addPerson($person);
+$binding = new \Domain\Lms\ValueObject\MoodleBinding(
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    hash("sha256", "https://learning.example.invalid"),
+    hash("sha256", str_repeat("a", 32)),
+    $sis->access->actor,
+    "2026-11-12T12:00:00Z",
+);
+$app->make(\Domain\Lms\Repository\MoodleBindingRepository::class)->add(
+    $binding,
+    "fictional-encrypted-review",
+);
+$app->make(\Domain\Lms\Repository\MoodlePersonLinkRepository::class)->add(
+    new \Domain\Lms\ValueObject\MoodlePersonLink(
+        \Domain\Shared\ValueObject\EntityId::generate(),
+        $binding->id,
+        $person->id,
+        new \Domain\Lms\ValueObject\MoodleExternalId("123"),
+        $sis->access->actor,
+        "2026-11-12T12:00:00Z",
+    ),
+    "fictional-encrypted-review",
+);
+if (
+    $app->router->match($request("/portal/moodle/"))->getStatusCode() !== 302 ||
+    $app->router->match($request("/portal/moodle/", cookie: $first))->getStatusCode() !== 200
+) {
+    throw new RuntimeException("The Moodle page did not enforce the signed-in owner.");
+}
+if (
+    $app->router->match($request("/portal/moodle/launch/", "POST", $first, csrf: false))->getStatusCode() !==
+        403 ||
+    $sis->sql->rows("sis_moodle_launches") !== []
+) {
+    throw new RuntimeException("The Moodle browser launch lost CSRF protection.");
+}
+$handoff = $app->router->match(
+    $request("/portal/moodle/launch/", "POST", $first, ["moodle_user_id" => "456"]),
+);
+if (
+    $handoff->getStatusCode() !== 200 ||
+    !str_contains($handoff->getHeaderLine("Cache-Control"), "no-store") ||
+    !str_contains(
+        $handoff->getHeaderLine("Content-Security-Policy"),
+        "form-action https://learning.example.invalid",
+    ) ||
+    !preg_match('/name="ticket" value="([a-f0-9]{64})"/', (string) $handoff->getBody(), $match)
+) {
+    throw new RuntimeException("The private Moodle POST handoff failed.");
+}
+if ($sis->sql->rows("sis_moodle_launches")[0]["moodle_user_id"] !== "123") {
+    throw new RuntimeException("Browser input changed the launch identity.");
+}
+$channelRequest = static function (array $data) use ($sis): \Qubus\Http\ServerRequest {
+    $body = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+    $time = (string) $sis->clock->now()->getTimestamp();
+    $nonce = str_repeat("d", 64);
+    $stream = new \Laminas\Diactoros\Stream("php://temp", "w+");
+    $stream->write($body);
+    $stream->rewind();
+    return new \Qubus\Http\ServerRequest([], [], "/sis/moodle/session-channel/", "POST", $stream, [
+        "Content-Type" => "application/json",
+        "X-Etsis-Time" => $time,
+        "X-Etsis-Nonce" => $nonce,
+        "X-Etsis-Signature" => hash_hmac(
+            "sha256",
+            "etsis-moodle/v1\nrequest\n$time\n$nonce\n$body",
+            hex2bin(str_repeat("c", 64)),
+        ),
+    ]);
+};
+$exchange = $app->router->match(
+    $channelRequest([
+        "op" => "exchange",
+        "ticket" => $match[1],
+        "instance_hash" => $binding->instanceFingerprint,
+    ]),
+);
+$grant = json_decode((string) $exchange->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $exchange->getStatusCode() !== 200 ||
+    ($grant["active"] ?? false) !== true ||
+    $grant["moodle_user_id"] !== "123" ||
+    $exchange->getHeaderLine("X-Etsis-Signature") === "" ||
+    !str_contains($exchange->getHeaderLine("Cache-Control"), "no-store") ||
+    str_contains((string) $exchange->getBody(), "phpdebugbar")
+) {
+    throw new RuntimeException("The machine channel did not authenticate independently of browser CSRF.");
+}
+$grantCheck = [
+    "op" => "check",
+    "grant_id" => $grant["grant_id"],
+    "moodle_user_id" => "123",
+    "instance_hash" => $binding->instanceFingerprint,
+];
+
 $failed = $app->router->match(
     $request("/auth/", "POST", $first, [
         "email" => "fictional@example.invalid",
@@ -119,6 +235,39 @@ if (
 ) {
     throw new RuntimeException("Failed authentication ended a valid sign-in.");
 }
+
+if ($failed->getStatusCode() !== 302 || $failed->getHeaderLine("Location") !== "/login/?notice=credentials") {
+    throw new RuntimeException("Wrong credentials did not produce the fixed sign-in notice.");
+}
+$failurePage = $app->router->match($request("/login/")->withQueryParams(["notice" => "credentials"]));
+if (
+    $failurePage->getStatusCode() !== 200 ||
+    !str_contains((string) $failurePage->getBody(), "Check your email address and password") ||
+    !str_contains((string) $failurePage->getBody(), 'role="alert"') ||
+    str_contains((string) $failurePage->getBody(), "wrong fictional password")
+) {
+    throw new RuntimeException("Sign-in rejection did not render accessible, private feedback.");
+}
+$unknown = $app->router->match(
+    $request(
+        "/auth/",
+        "POST",
+        body: [
+            "email" => "absent@example.invalid",
+            "password" => "wrong fictional password",
+            "continue" => "apply",
+        ],
+    ),
+);
+if (
+    $unknown->getStatusCode() !== 302 ||
+    $unknown->getHeaderLine("Location") !== "/login/?notice=credentials&continue=apply"
+) {
+    throw new RuntimeException(
+        "Unknown identities must receive the same notice and retain only the allowed continuation.",
+    );
+}
+
 $missing = $app->router->match($request("/logout/", "POST", $first, csrf: false));
 if (
     $missing->getStatusCode() !== 403 ||
@@ -133,6 +282,12 @@ if (
 ) {
     throw new RuntimeException("Logout did not revoke its server-side reference.");
 }
+
+$ended = $app->router->match($channelRequest($grantCheck));
+if (json_decode((string) $ended->getBody(), true, flags: JSON_THROW_ON_ERROR) !== ["active" => false]) {
+    throw new RuntimeException("Logging out did not end the linked Moodle grant.");
+}
+
 if ($app->router->match($request("/portal/session-probe/", cookie: $first))->getStatusCode() !== 403) {
     throw new RuntimeException("A replayed logout cookie was accepted.");
 }

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Open Moodle</title>
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
+        <link rel="stylesheet" href="/assets/css/portal.css" />
+    </head>
+    <body class="campus-site">
+        <main class="campus-container py-5">
+            <section class="campus-surface p-4" aria-labelledby="moodle-launch-title">
+                <h1 id="moodle-launch-title">Opening your learning space</h1>
+                <p>If you are not taken to Moodle, use the button below. Your etSIS sign-in deadline still applies.</p>
+                <form id="moodle-launch" method="post" action="<?= $this->esc($action); ?>" autocomplete="off">
+                    <input type="hidden" name="ticket" value="<?= $this->esc($ticket); ?>" />
+                    <button class="btn btn-primary" type="submit">Continue to Moodle</button>
+                </form>
+            </section>
+        </main>
+        <script nonce="<?= $this->esc($nonce); ?>">document.getElementById('moodle-launch').submit();</script>
+    </body>
+</html>

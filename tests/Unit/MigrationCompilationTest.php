@@ -87,33 +87,76 @@ require_once $registrationCompilerMigrations . "20261110000004_CreateSisCourseCl
 require_once $registrationCompilerMigrations . "20261110000005_CreateSisProgramDefinitions.php";
 require_once $registrationCompilerMigrations . "20261111000006_CreateSisMoodleBindings.php";
 require_once $registrationCompilerMigrations . "20261111000007_CreateSisMoodlePersonLinks.php";
-require_once $registrationCompilerMigrations . '20261112000000_CreateSisMoodleAccountRequests.php';
+require_once $registrationCompilerMigrations . "20261112000000_CreateSisMoodleAccountRequests.php";
 
-require_once $registrationCompilerMigrations . '20261112000002_CreateSisLoginSessions.php';
+require_once $registrationCompilerMigrations . "20261112000002_CreateSisLoginSessions.php";
+require_once $registrationCompilerMigrations . "20261112000003_CreateSisMoodleLaunches.php";
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testMoodleOwnerLookupIndexCompilesForEverySupportedDialect(): void
+    {
+        $schema = $this->createMock(Schema::class);
+        $definition = null;
+        $schema
+            ->expects(self::once())
+            ->method("alter")
+            ->willReturnCallback(static function (string $name, callable $callback) use (&$definition): void {
+                self::assertSame("sis_persons", $name);
+                $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($definition);
+            });
+        $connection = $this->createStub(Connection::class);
+        $connection->method("getSchema")->willReturn($schema);
+        $migration = new CreateSisMoodleLaunches("launch-index");
+        $migration->setObjectMap(
+            new ArrayObject(["phpmig.adapter" => new DbalMigrationAdapter($connection, "test_migrations")]),
+        );
+        $migration->up();
+        foreach (["MySQL", "PostgreSQL", "SQLite", "SQLServer", "Oracle"] as $driver) {
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect
+                ->method("quoteIdentifier")
+                ->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            self::assertStringContainsString(
+                "moodle_owner_person_idx",
+                json_encode(new $class($dialect)->alter($definition), JSON_THROW_ON_ERROR),
+            );
+        }
+    }
+
     public function testMoodleProvisioningLeaseUpgradePreservesRequestsAndCompilesAcrossDialects(): void
     {
-        require_once dirname(__DIR__, 2).'/database/migrations/20261112000001_CreateSisMoodleProvisioningLeases.php';
-        $definition=null;
-        $schema=$this->createMock(Schema::class);
-        $schema->expects(self::once())->method('alter')->willReturnCallback(static function(string $name,callable $callback) use (&$definition): void {
-            $definition=new \Qubus\Expressive\Schema\AlterTable($name);$callback($definition);
-        });
-        $connection=$this->createStub(Connection::class);$connection->method('getSchema')->willReturn($schema);
-        $migration=new CreateSisMoodleProvisioningLeases('leases');
-        $migration->setObjectMap(new ArrayObject(['phpmig.adapter'=>new DbalMigrationAdapter($connection,'test_migrations')]));
+        require_once dirname(__DIR__, 2) .
+            "/database/migrations/20261112000001_CreateSisMoodleProvisioningLeases.php";
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema
+            ->expects(self::once())
+            ->method("alter")
+            ->willReturnCallback(static function (string $name, callable $callback) use (&$definition): void {
+                $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($definition);
+            });
+        $connection = $this->createStub(Connection::class);
+        $connection->method("getSchema")->willReturn($schema);
+        $migration = new CreateSisMoodleProvisioningLeases("leases");
+        $migration->setObjectMap(
+            new ArrayObject(["phpmig.adapter" => new DbalMigrationAdapter($connection, "test_migrations")]),
+        );
         $migration->up();
-        foreach (['MySQL','PostgreSQL','SQLite','SQLServer','Oracle'] as $driver) {
-            $class='Qubus\\Expressive\\Schema\\Compiler\\'.$driver;
-            $dialect=$this->createStub(Connection::class);
-            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"'.$name.'"');
-            $commands=new $class($dialect)->alter($definition);
+        foreach (["MySQL", "PostgreSQL", "SQLite", "SQLServer", "Oracle"] as $driver) {
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect
+                ->method("quoteIdentifier")
+                ->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $commands = new $class($dialect)->alter($definition);
             self::assertNotEmpty($commands);
-            self::assertStringContainsString('lease_until',json_encode($commands,JSON_THROW_ON_ERROR));
-            self::assertStringContainsString('attempts',json_encode($commands,JSON_THROW_ON_ERROR));
-            self::assertStringContainsString('issue_code',json_encode($commands,JSON_THROW_ON_ERROR));
+            self::assertStringContainsString("lease_until", json_encode($commands, JSON_THROW_ON_ERROR));
+            self::assertStringContainsString("attempts", json_encode($commands, JSON_THROW_ON_ERROR));
+            self::assertStringContainsString("issue_code", json_encode($commands, JSON_THROW_ON_ERROR));
         }
     }
     public function testTransferReadIndexesCompileAcrossDialectsAndRollbackOnSqlite(): void
@@ -132,10 +175,7 @@ final class MigrationCompilationTest extends TestCase
         $schema
             ->expects(self::exactly(4))
             ->method("alter")
-            ->willReturnCallback(static function (
-                string $name,
-                callable $callback,
-            ) use (
+            ->willReturnCallback(static function (string $name, callable $callback) use (
                 &$alters,
                 $fixture,
             ): void {
@@ -171,11 +211,11 @@ final class MigrationCompilationTest extends TestCase
             }
         }
         $historyCases1 = [
-                "sis_external_courses",
-                "sis_transfer_equivalencies",
-                "sis_transfer_awards",
-                "sis_academic_credits",
-            ];
+            "sis_external_courses",
+            "sis_transfer_equivalencies",
+            "sis_transfer_awards",
+            "sis_academic_credits",
+        ];
         foreach ($historyCases1 as $table) {
             $indexes = $fixture->connection->pdo
                 ->query("PRAGMA index_list(" . $table . ")")
@@ -210,10 +250,7 @@ final class MigrationCompilationTest extends TestCase
         $schema
             ->expects(self::exactly(2))
             ->method("alter")
-            ->willReturnCallback(static function (
-                string $name,
-                callable $callback,
-            ) use (
+            ->willReturnCallback(static function (string $name, callable $callback) use (
                 &$alters,
                 $fixture,
             ): void {
@@ -266,12 +303,9 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(116))
+            ->expects(self::exactly(117))
             ->method("create")
-            ->willReturnCallback(static function (
-                string $name,
-                callable $callback,
-            ) use (
+            ->willReturnCallback(static function (string $name, callable $callback) use (
                 &$tables,
                 $live,
             ): void {
@@ -288,53 +322,54 @@ final class MigrationCompilationTest extends TestCase
             ->willReturnCallback(static fn(string $name) => '"' . $name . '"');
         $adapter = new DbalMigrationAdapter($connection, "test_migrations");
         $historyCases2 = [
-                new CreateSisAdmissionsTables("1"),
-                new CreateSisStudentAccountsTable("2"),
-                new CreateSisWorkflowTables("3"),
-                new CreateSisBillingRulesTable("4"),
-                new CreateSisPersonIdentifiersTable("5"),
-                new CreateSisAccessTables("6"),
-                new CreateSisWorkspaceTables("7"),
-                new CreateCampusPortalTables("8"),
-                new CreateSisRestrictionNotesTable("9"),
-                new CreateSisRegistrationBatchesTable("10"),
-                new CreateSisStudentHiatusTables("11"),
-                new CreateSisCatalogOperationsTable("12"),
-                new CreateSisFinancialReviewTables("13"),
-                new CreateSisTranscriptDocumentsTable("14"),
-                new CreateSisCatalogYearTables("15"),
-                new CreateSisSectionDeliveryTable("16"),
-                new CreateSisRelationalReportTables("17"),
-                new CreateSisTransferAwardChangesTable("18"),
-                new CreateSisCourseDropTables("19"),
-                new CreateSisReportRequestTables("20"),
-                new CreateSisOfferingTemplateTables("21"),
-                new CreateSisAcademicCalendarTables("22"),
-                new CreateSisHistoricalEventTables("23"),
-                new CreateSisCourseDescriptionsTable("24"),
-                new CreateSisCourseVersionBindings("25"),
-                new CreateSisCourseSubjects("subjects"),
-                new CreateSisCourseClassifications("classifications"),
-                new CreateSisProgramDefinitions("programs"),
-                new CreateSisMoodleBindings("moodle-bindings"),
-                new CreateSisMoodlePersonLinks("moodle-person-links"),
-                new CreateSisMoodleAccountRequests('moodle-account-requests'),
-                new CreateSisLoginSessions('login-sessions'),
-                new CreateSisDegreeAuditTemplates("26"),
-                new CreateSisCourseGroupLibrary("27"),
-                new CreateSisStudentRequirements("28"),
-                new CreateSisRequirementAdjustments("29"),
-                new CreateSisGradingScales("30"),
-                new CreateSisAcademicCreditStreams("31"),
-                new CreateSisTransferCreditStreams("32"),
-                new CreateSisRegistrationHistory("33"),
-                new CreateSisStudentActivity("34"),
-                new CreateSisProgramStatusStreams("35"),
-                new CreateSisPrimaryProgramStreams("36"),
-                new CreateSisAdmissionCorrectionPermission("37"),
-                new CreateSisSectionVersions("38"),
-                new CreateSisSectionOfferingSelections("39"),
-            ];
+            new CreateSisAdmissionsTables("1"),
+            new CreateSisStudentAccountsTable("2"),
+            new CreateSisWorkflowTables("3"),
+            new CreateSisBillingRulesTable("4"),
+            new CreateSisPersonIdentifiersTable("5"),
+            new CreateSisAccessTables("6"),
+            new CreateSisWorkspaceTables("7"),
+            new CreateCampusPortalTables("8"),
+            new CreateSisRestrictionNotesTable("9"),
+            new CreateSisRegistrationBatchesTable("10"),
+            new CreateSisStudentHiatusTables("11"),
+            new CreateSisCatalogOperationsTable("12"),
+            new CreateSisFinancialReviewTables("13"),
+            new CreateSisTranscriptDocumentsTable("14"),
+            new CreateSisCatalogYearTables("15"),
+            new CreateSisSectionDeliveryTable("16"),
+            new CreateSisRelationalReportTables("17"),
+            new CreateSisTransferAwardChangesTable("18"),
+            new CreateSisCourseDropTables("19"),
+            new CreateSisReportRequestTables("20"),
+            new CreateSisOfferingTemplateTables("21"),
+            new CreateSisAcademicCalendarTables("22"),
+            new CreateSisHistoricalEventTables("23"),
+            new CreateSisCourseDescriptionsTable("24"),
+            new CreateSisCourseVersionBindings("25"),
+            new CreateSisCourseSubjects("subjects"),
+            new CreateSisCourseClassifications("classifications"),
+            new CreateSisProgramDefinitions("programs"),
+            new CreateSisMoodleBindings("moodle-bindings"),
+            new CreateSisMoodlePersonLinks("moodle-person-links"),
+            new CreateSisMoodleAccountRequests("moodle-account-requests"),
+            new CreateSisLoginSessions("login-sessions"),
+            new CreateSisMoodleLaunches("moodle-launches"),
+            new CreateSisDegreeAuditTemplates("26"),
+            new CreateSisCourseGroupLibrary("27"),
+            new CreateSisStudentRequirements("28"),
+            new CreateSisRequirementAdjustments("29"),
+            new CreateSisGradingScales("30"),
+            new CreateSisAcademicCreditStreams("31"),
+            new CreateSisTransferCreditStreams("32"),
+            new CreateSisRegistrationHistory("33"),
+            new CreateSisStudentActivity("34"),
+            new CreateSisProgramStatusStreams("35"),
+            new CreateSisPrimaryProgramStreams("36"),
+            new CreateSisAdmissionCorrectionPermission("37"),
+            new CreateSisSectionVersions("38"),
+            new CreateSisSectionOfferingSelections("39"),
+        ];
         foreach ($historyCases2 as $migration) {
             $migration->setObjectMap(new ArrayObject(["phpmig.adapter" => $adapter]));
             $migration->up();

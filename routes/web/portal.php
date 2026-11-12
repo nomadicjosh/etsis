@@ -10,6 +10,12 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $moodle = \Application\Http\Controller\PortalMoodleController::class;
+    $router->map(["GET"], "/portal/moodle/", [$moodle, "page"])->name("portal.moodle");
+    $router->map(["POST"], "/portal/moodle/launch/", [$moodle, "launch"])->name("portal.moodle.launch");
+    $router
+        ->map(["POST"], "/sis/moodle/session-channel/", [$moodle, "channel"])
+        ->name("moodle.session.channel");
     $router->map(["GET"], "/portal/", [Portal::class, "home"])->name("portal.home");
     $router->map(["GET"], "/portal/sign-in/", [Portal::class, "landing"])->name("portal.landing");
     $router->map(["GET"], "/portal/courses/", [Portal::class, "catalog"])->name("portal.courses");
@@ -17,19 +23,27 @@ return static function (Psr7Router $router): void {
     $router->map(["GET"], "/portal/news/{code}/", [Portal::class, "article"])->name("portal.article");
     $router->map(["GET"], "/portal/apply/", [Portal::class, "apply"])->name("portal.apply");
     $router->map(["GET"], "/portal/student/", [Portal::class, "student"])->name("portal.student");
-    $router->map(["GET"], "/portal/student/{section}/", [Portal::class, "student"])->name("portal.student.section");
+    $router
+        ->map(["GET"], "/portal/student/{section}/", [Portal::class, "student"])
+        ->name("portal.student.section");
     $router->map(["GET"], "/portal/api/public/", [Portal::class, "publicData"])->name("portal.public");
     $router->map(["GET"], "/portal/api/programs/", [Portal::class, "programs"])->name("portal.programs");
-    $router->map(["GET"], "/portal/api/campus-news/", [Portal::class, "campusNews"])->name("portal.campus.news");
+    $router
+        ->map(["GET"], "/portal/api/campus-news/", [Portal::class, "campusNews"])
+        ->name("portal.campus.news");
     $router->map(["GET"], "/portal/api/courses/", [Portal::class, "courses"])->name("portal.catalog");
     $router->map(["GET"], "/portal/api/me/", [Portal::class, "me"])->name("portal.me");
     $router->map(["POST"], "/portal/api/contact/", [Portal::class, "contact"])->name("portal.contact");
-    $router->map(["GET"], "/portal/api/payments/status/", [Payments::class, "status"])->name("portal.payments.status");
+    $router
+        ->map(["GET"], "/portal/api/payments/status/", [Payments::class, "status"])
+        ->name("portal.payments.status");
     $router
         ->map(["POST"], "/portal/api/payments/checkout/", [Payments::class, "checkout"])
         ->name("portal.payments.checkout");
     $router->map(["POST"], "/portal/api/register/", [Portal::class, "register"])->name("portal.register");
-    $router->map(["POST"], "/portal/api/drop-review/", [Portal::class, "reviewDrop"])->name("portal.drop.review");
+    $router
+        ->map(["POST"], "/portal/api/drop-review/", [Portal::class, "reviewDrop"])
+        ->name("portal.drop.review");
     $router
         ->map(["GET"], "/portal/api/drop-receipts/{operation}/", [Portal::class, "dropReceipt"])
         ->name("portal.drop.receipt");
@@ -40,7 +54,9 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["GET"], "/portal/api/students/{id}/sections/{section}/scores/", [Portal::class, "scores"])
         ->name("portal.scores");
-    $router->map(["GET"], "/portal/api/accounts/{id}/", [Portal::class, "statement"])->name("portal.statement");
+    $router
+        ->map(["GET"], "/portal/api/accounts/{id}/", [Portal::class, "statement"])
+        ->name("portal.statement");
     $router
         ->map(["POST"], "/portal/api/transcripts/", [Portal::class, "requestTranscript"])
         ->name("portal.transcript.request");

@@ -15,6 +15,12 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Lms\Repository\MoodleLaunchRepository::class =>
+                \Infrastructure\Lms\SqlMoodleLaunchRepository::class,
+            \Domain\Lms\Service\MoodleLaunchPolicy::class =>
+                \Infrastructure\Lms\ConfiguredMoodleLaunchPolicy::class,
+            \Application\Http\Security\MoodleSessionChannel::class =>
+                \Infrastructure\Lms\SignedMoodleSessionChannel::class,
             \Domain\User\Repository\LoginSessionRepository::class =>
                 \Infrastructure\Security\SqlLoginSessionRepository::class,
             \Domain\User\Repository\LoginAccountStateReader::class =>
@@ -23,15 +29,18 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Security\FrameworkLoginCookieReader::class,
             \Domain\Lms\Repository\MoodleProvisioningQueue::class =>
                 \Infrastructure\Lms\SqlMoodleProvisioningQueue::class,
-            \Domain\Lms\Service\MoodleAccountProvisioner::class => \Infrastructure\Lms\RestMoodleGateway::class,
+            \Domain\Lms\Service\MoodleAccountProvisioner::class =>
+                \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Lms\Repository\MoodleAccountRequestRepository::class =>
                 \Infrastructure\Lms\SqlMoodleAccountRequestRepository::class,
-            \Domain\Lms\Repository\MoodleAccountDefaults::class => \Infrastructure\Lms\SqlMoodleAccountDefaults::class,
+            \Domain\Lms\Repository\MoodleAccountDefaults::class =>
+                \Infrastructure\Lms\SqlMoodleAccountDefaults::class,
             \Domain\Lms\Service\MoodleAccountRequestPolicy::class =>
                 \Infrastructure\Lms\ConfiguredMoodleAccountRequestPolicy::class,
             \Domain\Lms\Repository\MoodlePersonLinkRepository::class =>
                 \Infrastructure\Lms\SqlMoodlePersonLinkRepository::class,
-            \Domain\Lms\Service\MoodleBoundRecordReader::class => \Infrastructure\Lms\RestMoodleGateway::class,
+            \Domain\Lms\Service\MoodleBoundRecordReader::class =>
+                \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Lms\Repository\MoodleBindingRepository::class =>
                 \Infrastructure\Lms\SqlMoodleBindingRepository::class,
             \Domain\Lms\Service\MoodleInstanceReader::class => \Infrastructure\Lms\RestMoodleGateway::class,

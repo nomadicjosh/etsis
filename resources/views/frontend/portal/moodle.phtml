@@ -1,0 +1,24 @@
+<?php
+/** @var bool $available */
+?>
+<section class="campus-container campus-auth" aria-labelledby="moodle-title">
+    <div class="campus-auth-intro">
+        <p class="campus-eyebrow">YOUR LEARNING SPACE</p>
+        <h1 id="moodle-title">Keep learning, stay connected.</h1>
+        <p class="campus-lead">Open your institution’s Moodle learning space with your campus sign-in.</p>
+    </div>
+    <div class="campus-surface campus-auth-form">
+        <?php if ($available): ?>
+            <h2>Ready when you are</h2>
+            <p>Your etSIS sign-in deadline applies in Moodle too. Signing out of etSIS ends this linked access on the next Moodle request.</p>
+            <form method="post" action="/portal/moodle/launch/">
+                <?= $csrfMarkup ?? csrf_field() ?>
+                <button class="btn btn-primary" type="submit">Open Moodle</button>
+            </form>
+        <?php else: ?>
+            <h2>Your learning space is not connected yet</h2>
+            <p>Ask your institution to enable Moodle launch and connect your campus account.</p>
+        <?php endif; ?>
+        <a class="d-inline-block mt-4" href="/portal/student/">Back to my campus</a>
+    </div>
+</section>

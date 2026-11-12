@@ -87,7 +87,8 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
         $data['article'] = $public['news'][0];
     } elseif ($path === '/login/' || $path === '/register/') {
         $template = 'auth'; $data += ['mode' => $path === '/login/' ? 'login' : 'register',
-            'continue' => true, 'url' => $path === '/login/' ? '/auth/' : '/create/'];
+            'continue' => true, 'signInFailed' => ($_GET['notice'] ?? '') === 'credentials',
+            'url' => $path === '/login/' ? '/auth/' : '/create/'];
     } elseif ($path === '/portal/apply/' || str_starts_with($path, '/portal/student/')) {
         $template = 'workspace';
         $section = trim(substr($path, strlen('/portal/student/')), '/') ?: 'overview';

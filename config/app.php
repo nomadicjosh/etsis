@@ -13,7 +13,7 @@ return [
     | Application Name
     |--------------------------------------------------------------------------
     */
-    'name' => env(key: 'APP_NAME', default: 'etsis'),
+    "name" => env(key: "APP_NAME", default: "etsis"),
 
     /*
     |--------------------------------------------------------------------------
@@ -21,85 +21,87 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'env' => env(key: 'APP_ENV', default: 'production'),
+    "env" => env(key: "APP_ENV", default: "production"),
 
     /*
     |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------
     */
-    'debug' => env(key: 'APP_DEBUG', default: false),
+    "debug" => env(key: "APP_DEBUG", default: false),
 
     /*
     |--------------------------------------------------------------------------
     | Application Base Url
     |--------------------------------------------------------------------------
     */
-    'url' => env(key: 'APP_BASE_URL'),
+    "url" => env(key: "APP_BASE_URL"),
 
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     */
-    'timezone' => 'America/Los_Angeles',
+    "timezone" => "America/Los_Angeles",
 
     /*
     |--------------------------------------------------------------------------
     | Application Locale
     |--------------------------------------------------------------------------
     */
-    'locale' => 'en',
+    "locale" => "en",
 
     /*
     |--------------------------------------------------------------------------
     | Application HTML Charset
     |--------------------------------------------------------------------------
     */
-    'charset' => 'UTF-8',
+    "charset" => "UTF-8",
 
     /*
     |--------------------------------------------------------------------------
     | Application HTML Language
     |--------------------------------------------------------------------------
     */
-    'language' => 'en',
+    "language" => "en",
 
     /*
     |--------------------------------------------------------------------------
     | Application Locale Domain
     |--------------------------------------------------------------------------
     */
-    'locale_domain' => 'codefy',
+    "locale_domain" => "codefy",
 
     /*
     |--------------------------------------------------------------------------
     | API key for restful routes.
     |--------------------------------------------------------------------------
     */
-    'api_key' => env(key: 'APP_KEY'),
+    "api_key" => env(key: "APP_KEY"),
 
     /*
     |--------------------------------------------------------------------------
     | Encryption Key
     |--------------------------------------------------------------------------
     */
-    'crypto_key' => is_file(__DIR__ . '/../.enc.key') ? trim(file_get_contents(__DIR__ . '/../.enc.key')) : '',
+    "crypto_key" => is_file(__DIR__ . "/../.enc.key")
+        ? trim(file_get_contents(__DIR__ . "/../.enc.key"))
+        : "",
 
     /*
     |--------------------------------------------------------------------------
     | Event Listener Provider and Dispatcher
     |--------------------------------------------------------------------------
     */
-    'event_listener' => Qubus\EventDispatcher\Providers\PrioritizedProvider::class,
-    'event_dispatcher' => Qubus\EventDispatcher\EventDispatcher::class,
+    "event_listener" => Qubus\EventDispatcher\Providers\PrioritizedProvider::class,
+    "event_dispatcher" => Qubus\EventDispatcher\EventDispatcher::class,
 
     /*
     |--------------------------------------------------------------------------
     | Controller Namespace
     |--------------------------------------------------------------------------
     */
-    'controller_namespace' => 'Application\\Http\\Controller',
+    "controller_namespace" => "Application\\Http\\Controller",
 
     /*
     |--------------------------------------------------------------------------
@@ -108,10 +110,12 @@ return [
     | These service providers will automatically load when the application is
     | requested. Feel free to add your own service providers.
     */
-    'providers' => CodefyServiceProvider::defaultProviders()->merge([
-        // Application Service Providers...
-        // App\Infrastructure\Providers\AppServiceProvider::class,
-    ])->toArray(),
+    "providers" => CodefyServiceProvider::defaultProviders()
+        ->merge([
+            // Application Service Providers...
+            // App\Infrastructure\Providers\AppServiceProvider::class,
+        ])
+        ->toArray(),
 
     /*
     |--------------------------------------------------------------------------
@@ -120,14 +124,18 @@ return [
     | Middleware aliases are registered here, but to use a middleware, you
     | can add them to a route, a group of routes or controllers.
     */
-    'middlewares' => Middleware::defaultMiddlewares()->merge([
-        'user.session' => Application\Http\Middleware\StartLoginSessionMiddleware::class,
-        'auth.session.authority' => Application\Http\Middleware\LoginSessionAuthorityMiddleware::class,
-        'sis.json' => Application\Http\Middleware\WorkspaceJsonBodyMiddleware::class,
-        'sis.privacy' => Application\Http\Middleware\SisPrivacyMiddleware::class,
-        'php.debugbar' => Application\Http\Middleware\PrivateRouteDebugBarMiddleware::class,
-        'http.exception' => Application\Http\Middleware\HttpExceptionMiddleware::class,
-    ])->toArray(),
+    "middlewares" => Middleware::defaultMiddlewares()
+        ->merge([
+            "user.authenticate" => Application\Http\Middleware\PasswordAuthenticationMiddleware::class,
+            "user.session" => Application\Http\Middleware\StartLoginSessionMiddleware::class,
+            "auth.session.authority" => Application\Http\Middleware\LoginSessionAuthorityMiddleware::class,
+            "moodle.session.channel" => Application\Http\Middleware\MoodleSessionChannelMiddleware::class,
+            "sis.json" => Application\Http\Middleware\WorkspaceJsonBodyMiddleware::class,
+            "sis.privacy" => Application\Http\Middleware\SisPrivacyMiddleware::class,
+            "php.debugbar" => Application\Http\Middleware\PrivateRouteDebugBarMiddleware::class,
+            "http.exception" => Application\Http\Middleware\HttpExceptionMiddleware::class,
+        ])
+        ->toArray(),
 
     /*
     |--------------------------------------------------------------------------
@@ -136,21 +144,22 @@ return [
     | Register middleware class strings or aliases to be applied to the entire
     | application.
     */
-    'base_middlewares' => array_merge(
+    "base_middlewares" => array_merge(
         [
-            'sis.privacy',
-            'sis.json',
-            'cors',
-            'http.exception',
-            'firewall',
-            'csrf.token',
-            'csrf.protection',
-            'http.cache.prevention',
-            'user.cookie.decrypt',
-            'auth.session.authority',
-            'bind.request',
+            "sis.privacy",
+            "moodle.session.channel",
+            "sis.json",
+            "cors",
+            "http.exception",
+            "firewall",
+            "csrf.token",
+            "csrf.protection",
+            "http.cache.prevention",
+            "user.cookie.decrypt",
+            "auth.session.authority",
+            "bind.request",
         ],
-        env(key: 'APP_DEBUG', default: false) === true ? ['php.debugbar'] : [],
+        env(key: "APP_DEBUG", default: false) === true ? ["php.debugbar"] : [],
     ),
 
     /*
@@ -160,11 +169,11 @@ return [
     | These console commands will automatically load when the application is
     | requested. Feel free to add your own console commands.
     */
-    'commands' => [
+    "commands" => [
         \Application\Console\Commands\BootstrapAccessCommand::class,
         \Application\Console\Commands\MoodleCheckCommand::class,
         \Application\Console\Commands\MoodleInspectCommand::class,
         \Application\Console\Commands\MoodleInstanceCommand::class,
         \Application\Console\Commands\MoodleProvisionCommand::class,
-    ]
+    ],
 ];

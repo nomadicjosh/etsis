@@ -12,6 +12,11 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
+    "launch.php",
+    "classes/local/session_channel.php",
+    "classes/local/linked_session.php",
+    "classes/local/launch_error.php",
+    "db/hooks.php",
     "COPYING.txt",
     "README.md",
     "classes/external/get_instance_info.php",
@@ -28,6 +33,7 @@ FILES = (
     "db/services.php",
     "lang/en/local_etsis.php",
     "settings.php",
+    "tests/linked_session_test.php",
     "tests/instance_identity_test.php",
     "tests/account_provisioner_test.php",
     "version.php",

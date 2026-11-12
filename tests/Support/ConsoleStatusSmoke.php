@@ -140,7 +140,7 @@ try {
                 throw new RuntimeException('Unauthenticated request reached the protected handler.');
             });
             $response = $middleware->process(new \Qubus\Http\ServerRequest([], [], '/auth/', 'POST'), $handler);
-            if ($response->getStatusCode() !== 302 || $response->getHeaderLine('Location') !== '/login/') {
+            if ($response->getStatusCode() !== 302 || $response->getHeaderLine('Location') !== '/login/?notice=credentials') {
                 throw new RuntimeException('Authentication middleware did not reject missing credentials.');
             }
             $status = 0;
