@@ -15,6 +15,12 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\User\Repository\LoginSessionRepository::class =>
+                \Infrastructure\Security\SqlLoginSessionRepository::class,
+            \Domain\User\Repository\LoginAccountStateReader::class =>
+                \Infrastructure\Security\SqlLoginAccountStateReader::class,
+            \Application\Http\Security\LoginCookieReader::class =>
+                \Infrastructure\Security\FrameworkLoginCookieReader::class,
             \Domain\Lms\Repository\MoodleProvisioningQueue::class =>
                 \Infrastructure\Lms\SqlMoodleProvisioningQueue::class,
             \Domain\Lms\Service\MoodleAccountProvisioner::class => \Infrastructure\Lms\RestMoodleGateway::class,

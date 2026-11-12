@@ -7,6 +7,14 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testRealLoginLogoutRevocationAndReauthenticationKeepPrivateCsrfBoundaries(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-login-sessions']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
     public function testDisabledMoodleCheckResolvesThroughActualProvidersWithoutDatabaseOrNetworkUse(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

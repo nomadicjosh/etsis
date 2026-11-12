@@ -121,6 +121,8 @@ return [
     | can add them to a route, a group of routes or controllers.
     */
     'middlewares' => Middleware::defaultMiddlewares()->merge([
+        'user.session' => Application\Http\Middleware\StartLoginSessionMiddleware::class,
+        'auth.session.authority' => Application\Http\Middleware\LoginSessionAuthorityMiddleware::class,
         'sis.json' => Application\Http\Middleware\WorkspaceJsonBodyMiddleware::class,
         'sis.privacy' => Application\Http\Middleware\SisPrivacyMiddleware::class,
         'php.debugbar' => Application\Http\Middleware\PrivateRouteDebugBarMiddleware::class,
@@ -145,6 +147,7 @@ return [
             'csrf.protection',
             'http.cache.prevention',
             'user.cookie.decrypt',
+            'auth.session.authority',
             'bind.request',
         ],
         env(key: 'APP_DEBUG', default: false) === true ? ['php.debugbar'] : [],
@@ -162,5 +165,6 @@ return [
         \Application\Console\Commands\MoodleCheckCommand::class,
         \Application\Console\Commands\MoodleInspectCommand::class,
         \Application\Console\Commands\MoodleInstanceCommand::class,
+        \Application\Console\Commands\MoodleProvisionCommand::class,
     ]
 ];

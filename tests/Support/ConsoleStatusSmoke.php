@@ -32,7 +32,7 @@ try {
         $_POST = ['_workspace_json' => json_encode(['code' => 'Math-101', 'title' => 'Algebra',
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
-    if (in_array(($argv[1] ?? ''), ['check-portal', 'check-profile-command'], true)) {
+    if (in_array(($argv[1] ?? ''), ['check-portal', 'check-profile-command', 'check-login-sessions'], true)) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
         $_SERVER['SCRIPT_NAME'] = '/index.php';
         $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -89,6 +89,9 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/ProfileCommandBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-login-sessions') {
+            require __DIR__.'/LoginSessionBootChecks.php';
+            $status=0;
         } elseif (($argv[1] ?? '') === 'check-moodle') {
             $kernel->bootstrap();
             $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
@@ -100,6 +103,9 @@ try {
             $tester = new \Symfony\Component\Console\Tester\CommandTester($command);
             if ($tester->execute([]) !== 0 || !str_contains($tester->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle diagnostic did not complete.');
+            }
+            if ($kernel->call('sis:moodle:provision') !== 0) {
+                throw new RuntimeException('The disabled Moodle provisioning command was not registered.');
             }
             $worker = $app->make(\Domain\Lms\Service\MoodleProvisioningWorker::class);
             $provision = new \Symfony\Component\Console\Tester\CommandTester(new \Application\Console\Commands\MoodleProvisionCommand($app, $worker));
