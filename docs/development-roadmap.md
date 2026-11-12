@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-11**, after adding reviewed registrar course-placement preferences and the optional Moodle connection-diagnostic foundation.
+Last reviewed: **2026-11-11**, after adding the installable optional Moodle instance-verification connector.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -151,6 +151,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] Verify the enabled local Moodle REST handshake, reject a missing/mismatched canonical installation address, and discover targeted lookup functions without requesting user/course records. Stable instance/identity links remain a subsequent stage.
 - [x] Add an operator-only, single-ID user/course mapping preflight with exact-ID validation, known/unknown status flags and no matching/link creation. Reuse one bounded read gateway for handshake and targeted reads; persistent mappings and SSO remain open.
 - [x] Add the permission-controlled Moodle administration screen, with local status reads, explicit metadata checks, private/CSRF-protected endpoints and no browser credential access or automatic synchronization.
+- [x] Package the optional `local_etsis` Moodle connector as a [downloadable ZIP](../dist/moodle/local_etsis-0.1.0-alpha.zip), with licensing, installation instructions, checksum and reproducible build script. Add token/capability-protected, disabled-by-default instance verification and an etSIS operator diagnostic. Moodle package validation passes; native Moodle PHPUnit execution and cross-version installation acceptance remain open. This does not establish persistent bindings, SSO or synchronization.
 - [ ] Build optional deep Moodle LMS integration: institutional single sign-on, authorized background course-section/enrollment synchronization and background gradebook synchronization. Establish identity matching and source-of-truth policies; preserve academic approval/history boundaries and make external synchronization idempotent.
 - [ ] Add authorized operational workers, a durable outbox and idempotent consumers for external effects where needed. Store protected references rather than student payloads in jobs.
 

@@ -19,7 +19,7 @@ async function fixture(page, options = {}) {
                 return;
             }
             result = options.disabledDuringCheck ? { enabled: false, capabilities: null } :
-                { enabled: true, capabilities: { core_webservice_get_site_info: true, core_user_get_users_by_field: false,
+                { enabled: true, capabilities: { core_webservice_get_site_info: true, local_etsis_get_instance_info: true, core_user_get_users_by_field: false,
                     core_course_get_courses_by_field: false, core_course_create_courses: true,
                     core_course_update_courses: true, enrol_manual_enrol_users: true,
                     enrol_manual_unenrol_users: false, gradereport_user_get_grade_items: true,
@@ -43,6 +43,7 @@ test('Moodle status opens without automatic network diagnostics and explicit che
     await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
     await expect(page.locator('#moodle-status')).toContainText('Site URL and REST connection verified');
     await expect(page.locator('#moodle-results')).toContainText('Targeted user lookup');
+    await expect(page.locator('#moodle-results')).toContainText('Installation identity plugin');
     await expect(page.locator('#moodle-results')).toContainText('Not advertised');
     await expect(page.locator('#moodle-results')).not.toContainText('<script>');
     expect(f.calls.find(c => c.path === '/sis/moodle/check/')).toMatchObject({ method: 'POST', data: {}, csrf: 'fictional-test-token' });

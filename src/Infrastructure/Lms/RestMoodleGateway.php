@@ -7,6 +7,8 @@ namespace Infrastructure\Lms;
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\Service\MoodleConnectionProbe;
 use Domain\Lms\Service\MoodleRecordReader;
+use Domain\Lms\Service\MoodleInstanceReader;
+use Domain\Lms\ValueObject\MoodleInstanceIdentity;
 use Domain\Lms\ValueObject\MoodleExternalId;
 use Domain\Lms\ValueObject\MoodleRecordCheck;
 use Domain\Lms\ValueObject\MoodleResourceKind;
@@ -20,7 +22,7 @@ use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 /** Isolated client deliberately bypasses framework HTTP debug and observer hooks. */
-final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleRecordReader
+final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleRecordReader, MoodleInstanceReader
 {
     public function __construct(private ConfigContainer $config, private Client $http = new Client())
     {
@@ -39,6 +41,30 @@ final readonly class RestMoodleGateway implements MoodleConnectionProbe, MoodleR
             $result = $this->handshake($settings);
             $this->assertCurrent($settings);
             return $result;
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+    public function identify(): MoodleInstanceIdentity
+    {
+        try {
+            $settings = $this->settings();
+            $capabilities = $this->handshake($settings)->describe();
+            if (!$capabilities['local_etsis_get_instance_info']) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $this->assertCurrent($settings);
+            $result = $this->request($settings, 'local_etsis_get_instance_info');
+            if (
+                count($result) !== 2 ||
+                ($result['protocol'] ?? null) !== 1 ||
+                !is_string($result['instance_id'] ?? null)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $identity = new MoodleInstanceIdentity($result['instance_id']);
+            $this->assertCurrent($settings);
+            return $identity;
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }

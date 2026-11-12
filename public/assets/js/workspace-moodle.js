@@ -9,6 +9,7 @@ window.createWorkspaceMoodle = function (ui) {
     const results = document.querySelector('#moodle-results');
     let version = 0, enabled = false, busy = false;
     const labels = {
+        local_etsis_get_instance_info: "Installation identity plugin",
         core_webservice_get_site_info: 'Service information',
         core_user_get_users_by_field: 'Targeted user lookup',
         core_course_get_courses_by_field: 'Targeted course lookup',

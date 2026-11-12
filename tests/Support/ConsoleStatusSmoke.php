@@ -109,6 +109,13 @@ try {
                 !str_contains($inspect->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle record reader did not resolve without network access.');
             }
+            $instanceReader = $app->make(\Domain\Lms\Service\MoodleInstanceReader::class);
+            $instance = new \Symfony\Component\Console\Tester\CommandTester(
+                new \Application\Console\Commands\MoodleInstanceCommand($app, $instanceReader),
+            );
+            if ($instance->execute([]) !== 0 || !str_contains($instance->getDisplay(), 'disabled')) {
+                throw new RuntimeException('Disabled Moodle instance reader did not resolve without network access.');
+            }
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-authentication') {
             $kernel->bootstrap();
