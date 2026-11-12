@@ -1,6 +1,6 @@
 # Optional Moodle integration
 
-Moodle integration is optional and disabled by default. An institution must explicitly enable and configure it. Normal SIS workflows do not require Moodle. The first implementation is an operator-only REST connection diagnostic; SSO and background course/enrollment/gradebook synchronization remain separate development stages.
+Moodle integration is optional and disabled by default. An institution must explicitly enable and configure it. Normal SIS workflows do not require Moodle. The current implementation provides a private administrator status screen, an operator REST diagnostic and a single-ID mapping preflight. SSO and background course/enrollment/gradebook synchronization remain separate development stages.
 
 ## Enable the connection diagnostic
 
@@ -27,6 +27,16 @@ Without DDEV, invoke `codex sis:moodle:check` using the project's configured PHP
 
 With the feature disabled, the command succeeds with a disabled notice and makes no network request. To disable it again, set `SIS_MOODLE_ENABLED=false`; no SIS academic facts are changed. Enabling the current diagnostic does not enable SSO, publish courses, change enrollments or import grades.
 
+## Administrator status screen
+
+Authorized staff can open **Moodle integration** in the backend sidebar. The screen reads the institution's enabled/disabled status without contacting Moodle. **Check Moodle connection** explicitly requests the same sanitized site-info diagnostic as the console command; **Refresh status** only rereads etSIS configuration. An advertised function is not proof that SSO, identity links or synchronization are enabled. Missing functions can be expected for a restricted service.
+
+The independent protected permission **sis:moodle:manage** is added by `20261111000005_CreateSisMoodleAdministrationPermission.php`. The migration adds no role/user grants or broad SIS implications. Super administrators already have access; authorized access administrators can assign the permission through an institution-created role or direct user grant. Existing protected system roles remain unchanged. Ordinary catalog, student-read and access-management permissions alone do not grant Moodle administration.
+
+The status GET and explicit check POST enforce current permission, private/no-store responses, suppressed debug collectors and framework CSRF protection for the POST. A check records only requesting-actor/action metadata before the external read; it does not save credentials, responses, profiles or capability results. The call runs outside database transactions and results are discarded if the administrator or permission changes. No per-user or course record lookup is exposed through this screen.
+
+Configuration remains deployment controlled. The screen does not display/edit the URL, token or TLS settings and cannot turn on SSO or synchronization. Use the institutional setup above to enable or disable the optional connection.
+
 ## What the check establishes
 
 The probe calls only `core_webservice_get_site_info`, with the token in the POST body. It reports a fixed allowlist of function-availability flags for site information, targeted user/course lookups, course creation/update, manual enrollment/unenrollment and user grade items. The lookup functions (`core_user_get_users_by_field` and `core_course_get_courses_by_field`) are discovered but never invoked by this check. They are intended for future reviewed identity/section mappings and are not required for this diagnostic. Add them to a restricted service only when the corresponding mapping workflow is being enabled. See Moodle's [function reference](https://docs.moodle.org/dev/Web_service_API_functions) for their API names. A function missing from the restricted diagnostic service is expected to show **not advertised**. Do not broaden the token merely to turn every flag on.
@@ -37,9 +47,9 @@ This verifies the installation address, not a permanent instance identity. Repla
 
 Function discovery does not prove contextual permissions, mapping correctness, SSO readiness, grade compatibility or synchronization readiness. Returned account identities, profile URLs, site labels, arbitrary function names and upstream errors are discarded. The console reports fixed messages and known function names only, including in verbose mode. No student records or gradebooks are requested.
 
-An isolated Guzzle client bypasses framework HTTP debug/observer hooks. Requests use TLS verification, no redirects, cookies or automatic retries, a 3-second connect timeout, a 15-second request/deadline budget and 5-second individual read timeouts. The final read can extend that deadline by up to its read timeout. Responses are capped at 512 KiB, JSON depth 16 and 2,000 function descriptors. Errors retain no upstream exception chain. The command requires deployment-operator access; no browser route is exposed.
+An isolated Guzzle client bypasses framework HTTP debug/observer hooks. Requests use TLS verification, no redirects, cookies or automatic retries, a 3-second connect timeout, a 15-second request/deadline budget and 5-second individual read timeouts. The final read can extend that deadline by up to its read timeout. Responses are capped at 512 KiB, JSON depth 16 and 2,000 function descriptors. Errors retain no upstream exception chain. The console command requires deployment-operator access. The separate administrator status/check routes expose only sanitized metadata under **sis:moodle:manage**.
 
-Automated tests use fictional responses and injected clients. The disabled command is tested through real application providers. The configured local Moodle service was checked through DDEV using the authenticated, read-only site-info request. No Moodle accounts, service tokens, plugins or settings were created or changed. SSO, mappings and synchronization remain unimplemented; function discovery is not operational acceptance of those workflows.
+Automated tests use fictional responses and injected clients. Disabled console commands and private administrator routes are tested through real application providers. The configured local Moodle service was checked through DDEV using the authenticated, read-only site-info request. No Moodle accounts, service tokens, plugins or settings were created or changed. SSO, mappings and synchronization remain unimplemented; function discovery is not operational acceptance of those workflows.
 
 ## Next integration stages
 

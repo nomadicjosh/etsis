@@ -5,6 +5,7 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:moodle:manage" => ["description" => "Review optional Moodle status and request connection checks."],
         "sis:ai:degree:readiness" => ["description" => "Request optional saved-degree setup suggestions."],
         "sis:ai:section:readiness" => ["description" => "Request optional saved-section readiness suggestions."],
         "sis:ai:course:rewrite" => ["description" => "Request optional rewrites of saved course descriptions."],

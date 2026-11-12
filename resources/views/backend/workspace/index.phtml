@@ -32,6 +32,7 @@ $navigation = [
         ['imports', 'Import data', 'arrow-up-square', 'sis:import:manage'],
         ['rules', 'Rules & audiences', 'sliders2', 'sis:rules:manage'],
         ['access', 'Roles & access', 'shield-check', 'admin:access:manage'],
+        ['moodle', 'Moodle integration', 'plug', 'sis:moodle:manage'],
         ['apply', 'Apply to a program', 'send', ''],
     ],
 ];
@@ -63,6 +64,7 @@ $client = [
         <script defer src="/assets/vendor/query-builder.min.js"></script>
         <script defer src="/assets/js/workspace-operations.js"></script>
         <script defer src="/assets/js/workspace-access.js"></script>
+        <script defer src="/assets/js/workspace-moodle.js"></script>
         <script defer src="/assets/js/workspace-people.js"></script>
         <script defer src="/assets/js/workspace-teaching.js"></script>
         <script defer src="/assets/js/workspace-scheduling.js"></script>
@@ -299,6 +301,7 @@ $client = [
                     <?php $this->insert('framework::backend/workspace/imports'); ?>
                     <?php $this->insert('framework::backend/workspace/rules'); ?>
                     <?php $this->insert('framework::backend/workspace/access'); ?>
+                    <?php $this->insert('framework::backend/workspace/moodle'); ?>
                     <section data-panel="apply" hidden aria-labelledby="apply-heading">
                         <div class="page-heading">
                             <div>

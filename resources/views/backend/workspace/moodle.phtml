@@ -1,0 +1,39 @@
+<section data-panel="moodle" hidden aria-labelledby="moodle-heading">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">CONNECTED CAMPUS</div>
+            <h1 id="moodle-heading">Moodle integration<span class="brand-dot">.</span></h1>
+            <p>An optional connection, controlled by your institution.</p>
+        </div>
+    </div>
+    <div class="row g-4">
+        <div class="col-12 col-lg-8">
+            <section class="surface p-4" aria-labelledby="moodle-connection-heading">
+                <h2 id="moodle-connection-heading">Connection status</h2>
+                <p id="moodle-status" role="status" aria-live="polite">Loading institutional status…</p>
+                <p id="moodle-check-help">A connection check reads Moodle service metadata only. It does not request individual users, courses or grades.</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" id="moodle-check" class="btn btn-primary" disabled aria-describedby="moodle-check-help">
+                        Check Moodle connection
+                    </button>
+                    <button type="button" id="moodle-refresh" class="btn btn-outline-secondary">Refresh status</button>
+                </div>
+                <div id="moodle-results" class="mt-4" hidden></div>
+            </section>
+        </div>
+        <div class="col-12 col-lg-4">
+            <aside class="surface p-4" aria-labelledby="moodle-institution-heading">
+                <h2 id="moodle-institution-heading">Your institution decides</h2>
+                <p>Moodle is not required for normal SIS workflows. A deployment administrator enables and configures it using protected server settings.</p>
+                <p>Credentials stay on the server. This screen cannot display or change them.</p>
+                <h3 class="h5">Following stages</h3>
+                <ul>
+                    <li>Reviewed identity and section links</li>
+                    <li>Institutional single sign-on</li>
+                    <li>Background enrollment and gradebook synchronization</li>
+                </ul>
+                <p class="mb-0">These stages are not enabled by a successful connection check. Academic records remain unchanged.</p>
+            </aside>
+        </div>
+    </div>
+</section>

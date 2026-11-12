@@ -137,6 +137,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/admissions-only-fixture/' => ['sis:admissions:manage'],
         '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
         '/admin/student-read-fixture/' => ['sis:student:read'],
+        '/admin/moodle-denied-fixture/' => ['sis:catalog:manage'],
         '/admin/registration-fixture/' => ['sis:registration:manage'],
         '/admin/report-fixture/' => ['sis:reporting:run'],
         '/admin/report-manager-fixture/' => ['sis:reporting:manage'],

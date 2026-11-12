@@ -193,6 +193,22 @@ $teachingPost = static function (
     }
     return $response;
 };
+$app->configContainer->setConfigKey('moodle', ['enabled' => false]);
+$moodleResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/status/')));
+$moodleStatus = json_decode((string) $moodleResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($moodleResponse->getStatusCode() !== 200 || $moodleStatus !== ['enabled' => false] ||
+    !str_contains($moodleResponse->getHeaderLine('Cache-Control'), 'no-store') ||
+    $teachingPost('/sis/moodle/check/', [])->getStatusCode() !== 200) {
+    throw new RuntimeException('Moodle administration did not preserve disabled mode, private responses and CSRF.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['admin:dashboard', 'sis:catalog:manage'];
+if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/moodle/status/')))->getStatusCode() !== 403 ||
+    $teachingPost('/sis/moodle/check/', [])->getStatusCode() !== 403) {
+    throw new RuntimeException('Unrelated permissions granted Moodle administration.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $sectionPath = "/sis/sections/" . $teachingSection->id->value;
 $created = $teachingPost($sectionPath . "/assignments/", [
     "title" => "Fictional assignment",

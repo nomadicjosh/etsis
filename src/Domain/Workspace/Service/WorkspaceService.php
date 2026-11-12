@@ -46,6 +46,7 @@ final readonly class WorkspaceService
         "equivalencies" => "sis:transfer:manage",
     ];
     public const array PERMISSIONS = [
+        "sis:moodle:manage",
         "sis:person:manage",
         "sis:person:assign-id",
         "sis:admissions:manage",

@@ -183,6 +183,7 @@
     const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
     const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
@@ -205,7 +206,7 @@
     datasets.equivalencies.columns = [['External course', 'external_code'], ['Institutional course', 'course_code'], ['Credits', 'credits_milli'], ['Effective', 'starts_on']];
     datasets.sections.columns = datasets.teaching.columns = [['Section', 'code'], ['Course', 'course_code'], ['Term', 'term_code'], ['Seats', 'capacity']];
     datasets.journals.action = 'Post a journal';
-    const pageNames = { overview: 'Overview', forms: 'Application forms', imports: 'Import data', rules: 'Rules & audiences', access: 'Roles & access', apply: 'Application', ...Object.fromEntries(Object.entries(datasets).map(([key, value]) => [key, value.title])) };
+    const pageNames = { overview: 'Overview', forms: 'Application forms', imports: 'Import data', rules: 'Rules & audiences', access: 'Roles & access', moodle: 'Moodle integration', apply: 'Application', ...Object.fromEntries(Object.entries(datasets).map(([key, value]) => [key, value.title])) };
     const catalogTabs = [['courses', 'Courses'], ['sections', 'Sections'], ['programs', 'Programs'], ['terms', 'Terms'], ['grades', 'Grade definitions']];
 
     async function navigate(section, push = true) {
@@ -231,6 +232,7 @@
         else if (section === 'forms') await loadFormStudio();
         else if (section === 'rules') await loadRuleStudio();
         else if (section === 'access') await loadAccess();
+        else if (section === 'moodle') await moodleStudio.load();
         else if (section === 'apply') await loadApplicantSelect();
         $one('#workspace-main').focus({ preventScroll: true });
     }
