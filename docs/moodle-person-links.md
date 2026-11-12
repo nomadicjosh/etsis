@@ -1,12 +1,14 @@
 # Reviewed Moodle person links
 
-This stage lets authorized staff explicitly connect one etSIS person to one Moodle user ID within the approved institutional installation. It does not create accounts, enable SSO, assign roles, enroll anyone or synchronize grades. Normal SIS work remains available without Moodle.
+The intended person workspace offers two choices: **Link an existing Moodle account** and **Create a Moodle account**. Staff should complete either task in etSIS. Creation must save the returned Moodle ID automatically, without a second linking task. The existing manual-link tool implements the first choice; the creation choice still needs the provisioning service and background worker.
+
+The intended integration automatically provisions eligible **students** and **faculty** in the background when the institution enables that capability. An accepted teaching assignment must request provisioning of the instructor and the appropriate role in that specific Moodle course; committed registrations drive student course access. For all other people, staff choose creation or existing-account linking on an as-needed basis. Such people do not need a student or faculty role just to receive a Moodle account. See the [provisioning policy](optional-moodle-integration.md#automatic-account-provisioning-and-section-access) for the intended workflow and current implementation status. Normal SIS work remains available without Moodle.
 
 ## Setup and permissions
 
 Complete the [optional Moodle setup and installation approval](optional-moodle-integration.md) first. Person linking requires the independent protected permission **sis:moodle:link-person** and **sis:person:manage**. Moodle administration alone does not grant it. The migration adds no role/user grants and no broad permission implications; grant it through an institution-created role or a direct assignment to appropriate administrators.
 
-For a person with a local sign-in account, existing account-management authorization also applies: **admin:profile** for one's own account or **admin:edit:user** for another account. Only a super administrator may link a super account. Linking a person who does not yet have a local account does not create or enable one.
+For a manual link involving a person with a local sign-in account, existing account-management authorization also applies: **admin:profile** for one's own account or **admin:edit:user** for another account. Only a super administrator may manually link a super account. This tool does not create or enable a local sign-in account. Planned automatic provisioning will use its own institution-approved service authority and current eligibility checks; it must not require a staff member to approve every normal student/faculty account individually.
 
 The restricted Moodle service must authorize these functions:
 
@@ -16,7 +18,7 @@ The restricted Moodle service must authorize these functions:
 
 The connector's predefined **etSIS instance verification** service contains only the first two functions. To authorize person lookup, create a separately reviewed restricted custom service with the three functions, explicitly authorize the integration account, and configure its token securely in etSIS. Moodle's predefined plugin service cannot be expanded through the administrator UI. See Moodle's [service creation documentation](https://moodledev.io/docs/5.3/apis/subsystems/external/advanced/custom-services). Do not grant course creation, enrollment or gradebook functions for this workflow, and do not broaden unrelated role capabilities merely to make discovery flags available.
 
-## Staff workflow
+## Link an existing account (implemented)
 
 1. Search **People** by name or institutional ID, open the person and select **Moodle account link**. No Moodle request runs while searching people or loading saved link details.
 2. Enter the exact numeric Moodle user ID independently verified for this person, plus an administrative reason. Do not enter credentials, student academic details, an email address or username. etSIS does not infer identity from matching names or email addresses.
@@ -28,6 +30,16 @@ The connector's predefined **etSIS instance verification** service contains only
 Missing records and records outside the service account's scope are both described as **no matching account returned**. A known suspended/deleted account cannot receive a new link. A missing flag remains **not supplied by Moodle**, rather than becoming false. Staff may independently approve a reference with unknown flags, but that does not establish current login eligibility. Future SSO must apply its own current account checks and institutional policy.
 
 Saved references have no ordinary replace/unlink action. A correction needs a separate reviewed workflow that preserves the previous decision and checks any dependent mappings. Changing an institutional person ID continues to resolve through the same person ULID; it does not move the Moodle reference to a different person.
+
+## Create an account from etSIS (planned)
+
+1. Open the person and choose **Create a Moodle account** when the person needs access and does not already have a reviewed Moodle reference.
+2. Reuse the existing person details and supply only missing account information required by the institution's approved Moodle authentication arrangement. Do not ask staff to reenter a complete profile or copy SIS credentials.
+3. Review the intended account and submit an authorized creation request. This does not require assigning the person a faculty or student role, and must not grant Moodle administrative privileges implicitly.
+4. The shared provisioning worker verifies the installation and current request authority, creates the account using its retry-safe operation reference, and retains the returned Moodle ID against the same person. Normal faculty/student auto-provisioning uses this service without an individual staff request.
+5. Follow progress or resolve an exception in the same person workspace. Staff do not need to open Moodle to create the account or return to the existing-account linking form afterward.
+
+An existing account or conflicting identity requires review rather than silent adoption or duplicate creation. An interrupted result must reconcile the original creation operation before retrying. Existing-account link permission alone must not authorize creation; the creation feature needs its own controlled authority and the existing account-protection checks. These steps describe the approved target workflow and are not enabled by the current manual-link implementation.
 
 ## Security and persistence
 
