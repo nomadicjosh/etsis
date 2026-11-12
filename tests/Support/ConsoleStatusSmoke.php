@@ -89,6 +89,19 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/ProfileCommandBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-moodle') {
+            $kernel->bootstrap();
+            $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
+            $probe = $app->make(\Domain\Lms\Service\MoodleConnectionProbe::class);
+            if (!$probe instanceof \Infrastructure\Lms\RestMoodleConnectionProbe || $probe->enabled()) {
+                throw new RuntimeException('Moodle diagnostic provider failed to resolve in disabled mode.');
+            }
+            $command = new \Application\Console\Commands\MoodleCheckCommand($app, $probe);
+            $tester = new \Symfony\Component\Console\Tester\CommandTester($command);
+            if ($tester->execute([]) !== 0 || !str_contains($tester->getDisplay(), 'disabled')) {
+                throw new RuntimeException('Disabled Moodle diagnostic did not complete.');
+            }
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-authentication') {
             $kernel->bootstrap();
             if (!$app->get(\Codefy\Framework\Auth\Sentinel::class) instanceof \Codefy\Framework\Auth\Auth

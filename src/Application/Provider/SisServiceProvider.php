@@ -15,6 +15,7 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Lms\Service\MoodleConnectionProbe::class => \Infrastructure\Lms\RestMoodleConnectionProbe::class,
             \Domain\Assistance\Service\AuthoringAssistant::class =>
                 \Infrastructure\Assistance\ConfiguredAuthoringAssistant::class,
             \Domain\Catalog\Repository\ProgramDefinitionRepository::class =>

@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-11**, after adding reviewed registrar course-placement preferences to the existing student-exception stream and group-placement evaluator.
+Last reviewed: **2026-11-11**, after adding reviewed registrar course-placement preferences and the optional Moodle connection-diagnostic foundation.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -147,7 +147,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Complete source-linked adjustment/refund cases, institution-defined refund schedules and installment arrangements. Account credit and a cash refund remain separate decisions.
 - [ ] Complete automatic student-account-to-GL mappings, controlled period closing and reconciliation against retained postings.
 - [ ] Verify gateway checkout, uncertain outcomes, duplicate notifications, refunds and settlement reconciliation through selected provider test environments before any live use.
-- [ ] Build deep Moodle LMS integration: institutional single sign-on, authorized background course-section/enrollment synchronization and background gradebook synchronization. Establish identity matching and source-of-truth policies; preserve academic approval/history boundaries and make external synchronization idempotent.
+- [x] Add the disabled-by-default [Moodle REST connection diagnostic](optional-moodle-integration.md), with bounded requests, fixed capability output and no enrollment/grade writes. Institutions explicitly opt in; Moodle is not required for SIS workflows.
+- [ ] Build optional deep Moodle LMS integration: institutional single sign-on, authorized background course-section/enrollment synchronization and background gradebook synchronization. Establish identity matching and source-of-truth policies; preserve academic approval/history boundaries and make external synchronization idempotent.
 - [ ] Add authorized operational workers, a durable outbox and idempotent consumers for external effects where needed. Store protected references rather than student payloads in jobs.
 
 **Done when:** internal balances and external settlements reconcile; retries and replay cannot repeat charges/refunds; pricing and approval changes preserve the policy used for prior transactions. Installed SDKs and fictional gateway tests do not establish operational readiness.
