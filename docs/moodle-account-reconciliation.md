@@ -4,7 +4,7 @@ An interrupted response does not tell etSIS whether Moodle committed an account.
 
 ## Setup
 
-Upgrade the existing connector using [local_etsis 0.5.0-alpha](../dist/moodle/local_etsis-0.5.0-alpha.zip) and its [checksum](../dist/moodle/local_etsis-0.5.0-alpha.zip.sha256). Use Moodle's normal plugin upgrade; do not uninstall or reset its installation identity or account receipts. Receipt inspection reads the original account receipt without enabling provisioning. Connector 0.4.0 also adds a separate opt-in section membership table; original account receipts remain intact.
+Upgrade the existing connector using [local_etsis 0.6.0-alpha](../dist/moodle/local_etsis-0.6.0-alpha.zip) and its [checksum](../dist/moodle/local_etsis-0.6.0-alpha.zip.sha256). Use Moodle's normal plugin upgrade; do not uninstall or reset its installation identity or account receipts. Receipt inspection reads the original account receipt without enabling provisioning. Connector 0.4.0 also adds a separate opt-in section membership table; original account receipts remain intact.
 
 Authorize `local_etsis_get_account_receipt` in the integration token's restricted service. The connector's predefined **etSIS account provisioning** service includes it; an institution-managed custom service must add it explicitly. Receipt reads require `local/etsis:provisionaccounts` and `local/etsis:viewinstance`, an enabled connector, and the original approved installation. The etSIS Moodle connection must also be enabled. Account-request intake, provisioning, password email and the current authentication policy may remain disabled or changed: this action does not approve new effects under those settings.
 

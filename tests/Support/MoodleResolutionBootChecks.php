@@ -192,3 +192,28 @@ $sis->access->grants = ['sis:moodle:manage'];
 if ($sectionSend(false)->getStatusCode() !== 403 || $sectionSend(true)->getStatusCode() !== 403) {
     throw new RuntimeException('Section mapping bypassed current catalog authority.');
 }
+
+// Category policy and link routes share the same real middleware and authorization boundary.
+$sis->access->staff=true; $sis->access->grants=[];
+$categorySend=static function(string $path,?array $data=null,bool $csrf=true) use($app): \Psr\Http\Message\ResponseInterface {
+    $r=new \Qubus\Http\ServerRequest([],[],$path,$data===null?'GET':'POST')
+        ->withQueryParams(['search'=>'MATH'])->withHeader('Accept','application/json')->withHeader('Content-Type','application/x-www-form-urlencoded')
+        ->withHeader('X-CSRF-Token',$csrf?'fictionalcsrftoken':'invalidtoken')
+        ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE,'fictionalcsrftoken')
+        ->withBody(new \Laminas\Diactoros\Stream('php://temp','w+'));
+    if ($data!==null) { $r->getBody()->write(http_build_query(['_workspace_json'=>json_encode((object)$data,JSON_THROW_ON_ERROR)])); $r->getBody()->rewind(); }
+    $response=$app->router->match($r);
+    if (!str_contains($response->getHeaderLine('Cache-Control'),'no-store') || str_contains((string)$response->getBody(),'phpdebugbar')) throw new RuntimeException('Category privacy boundary failed.');
+    return $response;
+};
+if ($categorySend('/sis/moodle/category-settings/')->getStatusCode()!==200 ||
+    $categorySend('/sis/moodle/category-settings/',['source'=>'subjects','version'=>0],false)->getStatusCode()!==403 ||
+    $categorySend('/sis/moodle/category-settings/',['source'=>'subjects','version'=>0])->getStatusCode()!==200 ||
+    $categorySend('/sis/moodle/categories/')->getStatusCode()!==200) throw new RuntimeException('Category policy provider or CSRF boundary failed.');
+$ref=\Domain\Shared\ValueObject\EntityId::generate();
+new \Infrastructure\Persistence\Repository\SqlSubjectRepository($sis->sql)->save(new \Domain\Catalog\ValueObject\SubjectSnapshot($ref,'MATH','Fictional Mathematics'),true,true);
+if ($categorySend('/sis/moodle/categories/'.$ref->value.'/link/',['category'=>'42','acknowledged'=>false,'reason'=>'Verified category.'])->getStatusCode()!==422 ||
+    $categorySend('/sis/moodle/categories/'.$ref->value.'/link/',['category'=>'42','acknowledged'=>true,'reason'=>'Verified category.'],false)->getStatusCode()!==403) throw new RuntimeException('Category linking bypassed acknowledgement or CSRF.');
+$sis->access->staff=false; $sis->access->grants=['sis:moodle:manage'];
+if ($categorySend('/sis/moodle/category-settings/')->getStatusCode()!==403 ||
+    $categorySend('/sis/moodle/categories/')->getStatusCode()!==403) throw new RuntimeException('Category setup bypassed catalog authority.');

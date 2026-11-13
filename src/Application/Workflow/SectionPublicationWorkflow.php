@@ -44,7 +44,7 @@ final readonly class SectionPublicationWorkflow
                 JSON_THROW_ON_ERROR,
             ),
         );
-        return $review + ["create_in_moodle" => $create];
+        return $review + ["create_in_moodle" => $create, "moodle_category" => $proof["routing"] ?? null];
     }
     /** @return array<string,mixed> */
     public function publish(EntityId $section, #[\SensitiveParameter] string $token): array

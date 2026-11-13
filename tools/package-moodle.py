@@ -28,6 +28,8 @@ FILES = (
     "classes/local/account_receipt.php",
     "classes/local/roster_sync.php",
     "classes/local/course_provisioner.php",
+    "classes/local/category_sync.php",
+    "classes/external/sync_category.php",
     "classes/external/provision_course.php",
     "classes/external/get_roster_policy.php",
     "classes/external/sync_roster_member.php",
@@ -45,6 +47,7 @@ FILES = (
     "tests/account_provisioner_test.php",
     "tests/roster_sync_test.php",
     "tests/course_provisioner_test.php",
+    "tests/category_sync_test.php",
     "version.php",
 )
 

@@ -41,6 +41,25 @@ final class MoodleSectionSyncTest extends TestCase
         $this->f = $f = new SisFixture();
         $f->connection->pdo->exec("ALTER TABLE users ADD COLUMN username VARCHAR(100)");
         $this->section = $f->section();
+        $subject = new \Domain\Catalog\ValueObject\SubjectSnapshot(
+            EntityId::generate(),
+            "MATH",
+            "Mathematics",
+        );
+        $subjects = new \Infrastructure\Persistence\Repository\SqlSubjectRepository($f->sql);
+        $subjects->save($subject, true, true);
+        $subjects->assign($this->section->courseId, $subject->id);
+        $department = new \Domain\Catalog\ValueObject\ClassificationSnapshot(
+            EntityId::generate(),
+            "SCI",
+            "School of Sciences",
+        );
+        $classifications = new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql);
+        $classifications->save(\Domain\Catalog\Enum\ClassificationKind::Department, $department, true, true);
+        $classifications->assign(
+            $this->section->courseId,
+            new \Domain\Catalog\ValueObject\CourseClassifications(department: $department),
+        );
         $this->catalog = new SqlCatalogRevisionRepository($f->sql);
         $this->history = new SqlHistoricalEventStore(
             $f->sql,
@@ -163,6 +182,29 @@ final class MoodleSectionSyncTest extends TestCase
             public ?Closure $duringCall = null;
             public bool $fail = false;
             public function __construct(private SisFixture $f) {}
+            public array $categories = [];
+            public array $categoryIds = [];
+            public ?Closure $duringCategory = null;
+            public function syncCategory(
+                \Domain\Lms\ValueObject\MoodleBinding $binding,
+                array $category,
+            ): array {
+                TestCase::assertFalse($this->f->connection->pdo->inTransaction());
+                $this->categories[] = $category;
+                $key = $category["source"] . ":" . $category["reference_id"];
+                $this->categoryIds[$key] ??= [
+                    "id" =>
+                        $category["category_id"] === "0"
+                            ? (string) (20 + count($this->categoryIds))
+                            : $category["category_id"],
+                    "owned" => $category["category_id"] === "0",
+                    "status" => "synchronized",
+                ];
+                if ($this->duringCategory !== null) {
+                    ($this->duringCategory)();
+                }
+                return $this->categoryIds[$key];
+            }
             public array $courses = [];
             public ?Closure $duringCourse = null;
             public function provisionCourse(
@@ -310,6 +352,20 @@ final class MoodleSectionSyncTest extends TestCase
             $automatic,
             new \Infrastructure\Lms\SqlMoodleCourseRequestRepository($f->sql),
         );
+        $categoryRepo = new \Infrastructure\Lms\SqlMoodleCategoryRepository($f->sql);
+        $categoryRepo->configure($binding->id, "subjects", 0, $f->access->actor, "2026-08-10T17:00:00Z");
+        $categories = new \Domain\Lms\Service\MoodleCategoryService(
+            $categoryRepo,
+            $bindings,
+            $remote,
+            $policy,
+            $roles,
+            $f->access,
+            $f->transactions,
+            $f->clock,
+            $f->audit,
+            $f->dropCipher,
+        );
         $courseService = new \Domain\Lms\Service\MoodleCourseProvisioningService(
             $automationPolicy,
             new \Infrastructure\Lms\SqlMoodleCourseRequestRepository($f->sql),
@@ -324,6 +380,7 @@ final class MoodleSectionSyncTest extends TestCase
             $f->dropCipher,
             $f->audit,
             $f->clock,
+            $categories,
         );
         $worker = new \Domain\Lms\Service\MoodleProvisioningWorker(
             $accountPolicy,
@@ -353,6 +410,8 @@ final class MoodleSectionSyncTest extends TestCase
             $automationPolicy,
             $worker,
             $accountRemote,
+            $categories,
+            $categoryRepo,
         ];
     }
     private function studentLink(array $context): \Domain\Student\Student
@@ -853,8 +912,8 @@ final class MoodleSectionSyncTest extends TestCase
         $c = $this->context(false);
         [, $published] = $this->queueCourse($c);
         $this->selectCoursePublication($published["operation_id"]);
-        $engine = new \Domain\Lms\Service\MoodleSynchronizationService($c[3], $c[8], $c[10], $c[0]);
-        self::assertSame("course_completed", $engine->runOne(0));
+        $engine = new \Domain\Lms\Service\MoodleSynchronizationService($c[3], $c[8], $c[10], $c[0], $c[12]);
+        self::assertSame("course_completed", $engine->runOne(1));
         $student = $this->automaticStudent($c);
         self::assertSame(
             "A",
@@ -899,5 +958,132 @@ final class MoodleSectionSyncTest extends TestCase
             "Different existing course.",
             true,
         );
+    }
+    public function testCategoryPolicySyncsNewReferencesAndOwnedRenamesWithoutRepeatingUnchangedReads(): void
+    {
+        $c = $this->context();
+        $history = $this->f->sql->rows("sis_history_events");
+        self::assertSame("category_synchronized", $c[12]->runOne());
+        self::assertSame("idle", $c[12]->runOne());
+        self::assertCount(1, $c[2]->categories);
+        $id = $this->f->sql->rows("sis_subjects")[0]["id"];
+        $this->f->sql->update("sis_subjects", ["title" => "Mathematical Sciences"], ["id" => $id]);
+        self::assertSame("category_synchronized", $c[12]->runOne());
+        self::assertSame("Mathematical Sciences", $c[2]->categories[1]["title"]);
+        self::assertSame("20", $c[2]->categories[1]["category_id"]);
+        self::assertGreaterThan($c[2]->categories[0]["version"], $c[2]->categories[1]["version"]);
+        self::assertCount(1, $this->f->sql->rows("sis_moodle_categories"));
+        self::assertSame($history, $this->f->sql->rows("sis_history_events"));
+    }
+    public function testExplicitCategoryLinkRetainsEncryptedEvidenceAndCannotBeReplaced(): void
+    {
+        $c = $this->context();
+        $ref = new EntityId($this->f->sql->rows("sis_subjects")[0]["id"]);
+        try {
+            $c[12]->link(
+                $ref,
+                new \Domain\Lms\ValueObject\MoodleExternalId("42"),
+                false,
+                "Verified category.",
+            );
+            self::fail();
+        } catch (\Domain\Shared\Exception\ValidationException) {
+        }
+        self::assertSame([], $c[2]->categories);
+        self::assertSame(
+            ["linked" => true],
+            $c[12]->link(
+                $ref,
+                new \Domain\Lms\ValueObject\MoodleExternalId("42"),
+                true,
+                "Verified independent mapping.",
+            ),
+        );
+        $row = $this->f->sql->rows("sis_moodle_categories")[0];
+        self::assertSame("42", $row["external_id"]);
+        self::assertSame(0, (int) $row["is_owned"]);
+        self::assertStringNotContainsString("independent", $row["encrypted_link"]);
+        self::assertStringContainsString("independent", $this->f->dropCipher->open($row["encrypted_link"]));
+        $this->expectException(ConcurrentModificationException::class);
+        $c[12]->link($ref, new \Domain\Lms\ValueObject\MoodleExternalId("99"), true, "Different category.");
+    }
+    public function testDepartmentPolicyRoutesThroughThePublishedDepartment(): void
+    {
+        $c = $this->context(false);
+        $c[12]->configure("departments", 1);
+        [, $publication] = $this->queueCourse($c);
+        $this->selectCoursePublication($publication["operation_id"]);
+        self::assertSame("course_completed", $c[8]->runOne());
+        self::assertSame("departments", $c[2]->categories[0]["source"]);
+        self::assertSame("SCI", $c[2]->categories[0]["code"]);
+        self::assertSame("20", $c[2]->courses[0]["course"]["category"]);
+    }
+    public function testChangedCategoryPolicyRejectsAStaleReviewWithoutAcademicWrites(): void
+    {
+        $c = $this->context();
+        $w = $this->workflow($c);
+        $r = $w->review($this->section->id, "2026-08-24", "2026-12-18", "Subject organization.", true);
+        $history = $this->f->sql->rows("sis_history_events");
+        $c[12]->configure("departments", 1);
+        try {
+            $w->publish($this->section->id, $r["review_token"]);
+            self::fail();
+        } catch (ConcurrentModificationException) {
+        }
+        self::assertSame($history, $this->f->sql->rows("sis_history_events"));
+        self::assertSame([], $this->f->sql->rows("sis_moodle_course_requests"));
+    }
+    public function testAcceptedRequestKeepsOriginalRoutingAfterThePolicyChanges(): void
+    {
+        $c = $this->context(false);
+        [, $r] = $this->queueCourse($c);
+        $this->selectCoursePublication($r["operation_id"]);
+        $c[12]->configure("departments", 1);
+        self::assertSame("course_completed", $c[8]->runOne());
+        self::assertSame("subjects", $c[2]->categories[0]["source"]);
+        self::assertSame("category_synchronized", $c[12]->runOne());
+        self::assertSame("departments", $c[2]->categories[1]["source"]);
+        self::assertCount(1, $c[2]->courses);
+        self::assertSame("20", $c[2]->courses[0]["course"]["category"]);
+    }
+    public function testCategoryChoiceRequiresCurrentMoodleAndCatalogAuthority(): void
+    {
+        $c = $this->context();
+        $this->f->access->staff = false;
+        $this->f->access->grants = ["sis:catalog:manage"];
+        $this->expectException(AccessDeniedException::class);
+        $c[12]->configure("departments", 1);
+    }
+    public function testPermissionLossDuringManualCategoryLinkRetainsItsReferenceWithoutCompleting(): void
+    {
+        $c = $this->context();
+        $ref = new EntityId($this->f->sql->rows("sis_subjects")[0]["id"]);
+        $c[2]->duringCategory = function (): void {
+            $this->f->access->staff = false;
+            $this->f->access->grants = [];
+        };
+        try {
+            $c[12]->link(
+                $ref,
+                new \Domain\Lms\ValueObject\MoodleExternalId("42"),
+                true,
+                "Verified original category.",
+            );
+            self::fail();
+        } catch (AccessDeniedException) {
+        }
+        $row = $this->f->sql->rows("sis_moodle_categories")[0];
+        self::assertNull($row["external_id"]);
+        self::assertSame("source_changed", $row["issue_code"]);
+    }
+
+    public function testUnchangedCategoryPollingAvoidsNetworkAndStillDetectsLaterChanges(): void
+    {
+        $c = $this->context();
+        self::assertSame("category_synchronized", $c[12]->runOne());
+        $this->f->clock->time = $this->f->clock->time->modify("+301 seconds");
+        self::assertSame("category_unchanged", $c[12]->runOne());
+        self::assertCount(1, $c[2]->categories);
+        self::assertSame("idle", $c[12]->runOne());
     }
 }

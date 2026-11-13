@@ -31,6 +31,7 @@ final readonly class MoodleCourseProvisioningService
         private MessageCipher $cipher,
         private AuditTrail $audit,
         private Clock $clock,
+        private MoodleCategoryService $categories,
     ) {
     }
     /** Local setup only; academic caller already checks catalog authority.
@@ -49,6 +50,8 @@ final readonly class MoodleCourseProvisioningService
                 $binding !== null &&
                 $link === null &&
                 $request === null,
+            "category_source" =>
+                $binding === null ? null : $this->categories->configuration($binding)["source"] ?? null,
             "linked" => $link !== null,
             "request_state" => $request["state"] ?? null,
             "issue" => $request["issue_code"] ?? null,
@@ -75,6 +78,7 @@ final readonly class MoodleCourseProvisioningService
             "binding_id" => $binding->id->value,
             "binding_hash" => hash("sha256", json_encode($binding->describe(), JSON_THROW_ON_ERROR)),
             "actor_id" => $actor->value,
+            "routing" => $this->categories->route($binding, $bound->definition),
             "course" => [
                 "shortname" => "etsis-" . $section->value,
                 "fullname" => mb_substr(
@@ -104,6 +108,12 @@ final readonly class MoodleCourseProvisioningService
         ) {
             return;
         }
+        if (!is_array($proof["routing"] ?? null)) {
+            throw new ConcurrentModificationException(
+                "Review this request with an explicit subject or department category.",
+            );
+        }
+        $this->categories->validateRoute($binding, $proof["routing"]);
         if (
             !$this->policy->courseCreationEnabled() ||
             $row !== null ||
@@ -179,9 +189,12 @@ final readonly class MoodleCourseProvisioningService
                 JSON_THROW_ON_ERROR,
             );
             $binding = $this->bindings->current() ?? throw new AccessDeniedException();
+            $courseData = $this->courseData($proof);
             $this->validate($row, $proof);
             if ($this->sections->link($binding->id, $section) !== null) {
-                throw new ConcurrentModificationException('A course link already exists; review the original request.');
+                throw new ConcurrentModificationException(
+                    "A course link already exists; review the original request.",
+                );
             }
             $selected = $this->versions->selected($section);
             if ($selected === null) {
@@ -198,8 +211,28 @@ final readonly class MoodleCourseProvisioningService
             $this->requests->finish($id, $version, "review_required", "source_changed", 0);
             return "review_required";
         }
+        if (!is_array($proof["routing"] ?? null)) {
+            $this->requests->finish($id, $version, "review_required", "category_required", 0);
+            return "review_required";
+        }
+        $category = $this->categories->resolve($binding, $proof["routing"]);
+        if ($category === null) {
+            $this->requests->finish($id, $version, "queued", "category_required", $now + 60);
+            return "course_waiting";
+        }
         try {
-            $course = $this->remote->provisionCourse($binding, $id, $proof["course"]);
+            $this->validate($row, $proof);
+            if (
+                $this->versions->selected($section)?->publication->value !== $row["publication_id"] ||
+                $this->sections->section($section)["hash"] !== $source["hash"]
+            ) {
+                throw new ConcurrentModificationException("The offering changed during category setup.");
+            }
+            $course = $this->remote->provisionCourse(
+                $binding,
+                $id,
+                $courseData + ["category" => $category],
+            );
         } catch (\Throwable) {
             $this->requests->finish($id, $version, "processing", "connection_uncertain", $now + 120);
             return (int) $row["attempts"] >= 4 ? "review_required" : "course_retry_pending";
@@ -255,6 +288,25 @@ final readonly class MoodleCourseProvisioningService
             $this->requests->finish($id, $version, "review_required", "source_changed", 0);
             return "review_required";
         }
+    }
+    /** @param array<string,mixed> $proof
+     * @return array{shortname:string,fullname:string,startdate:int,enddate:int} */
+    private function courseData(array $proof): array
+    {
+        $r = $proof['course'] ?? null;
+        if (
+            !is_array($r) || count($r) !== 4 ||
+            !is_string($r['shortname'] ?? null) || !is_string($r['fullname'] ?? null) ||
+            !is_int($r['startdate'] ?? null) || !is_int($r['enddate'] ?? null)
+        ) {
+            throw new ConcurrentModificationException('The retained course request is invalid.');
+        }
+        return [
+            'shortname' => $r['shortname'],
+            'fullname' => $r['fullname'],
+            'startdate' => $r['startdate'],
+            'enddate' => $r['enddate'],
+        ];
     }
     /** @param array<string,mixed> $row
      * @param array<string,mixed> $proof */

@@ -148,6 +148,54 @@ final readonly class RestMoodleGateway implements Probe, Reader, Identity, Bound
             throw new MoodleConnectionUnavailableException();
         }
     }
+    public function syncCategory(MoodleBinding $binding, array $category): array
+    {
+        try {
+            if ($this->config->getConfigKey("moodle.section_sync_enabled", false) !== true) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $settings = $this->settings();
+            $deadline = microtime(true) + 15;
+            $this->handshake($settings, $deadline);
+            $this->assertCurrent($settings);
+            if (
+                !hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value)) ||
+                $this->config->getConfigKey("moodle.section_sync_enabled", false) !== true
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $r = $this->request(
+                $settings,
+                "local_etsis_sync_category",
+                [
+                    "instance_hash" => $binding->instanceFingerprint,
+                    "payload" => json_encode($category, JSON_THROW_ON_ERROR),
+                ],
+                $deadline,
+            );
+            $this->assertCurrent($settings);
+            if (
+                $this->config->getConfigKey("moodle.section_sync_enabled", false) !== true ||
+                count($r) !== 7 ||
+                ($r["protocol"] ?? null) !== 1 ||
+                ($r["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                ($r["reference_id"] ?? null) !== $category["reference_id"] ||
+                ($r["version"] ?? null) !== $category["version"] ||
+                !is_string($r["category_id"] ?? null) ||
+                !is_bool($r["owned"] ?? null) ||
+                !in_array($r["status"] ?? null, ["synchronized", "unchanged", "superseded"], true)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return [
+                "id" => new \Domain\Lms\ValueObject\MoodleExternalId($r["category_id"])->value,
+                "owned" => $r["owned"],
+                "status" => $r["status"],
+            ];
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
     public function provisionCourse(
         MoodleBinding $binding,
         EntityId $operation,

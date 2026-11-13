@@ -161,6 +161,7 @@ final class MoodleSectionGatewayTest extends TestCase
             "fullname" => "Fictional Algebra",
             "startdate" => 1790000000,
             "enddate" => 1795000000,
+            "category" => "20",
         ];
         $history = [];
         $handler = HandlerStack::create(
@@ -233,4 +234,22 @@ final class MoodleSectionGatewayTest extends TestCase
             self::assertNull($error->getPrevious());
         }
     }
+    public function testCategorySyncUsesOnlyBoundReferenceMetadataAndRejectsCrossReferenceReplies(): void
+    {
+        $b=$this->binding(); $p=['source'=>'subjects','reference_id'=>EntityId::generate()->value,'code'=>'MATH','title'=>'Mathematics','version'=>2,'category_id'=>'0'];
+        $base=['protocol'=>1,'instance_hash'=>$b->instanceFingerprint,'reference_id'=>$p['reference_id'],'version'=>2,'category_id'=>'20','owned'=>true,'status'=>'synchronized'];
+        foreach ([[],['reference_id'=>EntityId::generate()->value],['instance_hash'=>str_repeat('e',64)],['version'=>1],['owned'=>'true'],['private'=>'fictional-upstream']] as $change) {
+            $history=[]; $mock=new MockHandler([
+                new Response(200,[],json_encode(['siteurl'=>'https://moodle.example.invalid','functions'=>[['name'=>'core_webservice_get_site_info']]])),
+                new Response(200,[],json_encode(array_replace($base,$change))),
+            ]); $stack=HandlerStack::create($mock); $stack->push(Middleware::history($history));
+            try {
+                $r=new RestMoodleGateway($this->config(),new Client(['handler'=>$stack]))->syncCategory($b,$p);
+                self::assertSame([],$change); self::assertSame('20',$r['id']);
+                parse_str((string)$history[1]['request']->getBody(),$body); self::assertSame($p,json_decode($body['payload'],true));
+                self::assertSame('',$history[1]['request']->getUri()->getQuery()); self::assertTrue($history[1]['options']['verify']); self::assertFalse($history[1]['options']['allow_redirects']);
+            } catch (MoodleConnectionUnavailableException $e) { self::assertNotSame([],$change); self::assertNull($e->getPrevious()); self::assertStringNotContainsString('fictional',$e->getMessage()); }
+        }
+    }
+
 }

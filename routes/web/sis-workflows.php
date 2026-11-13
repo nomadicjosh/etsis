@@ -13,6 +13,7 @@ use Application\Http\Controller\SisCourseAssistanceController;
 use Application\Http\Controller\SisSectionAssistanceController;
 use Application\Http\Controller\SisDegreeAssistanceController;
 use Application\Http\Controller\SisMoodleController;
+use Application\Http\Controller\SisMoodleCategoryController;
 use Application\Http\Controller\SisMoodleSectionController;
 use Application\Http\Controller\SisMoodleBindingController;
 use Application\Http\Controller\SisMoodlePersonLinkController;
@@ -776,6 +777,10 @@ return static function (Psr7Router $router): void {
     $router->get("/sis/sections/{id}/assistance/", [SisSectionAssistanceController::class, "preview"]);
     $router->post("/sis/sections/{id}/assistance/", [SisSectionAssistanceController::class, "suggest"]);
     $router->get("/sis/moodle/status/", [SisMoodleController::class, "status"]);
+    $router->get('/sis/moodle/category-settings/', [SisMoodleCategoryController::class, 'settings']);
+    $router->post('/sis/moodle/category-settings/', [SisMoodleCategoryController::class, 'configure']);
+    $router->get('/sis/moodle/categories/', [SisMoodleCategoryController::class, 'page']);
+    $router->post('/sis/moodle/categories/{reference}/link/', [SisMoodleCategoryController::class, 'link']);
     $router->get('/sis/moodle/sections/', [SisMoodleSectionController::class, 'directory']);
     $router->post('/sis/moodle/sections/{section}/link/', [SisMoodleSectionController::class, 'link']);
     $router->post("/sis/moodle/check/", [SisMoodleController::class, "check"]);

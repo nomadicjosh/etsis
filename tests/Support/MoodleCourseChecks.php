@@ -55,6 +55,7 @@ $p = [
     "fullname" => "26/FA · MATH.101.A · Fictional Algebra",
     "startdate" => 1790000000,
     "enddate" => 1795000000,
+    "category" => "2",
 ];
 $scenario = $argv[1];
 $refused = false;
@@ -67,7 +68,7 @@ try {
         $authorized = false;
     }
     if ($scenario === "course_category") {
-        $settings["coursecategory"] = 99;
+        $p["category"] = "99";
     }
     if ($scenario === "course_rollback") {
         $DB->pdo->exec(
@@ -86,7 +87,7 @@ try {
         $p["fullname"] = "Changed request";
     }
     if ($scenario === "course_moved") {
-        $settings["coursecategory"] = 3;
+        $p["category"] = "3";
     }
     if ($scenario === "course_deleted") {
         $DB->pdo->exec("DELETE FROM course");

@@ -29,6 +29,8 @@ window.createWorkspaceMoodle = function (ui) {
         confirm.disabled = !enabled || busy || pending === null || !acknowledge.checked;
         cancel.disabled = busy;
         verify.disabled = !enabled || busy || binding === null;
+        const categorySave = document.querySelector('#moodle-category-save');
+        if (categorySave) categorySave.disabled = busy || binding === null;
     }
     function clearReview() {
         pending = null;
@@ -72,6 +74,7 @@ window.createWorkspaceMoodle = function (ui) {
         local_etsis_get_roster_policy: 'Section course-role policy',
         local_etsis_sync_roster_member: 'Managed student and instructor access',
         local_etsis_provision_course: 'Section course creation',
+        local_etsis_sync_category: 'Subject and department categories',
         core_webservice_get_site_info: 'Service information',
         core_user_get_users_by_field: 'Targeted user lookup',
         core_course_get_courses_by_field: 'Targeted course lookup',
@@ -116,6 +119,7 @@ window.createWorkspaceMoodle = function (ui) {
         const installation = await request('/sis/moodle/installation/');
         if (version !== current || panel.hidden) return;
         showBinding(installation.binding);
+        if (categoryArea && can('sis:catalog:manage') && can('sis:moodle:manage')) await loadCategories(current);
     }
     refresh.addEventListener('click', event => task(load, event.currentTarget));
     check.addEventListener('click', event => task(async () => {
@@ -228,6 +232,7 @@ window.createWorkspaceMoodle = function (ui) {
         version++;
         clearReview();
         reason.value = '';
+        document.querySelector('#moodle-category-results')?.replaceChildren();
     }
     const sectionArea = document.querySelector('#moodle-section-area');
     if (sectionArea && can('sis:catalog:manage') && can('sis:moodle:manage')) {
@@ -283,6 +288,77 @@ window.createWorkspaceMoodle = function (ui) {
                         });
                     }
                 } finally { sectionBusy = false; }
+            });
+        });
+    }
+    const categoryArea = document.querySelector('#moodle-category-area');
+    let categorySource = null, categoryVersion = 0, categoryBusy = false;
+    async function loadCategories(current) {
+        categoryArea.hidden = false;
+        const data = await request('/sis/moodle/category-settings/');
+        if (current !== version || panel.hidden) return;
+        categorySource = data.source; categoryVersion = data.version;
+        for (const radio of categoryArea.querySelectorAll('[name="moodle_category_source"]')) radio.checked = radio.value === data.source;
+        document.querySelector('#moodle-category-save').disabled = binding === null;
+        document.querySelector('#moodle-category-status').textContent = data.source
+            ? `New Moodle courses are organized by ${data.source}. Active references synchronize in the background.`
+            : 'Choose Subjects or Departments before requesting Moodle course creation.';
+    }
+    if (categoryArea && can('sis:catalog:manage') && can('sis:moodle:manage')) {
+        const policyForm = document.querySelector('#moodle-category-policy-form');
+        const categoryStatus = document.querySelector('#moodle-category-status');
+        const categoryResults = document.querySelector('#moodle-category-results');
+        policyForm.addEventListener('submit', event => {
+            event.preventDefault(); if (categoryBusy || !policyForm.reportValidity()) return;
+            task(async () => {
+                const current = version; categoryBusy = true;
+                const save = document.querySelector('#moodle-category-save'); save.disabled = true;
+                try {
+                    const source = policyForm.querySelector('[name="moodle_category_source"]:checked').value;
+                    const data = await request('/sis/moodle/category-settings/', 'POST', { source, version: categoryVersion });
+                    if (current !== version || panel.hidden) return;
+                    categorySource = data.source; categoryVersion = data.version; categoryResults.replaceChildren();
+                    categoryStatus.textContent = `Saved. New Moodle courses will use ${data.source} categories. Existing courses keep their categories.`;
+                } finally { categoryBusy = false; save.disabled = binding === null; }
+            });
+        });
+        const searchForm = document.querySelector('#moodle-category-search-form');
+        searchForm.addEventListener('submit', event => {
+            event.preventDefault(); if (categoryBusy || !searchForm.reportValidity()) return;
+            if (!categorySource) { categoryStatus.textContent = 'Save your category organization first.'; return; }
+            task(async () => {
+                categoryBusy = true; const current = version;
+                try {
+                    const search = document.querySelector('#moodle-category-search').value;
+                    const data = await request('/sis/moodle/categories/?search=' + encodeURIComponent(search));
+                    if (current !== version || panel.hidden) return;
+                    categoryResults.replaceChildren(); categoryStatus.textContent = `${data.items.length} matching ${data.source}.`;
+                    for (const item of data.items) {
+                        const card = node('section', { class: 'border rounded-3 p-3 mt-3' }, node('h3', { class: 'h5' }, `${item.code} · ${item.title}`));
+                        categoryResults.append(card);
+                        if (item.external_id) { card.append(node('p', {}, `Linked Moodle category ${item.external_id}.`)); continue; }
+                        if (item.issue_code === 'review_required') card.append(node('p', {}, 'Automatic category setup needs review of its original outcome.'));
+                        const category = node('input', { id: `moodle-category-${item.id}`, type: 'text', inputmode: 'numeric', class: 'form-control', required: true, maxlength: 19, autocomplete: 'off' });
+                        const why = node('input', { id: `moodle-category-reason-${item.id}`, type: 'text', class: 'form-control', required: true, maxlength: 500, autocomplete: 'off' });
+                        const ack = node('input', { id: `moodle-category-ack-${item.id}`, type: 'checkbox', class: 'form-check-input', required: true });
+                        const save = node('button', { type: 'submit', class: 'btn btn-outline-primary mt-3' }, 'Link existing Moodle category');
+                        const linkForm = node('form', {}, node('label', { for: category.id, class: 'form-label' }, 'Existing Moodle category ID'), category,
+                            node('label', { for: why.id, class: 'form-label mt-2' }, 'Reason for category link'), why,
+                            node('div', { class: 'form-check mt-2' }, ack, node('label', { for: ack.id, class: 'form-check-label' }, 'I independently verified this Moodle category for this reference.')), save);
+                        card.append(linkForm);
+                        linkForm.addEventListener('submit', event => {
+                            event.preventDefault(); if (categoryBusy || !linkForm.reportValidity()) return;
+                            task(async () => {
+                                categoryBusy = true; save.disabled = true;
+                                try {
+                                    await request(`/sis/moodle/categories/${item.id}/link/`, 'POST', { category: category.value, reason: why.value, acknowledged: ack.checked });
+                                    if (current !== version || panel.hidden) return;
+                                    linkForm.remove(); card.append(node('p', { role: 'status' }, 'Existing category linked. Its Moodle name will be preserved.'));
+                                } finally { categoryBusy = false; save.disabled = false; }
+                            });
+                        });
+                    }
+                } finally { categoryBusy = false; }
             });
         });
     }

@@ -1529,7 +1529,8 @@ window.createWorkspaceCatalog = function (ui) {
             }
             const createMoodle = node("input", { type: "checkbox", id: "section-create-moodle", class: "form-check-input" });
             createMoodle.checked = initial.create_in_moodle === true;
-            if (setup.moodle?.available) {
+            if (setup.moodle?.available && !setup.moodle.category_source) form.append(node("p", { class: "form-text", role: "status" }, "Choose Subjects or Departments under Moodle integration before requesting course creation."));
+            if (setup.moodle?.available && setup.moodle.category_source) {
                 form.append(node("div", { class: "form-check my-3" }, createMoodle,
                     node("label", { for: createMoodle.id, class: "form-check-label" }, "Create this section’s course in Moodle")),
                     node("p", { class: "form-text" }, "Created in the background after this publication is selected for registration. Eligible instructors and registered students are set up automatically when institutional account provisioning is enabled."));
@@ -1540,7 +1541,7 @@ window.createWorkspaceCatalog = function (ui) {
                 event.preventDefault();
                 task(async () => {
                     if (!form.reportValidity()) return;
-                    const values = { ...formData(form, fields), create_in_moodle: !!setup.moodle?.available && createMoodle.checked };
+                    const values = { ...formData(form, fields), create_in_moodle: !!setup.moodle?.available && !!setup.moodle.category_source && createMoodle.checked };
                     const reviewed = await request(
                         `/sis/sections/${section}/publication/review/`,
                         "POST",
@@ -1561,6 +1562,7 @@ window.createWorkspaceCatalog = function (ui) {
                             "Publication takes effect when confirmed. Existing registrations, grades and charges keep their current records.",
                         ),
                     );
+                    if (reviewed.moodle_category) target.append(node("p", {}, `Moodle category: ${reviewed.moodle_category.code} · ${reviewed.moodle_category.title} (${reviewed.moodle_category.source}).`));
                     if (reviewed.create_in_moodle) target.append(node("p", { class: "alert alert-info" }, "This confirmation also queues creation and linking of the Moodle course. Moodle availability will not delay the SIS publication."));
                     if (
                         reviewed.definition.instruction_starts_on < reviewed.definition.term_starts_on ||

@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let checks = 0, sectionLinked = false;
+    let checks = 0, sectionLinked = false, categorySource = null, categoryVersion = 0, categoryLinked = false;
     const approved = { id: '01K9Q4S3E5W4Y3P2F1R6V7N8M9', instance_fingerprint: 'a'.repeat(64), site_fingerprint: 'b'.repeat(64), approved_at: '2026-11-11T12:00:00Z' };
     let binding = options.bound ? approved : null;
     page.on('pageerror', error => errors.push(error.message));
@@ -14,6 +14,12 @@ async function fixture(page, options = {}) {
         let result = {};
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/moodle/status/') result = { enabled: !options.disabled };
+        else if (path === '/sis/moodle/category-settings/') {
+            if (route.request().method() === 'POST') { categorySource = data.source; categoryVersion++; }
+            result = { source: categorySource, version: categoryVersion };
+        }
+        else if (path === '/sis/moodle/categories/') result = { source: categorySource, items: [{ id: '01KAT5HZXS0000000000000002', code: 'MATH', title: 'Mathematics', external_id: categoryLinked ? '42' : null, issue_code: 'none' }] };
+        else if (path.startsWith('/sis/moodle/categories/') && path.endsWith('/link/')) { categoryLinked = true; result = { linked: true }; }
         else if (path === '/sis/moodle/sections/') result = { sync_enabled: false, items: [{ id: '01KAT5HZXS0000000000000001', term_code: '26/FA', code: 'MATH.101.01', title: 'Fictional Algebra', moodle_course_id: sectionLinked ? '81' : null, issue: 'none', members_needing_setup: sectionLinked ? 2 : 0 }] };
         else if (path.endsWith('/link/') && path.startsWith('/sis/moodle/sections/')) {
             sectionLinked = true;
@@ -60,7 +66,7 @@ async function fixture(page, options = {}) {
                 result = { enabled: true, capabilities: {
                     core_webservice_get_site_info: true, local_etsis_get_instance_info: true,
                     local_etsis_get_account_policy: true, local_etsis_provision_account: true,
-                    local_etsis_get_account_receipt: true, local_etsis_get_roster_policy: true, local_etsis_provision_course: true,
+                    local_etsis_get_account_receipt: true, local_etsis_get_roster_policy: true, local_etsis_provision_course: true, local_etsis_sync_category: true,
                     local_etsis_sync_roster_member: !options.missingRoster,
                     core_user_get_users_by_field: true, core_course_get_courses_by_field: true,
                 } };
@@ -114,7 +120,7 @@ test('a complete section service shows expected missing generic functions separa
     const f = await fixture(page, { sectionService: true });
     await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
     await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
-    await expect(page.locator('#moodle-results')).toContainText('10 of 10 connector functions advertised');
+    await expect(page.locator('#moodle-results')).toContainText('11 of 11 connector functions advertised');
     const connector = page.locator('[data-moodle-connector-functions]');
     await expect(connector).toContainText('Managed student and instructor access');
     await expect(connector).not.toContainText('Not advertised');
@@ -137,7 +143,7 @@ test('a missing connector function remains visible in the main service list', as
     const f = await fixture(page, { sectionService: true, missingRoster: true });
     await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
     await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
-    await expect(page.locator('#moodle-results')).toContainText('9 of 10 connector functions advertised');
+    await expect(page.locator('#moodle-results')).toContainText('10 of 11 connector functions advertised');
     await expect(page.locator('[data-moodle-connector-functions]')).toContainText('Not advertised');
     await expect(page.locator('#moodle-results')).toContainText('does not verify course permissions or enable synchronization');
     expect(f.errors).toEqual([]);
@@ -293,5 +299,41 @@ test('searching after an interrupted course-link confirmation shows the retained
     await expect(page.locator('#moodle-section-results')).toContainText('2 members still need setup');
     await expect(page.getByRole('button', { name: 'Confirm Moodle course link', exact: true })).toHaveCount(0);
     expect(f.calls.filter(c => c.path.endsWith('/link/'))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test('category organization is an explicit SIS setting with optimistic version and no remote discovery', async ({ page }) => {
+    const f = await fixture(page, { bound: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await expect(page.locator('#moodle-category-status')).toContainText('Choose Subjects or Departments');
+    await page.getByRole('radio', { name: 'Subjects', exact: true }).focus(); await page.keyboard.press('Space');
+    await page.getByRole('button', { name: 'Save category organization', exact: true }).click();
+    await expect(page.locator('#moodle-category-status')).toContainText('Saved. New Moodle courses will use subjects');
+    expect(f.calls.find(c => c.path === '/sis/moodle/category-settings/' && c.method === 'POST')).toMatchObject({ csrf: 'fictional-test-token', data: { source: 'subjects', version: 0 } });
+    await page.getByRole('radio', { name: 'Departments', exact: true }).check();
+    await page.getByRole('button', { name: 'Save category organization', exact: true }).click();
+    await expect(page.locator('#moodle-category-status')).toContainText('Existing courses keep their categories');
+    expect(f.calls.filter(c => c.path === '/sis/moodle/category-settings/' && c.method === 'POST')[1].data).toEqual({ source: 'departments', version: 1 });
+    expect(f.calls.some(c => /check|\/link\//.test(c.path))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+test('existing category linking requires explicit acknowledgement and keeps the category ID out of storage', async ({ page }) => {
+    const f = await fixture(page, { bound: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByRole('radio', { name: 'Subjects', exact: true }).check();
+    await page.getByRole('button', { name: 'Save category organization', exact: true }).click();
+    await page.getByLabel('Find a subject or department to link').fill('MATH');
+    await page.getByRole('button', { name: 'Find category references', exact: true }).click();
+    await page.getByLabel('Existing Moodle category ID', { exact: true }).fill('42');
+    await page.getByLabel('Reason for category link', { exact: true }).fill('Verified existing Mathematics category.');
+    const ack = page.getByRole('checkbox', { name: 'I independently verified this Moodle category for this reference.' });
+    await ack.focus(); await page.keyboard.press('Space');
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByRole('button', { name: 'Link existing Moodle category', exact: true }).click();
+    await expect(page.locator('#moodle-category-results')).toContainText('Existing category linked. Its Moodle name will be preserved.');
+    expect(f.calls.find(c => c.path.startsWith('/sis/moodle/categories/') && c.path.endsWith('/link/'))).toMatchObject({ method: 'POST', csrf: 'fictional-test-token', data: { category: '42', acknowledged: true } });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

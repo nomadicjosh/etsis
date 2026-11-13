@@ -66,7 +66,8 @@ final readonly class SqlMoodleCourseRequestRepository implements MoodleCourseReq
             !in_array($state, ["queued", "processing", "completed", "review_required"], true) ||
             !in_array(
                 $issue,
-                ["none", "selection_required", "source_changed", "connection_uncertain", "attempt_limit"],
+                ["none", "selection_required",
+                "category_required", "source_changed", "connection_uncertain", "attempt_limit"],
                 true,
             )
         ) {

@@ -9,8 +9,13 @@ use Domain\Lms\ValueObject\MoodleBinding;
 
 interface MoodleSectionGateway
 {
+    /**
+     * @param array{source:string,reference_id:string,code:string,title:string,version:int,category_id:string} $category
+     * @return array{id:string,owned:bool,status:string}
+     */
+    public function syncCategory(MoodleBinding $binding, array $category): array;
     /** Create or return the original course for one retained publication decision.
-     * @param array{shortname:string,fullname:string,startdate:int,enddate:int} $course */
+     * @param array{shortname:string,fullname:string,startdate:int,enddate:int,category:string} $course */
     public function provisionCourse(
         \Domain\Lms\ValueObject\MoodleBinding $binding,
         EntityId $operation,

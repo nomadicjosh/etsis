@@ -38,6 +38,7 @@ namespace {
     }
     class core_text
     {
+        public static function substr(string $value, int $start, int $length): string { return mb_substr($value, $start, $length); }
         public static function strlen(string $value): int
         {
             return mb_strlen($value);
@@ -229,6 +230,12 @@ namespace {
     require $plugin . "/classes/local/account_policy.php";
     require $plugin . "/classes/local/account_provisioner.php";
     require $plugin . "/classes/local/account_receipt.php";
+    if (str_starts_with($argv[1] ?? '', 'category_')) {
+        $report = require __DIR__.'/MoodleCategoryChecks.php';
+        echo json_encode($report, JSON_THROW_ON_ERROR);
+        foreach (["user", "login", "lib"] as $folder) { unlink($temporary . "/" . $folder . "/" . ($folder === "lib" ? "authlib.php" : "lib.php")); rmdir($temporary . "/" . $folder); }
+        rmdir($temporary); exit;
+    }
     if (str_starts_with($argv[1] ?? '', 'course_')) {
         mkdir($temporary.'/course'); file_put_contents($temporary.'/course/lib.php','<?php');
         file_put_contents($temporary.'/lib/enrollib.php','<?php');

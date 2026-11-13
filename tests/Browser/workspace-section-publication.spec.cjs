@@ -99,7 +99,7 @@ async function fixture(page, { bound = true, paged = false, unavailable = false,
         has_student_records: false,
         publication_status: unavailable ? "unavailable" : latest ? "ready" : "unpublished",
         faculty_label: "Not assigned",
-        moodle: { available: moodle, linked: false, request_state: null },
+        moodle: { available: moodle, linked: false, request_state: null, category_source: "subjects" },
       };
     else if (path.endsWith("/publication/page/"))
       result = {
