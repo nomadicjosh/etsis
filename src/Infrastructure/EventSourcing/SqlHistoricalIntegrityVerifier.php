@@ -13,7 +13,7 @@ use Infrastructure\Persistence\SqlRecords;
 use InvalidArgumentException;
 use Throwable;
 
-/** Walk indexed heads and reuse the journal's authenticated paging. No database writes or aggregate handlers. */
+/** Verify indexed chains, references and receipts. No database writes, aggregate handlers or projectors. */
 final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegrityVerifier
 {
     public function __construct(
@@ -39,24 +39,37 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             );
         }
         $state = $this->state($cursor);
-        $events = $completed = $inventory = 0;
+        $events = $completed = $inventory = $receipts = $receiptEvents = 0;
         $started = $state["active"] === null ? 0 : 1;
         $begin = hrtime(true);
-        while ($events + $inventory < $eventLimit) {
+        while ($events + $inventory + $receipts < $eventLimit) {
             if (hrtime(true) - $begin >= 5_000_000_000) {
                 break;
             }
-            if ($state["stage"] === "inventory") {
-                $rows = $this->eventRows($state["after"], min(20, $eventLimit - $events - $inventory));
-                if ($rows === []) {
-                    return new HistoryVerificationResult(
-                        true,
-                        $completed,
-                        $events,
-                        inventoryEvents: $inventory,
-                    );
+            if ($state["stage"] === "receipts") {
+                $row = $this->nextOperation($state["after"]);
+                if ($row === null || $receipts >= 20) {
+                    break;
                 }
-                $this->assertRecordedHeads($rows);
+                try {
+                    $receiptEvents += $this->history->verifyOperation(new EntityId($row["id"]));
+                } catch (Throwable) {
+                    throw new HistoryVerificationFailedException();
+                }
+                $receipts++;
+                $state["after"] = $row["id"];
+                continue;
+            }
+            if ($state["stage"] === "inventory") {
+                $rows = $this->eventRows(
+                    $state["after"],
+                    min(20, $eventLimit - $events - $inventory - $receipts),
+                );
+                if ($rows === []) {
+                    $state = ["stage" => "receipts", "after" => null, "active" => null];
+                    continue;
+                }
+                $this->assertRecordedReferences($rows);
                 $inventory += count($rows);
                 $state["after"] = $rows[array_key_last($rows)]["id"];
                 continue;
@@ -86,7 +99,7 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
                 $page = $this->history->page(
                     $stream,
                     $state["active"]["cursor"],
-                    min(20, $eventLimit - $events - $inventory),
+                    min(20, $eventLimit - $events - $inventory - $receipts),
                 );
                 $events += count($page->events);
                 if ($page->nextCursor === null) {
@@ -110,17 +123,20 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             $state = ["stage" => "inventory", "after" => null, "active" => null];
         }
         if ($state["stage"] === "inventory" && $this->eventRows($state["after"], 1) === []) {
-            return new HistoryVerificationResult(true, $completed, $events, inventoryEvents: $inventory);
+            $state = ["stage" => "receipts", "after" => null, "active" => null];
         }
+        $complete = $state["stage"] === "receipts" && $this->nextOperation($state["after"]) === null;
         return new HistoryVerificationResult(
-            false,
+            $complete,
             $completed,
             $events,
-            $this->codec->seal("history.verification.v1", $state),
+            $complete ? null : $this->codec->seal("history.verification.v1", $state),
             $inventory,
+            $receipts,
+            $receiptEvents,
         );
     }
-    /** @return array{stage:'streams'|'inventory',after:?string,active:?array{id:string,cursor:?string}} */
+    /** @return array{stage:'streams'|'inventory'|'receipts',after:?string,active:?array{id:string,cursor:?string}} */
     private function state(#[\SensitiveParameter] ?string $cursor): array
     {
         if ($cursor === null) {
@@ -133,7 +149,7 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             $state = $this->codec->open("history.verification.v1", $cursor);
             if (
                 count($state) !== 3 ||
-                !in_array($state["stage"] ?? null, ["streams", "inventory"], true) ||
+                !in_array($state["stage"] ?? null, ["streams", "inventory", "receipts"], true) ||
                 !array_key_exists("after", $state) ||
                 !array_key_exists("active", $state)
             ) {
@@ -169,7 +185,7 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
         }
     }
     /** @param list<array<string,mixed>> $rows */
-    private function assertRecordedHeads(array $rows): void
+    private function assertRecordedReferences(#[\SensitiveParameter] array $rows): void
     {
         try {
             $ids = [];
@@ -195,8 +211,46 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             if (count($heads) !== count($ids)) {
                 throw new \RuntimeException();
             }
+            $operations = [];
+            foreach ($rows as $row) {
+                $event = $this->codec->open("history.event.v1", $row["sealed_event"]);
+                if (
+                    ($event["id"] ?? null) !== $row["id"] ||
+                    ($event["stream_id"] ?? null) !== $row["stream_id"]
+                ) {
+                    throw new \RuntimeException();
+                }
+                $id = new EntityId($event["operation_id"])->value;
+                if (isset($operations[$id]) && $operations[$id] !== $row["stream_id"]) {
+                    throw new \RuntimeException();
+                }
+                $operations[$id] = $row["stream_id"];
+            }
+            $receipts = $this->sql->fetch(
+                "SELECT " .
+                    $q("id") .
+                    ", " .
+                    $q("stream_id") .
+                    " FROM " .
+                    $q("sis_history_operations") .
+                    " WHERE " .
+                    $q("id") .
+                    " IN (" .
+                    implode(", ", array_fill(0, count($operations), "?")) .
+                    ")",
+                array_keys($operations),
+                count($operations),
+            );
+            if (count($receipts) !== count($operations)) {
+                throw new \RuntimeException();
+            }
+            foreach ($receipts as $receipt) {
+                if ($operations[$receipt["id"]] !== $receipt["stream_id"]) {
+                    throw new \RuntimeException();
+                }
+            }
         } catch (Throwable) {
-            // A damaged foreign key could contain a person ID; never expose it as a support reference.
+            // A damaged reference could contain a person ID; never expose it as a support reference.
             throw new HistoryVerificationFailedException();
         }
     }
@@ -209,6 +263,8 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
                 $q("id") .
                 ", " .
                 $q("stream_id") .
+                ", " .
+                $q("sealed_event") .
                 " FROM " .
                 $q("sis_history_events") .
                 ($after === null ? "" : " WHERE " . $q("id") . " > ?") .
@@ -217,6 +273,22 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             $after === null ? [] : [$after],
             $limit,
         );
+    }
+    /** @return array<string,mixed>|null */
+    private function nextOperation(?string $after): ?array
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch(
+            "SELECT " .
+                $q("id") .
+                " FROM " .
+                $q("sis_history_operations") .
+                ($after === null ? "" : " WHERE " . $q("id") . " > ?") .
+                " ORDER BY " .
+                $q("id"),
+            $after === null ? [] : [$after],
+            1,
+        )[0] ?? null;
     }
     /** One indexed statement compares against the currently committed head, allowing concurrent atomic appends. */
     private function assertNoUncommittedPositions(EntityId $stream): void

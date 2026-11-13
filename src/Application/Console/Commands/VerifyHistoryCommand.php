@@ -16,10 +16,10 @@ use Throwable;
 final class VerifyHistoryCommand extends ConsoleCommand
 {
     protected string $name = "sis:history:verify";
-    protected string $description = "Verify a bounded batch of protected event chains without changing records.";
+    protected string $description = "Verify protected chains, references and retry receipts in read-only batches.";
     protected array $options = [
         ["streams", null, "required", "Maximum stream chains visited (1–50).", "10"],
-        ["events", null, "required", "Maximum combined chain/inventory event rows checked (1–2000).", "500"],
+        ["events", null, "required", "Maximum combined event/reference/receipt checks (1–2000).", "500"],
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
     ];
@@ -57,7 +57,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
             return $this->failure(
                 $json,
                 "stream_unverified",
-                "Recorded stream could not be verified. No records were changed.",
+                "Recorded history could not be verified. No records were changed.",
                 self::FAILURE,
                 $exception->streamReference?->value,
             );
@@ -83,15 +83,19 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     $result->events .
                     " events authenticated; " .
                     $result->inventoryEvents .
-                    " event references checked in this batch.",
+                    " event references checked; " .
+                    $result->receipts .
+                    " receipts and " .
+                    $result->receiptEvents .
+                    " associated events verified in this batch.",
             );
             $this->terminalRaw(
                 $result->complete
-                    ? "Stream-chain and event-reference traversals finished for the rows visible to this pass."
+                    ? "Chain, reference and receipt traversals finished for the rows visible to this pass."
                     : "More history remains. Use --json for the protected continuation cursor; rerun with --cursor.",
             );
             $this->terminalRaw(
-                "This checks stored event chains; it does not certify projections, operation receipts, " .
+                "This checks stored history; it does not certify projections, " .
                     "archive completeness or restore readiness.",
             );
         }

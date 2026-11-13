@@ -29,19 +29,23 @@ final class HistoryVerificationTest extends TestCase
         $f->stream(3);
         $before = $f->digest();
         $cursor = null;
-        $events = $streams = $inventory = $calls = 0;
+        $events = $streams = $inventory = $receipts = $receiptEvents = $calls = 0;
         do {
             $r = $f->verifier->verify(cursor: $cursor, streamLimit: 1, eventLimit: 7);
-            self::assertLessThanOrEqual(7, $r->events + $r->inventoryEvents);
+            self::assertLessThanOrEqual(7, $r->events + $r->inventoryEvents + $r->receipts);
             self::assertLessThanOrEqual(1, $r->streams);
             $events += $r->events;
             $streams += $r->streams;
             $inventory += $r->inventoryEvents;
+            $receipts += $r->receipts;
+            $receiptEvents += $r->receiptEvents;
             $cursor = $r->nextCursor;
             self::assertLessThan(20, ++$calls);
         } while (!$r->complete);
         self::assertSame(48, $events);
         self::assertSame(48, $inventory);
+        self::assertSame(2, $receipts);
+        self::assertSame(48, $receiptEvents);
         self::assertSame(2, $streams);
         self::assertSame($before, $f->digest());
     }
@@ -169,9 +173,10 @@ final class HistoryVerificationTest extends TestCase
             EntityId::generate(),
             0,
             new \Domain\Shared\EventSourcing\EventContext(
-                $f->sis->access->actor,
-                $f->sis->clock->now(),
-                EntityId::generate(),
+                null,
+                null,
+                null,
+                origin: "framework",
             ),
             [$event],
         );
@@ -228,9 +233,15 @@ final class HistoryVerificationTest extends TestCase
         self::assertSame(1, $next->inventoryEvents);
         self::assertSame(0, $next->streams);
         $last = $f->verifier->verify($next->nextCursor, eventLimit: 1);
-        self::assertTrue($last->complete);
+        self::assertFalse($last->complete);
         self::assertSame(0, $last->events);
         self::assertSame(1, $last->inventoryEvents);
+        $receipt = $f->verifier->verify($last->nextCursor, eventLimit: 1);
+        self::assertTrue($receipt->complete);
+        self::assertSame(0, $receipt->events);
+        self::assertSame(0, $receipt->inventoryEvents);
+        self::assertSame(1, $receipt->receipts);
+        self::assertSame(3, $receipt->receiptEvents);
         self::assertSame($before, $f->digest());
     }
     public function testOrphanAfterSeveralInventoryPagesFailsWithoutExposingTheDamagedReference(): void

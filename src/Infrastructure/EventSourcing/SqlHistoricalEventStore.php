@@ -410,7 +410,7 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
     }
 
     /** @param array<string, mixed> $row */
-    private function decode(StreamReference $stream, array $row): StoredEvent
+    private function decode(StreamReference $stream, array $row, ?EntityId $operation = null): StoredEvent
     {
         try {
             $row["position"] = $this->integer($row["position"]);
@@ -429,6 +429,7 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
                 }
             }
             if (
+                ($operation !== null && ($data["operation_id"] ?? null) !== $operation->value) ||
                 $data["stream_type"] !== $stream->type ||
                 $data["aggregate_id"] !== (string) $stream->aggregateId ||
                 $data["schema_version"] !== $data["event"]["schema_version"] ||
@@ -465,6 +466,94 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
                 $this->date($row["recorded_at"]),
                 $hash,
             );
+        } catch (Throwable) {
+            throw new CorruptHistoryException();
+        }
+    }
+
+    public function verifyOperation(EntityId $operation): int
+    {
+        $this->requireMigrationComplete();
+        try {
+            return $this->transactions->run(function () use ($operation): int {
+                $row = $this->sql->rows("sis_history_operations", ["id" => $operation->value], 1)[0] ?? null;
+                if ($row === null) {
+                    throw new CorruptHistoryException();
+                }
+                $saved = $this->codec->open("history.receipt.v1", $row["sealed_receipt"]);
+                if (
+                    count($saved) !== 5 ||
+                    ($saved["operation_id"] ?? null) !== $operation->value ||
+                    ($saved["stream_id"] ?? null) !== $row["stream_id"] ||
+                    !array_key_exists("actor_id", $saved) ||
+                    !is_string($saved["fingerprint"] ?? null) ||
+                    preg_match('/^[a-f0-9]{64}$/D', $saved["fingerprint"]) !== 1 ||
+                    !is_array($saved["result"] ?? null)
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                new EntityId($row["stream_id"]);
+                if ($saved["actor_id"] !== null) {
+                    new EntityId($saved["actor_id"]);
+                }
+                $result = $this->receiptResult($saved["result"]);
+                $head = $this->sql->rows("sis_history_streams", ["id" => $row["stream_id"]], 1)[0] ?? null;
+                if ($head === null || $result["operation_id"] !== $operation->value) {
+                    throw new CorruptHistoryException();
+                }
+                $stream = $this->schemas->stream($head["stream_type"], $head["aggregate_id"]);
+                $this->verifyHead($head, $stream);
+                if ($result["last_version"] > $head["version"]) {
+                    throw new CorruptHistoryException();
+                }
+                $q = $this->sql->quote(...);
+                $rows = $this->sql->fetch(
+                    "SELECT * FROM " .
+                        $q("sis_history_events") .
+                        " WHERE " .
+                        $q("stream_id") .
+                        " = ? AND " .
+                        $q("position") .
+                        " >= ? AND " .
+                        $q("position") .
+                        " <= ? ORDER BY " .
+                        $q("position"),
+                    [$row["stream_id"], $result["first_version"], $result["last_version"]],
+                    50,
+                );
+                if (count($rows) !== count($result["event_ids"])) {
+                    throw new CorruptHistoryException();
+                }
+                $events = [];
+                $context = null;
+                foreach ($rows as $index => $eventRow) {
+                    if (
+                        $this->integer($eventRow["position"]) !== $result["first_version"] + $index ||
+                        $eventRow["event_id"] !== $result["event_ids"][$index]
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $stored = $this->decode($stream, $eventRow, $operation);
+                    if (
+                        $stored->context->actor?->value !== $saved["actor_id"] ||
+                        ($context !== null &&
+                            ProtectedEventCodec::canonical($context->describe()) !==
+                                ProtectedEventCodec::canonical($stored->context->describe()))
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $context ??= $stored->context;
+                    $events[] = $stored->event;
+                }
+                if ($context === null) {
+                    throw new CorruptHistoryException();
+                }
+                [, $fingerprint] = $this->prepare($stream, $result["first_version"] - 1, $context, $events);
+                if (!hash_equals($saved["fingerprint"], $fingerprint)) {
+                    throw new CorruptHistoryException();
+                }
+                return count($events);
+            });
         } catch (Throwable) {
             throw new CorruptHistoryException();
         }

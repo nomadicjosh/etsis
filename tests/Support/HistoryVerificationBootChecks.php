@@ -40,7 +40,9 @@ if (
     $next["events_checked"] !== 2 ||
     $next["streams_completed"] !== 1 ||
     $next["next_cursor"] !== null ||
-    $next["inventory_rows_checked"] !== 3
+    $next["inventory_rows_checked"] !== 3 ||
+    $next["receipts_checked"] !== 1 ||
+    $next["receipt_events_checked"] !== 3
 ) {
     throw new RuntimeException("History verification returned incorrect bounded counts.");
 }
@@ -70,6 +72,31 @@ foreach (
         throw new RuntimeException("Invalid verification input was accepted or exposed.");
     }
 }
+$operation = $f->sis->sql->rows("sis_history_operations", [], 1)[0];
+$f->sis->sql->update(
+    "sis_history_operations",
+    ["sealed_receipt" => "fictional-private-receipt"],
+    ["id" => $operation["id"]],
+);
+$badReceipt = $f->digest();
+if ($test->execute(["--json" => true]) !== 1) {
+    throw new RuntimeException("An unverified receipt returned success.");
+}
+$failed = json_decode($test->getDisplay(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $failed["error"] !== "stream_unverified" ||
+    $failed["stream_reference"] !== null ||
+    str_contains($test->getDisplay(), $operation["id"]) ||
+    str_contains($test->getDisplay(), "fictional-private-receipt") ||
+    $badReceipt !== $f->digest()
+) {
+    throw new RuntimeException("Receipt failure exposed contents or changed history.");
+}
+$f->sis->sql->update(
+    "sis_history_operations",
+    ["sealed_receipt" => $operation["sealed_receipt"]],
+    ["id" => $operation["id"]],
+);
 $row = $f->sis->sql->rows("sis_history_events", ["position" => 2], 1)[0];
 $f->sis->sql->update(
     "sis_history_events",

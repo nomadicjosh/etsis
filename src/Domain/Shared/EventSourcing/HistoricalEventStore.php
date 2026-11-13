@@ -30,4 +30,9 @@ interface HistoricalEventStore
      * Only suitable for checks whose required state is self-contained in the latest event.
      */
     public function latest(StreamReference $stream): ?StoredEvent;
+
+    /** Read-only operator check of one retry receipt and its bounded batch (1–50 events).
+     * Returns the number of associated events verified; does not invoke aggregate handlers or projectors.
+     */
+    public function verifyOperation(EntityId $operation): int;
 }
