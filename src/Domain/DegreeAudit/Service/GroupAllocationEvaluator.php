@@ -46,6 +46,7 @@ final readonly class GroupAllocationEvaluator
             PolicyAttempt::fromAcademicWork($item);
         }
         $labels = [];
+        $namedMemberships = [];
         $issues = [];
         $reuse = $requirements["definition"]["policies"]["group_reuse"] ?? null;
         $sharing = is_string($reuse) ? CourseGroupReuse::tryFrom($reuse) : null;
@@ -61,6 +62,13 @@ final readonly class GroupAllocationEvaluator
         foreach ($requirements["group_details"] as $id => $group) {
             $d = $group["definition"];
             $e = $effective["groups"][$id];
+            foreach ($d['rules'] as $rule) {
+                if (!isset($rule['eligibility'])) {
+                    foreach ($rule['course_ids'] as $course) {
+                        $namedMemberships[$id][$course][] = $rule['id'];
+                    }
+                }
+            }
             if (($e["min_gpa_milli"] ?? ($d["min_gpa_milli"] ?? 0)) > 0) {
                 $issues["group_average_gpa_unsupported"] = true;
             }
@@ -105,10 +113,9 @@ final readonly class GroupAllocationEvaluator
             ];
             $label = $labels[$id] ?? throw new CorruptHistoryException();
             $label['courses'] = $group['course_details'];
-            $byId = array_column($group['definition']['rules'], null, 'id');
             foreach ($label['rules'] as &$rule) {
                 if (isset($rule['eligibility'])) {
-                    $rule['course_ids'] = $byId[$rule['id']]['course_ids'];
+                    $rule['course_ids'] = $requirements['rule_course_ids'][$id][$rule['id']];
                 }
             }
             unset($rule);
@@ -121,6 +128,7 @@ final readonly class GroupAllocationEvaluator
         $records = [];
         $pairs = [];
         $candidates = [];
+        $candidateMemberships = [];
         $items = $this->matches->allocation($work, $requirements, $effective);
         foreach ($items as $item) {
             $id = $item["id"];
@@ -155,22 +163,31 @@ final readonly class GroupAllocationEvaluator
                     continue;
                 }
                 $key = $item["course_id"] . ":" . $match["group_id"] . ":" . $match["required_course_id"];
+                if (isset($requirements['rule_memberships'][$match['group_id']])) {
+                    $memberships = array_merge(
+                        $namedMemberships[$match['group_id']][$match['required_course_id']] ?? [],
+                        $requirements['rule_memberships'][$match['group_id']][$id]
+                            ?? throw new CorruptHistoryException(),
+                    );
+                    sort($memberships, SORT_STRING);
+                    $candidateMemberships[$key][$id] = $memberships;
+                }
                 $pairs[$key] = $match + ["actual_course_id" => $item["course_id"]];
                 $candidates[$key][] = PolicyAttempt::fromAcademicWork($item);
             }
         }
         $evidence = [];
         $evidenceCount = 0;
+        $contributionCount = 0;
         foreach ($candidates as $key => $attempts) {
             $pair = $pairs[$key];
-            $memberships = ($pair['dynamic_target'] ?? false)
-            ? $requirements['dynamic_rule_memberships'][$pair['group_id']][$pair['actual_course_id']]
-            : null;
+            $memberships = $candidateMemberships[$key] ?? null;
             $selected = [];
             foreach ($this->pools($attempts, $policy, $memberships) as $pool) {
                 $options = $pool['options'];
                 $evidenceCount += array_sum(array_map(count(...), $options));
-                if ($evidenceCount > 20000) {
+                $contributionCount += count($pool['rule_credits_milli'] ?? []);
+                if ($evidenceCount > 20000 || $contributionCount > 20000) {
                     throw new AllocationBudgetExhaustedException();
                 }
                 $course = $pair['actual_course_id'];

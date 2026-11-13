@@ -321,7 +321,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertContains("repeat_not_selected", $result["records"][0]["statuses"]);
     }
 
-    public function testSubstitutionOverlapNeedsReviewInsteadOfAnInventedFailureOrDoubleUse(): void
+    public function testSubstitutionAndSavedRuleShareOnePlacementAndOneActualAward(): void
     {
         $g = $this->ruleGroup(1);
         $named = $this->group(1, [2]);
@@ -341,9 +341,148 @@ final class GroupAllocationEvaluatorTest extends TestCase
         ];
         $work = [$this->work(10)];
         $result = $this->evaluator()->evaluate($work, $r, $effective, $this->decisions($work, $r));
-        self::assertSame("needs_review", $result["outcome"]);
-        self::assertContains("rule_substitution_overlap", $result["issues"]);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame([], $result["issues"]);
+        self::assertCount(1, $result["groups"][0]["placements"]);
+        $p = $result["groups"][0]["placements"][0];
+        self::assertSame(self::id(1), $p["course_id"]);
+        self::assertSame(self::id(2), $p["target_course_id"]);
+        self::assertTrue($p["via_substitution"]);
+        self::assertSame(3000, $p["credits_milli"]);
+        self::assertSame([self::id(301) => 3000, self::id(399) => 3000], $p["rule_credits_milli"]);
+        self::assertSame([self::id(1)], $result["groups"][0]["rules"][0]["course_ids"]);
+        self::assertSame([self::id(1)], $result["groups"][0]["gaps"]["rules"][0]["eligible_course_ids"]);
+    }
+
+    private function substitutionRuleInputs(array $namedCourses = [2]): array
+    {
+        $g = $this->ruleGroup(1);
+        $named = $this->group(1, $namedCourses);
+        $g["definition"]["courses"] = $named["definition"]["courses"];
+        $g["course_details"] = $named["course_details"];
+        $g["definition"]["rules"][] = [
+            "id" => self::id(399),
+            "mode" => "all",
+            "minimum_courses" => count($namedCourses),
+            "course_ids" => array_map(self::id(...), $namedCourses),
+        ];
+        $r = $this->requirements([self::id(1) => $g]);
+        $e = $this->effective($r);
+        foreach ($namedCourses as $course) {
+            $e["substitutions"][self::id($course)] = [
+                "course_id" => self::id(1),
+                "version_id" => self::id(101),
+            ];
+        }
+        return [$r, $e];
+    }
+
+    public function testCombinedSubstitutionDoesNotCreateASecondCourseOrDoubleGroupCredits(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs();
+        $work = [$this->work(10)];
+        $e["groups"][self::id(1)]["min_credits_milli"] = 6000;
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(3000, $result["groups"][0]["gaps"]["credit_shortfall_milli"]);
+        $e["groups"][self::id(1)]["min_credits_milli"] = 3000;
+        $rule = &$r["group_details"][self::id(1)]["definition"]["rules"][0];
+        $rule["mode"] = "choose";
+        $rule["minimum_courses"] = 2;
+        unset($rule["minimum_credits_milli"]);
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        $gap = $result["groups"][0]["gaps"]["rules"][0];
+        self::assertSame(1, $gap["course_upper_bound"]);
+        self::assertSame(1, $gap["shortfall_courses"]);
+        self::assertSame([self::id(1)], $gap["eligible_course_ids"]);
         self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testOriginalCourseCannotBorrowItsSubstitutesSavedRuleMatch(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs();
+        $work = [$this->work(10), $this->work(11, course: 2)];
+        $e["groups"][self::id(1)]["min_credits_milli"] = 6000;
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $e,
+            $this->decisions($work, $r, ["matches", "does_not_match"]),
+        );
+        self::assertSame("feasible", $result["outcome"]);
+        $placements = $result["groups"][0]["placements"];
+        self::assertCount(2, $placements);
+        $original = array_values(array_filter($placements, fn($p) => $p["course_id"] === self::id(2)))[0];
+        self::assertSame([self::id(399) => 3000], $original["rule_credits_milli"]);
+        self::assertFalse($original["via_substitution"]);
+        $matching = array_values(array_filter($placements, fn($p) => $p["course_id"] === self::id(1)))[0];
+        self::assertSame([self::id(301) => 3000], $matching["rule_credits_milli"]);
+        self::assertSame(self::id(1), $matching["target_course_id"]);
+    }
+
+    public function testOneSubstituteCannotFillTwoDifferentNamedRequirements(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs([2, 3]);
+        $work = [$this->work(10)];
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        $gap = $result["groups"][0]["gaps"]["rules"][1];
+        self::assertSame(2, $gap["eligible_target_count"]);
+        self::assertSame(1, $gap["course_upper_bound"]);
+        self::assertSame(1, $gap["shortfall_courses"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testSavedRuleCannotSupplyAnUnapprovedReplacementOrIgnoreItsExactPublication(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs();
+        $work = [$this->work(10)];
+        $e["substitutions"] = [];
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        [$r, $e] = $this->substitutionRuleInputs();
+        $work[0]["course_version_id"] = self::id(500);
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("course_version_differs", $result["issues"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testWaiverRemovesTheNamedObligationWhileRuleWorkSuppliesOnlyActualCredits(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs();
+        $work = [$this->work(10)];
+        $e["waived_course_ids"] = [self::id(2)];
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("feasible", $result["outcome"]);
+        $p = $result["groups"][0]["placements"][0];
+        self::assertFalse($p["via_substitution"]);
+        self::assertSame(self::id(1), $p["target_course_id"]);
+        self::assertSame([self::id(301) => 3000], $p["rule_credits_milli"]);
+        self::assertSame(0, $result["groups"][0]["gaps"]["rules"][1]["required_courses"]);
+    }
+
+    public function testCombinedNamedAndRulePlacementStillRespectsSharingAndGradeFloors(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs();
+        $work = [$this->work(10, points: 1000)];
+        $r["group_details"][self::id(1)]["definition"]["min_course_grade_points_milli"] = 2000;
+        $e["groups"][self::id(1)]["min_course_grade_points_milli"] = 2000;
+        $low = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("infeasible", $low["outcome"]);
+        self::assertSame(3000, $low["groups"][0]["gaps"]["credit_shortfall_milli"]);
+        $work = [$this->work(10)];
+        $r["group_details"][self::id(2)] = $this->ruleGroup(2);
+        $e["groups"][self::id(2)] = $this->effective($r)["groups"][self::id(2)];
+        $one = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("infeasible", $one["outcome"]);
+        $r["definition"]["policies"]["group_reuse"] = "multiple_groups";
+        $many = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+        self::assertSame("feasible", $many["outcome"]);
+        self::assertTrue($many["groups"][0]["placements"][0]["via_substitution"]);
+        self::assertCount(1, $many["groups"][0]["placements"]);
+        self::assertCount(1, $many["groups"][1]["placements"]);
     }
 
     public function testMissingOrDuplicateCapturedRuleDecisionsCannotBecomeAnEmptyEligibleUniverse(): void

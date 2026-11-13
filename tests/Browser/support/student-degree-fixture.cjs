@@ -308,6 +308,9 @@ async function fixture(page, options = {}) {
                       id: rule.id,
                       required_courses: rule.mode === "all" ? 2 : rule.mode === "choose" ? 2 : 0,
                       eligible_target_count: eligible.length,
+                      course_upper_bound: eligible.length,
+                      eligible_target_ids: eligible,
+                      eligible_course_ids: eligible,
                       shortfall_courses: rule.mode === "pool" ? 0 : Math.max(0, 2 - eligible.length),
                       ...(rule.mode === "credits"
                           ? {
@@ -417,6 +420,31 @@ async function fixture(page, options = {}) {
                 ],
                 more_conflicts: !!options.competitionMore,
             };
+        }
+        if (options.allocationRuleSubstitution) {
+            const actual=id(300), target=id(200), named=id(99), dynamic=id(98);
+            const g=result.groups[0];
+            result.current_record_count=1;
+            result.records=result.records.slice(0,1).map(r=>({...r,course_code:"SCI.201",uses:[{group_id:group,alternative:false}]}));
+            g.required_credits_milli=3000;g.waived_courses=[];
+            g.courses={
+                [target]:{code:"REQ.0",title:"Retained requirement <b>fictional</b>"},
+                [actual]:{code:"SCI.201",title:"Accepted Science <b>fictional</b>"},
+            };
+            g.rules=[{id:named,mode:"all",minimum_courses:1,course_ids:[target]},
+                {id:dynamic,mode:"credits",minimum_courses:0,minimum_credits_milli:3000,course_ids:[actual],
+                    eligibility:{id:id(700),rule_id:id(700),revision:1,code:"DA.SCI",title:"Fictional elective rule",
+                        definition:{tree:{condition:"AND",rules:[{id:"course_level_number",operator:"greater",value:100}]},references:{}}}}];
+            g.placements=[{course_id:actual,course_code:"SCI.201",course_title:"Accepted Science <b>fictional</b>",
+                target_course_id:target,target_code:"REQ.0",target_title:"Retained requirement <b>fictional</b>",
+                via_substitution:true,credits_milli:3000,work_options:[[id(100)]],rule_credits_milli:{[named]:3000,[dynamic]:3000}}];
+            g.gaps={has_shortfall:false,credit_upper_bound_milli:3000,credit_shortfall_milli:0,
+                course_upper_bound:1,course_shortfall:0,eligible_target_ids:[target,actual],
+                rules:[{id:named,required_courses:1,eligible_target_count:1,course_upper_bound:1,
+                    shortfall_courses:0,eligible_target_ids:[target],eligible_course_ids:[actual]},
+                    {id:dynamic,required_courses:0,eligible_target_count:2,course_upper_bound:1,
+                        shortfall_courses:0,eligible_target_ids:[target,actual],eligible_course_ids:[actual],
+                        required_credits_milli:3000,credit_upper_bound_milli:3000,credit_shortfall_milli:0}]};
         }
         return result;
     }

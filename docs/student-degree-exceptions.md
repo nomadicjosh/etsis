@@ -57,6 +57,8 @@ Choose **Course substitution**, select the original required course, then search
 
 The substitution applies wherever the original is required within this one pursuit, bound to the degree publication reviewed. Another pursuit or another selected degree publication needs its own approval. It creates no completed attempt, earned credits, GPA points or charges. Actual earned work and the retained grading policy remain evaluator inputs.
 
+In the selected student's placement review, a substitute can also contribute to a saved-rule card when its own retained course facts satisfy that rule. One combined placement counts its credits and course identity once in the group. The original target does not inherit the replacement's rule match, and one actual course cannot fill two different named targets. Revocation removes the alternative from subsequent verified reviews; it changes no course award or earlier approval. [Placement details and limits](degree-audit-builder.md#place-matching-awards-in-course-groups) explain the shared calculation.
+
 Approvals reject self-replacements, chains/cycles and active waivers overlapping either endpoint. If selecting an older degree publication later exposes a conflict, the read remains usable: the screen identifies the conflict, omits ambiguous substitutions from the effective map and allows reasoned revocation. It never invents an allocation or silently chooses an approval. Revocation retains the original decision. Authorized student readers can inspect substitutions; office authority is required for replacement searches and approval/revocation.
 
 ## Course placement preferences

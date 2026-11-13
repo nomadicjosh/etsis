@@ -79,6 +79,7 @@ final class StudentDegreeProgressTest extends TestCase
                                 "target_title" => "Algebra",
                                 "via_substitution" => false,
                                 "work_options" => [[$secret]],
+                                "rule_credits_milli" => [$secret => 3000],
                             ],
                         ],
                     ],
@@ -108,6 +109,7 @@ final class StudentDegreeProgressTest extends TestCase
         $view = new StudentDegreeProgress($this->review());
         $data = $view->describe();
         self::assertStringNotContainsString("fictional-staff-only-detail", json_encode($data));
+        self::assertStringNotContainsString("rule_credits_milli", json_encode($data));
         self::assertNull($data["minimums"][0]["actual_minimum_milli"]);
         self::assertNull($data["gpa"]["cumulative"]["milli"]);
         self::assertSame(0, $data["gpa"]["cumulative"]["credits_milli"]);

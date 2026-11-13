@@ -140,6 +140,123 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame($before, $f->f->digest("sis_history_events"));
     }
 
+    public function testPublishedSubstitutionAndRuleUseTheSameAwardWithoutAnyReadSideWrites(): void
+    {
+        $f = $this->institution();
+        $this->work($f, 3);
+        $s = $f->f->sis;
+        $required = $f->f->groupDefinition["courses"][4];
+        $replacement = $f->f->groupDefinition["courses"][3];
+        $rules = new CourseRuleService(
+            new SqlCourseRuleRepository($s->sql),
+            new PublishedCourseReader($f->f->history),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $s->clock,
+        );
+        $snapshot = $rules->save(null, null, "DA.FICTIONAL.SUBSTITUTE", "Fictional elective eligibility", [
+            "condition" => "AND",
+            "rules" => [["id" => "course_id", "operator" => "equal", "value" => $replacement["course_id"]]],
+        ]);
+        $group = EntityId::generate();
+        $named = EntityId::generate();
+        $dynamic = EntityId::generate();
+        $d = CourseGroupDefinitionV2::blank("Fictional substitution and elective")->definition;
+        $d["min_credits_milli"] = 3000;
+        $d["courses"] = [$required];
+        $d["rules"] = [
+            [
+                "id" => $named->value,
+                "mode" => "all",
+                "minimum_courses" => 1,
+                "course_ids" => [$required["course_id"]],
+            ],
+            [
+                "id" => $dynamic->value,
+                "mode" => "credits",
+                "minimum_courses" => 0,
+                "minimum_credits_milli" => 3000,
+                "course_ids" => [],
+                "eligibility" => $snapshot,
+            ],
+        ];
+        $f->f->groups->create($group, new CourseGroupDefinitionV2($d));
+        $review = $f->f->groups->review($group, "Fictional combined requirements");
+        $version = $f->f->groups->publish($group, $review["review_token"])["operation_id"];
+        $degree = $f->f->definition;
+        $degree["groups"] = [["group_id" => $group->value, "version_id" => $version]];
+        $degree["min_credits_milli"] = 3000;
+        $degree["min_resident_milli"] = 0;
+        $row = $f->f->degrees->view($f->f->degree);
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($degree));
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        $state = function () use ($f, $s): array {
+            $hashes = [];
+            $tables = [
+                "sis_history_events",
+                "sis_history_streams",
+                "sis_history_operations",
+                "sis_audit",
+                "sis_requirement_adjustments",
+                "sis_student_requirements",
+                "sis_academic_credits",
+            ];
+            foreach ($tables as $table) {
+                $hashes[$table] = $f->f->digest($table);
+            }
+            $hashes["finance"] = hash("sha256", json_encode($s->financialEvents(), JSON_THROW_ON_ERROR));
+            return $hashes;
+        };
+        $service = $this->service($f);
+        $before = $state();
+        self::assertSame("infeasible", $service->preview($f->student, $f->assignment)["outcome"]);
+        self::assertSame($before, $state());
+        $approvals = $this->adjustments($f);
+        $review = $approvals->reviewGrant(
+            $f->student,
+            $f->assignment,
+            [
+                "kind" => "substitution",
+                "course_id" => $required["course_id"],
+                "replacement_course_id" => $replacement["course_id"],
+                "replacement_version_id" => $replacement["version_id"],
+            ],
+            "Fictional registrar alternative",
+        );
+        $approvals->commit($f->student, $f->assignment, $review["review_token"]);
+        $before = $state();
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertCount(1, $result["groups"][0]["placements"]);
+        $p = $result["groups"][0]["placements"][0];
+        self::assertSame($replacement["course_id"], $p["course_id"]);
+        self::assertSame($required["course_id"], $p["target_course_id"]);
+        self::assertSame(3000, $p["credits_milli"]);
+        self::assertTrue($p["via_substitution"]);
+        $contributions = [$named->value => 3000, $dynamic->value => 3000];
+        ksort($contributions, SORT_STRING);
+        self::assertSame($contributions, $p["rule_credits_milli"]);
+        self::assertSame([$replacement["course_id"]], $result["groups"][0]["rules"][1]["course_ids"]);
+        self::assertSame(
+            [$replacement["course_id"]],
+            $result["groups"][0]["gaps"]["rules"][1]["eligible_course_ids"],
+        );
+        self::assertSame($result, $service->preview($f->student, $f->assignment));
+        self::assertSame($before, $state());
+        $revoke = $approvals->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]),
+            "Fictional registrar revocation",
+        );
+        $approvals->commit($f->student, $f->assignment, $revoke["review_token"]);
+        $before = $state();
+        self::assertSame("infeasible", $service->preview($f->student, $f->assignment)["outcome"]);
+        self::assertSame($before, $state());
+    }
+
     private function institution(): StudentRequirementsFixture
     {
         $f = new StudentRequirementsFixture();

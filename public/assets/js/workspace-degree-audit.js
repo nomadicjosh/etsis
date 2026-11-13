@@ -2257,8 +2257,6 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "Some potentially usable work lacks the retained course facts needed by a saved rule. No complete placement is shown.",
             rule_publication_conflict:
                 "A named requirement and a saved rule use incompatible course publications for the same course. Review the retained definitions.",
-            rule_substitution_overlap:
-                "A course is both an approved substitute for a named requirement and a saved-rule match. Their combined placement needs review.",
         };
         return node(
             "div",
@@ -3154,7 +3152,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node(
                         "p",
                         {},
-                        `Required course contributions: ${gap.required_courses} · ${rule.mode === "all" ? "Required courses" : "Listed options"} with eligible evidence: ${gap.eligible_target_count}.${gap.shortfall_courses > 0 ? ` At least ${gap.shortfall_courses} more listed course requirement${gap.shortfall_courses === 1 ? " needs" : "s need"} eligible evidence.` : " Eligible choices may still compete for the same actual course or another group."}`,
+                        `Required course contributions: ${gap.required_courses} · ${rule.mode === "all" ? "Required courses" : "Listed options"} with eligible evidence: ${rule.eligibility ? gap.eligible_course_ids.length : gap.eligible_target_count}. At most ${gap.course_upper_bound} distinct eligible course contributions can be used.${gap.shortfall_courses > 0 ? ` At least ${gap.shortfall_courses} more distinct eligible course contribution${gap.shortfall_courses === 1 ? " is" : "s are"} needed.` : " Eligible choices may still compete for the same actual course or another group."}`,
                     ),
                 );
             let loaded = false;
@@ -3164,15 +3162,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 const list = node("ul", {});
                 for (const id of rule.course_ids) {
                     const course = group.courses[id];
-                    const waived = group.waived_courses.includes(id);
+                    const waived = !rule.eligibility && group.waived_courses.includes(id);
                     const placed =
                         data.outcome === "feasible" &&
                         group.placements.some(
                             (p) =>
-                                p.target_course_id === id &&
+                                (rule.eligibility ? p.course_id : p.target_course_id) === id &&
                                 (!p.rule_credits_milli || Object.hasOwn(p.rule_credits_milli, rule.id)),
                         );
-                    const eligible = (gap?.eligible_target_ids || group.gaps?.eligible_target_ids || []).includes(id);
+                    const eligible = (rule.eligibility ? gap?.eligible_course_ids : gap?.eligible_target_ids)?.includes(id);
                     list.append(
                         node(
                             "li",
@@ -3227,13 +3225,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     for (const [id, credits] of Object.entries(p.rule_credits_milli)) {
                         const rule = group.rules.find((r) => r.id === id);
                         if (!rule) continue;
-                        list.append(
-                            node(
-                                "li",
-                                {},
-                                `${rule.eligibility ? `${rule.eligibility.code} · Revision ${rule.eligibility.revision}` : "Named requirement"}: ${text(credits)} eligible credits · One distinct course`,
-                            ),
-                        );
+                        const label = rule.eligibility
+                            ? `${rule.eligibility.code} · Revision ${rule.eligibility.revision}`
+                            : `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} listed courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} listed credits` : "Eligible listed course pool"} · ${p.target_code}`;
+                        list.append(node("li", {}, `${label}: ${text(credits)} eligible credits · One distinct course`));
                     }
                     contributions.append(list);
                 });
@@ -3261,6 +3256,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         body.append(pages);
     }
+
     const calculationReasons = window.degreeProgressCalculationReasons;
     const calculationIssues = {
         policy_unknown: "A required calculation policy was not recorded.",

@@ -144,6 +144,7 @@ final readonly class CourseMatchEvaluator
                 if (
                     isset($effective["substitutions"][$id]) &&
                     !$candidate["waived"] &&
+                    !($candidate['dynamic_target'] ?? false) &&
                     !$candidate["approval_conflict"]
                 ) {
                     $replacement = $effective["substitutions"][$id];

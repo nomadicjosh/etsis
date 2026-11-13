@@ -64,6 +64,7 @@ final readonly class AllocationGapAnalyzer
                     $actualListed[$course] = max($actualListed[$course] ?? 0, $amount);
                 }
                 ksort($ruleTargets, SORT_STRING);
+                ksort($actualListed, SORT_STRING);
                 $required = $rule["mode"] === "choose" ? $rule["minimum_courses"] : 0;
                 $available = 0;
                 foreach ($rule["course_ids"] as $target) {
@@ -77,14 +78,17 @@ final readonly class AllocationGapAnalyzer
                         $available++;
                     }
                 }
-                $missing = max(0, $required - $available);
+                $courseUpper = min($available, count($actualListed));
+                $missing = max(0, $required - $courseUpper);
                 $shortfall = $shortfall || $missing > 0;
                 $report = [
                     "id" => $rule["id"],
                     "required_courses" => $required,
                     "eligible_target_count" => $available,
+                    "course_upper_bound" => $courseUpper,
                     "shortfall_courses" => $missing,
                     "eligible_target_ids" => array_keys($ruleTargets),
+                    "eligible_course_ids" => array_keys($actualListed),
                 ];
                 if ($rule["mode"] === "credits") {
                     $requiredCredits = $rule["minimum_credits_milli"] ??

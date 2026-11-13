@@ -52,8 +52,12 @@ final readonly class RuleAllocationCompiler
             $named = array_column($group['definition']['courses'], 'version_id', 'course_id');
             $substitutes = [];
             foreach ($effective['substitutions'] as $target => $replacement) {
-                if (isset($named[$target]) && $target !== $replacement['course_id']) {
-                    $substitutes[$replacement['course_id']] = true;
+                if (
+                    isset($named[$target]) && $target !== $replacement['course_id'] &&
+                    !in_array($target, $effective['waived_course_ids'], true) &&
+                    !isset($effective['substitution_conflicts'][$target])
+                ) {
+                    $substitutes[$replacement['course_id']][$target] = true;
                 }
             }
             $courses = [];
@@ -101,6 +105,8 @@ final readonly class RuleAllocationCompiler
                         $targets[$rule['id']][$courseId] = true;
                     }
                 }
+                sort($membership, SORT_STRING);
+                $requirements['rule_memberships'][$groupId][$item['id']] = $membership;
                 if ($membership === []) {
                     continue;
                 }
@@ -122,17 +128,12 @@ final readonly class RuleAllocationCompiler
                 if (!isset($named[$courseId])) {
                     $requirements['dynamic_versions'][$groupId][$courseId][$item['course_version_id']] = true;
                     $requirements['dynamic_work_ids'][$groupId][$courseId][$item['id']] = true;
-                    sort($membership, SORT_STRING);
-                    $requirements['dynamic_rule_memberships'][$groupId][$courseId][$item['id']] = $membership;
                 }
                 if ($status !== CourseMatchStatus::Candidate) {
                     continue;
                 }
                 if (isset($named[$courseId]) && $named[$courseId] !== $item['course_version_id']) {
                     $issues['rule_publication_conflict'] = true;
-                }
-                if (isset($substitutes[$courseId])) {
-                    $issues['rule_substitution_overlap'] = true;
                 }
             }
             if (count($named + $courses) > 200) {
@@ -150,7 +151,16 @@ final readonly class RuleAllocationCompiler
             }
             foreach ($group['definition']['rules'] as &$rule) {
                 if (isset($rule['eligibility'])) {
-                    $rule['course_ids'] = array_keys($targets[$rule['id']] ?? []);
+                    $actual = array_keys($targets[$rule['id']] ?? []);
+                    sort($actual, SORT_STRING);
+                    $requirements['rule_course_ids'][$groupId][$rule['id']] = $actual;
+                    $eligibleTargets = $targets[$rule['id']] ?? [];
+                    // A matching replacement can contribute while occupying its approved named slot.
+                    // Display lists retain actual courses; each choice still carries its own card memberships.
+                    foreach ($actual as $course) {
+                        $eligibleTargets += $substitutes[$course] ?? [];
+                    }
+                    $rule['course_ids'] = array_keys($eligibleTargets);
                     sort($rule['course_ids'], SORT_STRING);
                     unset($rule['eligibility']);
                 }

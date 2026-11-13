@@ -176,7 +176,7 @@ test("group shortages explain named and choose evidence without assigning missin
     await expect(all).toContainText(
         "Required course contributions: 2 · Required courses with eligible evidence: 1",
     );
-    await expect(all).toContainText("At least 1 more listed course requirement needs eligible evidence");
+    await expect(all).toContainText("At least 1 more distinct eligible course contribution is needed");
     await expect(all).toContainText(
         "REQ.1 · Retained requirement <b>fictional</b> · Eligible completed evidence available",
     );
@@ -277,3 +277,30 @@ for (const settings of [
         ).toHaveCount(0);
     });
 }
+
+test("an approved substitute supports named and saved-rule cards with one course and its own labels", async ({page}) => {
+    const f=await fixture(page,{assigned:true,readOnly:true,allocationRuleSubstitution:true});
+    await page.getByRole("button",{name:"Review course placement",exact:true}).click();
+    const studio=page.locator("dialog.degree-audit-studio");
+    await studio.getByRole("button",{name:"Inspect group General education <b>fictional</b>",exact:true}).click();
+    await expect(studio).toContainText("3 actual earned credits · One distinct course");
+    await expect(studio).toContainText("Approved alternative for REQ.0");
+    const named=studio.locator("details").filter({has:page.locator("summary").filter({hasText:"All listed courses"})});
+    await named.locator("summary").click();
+    await expect(named).toContainText("REQ.0 · Retained requirement <b>fictional</b> · Proposed placement");
+    const rule=studio.locator("details").filter({has:page.locator("summary").filter({hasText:"Take 3 matching credits"})});
+    await rule.locator("summary").click();
+    await expect(rule).toContainText("SCI.201 · Accepted Science <b>fictional</b> · Proposed placement");
+    await expect(rule).not.toContainText("REQ.0");
+    await studio.getByText("Requirement contributions",{exact:true}).click();
+    await expect(studio).toContainText("All listed courses · REQ.0: 3 eligible credits · One distinct course");
+    await expect(studio).toContainText("DA.SCI · Revision 1: 3 eligible credits · One distinct course");
+    await expect(studio.locator("b")).toHaveCount(0);
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(f.calls.filter(c=>c.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.calls.some(c=>/\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
