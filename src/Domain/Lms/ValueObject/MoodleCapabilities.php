@@ -15,6 +15,7 @@ final readonly class MoodleCapabilities
         "local_etsis_get_account_receipt",
         "local_etsis_get_roster_policy",
         "local_etsis_sync_roster_member",
+        "local_etsis_provision_course",
         "core_user_get_users_by_field",
         "core_course_get_courses_by_field",
         "core_course_create_courses",

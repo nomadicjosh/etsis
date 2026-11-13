@@ -28,7 +28,7 @@ interface MoodleSectionRepository
     public function claim(EntityId $binding, int $now): ?array;
     public function candidate(EntityId $section, EntityId $link, ?EntityId $after): ?EntityId;
     /** Reverify academic facts under local locks; never writes academic projections.
-     * @return array{student:bool,instructor:bool,enrollment_id:?string,hash:string,issue:string} */
+     * @return array{account_eligible:bool,student:bool,instructor:bool,enrollment_id:?string,hash:string,issue:string} */
     public function desired(EntityId $section, EntityId $link, EntityId $person): array;
     /** Retain a person/enrollment reference before any external effect, including an uncertain one. */
     public function remember(EntityId $link, EntityId $person, ?string $enrollment): void;

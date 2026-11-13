@@ -6,7 +6,7 @@ namespace Application\Console\Commands;
 
 use Codefy\Framework\Application;
 use Codefy\Framework\Console\ConsoleCommand;
-use Domain\Lms\Service\MoodleSectionSyncService;
+use Domain\Lms\Service\MoodleSynchronizationService;
 use Symfony\Component\Console\Input\InputOption;
 
 final class MoodleSyncCommand extends ConsoleCommand
@@ -24,7 +24,7 @@ final class MoodleSyncCommand extends ConsoleCommand
             "limit",
             null,
             InputOption::VALUE_REQUIRED,
-            "Maximum membership steps (1–20).",
+            "Maximum synchronization steps (1–20).",
             "10",
         );
     }
@@ -38,9 +38,9 @@ final class MoodleSyncCommand extends ConsoleCommand
         $counts = [];
         $deadline = microtime(true) + 30;
         try {
-            $service = $this->codefy->make(MoodleSectionSyncService::class);
+            $service = $this->codefy->make(MoodleSynchronizationService::class);
             for ($i = 0; $i < (int) $raw && microtime(true) < $deadline; $i++) {
-                $status = $service->runOne();
+                $status = $service->runOne($i);
                 $counts[$status] = ($counts[$status] ?? 0) + 1;
                 if (in_array($status, ["disabled", "idle", "review_required"], true)) {
                     break;

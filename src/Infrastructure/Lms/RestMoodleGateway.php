@@ -148,6 +148,51 @@ final readonly class RestMoodleGateway implements Probe, Reader, Identity, Bound
             throw new MoodleConnectionUnavailableException();
         }
     }
+    public function provisionCourse(
+        MoodleBinding $binding,
+        EntityId $operation,
+        array $course,
+    ): \Domain\Lms\ValueObject\MoodleExternalId {
+        try {
+            if ($this->config->getConfigKey("moodle.course_creation_enabled", false) !== true) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $settings = $this->settings();
+            $deadline = microtime(true) + 15;
+            $this->handshake($settings, $deadline);
+            if (!hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value))) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $this->assertCurrent($settings);
+            if ($this->config->getConfigKey("moodle.course_creation_enabled", false) !== true) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $result = $this->request(
+                $settings,
+                "local_etsis_provision_course",
+                [
+                    "instance_hash" => $binding->instanceFingerprint,
+                    "operation" => $operation->value,
+                    "payload" => json_encode($course, JSON_THROW_ON_ERROR),
+                ],
+                $deadline,
+            );
+            $this->assertCurrent($settings);
+            if (
+                $this->config->getConfigKey("moodle.course_creation_enabled", false) !== true ||
+                count($result) !== 4 ||
+                ($result["protocol"] ?? null) !== 1 ||
+                ($result["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                ($result["operation"] ?? null) !== $operation->value ||
+                !is_string($result["course_id"] ?? null)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return new \Domain\Lms\ValueObject\MoodleExternalId($result["course_id"]);
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
     public function rosterPolicy(MoodleBinding $binding): array
     {
         try {

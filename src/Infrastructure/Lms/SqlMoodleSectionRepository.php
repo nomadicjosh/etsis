@@ -235,8 +235,10 @@ final readonly class SqlMoodleSectionRepository implements MoodleSectionReposito
             $teacher = $d["faculty_person_id"] === $person->value && $owner?->value === $d["faculty_user_id"];
             $facultyRole = $owner !== null && $this->role($owner, "faculty");
             $issue = $teacher && !$facultyRole ? "faculty_role_required" : "none";
-            $instructor = $within && $teacher && $facultyRole;
+            $notEnded = $today->format("Y-m-d") <= $end->format("Y-m-d");
+            $instructor = $s->active && $notEnded && $teacher && $facultyRole;
             $isStudent = false;
+            $eligibleStudent = false;
             $enrollmentId = null;
             $activityVersion = null;
             $facts = null;
@@ -268,18 +270,21 @@ final readonly class SqlMoodleSectionRepository implements MoodleSectionReposito
                     ) {
                         throw new CorruptHistoryException();
                     }
-                    $isStudent =
-                        $within &&
+                    $eligibleStudent =
+                        $s->active &&
+                        $notEnded &&
                         $active &&
                         $student->active &&
                         $owner !== null &&
                         $this->role($owner, "student");
+                    $isStudent = $within && $eligibleStudent;
                     if ($active && $student->active && !$isStudent && $within) {
                         $issue = "student_setup_required";
                     }
                 }
             }
             return [
+                "account_eligible" => $eligibleStudent || $instructor,
                 "student" => $isStudent,
                 "instructor" => $instructor,
                 "enrollment_id" => $enrollmentId,
@@ -292,6 +297,7 @@ final readonly class SqlMoodleSectionRepository implements MoodleSectionReposito
                             $owner?->value,
                             $within,
                             $isStudent,
+                            $eligibleStudent,
                             $instructor,
                             $facts,
                             $activityVersion,
@@ -339,10 +345,20 @@ final readonly class SqlMoodleSectionRepository implements MoodleSectionReposito
     public function issues(EntityId $link): int
     {
         $q = $this->sql->quote(...);
-        $row = $this->sql->fetch('SELECT COUNT(*) AS ' . $q('pending') . ' FROM ' .
-            $q('sis_moodle_section_members') . ' WHERE ' . $q('link_id') . ' = ? AND ' .
-            $q('issue_code') . ' <> ?', [$link->value, 'none'], 1)[0];
-        return (int) $row['pending'];
+        $row = $this->sql->fetch(
+            "SELECT COUNT(*) AS " .
+                $q("pending") .
+                " FROM " .
+                $q("sis_moodle_section_members") .
+                " WHERE " .
+                $q("link_id") .
+                " = ? AND " .
+                $q("issue_code") .
+                " <> ?",
+            [$link->value, "none"],
+            1,
+        )[0];
+        return (int) $row["pending"];
     }
     public function memberResult(EntityId $link, EntityId $person, string $hash, string $issue): void
     {

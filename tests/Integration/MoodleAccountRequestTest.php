@@ -160,6 +160,14 @@ final class MoodleAccountRequestTest extends TestCase
             $this->f->transactions,
             $audit ?? $this->f->audit,
             $this->f->clock,
+            new \Domain\Lms\Service\MoodleAutomaticAccountService(
+                $this->createStub(\Domain\Lms\Service\MoodleAutomationPolicy::class), $this->policy,
+                $this->requests, $this->defaults, $this->bindings, $this->links,
+                $this->createStub(\Domain\Lms\Repository\MoodleSectionRepository::class),
+                $this->f->admissions, new SqlAccessRepository($this->f->sql), $remote,
+                new \Domain\Lms\Service\MoodleAccountProfile($this->defaults), $this->f->dropCipher,
+                $this->f->transactions, $this->f->audit, $this->f->clock,
+            ),
         );
     }
     private function permitWorker(): void

@@ -119,7 +119,7 @@ try {
                 throw new RuntimeException('The disabled Moodle provisioning command was not registered.');
             }
             $worker = $app->make(\Domain\Lms\Service\MoodleProvisioningWorker::class);
-            $provision = new \Symfony\Component\Console\Tester\CommandTester(new \Application\Console\Commands\MoodleProvisionCommand($app, $worker));
+            $provision = new \Symfony\Component\Console\Tester\CommandTester(new \Application\Console\Commands\MoodleProvisionCommand($app));
             if ($provision->execute([]) !== 0 || !str_contains($provision->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle worker did not resolve without network or queue access.');
             }

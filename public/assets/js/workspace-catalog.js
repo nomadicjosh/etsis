@@ -1367,6 +1367,12 @@ window.createWorkspaceCatalog = function (ui) {
         let currentDraft = draft;
         const body = openDrawer("Published section details", "ACADEMIC CATALOG");
         body.append(node("p", {}, `Section: ${setup.section.code}`));
+        if (setup.moodle?.linked) body.append(node("p", { role: "status" }, "This section is linked to Moodle. The background worker manages participant access."));
+        else if (setup.moodle?.request_state) {
+            const courseStatus = { queued: "Moodle course creation is queued; select its reviewed publication for registration.", processing: "Moodle course creation is processing or waiting for a retry.",
+                review_required: "Moodle course creation needs review. Check the original request and institutional settings.", completed: "Moodle course creation completed." };
+            body.append(node("p", { role: "status" }, courseStatus[setup.moodle.request_state] || "Review Moodle course setup."));
+        }
         let assistancePanel = null;
         body.append(
             button("Optional section AI help", async () => {
@@ -1507,7 +1513,7 @@ window.createWorkspaceCatalog = function (ui) {
             const form = await buildForm(fields, initial);
             currentDraft = initial;
             form.addEventListener("input", () => {
-                currentDraft = formData(form, fields);
+                currentDraft = { ...formData(form, fields), create_in_moodle: !!form.querySelector("#section-create-moodle")?.checked };
             });
             const reason = form.querySelector('[name="reason"]');
             reason.maxLength = 1000;
@@ -1521,13 +1527,20 @@ window.createWorkspaceCatalog = function (ui) {
             for (const name of ["instruction_starts_on", "instruction_ends_on"]) {
                 form.querySelector(`[name="${name}"]`).setAttribute("aria-describedby", help.id);
             }
+            const createMoodle = node("input", { type: "checkbox", id: "section-create-moodle", class: "form-check-input" });
+            createMoodle.checked = initial.create_in_moodle === true;
+            if (setup.moodle?.available) {
+                form.append(node("div", { class: "form-check my-3" }, createMoodle,
+                    node("label", { for: createMoodle.id, class: "form-check-label" }, "Create this section’s course in Moodle")),
+                    node("p", { class: "form-text" }, "Created in the background after this publication is selected for registration. Eligible instructors and registered students are set up automatically when institutional account provisioning is enabled."));
+            }
             const review = submit("Review section publication");
             form.append(help, review);
             form.addEventListener("submit", (event) => {
                 event.preventDefault();
                 task(async () => {
                     if (!form.reportValidity()) return;
-                    const values = formData(form, fields);
+                    const values = { ...formData(form, fields), create_in_moodle: !!setup.moodle?.available && createMoodle.checked };
                     const reviewed = await request(
                         `/sis/sections/${section}/publication/review/`,
                         "POST",
@@ -1548,6 +1561,7 @@ window.createWorkspaceCatalog = function (ui) {
                             "Publication takes effect when confirmed. Existing registrations, grades and charges keep their current records.",
                         ),
                     );
+                    if (reviewed.create_in_moodle) target.append(node("p", { class: "alert alert-info" }, "This confirmation also queues creation and linking of the Moodle course. Moodle availability will not delay the SIS publication."));
                     if (
                         reviewed.definition.instruction_starts_on < reviewed.definition.term_starts_on ||
                         reviewed.definition.instruction_ends_on > reviewed.definition.term_ends_on
@@ -1579,6 +1593,7 @@ window.createWorkspaceCatalog = function (ui) {
                                         { role: "status" },
                                         `Version ${result.last_version} is retained with its instructional dates and reviewed offering details.`,
                                     ),
+                                    ...(result.moodle_creation_queued ? [node("p", { role: "status" }, "Moodle course creation is queued. Select this publication for registration to let the background worker create and link the course.")] : []),
                                     reference(result.operation_id),
                                     button(
                                         "View section publications",

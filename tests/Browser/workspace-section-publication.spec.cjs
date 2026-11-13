@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
 
-async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false, aiEnabled = true, aiFailure = false } = {}) {
+async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false, aiEnabled = true, aiFailure = false, moodle = false } = {}) {
   const section = id(1),
     course = id(2),
     term = id(3),
@@ -99,6 +99,7 @@ async function fixture(page, { bound = true, paged = false, unavailable = false,
         has_student_records: false,
         publication_status: unavailable ? "unavailable" : latest ? "ready" : "unpublished",
         faculty_label: "Not assigned",
+        moodle: { available: moodle, linked: false, request_state: null },
       };
     else if (path.endsWith("/publication/page/"))
       result = {
@@ -146,6 +147,7 @@ async function fixture(page, { bound = true, paged = false, unavailable = false,
           instruction_ends_on: data.instruction_ends_on,
         },
         reason: data.reason,
+        create_in_moodle: data.create_in_moodle === true,
         faculty_label: "Not assigned",
         review_token: "fictional-section-publication-proof",
       };
@@ -165,6 +167,7 @@ async function fixture(page, { bound = true, paged = false, unavailable = false,
         first_version: 1,
         last_version: 1,
         event_ids: [id(5)],
+        moodle_creation_queued: reviewed.create_in_moodle === true,
       };
     }
     await route.fulfill({
@@ -426,5 +429,27 @@ test('section assistance works before course binding and remains optional during
   await expect(page.getByText('No suggestion was applied. Another request requires fresh consent.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Choose course definition', exact: true })).toBeVisible();
   expect(f.calls.some(c => c.path.endsWith('/commit/'))).toBe(false);
+  expect(f.errors).toEqual([]);
+});
+
+test('Moodle course creation is an explicit retained publication option and confirmation sends only its proof', async ({ page }) => {
+  const f = await fixture(page, { moodle: true });
+  const choice = page.getByRole('checkbox', { name: 'Create this section’s course in Moodle', exact: true });
+  await expect(choice).not.toBeChecked();
+  await choice.focus(); await page.keyboard.press('Space');
+  await page.getByLabel('Reason for section publication').fill('Publish offering with its learning space.');
+  await page.getByRole('button', { name: 'Review section publication', exact: true }).click();
+  await expect(page.locator('#drawer-body')).toContainText('queues creation and linking of the Moodle course');
+  expect(f.calls.some(call => call.path.endsWith('/commit/'))).toBe(false);
+  await page.getByRole('button', { name: 'Revise section publication', exact: true }).click();
+  await expect(choice).toBeChecked();
+  await page.getByRole('button', { name: 'Review section publication', exact: true }).click();
+  await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+  await page.getByRole('button', { name: 'Publish reviewed section details', exact: true }).click();
+  await expect(page.locator('#drawer-body')).toContainText('Moodle course creation is queued');
+  expect(f.calls.find(call => call.path.endsWith('/publication/review/')).data.create_in_moodle).toBe(true);
+  expect(f.calls.find(call => call.path.endsWith('/publication/commit/')).data).toEqual({ review_token: 'fictional-section-publication-proof' });
+  expect(f.calls.find(call => call.path.endsWith('/publication/commit/')).csrf).toBe('fictional-test-token');
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(f.errors).toEqual([]);
 });

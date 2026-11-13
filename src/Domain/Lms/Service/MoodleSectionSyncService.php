@@ -8,6 +8,7 @@ use Domain\Access\Repository\AccessRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Lms\Repository\MoodleBindingRepository;
+use Domain\Lms\Repository\MoodleCourseRequestRepository;
 use Domain\Lms\Repository\MoodlePersonLinkRepository;
 use Domain\Lms\Repository\MoodleSectionRepository;
 use Domain\Lms\ValueObject\MoodleExternalId;
@@ -35,6 +36,8 @@ final readonly class MoodleSectionSyncService
         private Clock $clock,
         private MessageCipher $cipher,
         private AuditTrail $audit,
+        private MoodleAutomaticAccountService $automatic,
+        private MoodleCourseRequestRepository $courseRequests,
     ) {
     }
     /** @return array<string,mixed> */
@@ -50,7 +53,8 @@ final readonly class MoodleSectionSyncService
                 $items[] = $row + [
                     "moodle_course_id" => $link["moodle_course_id"] ?? null,
                     "issue" => $link["issue_code"] ?? null,
-                    "members_needing_setup" => $link === null ? 0 : $this->sections->issues(new EntityId($link["id"])),
+                    "members_needing_setup" =>
+                        $link === null ? 0 : $this->sections->issues(new EntityId($link["id"])),
                 ];
             }
         }
@@ -94,6 +98,7 @@ final readonly class MoodleSectionSyncService
             }
             return ["linked" => true];
         }
+        $this->requireNoCreationRequest($binding->id, $section);
         $this->audit->record($actor, "moodle.section_link_check_requested", $section);
         // A returned record must be explicitly present, not an unknown/invisible lookup result.
         $record = $this->lookup->inspectBound($binding, MoodleResourceKind::Course, $course);
@@ -130,6 +135,7 @@ final readonly class MoodleSectionSyncService
                 }
                 return ["linked" => true];
             }
+            $this->requireNoCreationRequest($binding->id, $section);
             $at = $this->clock->now()->setTimezone(new \DateTimeZone("UTC"))->format("Y-m-d\TH:i:s\Z");
             $this->sections->add(
                 EntityId::generate(),
@@ -146,6 +152,14 @@ final readonly class MoodleSectionSyncService
             $this->authorize();
             return ["linked" => true];
         });
+    }
+    private function requireNoCreationRequest(EntityId $binding, EntityId $section): void
+    {
+        if ($this->courseRequests->forSection($binding, $section) !== null) {
+            throw new ConcurrentModificationException(
+                'Review this section’s original Moodle creation request before linking a different course.',
+            );
+        }
     }
     private function authorize(): EntityId
     {
@@ -209,8 +223,8 @@ final readonly class MoodleSectionSyncService
             $link = $this->people->forPerson($binding->id, $person);
             $issue = $desired["issue"];
             if ($link === null) {
-                if ($desired["student"] || $desired["instructor"]) {
-                    $issue = "account_setup_required";
+                if ($desired["account_eligible"]) {
+                    $issue = $this->automatic->ensure($section, $id, $person);
                 }
             } else {
                 $policy = $this->remote->rosterPolicy($binding);

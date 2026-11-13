@@ -5,6 +5,9 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\env;
 
 return [
+    "course_creation_enabled" => env(key: "SIS_MOODLE_COURSE_CREATION_ENABLED", default: false) === true,
+    "automatic_accounts_enabled" => env(key: "SIS_MOODLE_AUTOMATIC_ACCOUNTS_ENABLED", default: false) === true,
+    "automatic_sign_in" => env(key: "SIS_MOODLE_AUTOMATIC_SIGN_IN", default: "password_email"),
     "section_sync_enabled" => env(key: "SIS_MOODLE_SECTION_SYNC_ENABLED", default: false) === true,
     "sync_actor" => env(key: "SIS_MOODLE_SYNC_ACTOR", default: ""),
     "access_before_days" => (int) env(key: "SIS_MOODLE_ACCESS_BEFORE_DAYS", default: 0),

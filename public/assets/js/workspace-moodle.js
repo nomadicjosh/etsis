@@ -71,6 +71,7 @@ window.createWorkspaceMoodle = function (ui) {
         local_etsis_get_account_receipt: 'Original account receipt inspection',
         local_etsis_get_roster_policy: 'Section course-role policy',
         local_etsis_sync_roster_member: 'Managed student and instructor access',
+        local_etsis_provision_course: 'Section course creation',
         core_webservice_get_site_info: 'Service information',
         core_user_get_users_by_field: 'Targeted user lookup',
         core_course_get_courses_by_field: 'Targeted course lookup',
@@ -148,7 +149,7 @@ window.createWorkspaceMoodle = function (ui) {
                 node('p', {}, 'Functions needed depend on the features your institution enables. Advertisement confirms service availability; it does not verify course permissions or enable synchronization.'), list,
                 node('details', { class: 'mt-3' },
                     node('summary', { class: 'fw-semibold' }, 'Additional Moodle functions — not required by this connector'),
-                    node('p', { class: 'mt-2' }, 'Missing functions here are expected with the etSIS section synchronization service. Managed course access uses the connector’s own enrollment function. Automatic course creation and gradebook import remain future work.'), additionalList));
+                    node('p', { class: 'mt-2' }, 'Missing functions here are expected with the etSIS section synchronization service. Managed course access uses the connector’s own enrollment function. Section course creation uses the connector’s own creation function. Gradebook import remains future work.'), additionalList));
             results.hidden = false;
             results.querySelector('h3').focus();
         } catch (error) {
@@ -252,7 +253,7 @@ window.createWorkspaceMoodle = function (ui) {
                         const card = node('section', { class: 'border rounded-3 p-3 mt-3' }, node('h3', { class: 'h5' }, `${item.term_code} · ${item.code} · ${item.title}`));
                         sectionResults.append(card);
                         if (item.moodle_course_id) {
-                            const messages = { none: 'No section issue recorded.', account_setup_required: 'A Moodle account link is needed.',
+                            const messages = { none: 'No section issue recorded.', account_setup_required: 'A Moodle account link or account setup is needed.', account_pending: 'Automatic Moodle account setup is queued or processing.',
                                 externally_managed: 'Some course access is managed outside this connector.', faculty_role_required: 'The instructor needs a current faculty role.',
                                 student_setup_required: 'Student sign-in or role setup is needed.', source_changed: 'SIS changes are waiting for the next run.',
                                 review_required: 'Synchronization stopped for review. Check institutional settings.' };

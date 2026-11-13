@@ -60,7 +60,7 @@ async function fixture(page, options = {}) {
                 result = { enabled: true, capabilities: {
                     core_webservice_get_site_info: true, local_etsis_get_instance_info: true,
                     local_etsis_get_account_policy: true, local_etsis_provision_account: true,
-                    local_etsis_get_account_receipt: true, local_etsis_get_roster_policy: true,
+                    local_etsis_get_account_receipt: true, local_etsis_get_roster_policy: true, local_etsis_provision_course: true,
                     local_etsis_sync_roster_member: !options.missingRoster,
                     core_user_get_users_by_field: true, core_course_get_courses_by_field: true,
                 } };
@@ -114,7 +114,7 @@ test('a complete section service shows expected missing generic functions separa
     const f = await fixture(page, { sectionService: true });
     await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
     await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
-    await expect(page.locator('#moodle-results')).toContainText('9 of 9 connector functions advertised');
+    await expect(page.locator('#moodle-results')).toContainText('10 of 10 connector functions advertised');
     const connector = page.locator('[data-moodle-connector-functions]');
     await expect(connector).toContainText('Managed student and instructor access');
     await expect(connector).not.toContainText('Not advertised');
@@ -137,7 +137,7 @@ test('a missing connector function remains visible in the main service list', as
     const f = await fixture(page, { sectionService: true, missingRoster: true });
     await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
     await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
-    await expect(page.locator('#moodle-results')).toContainText('8 of 9 connector functions advertised');
+    await expect(page.locator('#moodle-results')).toContainText('9 of 10 connector functions advertised');
     await expect(page.locator('[data-moodle-connector-functions]')).toContainText('Not advertised');
     await expect(page.locator('#moodle-results')).toContainText('does not verify course permissions or enable synchronization');
     expect(f.errors).toEqual([]);

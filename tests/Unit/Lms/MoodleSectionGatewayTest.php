@@ -150,4 +150,87 @@ final class MoodleSectionGatewayTest extends TestCase
             }
         }
     }
+    public function testCourseCreationUsesOriginalOperationAndAcceptsOnlyItsBoundReceipt(): void
+    {
+        $config = $this->config();
+        $config->setConfigKey("moodle", ["course_creation_enabled" => true]);
+        $b = $this->binding();
+        $id = EntityId::generate();
+        $course = [
+            "shortname" => "etsis-" . EntityId::generate()->value,
+            "fullname" => "Fictional Algebra",
+            "startdate" => 1790000000,
+            "enddate" => 1795000000,
+        ];
+        $history = [];
+        $handler = HandlerStack::create(
+            new MockHandler([
+                new Response(
+                    200,
+                    [],
+                    json_encode([
+                        "siteurl" => "https://moodle.example.invalid",
+                        "functions" => [["name" => "core_webservice_get_site_info"]],
+                    ]),
+                ),
+                new Response(
+                    200,
+                    [],
+                    json_encode([
+                        "protocol" => 1,
+                        "instance_hash" => $b->instanceFingerprint,
+                        "operation" => $id->value,
+                        "course_id" => "81",
+                    ]),
+                ),
+            ]),
+        );
+        $handler->push(Middleware::history($history));
+        self::assertSame(
+            "81",
+            new RestMoodleGateway($config, new Client(["handler" => $handler]))->provisionCourse(
+                $b,
+                $id,
+                $course,
+            )->value,
+        );
+        parse_str((string) $history[1]["request"]->getBody(), $body);
+        self::assertSame("local_etsis_provision_course", $body["wsfunction"]);
+        self::assertSame($id->value, $body["operation"]);
+        self::assertSame($course, json_decode($body["payload"], true));
+        self::assertSame("", $history[1]["request"]->getUri()->getQuery());
+        self::assertTrue($history[1]["options"]["verify"]);
+        self::assertFalse($history[1]["options"]["allow_redirects"]);
+    }
+    public function testDisablingCourseCreationDuringHandshakePreventsTheWrite(): void
+    {
+        $config = $this->config();
+        $config->setConfigKey("moodle", ["course_creation_enabled" => true]);
+        $calls = 0;
+        $handler = function () use ($config, &$calls) {
+            $calls++;
+            $config->setConfigKey("moodle", ["course_creation_enabled" => false]);
+            return \GuzzleHttp\Promise\Create::promiseFor(
+                new Response(
+                    200,
+                    [],
+                    json_encode([
+                        "siteurl" => "https://moodle.example.invalid",
+                        "functions" => [["name" => "core_webservice_get_site_info"]],
+                    ]),
+                ),
+            );
+        };
+        try {
+            new RestMoodleGateway($config, new Client(["handler" => $handler]))->provisionCourse(
+                $this->binding(),
+                EntityId::generate(),
+                [],
+            );
+            self::fail("A disabled course write was attempted.");
+        } catch (MoodleConnectionUnavailableException $error) {
+            self::assertSame(1, $calls);
+            self::assertNull($error->getPrevious());
+        }
+    }
 }

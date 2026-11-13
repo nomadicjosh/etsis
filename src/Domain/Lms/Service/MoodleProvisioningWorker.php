@@ -33,6 +33,7 @@ final readonly class MoodleProvisioningWorker
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private MoodleAutomaticAccountService $automatic,
     ) {
     }
     public function runOne(): string
@@ -158,5 +159,6 @@ final readonly class MoodleProvisioningWorker
         ) {
             throw new AccessDeniedException("The account request needs review.");
         }
+        $this->automatic->validate($data, $binding);
     }
 }

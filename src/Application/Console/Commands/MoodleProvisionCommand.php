@@ -13,14 +13,14 @@ final class MoodleProvisionCommand extends ConsoleCommand
 {
     protected string $name = "sis:moodle:provision";
     protected string $description = "Process at most one reviewed Moodle account request.";
-    public function __construct(Application $codefy, private readonly MoodleProvisioningWorker $worker)
+    public function __construct(Application $codefy)
     {
         parent::__construct($codefy);
     }
     public function handle(): int
     {
         try {
-            $status = $this->worker->runOne();
+            $status = $this->codefy->make(MoodleProvisioningWorker::class)->runOne();
         } catch (Throwable) {
             $this->terminalError(
                 "Provisioning could not finish. Retain the saved request and review its local status.",
