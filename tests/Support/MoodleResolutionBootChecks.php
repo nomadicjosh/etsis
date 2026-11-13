@@ -159,3 +159,36 @@ $sis->clock->time = $sis->clock->time->modify('+21 minutes');
 if ($send('recovery/confirm', ['review_token' => $review['review_token']])->getStatusCode() !== 200 || $receiptReader->calls !== 3) {
     throw new RuntimeException('Repeated recovery confirmation was not local and idempotent.');
 }
+
+// Section mapping shares the existing private Moodle boundary and current catalog authority.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$sectionSend = static function (bool $post, bool $csrf = true) use ($app): \Psr\Http\Message\ResponseInterface {
+    $path = $post ? '/sis/moodle/sections/' . \Domain\Shared\ValueObject\EntityId::generate()->value . '/link/' : '/sis/moodle/sections/';
+    $request = new \Qubus\Http\ServerRequest([], [], $path, $post ? 'POST' : 'GET')
+        ->withQueryParams(['search' => 'FICTIONAL'])
+        ->withHeader('Content-Type', 'application/x-www-form-urlencoded')->withHeader('Accept', 'application/json')
+        ->withHeader('X-CSRF-Token', $csrf ? 'fictionalcsrftoken' : 'invalidtoken')
+        ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE, 'fictionalcsrftoken')
+        ->withBody(new \Laminas\Diactoros\Stream('php://temp', 'w+'));
+    if ($post) {
+        $request->getBody()->write(http_build_query(['_workspace_json' => json_encode(['course' => '81', 'reason' => 'Fictional setup.', 'acknowledged' => false])]));
+        $request->getBody()->rewind();
+    }
+    $response = $app->router->match($request);
+    if (!str_contains($response->getHeaderLine('Cache-Control'), 'no-store') ||
+        !str_contains($response->getHeaderLine('Content-Type'), 'application/json') ||
+        str_contains((string) $response->getBody(), 'phpdebugbar')) {
+        throw new RuntimeException('Section mapping lost private JSON boundaries.');
+    }
+    return $response;
+};
+if ($sectionSend(false)->getStatusCode() !== 200 || $sectionSend(true, false)->getStatusCode() !== 403 ||
+    $sectionSend(true)->getStatusCode() !== 422) {
+    throw new RuntimeException('Section mapping failed its directory, CSRF or acknowledgement boundary.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:moodle:manage'];
+if ($sectionSend(false)->getStatusCode() !== 403 || $sectionSend(true)->getStatusCode() !== 403) {
+    throw new RuntimeException('Section mapping bypassed current catalog authority.');
+}

@@ -26,6 +26,9 @@ FILES = (
     "classes/local/account_policy.php",
     "classes/local/account_provisioner.php",
     "classes/local/account_receipt.php",
+    "classes/local/roster_sync.php",
+    "classes/external/get_roster_policy.php",
+    "classes/external/sync_roster_member.php",
     "classes/local/instance_identity.php",
     "classes/privacy/provider.php",
     "db/access.php",
@@ -38,6 +41,7 @@ FILES = (
     "tests/linked_session_test.php",
     "tests/instance_identity_test.php",
     "tests/account_provisioner_test.php",
+    "tests/roster_sync_test.php",
     "version.php",
 )
 

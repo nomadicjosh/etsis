@@ -10,6 +10,11 @@ final readonly class MoodleCapabilities
     public const array FUNCTIONS = [
         "core_webservice_get_site_info",
         "local_etsis_get_instance_info",
+        "local_etsis_get_account_policy",
+        "local_etsis_provision_account",
+        "local_etsis_get_account_receipt",
+        "local_etsis_get_roster_policy",
+        "local_etsis_sync_roster_member",
         "core_user_get_users_by_field",
         "core_course_get_courses_by_field",
         "core_course_create_courses",

@@ -5,6 +5,10 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\env;
 
 return [
+    "section_sync_enabled" => env(key: "SIS_MOODLE_SECTION_SYNC_ENABLED", default: false) === true,
+    "sync_actor" => env(key: "SIS_MOODLE_SYNC_ACTOR", default: ""),
+    "access_before_days" => (int) env(key: "SIS_MOODLE_ACCESS_BEFORE_DAYS", default: 0),
+    "access_after_days" => (int) env(key: "SIS_MOODLE_ACCESS_AFTER_DAYS", default: 0),
     "launch_enabled" => env(key: "SIS_MOODLE_LAUNCH_ENABLED", default: false) === true,
     "launch_secret" => env(key: "SIS_MOODLE_LAUNCH_SECRET", default: ""),
     "enabled" => env(key: "SIS_MOODLE_ENABLED", default: false) === true,

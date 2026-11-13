@@ -45,8 +45,9 @@ final class MoodleCheckCommandTest extends TestCase
             new Application(['basePath' => dirname(__DIR__, 3)]), $probe,
         ));
         self::assertSame(0, $tester->execute([]));
-        self::assertStringContainsString("SSO and synchronization are not enabled", $tester->getDisplay());
+        self::assertStringContainsString("does not change SSO or synchronization settings", $tester->getDisplay());
         self::assertStringContainsString("core_course_create_courses: not advertised", $tester->getDisplay());
+        self::assertStringContainsString("are not required by this connector", $tester->getDisplay());
     }
     public function testFailuresNeverExposeProviderDetailsEvenInVerboseMode(): void
     {

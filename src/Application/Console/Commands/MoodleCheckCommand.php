@@ -35,11 +35,15 @@ final class MoodleCheckCommand extends ConsoleCommand
             return self::FAILURE;
         }
         $this->terminalRaw(
-            "Moodle site URL and REST connection verified. Discovery only; SSO and synchronization are not enabled.",
+            "Moodle site URL and REST connection verified. This check does not change SSO or synchronization settings.",
         );
         foreach ($capabilities->describe() as $name => $available) {
             $this->terminalRaw($name . ": " . ($available ? "available" : "not advertised"));
         }
+        $this->terminalRaw(
+            "The section synchronization service uses connector-managed enrollment. Generic course creation/update,"
+            . " manual enrollment/unenrollment and grade-item functions are not required by this connector.",
+        );
         return self::SUCCESS;
     }
 }

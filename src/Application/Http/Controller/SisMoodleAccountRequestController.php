@@ -25,90 +25,77 @@ final readonly class SisMoodleAccountRequestController
     }
     public function status(string $person): ResponseInterface
     {
-        return new JsonResponse($this->service->status(new EntityId($person)));
+        return $this->respond(fn() => $this->service->status(new EntityId($person)));
     }
     public function review(ServerRequest $request, string $person): ResponseInterface
     {
         $input = FormInput::from($request);
-        try {
-            return new JsonResponse(
-                $this->service->review(
-                    new EntityId($person),
-                    new MoodleAccountDraft(
-                        $input->text("username", 100),
-                        $input->text("email", 100),
-                        $input->text("sign_in", 20),
-                    ),
-                    $input->text("reason", 500),
+        return $this->respond(
+            fn() => $this->service->review(
+                new EntityId($person),
+                new MoodleAccountDraft(
+                    $input->text("username", 100),
+                    $input->text("email", 100),
+                    $input->text("sign_in", 20),
                 ),
-            );
-        } catch (MoodleConnectionUnavailableException $error) {
-            return new JsonResponse(["error" => $error->getMessage()], 503);
-        }
+                $input->text("reason", 500),
+            ),
+        );
     }
     public function confirm(ServerRequest $request, string $person): ResponseInterface
     {
-        try {
-            return new JsonResponse(
-                $this->service->confirm(
-                    new EntityId($person),
-                    FormInput::from($request)->text("review_token", 16384),
-                ),
-            );
-        } catch (MoodleConnectionUnavailableException $error) {
-            return new JsonResponse(["error" => $error->getMessage()], 503);
-        }
-    }
-
-    public function reviewResolution(ServerRequest $request, string $person): ResponseInterface
-    {
-        return new JsonResponse(
-            $this->resolutions->review(new EntityId($person), FormInput::from($request)->text("reason", 500)),
-        );
-    }
-
-    public function confirmResolution(ServerRequest $request, string $person): ResponseInterface
-    {
-        return new JsonResponse(
-            $this->resolutions->confirm(
+        return $this->respond(
+            fn() => $this->service->confirm(
                 new EntityId($person),
                 FormInput::from($request)->text("review_token", 16384),
             ),
         );
     }
-
+    public function reviewResolution(ServerRequest $request, string $person): ResponseInterface
+    {
+        return $this->respond(
+            fn() => $this->resolutions->review(
+                new EntityId($person),
+                FormInput::from($request)->text("reason", 500),
+            ),
+        );
+    }
+    public function confirmResolution(ServerRequest $request, string $person): ResponseInterface
+    {
+        return $this->respond(
+            fn() => $this->resolutions->confirm(
+                new EntityId($person),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
     public function inspectReceipt(string $person): ResponseInterface
     {
-        try {
-            return new JsonResponse($this->reconciliation->inspect(new EntityId($person)));
-        } catch (MoodleConnectionUnavailableException $error) {
-            return new JsonResponse(["error" => $error->getMessage()], 503);
-        }
+        return $this->respond(fn() => $this->reconciliation->inspect(new EntityId($person)));
     }
-
     public function reviewRecovery(ServerRequest $request, string $person): ResponseInterface
     {
-        try {
-            return new JsonResponse(
-                $this->reconciliation->reviewRecovery(
-                    new EntityId($person),
-                    FormInput::from($request)->text("reason", 500),
-                ),
-            );
-        } catch (MoodleConnectionUnavailableException $error) {
-            return new JsonResponse(["error" => $error->getMessage()], 503);
-        }
+        return $this->respond(
+            fn() => $this->reconciliation->reviewRecovery(
+                new EntityId($person),
+                FormInput::from($request)->text("reason", 500),
+            ),
+        );
     }
-
     public function confirmRecovery(ServerRequest $request, string $person): ResponseInterface
     {
+        return $this->respond(
+            fn() => $this->reconciliation->confirmRecovery(
+                new EntityId($person),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+    /** @param \Closure():array<string,mixed> $operation */
+    private function respond(\Closure $operation): ResponseInterface
+    {
         try {
-            return new JsonResponse(
-                $this->reconciliation->confirmRecovery(
-                    new EntityId($person),
-                    FormInput::from($request)->text("review_token", 16384),
-                ),
-            );
+            return new JsonResponse($operation());
         } catch (MoodleConnectionUnavailableException $error) {
             return new JsonResponse(["error" => $error->getMessage()], 503);
         }

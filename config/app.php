@@ -176,5 +176,6 @@ return [
         \Application\Console\Commands\MoodleInspectCommand::class,
         \Application\Console\Commands\MoodleInstanceCommand::class,
         \Application\Console\Commands\MoodleProvisionCommand::class,
+        \Application\Console\Commands\MoodleSyncCommand::class,
     ],
 ];

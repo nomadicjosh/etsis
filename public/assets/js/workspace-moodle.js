@@ -66,6 +66,11 @@ window.createWorkspaceMoodle = function (ui) {
     }
     const labels = {
         local_etsis_get_instance_info: "Installation identity plugin",
+        local_etsis_get_account_policy: 'Account sign-in policy',
+        local_etsis_provision_account: 'Reviewed account creation',
+        local_etsis_get_account_receipt: 'Original account receipt inspection',
+        local_etsis_get_roster_policy: 'Section course-role policy',
+        local_etsis_sync_roster_member: 'Managed student and instructor access',
         core_webservice_get_site_info: 'Service information',
         core_user_get_users_by_field: 'Targeted user lookup',
         core_course_get_courses_by_field: 'Targeted course lookup',
@@ -75,6 +80,10 @@ window.createWorkspaceMoodle = function (ui) {
         enrol_manual_unenrol_users: 'Manual unenrollment',
         gradereport_user_get_grade_items: 'User grade items',
     };
+    const additionalFunctions = new Set([
+        'core_course_create_courses', 'core_course_update_courses',
+        'enrol_manual_enrol_users', 'enrol_manual_unenrol_users', 'gradereport_user_get_grade_items',
+    ]);
     function state(value) {
         enabled = value === true;
         controls();
@@ -121,15 +130,25 @@ window.createWorkspaceMoodle = function (ui) {
             const response = await request('/sis/moodle/check/', 'POST', {});
             if (version !== current || panel.hidden) return;
             if (!response.enabled) { state(false); return; }
-            status.textContent = 'Site URL and REST connection verified. SSO and synchronization remain inactive.';
-            const list = node('dl', { class: 'row mb-0' });
+            status.textContent = 'Site URL and REST connection verified. This verification does not change launch or synchronization settings.';
+            const list = node('dl', { class: 'row mb-0', 'data-moodle-connector-functions': '' });
+            const additionalList = node('dl', { class: 'row mb-0' });
+            let advertised = 0;
             for (const [name, label] of Object.entries(labels)) {
-                list.append(node('dt', { class: 'col-8 mb-3' }, label,
+                const additional = additionalFunctions.has(name);
+                const available = response.capabilities[name] === true;
+                if (!additional && available) advertised++;
+                (additional ? additionalList : list).append(node('dt', { class: 'col-8 mb-3' }, label,
                     node('span', { class: 'd-block fw-normal small text-break' }, name)),
-                    node('dd', { class: 'col-4 mb-3' }, response.capabilities[name] === true ? 'Advertised' : 'Not advertised'));
+                    node('dd', { class: 'col-4 mb-3' }, available ? 'Advertised' : 'Not advertised'));
             }
-            results.append(node('h3', { class: 'h5', tabindex: '-1' }, 'Available service functions'),
-                node('p', {}, 'Not advertised can be expected for a restricted service. Do not add permissions simply to make every function available. Discovery does not prove identity mappings or contextual access.'), list);
+            const total = Object.keys(labels).length - additionalFunctions.size;
+            results.append(node('h3', { class: 'h5', tabindex: '-1' }, 'Connector service functions'),
+                node('p', {}, `${advertised} of ${total} connector functions advertised. The etSIS section synchronization service includes all ${total}.`),
+                node('p', {}, 'Functions needed depend on the features your institution enables. Advertisement confirms service availability; it does not verify course permissions or enable synchronization.'), list,
+                node('details', { class: 'mt-3' },
+                    node('summary', { class: 'fw-semibold' }, 'Additional Moodle functions — not required by this connector'),
+                    node('p', { class: 'mt-2' }, 'Missing functions here are expected with the etSIS section synchronization service. Managed course access uses the connector’s own enrollment function. Automatic course creation and gradebook import remain future work.'), additionalList));
             results.hidden = false;
             results.querySelector('h3').focus();
         } catch (error) {
@@ -194,7 +213,7 @@ window.createWorkspaceMoodle = function (ui) {
             const result = await request('/sis/moodle/installation/confirm/', 'POST', { review_token: token });
             if (current !== version || panel.hidden) return;
             showBinding(result.binding);
-            installationStatus.textContent = 'Installation approved. SSO and synchronization remain inactive.';
+            installationStatus.textContent = 'Installation approved. This verification does not change launch or synchronization settings.';
             installationStatus.focus();
         }, 'Approval could not be confirmed. Refresh saved details before reviewing again.'));
     });
@@ -202,12 +221,69 @@ window.createWorkspaceMoodle = function (ui) {
         installationStatus.textContent = 'Checking Moodle against the saved approval…';
         await request('/sis/moodle/installation/verify/', 'POST', {});
         if (current !== version || panel.hidden) return;
-        installationStatus.textContent = 'The configured Moodle installation matches the saved approval. SSO and synchronization remain inactive.';
+        installationStatus.textContent = 'The configured Moodle installation matches the saved approval. This verification does not change launch or synchronization settings.';
     }, 'The approved installation could not be verified. Check the institutional configuration; the saved approval has not been replaced.')));
     function leave() {
         version++;
         clearReview();
         reason.value = '';
+    }
+    const sectionArea = document.querySelector('#moodle-section-area');
+    if (sectionArea && can('sis:catalog:manage') && can('sis:moodle:manage')) {
+        sectionArea.hidden = false;
+        const searchForm = document.querySelector('#moodle-section-search-form');
+        const search = document.querySelector('#moodle-section-search');
+        const sectionStatus = document.querySelector('#moodle-section-status');
+        const sectionResults = document.querySelector('#moodle-section-results');
+        let sectionBusy = false;
+        searchForm.addEventListener('submit', event => {
+            event.preventDefault();
+            if (sectionBusy || !searchForm.reportValidity()) return;
+            task(async () => {
+                sectionBusy = true;
+                const current = version;
+                try {
+                    sectionStatus.textContent = 'Searching section setup…';
+                    const data = await request('/sis/moodle/sections/?search=' + encodeURIComponent(search.value));
+                    if (current !== version || panel.hidden) return;
+                    sectionResults.replaceChildren();
+                    sectionStatus.textContent = `${data.items.length} matching sections. Background section synchronization is ${data.sync_enabled ? 'enabled' : 'disabled'}.`;
+                    for (const item of data.items) {
+                        const card = node('section', { class: 'border rounded-3 p-3 mt-3' }, node('h3', { class: 'h5' }, `${item.term_code} · ${item.code} · ${item.title}`));
+                        sectionResults.append(card);
+                        if (item.moodle_course_id) {
+                            const messages = { none: 'No section issue recorded.', account_setup_required: 'A Moodle account link is needed.',
+                                externally_managed: 'Some course access is managed outside this connector.', faculty_role_required: 'The instructor needs a current faculty role.',
+                                student_setup_required: 'Student sign-in or role setup is needed.', source_changed: 'SIS changes are waiting for the next run.',
+                                review_required: 'Synchronization stopped for review. Check institutional settings.' };
+                            card.append(node('p', {}, `Moodle course ${item.moodle_course_id}. ${messages[item.issue] || 'Review section setup.'}`));
+                            if (item.members_needing_setup) card.append(node('p', { class: 'text-body-secondary' }, `${item.members_needing_setup} members still need setup. Review their account links and current SIS roles in the person workspace.`));
+                            continue;
+                        }
+                        const course = node('input', { id: `moodle-course-${item.id}`, type: 'text', inputmode: 'numeric', class: 'form-control', required: true, maxlength: 19, autocomplete: 'off' });
+                        const why = node('input', { id: `moodle-why-${item.id}`, type: 'text', class: 'form-control', required: true, maxlength: 500, autocomplete: 'off' });
+                        const ack = node('input', { id: `moodle-course-ack-${item.id}`, type: 'checkbox', class: 'form-check-input', required: true });
+                        const save = node('button', { type: 'submit', class: 'btn btn-primary mt-3' }, 'Confirm Moodle course link');
+                        const linkForm = node('form', {}, node('label', { for: course.id, class: 'form-label' }, 'Moodle course ID'), course,
+                            node('label', { for: why.id, class: 'form-label mt-2' }, 'Administrative reason'), why,
+                            node('p', { class: 'form-text' }, 'Publish and select the section offering first. Enter no credentials or student details. The saved course link cannot be replaced here.'),
+                            node('div', { class: 'form-check mt-2' }, ack, node('label', { for: ack.id, class: 'form-check-label' }, 'I independently verified that this Moodle course belongs to this SIS section.')), save);
+                        card.append(linkForm);
+                        linkForm.addEventListener('submit', event => {
+                            event.preventDefault(); if (sectionBusy || !linkForm.reportValidity()) return;
+                            task(async () => {
+                                sectionBusy = true; save.disabled = true;
+                                try {
+                                    await request(`/sis/moodle/sections/${item.id}/link/`, 'POST', { course: course.value, reason: why.value, acknowledged: ack.checked });
+                                    if (current !== version || panel.hidden) return;
+                                    linkForm.remove(); card.append(node('p', { role: 'status' }, 'Course link saved. The worker will reconcile access when institutional synchronization is enabled.'));
+                                } finally { sectionBusy = false; save.disabled = false; }
+                            });
+                        });
+                    }
+                } finally { sectionBusy = false; }
+            });
+        });
     }
     window.addEventListener('pagehide', leave);
     return { load, leave };

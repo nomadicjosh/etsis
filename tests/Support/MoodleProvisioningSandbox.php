@@ -185,6 +185,8 @@ namespace {
             $q->execute(array_values($data));
             return (int) $this->pdo->lastInsertId();
         }
+        public function update_record(string $table, object $record): void
+        { $data=(array)$record; $id=$data['id']; unset($data['id']); $q=$this->pdo->prepare('UPDATE '.$table.' SET '.implode(',',array_map(static fn($key)=>$key.' = ?',array_keys($data))).' WHERE id = ?'); $q->execute([...array_values($data),$id]); }
         public function set_field(string $table, string $field, mixed $value, array $criteria): void
         {
             $where =
@@ -227,6 +229,14 @@ namespace {
     require $plugin . "/classes/local/account_policy.php";
     require $plugin . "/classes/local/account_provisioner.php";
     require $plugin . "/classes/local/account_receipt.php";
+    if (str_starts_with($argv[1] ?? '', 'roster_')) {
+        file_put_contents($temporary.'/lib/enrollib.php', '<?php');
+        $report=require __DIR__.'/MoodleRosterChecks.php';
+        echo json_encode($report,JSON_THROW_ON_ERROR);
+        unlink($temporary.'/lib/enrollib.php');
+        foreach (["user", "login", "lib"] as $folder) { unlink($temporary . "/" . $folder . "/" . ($folder === "lib" ? "authlib.php" : "lib.php")); rmdir($temporary . "/" . $folder); }
+        rmdir($temporary); exit;
+    }
     $instance = hash("sha256", $settings["instanceid"]);
     $policy = \local_etsis\local\account_policy::read($instance);
     $data = [

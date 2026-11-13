@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let checks = 0;
+    let checks = 0, sectionLinked = false;
     const approved = { id: '01K9Q4S3E5W4Y3P2F1R6V7N8M9', instance_fingerprint: 'a'.repeat(64), site_fingerprint: 'b'.repeat(64), approved_at: '2026-11-11T12:00:00Z' };
     let binding = options.bound ? approved : null;
     page.on('pageerror', error => errors.push(error.message));
@@ -14,6 +14,12 @@ async function fixture(page, options = {}) {
         let result = {};
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/moodle/status/') result = { enabled: !options.disabled };
+        else if (path === '/sis/moodle/sections/') result = { sync_enabled: false, items: [{ id: '01KAT5HZXS0000000000000001', term_code: '26/FA', code: 'MATH.101.01', title: 'Fictional Algebra', moodle_course_id: sectionLinked ? '81' : null, issue: 'none', members_needing_setup: sectionLinked ? 2 : 0 }] };
+        else if (path.endsWith('/link/') && path.startsWith('/sis/moodle/sections/')) {
+            sectionLinked = true;
+            if (options.sectionInterrupted) { await route.fulfill({ status: 503, json: { error: 'Fictional interrupted reply. Search again to check the saved link.' } }); return; }
+            result = { linked: true };
+        }
         else if (path === '/sis/moodle/installation/') result = { binding };
         else if (path === '/sis/moodle/installation/review/') {
             if (options.connectorDisabled) {
@@ -50,6 +56,15 @@ async function fixture(page, options = {}) {
                     core_course_update_courses: true, enrol_manual_enrol_users: true,
                     enrol_manual_unenrol_users: false, gradereport_user_get_grade_items: true,
                     '<script>window.moodleExecuted = true</script>': true } };
+            if (options.sectionService) {
+                result = { enabled: true, capabilities: {
+                    core_webservice_get_site_info: true, local_etsis_get_instance_info: true,
+                    local_etsis_get_account_policy: true, local_etsis_provision_account: true,
+                    local_etsis_get_account_receipt: true, local_etsis_get_roster_policy: true,
+                    local_etsis_sync_roster_member: !options.missingRoster,
+                    core_user_get_users_by_field: true, core_course_get_courses_by_field: true,
+                } };
+            }
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -92,6 +107,39 @@ test('disabled integration does not allow a check and refreshing status makes no
     await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
     await expect(page.locator('#moodle-status')).toContainText('disabled');
     expect(f.calls.filter(c => c.path === '/sis/moodle/check/')).toHaveLength(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('a complete section service shows expected missing generic functions separately', async ({ page }) => {
+    const f = await fixture(page, { sectionService: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
+    await expect(page.locator('#moodle-results')).toContainText('9 of 9 connector functions advertised');
+    const connector = page.locator('[data-moodle-connector-functions]');
+    await expect(connector).toContainText('Managed student and instructor access');
+    await expect(connector).not.toContainText('Not advertised');
+    await expect(connector).not.toContainText('Manual unenrollment');
+    const additional = page.locator('#moodle-results details');
+    await expect(additional).not.toHaveAttribute('open');
+    await additional.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(additional).toHaveAttribute('open', '');
+    await expect(additional).toContainText('Missing functions here are expected');
+    await expect(additional).toContainText('Not advertised');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.calls.filter(c => c.path === '/sis/moodle/check/')).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test('a missing connector function remains visible in the main service list', async ({ page }) => {
+    const f = await fixture(page, { sectionService: true, missingRoster: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByRole('button', { name: 'Check Moodle connection', exact: true }).click();
+    await expect(page.locator('#moodle-results')).toContainText('8 of 9 connector functions advertised');
+    await expect(page.locator('[data-moodle-connector-functions]')).toContainText('Not advertised');
+    await expect(page.locator('#moodle-results')).toContainText('does not verify course permissions or enable synchronization');
     expect(f.errors).toEqual([]);
 });
 
@@ -206,5 +254,44 @@ test('unrelated office grants do not show Moodle navigation or request its statu
     const f = await fixture(page, { denied: true });
     await expect(page.getByRole('link', { name: 'Moodle integration', exact: true })).toHaveCount(0);
     expect(f.calls.some(c => c.path.startsWith('/sis/moodle/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('section mapping searches on demand and confirms one course with accessible explicit acknowledgement', async ({ page }) => {
+    const f = await fixture(page, { bound: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    expect(f.calls.some(c => c.path.startsWith('/sis/moodle/sections/'))).toBe(false);
+    await page.getByLabel('Search by section code').fill('MATH.101');
+    await page.getByRole('button', { name: 'Find sections', exact: true }).click();
+    await expect(page.locator('#moodle-section-results')).toContainText('26/FA · MATH.101.01 · Fictional Algebra');
+    await page.getByLabel('Moodle course ID', { exact: true }).fill('81');
+    await page.getByLabel('Administrative reason', { exact: true }).fill('Independently verified fictional section.');
+    const ack = page.getByRole('checkbox', { name: 'I independently verified that this Moodle course belongs to this SIS section.' });
+    await ack.focus(); await page.keyboard.press('Space');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Confirm Moodle course link', exact: true }).click();
+    await expect(page.locator('#moodle-section-results')).toContainText('Course link saved');
+    expect(f.calls.find(c => c.path.endsWith('/link/'))).toMatchObject({ method: 'POST', csrf: 'fictional-test-token', data: { course: '81', acknowledged: true } });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.calls.some(c => /sync|provision/.test(c.path))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+test('searching after an interrupted course-link confirmation shows the retained mapping', async ({ page }) => {
+    const f = await fixture(page, { bound: true, sectionInterrupted: true });
+    await page.getByRole('link', { name: 'Moodle integration', exact: true }).click();
+    await page.getByLabel('Search by section code').fill('MATH');
+    await page.getByRole('button', { name: 'Find sections', exact: true }).click();
+    await page.getByLabel('Moodle course ID', { exact: true }).fill('81');
+    await page.getByLabel('Administrative reason', { exact: true }).fill('Fictional course check.');
+    await page.getByRole('checkbox', { name: 'I independently verified that this Moodle course belongs to this SIS section.' }).check();
+    await page.getByRole('button', { name: 'Confirm Moodle course link', exact: true }).click();
+    await expect(page.locator('#workspace-alert')).toContainText('Search again');
+    await page.getByRole('button', { name: 'Find sections', exact: true }).click();
+    await expect(page.locator('#moodle-section-results')).toContainText('Moodle course 81');
+    await expect(page.locator('#moodle-section-results')).toContainText('2 members still need setup');
+    await expect(page.getByRole('button', { name: 'Confirm Moodle course link', exact: true })).toHaveCount(0);
+    expect(f.calls.filter(c => c.path.endsWith('/link/'))).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });

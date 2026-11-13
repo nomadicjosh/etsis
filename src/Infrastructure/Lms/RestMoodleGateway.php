@@ -7,10 +7,11 @@ namespace Infrastructure\Lms;
 use Domain\Lms\Exception\MoodleConnectionUnavailableException;
 use Domain\Lms\Service\MoodleConnectionProbe as Probe;
 use Domain\Lms\Service\MoodleRecordReader as Reader;
-use Domain\Lms\Service\MoodleInstanceReader as IdentityReader;
-use Domain\Lms\Service\MoodleBoundRecordReader as BoundReader;
+use Domain\Lms\Service\MoodleInstanceReader as Identity;
+use Domain\Lms\Service\MoodleBoundRecordReader as Bound;
 use Domain\Lms\Service\MoodleAccountProvisioner as Provisioner;
-use Domain\Lms\Service\MoodleAccountReceiptReader as ReceiptReader;
+use Domain\Lms\Service\MoodleAccountReceiptReader as Receipts;
+use Domain\Lms\Service\MoodleSectionGateway as Sections;
 use Domain\Lms\ValueObject\MoodleAccountReceipt;
 use Domain\Lms\ValueObject\MoodleAccountPolicy;
 use Domain\Lms\ValueObject\MoodleAccountDraft;
@@ -33,7 +34,7 @@ use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 /** Isolated client deliberately bypasses framework HTTP debug and observer hooks. */
-final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader, BoundReader, Provisioner, ReceiptReader
+final readonly class RestMoodleGateway implements Probe, Reader, Identity, Bound, Provisioner, Receipts, Sections
 {
     public function __construct(private ConfigContainer $config, private Client $http = new Client())
     {
@@ -143,6 +144,80 @@ final readonly class RestMoodleGateway implements Probe, Reader, IdentityReader,
                 throw new MoodleConnectionUnavailableException();
             }
             return new MoodleAccountPolicy($result["policy_hash"], $result["sso"], $result["password_email"]);
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+    public function rosterPolicy(MoodleBinding $binding): array
+    {
+        try {
+            $settings = $this->settings();
+            $deadline = microtime(true) + 10;
+            $this->handshake($settings, $deadline);
+            if (!hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value))) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $result = $this->request(
+                $settings,
+                "local_etsis_get_roster_policy",
+                ["instance_hash" => $binding->instanceFingerprint],
+                $deadline,
+            );
+            $this->assertCurrent($settings);
+            if (
+                count($result) !== 3 ||
+                ($result["protocol"] ?? null) !== 1 ||
+                ($result["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                !is_string($result["policy_hash"] ?? null) ||
+                preg_match('/^[a-f0-9]{64}$/D', $result["policy_hash"]) !== 1
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return ["policy_hash" => $result["policy_hash"]];
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+    public function syncMember(
+        MoodleBinding $binding,
+        string $policyHash,
+        #[\SensitiveParameter] array $member,
+    ): string {
+        try {
+            if ($this->config->getConfigKey("moodle.section_sync_enabled", false) !== true) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $settings = $this->settings();
+            if (!hash_equals($binding->siteFingerprint, hash("sha256", $settings["site"]->value))) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $result = $this->request(
+                $settings,
+                "local_etsis_sync_roster_member",
+                [
+                    "instance_hash" => $binding->instanceFingerprint,
+                    "policy_hash" => $policyHash,
+                    "payload" => json_encode($member, JSON_THROW_ON_ERROR),
+                ],
+                microtime(true) + 10,
+            );
+            $this->assertCurrent($settings);
+            if (
+                $this->config->getConfigKey("moodle.section_sync_enabled", false) !== true ||
+                count($result) !== 5 ||
+                ($result["protocol"] ?? null) !== 1 ||
+                ($result["instance_hash"] ?? null) !== $binding->instanceFingerprint ||
+                ($result["section"] ?? null) !== $member["section"] ||
+                ($result["version"] ?? null) !== $member["version"] ||
+                !in_array(
+                    $result["status"] ?? null,
+                    ["synchronized", "unchanged", "superseded", "externally_managed"],
+                    true,
+                )
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return $result["status"];
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }

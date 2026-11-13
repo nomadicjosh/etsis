@@ -110,6 +110,11 @@ try {
             if ($tester->execute([]) !== 0 || !str_contains($tester->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle diagnostic did not complete.');
             }
+            $sync = new \Symfony\Component\Console\Tester\CommandTester($kernel->all()['sis:moodle:sync']);
+            if ($sync->execute(['--limit' => '21']) !== 2 || $sync->execute([]) !== 0 ||
+                !str_contains($sync->getDisplay(), 'disabled')) {
+                throw new RuntimeException('Disabled section synchronization failed its command boundary.');
+            }
             if ($kernel->call('sis:moodle:provision') !== 0) {
                 throw new RuntimeException('The disabled Moodle provisioning command was not registered.');
             }

@@ -13,6 +13,7 @@ use Application\Http\Controller\SisCourseAssistanceController;
 use Application\Http\Controller\SisSectionAssistanceController;
 use Application\Http\Controller\SisDegreeAssistanceController;
 use Application\Http\Controller\SisMoodleController;
+use Application\Http\Controller\SisMoodleSectionController;
 use Application\Http\Controller\SisMoodleBindingController;
 use Application\Http\Controller\SisMoodlePersonLinkController;
 use Application\Http\Controller\SisMoodleAccountRequestController;
@@ -775,6 +776,8 @@ return static function (Psr7Router $router): void {
     $router->get("/sis/sections/{id}/assistance/", [SisSectionAssistanceController::class, "preview"]);
     $router->post("/sis/sections/{id}/assistance/", [SisSectionAssistanceController::class, "suggest"]);
     $router->get("/sis/moodle/status/", [SisMoodleController::class, "status"]);
+    $router->get('/sis/moodle/sections/', [SisMoodleSectionController::class, 'directory']);
+    $router->post('/sis/moodle/sections/{section}/link/', [SisMoodleSectionController::class, 'link']);
     $router->post("/sis/moodle/check/", [SisMoodleController::class, "check"]);
     $router->get("/sis/moodle/installation/", [SisMoodleBindingController::class, "status"]);
     $router->get('/sis/people/{person}/moodle/', [SisMoodlePersonLinkController::class, 'status']);
