@@ -226,23 +226,37 @@ final readonly class DegreeAuditTrialService
             $d->assertPublishable();
             $details = [];
             foreach ($d->definition['courses'] as $course) {
-                $key = $course['course_id'] . ':' . $course['version_id'];
-                if (!isset($courses[$key])) {
-                    if (count($courses) >= 200) {
-                        throw new HistoryReadLimitException();
-                    }
-                    $published = $this->courses->version(
+                $ids = [$course['version_id'], ...($course['accepted_version_ids'] ?? [])];
+                $missing = array_values(array_filter(
+                    $ids,
+                    static fn(string $v): bool => !isset($courses[$course['course_id'] . ':' . $v])
+                ));
+                if (count($courses) + count($missing) > 2000) {
+                    throw new HistoryReadLimitException();
+                }
+                if ($missing !== []) {
+                    $selectedVersions = $this->courses->selectedVersions(
                         new EntityId($course['course_id']),
-                        new EntityId($course['version_id']),
+                        array_map(static fn(string $v): EntityId => new EntityId($v), $missing),
                         $budget,
                     );
-                    $courses[$key] = [
-                        'code' => $published->definition->code,
-                        'title' => $published->definition->text->transcriptTitle ?? $published->definition->title,
-                        'credits_milli' => $published->definition->creditsMilli,
-                    ];
+                    foreach ($selectedVersions as $version => $selectedVersion) {
+                        $published = $selectedVersion['publication']->definition;
+                        $courses[$course['course_id'] . ':' . $version] = [
+                            'version_id' => $version, 'version' => $selectedVersion['version'],
+                            'code' => $published->code,
+                            'title' => $published->text->transcriptTitle ?? $published->title,
+                            'credits_milli' => $published->creditsMilli,
+                        ];
+                    }
                 }
-                $details[$course['course_id']] = $courses[$key];
+                $details[$course['course_id']] = $courses[$course['course_id'] . ':' . $course['version_id']];
+                if (($course['accepted_version_ids'] ?? []) !== []) {
+                    $details[$course['course_id']]['accepted_versions'] = array_map(
+                        static fn(string $v): array => $courses[$course['course_id'] . ':' . $v],
+                        $course['accepted_version_ids'],
+                    );
+                }
             }
             $groups[$id] = ['definition' => $d->definition, 'version_id' => null, 'course_details' => $details];
             $sources[] = [

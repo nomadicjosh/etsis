@@ -126,11 +126,11 @@ final class PublishedRequirementsReaderTest extends TestCase
         $earlier = $result["group_details"][$f->group->value]["course_details"][$course];
         $later = $result["group_details"][$newGroup["group_id"]]["course_details"][$course];
         self::assertSame(
-            ["code" => "MATH.101", "title" => "Fictional MATH.101", "credits_milli" => 3000],
+            ["code" => "MATH.101", "title" => "Fictional MATH.101", "credits_milli" => 3000, "version" => 1],
             $earlier,
         );
         self::assertSame(
-            ["code" => "MATH.101", "title" => "Fictional revised mathematics 12", "credits_milli" => 4000],
+            ["code" => "MATH.101", "title" => "Fictional revised mathematics 12", "credits_milli" => 4000, "version" => 12],
             $later,
         );
         $calls = array_values(

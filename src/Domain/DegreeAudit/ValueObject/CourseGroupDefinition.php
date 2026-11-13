@@ -46,12 +46,27 @@ final readonly class CourseGroupDefinition
         $used = [];
         $rules = [];
         foreach ($definition["courses"] as $course) {
-            self::keys($course, ["course_id", "version_id"]);
-            foreach ($course as $id) {
+            self::keys($course, ["course_id", "version_id", ...
+                (array_key_exists('accepted_version_ids', $course) ? ['accepted_version_ids'] : [])]);
+            foreach ([$course['course_id'], $course['version_id']] as $id) {
                 if (!is_string($id)) {
                     self::invalid();
                 }
                 new EntityId($id);
+            }
+            if (array_key_exists('accepted_version_ids', $course)) {
+                if (!is_array($course['accepted_version_ids'])) {
+                    self::invalid();
+                }
+                self::listing($course['accepted_version_ids'], 10);
+                $seen = [$course['version_id'] => true];
+                foreach ($course['accepted_version_ids'] as $version) {
+                    if (!is_string($version) || isset($seen[$version])) {
+                        self::invalid();
+                    }
+                    new EntityId($version);
+                    $seen[$version] = true;
+                }
             }
             if (isset($courses[$course["course_id"]])) {
                 self::invalid();

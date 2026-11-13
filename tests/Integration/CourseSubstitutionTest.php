@@ -64,6 +64,25 @@ final class CourseSubstitutionTest extends TestCase
     {
         return $this->service->view($this->f->student, $this->f->assignment);
     }
+    public function testPublicationExceptionsRejectNoopsForeignVersionsAndMissingCurriculumCourses(): void
+    {
+        $courses = $this->f->f->groupDefinition["courses"];
+        $cases = [
+                ["course_id" => $courses[0]["course_id"], "version_id" => $courses[0]["version_id"]],
+                ["course_id" => $courses[0]["course_id"], "version_id" => $courses[1]["version_id"]],
+                ["course_id" => EntityId::generate()->value, "version_id" => $courses[0]["version_id"]],
+        ];
+        foreach ($cases as $invalid) {
+            $before = $this->f->f->digest("sis_history_events");
+            try {
+                $this->review(["kind" => "course_version"] + $invalid);
+                self::fail("Invalid publication allowance accepted.");
+            } catch (InvalidArgumentException | RecordNotFoundException) {
+                self::assertSame($before, $this->f->f->digest("sis_history_events"));
+            }
+        }
+    }
+
     public function testSubstitutionCanBeApprovedBeforeEitherCourseIsTakenAndDoesNotCreateCredit(): void
     {
         $d = $this->definition();

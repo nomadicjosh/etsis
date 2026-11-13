@@ -473,6 +473,91 @@ final class DraftDegreeAuditTest extends TestCase
         }
     }
 
+    public function testExplicitCurriculumPublicationsWorkInDraftAndPublishedTestsWithoutRewritingWork(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        $s = $f->f->sis;
+        $original = $f->f->groupDefinition["courses"][0];
+        $course = new EntityId($original["course_id"]);
+        $s->sql->update(
+            "sis_courses",
+            ["title" => "Fictional revised curriculum title", "credits_milli" => 4000],
+            ["id" => $course->value],
+        );
+        $pub = $f->f->catalog->publications();
+        $r = $pub->review($course, "Fictional new publication");
+        $current = $pub->publish($course, $r["review_token"])["operation_id"];
+        [$template, $degree, $group] = $this->draft($f);
+        $row = $f->f->groups->view($group);
+        $d = $row["definition"];
+        $d["courses"][0]["version_id"] = $current;
+        $f->f->groups->save($group, $row["revision"], new CourseGroupDefinitionV2($d));
+        $service = $this->service($f);
+        $before = $this->digest($f);
+        self::assertSame(
+            "needs_review",
+            $service->test($template, $f->student, $f->assignment, $degree)["allocation"]["outcome"],
+        );
+        self::assertSame($before, $this->digest($f));
+        $d["courses"][0]["accepted_version_ids"] = [$original["version_id"]];
+        $row = $f->f->groups->view($group);
+        $f->f->groups->save($group, $row["revision"], new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $draft = $service->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("feasible", $draft["allocation"]["outcome"]);
+        $p = $draft["allocation"]["groups"][0]["placements"][0];
+        self::assertSame(3000, $p["credits_milli"]);
+        self::assertSame("Fictional revised curriculum title", $p["target_title"]);
+        self::assertNotSame($p["target_title"], $p["course_title"]);
+        self::assertSame($before, $this->digest($f));
+        $review = $f->f->groups->review($group, "Fictional accepted versions");
+        $groupVersion = $f->f->groups->publish($group, $review["review_token"])["operation_id"];
+        $dd = $degree->definition;
+        $dd["groups"][0]["version_id"] = $groupVersion;
+        $f->f->degrees->save($template, 0, new AuditRequirementsV3($dd));
+        $review = $f->f->degrees->review($template, "Fictional curriculum acceptance");
+        $version = new EntityId($f->f->degrees->publish($template, $review["review_token"])["operation_id"]);
+        $d["courses"][0]["accepted_version_ids"] = [];
+        $row = $f->f->groups->view($group);
+        $f->f->groups->save($group, $row["revision"], new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $published = $service->testPublication($template, $version, $f->student, $f->assignment);
+        self::assertSame("feasible", $published["allocation"]["outcome"]);
+        self::assertSame($p, $published["allocation"]["groups"][0]["placements"][0]);
+        self::assertSame($before, $this->digest($f));
+        self::assertSame(
+            [$original["version_id"]],
+            array_column(
+                $published["allocation"]["groups"][0]["courses"][$course->value]["accepted_versions"],
+                "version_id",
+            ),
+        );
+        $reader = new PublishedCourseReader($f->f->history);
+        $both = $reader->selectedVersions(
+            $course,
+            [new EntityId($original["version_id"]), new EntityId($current)],
+            new HistoryReadBudget(1, 20),
+        );
+        self::assertCount(2, $both);
+    }
+
+    public function testForeignAcceptedPublicationCannotBeSavedOrChangeHistory(): void
+    {
+        $f = new StudentRequirementsFixture();
+        [$template, $degree, $group] = $this->draft($f);
+        $row = $f->f->groups->view($group);
+        $d = $row["definition"];
+        $d["courses"][0]["accepted_version_ids"] = [$f->f->groupDefinition["courses"][1]["version_id"]];
+        $before = $this->digest($f);
+        try {
+            $f->f->groups->save($group, $row["revision"], new CourseGroupDefinitionV2($d));
+            self::fail("A foreign publication was accepted.");
+        } catch (RecordNotFoundException) {
+            self::assertSame($before, $this->digest($f));
+        }
+    }
+
     public function testMissingPublishedClassificationsRemainUnknownForSavedRulePreview(): void
     {
         $f = new StudentRequirementsFixture();

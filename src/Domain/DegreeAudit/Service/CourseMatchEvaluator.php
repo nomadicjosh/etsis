@@ -35,6 +35,9 @@ final readonly class CourseMatchEvaluator
                     $requirements["grade_scale"] ?? null,
                     $effective["placements"][$item["course_id"]]["group_id"] ?? null
                 );
+                if (isset($candidate['exception_version_ids'][$item['course_version_id'] ?? ''])) {
+                    $candidate['via_substitution'] = true;
+                }
                 $matches[] = $candidate + [
                     "status" => $status->value,
                     "explanation" => $status->explanation(),
@@ -80,6 +83,9 @@ final readonly class CourseMatchEvaluator
                     $requirements["grade_scale"] ?? null,
                     $effective["placements"][$item["course_id"]]["group_id"] ?? null
                 );
+                if (isset($candidate['exception_version_ids'][$item['course_version_id'] ?? ''])) {
+                    $candidate['via_substitution'] = true;
+                }
                 $matches[] = $candidate + ["status" => $status->value];
             }
             $items[] = array_replace($item, ["requirement_matches" => $matches]);
@@ -135,19 +141,27 @@ final readonly class CourseMatchEvaluator
                     "waived" => in_array($id, $effective["waived_course_ids"], true),
                     "approval_conflict" => isset($effective["substitution_conflicts"][$id]),
                 ];
+                $candidate['accepted_course_versions'] = $this->acceptedVersions($course, $effective);
+                $candidate['exception_version_ids'] = array_diff_key(
+                    $effective['accepted_course_versions'][$id] ?? [],
+                    array_fill_keys([$course['version_id'], ...($course['accepted_version_ids'] ?? [])], true),
+                );
                 if (isset($requirements['dynamic_versions'][$groupId][$id])) {
                     $candidate['accepted_course_versions'] = $requirements['dynamic_versions'][$groupId][$id];
                     $candidate['matched_work_ids'] = $requirements['dynamic_work_ids'][$groupId][$id];
                     $candidate['dynamic_target'] = true;
+                    unset($candidate['exception_version_ids']);
                 }
                 $index[$id][] = $candidate;
                 if (
                     isset($effective["substitutions"][$id]) &&
+                    $effective['substitutions'][$id]['course_id'] !== $id &&
                     !$candidate["waived"] &&
                     !($candidate['dynamic_target'] ?? false) &&
                     !$candidate["approval_conflict"]
                 ) {
                     $replacement = $effective["substitutions"][$id];
+                    unset($candidate['accepted_course_versions'], $candidate['exception_version_ids']);
                     $candidate["expected_course_version_id"] = $replacement["version_id"];
                     $candidate["via_substitution"] = true;
                     $index[$replacement["course_id"]][] = $candidate;
@@ -155,6 +169,18 @@ final readonly class CourseMatchEvaluator
             }
         }
         return $index;
+    }
+
+    /** Explicit curriculum allowances plus a verified same-course student exception.
+     * @param array<string,mixed> $reference
+     * @param array<string,mixed> $effective
+     * @return array<string,true>
+     */
+    public function acceptedVersions(array $reference, #[\SensitiveParameter] array $effective): array
+    {
+        $allowed = array_fill_keys([$reference['version_id'], ...($reference['accepted_version_ids'] ?? [])], true);
+        $allowed += $effective['accepted_course_versions'][$reference['course_id']] ?? [];
+        return $allowed;
     }
 
     /** @param array<string,mixed> $requirements */

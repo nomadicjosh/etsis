@@ -595,6 +595,65 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertSame(1, $result["groups"][0]["gaps"]["rules"][0]["eligible_target_count"]);
     }
 
+    public function testAcceptedNamedVersionsKeepEachAwardsOwnSavedRuleMembership(): void
+    {
+        [$r, $e] = $this->substitutionRuleInputs();
+        $g = &$r["group_details"][self::id(1)];
+        $g["definition"]["courses"] = [
+            [
+                "course_id" => self::id(1),
+                "version_id" => self::id(101),
+                "accepted_version_ids" => [self::id(500)],
+            ],
+        ];
+        $g["definition"]["rules"][1]["course_ids"] = [self::id(1)];
+        $g["course_details"] = [self::id(1) => ["code" => "COURSE.1", "title" => "Required title"]];
+        $r["definition"]["policies"]["repeat_credit"] = "all_eligible";
+        $e["substitutions"] = [];
+        $e["groups"][self::id(1)]["min_credits_milli"] = 7000;
+        $work = [$this->work(10), $this->work(11, credits: 4000)];
+        $work[1]["course_version_id"] = self::id(500);
+        $matrix = ["matches", "does_not_match"];
+        $before = json_encode($r, JSON_THROW_ON_ERROR);
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r, $matrix));
+        self::assertSame($before, json_encode($r, JSON_THROW_ON_ERROR));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(
+            [self::id(301) => 3000, self::id(399) => 7000],
+            $result["groups"][0]["placements"][0]["rule_credits_milli"],
+        );
+        $g["definition"]["rules"][0]["minimum_credits_milli"] = 4000;
+        $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r, $matrix));
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(1000, $result["groups"][0]["gaps"]["rules"][0]["credit_shortfall_milli"]);
+    }
+
+    public function testNamedVersionAllowancesCannotLeakIntoAnotherCoursesSubstitution(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->group(1)]);
+        $r["group_details"][self::id(1)]["definition"]["courses"][0]["accepted_version_ids"] = [
+            self::id(500),
+        ];
+        $e = $this->effective($r);
+        $e["substitutions"][self::id(1)] = ["course_id" => self::id(2), "version_id" => self::id(102)];
+        $work = $this->work(10, course: 2);
+        $work["course_version_id"] = self::id(500);
+        $result = $this->evaluator()->evaluate([$work], $r, $e);
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("course_version_differs", $result["issues"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testRuleOnlyPlacementDoesNotClaimItUsedAnUnneededNamedVersionException(): void
+    {
+        $r=$this->requirements([self::id(1)=>$this->ruleGroup(1,4000)]);
+        $e=$this->effective($r);$e['accepted_course_versions'][self::id(1)][self::id(500)]=true;
+        $work=[$this->work(10),$this->work(11,credits:4000)];$work[1]['course_version_id']=self::id(500);
+        $result=$this->evaluator()->evaluate($work,$r,$e,$this->decisions($work,$r));
+        self::assertSame('feasible',$result['outcome']);
+        self::assertFalse($result['groups'][0]['placements'][0]['via_substitution']);
+    }
+
     private function evaluator(int $steps = 100000): GroupAllocationEvaluator
     {
         return new GroupAllocationEvaluator(

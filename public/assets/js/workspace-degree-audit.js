@@ -281,14 +281,34 @@ window.createWorkspaceDegreeAudit = function (ui) {
             group(saved.definition.tree),
         );
     }
+    function acceptedPublicationList(course) {
+        const versions = course?.accepted_versions || [];
+        if (!versions.length) return null;
+        const view = node("details", {}, node("summary", {}, `Also accepted publications (${versions.length})`));
+        let loaded = false;
+        view.addEventListener("toggle", () => {
+            if (!view.open || loaded) return;
+            loaded = true;
+            view.append(
+                node(
+                    "ul",
+                    {},
+                    versions.map((v) =>
+                        node(
+                            "li",
+                            {},
+                            `${v.version ? `Version ${v.version} · ` : ""}${courseLabel(v)} · ${text(v.credits_milli)} credits`,
+                        ),
+                    ),
+                ),
+            );
+        });
+        return view;
+    }
     function groupTree(item, open = true) {
         const d = item.definition,
             details = item.course_details || {};
-        const tree = node(
-            "details",
-            { class: "audit-tree", open },
-            node("summary", {}, d.name, " ", badge(count(d))),
-        );
+        const tree = node("details", { class: "audit-tree", open }, node("summary", {}, d.name, " ", badge(count(d))));
         if (!item.course_approvals) {
             const plan = planningPanel();
             plan.update(item.planning_summary || groupPlan(d, details));
@@ -330,13 +350,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             return node(
                                 "li",
                                 {},
-                                node(
-                                    waived ? "s" : "span",
-                                    {},
-                                    details[id] ? courseLabel(details[id]) : "Selected course",
-                                ),
+                                node(waived ? "s" : "span", {}, details[id] ? courseLabel(details[id]) : "Selected course"),
                                 " ",
                                 details[id] ? badge(`${text(details[id].credits_milli)} credits`) : null,
+                                ...(details[id]?.accepted_versions?.length ? [acceptedPublicationList(details[id])] : []),
+                                ...(item.course_approvals?.publications?.[id] || []).map((v) =>
+                                    node(
+                                        "p",
+                                        { class: "form-text" },
+                                        `Additional publication accepted for this pursuit: version ${v.version} · ${courseLabel(v)} · ${text(v.credits_milli)} catalog credits. Earned work remains separate.`,
+                                    ),
+                                ),
                                 ...(waived ? [" ", badge("Waived for this pursuit")] : []),
                                 ...(replacement
                                     ? [
@@ -1166,7 +1190,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node(
                         "p",
                         {},
-                        "Adopting a version replaces this course reference throughout this working group. Published groups and degrees keep their earlier versions.",
+                        "Adopting a version replaces this course reference throughout this working group. Published groups and degrees keep their earlier versions. The previous required publication is not automatically added to the accepted list.",
                     ),
                 );
                 for (const p of replacements) {
@@ -1204,9 +1228,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
             }
             for (const pick of picks) {
                 const existing = model.courses.find((c) => c.course_id === pick.course_id);
-                if (existing) existing.version_id = pick.version_id;
-                else model.courses.push({ course_id: pick.course_id, version_id: pick.version_id });
-                details[pick.course_id] = pick.detail;
+                const accepted = (existing?.accepted_version_ids || []).filter(v=>v!==pick.version_id);
+                const acceptedDetails = (details[pick.course_id]?.accepted_versions || []).filter(v=>accepted.includes(v.version_id));
+                if (existing) {
+                    existing.version_id = pick.version_id;
+                    if (accepted.length) existing.accepted_version_ids = accepted;
+                    else delete existing.accepted_version_ids;
+                } else model.courses.push({ course_id: pick.course_id, version_id: pick.version_id });
+                details[pick.course_id] = {...pick.detail, ...(acceptedDetails.length ? {accepted_versions:acceptedDetails} : {})};
                 if (!r.course_ids.includes(pick.course_id)) r.course_ids.push(pick.course_id);
             }
             render();
@@ -1310,6 +1339,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             "li",
                             {},
                             node("span", {}, details[id] ? courseLabel(details[id]) : "Selected course"),
+                            button(`Manage accepted publications for ${details[id]?.code || "course"}`, () => acceptedVersions(id)),
+                            ...(details[id]?.accepted_versions?.length ? [acceptedPublicationList(details[id])] : []),
                             button(
                                 `Remove ${details[id]?.code || "course"} from requirement ${i + 1}`,
                                 () => {
@@ -1386,6 +1417,104 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 target.tabIndex = target === cards ? -1 : target.tabIndex;
                 target.focus({ preventScroll: true });
             }
+        }
+        async function acceptedVersions(id, cursor = null, stack = [], state = null) {
+            const reference = model.courses.find((c) => c.course_id === id);
+            const choices = state || {
+                chosen: new Set(reference.accepted_version_ids || []),
+                details: new Map((details[id]?.accepted_versions || []).map((v) => [v.version_id, v])),
+            };
+            const previous = dialog;
+            const data = await post(`/sis/courses/${id}/publication/page/`, cursor ? { cursor } : {});
+            if (dialog !== previous) return;
+            const body = screen(`Accepted publications · ${details[id]?.code || "Course"}`, "EXPLICIT CURRICULUM ALLOWANCES");
+            body.append(
+                node(
+                    "p",
+                    {},
+                    `Required publication: ${courseLabel(details[id])}. This remains the curriculum label and planning reference.`,
+                ),
+                node(
+                    "p",
+                    {},
+                    "Choose up to ten additional publications of this course. They can satisfy its named requirements; actual course labels, credits, grades and saved-rule conditions still come from the student's retained work. Save and publish the group to make these choices available to a degree.",
+                ),
+            );
+            const selected = node("section"),
+                versions = node("div"),
+                limitNotice = node("p", { role: "status" });
+            const apply = button(
+                "Apply accepted publications to draft",
+                () => {
+                    if (choices.chosen.size > 10) throw new Error("Choose at most ten additional course publications.");
+                    const ids = [...choices.chosen].sort();
+                    if (ids.length) {
+                        reference.accepted_version_ids = ids;
+                        details[id].accepted_versions = ids.map((v) => choices.details.get(v));
+                    } else {
+                        delete reference.accepted_version_ids;
+                        delete details[id].accepted_versions;
+                    }
+                    restore();
+                },
+                "btn-primary",
+            );
+            function selectedList() {
+                selected.replaceChildren(
+                    node("h2", { class: "h5" }, `${choices.chosen.size} additional publications selected`),
+                );
+                for (const version of choices.chosen) {
+                    const v = choices.details.get(version);
+                    selected.append(
+                        node(
+                            "p",
+                            {},
+                            `${v.version ? `Version ${v.version} · ` : ""}${courseLabel(v)} · ${text(v.credits_milli)} credits`,
+                            button(`Remove accepted publication ${v.version || courseLabel(v)}`, () => {
+                                choices.chosen.delete(version);
+                                selectedList();
+                                versions
+                                    .querySelectorAll("input")
+                                    .forEach((input) => (input.checked = choices.chosen.has(input.dataset.version)));
+                                apply.focus();
+                            }),
+                        ),
+                    );
+                }
+            }
+            for (const v of data.items) {
+                const d = {
+                    ...v.definition,
+                    version_id: v.version_id,
+                    version: v.version,
+                    title: v.definition.transcript_title || v.definition.title,
+                };
+                choices.details.set(v.version_id, d);
+                if (v.version_id === reference.version_id) {
+                    versions.append(node("p", {}, `Version ${v.version} · ${courseLabel(d)} · Required publication`));
+                    continue;
+                }
+                const control = checkbox(
+                    `Accept version ${v.version} · ${courseLabel(d)} · ${text(d.credits_milli)} credits`,
+                    (on) => {
+                        if (on && choices.chosen.size >= 10) {
+                            control.querySelector("input").checked = false;
+                            limitNotice.textContent = "Choose at most ten additional course publications.";
+                            return;
+                        }
+                        limitNotice.textContent = "";
+                        if (on) choices.chosen.add(v.version_id);
+                        else choices.chosen.delete(v.version_id);
+                        selectedList();
+                    },
+                );
+                control.querySelector("input").checked = choices.chosen.has(v.version_id);
+                control.querySelector("input").dataset.version = v.version_id;
+                versions.append(control);
+            }
+            selectedList();
+            body.append(selected, limitNotice, versions, actions(apply, button("Keep current accepted publications", restore)));
+            pager(body, data, cursor, stack, (c, h) => acceptedVersions(id, c, h, choices), "next_cursor");
         }
         async function courseSource(query = "", after = null, stack = []) {
             const data = await post("/sis/ui/data/courses/", {
@@ -3958,6 +4087,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
             const group = course?.placement_groups?.find((g) => g.id === d.group_id);
             return `Course placement · ${group ? `${group.course_code} · ${group.course_title}` : "Retained course"} → ${group?.name || data?.group_labels?.[d.group_id] || "Retained group"}`;
         }
+        if (d.kind === "course_version") {
+            const version=data?.substitution_details?.[p.adjustment_id];
+            const required=data?.courses?.find(c=>c.course_id===d.course_id);
+            return `${p.subject_label || `Course publication acceptance · ${required ? courseLabel(required) : "Retained course"}`} → ${p.replacement_label || (version ? `Version ${version.version} · ${courseLabel(version)}` : "Selected retained publication")}`;
+        }
         if (d.kind === "substitution") {
             const required = data?.courses?.find((c) => c.course_id === d.course_id),
                 replacement = data?.substitution_details?.[p.adjustment_id];
@@ -3972,9 +4106,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         return `${t?.label || p.scope_label || (d.group_id ? "Course group" : "Degree")} · ${minimumLabels[d.minimum]}: ${text(d.original_milli)} → ${text(d.required_milli)}`;
     }
     function previewCourseApprovals(data) {
-        const replacements = {};
+        const replacements = {}, publications={};
         for (const item of data.items) {
             const d = item.definition;
+            if (item.applicable && d.kind==="course_version" && data.effective_minimums.accepted_course_versions?.[d.course_id]?.[d.version_id]) {
+                (publications[d.course_id] ||= []).push(data.substitution_details[item.adjustment_id]);
+            }
             if (!item.applicable || d.kind !== "substitution") continue;
             const effective = data.effective_minimums.substitutions[d.course_id];
             if (
@@ -3983,7 +4120,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             )
                 replacements[d.course_id] = data.substitution_details[item.adjustment_id];
         }
-        return { waived_course_ids: data.effective_minimums.waived_course_ids, replacements };
+        return { waived_course_ids: data.effective_minimums.waived_course_ids, replacements, publications };
     }
     async function adjustedRequirements(
         base,
@@ -4019,6 +4156,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             summary = [
                 ["waiver", "course waiver"],
                 ["substitution", "substitution approval"],
+                ["course_version", "course-publication approval"],
                 ["minimum", "minimum reduction"],
             ]
                 .map(([kind, label]) => `${kinds(kind)} ${label}${kinds(kind) === 1 ? "" : "s"}`)
@@ -4173,12 +4311,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         "This course waiver follows the course throughout this program pursuit, without lowering credit or GPA minimums.",
                     ),
                 );
-            else if (p.definition.kind === "substitution")
+            else if (["substitution", "course_version"].includes(p.definition.kind))
                 card.append(
                     node(
                         "p",
                         {},
-                        "This substitution uses the chosen course publication and applies to the reviewed degree version. It creates no earned credit or grade.",
+                        "This approval uses the chosen course publication and applies to the reviewed degree version. It creates no earned credit or grade.",
                     ),
                 );
             else
@@ -4222,11 +4360,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         ]);
         source.parentElement.classList.add("audit-adjustment-grid");
         const list = node("div"),
-            description = node(
-                "p",
-                { role: "status", class: "audit-status" },
-                "Choose a course or minimum to begin.",
-            ),
+            description = node("p", { role: "status", class: "audit-status" }, "Choose a course or minimum to begin."),
             valueField = field("New required minimum", "", (v) => (value = v), { inputmode: "decimal" });
         valueField.hidden = true;
         const waiverButton = button("Course waiver", () => {
@@ -4280,8 +4414,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             }
         }
         const replacementPanel = panel(
-                "Choose the replacement publication",
-                "Search current catalog entries, then explicitly choose a published version. No completed course is required to approve the substitution.",
+                "Choose the course publication",
+                "Choose an exact published version. A course-publication approval stays on the same course; a substitution uses a different course. This does not require completed student work.",
             ),
             replacementList = node("div"),
             replacementStatus = node(
@@ -4299,8 +4433,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
             render();
             await replacementCourses();
         });
+        const versionButton = button("Accept course publication", () => {
+            kind = "course_version";
+            selected = null;
+            replacement = null;
+            page = 0;
+            render();
+            replacementList.replaceChildren(node("p", {}, "Choose a curriculum course, then browse its publications."));
+        });
         source.append(
-            actions(waiverButton, substitutionButton, placementButton, minimumButton),
+            actions(waiverButton, substitutionButton, versionButton, placementButton, minimumButton),
             search("Search exception targets", "", (q) => {
                 query = q;
                 page = 0;
@@ -4326,35 +4468,35 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         if (!selected || !reason.trim())
                             throw new Error("Choose an exception target and enter its approval reason.");
                         if (kind === "placement" && !placementGroup)
+                            throw new Error("Choose the group that should receive this course's eligible work.");
+                        if (["substitution", "course_version"].includes(kind) && !replacement)
                             throw new Error(
-                                "Choose the group that should receive this course's eligible work.",
+                                kind === "course_version"
+                                    ? "Choose an explicit published version of this course."
+                                    : "Choose an explicit published replacement course version.",
                             );
-                        if (kind === "substitution" && !replacement)
-                            throw new Error("Choose an explicit published replacement course version.");
-                        if (
-                            kind === "minimum" &&
-                            selected.minimum === "min_courses" &&
-                            !/^\d{1,3}$/.test(value)
-                        )
+                        if (kind === "minimum" && selected.minimum === "min_courses" && !/^\d{1,3}$/.test(value))
                             throw new Error("Use a whole number of courses for this minimum.");
                         const definition =
                             kind === "waiver"
                                 ? { kind, course_id: selected.course_id }
-                                : kind === "placement"
-                                  ? { kind, course_id: selected.course_id, group_id: placementGroup }
-                                  : kind === "substitution"
-                                    ? {
-                                          kind,
-                                          course_id: selected.course_id,
-                                          replacement_course_id: replacement.course_id,
-                                          replacement_version_id: replacement.version_id,
-                                      }
-                                    : {
-                                          kind,
-                                          group_id: selected.group_id,
-                                          minimum: selected.minimum,
-                                          required_milli: milli(value),
-                                      };
+                                : kind === "course_version"
+                                  ? { kind, course_id: selected.course_id, version_id: replacement.version_id }
+                                  : kind === "placement"
+                                    ? { kind, course_id: selected.course_id, group_id: placementGroup }
+                                    : kind === "substitution"
+                                      ? {
+                                            kind,
+                                            course_id: selected.course_id,
+                                            replacement_course_id: replacement.course_id,
+                                            replacement_version_id: replacement.version_id,
+                                        }
+                                      : {
+                                            kind,
+                                            group_id: selected.group_id,
+                                            minimum: selected.minimum,
+                                            required_milli: milli(value),
+                                        };
                         const reviewed = await post(`${base}review/`, { definition, reason });
                         exceptionConfirmation(base, reviewed, data, back, restore);
                     },
@@ -4364,7 +4506,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
         function render() {
-            replacementPanel.hidden = kind !== "substitution";
+            replacementPanel.hidden = !["substitution", "course_version"].includes(kind);
+            versionButton.setAttribute("aria-pressed", String(kind === "course_version"));
             placementPanel.hidden = kind !== "placement";
             placementButton.setAttribute("aria-pressed", String(kind === "placement"));
             renderPlacementGroups();
@@ -4392,6 +4535,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         { class: "audit-source-card" },
                         button(label, () => {
                             selected = t;
+                            if (kind === "course_version") {
+                                replacement = null;
+                                replacementStatus.textContent = "No course publication selected.";
+                                task(() => replacementVersions({ id: t.course_id }, replacementList), replacementPanel);
+                            }
                             placementGroup = null;
                             renderPlacementGroups();
                             description.textContent =
@@ -4399,9 +4547,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                     ? `Waive ${courseLabel(t)} for this program. Appears in: ${t.groups.join(", ")}.`
                                     : kind === "placement"
                                       ? `Choose which retained group may use eligible ${courseLabel(t)} work. Other groups will not use this course identity while the preference is active.`
-                                      : kind === "substitution"
-                                        ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
-                                        : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
+                                      : kind === "course_version"
+                                        ? `Accept an additional publication of ${courseLabel(t)} for this student's selected degree. The course record and earlier publications remain unchanged.`
+                                        : kind === "substitution"
+                                          ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
+                                          : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
                             valueField.hidden = kind !== "minimum";
                             if (kind === "minimum") {
                                 value = text(t.original_milli);
@@ -4422,9 +4572,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 );
             }
             if (!all.length)
-                list.append(
-                    node("p", {}, "No matching requirements. Review the selected degree publication."),
-                );
+                list.append(node("p", {}, "No matching requirements. Review the selected degree publication."));
             const pages = actions();
             if (page)
                 pages.append(
@@ -4449,9 +4597,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ...(after ? { after } : {}),
             });
             if (serial !== replacementSerial || !replacementPanel.isConnected) return;
-            replacementList.replaceChildren(
-                search("Replacement course search", query, (q) => replacementCourses(q)),
-            );
+            replacementList.replaceChildren(search("Replacement course search", query, (q) => replacementCourses(q)));
             replacementStatus.textContent = replacement
                 ? `Chosen version ${replacement.version} · ${courseLabel(replacement)} · ${text(replacement.credits_milli)} credits`
                 : "No replacement publication selected.";
@@ -4480,19 +4626,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 replacementList.append(card);
             }
             if (!result.items.length)
-                replacementList.append(
-                    node("p", {}, "No matching catalog entries. Try a different course code or title."),
-                );
-            pager(replacementList, result, after, stack, (next, previous) =>
-                replacementCourses(query, next, previous),
-            );
+                replacementList.append(node("p", {}, "No matching catalog entries. Try a different course code or title."));
+            pager(replacementList, result, after, stack, (next, previous) => replacementCourses(query, next, previous));
         }
         async function replacementVersions(course, target, cursor = null, stack = []) {
-            const result = await post(
-                `${base}replacement-courses/${course.id}/versions/`,
-                cursor ? { cursor } : {},
-            );
-            if (!target.isConnected) return;
+            const expectedCourse = kind === "course_version" ? selected?.course_id : null;
+            const result = await post(`${base}replacement-courses/${course.id}/versions/`, cursor ? { cursor } : {});
+            if (
+                !target.isConnected ||
+                (expectedCourse !== null && (kind !== "course_version" || selected?.course_id !== expectedCourse))
+            )
+                return;
             target.replaceChildren();
             for (const version of result.items)
                 target.append(
@@ -4500,10 +4644,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         "article",
                         { class: "audit-version-card" },
                         node("p", {}, `${courseLabel(version)} · ${text(version.credits_milli)} credits`),
-                        button(`Select replacement version ${version.version}`, () => {
-                            replacement = version;
-                            replacementStatus.textContent = `Chosen version ${version.version} · ${courseLabel(version)} · ${text(version.credits_milli)} credits`;
-                        }),
+                        button(
+                            `${kind === "course_version" ? "Accept publication" : "Select replacement"} version ${version.version}`,
+                            () => {
+                                replacement = version;
+                                replacementStatus.textContent = `Chosen version ${version.version} · ${courseLabel(version)} · ${text(version.credits_milli)} credits`;
+                            },
+                        ),
                     ),
                 );
             if (!result.items.length)
@@ -4569,7 +4716,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         : "Eligible work for this course will be considered only in the chosen group for this selected degree publication. Other courses retain their normal sharing rules. This does not guarantee a complete placement, override a grade/publication requirement, or change earned credits, GPA or charges. The same rule applies to eligible retake evidence; it does not select a particular attempt.",
                 ),
             );
-        if (p.definition.kind === "substitution") {
+        if (["substitution","course_version"].includes(p.definition.kind)) {
             const selected =
                 reviewed.substitution_details?.[p.adjustment_id] ||
                 data.substitution_details?.[p.adjustment_id];
@@ -4577,7 +4724,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     {},
-                    reviewed.action === "revoke"
+                    p.definition.kind === "course_version"
+                        ? (reviewed.action === "revoke" ? "This decision removes only this student's additional publication allowance. It preserves the accepted course record and earlier approval." : "This publication may satisfy the same course's named requirements in this selected degree. Other publication approvals remain separate. Course awards, credits, grades and transcript labels are preserved.")
+                    : reviewed.action === "revoke"
                         ? "Revoking this substitution restores the original course requirement. Earned coursework and grades are preserved."
                         : "This replacement may satisfy the original course requirement in the reviewed program. Earned credit and grades come from actual coursework; this approval creates neither.",
                 ),
@@ -4587,7 +4736,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node(
                         "p",
                         {},
-                        `Chosen replacement publication: version ${selected.version} · ${courseLabel(selected)} · ${text(selected.credits_milli)} credits`,
+                        `Chosen ${p.definition.kind === "course_version" ? "course" : "replacement"} publication: version ${selected.version} · ${courseLabel(selected)} · ${text(selected.credits_milli)} credits`,
                     ),
                 );
         }

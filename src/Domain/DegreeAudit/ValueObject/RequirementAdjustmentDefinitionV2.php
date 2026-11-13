@@ -15,6 +15,16 @@ final readonly class RequirementAdjustmentDefinitionV2
     /** @param array<string, mixed> $definition */
     public function __construct(public array $definition)
     {
+        if (($definition['kind'] ?? null) === 'course_version') {
+            self::keys($definition, ['kind', 'course_id', 'version_id']);
+            foreach (['course_id', 'version_id'] as $key) {
+                if (!is_string($definition[$key])) {
+                    throw new InvalidArgumentException('Choose an explicit course publication.');
+                }
+                new EntityId($definition[$key]);
+            }
+            return;
+        }
         if (($definition["kind"] ?? null) === "placement") {
             self::keys($definition, [
                 "kind",
@@ -42,12 +52,17 @@ final readonly class RequirementAdjustmentDefinitionV2
             }
             new EntityId($definition[$key]);
         }
-        if ($definition["course_id"] === $definition["replacement_course_id"]) {
-            throw new InvalidArgumentException("Choose a different course as the replacement.");
+        if ($definition['course_id'] === $definition['replacement_course_id']) {
+            throw new InvalidArgumentException(
+                'Use a course-publication exception to accept another version of this course.',
+            );
         }
     }
     public function key(): string
     {
+        if ($this->definition['kind'] === 'course_version') {
+            return 'course_version:' . $this->definition['course_id'] . ':' . $this->definition['version_id'];
+        }
         if ($this->definition["kind"] === "placement") {
             return "placement:" . $this->definition["course_id"];
         }

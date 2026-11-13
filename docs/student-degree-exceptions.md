@@ -1,8 +1,10 @@
-# Student waivers, substitutions and minimum exceptions
+# Student degree-audit exceptions
 
 A **course waiver belongs to one student-program pursuit**. It removes the requirement to take the course wherever it is required within that program, regardless of course group. A dual-degree pursuit needs its own approval. Waiving a course never creates an earned award, grade, GPA points, resident credit or a financial reversal.
 
 A **minimum exception** explicitly reduces a published credit/GPA threshold for that student. It is separate from a waiver and applies to the exact degree publication reviewed. Neither action changes the institution's published curriculum or another student's requirements.
+
+A **course-publication acceptance** allows a specific additional publication of a required course for one student-program pursuit and selected degree publication. It preserves the student's actual academic record. Use curriculum setup instead when the allowance should apply to everyone using a newly published course group.
 
 These controls retain approved inputs and show their effective thresholds. The [course-group placement review](student-course-placement.md) now applies approved waivers, substitutions and group minimum/grade-floor reductions. Approved general minimum reductions now also appear in the [combined degree-progress review](student-degree-progress.md), alongside their original published thresholds. Complete degree evaluation and specialization exclusions remain subsequent stages; these controls do not award credentials or manufacture academic facts.
 
@@ -60,6 +62,18 @@ The substitution applies wherever the original is required within this one pursu
 In the selected student's placement review, a substitute can also contribute to a saved-rule card when its own retained course facts satisfy that rule. One combined placement counts its credits and course identity once in the group. The original target does not inherit the replacement's rule match, and one actual course cannot fill two different named targets. Revocation removes the alternative from subsequent verified reviews; it changes no course award or earlier approval. [Placement details and limits](degree-audit-builder.md#place-matching-awards-in-course-groups) explain the shared calculation.
 
 Approvals reject self-replacements, chains/cycles and active waivers overlapping either endpoint. If selecting an older degree publication later exposes a conflict, the read remains usable: the screen identifies the conflict, omits ambiguous substitutions from the effective map and allows reasoned revocation. It never invents an allocation or silently chooses an approval. Revocation retains the original decision. Authorized student readers can inspect substitutions; office authority is required for replacement searches and approval/revocation.
+
+## Accept a course publication for one student
+
+Use **Student exceptions → Approve an exception → Accept course publication** when this student's retained work uses another publication of a curriculum course. Select the required course, choose **Accept publication version …**, explain the registrar's reason, and review the exact retained publication before **Approve reviewed exception**. Curriculum-wide setup belongs in the [course-group accepted-publication list](degree-audit-builder.md#accept-other-publications-of-the-same-course).
+
+This exception is specific to one student-program pursuit and the selected degree publication. It adds one explicit allowed course publication; it neither substitutes another course nor changes the student's accepted work, title, credits, grade, GPA or charges. Different publication approvals for the same course coexist independently. A publication already accepted by every applicable curriculum group is not a new exception, and an already active identical approval is rejected. Foreign publications and courses outside the selected curriculum cannot be approved.
+
+Review and revocation confirmations expire after 20 minutes and bind the signed-in reviewer, selected requirements and expected approval-stream version. They require both `sis:degree-audit:adjust` and `sis:student:read`, plus the student's pursuit scope. Changed selections, concurrent approvals, an inactive pursuit, a changed cohort or lost authority reject a new confirmation. A completed exact retry returns its original receipt even after expiry or later revocation, without restoring an obsolete allowance.
+
+**Review revocation** removes only that publication allowance. Other approved publications and curriculum allowances remain. The course's original acceptance, academic events and earlier approval/revocation facts remain recorded. Current placement rereads applicable allowances and can return needs review again when a used version is no longer accepted; it does not rewrite history or retroactively change an issued document.
+
+The existing `RequirementAdjustmentWasGranted`/`WasRevoked` stream and active projection retain these decisions, with current approval kind `course_version`, exact course/publication identities and a publication-specific key. No new event table, numbered model, schema migration or data conversion is needed. Earlier waiver/substitution/minimum/placement facts and receipts keep their contracts. The generic 500-active-approval bound still applies. Curated labels use verified publications; request-local metadata is shared with the overlay and never persists as academic truth. Reads remain private, bounded and owner/office checked, while browser mutations retain CSRF protection.
 
 ## Course placement preferences
 

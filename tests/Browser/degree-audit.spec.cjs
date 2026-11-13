@@ -139,11 +139,20 @@ async function fixture(page, options = {}) {
     }
     if (options.unknownOrdering) delete definition.policies.repeat_attempt_order;
     const publishedDefinition = {...structuredClone(definition), name:"Published Computing <b>fictional</b>", min_credits_milli:3000};
+    function resolvedCourseDetails(d) {
+        const values=structuredClone(courses);
+        for (const c of d.courses || []) {
+            if (c.accepted_version_ids?.length) values[c.course_id].accepted_versions=c.accepted_version_ids.map(v=>({
+                course_id:c.course_id,version_id:v,version:2,code:"MATH.101",title:"Advanced Algebra",credits_milli:4000,
+            }));
+        }
+        return values;
+    }
     function detail(g, v) {
         const entry = groups.get(g);
         return v
-            ? { ...entry.versions.find((x) => x.version_id === v), group_id: g, course_details: courses }
-            : { ...entry, course_details: courses, grade_point_scale: scale };
+            ? { ...entry.versions.find((x) => x.version_id === v), group_id: g, course_details: resolvedCourseDetails(entry.versions.find(x=>x.version_id===v).definition) }
+            : { ...entry, course_details: resolvedCourseDetails(entry.definition), grade_point_scale: scale };
     }
     function row() {
         return {
@@ -268,7 +277,7 @@ async function fixture(page, options = {}) {
             const [, , , gid, action, version] = path.split("/");
             const g = groups.get(gid);
             if (!g) throw new Error(`Unexpected group ${gid}`);
-            if (!action) response = { ...g, course_details: courses, grade_point_scale: scale };
+            if (!action) response = { ...g, course_details: resolvedCourseDetails(g.definition), grade_point_scale: scale };
             else if (action === "assistance") {
                 if (body && options.groupAiFailure) return route.fulfill({status:503,json:{error:"The assistance provider rejected authentication. Your draft is unchanged."}});
                 if (body && options.groupAiEdit) await page.getByLabel("Course group name", {exact:true}).fill("My later group edit");
@@ -281,11 +290,11 @@ async function fixture(page, options = {}) {
             else if (action === "save") {
                 g.definition = body.definition;
                 g.revision++;
-                response = { ...g, course_details: courses, grade_point_scale: scale };
+                response = { ...g, course_details: resolvedCourseDetails(g.definition), grade_point_scale: scale };
             } else if (action === "review")
                 response = {
                     definition: g.definition,
-                    course_details: courses,
+                    course_details: resolvedCourseDetails(g.definition),
                     reason: body.reason,
                     review_token: `group-review-${gid}`,
                 };
@@ -1619,6 +1628,27 @@ test("mixed repeat memberships show each card's own credits without counting ano
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     expect(f.calls.filter(c=>c.path.endsWith("/test/"))).toHaveLength(1);
     expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("curriculum authors explicitly accept additional publications without replacing the required version", async ({page}) => {
+    const f=await fixture(page,{newCourseVersion:true});
+    await page.getByRole("button",{name:"Course group library",exact:true}).click();
+    await page.getByRole("button",{name:"Build General education",exact:true}).click();
+    await page.getByRole("button",{name:"Manage accepted publications for MATH.101",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Required publication: MATH.101 · Algebra");
+    await page.getByRole("checkbox",{name:"Accept version 2 · MATH.101 · Advanced Algebra · 4 credits",exact:true}).check();
+    await page.getByRole("button",{name:"Apply accepted publications to draft",exact:true}).click();
+    expect(f.calls.some(c=>c.path.includes("/course-groups/") && c.path.endsWith("/save/"))).toBe(false);
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    const saved=f.calls.find(c=>c.path.includes("/course-groups/") && c.path.endsWith("/save/"));
+    expect(saved.body.definition.courses).toEqual([{course_id:f.course,version_id:f.courseVersion,accepted_version_ids:[id(16)]}]);
+    await page.getByRole("button",{name:"Requirements preview",exact:true}).click();
+    await page.getByText("Also accepted publications (1)",{exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Version 2 · MATH.101 · Advanced Algebra · 4 credits");
+    await page.setViewportSize({width:375,height:812});await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

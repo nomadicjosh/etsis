@@ -188,7 +188,9 @@ final readonly class PublishedRequirementsReader
                 "course_details" => [],
             ];
             foreach ($definition["courses"] as $course) {
-                $requested[$course["course_id"]][$course["version_id"]] = true;
+                foreach ([$course['version_id'], ...($course['accepted_version_ids'] ?? [])] as $accepted) {
+                    $requested[$course['course_id']][$accepted] = true;
+                }
             }
         }
         $courses = [];
@@ -210,13 +212,20 @@ final readonly class PublishedRequirementsReader
                     "code" => $published->definition->code,
                     "title" => $published->definition->text->transcriptTitle ?? $published->definition->title,
                     "credits_milli" => $published->definition->creditsMilli,
+                    "version" => $item['version'],
                 ];
             }
         }
         foreach ($groups as &$group) {
             foreach ($group["definition"]["courses"] as $reference) {
-                $group["course_details"][$reference["course_id"]] =
-                $courses[$reference["course_id"]][$reference["version_id"]];
+                $details = $courses[$reference['course_id']][$reference['version_id']];
+                if (($reference['accepted_version_ids'] ?? []) !== []) {
+                    $details['accepted_versions'] = array_map(
+                        static fn(string $v): array => ['version_id' => $v] + $courses[$reference['course_id']][$v],
+                        $reference['accepted_version_ids'],
+                    );
+                }
+                $group['course_details'][$reference['course_id']] = $details;
             }
         }
         unset($group);
@@ -298,11 +307,31 @@ final readonly class PublishedRequirementsReader
         EntityId $version,
         ?HistoryReadBudget $budget = null,
     ): array {
-        $s = new StreamReference(new CoursePublicationId($course->value), "course_publication");
-        return $this->courseItem(
-            $course,
-            $this->selected($s, $version, CoursePublication::root($s->aggregateId), $budget),
-        );
+        return $this->courseVersions($course, [$version], $budget)[$version->value];
+    }
+    /** Selected immutable labels in one scan per course; no current catalog fallback.
+     * @param list<EntityId> $versions
+     * @return array<string,array<string,mixed>>
+     */
+    public function courseVersions(EntityId $course, array $versions, ?HistoryReadBudget $budget = null): array
+    {
+        if ($versions === [] || count($versions) > 500) {
+            throw new \InvalidArgumentException('Choose bounded explicit course publications.');
+        }
+        $requested = [];
+        foreach ($versions as $version) {
+            if (isset($requested[$version->value])) {
+                throw new \InvalidArgumentException('Choose distinct course publications.');
+            }
+            $requested[$version->value] = true;
+        }
+        $s = new StreamReference(new CoursePublicationId($course->value), 'course_publication');
+        $found = $this->selectedVersions($s, $requested, CoursePublication::root($s->aggregateId), $budget);
+        $rows = [];
+        foreach ($found as $id => $item) {
+            $rows[$id] = $this->courseItem($course, $item);
+        }
+        return $rows;
     }
     /** @param array<string,mixed> $item
      * @return array<string,mixed> */

@@ -77,3 +77,31 @@ test("unpublished catalog entries cannot be selected as replacements", async ({ 
     expect(f.errors).toEqual([]);
     await accessible(page);
 });
+
+test("registrar accepts and revokes one publication without choosing another course", async ({page}) => {
+    const f=await fixture(page,{assigned:true});
+    await page.getByRole("button",{name:"Student exceptions",exact:true}).click();
+    await page.getByRole("button",{name:"Approve an exception",exact:true}).click();
+    await page.getByRole("button",{name:"Accept course publication",exact:true}).click();
+    await page.getByRole("button",{name:"MATH.101 · Algebra",exact:true}).click();
+    await page.getByRole("button",{name:"Accept publication version 2",exact:true}).click();
+    await page.getByLabel("Reason for student exception",{exact:true}).fill("Fictional publication acceptance");
+    await page.getByRole("button",{name:"Review exception",exact:true}).click();
+    const dialog=page.locator("dialog.degree-audit-studio");
+    await expect(dialog).toContainText("Other publication approvals remain separate");
+    await expect(dialog).toContainText("Chosen course publication: version 2 · MATH.101 · Revised Algebra <b>fictional</b>");
+    await expect(dialog.locator("b")).toHaveCount(0);
+    await page.setViewportSize({width:375,height:812});await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole("button",{name:"Approve reviewed exception",exact:true}).click();
+    await expect(dialog).toContainText("Course publication acceptance · MATH.101 · Algebra");
+    expect(f.calls.find(c=>c.path===f.adjustmentBase+"review/").body.definition).toEqual({kind:"course_version",course_id:id(7),version_id:id(17)});
+    await page.getByRole("button",{name:"Review revocation",exact:true}).click();
+    await page.getByLabel("Reason for revocation",{exact:true}).fill("Fictional restore baseline");
+    await page.getByRole("button",{name:"Prepare revocation",exact:true}).click();
+    await expect(dialog).toContainText("removes only this student's additional publication allowance");
+    await page.getByRole("button",{name:"Revoke reviewed exception",exact:true}).click();
+    await expect(dialog).toContainText("No active exceptions");
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});

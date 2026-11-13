@@ -31,6 +31,8 @@ final readonly class RuleAllocationCompiler
         if (count($work) > 200 || count($eligibility) > 5000) {
             throw new AllocationBudgetExhaustedException();
         }
+        // Rebuild array values so PHP references in a caller's captured snapshot cannot be mutated.
+        $requirements = $this->detached($requirements);
         $decisions = [];
         foreach ($eligibility as $row) {
             $key = $row['group_id'] . ':' . $row['requirement_id'] . ':' . $row['work_id'];
@@ -49,7 +51,10 @@ final readonly class RuleAllocationCompiler
             if ($dynamic === []) {
                 continue;
             }
-            $named = array_column($group['definition']['courses'], 'version_id', 'course_id');
+            $named = [];
+            foreach ($group['definition']['courses'] as $reference) {
+                $named[$reference['course_id']] = $this->matches->acceptedVersions($reference, $effective);
+            }
             $substitutes = [];
             foreach ($effective['substitutions'] as $target => $replacement) {
                 if (
@@ -100,7 +105,7 @@ final readonly class RuleAllocationCompiler
                     $membership[] = $rule['id'];
                     if (
                         $status === CourseMatchStatus::Candidate && $item['course_version_id'] !== null &&
-                        (!isset($named[$courseId]) || $named[$courseId] === $item['course_version_id'])
+                        (!isset($named[$courseId]) || isset($named[$courseId][$item['course_version_id']]))
                     ) {
                         $targets[$rule['id']][$courseId] = true;
                     }
@@ -132,7 +137,7 @@ final readonly class RuleAllocationCompiler
                 if ($status !== CourseMatchStatus::Candidate) {
                     continue;
                 }
-                if (isset($named[$courseId]) && $named[$courseId] !== $item['course_version_id']) {
+                if (isset($named[$courseId]) && !isset($named[$courseId][$item['course_version_id']])) {
                     $issues['rule_publication_conflict'] = true;
                 }
             }
@@ -173,5 +178,17 @@ final readonly class RuleAllocationCompiler
         }
         ksort($issues, SORT_STRING);
         return ['requirements' => $requirements, 'issues' => array_keys($issues)];
+    }
+    /** @template TKey of array-key
+     * @param array<TKey,mixed> $values
+     * @return array<TKey,mixed>
+     */
+    private function detached(#[\SensitiveParameter] array $values): array
+    {
+        $copy = [];
+        foreach ($values as $key => $value) {
+            $copy[$key] = is_array($value) ? $this->detached($value) : $value;
+        }
+        return $copy;
     }
 }

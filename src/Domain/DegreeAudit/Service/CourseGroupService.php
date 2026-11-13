@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\Audit\Repository\AuditTrail;
-use Domain\Catalog\Service\CoursePublicationService;
+use Domain\Catalog\Service\PublishedCourseReader;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Communications\Service\MessageCipher;
 use Domain\DegreeAudit\CourseGroupPublication;
 use Domain\DegreeAudit\Event\CourseGroupWasPublished;
@@ -34,7 +35,7 @@ final readonly class CourseGroupService
 {
     public function __construct(
         private CourseGroupRepository $groups,
-        private CoursePublicationService $courses,
+        private PublishedCourseReader $courses,
         private HistoricalEventStore $history,
         private StudentAccess $access,
         private UnitOfWork $transactions,
@@ -454,18 +455,29 @@ final readonly class CourseGroupService
     private function courseDetails(CourseGroupDefinition|CourseGroupDefinitionV2 $definition): array
     {
         $rows = [];
-        foreach ($definition->definition["courses"] as $c) {
-            $d = $this->courses->publishedDefinition(
-                new EntityId($c["course_id"]),
-                new EntityId($c["version_id"]),
+        $budget = new HistoryReadBudget();
+        foreach ($definition->definition['courses'] as $c) {
+            $versions = $this->courses->selectedVersions(
+                new EntityId($c['course_id']),
+                array_map(
+                    static fn(string $v): EntityId => new EntityId($v),
+                    array_values([$c['version_id'], ...($c['accepted_version_ids'] ?? [])])
+                ),
+                $budget,
             );
-            $rows[$c["course_id"]] = [
-                "course_id" => $c["course_id"],
-                "version_id" => $c["version_id"],
-                "code" => $d->definition->code,
-                "title" => $d->definition->text->transcriptTitle ?? $d->definition->title,
-                "credits_milli" => $d->definition->creditsMilli,
-            ];
+            $describe = static function (string $version) use ($versions, $c): array {
+                $selected = $versions[$version];
+                $d = $selected['publication']->definition;
+                return [
+                    'course_id' => $c['course_id'], 'version_id' => $version, 'version' => $selected['version'],
+                    'code' => $d->code, 'title' => $d->text->transcriptTitle ?? $d->title,
+                    'credits_milli' => $d->creditsMilli,
+                ];
+            };
+            $rows[$c['course_id']] = $describe($c['version_id']);
+            if (($c['accepted_version_ids'] ?? []) !== []) {
+                $rows[$c['course_id']]['accepted_versions'] = array_map($describe, $c['accepted_version_ids']);
+            }
         }
         return $rows;
     }

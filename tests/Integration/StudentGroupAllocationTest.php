@@ -257,6 +257,109 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame($before, $state());
     }
 
+    public function testIndividualPublicationApprovalsCoexistExpireAndRevokeWithoutChangingAcademicFacts(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        $original = $f->f->groupDefinition["courses"][0];
+        $course = new EntityId($original["course_id"]);
+        $pub = $f->f->catalog->publications();
+        $s->sql->update(
+            "sis_courses",
+            ["title" => "Fictional accepted later title", "credits_milli" => 4000],
+            ["id" => $course->value],
+        );
+        $r = $pub->review($course, "Fictional later course");
+        $later = $pub->publish($course, $r["review_token"])["operation_id"];
+        $f->f->groupDefinition["courses"][0]["version_id"] = $later;
+        $this->work($f, 0);
+        $f->f->groupDefinition["courses"][0] = $original;
+        $group = EntityId::generate();
+        $d = CourseGroupDefinitionV2::blank("Fictional version exception")->definition;
+        $d["min_credits_milli"] = 3000;
+        $d["courses"] = [$original];
+        $d["rules"] = [
+            [
+                "id" => EntityId::generate()->value,
+                "mode" => "all",
+                "minimum_courses" => 1,
+                "course_ids" => [$course->value],
+            ],
+        ];
+        $f->f->groups->create($group, new CourseGroupDefinitionV2($d));
+        $review = $f->f->groups->review($group, "Fictional strict curriculum");
+        $gv = $f->f->groups->publish($group, $review["review_token"])["operation_id"];
+        $dd = $f->f->definition;
+        $dd["groups"] = [["group_id" => $group->value, "version_id" => $gv]];
+        $row = $f->f->degrees->view($f->f->degree);
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($dd));
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        $service = $this->service($f);
+        self::assertSame("needs_review", $service->preview($f->student, $f->assignment)["outcome"]);
+        $academic = $f->f->digest("sis_academic_credits");
+        $finance = $s->financialEvents();
+        $approvals = $this->adjustments($f);
+        $definition = ["kind" => "course_version", "course_id" => $course->value, "version_id" => $later];
+        $review = $approvals->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $definition,
+            "Fictional registrar acceptance",
+        );
+        $receipt = $approvals->commit($f->student, $f->assignment, $review["review_token"]);
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        $p = $result["groups"][0]["placements"][0];
+        self::assertTrue($p["via_substitution"]);
+        self::assertSame(4000, $p["credits_milli"]);
+        self::assertSame("Fictional accepted later title", $p["course_title"]);
+        self::assertNotSame($p["course_title"], $p["target_title"]);
+        $s->sql->update("sis_courses", ["title" => "Fictional third publication"], ["id" => $course->value]);
+        $r = $pub->review($course, "Fictional third course");
+        $third = $pub->publish($course, $r["review_token"])["operation_id"];
+        $extra = $approvals->reviewGrant(
+            $f->student,
+            $f->assignment,
+            ["kind" => "course_version", "course_id" => $course->value, "version_id" => $third],
+            "Fictional second allowance",
+        );
+        $approvals->commit($f->student, $f->assignment, $extra["review_token"]);
+        self::assertCount(
+            2,
+            $approvals->view($f->student, $f->assignment)["effective_minimums"]["accepted_course_versions"][
+                $course->value
+            ],
+        );
+        $revoke = $approvals->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]),
+            "Fictional revoke first allowance",
+        );
+        $approvals->commit($f->student, $f->assignment, $revoke["review_token"]);
+        self::assertSame("needs_review", $service->preview($f->student, $f->assignment)["outcome"]);
+        $s->clock->time = $s->clock->time->modify("+21 minutes");
+        self::assertSame($receipt, $approvals->commit($f->student, $f->assignment, $review["review_token"]));
+        self::assertSame("needs_review", $service->preview($f->student, $f->assignment)["outcome"]);
+        self::assertSame($academic, $f->f->digest("sis_academic_credits"));
+        self::assertSame($finance, $s->financialEvents());
+        $expired = $approvals->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $definition,
+            "Fictional expired new allowance",
+        );
+        $before = $f->f->digest("sis_history_events");
+        $s->clock->time = $s->clock->time->modify("+21 minutes");
+        try {
+            $approvals->commit($f->student, $f->assignment, $expired["review_token"]);
+            self::fail("Expired review accepted.");
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($before, $f->f->digest("sis_history_events"));
+        }
+    }
+
     private function institution(): StudentRequirementsFixture
     {
         $f = new StudentRequirementsFixture();

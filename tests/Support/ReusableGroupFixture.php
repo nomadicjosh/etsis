@@ -92,7 +92,7 @@ final class ReusableGroupFixture
         $f = $this->sis;
         return new CourseGroupService(
             new SqlCourseGroupRepository($f->sql),
-            $this->catalog->publications(),
+            new \Domain\Catalog\Service\PublishedCourseReader($history ?? $this->history),
             $history ?? $this->history,
             $f->access,
             $transactions ?? $f->transactions,

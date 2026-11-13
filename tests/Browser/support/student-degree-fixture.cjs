@@ -225,6 +225,7 @@ async function fixture(page, options = {}) {
             },
             waived_course_ids: [],
             substitutions: {},
+            accepted_course_versions: {},
             placements: {},
             substitution_conflicts: {},
         };
@@ -232,6 +233,7 @@ async function fixture(page, options = {}) {
             if (p.applicable === false) continue;
             const d = p.definition;
             if (d.kind === "waiver") out.waived_course_ids.push(d.course_id);
+            else if (d.kind === "course_version") (out.accepted_course_versions[d.course_id] ||= {})[d.version_id]=true;
             else if (d.kind === "placement")
                 out.placements[d.course_id] = {
                     group_id: d.group_id,
@@ -262,11 +264,12 @@ async function fixture(page, options = {}) {
         title: "Fictional <b>Science</b>",
         credits_milli: 4000,
     };
+    const acceptedPublication={...replacement,course_id:courses[0].course_id,version_id:id(17),version:2,code:"MATH.101",title:"Revised Algebra <b>fictional</b>"};
     const substitutionDetails = (items = activeAdjustments) =>
         Object.fromEntries(
             items
-                .filter((p) => p.definition.kind === "substitution")
-                .map((p) => [p.adjustment_id, replacement]),
+                .filter((p) => ["substitution","course_version"].includes(p.definition.kind))
+                .map((p) => [p.adjustment_id, p.definition.kind==="course_version" ? acceptedPublication : replacement]),
         );
     let cursorCount = 0;
     page.on("pageerror", (e) => errors.push(e.message));
@@ -961,13 +964,15 @@ async function fixture(page, options = {}) {
             };
         else if (path === `${adjustmentBase}replacement-courses/${replacement.course_id}/versions/`)
             response = { items: options.unpublishedReplacement ? [] : [replacement], next_cursor: null };
+        else if (path === `${adjustmentBase}replacement-courses/${acceptedPublication.course_id}/versions/`)
+            response={items:[acceptedPublication],next_cursor:null};
         else if (path === `${adjustmentBase}review/`) {
             const d = body.definition,
                 previous = activeAdjustments.find(
                     (p) =>
                         p.definition.kind === d.kind &&
                         (d.kind !== "minimum"
-                            ? p.definition.course_id === d.course_id
+                            ? p.definition.course_id === d.course_id && (d.kind!=="course_version" || p.definition.version_id===d.version_id)
                             : p.definition.group_id === d.group_id && p.definition.minimum === d.minimum),
                 );
             const enriched =
@@ -996,7 +1001,7 @@ async function fixture(page, options = {}) {
                 affected_groups: d.kind !== "minimum" || d.group_id ? ["General education"] : [],
                 group_labels: { [group]: "General education" },
                 grade_scale: requirements.grade_scale || null,
-                substitution_details: d.kind === "substitution" ? { [p.adjustment_id]: replacement } : {},
+                substitution_details: ["substitution","course_version"].includes(d.kind) ? { [p.adjustment_id]: d.kind==="course_version" ? acceptedPublication : replacement } : {},
                 effective_minimums: effective([...activeAdjustments.filter((x) => x !== previous), p]),
                 review_token: `fictional-exception-${p.adjustment_id}`,
             };

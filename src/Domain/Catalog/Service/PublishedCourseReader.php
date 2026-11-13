@@ -52,26 +52,50 @@ final readonly class PublishedCourseReader
         EntityId $version,
         HistoryReadBudget $budget,
     ): PublishedCourseDefinition {
+        return $this->selectedVersions($course, [$version], $budget)[$version->value]['publication'];
+    }
+
+    /** Read selected versions in one complete protected scan, sharing the caller's work limit.
+     * @param list<EntityId> $versions
+     * @return array<string,array{version:int,publication:PublishedCourseDefinition}>
+     */
+    public function selectedVersions(EntityId $course, array $versions, HistoryReadBudget $budget): array
+    {
+        if ($versions === [] || count($versions) > 11) {
+            throw new \InvalidArgumentException('Choose at most eleven explicit course publications.');
+        }
+        $requested = [];
+        foreach ($versions as $version) {
+            if (isset($requested[$version->value])) {
+                throw new \InvalidArgumentException('Choose distinct course publications.');
+            }
+            $requested[$version->value] = true;
+        }
         $stream = $this->stream($course);
         $root = CoursePublication::root($stream->aggregateId);
         $cursor = null;
-        $found = null;
+        $found = [];
         do {
             $page = $budget->page($this->history, $stream, $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 $p = $stored->event->payload();
-                if ($p["version_id"] === $version->value) {
-                    if ($found !== null) {
+                if (isset($requested[$p['version_id']])) {
+                    if (isset($found[$p['version_id']])) {
                         throw new CorruptHistoryException();
                     }
-                    $found = PublishedCourseDefinition::fromPublication($course, $p);
+                    $found[$p['version_id']] = [
+                        'version' => $stored->event->playhead(),
+                        'publication' => PublishedCourseDefinition::fromPublication($course, $p),
+                    ];
                 }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
-        return $found ??
-        throw new RecordNotFoundException("Choose a publication belonging to this institutional course.");
+        if (count($found) !== count($requested)) {
+            throw new RecordNotFoundException('Choose publications belonging to this institutional course.');
+        }
+        return $found;
     }
 
     private function stream(EntityId $course): StreamReference

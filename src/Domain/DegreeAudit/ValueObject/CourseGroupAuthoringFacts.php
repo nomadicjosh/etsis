@@ -67,6 +67,9 @@ final readonly class CourseGroupAuthoringFacts
                 "title" => $course["title"],
                 "credits_milli" => $course["credits_milli"],
             ];
+            if (($reference['accepted_version_ids'] ?? []) !== []) {
+                $value['additional_accepted_publications'] = count($reference['accepted_version_ids']);
+            }
             if ($degreePositions !== []) {
                 $shared = $degreePositions[$id] ?? null;
                 if (!is_int($shared) || $shared < 1) {
