@@ -25,7 +25,7 @@ use Domain\Student\Repository\StudentRecordRepository;
 use InvalidArgumentException;
 
 /** Runtime-only curriculum trial. No publication, assignment, approval or result persistence. */
-final readonly class DraftDegreeAuditService
+final readonly class DegreeAuditTrialService
 {
     public function __construct(
         private RequirementsRepository $templates,
@@ -42,7 +42,7 @@ final readonly class DraftDegreeAuditService
     ) {
     }
 
-    /** Tests the supplied editor snapshot; group draft choices are explicit, never published automatically.
+    /** Test the editor snapshot without publishing it or assigning it to the student.
      * @return array<string,mixed>
      */
     public function test(
@@ -53,44 +53,107 @@ final readonly class DraftDegreeAuditService
         bool $useGroupDrafts = false,
         ?HistoryReadBudget $budget = null,
     ): array {
+        return $this->run($student, $assignment, function (HistoryReadBudget $budget) use (
+            $template,
+            $definition,
+            $useGroupDrafts,
+        ): array {
+            if ($definition->definition['groups'] === []) {
+                throw new InvalidArgumentException('Add a course group before testing this degree draft.');
+            }
+            $row = $this->templates->get($template);
+            $context = $this->templates->context(
+                new EntityId($row['program_id']),
+                new EntityId($row['academic_year_id']),
+            );
+            [$groups, $sources] = $this->groupInputs($definition, $useGroupDrafts, $budget);
+            return [
+                'source' => 'draft',
+                'requirements' => [
+                    'definition' => $definition->definition,
+                    'group_details' => $groups,
+                    'grade_scale' => $this->scales->resolve(new EntityId($row['program_id']), $budget),
+                ],
+                'academic_year_code' => $context['academic_year_code'],
+                'program_code' => $context['program_code'],
+                'program_title' => $context['program_title'],
+                'sources' => $sources,
+                'version' => null,
+                'version_id' => null,
+            ];
+        }, $budget);
+    }
+
+    /** Exact immutable requirements, including retained grading context; no draft or current-scale fallback.
+     * @return array<string,mixed>
+     */
+    public function testPublication(
+        EntityId $template,
+        EntityId $version,
+        EntityId $student,
+        EntityId $assignment,
+        ?HistoryReadBudget $budget = null,
+    ): array {
+        return $this->run($student, $assignment, function (HistoryReadBudget $budget) use (
+            $template,
+            $version,
+        ): array {
+            $requirements = $this->published->version($template, $version, $budget);
+            $sources = [];
+            foreach ($requirements['group_details'] as $id => $group) {
+                $sources[] = [
+                    'group_id' => $id,
+                    'name' => $group['definition']['name'],
+                    'source' => 'publication',
+                    'revision' => $group['version'],
+                ];
+            }
+            return [
+                'source' => 'publication',
+                'requirements' => $requirements,
+                'academic_year_code' => $requirements['context']['academic_year_code'],
+                'program_code' => $requirements['context']['program_code'],
+                'program_title' => $requirements['context']['program_title'],
+                'sources' => $sources,
+                'version' => $requirements['version'],
+                'version_id' => $version->value,
+            ];
+        }, $budget);
+    }
+
+    /** Caller-supplied source resolution is internal; HTTP clients cannot supply academic inputs.
+     * @param callable(HistoryReadBudget):array<string,mixed> $resolve
+     * @return array<string,mixed>
+     */
+    private function run(
+        EntityId $student,
+        EntityId $assignment,
+        callable $resolve,
+        ?HistoryReadBudget $budget = null,
+    ): array {
         $actor = $this->authorize($student, $assignment);
-        if ($definition->definition['groups'] === []) {
-            throw new InvalidArgumentException('Add a course group before testing this degree draft.');
-        }
         try {
             return $this->transactions->run(function () use (
-                $template,
                 $student,
                 $assignment,
-                $definition,
-                $useGroupDrafts,
+                $resolve,
                 $budget,
                 $actor,
             ): array {
                 $this->students->lock($student);
                 $this->authorize($student, $assignment, $actor);
-                $row = $this->templates->get($template);
-                $pursuit = $this->students->assignment($assignment);
-                if ($pursuit->programId->value !== $row['program_id']) {
-                    throw new InvalidArgumentException('Choose a pursuit in the degree draft\'s academic program.');
-                }
                 $budget ??= new HistoryReadBudget();
-                $context = $this->templates->context(
-                    new EntityId($row['program_id']),
-                    new EntityId($row['academic_year_id']),
-                );
-                [$groups, $sources] = $this->groupInputs($definition, $useGroupDrafts, $budget);
-                $requirements = [
-                    'definition' => $definition->definition,
-                    'group_details' => $groups,
-                    'grade_scale' => $this->scales->resolve(new EntityId($row['program_id']), $budget),
-                ];
+                $source = $resolve($budget);
+                $requirements = $source['requirements'];
                 $effective = [
                     'degree' => array_intersect_key(
-                        $definition->definition,
+                        $requirements['definition'],
                         array_flip(RequirementAdjustmentDefinitionV2::DEGREE_MINIMUMS),
                     ),
-                    'groups' => array_map(static fn(array $g): array => $g['definition'], $groups),
+                    'groups' => array_map(
+                        static fn(array $g): array => $g['definition'],
+                        $requirements['group_details'],
+                    ),
                     'waived_course_ids' => [],
                     'substitutions' => [],
                     'substitution_conflicts' => [],
@@ -106,18 +169,21 @@ final readonly class DraftDegreeAuditService
                 $result = $this->evaluator->evaluate($inputs, $requirements, $effective, $budget);
                 $this->authorize($student, $assignment, $actor);
                 return $result + [
-                    'mode' => 'draft_test',
+                    'mode' => 'runtime_test',
                     'context' => [
-                        'mode' => 'draft_test',
-                        'name' => $definition->definition['name'],
-                        'academic_year_code' => $context['academic_year_code'],
-                        'group_reuse' => $definition->groupReuse->value,
+                        'mode' => 'runtime_test',
+                        'source' => $source['source'],
+                        'name' => $requirements['definition']['name'],
+                        'academic_year_code' => $source['academic_year_code'],
+                        'program_code' => $source['program_code'],
+                        'program_title' => $source['program_title'],
+                        'group_reuse' => $requirements['definition']['policies']['group_reuse'] ?? null,
                         'cohort_changed' => false,
-                        'version' => null,
-                        'requirements_version_id' => null,
+                        'version' => $source['version'],
+                        'requirements_version_id' => $source['version_id'],
                     ],
-                    'sources' => $sources,
-                    'draft_hash' => hash('sha256', json_encode($requirements, JSON_THROW_ON_ERROR)),
+                    'sources' => $source['sources'],
+                    'definition_hash' => hash('sha256', json_encode($requirements, JSON_THROW_ON_ERROR)),
                     'exceptions_applied' => false,
                 ];
             });
@@ -127,7 +193,7 @@ final readonly class DraftDegreeAuditService
             $status = 'inconsistent';
         }
         $this->authorize($student, $assignment, $actor);
-        return ['status' => $status, 'mode' => 'draft_test'];
+        return ['status' => $status, 'mode' => 'runtime_test'];
     }
 
     /** @return array{array<string,array<string,mixed>>,list<array<string,mixed>>} */

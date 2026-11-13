@@ -6,7 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\DegreeAudit\Service\RequirementsService;
-use Domain\DegreeAudit\Service\DraftDegreeAuditService;
+use Domain\DegreeAudit\Service\DegreeAuditTrialService;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -15,7 +15,7 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisDegreeAuditController
 {
-    public function __construct(private RequirementsService $service, private DraftDegreeAuditService $trials)
+    public function __construct(private RequirementsService $service, private DegreeAuditTrialService $trials)
     {
     }
     public function page(ServerRequest $request, string $program): ResponseInterface
@@ -52,10 +52,25 @@ final readonly class SisDegreeAuditController
     public function test(ServerRequest $request, string $id): ResponseInterface
     {
         $body = $request->getParsedBody();
-        if (!is_array($body) || !is_array($body['definition'] ?? null)) {
-            throw new \InvalidArgumentException('Provide the degree draft to test.');
+        if (!is_array($body)) {
+            throw new \InvalidArgumentException('Choose the audit source to test.');
         }
         $input = FormInput::from($request);
+        $source = $input->text('source', 20);
+        if ($source === 'publication') {
+            if (array_key_exists('definition', $body) || array_key_exists('use_group_drafts', $body)) {
+                throw new \InvalidArgumentException('A published audit test cannot override its retained definitions.');
+            }
+            return new JsonResponse($this->trials->testPublication(
+                new EntityId($id),
+                $input->id('version_id'),
+                $input->id('student_id'),
+                $input->id('assignment_id'),
+            ));
+        }
+        if ($source !== 'draft' || !is_array($body['definition'] ?? null) || array_key_exists('version_id', $body)) {
+            throw new \InvalidArgumentException('Provide a working draft or an exact published audit version.');
+        }
         return new JsonResponse($this->trials->test(
             new EntityId($id),
             $input->id('student_id'),

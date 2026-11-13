@@ -101,21 +101,37 @@ $digest = static function () use ($sis): string {
 };
 $before = $digest();
 $path = '/sis/degree-audits/' . $f->f->degree->value . '/test/';
-$body = ['definition' => $f->f->definition, 'student_id' => $f->student->value,
+$body = ['source' => 'draft', 'definition' => $f->f->definition, 'student_id' => $f->student->value,
     'assignment_id' => $f->assignment->value, 'use_group_drafts' => true];
 if ($send($path, $body, false)->getStatusCode() !== 403) {
     throw new RuntimeException('A runtime audit bypassed browser CSRF.');
 }
 $response = $send($path, $body);
 $result = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($response->getStatusCode() !== 200 || ($result['mode'] ?? null) !== 'draft_test' ||
+if ($response->getStatusCode() !== 200 || ($result['mode'] ?? null) !== 'runtime_test' ||
     ($result['status'] ?? null) !== 'review') {
     throw new RuntimeException('Runtime draft testing did not resolve through the actual providers.');
+}
+$publishedBody = ['source' => 'publication', 'version_id' => $f->version->value,
+    'student_id' => $f->student->value, 'assignment_id' => $f->assignment->value];
+if ($send($path, $publishedBody, false)->getStatusCode() !== 403) {
+    throw new RuntimeException('A published runtime test bypassed CSRF.');
+}
+$response = $send($path, $publishedBody);
+$result = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($response->getStatusCode() !== 200 || ($result['context']['source'] ?? null) !== 'publication' ||
+    ($result['context']['requirements_version_id'] ?? null) !== $f->version->value) {
+    throw new RuntimeException('Published runtime testing did not retain its selected version.');
+}
+foreach ([['definition' => $f->f->definition], ['use_group_drafts' => true], ['use_group_drafts' => false]] as $override) {
+    if ($send($path, $publishedBody + $override)->getStatusCode() !== 422) {
+        throw new RuntimeException('A published runtime test accepted a draft override.');
+    }
 }
 $sis->access->staff = false;
 foreach ([['sis:catalog:manage'], ['sis:student:read']] as $grants) {
     $sis->access->grants = $grants;
-    if ($send($path, $body)->getStatusCode() !== 403) {
+    if ($send($path, $body)->getStatusCode() !== 403 || $send($path, $publishedBody)->getStatusCode() !== 403) {
         throw new RuntimeException('Runtime audit lost its dual office permission boundary.');
     }
 }

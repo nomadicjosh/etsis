@@ -20,7 +20,7 @@ async function fixture(page, options = {}) {
     let sequence = 20,
         opened = Boolean(options.existing),
         degreeRevision = 0,
-        degreePublished = false;
+        degreePublished = Boolean(options.published);
     const scaleDecisions = new Map();
     const scaleData = new Map();
     const blankScale = {
@@ -124,6 +124,7 @@ async function fixture(page, options = {}) {
         delete definition.policies.repeat_attempt_order;
     }
     if (options.unknownOrdering) delete definition.policies.repeat_attempt_order;
+    const publishedDefinition = {...structuredClone(definition), name:"Published Computing <b>fictional</b>", min_credits_milli:3000};
     function detail(g, v) {
         const entry = groups.get(g);
         return v
@@ -333,14 +334,15 @@ async function fixture(page, options = {}) {
                     return value;
                 }) } };
         }
-        else if (path === `/sis/students/${id(90)}/programs/`) response = {items:[{id:id(91),program_id:program,program_title:"Computing",term_code:"27/FA",status:"active"}],next_after:null};
+        else if (path === `/sis/students/${id(90)}/programs/`) response = {items:[{id:id(91),program_id:options.crossProgram ? id(95) : program,program_title:options.crossProgram ? "Fictional History" : "Computing",term_code:"27/FA",status:"active"}],next_after:null};
         else if (path === `/sis/degree-audits/${template}/test/`) {
             if (options.trialGate) await options.trialGate();
             if (options.trialFailure) return route.fulfill({status:503,json:{error:"The temporary test could not be completed. No changes were saved."}});
-            response = {status:"review",mode:"draft_test",input_status:"verified",current_record_count:0,
-                context:{mode:"draft_test",name:body.definition.name,academic_year_code:context.academic_year_code,version:null,cohort_changed:false,group_reuse:"one_group"},
-                sources:body.definition.groups.map(g=>({name:"General education",source:body.use_group_drafts || !g.version_id ? "draft":"publication",revision:1})),
-                minimums:[{key:"min_credits_milli",required_milli:body.definition.min_credits_milli,actual_minimum_milli:0,actual_maximum_milli:0,status:"below_minimum",adjusted:false}],
+            const selected = body.source === "publication" ? publishedDefinition : body.definition;
+            response = {status:"review",mode:"runtime_test",input_status:"verified",current_record_count:0,
+                context:{mode:"runtime_test",source:body.source,program_code:"BSCS",program_title:"Computing",name:selected.name,academic_year_code:context.academic_year_code,version:body.source === "publication" ? 1:null,cohort_changed:false,group_reuse:"one_group"},
+                sources:selected.groups.map(g=>({name:"General education",source:body.use_group_drafts || !g.version_id ? "draft":"publication",revision:1})),
+                minimums:[{key:"min_credits_milli",required_milli:selected.min_credits_milli,actual_minimum_milli:0,actual_maximum_milli:0,status:"below_minimum",adjusted:false}],
                 gpa:{cumulative:{ready:false},overall:{ready:false}},
                 work_summary:{awaiting_grade_count:0,awaiting_grade_milli:0,placement_established:false,unused_completed_count:0},
                 records:[],issues:[],allocation:{outcome:"infeasible",groups:[],records:[],issues:[],competition:null},
@@ -410,8 +412,8 @@ async function fixture(page, options = {}) {
             response = { operation_id: id(15), last_version: 1 };
         } else if (path === `/sis/degree-audits/${template}/versions/`)
             response = {
-                items: degreePublished ? [{ version_id: id(15), version: 1, definition, context }] : [],
-                next_cursor: null,
+                items: degreePublished ? [{ version_id: options.publicationPaging && !body.cursor ? id(16) : id(15), version: options.publicationPaging && !body.cursor ? 2:1, definition: options.published ? publishedDefinition : definition, context }] : [],
+                next_cursor: options.publicationPaging && !body.cursor ? "fictional-older-page" : null,
             };
         else if (path === `/sis/degree-audits/${template}/versions/${id(15)}/`) response = row();
         else if (path.endsWith("/clone/"))
@@ -1349,7 +1351,7 @@ test("temporary audit workspace tests unsaved degree settings and working groups
     await page.locator(".audit-source-card > summary").filter({hasText:"General education"}).click();
     await page.getByRole("button",{name:"Use working draft for testing",exact:true}).click();
     await page.getByRole("button",{name:"Test with a student",exact:true}).click();
-    await expect(page.getByRole("heading",{name:"Test a degree draft",exact:true})).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Test a degree audit",exact:true})).toBeVisible();
     expect(f.calls.some(c=>c.path==="/sis/ui/data/students/")).toBe(false);
     await page.getByLabel("Find a student by name or assigned ID",{exact:true}).fill("Example");
     await page.getByLabel("Find a student by name or assigned ID",{exact:true}).press("Enter");
@@ -1370,7 +1372,7 @@ test("temporary audit workspace tests unsaved degree settings and working groups
     await accessible(page);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.getByRole("button",{name:"Inspect course-group placement",exact:true}).click();
-    await expect(dialog).toContainText("TEMPORARY DRAFT TEST");
+    await expect(dialog).toContainText("TEMPORARY AUDIT TEST");
     await expect(page.getByRole("button",{name:"Refresh course placement",exact:true})).toHaveCount(0);
     await page.getByRole("button",{name:"Back to degree progress",exact:true}).click();
     await page.getByRole("button",{name:"Back to test setup",exact:true}).click();
@@ -1415,8 +1417,60 @@ test("a trial response is discarded when group source choices change while it is
     release();
     await response;
     await expect(page.getByRole("button",{name:"Run temporary audit",exact:true})).toBeEnabled();
-    await expect(page.getByRole("heading",{name:"Test a degree draft",exact:true})).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Test a degree audit",exact:true})).toBeVisible();
     await expect(page.getByRole("heading",{name:"Temporary degree audit result",exact:true})).toHaveCount(0);
     expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("runtime testing selects an exact published audit for a student in another program", async ({page}) => {
+    const f = await fixture(page,{existing:true,published:true,publicationPaging:true,crossProgram:true});
+    await openDegree(page,true);
+    await page.getByLabel("Requirement title",{exact:true}).fill("Unsaved working requirements");
+    await page.getByLabel("Total earned credits required",{exact:true}).fill("6");
+    await page.getByRole("button",{name:"Test with a student",exact:true}).click();
+    await page.getByRole("button",{name:"Choose published audit version",exact:true}).click();
+    await expect(page.getByRole("button",{name:/Test published version 2/})).toBeVisible();
+    await page.getByRole("button",{name:"Next page",exact:true}).click();
+    await page.getByRole("button",{name:/Test published version 1/}).click();
+    await expect(page.getByRole("dialog")).toContainText("Published audit version 1");
+    await expect(page.getByRole("checkbox",{name:"Use current working drafts for all course groups",exact:true})).toHaveCount(0);
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).press("Enter");
+    await page.getByRole("button",{name:"Fictional Learner <b>example</b> · S-EXAMPLE",exact:true}).click();
+    await page.getByRole("button",{name:"Fictional History · 27/FA · active",exact:true}).click();
+    await page.getByRole("button",{name:"Run temporary audit",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Temporary degree audit result",exact:true})).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Published audit version 1 · Temporary test");
+    await expect(page.getByRole("dialog")).not.toContainText("Unpublished trial");
+    const call = f.calls.find(c=>c.path.endsWith("/test/"));
+    expect(call).toMatchObject({csrf:"fictional-test-token",body:{source:"publication",version_id:id(15),student_id:id(90),assignment_id:id(91)}});
+    expect(call.body).not.toHaveProperty("definition");
+    expect(call.body).not.toHaveProperty("use_group_drafts");
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole("button",{name:"Back to test setup",exact:true}).click();
+    await page.getByRole("button",{name:"Use working degree draft",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Unsaved working requirements");
+    await page.getByRole("button",{name:"Return to degree builder",exact:true}).click();
+    await expect(page.getByLabel("Total earned credits required",{exact:true})).toHaveValue("6");
+    expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("publication history opens a runtime test without loading the working degree draft", async ({page}) => {
+    const f = await fixture(page,{existing:true,published:true});
+    await openDegree(page,true);
+    await page.getByRole("button",{name:"Back to requirement drafts",exact:true}).click();
+    await page.getByRole("button",{name:"Published requirements",exact:true}).click();
+    const reads = f.calls.filter(c=>c.path===`/sis/degree-audits/${f.template}/`).length;
+    await page.getByRole("button",{name:"Test version 1 with a student",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Test a degree audit",exact:true})).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Published audit version 1");
+    expect(f.calls.filter(c=>c.path===`/sis/degree-audits/${f.template}/`)).toHaveLength(reads);
+    expect(f.calls.some(c=>c.path.endsWith("/test/"))).toBe(false);
+    await page.getByRole("button",{name:"Return to audit versions",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Published requirement versions",exact:true})).toBeVisible();
     expect(f.errors).toEqual([]);
 });

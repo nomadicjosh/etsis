@@ -567,16 +567,18 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         button(`Edit ${row.academic_year_code} requirements`, async () =>
                             degreeEditor(await request(`/sis/degree-audits/${row.id}/`)),
                         ),
-                        button("Published requirements", () =>
-                            history("degree", row.id, program, () => launch(program)),
-                        ),
+                        ui.can("sis:student:read")
+                            ? button(`Test ${row.academic_year_code} audit`, async () => {
+                                  const saved = await request(`/sis/degree-audits/${row.id}/`);
+                                  auditTrial(saved, saved.definition, () => launch(program, after, stack));
+                              })
+                            : null,
+                        button("Published requirements", () => history("degree", row.id, program, () => launch(program))),
                     ),
                 ),
             );
         if (!result.items.length)
-            cards.append(
-                node("p", {}, "No requirements for this program yet. Choose an academic year to start."),
-            );
+            cards.append(node("p", {}, "No requirements for this program yet. Choose an academic year to start."));
         body.append(cards);
         pager(body, result, after, stack, (a, s) => launch(program, a, s));
     }
@@ -1346,42 +1348,99 @@ window.createWorkspaceDegreeAudit = function (ui) {
         render();
         courseSource().catch(fail);
     }
-    function draftTrial(saved, definition, back, state = null) {
-        const snapshot = structuredClone(definition);
-        const model = state || { student: null, pursuit: null, drafts: false };
-        let choiceRequest = 0;
-        const body = screen("Test a degree draft", "RUNTIME ONLY · NO PUBLICATION");
-        const restore = () => draftTrial(saved, snapshot, back, model);
+    function auditTrial(saved, definition, back, state = null) {
+        const snapshot = definition === null ? null : structuredClone(definition);
+        const model = state || { student: null, pursuit: null, drafts: false, source: "draft", publication: null };
+        const published = model.source === "publication" ? model.publication : null;
+        let choiceRequest = 0,
+            sourceRequest = 0;
+        const body = screen("Test a degree audit", "RUNTIME ONLY · NO SAVED RESULTS");
+        const restore = () => auditTrial(saved, snapshot, back, model);
         restore.returnLabel = "Back to test setup";
         body.append(
             node(
                 "p",
                 { class: "alert alert-info" },
-                "This temporary test does not save an audit, publish definitions, or change the student's assigned requirements. Approved student-specific exceptions are not applied to this draft. Results disappear when you close the workspace.",
+                "This temporary test does not save an audit, publish definitions, or change the student's assigned requirements. Approved student-specific exceptions are not applied to this comparison. Results disappear when you close the workspace.",
             ),
-            node("h2", { class: "h5" }, snapshot.name),
+            node("h2", { class: "h5" }, published ? published.definition.name : snapshot.name),
             node(
                 "p",
                 {},
-                `${saved.context.program_title} · ${saved.context.academic_year_code} · Current editor snapshot, including unsaved degree edits.`,
+                published
+                    ? `${published.context.program_title} · ${published.context.academic_year_code} · Published audit version ${published.version}. Retained group and grading definitions.`
+                    : `${saved.context.program_title} · ${saved.context.academic_year_code} · Current editor snapshot, including unsaved degree edits.`,
             ),
             actions(
-                button("Return to degree builder", back),
-                button("Choose another degree draft", () => launch(saved.program_id)),
+                button(snapshot === null ? "Return to audit versions" : "Return to degree builder", back),
+                button("Choose another degree audit", () => launch(saved.program_id)),
             ),
         );
-        const choice = checkbox("Use current working drafts for all course groups", (on) => {
-            model.drafts = on;
-        });
-        choice.querySelector("input").checked = model.drafts;
-        body.append(
-            choice,
-            node(
-                "p",
-                { class: "form-text" },
-                "Otherwise use each selected publication; groups without a publication use their saved working draft. Course definitions remain the explicitly selected course publications. Test source revisions appear with the result.",
+        const sourceChoices = node("section", { class: "audit-panel", "aria-label": "Audit source" });
+        sourceChoices.append(
+            node("h2", { class: "h5" }, "Choose audit source"),
+            actions(
+                button("Use working degree draft", async () => {
+                    if (snapshot !== null) {
+                        model.source = "draft";
+                        model.publication = null;
+                        restore();
+                    } else {
+                        const target = dialog;
+                        const draft = await request(`/sis/degree-audits/${saved.id}/`);
+                        if (dialog === target) {
+                            model.source = "draft";
+                            model.publication = null;
+                            auditTrial(draft, draft.definition, back, model);
+                        }
+                    }
+                }),
+                button("Choose published audit version", () => versions()),
             ),
         );
+        const sourceList = node("div", { class: "audit-library-grid" });
+        sourceChoices.append(sourceList);
+        if (!published) {
+            const choice = checkbox("Use current working drafts for all course groups", (on) => {
+                model.drafts = on;
+            });
+            choice.querySelector("input").checked = model.drafts;
+            sourceChoices.append(
+                choice,
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Otherwise use each selected group publication; groups without a publication use their saved working draft. Test source revisions appear with the result.",
+                ),
+            );
+        } else {
+            sourceChoices.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Published tests use the exact retained degree, group, course and grading definitions. Working drafts cannot replace them.",
+                ),
+            );
+        }
+        body.append(sourceChoices);
+        async function versions(cursor = null, stack = []) {
+            const target = dialog,
+                token = ++sourceRequest;
+            const data = await post(`/sis/degree-audits/${saved.id}/versions/`, cursor ? { cursor } : {});
+            if (dialog !== target || token !== sourceRequest) return;
+            sourceList.replaceChildren();
+            for (const version of data.items)
+                sourceList.append(
+                    button(`Test published version ${version.version} — ${version.definition.name}`, () => {
+                        model.source = "publication";
+                        model.publication = version;
+                        restore();
+                    }),
+                );
+            if (!data.items.length)
+                sourceList.append(node("p", {}, "No published versions. The working draft can still be tested."));
+            pager(sourceList, data, cursor, stack, (next, previous) => versions(next, previous), "next_cursor");
+        }
         const students = node("section", { class: "audit-panel" }, node("h2", { class: "h5" }, "Choose a student"));
         const choices = node("div", { class: "audit-library-grid" });
         students.append(
@@ -1397,7 +1456,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
         function selected() {
             selection.replaceChildren();
             if (!model.student || !model.pursuit) {
-                selection.append(node("p", {}, "Choose a student and a pursuit in this degree's academic program."));
+                selection.append(
+                    node(
+                        "p",
+                        {},
+                        "Choose a student and a pursuit to authorize access to their academic work. The test may use a degree from any program.",
+                    ),
+                );
                 return;
             }
             selection.append(
@@ -1433,7 +1498,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             choices.replaceChildren(
                 node("h3", { class: "h6" }, `Choose a pursuit for ${student.given_name} ${student.family_name}`),
             );
-            const matches = data.items.filter((p) => p.program_id === saved.program_id);
+            const matches = data.items;
             for (const pursuit of matches)
                 choices.append(
                     button(`${pursuit.program_title} · ${pursuit.term_code} · ${pursuit.status}`, () => {
@@ -1444,27 +1509,32 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     }),
                 );
             if (!matches.length)
-                choices.append(
-                    node(
-                        "p",
-                        {},
-                        "No pursuit in this academic program on this page. Choose another student or check the next page.",
-                    ),
-                );
+                choices.append(node("p", {}, "No pursuits on this page. Choose another student or check the next page."));
             pager(choices, data, after, stack, (a, s) => pursuits(student, a, s));
         }
         async function run() {
             const target = dialog;
             const student = model.student,
                 pursuit = model.pursuit,
-                drafts = model.drafts;
+                drafts = model.drafts,
+                source = model.source,
+                version = model.publication?.version_id;
             const data = await post(`/sis/degree-audits/${saved.id}/test/`, {
-                definition: snapshot,
+                source,
+                ...(source === "publication"
+                    ? { version_id: version }
+                    : { definition: snapshot, use_group_drafts: drafts }),
                 student_id: student.id,
                 assignment_id: pursuit.id,
-                use_group_drafts: drafts,
             });
-            if (dialog !== target || model.student !== student || model.pursuit !== pursuit || model.drafts !== drafts)
+            if (
+                dialog !== target ||
+                model.student !== student ||
+                model.pursuit !== pursuit ||
+                model.drafts !== drafts ||
+                model.source !== source ||
+                model.publication?.version_id !== version
+            )
                 return;
             renderDegreeProgress(null, restore, data, null, {
                 setup: restore,
@@ -1515,7 +1585,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     ),
                 ),
                 ui.can("sis:student:read")
-                    ? button("Test with a student", () => draftTrial(saved, normalDegree(model), restore))
+                    ? button("Test with a student", () => auditTrial(saved, normalDegree(model), restore))
                     : null,
                 button("Program grading scale", () =>
                     gradingScale(saved.program_id, async () => {
@@ -1937,6 +2007,22 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                 history(kind, id, program, back, cursor, stack),
                             ),
                         ),
+                        kind === "degree" && ui.can("sis:student:read")
+                            ? button(`Test version ${row.version} with a student`, () =>
+                                  auditTrial(
+                                      { id, program_id: program, context: row.context },
+                                      null,
+                                      () => history(kind, id, program, back, cursor, stack),
+                                      {
+                                          student: null,
+                                          pursuit: null,
+                                          drafts: false,
+                                          source: "publication",
+                                          publication: row,
+                                      },
+                                  ),
+                              )
+                            : null,
                         kind === "degree"
                             ? button(`Clone version ${row.version} to another academic year`, () =>
                                   years(program, { id, version: row.version_id }),
@@ -2049,7 +2135,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     function renderDegreeProgress(base, back, data, guideState = null, trial = null) {
         const shell = screen(
             trial ? "Temporary degree audit result" : "Degree progress review",
-            trial ? "DRAFT TEST · NOT SAVED" : "GENERAL MINIMUMS & COURSE GROUPS",
+            trial ? "RUNTIME AUDIT TEST · NOT SAVED" : "GENERAL MINIMUMS & COURSE GROUPS",
         );
         const state = guideState || { open: false, side: "right", topic: "steps" };
         const layout = node("div", { class: "progress-guide-layout" });
@@ -2079,7 +2165,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "p",
                 {},
                 trial
-                    ? "Temporary test of draft requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
+                    ? "Temporary test of the selected audit requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
                     : "Review current work against the selected degree's general minimums and course groups, including approved exceptions. All checks use one verified read. This is not a completed degree audit or graduation decision, and it saves no academic changes.",
             ),
         );
@@ -2094,6 +2180,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         if (!trial) body.append(slot);
         if (trial) body.append(node("p", { class: "audit-status" }, trial.student));
+        if (trial && data.context?.program_title)
+            body.append(
+                node(
+                    "p",
+                    {},
+                    `Tested program: ${data.context.program_code} — ${data.context.program_title}. This does not change the student's program.`,
+                ),
+            );
         if (trial && data.sources) {
             body.append(node("h2", { class: "h5" }, "Tested group sources"));
             for (const source of data.sources)
@@ -2123,7 +2217,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "audit-status" },
-                `${data.context.name} · ${data.context.academic_year_code} · ${data.context.mode === "draft_test" ? "Unpublished trial" : `Version ${data.context.version}`}`,
+                `${data.context.name} · ${data.context.academic_year_code} · ${data.context.mode === "runtime_test" ? (data.context.source === "publication" ? `Published audit version ${data.context.version} · Temporary test` : "Unpublished trial") : `Version ${data.context.version}`}`,
             ),
         );
         body.append(
@@ -2512,21 +2606,23 @@ window.createWorkspaceDegreeAudit = function (ui) {
     function renderGroupAllocation(base, back, data, offset = 0) {
         const body = screen(
             "Course-group placement",
-            data.context?.mode === "draft_test" ? "TEMPORARY DRAFT TEST · NOT SAVED" : "RETAINED REQUIREMENTS & APPROVALS",
+            data.context?.mode === "runtime_test"
+                ? "TEMPORARY AUDIT TEST · NOT SAVED"
+                : "RETAINED REQUIREMENTS & APPROVALS",
         );
         const restore = () => renderGroupAllocation(base, back, data, offset);
         body.append(
             node(
                 "p",
                 {},
-                data.context?.mode === "draft_test"
-                    ? "Temporary placement against the tested draft requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
+                data.context?.mode === "runtime_test"
+                    ? "Temporary placement against the tested audit requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
                     : "Review a proposed placement of current work against course-group quantities and required courses, including approved exceptions. Overall GPA, residency, specialization rules and graduation eligibility are not evaluated here. This review saves no academic changes or audit result.",
             ),
         );
         body.append(
             actions(
-                data.context?.mode === "draft_test"
+                data.context?.mode === "runtime_test"
                     ? null
                     : button("Refresh course placement", () => groupAllocation(base, back)),
                 button(back.returnLabel || "Back to previous screen", back),
@@ -2565,7 +2661,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "audit-status" },
-                `${data.context.name} · ${data.context.academic_year_code} · ${data.context.mode === "draft_test" ? "Unpublished trial" : `Version ${data.context.version}`}`,
+                `${data.context.name} · ${data.context.academic_year_code} · ${data.context.mode === "runtime_test" ? (data.context.source === "publication" ? `Published audit version ${data.context.version} · Temporary test` : "Unpublished trial") : `Version ${data.context.version}`}`,
             ),
         );
         body.append(

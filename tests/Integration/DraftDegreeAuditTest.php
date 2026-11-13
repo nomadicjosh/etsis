@@ -13,7 +13,7 @@ use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\DegreeMinimumEvaluator;
 use Domain\DegreeAudit\Service\DegreeProgressEvaluator;
 use Domain\DegreeAudit\Service\DegreeWorkReview;
-use Domain\DegreeAudit\Service\DraftDegreeAuditService;
+use Domain\DegreeAudit\Service\DegreeAuditTrialService;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
 use Domain\DegreeAudit\Service\PublishedRequirementsReader;
 use Domain\DegreeAudit\Service\RetainedAttemptReader;
@@ -34,11 +34,11 @@ use PHPUnit\Framework\TestCase;
 
 final class DraftDegreeAuditTest extends TestCase
 {
-    private function service(StudentRequirementsFixture $f): DraftDegreeAuditService
+    private function service(StudentRequirementsFixture $f): DegreeAuditTrialService
     {
         $s = $f->f->sis;
         $students = new SqlStudentRecordRepository($s->sql);
-        return new DraftDegreeAuditService(
+        return new DegreeAuditTrialService(
             new SqlRequirementsRepository($s->sql),
             new SqlCourseGroupRepository($s->sql),
             new PublishedRequirementsReader($f->f->history),
@@ -139,7 +139,7 @@ final class DraftDegreeAuditTest extends TestCase
         $before = $this->digest($f);
         $result = $this->service($f)->test($template, $f->student, $f->assignment, $definition);
         self::assertSame('review', $result['status']);
-        self::assertSame('draft_test', $result['mode']);
+        self::assertSame('runtime_test', $result['mode']);
         self::assertNull($result['context']['requirements_version_id']);
         self::assertFalse($result['exceptions_applied']);
         self::assertSame('draft', $result['sources'][0]['source']);
@@ -149,7 +149,7 @@ final class DraftDegreeAuditTest extends TestCase
         $d = $definition->definition;
         $d['min_credits_milli'] = 6000;
         $again = $this->service($f)->test($template, $f->student, $f->assignment, new AuditRequirementsV3($d));
-        self::assertNotSame($result['draft_hash'], $again['draft_hash']);
+        self::assertNotSame($result['definition_hash'], $again['definition_hash']);
         self::assertSame(6000, $again['minimums'][0]['required_milli']);
         self::assertSame('below_minimum', $again['minimums'][0]['status']);
         self::assertSame($before, $this->digest($f));
@@ -171,7 +171,7 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame('General education', $pinned['sources'][0]['name']);
         self::assertSame('draft', $draft['sources'][0]['source']);
         self::assertSame('Changed working group', $draft['sources'][0]['name']);
-        self::assertNotSame($pinned['draft_hash'], $draft['draft_hash']);
+        self::assertNotSame($pinned['definition_hash'], $draft['definition_hash']);
         self::assertSame($before, $this->digest($f));
     }
 
@@ -194,6 +194,80 @@ final class DraftDegreeAuditTest extends TestCase
         $service->test($f->f->degree, EntityId::generate(), $f->assignment, new AuditRequirementsV3($f->f->definition));
     }
 
+    public function testPublishedAuditKeepsItsOriginalGroupsGradingAndMinimumsAfterDraftAndScaleEdits(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        $row = $f->f->degrees->view($f->f->degree);
+        $d = $f->f->definition;
+        $d['min_credits_milli'] = 3000;
+        $d['min_resident_milli'] = 0;
+        $f->f->degrees->save($f->f->degree, $row['revision'], new AuditRequirementsV3($d));
+        $version = new EntityId($f->f->publishDegree()['operation_id']);
+        $service = $this->service($f);
+        $before = $this->digest($f);
+        $first = $service->testPublication($f->f->degree, $version, $f->student, $f->assignment);
+        self::assertSame($before, $this->digest($f));
+        self::assertSame('review', $first['status']);
+        self::assertSame('publication', $first['context']['source']);
+        self::assertSame($version->value, $first['context']['requirements_version_id']);
+        self::assertSame(4000, $first['gpa']['overall']['milli']);
+        $f->f->sis->gradeScale([[
+            'code' => 'A', 'min_score_milli' => 0, 'max_score_milli' => 100000,
+            'points_milli' => 2000, 'passes' => true, 'counts_gpa' => true,
+        ]]);
+        $g = $f->f->groupDefinition;
+        $g['name'] = 'Changed group draft';
+        $f->f->groups->save($f->f->group, 0, new \Domain\DegreeAudit\ValueObject\CourseGroupDefinition($g));
+        $row = $f->f->degrees->view($f->f->degree);
+        $d['name'] = 'Changed degree draft';
+        $d['min_credits_milli'] = 6000;
+        $f->f->degrees->save($f->f->degree, $row['revision'], new AuditRequirementsV3($d));
+        $before = $this->digest($f);
+        $again = $service->testPublication($f->f->degree, $version, $f->student, $f->assignment);
+        self::assertSame($first, $again);
+        self::assertSame('General education', $again['sources'][0]['name']);
+        self::assertSame(3000, $again['minimums'][0]['required_milli']);
+        self::assertSame($before, $this->digest($f));
+        self::assertNull($f->service->view($f->student, $f->assignment)['selection']);
+    }
+
+    public function testDraftAndPublishedAuditsFromAnotherProgramRemainWhatIfComparisons(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $s = $f->f->sis;
+        $other = EntityId::generate();
+        $s->sql->insert('sis_programs', ['id' => $other->value, 'code' => 'BA.ENG', 'title' => 'Fictional English']);
+        $row = $f->f->degrees->open($other, $f->f->year);
+        $template = new EntityId($row['id']);
+        $d = new AuditRequirementsV3($f->f->definition);
+        $f->f->degrees->save($template, $row['revision'], $d);
+        $review = $f->f->degrees->review($template, 'Fictional what-if plan');
+        $version = new EntityId($f->f->degrees->publish($template, $review['review_token'])['operation_id']);
+        $before = $this->digest($f);
+        $service = $this->service($f);
+        self::assertSame('review', $service->test($template, $f->student, $f->assignment, $d)['status']);
+        self::assertSame('review', $service->testPublication($template, $version, $f->student, $f->assignment)['status']);
+        self::assertSame($before, $this->digest($f));
+        self::assertSame($s->program->value, (new SqlStudentRecordRepository($s->sql))->assignment($f->assignment)->programId->value);
+    }
+
+    public function testPublishedVersionMustBelongToTheSelectedDegreeAndShareTheReplayBudget(): void
+    {
+        $f = new StudentRequirementsFixture();
+        [$other] = $this->draft($f);
+        $before = $this->digest($f);
+        $service = $this->service($f);
+        self::assertSame(['status' => 'inconsistent', 'mode' => 'runtime_test'], $service->testPublication(
+            $other, $f->version, $f->student, $f->assignment,
+        ));
+        self::assertSame(['status' => 'limited', 'mode' => 'runtime_test'], $service->testPublication(
+            $f->f->degree, $f->version, $f->student, $f->assignment,
+            new HistoryReadBudget(maximumPages: 1, maximumEvents: 1),
+        ));
+        self::assertSame($before, $this->digest($f));
+    }
+
     public function testAnUnverifiableSelectedCourseReturnsNoPartialTrial(): void
     {
         $f = new StudentRequirementsFixture();
@@ -205,7 +279,7 @@ final class DraftDegreeAuditTest extends TestCase
         $repository->save($group, $row['revision'], $d);
         $before = $this->digest($f);
         $result = $this->service($f)->test($degree, $f->student, $f->assignment, $definition);
-        self::assertSame(['status' => 'inconsistent', 'mode' => 'draft_test'], $result);
+        self::assertSame(['status' => 'inconsistent', 'mode' => 'runtime_test'], $result);
         self::assertSame($before, $this->digest($f));
     }
 
@@ -216,7 +290,7 @@ final class DraftDegreeAuditTest extends TestCase
         $before = $this->digest($f);
         $budget = new HistoryReadBudget(maximumPages: 1, maximumEvents: 1);
         $result = $this->service($f)->test($degree, $f->student, $f->assignment, $definition, budget: $budget);
-        self::assertSame(['status' => 'limited', 'mode' => 'draft_test'], $result);
+        self::assertSame(['status' => 'limited', 'mode' => 'runtime_test'], $result);
         self::assertSame($before, $this->digest($f));
     }
 }
