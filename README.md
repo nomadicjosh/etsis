@@ -146,6 +146,8 @@ The [sign-in authority foundation](docs/optional-moodle-integration.md#etsis-sig
 
 [Original Moodle receipt inspection](docs/moodle-account-reconciliation.md) checks uncertain creation outcomes using the exact original operation and approval digest. Connector 0.3.2-alpha reports recorded, unknown or restricted outcomes without retrying creation, sending email or changing links.
 
+[Reviewed account-link recovery](docs/moodle-account-reconciliation.md#recover-a-stopped-requests-account-link) lets staff with separate creation and linking authority retain an eligible original account after processing has stopped for review. It preserves the original approval, counters and encrypted recovery evidence; setup-email warnings remain separate tasks.
+
 [Session-reference housekeeping](docs/sign-in-session-retention.md) now provides a bounded operator command that previews by default and explicitly removes eligible expired references with a grace period, preserving unexpired revocations and remaining launch references. It runs independently of normal page loads and leaves academic history unchanged.
 
 [Optional catalog authoring assistance](docs/optional-authoring-assistance.md) adds consent-based readiness suggestions, description drafts and saved-description rewrite/expansion, plus saved-section and degree-setup readiness checks with separate action permissions and replaceable providers. It is disabled until the institution configures a service and approves its data policy.

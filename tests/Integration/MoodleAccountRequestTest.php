@@ -175,6 +175,8 @@ final class MoodleAccountRequestTest extends TestCase
             public int $calls = 0;
             public ?Closure $duringCall = null;
             public string $status = "recorded";
+            public string $signInStatus = "sso_ready";
+            public string $userId = "500";
             public function __construct(private SisFixture $f) {}
             public function receipt(
                 MoodleBinding $binding,
@@ -203,8 +205,8 @@ final class MoodleAccountRequestTest extends TestCase
                     $this->status,
                     $this->status === "recorded"
                         ? new \Domain\Lms\ValueObject\MoodleProvisionedAccount(
-                            new MoodleExternalId("500"),
-                            "sso_ready",
+                            new MoodleExternalId($this->userId),
+                            $this->signInStatus,
                         )
                         : null,
                 );
@@ -233,18 +235,320 @@ final class MoodleAccountRequestTest extends TestCase
             ),
             $this->f->access,
             $audit ?? $this->f->audit,
+            new SqlAccessRepository($this->f->sql),
+            $this->f->transactions,
+            $this->f->dropCipher,
+            $this->f->clock,
         );
     }
 
-    private function uncertainRequest(): void
+    private function uncertainRequest(string $mode = "sso"): void
     {
         $this->permitWorker();
-        $review = $this->review();
+        $review = $this->review($mode);
         $this->service->confirm($this->person->id, $review["review_token"]);
         $remote = $this->remote();
         $remote->loseResponse = true;
         self::assertSame("retry_pending", $this->worker($remote)->runOne());
         self::assertCount(1, $remote->operations);
+    }
+
+    private function stoppedRequest(string $mode = "sso"): void
+    {
+        $this->uncertainRequest($mode);
+        $row = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        $this->f->sql->update(
+            "sis_moodle_provisioning_outbox",
+            [
+                "state" => "review_required",
+                "issue_code" => "attempt_limit",
+                "attempts" => 6,
+                "lease_until" => 0,
+            ],
+            ["id" => $row["id"]],
+        );
+    }
+
+    public function testReviewedRecoveryRetainsOriginalApprovalCountersAndHistoryWithEncryptedEvidence(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $approval = $this->f->sql->rows("sis_moodle_account_requests");
+        $history = $this->f->sql->rows("sis_history_events");
+        $job = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        $review = $service->reviewRecovery(
+            $this->person->id,
+            "Independently verified the original account belongs to this person.",
+        );
+        self::assertSame("alex_example", $review["original_username"]);
+        self::assertSame("500", $review["moodle_user_id"]);
+        self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+        $this->policy->active = false;
+        $result = $service->confirmRecovery($this->person->id, $review["review_token"]);
+        self::assertSame("completed", $result["state"]);
+        self::assertSame("500", $result["link"]["moodle_user_id"]);
+        self::assertSame(2, $reader->calls);
+        self::assertSame($approval, $this->f->sql->rows("sis_moodle_account_requests"));
+        self::assertSame($history, $this->f->sql->rows("sis_history_events"));
+        $after = $this->f->sql->rows("sis_moodle_provisioning_outbox")[0];
+        foreach (["id", "request_id", "attempts", "created_at"] as $field) {
+            self::assertSame($job[$field], $after[$field]);
+        }
+        $recovery = $this->f->sql->rows("sis_moodle_account_recoveries")[0];
+        $evidence = json_decode($this->f->dropCipher->open($recovery["encrypted_review"]), true);
+        self::assertSame($approval[0]["id"], $recovery["request_id"]);
+        self::assertSame($result["link"]["id"], $recovery["link_id"]);
+        self::assertSame($this->f->access->actor->value, $evidence["review"]["actor_id"]);
+        self::assertSame("2026-08-10T17:00:00Z", $evidence["recorded_at"]);
+        self::assertStringNotContainsString("Independently verified", $recovery["encrypted_review"]);
+        self::assertArrayNotHasKey("encrypted_review", $after);
+    }
+
+    public function testRecoveredEmailWarningRemainsIndependentAndOriginalConfirmationCannotUndoResolution(): void
+    {
+        $this->stoppedRequest("password_email");
+        $reader = $this->receiptReader();
+        $reader->signInStatus = "email_review_required";
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified original account identity.");
+        $result = $service->confirmRecovery($this->person->id, $review["review_token"]);
+        self::assertSame("review_required", $result["state"]);
+        self::assertSame(
+            "email_delivery",
+            $this->service->status($this->person->id)["request"]["issue_code"],
+        );
+        $recovery = $this->f->sql->rows("sis_moodle_account_recoveries");
+        $email = $this->resolutions()->review($this->person->id, "Verified access through support.");
+        $this->resolutions()->confirm($this->person->id, $email["review_token"]);
+        $audit = $this->f->audit->forSubject($this->person->id);
+        $this->f->clock->time = $this->f->clock->time->modify("+21 minutes");
+        $this->reader->active = false;
+        self::assertSame($result, $service->confirmRecovery($this->person->id, $review["review_token"]));
+        self::assertSame("completed", $this->service->status($this->person->id)["request"]["state"]);
+        self::assertSame($recovery, $this->f->sql->rows("sis_moodle_account_recoveries"));
+        self::assertSame($audit, $this->f->audit->forSubject($this->person->id));
+        self::assertSame(2, $reader->calls);
+    }
+
+    public function testRecoveryNeedsSeparateLinkPermissionAndStoppedWorkBeforeRemoteRead(): void
+    {
+        $this->uncertainRequest();
+        $reader = $this->receiptReader();
+        try {
+            $this->inspector($reader)->reviewRecovery($this->person->id, "Verified identity.");
+            self::fail("Active worker operation must not be recovered.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame(0, $reader->calls);
+        }
+        $this->f->access->staff = false;
+        $this->f->access->grants = [MoodleAccountRequestService::CREATE, "sis:person:manage"];
+        $this->expectException(AccessDeniedException::class);
+        $this->inspector($reader)->reviewRecovery($this->person->id, "Verified identity.");
+    }
+
+    public function testRecoveryRefusesMissingRestrictedAndChangedRemoteReceipts(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        foreach (["not_observed", "restricted"] as $status) {
+            $reader->status = $status;
+            try {
+                $this->inspector($reader)->reviewRecovery($this->person->id, "Verified identity.");
+                self::fail("No eligible receipt was returned.");
+            } catch (ValidationException) {
+                self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+            }
+        }
+        $reader->status = "recorded";
+        $review = $this->inspector($reader)->reviewRecovery($this->person->id, "Verified identity.");
+        $reader->userId = "501";
+        $this->expectException(ConcurrentModificationException::class);
+        $this->inspector($reader)->confirmRecovery($this->person->id, $review["review_token"]);
+    }
+
+    public function testRecoveryAuditFailureRollsBackLinkReceiptAndQueueTransition(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $review = $this->inspector($reader)->reviewRecovery($this->person->id, "Verified identity.");
+        $job = $this->f->sql->rows("sis_moodle_provisioning_outbox");
+        $audit = $this->createStub(AuditTrail::class);
+        $audit
+            ->method("record")
+            ->willReturnCallback(static function (EntityId $actor, string $action, EntityId $subject): void {
+                if ($action === "moodle.account_link_recovered") {
+                    throw new RuntimeException("Fictional audit failure.");
+                }
+            });
+        try {
+            $this->inspector($reader, $audit)->confirmRecovery($this->person->id, $review["review_token"]);
+            self::fail("Audit failure must abort recovery.");
+        } catch (RuntimeException) {
+            self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+            self::assertSame([], $this->f->sql->rows("sis_moodle_account_recoveries"));
+            self::assertSame($job, $this->f->sql->rows("sis_moodle_provisioning_outbox"));
+        }
+        self::assertSame(
+            "completed",
+            $this->inspector($reader)->confirmRecovery($this->person->id, $review["review_token"])["state"],
+        );
+    }
+
+    public function testRecoveryRejectsCompetingReviewsAndActorOrPersonSubstitution(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified identity.");
+        $other = $service->reviewRecovery($this->person->id, "Another verification.");
+        $actor = $this->f->access->actor;
+        $this->f->access->actor = $this->f->user();
+        try {
+            $service->confirmRecovery($this->person->id, $review["review_token"]);
+            self::fail("Another actor cannot confirm this review.");
+        } catch (AccessDeniedException) {
+            $this->f->access->actor = $actor;
+        }
+        try {
+            $service->confirmRecovery($this->person()->id, $review["review_token"]);
+            self::fail("Another person cannot receive this link.");
+        } catch (AccessDeniedException) {
+            self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+        }
+        $service->confirmRecovery($this->person->id, $review["review_token"]);
+        $calls = $reader->calls;
+        try {
+            $service->confirmRecovery($this->person->id, $other["review_token"]);
+            self::fail("Another review cannot replace the recovery.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($calls, $reader->calls);
+            self::assertCount(1, $this->f->sql->rows("sis_moodle_account_recoveries"));
+        }
+    }
+
+    public function testRecoveryRejectsExpiredAndOtherPurposeProofBeforeRemoteRead(): void
+    {
+        $creation = $this->review();
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified identity.");
+        $this->f->clock->time = $this->f->clock->time->modify("+20 minutes");
+        foreach (
+            [$review["review_token"], $review["review_token"] . "tampered", $creation["review_token"]]
+            as $token
+        ) {
+            try {
+                $service->confirmRecovery($this->person->id, $token);
+                self::fail("An expired or invalid proof was accepted.");
+            } catch (ValidationException) {
+                self::assertSame(1, $reader->calls);
+                self::assertSame([], $this->f->sql->rows("sis_moodle_account_recoveries"));
+            }
+        }
+    }
+
+    public function testRecoveryRechecksLinkPermissionBeforeAndAfterReceiptLookup(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified identity.");
+        $this->f->access->staff = false;
+        $this->f->access->grants = [MoodleAccountRequestService::CREATE, "sis:person:manage"];
+        try {
+            $service->confirmRecovery($this->person->id, $review["review_token"]);
+            self::fail("Link authority was revoked.");
+        } catch (AccessDeniedException) {
+            self::assertSame(1, $reader->calls);
+        }
+        $this->f->access->staff = true;
+        $reader->duringCall = function (): void {
+            $this->f->access->staff = false;
+            $this->f->access->grants = [MoodleAccountRequestService::CREATE, "sis:person:manage"];
+        };
+        try {
+            $service->confirmRecovery($this->person->id, $review["review_token"]);
+            self::fail("Link authority changed during lookup.");
+        } catch (AccessDeniedException) {
+            self::assertSame([], $this->f->sql->rows("sis_moodle_person_links"));
+            self::assertSame([], $this->f->sql->rows("sis_moodle_account_recoveries"));
+        }
+    }
+
+    public function testRecoveryCannotTakeAnAccountLinkedToAnotherPerson(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified identity.");
+        $other = $this->person();
+        $binding = $this->bindings->current();
+        $this->links->add(
+            new MoodlePersonLink(
+                EntityId::generate(),
+                $binding->id,
+                $other->id,
+                new MoodleExternalId("500"),
+                $this->f->access->actor,
+                "2026-08-10T17:00:00Z",
+            ),
+            "fictional-existing-link",
+        );
+        try {
+            $service->confirmRecovery($this->person->id, $review["review_token"]);
+            self::fail("A linked account was taken from another person.");
+        } catch (ConcurrentModificationException) {
+            self::assertCount(1, $this->f->sql->rows("sis_moodle_person_links"));
+            self::assertSame(
+                $other->id->value,
+                $this->f->sql->rows("sis_moodle_person_links")[0]["person_id"],
+            );
+            self::assertSame([], $this->f->sql->rows("sis_moodle_account_recoveries"));
+        }
+    }
+
+    public function testRecoveryRefusesProfileChangeAfterReviewAndDuringConfirmation(): void
+    {
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified identity.");
+        $this->defaults->email = "changed@example.invalid";
+        try {
+            $service->confirmRecovery($this->person->id, $review["review_token"]);
+            self::fail("Stale person review accepted.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame(1, $reader->calls);
+        }
+        $review = $service->reviewRecovery(
+            $this->person->id,
+            "Verified the same person after the account-default change.",
+        );
+        self::assertTrue($review["profile_changed"]);
+        self::assertSame("fictional@example.invalid", $review["original_email"]);
+        $reader->duringCall = function (): void {
+            $this->defaults->email = "changed-again@example.invalid";
+        };
+        $this->expectException(ConcurrentModificationException::class);
+        $service->confirmRecovery($this->person->id, $review["review_token"]);
+    }
+
+    public function testRecoveryRetainsSuperOwnerProtection(): void
+    {
+        $owner = $this->f->user();
+        $this->person = $this->person($owner);
+        $access = new SqlAccessRepository($this->f->sql);
+        $super = $access->roleNamed("super")->id;
+        $access->assign(GrantKind::UserRole, $owner, $super, true);
+        $this->stoppedRequest();
+        $reader = $this->receiptReader();
+        $service = $this->inspector($reader);
+        $review = $service->reviewRecovery($this->person->id, "Verified identity.");
+        $access->assign(GrantKind::UserRole, $this->f->access->actor, $super, false);
+        $this->expectException(AccessDeniedException::class);
+        $service->confirmRecovery($this->person->id, $review["review_token"]);
     }
 
     public function testOriginalReceiptInspectionKeepsLocalFactsAndJobsUnchangedWithoutProcessing(): void

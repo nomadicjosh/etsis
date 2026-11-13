@@ -14,12 +14,14 @@ $app->delegate(\Domain\Shared\Service\Clock::class, static fn() => $sis->clock);
 $app->delegate(\Domain\Communications\Service\MessageCipher::class, static fn() => $sis->dropCipher);
 $receiptReader = new class ($sis) implements \Domain\Lms\Service\MoodleAccountReceiptReader {
     public int $calls = 0;
+    public bool $recorded = false;
     public function __construct(private SisFixture $sis) {}
     public function receipt(\Domain\Lms\ValueObject\MoodleBinding $binding, \Domain\Shared\ValueObject\EntityId $operation, string $requestHash): \Domain\Lms\ValueObject\MoodleAccountReceipt
     {
         if ($this->sis->connection->pdo->inTransaction()) throw new RuntimeException('Receipt read held a write lock.');
         $this->calls++;
-        return new \Domain\Lms\ValueObject\MoodleAccountReceipt('not_observed', null);
+        return new \Domain\Lms\ValueObject\MoodleAccountReceipt($this->recorded ? 'recorded' : 'not_observed',
+            $this->recorded ? new \Domain\Lms\ValueObject\MoodleProvisionedAccount(new \Domain\Lms\ValueObject\MoodleExternalId('500'), 'sso_ready') : null);
     }
 };
 $app->define(\Domain\Lms\Service\MoodleAccountReconciliationService::class, [':remote' => $receiptReader]);
@@ -55,7 +57,7 @@ new \Infrastructure\Lms\SqlMoodlePersonLinkRepository($sis->sql)->add(
     ), 'fictional-link-review',
 );
 $send = static function (string $action, array $data, bool $csrf = true) use ($app, &$id): \Psr\Http\Message\ResponseInterface {
-    $suffix = $action === 'receipt' ? 'receipt/' : 'resolution/' . $action . '/';
+    $suffix = $action === 'receipt' || str_starts_with($action, 'recovery/') ? $action . '/' : 'resolution/' . $action . '/';
     $request = new \Qubus\Http\ServerRequest([], [], '/sis/people/' . $id->value . '/moodle/account-request/' . $suffix, 'POST')
         ->withHeader('Content-Type', 'application/x-www-form-urlencoded')->withHeader('Accept', 'application/json')
         ->withHeader('X-CSRF-Token', $csrf ? 'fictionalcsrftoken' : 'invalidtoken')
@@ -122,4 +124,38 @@ $data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ER
 if ($response->getStatusCode() !== 200 || ($data['status'] ?? null) !== 'not_observed' ||
     $receiptReader->calls !== 1 || $requests->processing($operationId)['state'] !== 'processing') {
     throw new RuntimeException('Original receipt route did not return a private read-only observation.');
+}
+
+$sis->sql->update('sis_moodle_provisioning_outbox', ['state' => 'review_required', 'issue_code' => 'attempt_limit', 'attempts' => 6, 'lease_until' => 0], ['request_id' => $operationId->value]);
+$receiptReader->recorded = true;
+if ($send('recovery/review', ['reason' => 'Fictional verification.'], false)->getStatusCode() !== 403 || $receiptReader->calls !== 1) {
+    throw new RuntimeException('Recovery review bypassed CSRF.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:person:manage', 'sis:moodle:create-person'];
+if ($send('recovery/review', ['reason' => 'Fictional verification.'])->getStatusCode() !== 403 || $receiptReader->calls !== 1) {
+    throw new RuntimeException('Recovery review bypassed separate link authority.');
+}
+$sis->access->staff = true;
+$response = $send('recovery/review', ['reason' => 'Fictional independent identity verification.']);
+$review = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($response->getStatusCode() !== 200 || !is_string($review['review_token'] ?? null) || $receiptReader->calls !== 2) {
+    throw new RuntimeException('Recovery review failed through actual provider bindings.');
+}
+if ($send('recovery/confirm', ['review_token' => $review['review_token']], false)->getStatusCode() !== 403 || $receiptReader->calls !== 2) {
+    throw new RuntimeException('Recovery confirmation bypassed CSRF.');
+}
+$sis->access->staff = false;
+if ($send('recovery/confirm', ['review_token' => $review['review_token']])->getStatusCode() !== 403 || $receiptReader->calls !== 2) {
+    throw new RuntimeException('Recovery confirmation bypassed current link authority.');
+}
+$sis->access->staff = true;
+$response = $send('recovery/confirm', ['review_token' => $review['review_token']]);
+if ($response->getStatusCode() !== 200 || $receiptReader->calls !== 3 || $requests->processing($operationId)['state'] !== 'completed' || count($sis->sql->rows('sis_moodle_account_recoveries')) !== 1) {
+    throw new RuntimeException('Recovery confirmation did not retain an atomic link and receipt.');
+}
+$app->configContainer->setConfigKey('moodle', ['enabled' => false]);
+$sis->clock->time = $sis->clock->time->modify('+21 minutes');
+if ($send('recovery/confirm', ['review_token' => $review['review_token']])->getStatusCode() !== 200 || $receiptReader->calls !== 3) {
+    throw new RuntimeException('Repeated recovery confirmation was not local and idempotent.');
 }

@@ -141,6 +141,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/moodle-denied-fixture/' => ['sis:catalog:manage'],
         '/admin/moodle-person-denied-fixture/' => ['sis:person:manage', 'sis:moodle:manage'],
         '/admin/moodle-request-denied-fixture/' => ['sis:person:manage', 'sis:moodle:link-person', 'sis:moodle:manage'],
+        '/admin/moodle-recovery-denied-fixture/' => ['sis:person:manage', 'sis:moodle:create-person'],
         '/admin/registration-fixture/' => ['sis:registration:manage'],
         '/admin/report-fixture/' => ['sis:reporting:run'],
         '/admin/report-manager-fixture/' => ['sis:reporting:manage'],

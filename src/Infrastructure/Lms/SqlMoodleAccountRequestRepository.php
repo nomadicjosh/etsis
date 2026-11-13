@@ -165,13 +165,78 @@ final readonly class SqlMoodleAccountRequestRepository implements MoodleAccountR
         $q = $this->sql->quote(...);
         if (
             $this->sql->execute(
-                "UPDATE " . $q("sis_moodle_account_requests") . " SET " . $q("resolution_hash") .
-                " = ?, " . $q("encrypted_resolution") . " = ? WHERE " . $q("id") . " = ? AND " .
-                $q("resolution_hash") . " IS NULL AND " . $q("encrypted_resolution") . " IS NULL",
+                "UPDATE " .
+                    $q("sis_moodle_account_requests") .
+                    " SET " .
+                    $q("resolution_hash") .
+                    " = ?, " .
+                    $q("encrypted_resolution") .
+                    " = ? WHERE " .
+                    $q("id") .
+                    " = ? AND " .
+                    $q("resolution_hash") .
+                    " IS NULL AND " .
+                    $q("encrypted_resolution") .
+                    " IS NULL",
                 [$reviewHash, $encryptedResolution, $request->value],
             ) !== 1
         ) {
             throw new ConcurrentModificationException("The account approval changed. Refresh its status.");
+        }
+    }
+
+    public function recovery(EntityId $request): ?array
+    {
+        $row =
+        $this->sql->rows("sis_moodle_account_recoveries", ["request_id" => $request->value], 1)[0] ??
+        null;
+        if ($row === null) {
+            return null;
+        }
+        return ["link_id" => $row["link_id"], "review_hash" => $row["review_hash"]];
+    }
+
+    public function recover(
+        EntityId $request,
+        int $expectedVersion,
+        string $expectedIssue,
+        EntityId $link,
+        string $reviewHash,
+        bool $needsEmailReview,
+        #[\SensitiveParameter] string $encryptedReview,
+    ): void {
+        if (!in_array($expectedIssue, ["attempt_limit", "request_changed"], true)) {
+            throw new \InvalidArgumentException("Only stopped creation requests can be recovered.");
+        }
+        if (
+            $this->sql->update(
+                "sis_moodle_provisioning_outbox",
+                [
+                    "state" => $needsEmailReview ? "review_required" : "completed",
+                    "issue_code" => $needsEmailReview ? "email_delivery" : "none",
+                    "version" => $expectedVersion + 1,
+                    "lease_until" => 0,
+                ],
+                [
+                    "request_id" => $request->value,
+                    "version" => $expectedVersion,
+                    "state" => "review_required",
+                    "issue_code" => $expectedIssue,
+                ],
+            ) !== 1
+        ) {
+            throw new ConcurrentModificationException("The original account operation changed.");
+        }
+        try {
+            $this->sql->insert("sis_moodle_account_recoveries", [
+                "id" => EntityId::generate()->value,
+                "request_id" => $request->value,
+                "link_id" => $link->value,
+                "review_hash" => $reviewHash,
+                "encrypted_review" => $encryptedReview,
+            ]);
+        } catch (PDOException) {
+            throw new ConcurrentModificationException("The original account recovery changed.");
         }
     }
 }

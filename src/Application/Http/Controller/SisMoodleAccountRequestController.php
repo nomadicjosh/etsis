@@ -85,4 +85,32 @@ final readonly class SisMoodleAccountRequestController
             return new JsonResponse(["error" => $error->getMessage()], 503);
         }
     }
+
+    public function reviewRecovery(ServerRequest $request, string $person): ResponseInterface
+    {
+        try {
+            return new JsonResponse(
+                $this->reconciliation->reviewRecovery(
+                    new EntityId($person),
+                    FormInput::from($request)->text("reason", 500),
+                ),
+            );
+        } catch (MoodleConnectionUnavailableException $error) {
+            return new JsonResponse(["error" => $error->getMessage()], 503);
+        }
+    }
+
+    public function confirmRecovery(ServerRequest $request, string $person): ResponseInterface
+    {
+        try {
+            return new JsonResponse(
+                $this->reconciliation->confirmRecovery(
+                    new EntityId($person),
+                    FormInput::from($request)->text("review_token", 16384),
+                ),
+            );
+        } catch (MoodleConnectionUnavailableException $error) {
+            return new JsonResponse(["error" => $error->getMessage()], 503);
+        }
+    }
 }

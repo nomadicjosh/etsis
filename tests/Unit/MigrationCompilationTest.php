@@ -91,6 +91,7 @@ require_once $registrationCompilerMigrations . "20261112000000_CreateSisMoodleAc
 
 require_once $registrationCompilerMigrations . "20261112000002_CreateSisLoginSessions.php";
 require_once $registrationCompilerMigrations . "20261112000003_CreateSisMoodleLaunches.php";
+require_once $registrationCompilerMigrations . "20261112000005_CreateSisMoodleAccountRecoveries.php";
 
 final class MigrationCompilationTest extends TestCase
 {
@@ -336,7 +337,7 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(117))
+            ->expects(self::exactly(118))
             ->method("create")
             ->willReturnCallback(static function (string $name, callable $callback) use (
                 &$tables,
@@ -388,6 +389,7 @@ final class MigrationCompilationTest extends TestCase
             new CreateSisMoodleAccountRequests("moodle-account-requests"),
             new CreateSisLoginSessions("login-sessions"),
             new CreateSisMoodleLaunches("moodle-launches"),
+            new CreateSisMoodleAccountRecoveries("moodle-account-recoveries"),
             new CreateSisDegreeAuditTemplates("26"),
             new CreateSisCourseGroupLibrary("27"),
             new CreateSisStudentRequirements("28"),

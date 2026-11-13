@@ -124,12 +124,13 @@ window.createWorkspaceMoodleRequests = function (ui) {
         function receiptCheck() {
             const check = node('button', { type: 'button', class: 'btn btn-outline-primary', disabled: data.receipt_inspection_available === false }, 'Check original Moodle operation');
             const result = node('div', { class: 'mt-3', 'aria-live': 'polite' });
-            body.append(node('section', { class: 'mt-4', 'aria-labelledby': 'moodle-receipt-heading' },
+            const section = node('section', { class: 'mt-4', 'aria-labelledby': 'moodle-receipt-heading' },
                 node('h4', { id: 'moodle-receipt-heading' }, 'Check the original creation outcome'),
                 node('p', {}, 'Read Moodle’s retained receipt for this exact request. This does not create an account, send email, change a link or restart processing.'),
                 check,
                 data.receipt_inspection_available === false ? node('p', { class: 'form-text' }, 'Enable the institutional Moodle connection to inspect its receipts. Account processing can remain disabled.') : node('span'),
-                result));
+                result);
+            body.append(section);
             check.addEventListener('click', () => task(async () => {
                 if (busy || !body.isConnected) return;
                 busy = true; check.disabled = true; refresh.disabled = true; check.setAttribute('aria-busy', 'true');
@@ -146,6 +147,12 @@ window.createWorkspaceMoodleRequests = function (ui) {
                                     'Password-setup email needs separate review. No message was resent.'));
                     }
                     if (observed.profile_changed) result.append(node('p', { class: 'alert alert-warning' }, 'The person or account defaults changed after the original approval. This check does not approve those changes or transfer an account.'));
+                    if (observed.status === 'recorded' && data.request.state === 'review_required' && can('sis:moodle:link-person')) {
+                        recovery(result, section, check);
+                    }
+                    if (observed.status === 'recorded' && data.request.state === 'processing') {
+                        result.append(node('p', { class: 'muted-text' }, 'Processing has not stopped for review. Wait for its outcome before recovering a link.'));
+                    }
                     status.textContent = 'Original operation check finished. The saved request is unchanged.';
                     result.querySelector('h5').focus();
                 } catch (error) {
@@ -156,6 +163,87 @@ window.createWorkspaceMoodleRequests = function (ui) {
                     throw error;
                 } finally { busy = false; check.disabled = false; refresh.disabled = false; check.removeAttribute('aria-busy'); }
             }));
+        }
+
+        function recovery(container, section, check) {
+            let draft = null;
+            const reason = node('input', { id: 'moodle-recovery-reason', type: 'text', class: 'form-control', required: true, maxlength: 500, autocomplete: 'off', 'aria-describedby': 'moodle-recovery-help' });
+            const review = node('button', { type: 'submit', class: 'btn btn-outline-primary mt-3' }, 'Review recovery link');
+            const form = node('form', { class: 'mt-3' },
+                node('h5', {}, 'Recover the missing account link'),
+                node('label', { class: 'form-label', for: reason.id }, 'Reason for recovering this account link'), reason,
+                node('p', { id: 'moodle-recovery-help', class: 'form-text' }, 'Independently verify that the original account still belongs to this person. Give an administrative reason without credentials or academic details. No new account or email will be created.'), review);
+            const preview = node('div', { hidden: true, class: 'mt-3' });
+            const acknowledge = node('input', { id: 'moodle-recovery-ack', type: 'checkbox', class: 'form-check-input' });
+            const confirm = node('button', { type: 'button', class: 'btn btn-primary', disabled: true }, 'Save recovered account link');
+            const cancel = node('button', { type: 'button', class: 'btn btn-outline-secondary' }, 'Cancel recovery review');
+            container.append(form, preview);
+            function controls() {
+                check.disabled = busy || draft !== null;
+                refresh.disabled = busy;
+                reason.disabled = busy || draft !== null;
+                review.disabled = busy || draft !== null;
+                acknowledge.disabled = busy;
+                confirm.disabled = busy || draft === null || !acknowledge.checked;
+                cancel.disabled = busy;
+            }
+            function clear() {
+                draft = null; acknowledge.checked = false;
+                preview.replaceChildren(); preview.hidden = true; controls();
+            }
+            async function act(button, action) {
+                if (busy || !body.isConnected) return;
+                busy = true; controls(); button.setAttribute('aria-busy', 'true');
+                try { await action(); }
+                catch (error) {
+                    if (!body.isConnected) return;
+                    clear();
+                    status.textContent = 'Recovery could not be confirmed here. Refresh request status before trying again.';
+                    status.focus();
+                    throw error;
+                } finally { busy = false; button.removeAttribute('aria-busy'); controls(); }
+            }
+            form.addEventListener('submit', event => {
+                event.preventDefault();
+                if (draft !== null || !form.reportValidity()) return;
+                task(() => act(review, async () => {
+                    const value = await request(`/sis/people/${id}/moodle/account-request/recovery/review/`, 'POST', { reason: reason.value });
+                    if (!body.isConnected) return;
+                    draft = value;
+                    preview.replaceChildren(node('h5', { tabindex: '-1' }, 'Review recovered account link'),
+                        node('dl', { class: 'detail-list' },
+                            node('div', {}, node('dt', {}, 'Current person'), node('dd', {}, value.person_name)),
+                            node('div', {}, node('dt', {}, 'Originally approved name'), node('dd', {}, value.original_person_name)),
+                            node('div', {}, node('dt', {}, 'Original username'), node('dd', { class: 'text-break' }, value.original_username)),
+                            node('div', {}, node('dt', {}, 'Original email'), node('dd', { class: 'text-break' }, value.original_email)),
+                            node('div', {}, node('dt', {}, 'Retained Moodle ID'), node('dd', {}, value.moodle_user_id))),
+                        node('p', { class: 'text-break' }, value.reason),
+                        node('p', {}, value.profile_changed ? 'The person or account defaults changed since the original approval. Verify identity carefully. Recovery will retain this original account without applying those changes to Moodle.' : 'This is the account retained for the original creation request.'),
+                        node('p', {}, value.sign_in_status === 'email_review_required' ? 'The link will be saved and setup-email review will remain open. No message is resent.' : 'The link will be saved and this stopped creation request will be completed.'),
+                        node('p', {}, 'This review expires after 20 minutes. Confirmation checks the original receipt again.'),
+                        node('div', { class: 'form-check mb-3' }, acknowledge, node('label', { for: acknowledge.id, class: 'form-check-label' }, 'I independently verified that this original Moodle account belongs to this person and approve retaining its link.')),
+                        node('div', { class: 'd-flex flex-wrap gap-2' }, confirm, cancel));
+                    preview.hidden = false;
+                    status.textContent = 'Recovery review ready. No link has been saved.';
+                    preview.querySelector('h5').focus();
+                }));
+            });
+            acknowledge.addEventListener('change', controls);
+            cancel.addEventListener('click', () => {
+                if (!busy) { clear(); status.textContent = 'Recovery review canceled. No link was saved.'; reason.focus(); }
+            });
+            confirm.addEventListener('click', () => {
+                if (draft === null || !acknowledge.checked) return;
+                const token = draft.review_token;
+                task(() => act(confirm, async () => {
+                    const saved = await request(`/sis/people/${id}/moodle/account-request/recovery/confirm/`, 'POST', { review_token: token });
+                    if (!body.isConnected) return;
+                    clear(); section.remove(); body.querySelector('[data-account-request-issue]')?.remove();
+                    body.append(node('p', {}, `Moodle account linked (ID ${saved.link.moodle_user_id}).`));
+                    status.textContent = saved.state === 'review_required' ? 'Recovered account link saved. Setup email still needs review; refresh request status to resolve it.' : 'Recovered account link saved. The original request is completed. No account or email was created.';
+                    status.focus();
+                }));
+            });
         }
 
         function resolution() {

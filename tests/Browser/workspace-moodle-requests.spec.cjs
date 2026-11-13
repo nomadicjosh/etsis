@@ -4,6 +4,7 @@ const person = '00000000000000000000000001';
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
     let saved = options.saved || null;
+    let link = options.link || null;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -16,7 +17,7 @@ async function fixture(page, options = {}) {
         else if (path === `/sis/ui/people/${person}/`) result = { person: { id: { value: person }, givenName: 'Alex', familyName: 'Example', institutionalId: { value: 'S-FICTIONAL' }, ownerUserId: null }, students: [], applications: [], employees: [], accounts: [] };
         else if (path.endsWith('/moodle/account-request/')) result = { enabled: !options.disabled, installation_approved: true,
             processing_available: Boolean(options.processing), receipt_inspection_available: !options.connectionDisabled,
-            request: saved, link: options.link || null, defaults: { username: 'alex_example', email: 'fictional@example.invalid' },
+            request: saved, link, defaults: { username: 'alex_example', email: 'fictional@example.invalid' },
             person: { id: person, name: 'Alex Example', institutional_id: 'S-FICTIONAL' } };
         else if (path.endsWith('/account-request/resolution/review/')) result = {
             review_token: 'fictional-private-resolution-review', person_name: 'Alex Example', moodle_user_id: '123', reason: data.reason,
@@ -35,6 +36,20 @@ async function fixture(page, options = {}) {
                     status === 'restricted' ? 'Receipt restricted. Ask a Moodle administrator to review it; do not create a replacement.' :
                         'No receipt observed. The outcome remains unknown; do not create a replacement account.' };
         }
+        else if (path.endsWith('/account-request/recovery/review/')) result = {
+            review_token: 'fictional-private-recovery-review', person_name: 'Alex Example', original_person_name: 'Alex Prior',
+            original_username: 'alex_example', original_email: 'original@example.invalid', moodle_user_id: '123',
+            profile_changed: true, sign_in_status: options.recoveryEmailReview ? 'email_review_required' : 'sso_ready', reason: data.reason,
+        };
+        else if (path.endsWith('/account-request/recovery/confirm/')) {
+            if (options.recoveryChanged) { await route.fulfill({ status: 409, json: { error: 'Fictional stale receipt.' } }); return; }
+            const state = options.recoveryEmailReview ? 'review_required' : 'completed';
+            link = { id: '00000000000000000000000004', moodle_user_id: '123' };
+            saved = { ...saved, state, issue_code: options.recoveryEmailReview ? 'email_delivery' : 'none',
+                issue: options.recoveryEmailReview ? 'Account linked; setup email needs review.' : '' };
+            if (options.recoveryInterrupted) { await route.fulfill({ status: 503, json: { error: 'Fictional interrupted recovery.' } }); return; }
+            result = { state, link };
+        }
         else if (path.endsWith('/account-request/review/')) result = { review_token: 'fictional-private-account-review', person_name: 'Alex Example',
             username: data.username, email: data.email, sign_in: data.sign_in, expires_at: 1794410000, processing_available: false };
         else if (path.endsWith('/account-request/confirm/')) {
@@ -44,7 +59,7 @@ async function fixture(page, options = {}) {
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    await page.goto(options.denied ? '/admin/moodle-request-denied-fixture/' : '/admin/');
+    await page.goto(options.denied ? '/admin/moodle-request-denied-fixture/' : options.recoveryDenied ? '/admin/moodle-recovery-denied-fixture/' : '/admin/');
     await page.locator('.workspace-nav-link[data-workspace="people"]').click();
     await page.locator('#directory-search').fill('Alex'); await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
@@ -62,6 +77,92 @@ const uncertainRequest = {
     disabled: true,
     saved: { id: '00000000000000000000000002', state: 'review_required', issue_code: 'attempt_limit', issue: 'Reconcile the original operation first.' },
 };
+
+async function recoveryReview(page) {
+    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
+    await page.getByLabel('Reason for recovering this account link', { exact: true }).fill('Independently verified the original account identity.');
+    await page.getByRole('button', { name: 'Review recovery link', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Review recovered account link', exact: true })).toBeFocused();
+}
+
+test('recover the original link with keyboard approval and accessible private review', async ({ page }) => {
+    const f = await fixture(page, uncertainRequest);
+    await recoveryReview(page);
+    const save = page.getByRole('button', { name: 'Save recovered account link', exact: true });
+    await expect(save).toBeDisabled();
+    await expect(page.locator('#drawer-body')).toContainText('Alex Prior');
+    await expect(page.locator('#drawer-body')).toContainText('original@example.invalid');
+    await page.setViewportSize({ width: 375, height: 812 });
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('checkbox').focus(); await page.keyboard.press('Space'); await page.keyboard.press('Tab');
+    await expect(save).toBeFocused(); await page.keyboard.press('Enter');
+    await expect(page.locator('[data-account-request-status]')).toContainText('Recovered account link saved');
+    await expect(page.locator('[data-account-request-status]')).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Save recovered account link' })).toHaveCount(0);
+    await expect(page.locator('#drawer-body')).not.toContainText('fictional-private-recovery-review');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.calls.find(c => c.path.endsWith('/recovery/confirm/'))).toMatchObject({ data: { review_token: 'fictional-private-recovery-review' }, csrf: 'fictional-test-token' });
+    await page.getByRole('button', { name: 'Refresh request status', exact: true }).click();
+    await expect(page.locator('[data-account-request-status]')).toContainText('completed');
+    await expect(page.locator('#drawer-body')).toContainText('Moodle account linked (ID 123)');
+    expect(f.errors).toEqual([]);
+});
+
+test('recovered link preserves the separate setup-email task', async ({ page }) => {
+    const f = await fixture(page, { ...uncertainRequest, recoveryEmailReview: true });
+    await recoveryReview(page);
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Save recovered account link', exact: true }).click();
+    await expect(page.locator('[data-account-request-status]')).toContainText('Setup email still needs review');
+    await page.getByRole('button', { name: 'Refresh request status', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Resolve setup-email review' })).toBeVisible();
+    expect(f.calls.filter(c => c.path.endsWith('/recovery/confirm/'))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test('cancel recovery leaves the original request unchanged', async ({ page }) => {
+    const f = await fixture(page, uncertainRequest);
+    await recoveryReview(page);
+    await page.getByRole('button', { name: 'Cancel recovery review', exact: true }).click();
+    await expect(page.getByLabel('Reason for recovering this account link', { exact: true })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Check original Moodle operation', exact: true })).toBeEnabled();
+    expect(f.calls.some(c => c.path.endsWith('/recovery/confirm/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('refresh recovers interrupted link confirmation without a repeated operation', async ({ page }) => {
+    const f = await fixture(page, { ...uncertainRequest, recoveryInterrupted: true });
+    await recoveryReview(page);
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Save recovered account link', exact: true }).click();
+    await expect(page.locator('[data-account-request-status]')).toContainText('Refresh request status');
+    await page.getByRole('button', { name: 'Refresh request status', exact: true }).click();
+    await expect(page.locator('[data-account-request-status]')).toContainText('completed');
+    expect(f.calls.filter(c => c.path.endsWith('/recovery/confirm/'))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test('receipt-inspection authority does not expose recovery without link permission', async ({ page }) => {
+    const f = await fixture(page, { ...uncertainRequest, recoveryDenied: true });
+    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review recovery link', exact: true })).toHaveCount(0);
+    expect(f.calls.some(c => c.path.includes('/recovery/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('active processing can inspect a receipt but cannot recover its link', async ({ page }) => {
+    const f = await fixture(page, { ...uncertainRequest, saved: { ...uncertainRequest.saved, state: 'processing', issue_code: 'connection_uncertain' } });
+    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Processing has not stopped');
+    await expect(page.getByRole('button', { name: 'Review recovery link', exact: true })).toHaveCount(0);
+    expect(f.calls.some(c => c.path.includes('/recovery/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
 
 for (const receiptStatus of ['recorded', 'not_observed', 'restricted']) {
     test(`inspect ${receiptStatus} original receipt without retrying creation or changing local status`, async ({ page }) => {

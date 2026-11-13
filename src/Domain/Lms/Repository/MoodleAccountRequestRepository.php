@@ -26,4 +26,16 @@ interface MoodleAccountRequestRepository
         string $reviewHash,
         #[\SensitiveParameter] string $encryptedResolution,
     ): void;
+    /** @return array{link_id:string,review_hash:string}|null */
+    public function recovery(EntityId $request): ?array;
+    /** Atomically finish stopped work and retain immutable recovery evidence in the caller's transaction. */
+    public function recover(
+        EntityId $request,
+        int $expectedVersion,
+        string $expectedIssue,
+        EntityId $link,
+        string $reviewHash,
+        bool $needsEmailReview,
+        #[\SensitiveParameter] string $encryptedReview,
+    ): void;
 }

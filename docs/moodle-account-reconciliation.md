@@ -1,4 +1,4 @@
-# Inspect an uncertain Moodle account-creation outcome
+# Review and recover uncertain Moodle account creation
 
 An interrupted response does not tell etSIS whether Moodle committed an account. Keep the original creation request and operation reference. The background worker already retries that same operation within its bounded attempt budget. The **Check original Moodle operation** action now provides a separate read-only inspection when that budget is exhausted or the request needs review.
 
@@ -25,7 +25,25 @@ The screen flags a person/profile/defaults change since the original approval. I
 
 Use Moodle's verified support process for an existing account's access problem. A recorded email submission does not prove delivery. Pending or uncertain email markers are displayed as requiring review without sending anything or updating the remote receipt. For already-linked accounts, use the separate [setup-email resolution](moodle-person-links.md#resolve-a-setup-email-review-implemented).
 
-This stage provides inspection only. Reviewed attachment of a recovered account, changes to the original approved attributes, and renewed processing after exhausted attempts remain subsequent work. Do not clear requests, reset attempt counters or repair identity links directly in SQL to bypass those boundaries.
+Reviewed recovery of a missing link is available below. Changes to the original approved attributes and renewed processing after exhausted attempts remain subsequent work. Do not clear requests, reset attempt counters or repair identity links directly in SQL to bypass those boundaries.
+
+## Recover a stopped request's account link
+
+Recovery requires all three permissions: `sis:moodle:create-person`, `sis:moodle:link-person` and `sis:person:manage`, plus current local-account management authority. Super-account protection also applies. Inspection authority alone cannot approve a link. Recovery is available only for an unlinked request stopped in **review required** because attempts were exhausted or the approved setup changed. A worker still processing an uncertain response must finish or stop for review first.
+
+1. Select **Check original Moodle operation**. When Moodle confirms an eligible account and the request has stopped for review, the screen offers **Recover the missing account link**.
+2. Independently verify that the original account belongs to this person. Enter an administrative reason, without credentials or academic details, then select **Review recovery link**.
+3. Check the current person's name, originally approved name, original username/email, retained Moodle ID and sign-in setup result. A profile/defaults change is explicitly flagged. Recovery retains the original account; it does not copy today's profile changes to Moodle or replace the original approval.
+4. Acknowledge the identity verification and select **Save recovered account link** within 20 minutes. Confirmation reads the exact original receipt again. A different account, sign-in result, profile, request version, installation, administrator or permission invalidates the outstanding review.
+5. The link, immutable recovery evidence, stopped-job transition and attributed `moodle.account_link_recovered` audit commit together. The link's approval time is the actual recovery time; etSIS does not invent an earlier approval. Existing source approvals, operation IDs, attempt counters, person attributes and academic events remain intact.
+
+**Cancel recovery review** saves nothing. An interrupted confirmation can be checked with **Refresh request status**, which reads local state without contacting Moodle. A competing review cannot replace the saved decision, and the Moodle account cannot already belong to another person's link.
+
+For recorded SSO setup or accepted setup email, the stopped request becomes **completed**. If the retained receipt indicates uncertain/pending setup email, the link is saved and **setup-email review** remains open. Resolve that separate task using [verified access recovery](moodle-person-links.md#resolve-a-setup-email-review-implemented); no email is resent by linking the account. An observed receipt does not independently prove current sign-in success or email delivery.
+
+Repeating the same completed confirmation returns its original result without another remote read, link or audit, including after expiry or connection disablement. Current recovery permissions, account protections, original installation and retained link still apply. If staff later resolve the email warning, repeating the earlier link confirmation cannot reopen it: its original reply is returned without changing today's state. Refresh request status to see the current outcome.
+
+Intake and automatic processing may remain disabled while staff recover a verified original account. Moodle connectivity and connector 0.3.2-alpha are required for a new review and confirmation; this workflow uses its existing read-only receipt function and makes no Moodle-side writes. It cannot recover an unknown/restricted receipt, select another Moodle ID, create a replacement, restart processing or change an original request's approved attributes.
 
 ## Security and persistence
 
@@ -35,6 +53,12 @@ POST `/sis/people/{person}/moodle/account-request/receipt/` preserves framework 
 
 The connector reads a single uniquely indexed operation receipt and, when needed, one account's ID under active-account filters. It uses no write locks and performs no account, receipt, password-reset, role or email writes. The SIS action does not claim or requeue work, change approvals, create links, change academic history, or persist the observation as a completed business decision. Only the inspection-attempt audit is added. The ordinary worker's lease, attempt budget and same-operation idempotency remain unchanged.
 
+Recovery uses separate POST `/sis/people/{person}/moodle/account-request/recovery/review/` and `/recovery/confirm/` endpoints with the same private/no-store, CSRF and debug suppression boundaries. Encrypted, purpose-specific reviews bind the actor, person, original request/installation, exact local snapshot/version, retained Moodle account, sign-in status, reason and expiry. Review and confirmation perform remote reads before acquiring local write locks. The final short transaction locks the access/person boundaries, rechecks authority and the reviewed snapshot, refuses competing links, and uses a version-checked transition on stopped work. Any failure rolls back the new link, recovery receipt and job transition.
+
+Migration `20261112000005_CreateSisMoodleAccountRecoveries.php` adds the private ULID-keyed `sis_moodle_account_recoveries` support table. Unique request/link references and foreign keys preserve the original approval and retained person link. The review/reason and actual UTC recovery time are encrypted; ordinary status and reporting omit this evidence. Setup-email resolution keeps its independent evidence on the original request. The outbox remains reference-only and its attempt count is never reset. This integration-decision receipt is not another authoritative event table, and no academic or financial history is changed or synthesized. Retain application encryption keys and follow institutional retention controls.
+
 ## Validation
 
 Fictional connector, gateway and SQLite integration checks cover recorded/missing/restricted outcomes, changed policies, pending email markers, erased receipts, authorization, exact digests, profile/version changes and absence of creation or mail effects. Real-route checks cover CSRF, current permissions, dependency wiring and private responses. Browser checks cover keyboard access, narrow-screen accessibility, unavailable connections, unchanged request status and transient results. Native Moodle tests are supplied for a dedicated PHPUnit database; deployment, native REST and institutional mail/SSO acceptance remain separate requirements.
+
+Recovery checks cover the independent link grant, stopped-worker requirement, fresh exact receipts, actor/person isolation, protected super accounts, expiry, profile changes, conflicting/competing links, atomic audit rollback and unchanged original approvals/history/counters. Repeated confirmation is tested after a later email resolution and connection disablement. Real routes and fictional browser fixtures exercise CSRF, current permissions, keyboard acknowledgement, cancellation, narrow-screen accessibility and interrupted-response recovery. The additive recovery schema compiles for all five framework database dialects and has been applied to the configured MariaDB test installation, with before/after verification that existing history, approvals, jobs and links were unchanged.
