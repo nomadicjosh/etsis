@@ -86,6 +86,13 @@ async function fixture(page, options = {}) {
             ? [{ adjustment_id: id(20), definition: { kind: "waiver", course_id: course }, applicable: true }]
             : [],
         nextAdjustment = 21;
+    if (options.approvedReplacement) activeAdjustments = [{
+        adjustment_id: id(20), applicable: true,
+        definition: {
+            kind: "substitution", course_id: course,
+            replacement_course_id: id(15), replacement_version_id: id(16),
+        },
+    }];
     if (options.previewApprovals) {
         activeAdjustments = [
             { adjustment_id: id(20), definition: { kind: "waiver", course_id: course }, applicable: true },
@@ -268,7 +275,7 @@ async function fixture(page, options = {}) {
     const substitutionDetails = (items = activeAdjustments) =>
         Object.fromEntries(
             items
-                .filter((p) => ["substitution","course_version"].includes(p.definition.kind))
+                .filter((p) => ["substitution","course_version"].includes(p.definition.kind) || (p.definition.kind === "placement" && p.definition.substitution_adjustment_id))
                 .map((p) => [p.adjustment_id, p.definition.kind==="course_version" ? acceptedPublication : replacement]),
         );
     let cursorCount = 0;
@@ -950,6 +957,22 @@ async function fixture(page, options = {}) {
                 substitution_details: substitutionDetails(),
                 targets,
                 courses,
+                placement_courses: [
+                    ...courses,
+                    ...activeAdjustments
+                        .filter(p => p.applicable && p.definition.kind === "substitution" && p.definition.course_id === course)
+                        .map(p => ({
+                            course_id: replacement.course_id, code: replacement.code, title: replacement.title,
+                            version: replacement.version, substitution_adjustment_id: p.adjustment_id,
+                            required_course_code: "MATH.101", required_course_title: "Retained <b>Algebra</b>",
+                            groups: ["General education"],
+                            placement_groups: [{
+                                id: group, name: "General education", course_code: replacement.code,
+                                course_title: replacement.title, required_course_code: "MATH.101",
+                                required_course_title: "Retained <b>Algebra</b>",
+                            }],
+                        })),
+                ],
                 effective_minimums: effective(),
                 group_labels: { [group]: "General education" },
                 grade_scale: requirements.grade_scale || null,
@@ -977,7 +1000,12 @@ async function fixture(page, options = {}) {
                 );
             const enriched =
                 d.kind === "placement"
-                    ? { ...d, course_version_id: id(14), group_version_id: id(8) }
+                    ? {
+                          ...d,
+                          course_version_id: d.substitution_adjustment_id ? replacement.version_id : id(14),
+                          group_version_id: id(8),
+                          ...(d.substitution_adjustment_id ? { required_course_id: course } : {}),
+                      }
                     : d.kind !== "minimum"
                       ? d
                       : {
@@ -1001,7 +1029,7 @@ async function fixture(page, options = {}) {
                 affected_groups: d.kind !== "minimum" || d.group_id ? ["General education"] : [],
                 group_labels: { [group]: "General education" },
                 grade_scale: requirements.grade_scale || null,
-                substitution_details: ["substitution","course_version"].includes(d.kind) ? { [p.adjustment_id]: d.kind==="course_version" ? acceptedPublication : replacement } : {},
+                substitution_details: (["substitution","course_version"].includes(d.kind) || (d.kind === "placement" && d.substitution_adjustment_id)) ? { [p.adjustment_id]: d.kind==="course_version" ? acceptedPublication : replacement } : {},
                 effective_minimums: effective([...activeAdjustments.filter((x) => x !== previous), p]),
                 review_token: `fictional-exception-${p.adjustment_id}`,
             };

@@ -26,18 +26,25 @@ final readonly class RequirementAdjustmentDefinitionV2
             return;
         }
         if (($definition["kind"] ?? null) === "placement") {
-            self::keys($definition, [
+            $keys = [
                 "kind",
                 "course_id",
                 "course_version_id",
                 "group_id",
                 "group_version_id",
-            ]);
-            foreach (["course_id", "course_version_id", "group_id", "group_version_id"] as $key) {
+            ];
+            if (array_key_exists('substitution_adjustment_id', $definition)) {
+                $keys = [...$keys, 'substitution_adjustment_id', 'required_course_id'];
+            }
+            self::keys($definition, $keys);
+            foreach (array_diff($keys, ['kind']) as $key) {
                 if (!is_string($definition[$key])) {
                     throw new InvalidArgumentException("Choose a retained course and group publication.");
                 }
                 new EntityId($definition[$key]);
+            }
+            if (($definition['required_course_id'] ?? null) === $definition['course_id']) {
+                throw new InvalidArgumentException('A replacement placement needs a different required course.');
             }
             return;
         }

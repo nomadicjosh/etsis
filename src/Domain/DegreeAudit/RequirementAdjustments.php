@@ -35,6 +35,21 @@ final class RequirementAdjustments extends EventSourcedAggregate
     {
         $p = $e->payload();
         $this->scope($p);
+        $d = $p['definition'];
+        if ($d['kind'] === 'placement' && isset($d['substitution_adjustment_id'])) {
+            $source = $this->active[$d['substitution_adjustment_id']] ?? null;
+            if (
+                $source === null ||
+                ($source['definition']['kind'] ?? null) !== 'substitution' ||
+                $source['template_id'] !== $p['template_id'] ||
+                $source['requirements_version_id'] !== $p['requirements_version_id'] ||
+                $source['definition']['course_id'] !== $d['required_course_id'] ||
+                $source['definition']['replacement_course_id'] !== $d['course_id'] ||
+                $source['definition']['replacement_version_id'] !== $d['course_version_id']
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
         $key = self::key($p);
         $previous = $this->forKey($key);
         if (

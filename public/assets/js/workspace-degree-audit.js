@@ -4083,8 +4083,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
             if (p.subject_label) return `${p.subject_label} → ${p.scope_label}`;
             if (p.applicable === false)
                 return "Course placement · retained approval for an earlier degree publication";
-            const course = data?.courses?.find((c) => c.course_id === d.course_id);
+            const course = (data?.placement_courses || data?.courses)?.find(
+                (c) => c.course_id === d.course_id &&
+                    c.substitution_adjustment_id === d.substitution_adjustment_id,
+            );
+            const retained = data?.substitution_details?.[p.adjustment_id];
             const group = course?.placement_groups?.find((g) => g.id === d.group_id);
+            if (retained)
+                return `Course placement · ${courseLabel(retained)} → ${group?.name || data?.group_labels?.[d.group_id] || "Retained group"}`;
             return `Course placement · ${group ? `${group.course_code} · ${group.course_title}` : "Retained course"} → ${group?.name || data?.group_labels?.[d.group_id] || "Retained group"}`;
         }
         if (d.kind === "course_version") {
@@ -4311,6 +4317,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         "This course waiver follows the course throughout this program pursuit, without lowering credit or GPA minimums.",
                     ),
                 );
+            else if (p.definition.kind === "placement")
+                card.append(
+                    node("p", {}, "Eligible work for this course is reserved for the chosen group. Its grade, publication, substitution and repeat requirements still apply."),
+                );
             else if (["substitution", "course_version"].includes(p.definition.kind))
                 card.append(
                     node(
@@ -4393,7 +4403,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             placementChoices.replaceChildren();
             if (!selected) {
                 placementChoices.append(
-                    node("p", {}, "Choose a curriculum course first. No group is selected automatically."),
+                    node("p", {}, "Choose a curriculum course or approved substitute first. No group is selected automatically."),
                 );
                 return;
             }
@@ -4408,6 +4418,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         "article",
                         { class: "audit-source-card" },
                         node("p", {}, `${group.course_code} · ${group.course_title}`),
+                        ...(selected.substitution_adjustment_id
+                            ? [node("p", {}, `Approved substitute version ${selected.version} for ${group.required_course_code} · ${group.required_course_title}.`)]
+                            : []),
                         choose,
                     ),
                 );
@@ -4483,7 +4496,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                 : kind === "course_version"
                                   ? { kind, course_id: selected.course_id, version_id: replacement.version_id }
                                   : kind === "placement"
-                                    ? { kind, course_id: selected.course_id, group_id: placementGroup }
+                                    ? {
+                                          kind,
+                                          course_id: selected.course_id,
+                                          group_id: placementGroup,
+                                          ...(selected.substitution_adjustment_id
+                                              ? { substitution_adjustment_id: selected.substitution_adjustment_id }
+                                              : {}),
+                                      }
                                     : kind === "substitution"
                                       ? {
                                             kind,
@@ -4519,7 +4539,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 description.textContent = "Choose a course or minimum to begin.";
             }
             list.replaceChildren();
-            const all = (kind !== "minimum" ? data.courses : data.targets).filter((t) =>
+            const sourceChoices = kind === "placement"
+                ? (data.placement_courses || data.courses)
+                : kind !== "minimum" ? data.courses : data.targets;
+            const all = sourceChoices.filter((t) =>
                 (kind !== "minimum" ? `${t.code} ${t.title}` : `${t.label} ${minimumLabels[t.minimum]}`)
                     .toLowerCase()
                     .includes(query.toLowerCase()),
@@ -4527,7 +4550,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             for (const t of all.slice(page * 30, (page + 1) * 30)) {
                 const label =
                     kind !== "minimum"
-                        ? courseLabel(t)
+                        ? `${courseLabel(t)}${t.substitution_adjustment_id ? ` · Approved substitute version ${t.version} for ${t.required_course_code}` : ""}`
                         : `${t.label} · ${minimumLabels[t.minimum]} · ${text(t.original_milli)}`;
                 list.append(
                     node(
@@ -4715,6 +4738,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         ? "Revoking this preference restores normal eligible group choices under the retained sharing policy. No course is applied automatically."
                         : "Eligible work for this course will be considered only in the chosen group for this selected degree publication. Other courses retain their normal sharing rules. This does not guarantee a complete placement, override a grade/publication requirement, or change earned credits, GPA or charges. The same rule applies to eligible retake evidence; it does not select a particular attempt.",
                 ),
+            );
+        if (p.definition.kind === "placement" && p.definition.substitution_adjustment_id)
+            body.append(
+                node("p", {}, "This placement was reviewed against an existing substitution approval. Course eligibility still requires a current approval; this separate group restriction remains until replaced or revoked. It never approves a substitute by itself."),
             );
         if (["substitution","course_version"].includes(p.definition.kind)) {
             const selected =

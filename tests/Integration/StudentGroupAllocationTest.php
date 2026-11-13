@@ -257,6 +257,161 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame($before, $state());
     }
 
+    public function testReplacementPreferenceRestrictsBothNamedAndSavedRuleChoicesWithoutGrantingEligibility(): void
+    {
+        $f = $this->institution();
+        $this->work($f, 3);
+        $s = $f->f->sis;
+        $required = $f->f->groupDefinition["courses"][0];
+        $replacement = $f->f->groupDefinition["courses"][3];
+        $rules = new CourseRuleService(
+            new SqlCourseRuleRepository($s->sql),
+            new PublishedCourseReader($f->f->history),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $s->clock,
+        );
+        $rule = $rules->save(
+            null,
+            null,
+            "DA.ALT",
+            "Fictional alternative rule",
+            [
+                "condition" => "AND",
+                "rules" => [
+                    [
+                        "id" => "course_id",
+                        "operator" => "equal",
+                        "value" => $replacement["course_id"],
+                    ],
+                ],
+            ],
+        );
+        $groups = [];
+        foreach (
+            ["Fictional named target", "Fictional rule target"]
+            as $i => $name
+        ) {
+            $id = EntityId::generate();
+            $d = CourseGroupDefinitionV2::blank($name)->definition;
+            $d["min_credits_milli"] = 3000;
+            $d["courses"] = $i === 0 ? [$required] : [];
+            $d["rules"] = [
+                [
+                    "id" => EntityId::generate()->value,
+                    "mode" => $i === 0 ? "all" : "credits",
+                    "minimum_courses" => $i === 0 ? 1 : 0,
+                    "course_ids" => $i === 0 ? [$required["course_id"]] : [],
+                ] +
+                ($i === 0
+                    ? []
+                    : [
+                        "minimum_credits_milli" => 3000,
+                        "eligibility" => $rule,
+                    ]),
+            ];
+            $f->f->groups->create($id, new CourseGroupDefinitionV2($d));
+            $r = $f->f->groups->review($id, "Fictional placement comparison.");
+            $groups[] = [
+                "group_id" => $id->value,
+                "version_id" => $f->f->groups->publish($id, $r["review_token"])[
+                    "operation_id"
+                ],
+            ];
+        }
+        $row = $f->f->degrees->view($f->f->degree);
+        $d = $row["definition"];
+        $d["groups"] = $groups;
+        $d["policies"]["group_reuse"] = "multiple_groups";
+        $f->f->degrees->save(
+            $f->f->degree,
+            $row["revision"],
+            new AuditRequirementsV3($d),
+        );
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        $approvals = $this->adjustments($f);
+        $source = $approvals->reviewGrant(
+            $f->student,
+            $f->assignment,
+            [
+                "kind" => "substitution",
+                "course_id" => $required["course_id"],
+                "replacement_course_id" => $replacement["course_id"],
+                "replacement_version_id" => $replacement["version_id"],
+            ],
+            "Fictional substitute approved.",
+        );
+        $approvals->commit(
+            $f->student,
+            $f->assignment,
+            $source["review_token"],
+        );
+        $service = $this->service($f);
+        self::assertSame(
+            "feasible",
+            $service->preview($f->student, $f->assignment)["outcome"],
+        );
+        $academic = $f->f->digest("sis_academic_credits");
+        $finance = $s->financialEvents();
+        $review = $approvals->reviewGrant(
+            $f->student,
+            $f->assignment,
+            [
+                "kind" => "placement",
+                "course_id" => $replacement["course_id"],
+                "group_id" => $groups[0]["group_id"],
+                "substitution_adjustment_id" =>
+                    $source["adjustment"]["adjustment_id"],
+            ],
+            "Fictional reservation for the named target.",
+        );
+        $approvals->commit(
+            $f->student,
+            $f->assignment,
+            $review["review_token"],
+        );
+        $events = $f->f->digest("sis_history_events");
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(
+            [],
+            array_merge(...array_column($result["groups"], "placements")),
+        );
+        self::assertSame($events, $f->f->digest("sis_history_events"));
+        $revoke = $approvals->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($source["adjustment"]["adjustment_id"]),
+            "Fictional revoked substitute.",
+        );
+        $approvals->commit(
+            $f->student,
+            $f->assignment,
+            $revoke["review_token"],
+        );
+        $result = $service->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $result["outcome"]);
+        $revoke = $approvals->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]),
+            "Fictional released preference.",
+        );
+        $approvals->commit(
+            $f->student,
+            $f->assignment,
+            $revoke["review_token"],
+        );
+        self::assertSame(
+            "infeasible",
+            $service->preview($f->student, $f->assignment)["outcome"],
+        );
+        // Releasing the preference cannot restore the separate substitution approval.
+        self::assertSame($academic, $f->f->digest("sis_academic_credits"));
+        self::assertSame($finance, $s->financialEvents());
+    }
     public function testIndividualPublicationApprovalsCoexistExpireAndRevokeWithoutChangingAcademicFacts(): void
     {
         $f = $this->institution();

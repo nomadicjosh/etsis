@@ -14,6 +14,8 @@ A proposed placement shows the actual course, the required-course target, any ap
 
 **How current work was considered** explains eligible work, insufficient grades, in-progress work, drops, voids, unknown publications and repeat/sharing effects. Work and placement pages use the same captured result without another request. **Refresh course placement** performs a fresh bounded review; **Back to previous screen** returns to the degree or work screen.
 
+Approved substitute courses can now have their own [reviewed group preference](student-degree-exceptions.md#course-placement-preferences), selected through the existing substitution approval. The restriction follows the actual course identity across named and saved-rule matches. It does not approve a substitute or restore a revoked approval; passing-grade, publication and repeat gates remain independent. Revocation of the substitution preserves the separate placement decision and its retained labels.
+
 ## Understanding shortfalls
 
 Group cards now identify clear shortages in current eligible work. Choose **Inspect group … → What current work can support** for details:

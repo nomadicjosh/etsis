@@ -281,6 +281,222 @@ final class CoursePlacementPreferenceTest extends TestCase
         // A token cannot be moved to another assignment, even with broad registrar authority.
         $this->service()->commit($otherStudent, $f->assignment, $r["review_token"]);
     }
+    private function approvedReplacement(): array
+    {
+        $f = $this->f;
+        $course = EntityId::generate();
+        $f->f->sis->registration->addCourse(
+            new \Domain\Catalog\Course(
+                $course,
+                "ALT.101",
+                "Fictional accepted alternative",
+                4000,
+            ),
+        );
+        $publications = $f->f->catalog->publications();
+        $review = $publications->review(
+            $course,
+            "Fictional course definition.",
+        );
+        $version = $publications->publish($course, $review["review_token"])[
+            "operation_id"
+        ];
+        $review = $this->service()->reviewGrant(
+            $f->student,
+            $f->assignment,
+            [
+                "kind" => "substitution",
+                "course_id" => $this->definition()["course_id"],
+                "replacement_course_id" => $course->value,
+                "replacement_version_id" => $version,
+            ],
+            "Fictional approved alternative.",
+        );
+        $this->commit($review);
+        return $review["adjustment"];
+    }
+
+    public function testApprovedSubstituteHasSeparatePlacementChoicesAndRetainedHistory(): void
+    {
+        $f = $this->f;
+        $source = $this->approvedReplacement();
+        $definition = [
+            "kind" => "placement",
+            "course_id" => $source["definition"]["replacement_course_id"],
+            "group_id" => $f->f->group->value,
+            "substitution_adjustment_id" => $source["adjustment_id"],
+        ];
+        $before = $f->f->digest("sis_history_events");
+        $view = $this->service()->view($f->student, $f->assignment);
+        self::assertCount(5, $view["courses"]);
+        self::assertCount(6, $view["placement_courses"]);
+        $choice = $view["placement_courses"][5];
+        self::assertSame(
+            $source["adjustment_id"],
+            $choice["substitution_adjustment_id"],
+        );
+        self::assertSame("ALT.101", $choice["code"]);
+        self::assertSame(
+            "MATH.101",
+            $choice["placement_groups"][0]["required_course_code"],
+        );
+        $review = $this->service()->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $definition,
+            "Fictional advisor placement approved.",
+        );
+        self::assertSame($before, $f->f->digest("sis_history_events"));
+        $stored = $review["adjustment"]["definition"];
+        self::assertSame(
+            $source["definition"]["replacement_version_id"],
+            $stored["course_version_id"],
+        );
+        self::assertSame(
+            $source["definition"]["course_id"],
+            $stored["required_course_id"],
+        );
+        self::assertSame(
+            $f->f->groupVersion->value,
+            $stored["group_version_id"],
+        );
+        $academic = $f->f->digest("sis_academic_credits");
+        $finance = $f->f->sis->financialEvents();
+        $receipt = $this->commit($review);
+        $f->f->sis->sql->update(
+            "sis_courses",
+            ["title" => "Fictional current draft title"],
+            [
+                "id" => $definition["course_id"],
+            ],
+        );
+        $view = $this->service()->view($f->student, $f->assignment);
+        self::assertSame(
+            $definition["group_id"],
+            $view["effective_minimums"]["placements"][$definition["course_id"]][
+                "group_id"
+            ],
+        );
+        $history = $this->service()->history($f->student, $f->assignment)[
+            "items"
+        ];
+        self::assertSame(
+            "Course placement · ALT.101 · Fictional accepted alternative",
+            $history[1]["subject_label"],
+        );
+        self::assertSame("General education", $history[1]["scope_label"]);
+        $revoke = $this->service()->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($source["adjustment_id"]),
+            "Fictional substitution revoked.",
+        );
+        $this->commit($revoke);
+        $view = $this->service()->view($f->student, $f->assignment);
+        self::assertCount(5, $view["placement_courses"]);
+        self::assertSame([], $view["effective_minimums"]["substitutions"]);
+        self::assertArrayHasKey(
+            $definition["course_id"],
+            $view["effective_minimums"]["placements"],
+        );
+        self::assertSame(
+            "Fictional accepted alternative",
+            $view["substitution_details"][
+                $review["adjustment"]["adjustment_id"]
+            ]["title"],
+        );
+        $f->f->sis->clock->time = $f->f->sis->clock->time->modify("+1 day");
+        $events = $f->f->digest("sis_history_events");
+        self::assertSame($receipt, $this->commit($review));
+        self::assertSame($events, $f->f->digest("sis_history_events"));
+        self::assertSame($academic, $f->f->digest("sis_academic_credits"));
+        self::assertSame($finance, $f->f->sis->financialEvents());
+        $revoke = $this->service()->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]),
+            "Fictional release of independent preference.",
+        );
+        $this->commit($revoke);
+        self::assertSame(
+            [],
+            $this->service()->view($f->student, $f->assignment)[
+                "effective_minimums"
+            ]["placements"],
+        );
+    }
+
+    public function testSubstitutePlacementRejectsUnapprovedForeignAndRevokedSourcesAndStaleConfirmation(): void
+    {
+        $f = $this->f;
+        $source = $this->approvedReplacement();
+        $definition = [
+            "kind" => "placement",
+            "course_id" => $source["definition"]["replacement_course_id"],
+            "group_id" => $f->f->group->value,
+            "substitution_adjustment_id" => $source["adjustment_id"],
+        ];
+        $cases = [
+            array_diff_key($definition, ["substitution_adjustment_id" => true]),
+            array_replace($definition, [
+                "substitution_adjustment_id" => EntityId::generate()->value,
+            ]),
+            array_replace($definition, ["substitution_adjustment_id" => null]),
+            array_replace($definition, [
+                "course_id" => $this->definition()["course_id"],
+            ]),
+            array_replace($definition, [
+                "group_id" => EntityId::generate()->value,
+            ]),
+            $definition + ["course_version_id" => EntityId::generate()->value],
+            $definition + [
+                "required_course_id" => $this->definition()["course_id"],
+            ],
+        ];
+        foreach ($cases as $invalid) {
+            $before = $f->f->digest("sis_history_events");
+            try {
+                $this->service()->reviewGrant(
+                    $f->student,
+                    $f->assignment,
+                    $invalid,
+                    "Fictional invalid selection.",
+                );
+                self::fail(
+                    "Unapproved or client-controlled replacement placement accepted.",
+                );
+            } catch (InvalidArgumentException) {
+                self::assertSame($before, $f->f->digest("sis_history_events"));
+            }
+        }
+        $review = $this->service()->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $definition,
+            "Fictional placement to become stale.",
+        );
+        $revoke = $this->service()->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($source["adjustment_id"]),
+            "Fictional revocation before confirmation.",
+        );
+        $this->commit($revoke);
+        $before = $f->f->digest("sis_history_events");
+        try {
+            $this->commit($review);
+            self::fail("Stale substitution source accepted.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $f->f->digest("sis_history_events"));
+        }
+        $this->expectException(InvalidArgumentException::class);
+        $this->service()->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $definition,
+            "Fictional revoked source.",
+        );
+    }
     public function testAuditFailureRollsBackEventReceiptAndActiveProjection(): void
     {
         $f = $this->f;

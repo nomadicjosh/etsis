@@ -94,6 +94,7 @@ final readonly class RequirementAdjustmentService
                 "items" => $items,
                 "targets" => $choices["targets"],
                 "courses" => $choices["courses"],
+                "placement_courses" => $this->placementChoices($parent, $state->active(), $details, $effective),
                 "effective_minimums" => $effective,
                 "group_labels" => $this->groupLabels($parent),
                 "grade_scale" => $parent["requirements"]["grade_scale"] ?? null,
@@ -124,7 +125,7 @@ final readonly class RequirementAdjustmentService
             $parent = $this->requirements->view($student, $assignment);
             $this->writable($parent);
             $state = $this->state($assignment, $parent);
-            $definition = $this->proposal($parent, $request);
+            $definition = $this->proposal($parent, $request, $state->active());
             $id = EntityId::generate();
             $p = [
                 "adjustment_id" => $id->value,
@@ -372,6 +373,13 @@ final readonly class RequirementAdjustmentService
                             break;
                         }
                     }
+                    if ($definition['kind'] === 'placement' && isset($definition['substitution_adjustment_id'])) {
+                        $course = $this->published->courseVersion(
+                            new EntityId($definition['course_id']),
+                            new EntityId($definition['course_version_id']),
+                        );
+                        $labels['subject_label'] = 'Course placement · ' . $course['code'] . ' · ' . $course['title'];
+                    }
                     if ($definition["kind"] === "placement") {
                         $labels["scope_label"] =
                         $source["group_details"][$definition["group_id"]]["definition"]["name"];
@@ -451,10 +459,9 @@ final readonly class RequirementAdjustmentService
         $out = [];
         foreach ($active as $p) {
             $d = $p["definition"];
-            if (in_array($d['kind'], ['substitution', 'course_version'], true)) {
-                $course = $d['kind'] === 'course_version' ? $d['course_id'] : $d['replacement_course_id'];
-                $version = $d['kind'] === 'course_version' ? $d['version_id'] : $d['replacement_version_id'];
-                $out[$p['adjustment_id']] = $publications[$course . ':' . $version];
+            $reference = $this->publicationReference($d);
+            if ($reference !== null) {
+                $out[$p['adjustment_id']] = $publications[$reference[0] . ':' . $reference[1]];
             }
         }
         return $out;
@@ -467,11 +474,11 @@ final readonly class RequirementAdjustmentService
         $requested = [];
         foreach ($active as $p) {
             $d = $p['definition'];
-            if (!in_array($d['kind'], ['substitution', 'course_version'], true)) {
+            $reference = $this->publicationReference($d);
+            if ($reference === null) {
                 continue;
             }
-            $course = $d['kind'] === 'course_version' ? $d['course_id'] : $d['replacement_course_id'];
-            $version = $d['kind'] === 'course_version' ? $d['version_id'] : $d['replacement_version_id'];
+            [$course, $version] = $reference;
             if (!isset($publications[$course . ':' . $version])) {
                 $requested[$course][$version] = new EntityId($version);
             }
@@ -482,6 +489,59 @@ final readonly class RequirementAdjustmentService
                 $publications[$course . ':' . $id] = $detail;
             }
         }
+    }
+
+    /** @param array<string,mixed> $definition
+     * @return array{string,string}|null */
+    private function publicationReference(array $definition): ?array
+    {
+        return match ($definition['kind']) {
+            'substitution' => [$definition['replacement_course_id'], $definition['replacement_version_id']],
+            'course_version' => [$definition['course_id'], $definition['version_id']],
+            'placement' => isset($definition['substitution_adjustment_id'])
+            ? [$definition['course_id'], $definition['course_version_id']] : null,
+            default => null,
+        };
+    }
+
+    /** Named choices remain separate from additional approved substitutes for placement only.
+     * @param array<string,mixed> $parent
+     * @param array<string,array<string,mixed>> $active
+     * @param array<string,array<string,mixed>> $details
+     * @param array<string,mixed> $effective
+     * @return list<array<string,mixed>> */
+    private function placementChoices(array $parent, array $active, array $details, array $effective): array
+    {
+        $choices = $this->choices($parent)['courses'];
+        foreach ($active as $p) {
+            $d = $p['definition'];
+            if (
+                $d['kind'] !== 'substitution' || !$this->applicable($parent, $p) ||
+                !isset($effective['substitutions'][$d['course_id']])
+            ) {
+                continue;
+            }
+            $course = $details[$p['adjustment_id']];
+            $groups = [];
+            foreach ($parent['requirements']['group_details'] as $id => $group) {
+                $target = $group['course_details'][$d['course_id']] ?? null;
+                if ($target !== null) {
+                    $groups[] = [
+                        'id' => $id, 'name' => $group['definition']['name'],
+                        'course_code' => $course['code'], 'course_title' => $course['title'],
+                        'required_course_code' => $target['code'], 'required_course_title' => $target['title'],
+                    ];
+                }
+            }
+            $choices[] = [
+                'course_id' => $d['replacement_course_id'], 'code' => $course['code'], 'title' => $course['title'],
+                'version' => $course['version'], 'substitution_adjustment_id' => $p['adjustment_id'],
+                'required_course_code' => $groups[0]['required_course_code'],
+                'required_course_title' => $groups[0]['required_course_title'],
+                'groups' => array_column($groups, 'name'), 'placement_groups' => $groups,
+            ];
+        }
+        return $choices;
     }
 
     /** @param array<string,mixed> $effective */
@@ -515,8 +575,9 @@ final readonly class RequirementAdjustmentService
         }
     }
     /** @param array<string, mixed> $parent
-     * @param array<string, mixed> $r */
-    private function proposal(array $parent, array $r): Definition
+     * @param array<string, mixed> $r
+     * @param array<string,array<string,mixed>> $active */
+    private function proposal(array $parent, array $r, array $active): Definition
     {
         if (($r['kind'] ?? null) === 'course_version') {
             $d = new Definition($r);
@@ -541,11 +602,35 @@ final readonly class RequirementAdjustmentService
             return $d;
         }
         if (($r["kind"] ?? null) === "placement") {
-            Definition::keys($r, ["kind", "course_id", "group_id"]);
+            $keys = ['kind', 'course_id', 'group_id'];
+            if (array_key_exists('substitution_adjustment_id', $r)) {
+                $keys[] = 'substitution_adjustment_id';
+            }
+            Definition::keys($r, $keys);
             if (!is_string($r["course_id"]) || !is_string($r["group_id"])) {
                 throw new InvalidArgumentException("Choose a course and its published group.");
             }
             $group = $parent["requirements"]["group_details"][$r["group_id"]] ?? null;
+            if (array_key_exists('substitution_adjustment_id', $r)) {
+                if (!is_string($r['substitution_adjustment_id'])) {
+                    throw new InvalidArgumentException('Choose an active approved substitution.');
+                }
+                $source = $active[$r['substitution_adjustment_id']] ?? null;
+                if (
+                    $source === null ||
+                    ($source['definition']['kind'] ?? null) !== 'substitution' ||
+                    !$this->applicable($parent, $source) ||
+                    $source['definition']['replacement_course_id'] !== $r['course_id'] ||
+                    !isset($group['course_details'][$source['definition']['course_id']])
+                ) {
+                    throw new InvalidArgumentException('Choose an active substitute and a group requiring its target.');
+                }
+                return new Definition($r + [
+                    'required_course_id' => $source['definition']['course_id'],
+                    'course_version_id' => $source['definition']['replacement_version_id'],
+                    'group_version_id' => $group['version_id'],
+                ]);
+            }
             foreach ($group["definition"]["courses"] ?? [] as $course) {
                 if ($course["course_id"] === $r["course_id"]) {
                     return new Definition($r + ["course_version_id" => $course["version_id"],
@@ -641,7 +726,7 @@ final readonly class RequirementAdjustmentService
         foreach ($parent["requirements"]["group_details"] ?? [] as $id => $g) {
             if (
                 (in_array($d->definition["kind"], ["waiver", "substitution", "placement", "course_version"], true) &&
-                    isset($g["course_details"][$d->definition["course_id"]])) ||
+                    isset($g["course_details"][$d->definition['required_course_id'] ?? $d->definition["course_id"]])) ||
                 ($d->definition["kind"] === "minimum" && $d->definition["group_id"] === $id)
             ) {
                 $groups[] = $g["definition"]["name"];
@@ -721,9 +806,12 @@ final readonly class RequirementAdjustmentService
             if ($d["kind"] === "placement") {
                 $group = $r["group_details"][$d["group_id"]] ?? null;
                 $references = array_column($group["definition"]["courses"] ?? [], "version_id", "course_id");
+                $replacement = isset($d['substitution_adjustment_id']);
                 if (
                     ($group["version_id"] ?? null) !== $d["group_version_id"] ||
-                    ($references[$d["course_id"]] ?? null) !== $d["course_version_id"]
+                    ($replacement
+                        ? !isset($references[$d['required_course_id']])
+                        : ($references[$d["course_id"]] ?? null) !== $d["course_version_id"])
                 ) {
                     throw new CorruptHistoryException();
                 }
