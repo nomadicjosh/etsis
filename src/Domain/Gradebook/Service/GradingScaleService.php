@@ -16,6 +16,7 @@ use Domain\Gradebook\ValueObject\GradingScaleId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -43,11 +44,11 @@ final readonly class GradingScaleService
     /** Internal policy resolution. The calling workflow must authorize its read first.
      * @return array<string,mixed>
      */
-    public function resolve(?EntityId $program = null): array
+    public function resolve(?EntityId $program = null, ?HistoryReadBudget $budget = null): array
     {
         if ($program !== null) {
             $this->repository->requireProgram($program);
-            $state = $this->state($program);
+            $state = $this->state($program, $budget);
             if ($state->definition() !== null) {
                 return new GradingScaleSnapshot([
                     "source" => "program",
@@ -59,7 +60,7 @@ final readonly class GradingScaleService
                 ])->data;
             }
         }
-        $global = $this->state(null);
+        $global = $this->state(null, $budget);
         $d = new GradingScaleDefinition($global->definition() ?? ["grades" => []]);
         return new GradingScaleSnapshot([
             "source" => $d->definition["grades"] === [] ? "default" : "global",
@@ -245,14 +246,16 @@ final readonly class GradingScaleService
             "grading_scale",
         );
     }
-    private function state(?EntityId $program): GradingScale
+    private function state(?EntityId $program, ?HistoryReadBudget $budget = null): GradingScale
     {
         $state = GradingScale::root(
             new GradingScaleId($program === null ? self::GLOBAL_ID : $program->value),
         );
         $cursor = null;
         do {
-            $page = $this->history->page($this->stream($program), $cursor, 20);
+            $page = $budget === null
+            ? $this->history->page($this->stream($program), $cursor, 20)
+            : $budget->page($this->history, $this->stream($program), $cursor);
             foreach ($page->events as $e) {
                 $state->acceptHistorical($e->event);
             }

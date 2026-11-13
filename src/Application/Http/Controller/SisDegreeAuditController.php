@@ -6,6 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\DegreeAudit\Service\RequirementsService;
+use Domain\DegreeAudit\Service\DraftDegreeAuditService;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -14,7 +15,7 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisDegreeAuditController
 {
-    public function __construct(private RequirementsService $service)
+    public function __construct(private RequirementsService $service, private DraftDegreeAuditService $trials)
     {
     }
     public function page(ServerRequest $request, string $program): ResponseInterface
@@ -47,6 +48,21 @@ final readonly class SisDegreeAuditController
                 new AuditRequirementsV3($definition),
             ),
         );
+    }
+    public function test(ServerRequest $request, string $id): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !is_array($body['definition'] ?? null)) {
+            throw new \InvalidArgumentException('Provide the degree draft to test.');
+        }
+        $input = FormInput::from($request);
+        return new JsonResponse($this->trials->test(
+            new EntityId($id),
+            $input->id('student_id'),
+            $input->id('assignment_id'),
+            new AuditRequirementsV3($body['definition']),
+            $input->boolean('use_group_drafts'),
+        ));
     }
     public function clone(ServerRequest $request, string $id): ResponseInterface
     {

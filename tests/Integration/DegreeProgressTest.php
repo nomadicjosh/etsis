@@ -77,16 +77,18 @@ final class DegreeProgressTest extends TestCase
             $inputs,
             $f->service,
             $this->adjustments($f),
-            new AcademicPolicyEvaluator(),
-            new RetainedAttemptReader(new RetainedSectionReader($f->f->history)),
-            new DegreeMinimumEvaluator(),
-            new GroupAllocationEvaluator(
-                new CourseMatchEvaluator(),
+            new \Domain\DegreeAudit\Service\DegreeProgressEvaluator(
                 new AcademicPolicyEvaluator(),
-                new CourseAllocationPlanner($steps),
-                new AllocationGapAnalyzer(),
+                new RetainedAttemptReader(new RetainedSectionReader($f->f->history)),
+                new DegreeMinimumEvaluator(),
+                new GroupAllocationEvaluator(
+                    new CourseMatchEvaluator(),
+                    new AcademicPolicyEvaluator(),
+                    new CourseAllocationPlanner($steps),
+                    new AllocationGapAnalyzer(),
+                ),
+                new DegreeWorkReview(),
             ),
-            new DegreeWorkReview(),
             $students,
             $s->transactions,
         );

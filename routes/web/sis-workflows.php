@@ -1044,6 +1044,7 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/degree-audits/{id}/assistance/", [SisDegreeAssistanceController::class, "suggest"]);
     $router->get("/sis/degree-audits/{id}/", [SisDegreeAuditController::class, "view"]);
     $router->post("/sis/degree-audits/{id}/save/", [SisDegreeAuditController::class, "save"]);
+    $router->post("/sis/degree-audits/{id}/test/", [SisDegreeAuditController::class, "test"]);
     $router->post("/sis/degree-audits/{id}/clone/", [SisDegreeAuditController::class, "clone"]);
     $router->post("/sis/degree-audits/{id}/review/", [SisDegreeAuditController::class, "review"]);
     $router->post("/sis/degree-audits/{id}/publish/", [SisDegreeAuditController::class, "publish"]);
