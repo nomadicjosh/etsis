@@ -176,6 +176,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlApplicationFormRepository::class,
             \Domain\Rules\Repository\RuleRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRuleRepository::class,
+            \Domain\Rules\Repository\CourseRuleRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCourseRuleRepository::class,
             \Domain\Import\Service\CourseCsvMapper::class =>
                 \Infrastructure\Import\LeagueCourseCsvMapper::class,
             \Domain\Person\Service\InstitutionalIdGenerator::class =>

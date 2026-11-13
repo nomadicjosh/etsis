@@ -106,12 +106,29 @@ The degree-audit plan's addendum now distinguishes five requirement sources:
 | Take ENG-101 and ENG-102 | **All of these**, using selected publications. |
 | Take 2 of a listed set | **Choose a number**, using distinct completed course targets. |
 | Take 6 credits from a listed set | **Take credits**, with an independent per-list threshold. |
-| Take courses using saved rule DA.BUS.UPPER | Planned: retain the selected rule definition/version with the academic requirement. The ordinary mutable RULE screen is not yet an authoritative degree-rule publication. |
-| Take credits from a subject or department | Planned: classification-based eligibility using retained course-publication facts. `SUBJ`/`SUBJECT` and `DEPT`/`DEPARTMENT` describe the same respective source. |
+| Take courses using saved rule DA.BUS.UPPER | Saved course-rule revisions and selected-publication previews are available in RULE. Attaching a retained rule to a group and evaluating student work remain planned. |
+| Take credits from a subject or department | Visual subject/department conditions, exclusions and numeric-level comparisons can now be saved and previewed. Dynamic requirement cards and student allocation remain planned. `SUBJ`/`SUBJECT` and `DEPT`/`DEPARTMENT` describe the same respective source. |
 
 Saved/classification rules must support combined conditions and exceptions, including “subject ENG except ENG-500” and “subject MATH with course level greater than 200.” Resolve readable codes to stable identities; retain explicit excluded course identities and typed numeric comparisons. Do not infer subject or numeric level by parsing a course code. A course's later reassignment to another subject/department, or a later saved-rule edit, must not silently change the earlier student's requirement or accepted academic facts.
 
-These will be visual condition controls rather than executable SQL or a requirement for staff to type TAKE syntax. Eligibility filters are distinct from student-specific course waivers, substitutions and credit/GPA minimum exceptions. Missing historical classifications, numeric-level evidence or retained rule versions must remain a review issue rather than silently matching or excluding work. This work needs historical publication and input support before it can be presented as implemented; a dropdown pointing to today's mutable rule is insufficient.
+The saved-rule library now provides visual condition controls rather than executable SQL or a requirement for staff to type TAKE syntax. Eligibility filters are distinct from student-specific course waivers, substitutions and credit/GPA minimum exceptions. Missing historical classifications, numeric-level evidence or retained rule versions must remain a review issue rather than silently matching or excluding work. Academic use still needs retained rule publication and verified student-input support; a dropdown pointing to today's mutable rule is insufficient.
+
+## Saved course eligibility rules
+
+Open **Rules → Course eligibility**. This library is separate from student-audience rules and requires both `sis:rules:manage` and `sis:catalog:manage` for every read, save and preview. It contains curricular definitions, not student records or a new event store.
+
+1. Enter a reusable rule code and descriptive name. Add visual conditions, combining **all** (AND) or **any** (OR).
+2. Choose subjects, departments, academic levels, course levels or individual courses through searchable, paged record pickers. To express “English except ENG-500,” combine **Subject equals ENG** with **Course does not equal ENG-500**. For “Math above level 200,” combine the subject with **Numeric course level greater than 200**. Staff select readable records; the definition stores stable identities rather than parsing course codes or executing SQL.
+3. **Save course-rule revision** creates its first revision. Saving later edits appends a revision and retains earlier definitions and reference labels. The rule code stays fixed; use a new rule for a different identity. A stale edit is rejected instead of overwriting someone else's revision. Open earlier revisions from the saved revision list.
+4. To test conditions, choose courses and explicitly select their retained publication versions, then preview. No current publication is silently selected. The result is **Matches**, **Does not match**, or **Unknown** when the retained evidence cannot decide. Changing conditions or selected publications clears earlier results.
+
+Numeric course level comes only from a one-to-six-digit course-level classification code retained in the selected course publication (0–999999). For example, a separately configured code `300` supports numeric comparisons. A code such as `UPPER` still supports classification identity comparisons, but has no inferred numeric value. Missing classifications remain unknown; a course number such as MATH-301 is never used to invent a numeric level. AND/OR retain decisive known outcomes without treating missing facts as a match.
+
+Previews accept at most 20 explicitly selected publications and share one bounded protected-history replay budget. Saved-rule and revision lists use 20-row metadata pages without loading every definition. Browser drafts stay in memory; the screen does not place them in browser storage. Browser mutations retain CSRF protection, and responses are private/no-store.
+
+`sis_course_rules` stores immutable authoring revisions with ULID identities, unique code/revision and family/revision constraints, reference labels, an author and time, and a definition checksum. Each save and its audit record commit together. The checksum detects damaged contents; it does not provide the protected journal's guarantees or make an authoring row an academic decision. The migration was applied after inspecting the configured development database; checksums confirmed existing student-rule rows and event, stream-head and operation-receipt rows were unchanged.
+
+**Remaining:** course-group cards must select an exact saved revision, retain its full definition with the academic publication in the existing protected journal, and evaluate verified historical course facts during student allocation. Saving or previewing an eligibility rule currently changes no student requirement, earned credits, GPA or completion result.
 
 ## Course sharing across groups
 

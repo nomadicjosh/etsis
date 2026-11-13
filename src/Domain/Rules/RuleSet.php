@@ -25,6 +25,14 @@ final readonly class RuleSet
     /** @param array<string, mixed> $facts */
     public function matches(array $facts): bool
     {
+        return $this->decision($facts) === true;
+    }
+
+    /** Missing facts remain unknown, including for exclusions. False wins AND; true wins OR.
+     * @param array<string,mixed> $facts
+     */
+    public function decision(array $facts): ?bool
+    {
         return self::evaluate($this->tree, $facts);
     }
 
@@ -109,15 +117,16 @@ final readonly class RuleSet
      * @param array<string, mixed> $group
      * @param array<string, mixed> $facts
      */
-    private static function evaluate(array $group, array $facts): bool
+    private static function evaluate(array $group, array $facts): ?bool
     {
+        $unknown = false;
         foreach ($group['rules'] as $rule) {
             if (isset($rule['condition'])) {
                 $match = self::evaluate($rule, $facts);
             } else {
                 $actual = $facts[$rule['id']] ?? null;
                 $expected = $rule['value'];
-                $match = $actual !== null && match ($rule['operator']) {
+                $match = $actual === null ? null : match ($rule['operator']) {
                     'equal' => $actual === $expected,
                     'not_equal' => $actual !== $expected,
                     'in' => in_array($actual, $expected, true),
@@ -127,14 +136,15 @@ final readonly class RuleSet
                     default => false,
                 };
             }
-            if ($group['condition'] === 'OR' && $match) {
+            $unknown = $unknown || $match === null;
+            if ($group['condition'] === 'OR' && $match === true) {
                 return true;
             }
-            if ($group['condition'] === 'AND' && !$match) {
+            if ($group['condition'] === 'AND' && $match === false) {
                 return false;
             }
         }
 
-        return $group['condition'] === 'AND';
+        return $unknown ? null : $group['condition'] === 'AND';
     }
 }

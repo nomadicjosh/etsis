@@ -87,6 +87,16 @@ return static function (Psr7Router $router): void {
         ->name('sis.import.commit');
     $router->map(['POST'], '/sis/rules/', [SisRulesController::class, 'save'])
         ->name('sis.rules.save');
+    $router->map(['POST'], '/sis/course-rules/page/', [\Application\Http\Controller\SisCourseRuleController::class, 'page'])
+        ->name('sis.course-rules.page');
+    $router->map(['GET'], '/sis/course-rules/{id}/', [\Application\Http\Controller\SisCourseRuleController::class, 'get'])
+        ->name('sis.course-rules.get');
+    $router->map(['POST'], '/sis/course-rules/{id}/revisions/', [\Application\Http\Controller\SisCourseRuleController::class, 'versions'])
+        ->name('sis.course-rules.versions');
+    $router->map(['POST'], '/sis/course-rules/save/', [\Application\Http\Controller\SisCourseRuleController::class, 'save'])
+        ->name('sis.course-rules.save');
+    $router->map(['POST'], '/sis/course-rules/preview/', [\Application\Http\Controller\SisCourseRuleController::class, 'preview'])
+        ->name('sis.course-rules.preview');
     $router->map(['GET'], '/sis/rules/{id}/', [SisRulesController::class, 'get'])
         ->name('sis.rules.get');
     $router->map(['POST'], '/sis/rules/preview/', [SisRulesController::class, 'preview'])

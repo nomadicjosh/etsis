@@ -178,6 +178,7 @@
     const courseDropStudio = window.createWorkspaceCourseDrops({ node, request, task, openDrawer, notify, buildForm, formData });
     const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
     const degreeAuditStudio = window.createWorkspaceDegreeAudit({ node, request, task, can, closeDrawer: () => drawer.hide() });
+    const courseRuleStudio = window.createWorkspaceCourseRules({ node, request, task, can, openDrawer, closeDrawer: () => drawer.hide(), table });
     const catalogStudio = window.createWorkspaceCatalog({ templates: () => offeringTemplates, deliveryModes, node, request, task, buildForm, formData, openDrawer, table, money, openRecord, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, publications: course => catalogStudio.publications(course) });
     const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -923,8 +924,26 @@
     document.addEventListener('click', event => { const button = event.target.closest('[data-import-back]'); if (button) importStep(Number(button.dataset.importBack)); });
 
     let ruleInitialized = false;
+    let ruleMode = 'students';
+    listen('#course-rule-mode', 'click', async () => {
+        ruleMode = 'courses';
+        $one('#student-rules-panel').hidden = true;
+        $one('#course-rule-studio').hidden = false;
+        $one('#student-rule-mode').setAttribute('aria-pressed', 'false');
+        $one('#course-rule-mode').setAttribute('aria-pressed', 'true');
+        await courseRuleStudio.open();
+    });
+    listen('#student-rule-mode', 'click', async () => {
+        ruleMode = 'students';
+        $one('#student-rules-panel').hidden = false;
+        $one('#course-rule-studio').hidden = true;
+        $one('#student-rule-mode').setAttribute('aria-pressed', 'true');
+        $one('#course-rule-mode').setAttribute('aria-pressed', 'false');
+        await loadRuleStudio();
+    });
     async function loadRuleStudio() {
         if (!can('sis:rules:manage')) throw new Error('Rule administration needs additional access.');
+        if (ruleMode === 'courses') return courseRuleStudio.open();
         if (!ruleInitialized) {
             const [programs, terms] = await Promise.all([options('programs'), options('terms')]);
             const values = items => Object.fromEntries(items.map(item => [item.value, escapeLabel(item.label)]));
