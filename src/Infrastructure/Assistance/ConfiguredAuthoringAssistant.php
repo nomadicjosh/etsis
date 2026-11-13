@@ -140,6 +140,22 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
             $instructions .=
             " " .
             match ($task) {
+                AuthoringTask::GroupReadiness
+                => "Review a reusable program-independent course group using only its saved settings" .
+                " and selected course publications." .
+                " Rule course_positions refer to the numbered course list, not database identifiers." .
+                " All requires every listed course; choose requires minimum_courses distinct choices;" .
+                " pool contributes toward the group quantity." .
+                " The group quantity is credits or course count; the optional grade-point floor applies to" .
+                " EACH completed course, not an average GPA." .
+                " Milli values use 1000 units per credit or grade point; use the supplied maximum," .
+                " never assume a 4-point scale." .
+                " The supplied maximum is the saved grading context, not confirmation of today's scale." .
+                " Flag unclear or incompatible quantities and overlapping rules for staff review" .
+                " without declaring the group valid or invalid." .
+                " Do not infer accreditation, program coverage, student eligibility, course availability" .
+                " or institutional policy." .
+                " Do not suggest specific institutional minimums. Return description as null.",
                 AuthoringTask::DegreeReadiness
                 => "Review saved degree minimums, policies and group publication selection flags." .
                 " Group contents and student records are not supplied. Do not infer course coverage, eligibility," .
@@ -266,6 +282,7 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                         AuthoringTask::Readiness,
                         AuthoringTask::SectionReadiness,
                         AuthoringTask::DegreeReadiness,
+                        AuthoringTask::GroupReadiness,
                     ],
                     true,
                 ) &&

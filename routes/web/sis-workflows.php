@@ -1050,6 +1050,9 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/degree-audits/{id}/versions/", [SisDegreeAuditController::class, "versions"]);
     $router->get("/sis/degree-audits/{id}/versions/{version}/", [SisDegreeAuditController::class, "version"]);
     $router->post("/sis/degree-audits/{id}/reuse-groups/", [SisDegreeAuditController::class, "reuse"]);
+    $groupAssistance = \Application\Http\Controller\SisCourseGroupAssistanceController::class;
+    $router->get("/sis/course-groups/{id}/assistance/", [$groupAssistance, "preview"]);
+    $router->post("/sis/course-groups/{id}/assistance/", [$groupAssistance, "suggest"]);
     $router->post("/sis/course-groups/page/", [SisCourseGroupController::class, "page"]);
     $router->post("/sis/course-groups/create/", [SisCourseGroupController::class, "create"]);
     $router->get("/sis/course-groups/{id}/", [SisCourseGroupController::class, "view"]);

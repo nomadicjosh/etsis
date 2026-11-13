@@ -35,10 +35,13 @@ final readonly class CourseAssistanceService
         $definition = $this->catalog->workingDefinition($course);
         $ready = $this->assistant->availability();
         $tasks = [];
-        foreach (AuthoringTask::cases() as $task) {
-            if (in_array($task, [AuthoringTask::SectionReadiness, AuthoringTask::DegreeReadiness], true)) {
-                continue;
-            }
+        $courseTasks = [
+            AuthoringTask::Readiness,
+            AuthoringTask::Description,
+            AuthoringTask::Rewrite,
+            AuthoringTask::Expand,
+        ];
+        foreach ($courseTasks as $task) {
             if ($task->requiresExistingDescription() && $definition->text->description === null) {
                 continue;
             }
@@ -64,8 +67,19 @@ final readonly class CourseAssistanceService
     public function suggest(EntityId $course, AuthoringTask $task, bool $consent, string $revision): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        if (in_array($task, [AuthoringTask::SectionReadiness, AuthoringTask::DegreeReadiness], true)) {
-            throw new InvalidArgumentException("Use the appropriate builder for this readiness action.");
+        if (
+            !in_array(
+                $task,
+                [
+                    AuthoringTask::Readiness,
+                    AuthoringTask::Description,
+                    AuthoringTask::Rewrite,
+                    AuthoringTask::Expand,
+                ],
+                true,
+            )
+        ) {
+            throw new InvalidArgumentException("Choose a course authoring action.");
         }
         $this->actor($actor, $task);
         if (!$consent) {

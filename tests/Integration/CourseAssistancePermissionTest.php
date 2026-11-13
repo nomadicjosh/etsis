@@ -18,11 +18,35 @@ require_once dirname(__DIR__, 2) .
 require_once dirname(__DIR__, 2) .
     "/database/migrations/20261112000009_CreateSisProgramAssistancePermissions.php";
 
+require_once dirname(__DIR__, 2) .
+    "/database/migrations/20261112000010_CreateSisCourseGroupAssistancePermission.php";
+
 use PHPUnit\Framework\TestCase;
 use Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter;
 
 final class CourseAssistancePermissionTest extends TestCase
 {
+    public function testCourseGroupPermissionIsProtectedIndependentAndIdempotent(): void
+    {
+        $f = new SisFixture();
+        $migration = new CreateSisCourseGroupAssistancePermission("group-assistance");
+        $migration->setObjectMap(
+            new ArrayObject([
+                "phpmig.adapter" => new DbalMigrationAdapter($f->connection, "test_migrations"),
+            ]),
+        );
+        $before = $f->sql->rows("sis_access_permissions");
+        $migration->up();
+        self::assertSame($before, $f->sql->rows("sis_access_permissions"));
+        $p = $f->sql->rows("sis_access_permissions", ["name" => "sis:ai:group:readiness"], 1)[0];
+        self::assertSame(1, (int) $p["is_system"]);
+        $edges = $f->sql->rows("sis_access_implications", ["descendant_id" => $p["id"]]);
+        self::assertCount(1, $edges);
+        self::assertSame($p["id"], $edges[0]["ancestor_id"]);
+        $f->sql->update("sis_access_permissions", ["is_system" => 0], ["id" => $p["id"]]);
+        $this->expectException(LogicException::class);
+        $migration->up();
+    }
     public function testProgramPermissionsAreProtectedIndependentAndIdempotent(): void
     {
         $f = new SisFixture();

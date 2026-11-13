@@ -156,3 +156,7 @@ The student program now has a **Degree requirements** action for inspecting its 
 After assigning a published degree to a student pursuit, use **Degree requirements → Academic work → Check requirement matches** for [per-course candidate explanations](student-academic-work.md#checking-requirement-matches). The view uses retained course/grading references and applicable exceptions. It identifies possible uses without allocating courses, calculating GPA or deciding degree completion.
 
 The [structural allocation engine](degree-audit-allocation.md) now handles normalized eligible courses, named/quantity constraints and the retained sharing choice. It remains separate from the student-screen candidate preview until complete verified inputs and repeat/GPA evaluation are integrated.
+
+## Optional saved-group review
+
+**Optional group AI help** in the course-group builder offers a consent-based readiness review of saved quantity/grade settings, rules and the exact selected course publications. It uses its own permission and never changes the group or evaluates student work. See [setup, payload and verification limits](optional-authoring-assistance.md#saved-course-group-readiness). Group and degree assistance share the same consent interface; normal saving and reviewed publication remain explicit.

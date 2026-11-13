@@ -251,6 +251,15 @@ async function fixture(page, options = {}) {
             const g = groups.get(gid);
             if (!g) throw new Error(`Unexpected group ${gid}`);
             if (!action) response = { ...g, course_details: courses, grade_point_scale: scale };
+            else if (action === "assistance") {
+                if (body && options.groupAiFailure) return route.fulfill({status:503,json:{error:"The assistance provider rejected authentication. Your draft is unchanged."}});
+                if (body && options.groupAiEdit) await page.getByLabel("Course group name", {exact:true}).fill("My later group edit");
+                response = body ? {task:"group_readiness",advice:{summary:"<script>window.groupAiExecuted=true</script> Verify saved quantities.",suggestions:["Review overlapping rules."],description:null}} : {
+                    enabled: !options.groupAiDisabled, label:"Fictional provider", revision:"c".repeat(64), saved_revision:g.revision,
+                    draft:{name:g.definition.name,requirement_type:g.definition.requirement_type,min_credits_milli:g.definition.min_credits_milli,min_courses:g.definition.min_courses,min_course_grade_points_milli:g.definition.min_course_grade_points_milli,max_course_grade_points_milli:g.definition.max_course_grade_points_milli,program_grading_context_selected:false,
+                    courses:[{position:1,code:"MATH.101",title:"Algebra",credits_milli:3000}],rules:[{mode:"all",minimum_courses:1,course_positions:[1]}]},
+                };
+            }
             else if (action === "save") {
                 g.definition = body.definition;
                 g.revision++;
@@ -1193,4 +1202,65 @@ test('unsaved degree edits cannot be submitted for assistance and failures prese
     await page.getByLabel('Requirement title').fill('Staff-edited title');
     expect(f.calls.some(c => c.path.endsWith('/save/') || c.path.endsWith('/publish/'))).toBe(false);
     expect(f.errors).toEqual([]);
+});
+
+
+test("group assistance shares consent workflow, exposes only selected facts and never saves or publishes", async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole("button", {name:"Course group library",exact:true}).click();
+    await page.getByRole("button", {name:"Build General education",exact:true}).click();
+    await page.getByRole("button", {name:"Optional group AI help",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Saved group setup readiness",exact:true})).toBeFocused();
+    await page.getByText("Inspect saved group facts to be sent",{exact:true}).click();
+    await expect(page.locator("[data-group-assistance] pre")).toContainText("course_positions");
+    await expect(page.locator("[data-group-assistance] pre")).not.toContainText(f.courseVersion);
+    await page.getByRole("button",{name:"Suggest saved group checks",exact:true}).click();
+    expect(f.calls.filter(c=>c.path.endsWith("/assistance/") && c.body)).toHaveLength(0);
+    await page.getByRole("checkbox",{name:/I agree to send the displayed saved group setup/}).check();
+    await page.getByRole("button",{name:"Suggest saved group checks",exact:true}).click();
+    await expect(page.locator("[data-group-assistance]")).toContainText("Suggestions received.");
+    await expect(page.getByRole("checkbox",{name:/I agree to send/})).not.toBeChecked();
+    expect(f.calls.filter(c=>c.path.endsWith("/assistance/") && c.body)[0]).toMatchObject({csrf:"fictional-test-token",body:{consent:true,revision:"c".repeat(64)}});
+    expect(f.calls.some(c=>c.path.endsWith("/save/") || c.path.endsWith("/publish/"))).toBe(false);
+    expect(await page.evaluate(()=>window.groupAiExecuted)).toBeUndefined();
+    expect(await page.locator("[data-group-assistance] script").count()).toBe(0);
+    await page.setViewportSize({width:375,height:812}); await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("group assistance blocks unsaved input and discards results after later edits", async ({ page }) => {
+    const f = await fixture(page,{groupAiEdit:true});
+    await page.getByRole("button",{name:"Course group library",exact:true}).click();
+    await page.getByRole("button",{name:"Build General education",exact:true}).click();
+    await page.getByLabel("Course group name",{exact:true}).fill("Unsaved group edit");
+    await page.getByRole("button",{name:"Optional group AI help",exact:true}).click();
+    expect(f.calls.filter(c=>c.path.endsWith("/assistance/"))).toHaveLength(0);
+    await page.getByLabel("Course group name",{exact:true}).fill("General education");
+    await page.getByRole("button",{name:"Optional group AI help",exact:true}).click();
+    await page.getByRole("checkbox",{name:/I agree to send/}).check();
+    await page.getByRole("button",{name:"Suggest saved group checks",exact:true}).click();
+    await expect(page.locator("[data-group-assistance]")).toContainText("Suggestions were discarded");
+    await expect(page.getByLabel("Course group name",{exact:true})).toHaveValue("My later group edit");
+    expect(f.calls.some(c=>c.path.endsWith("/save/") || c.path.endsWith("/publish/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("disabled or failed group assistance leaves normal editing available", async ({ page }) => {
+    for(const options of [{groupAiDisabled:true},{groupAiFailure:true}]) {
+        const f = await fixture(page,options);
+        await page.getByRole("button",{name:"Course group library",exact:true}).click();
+        await page.getByRole("button",{name:"Build General education",exact:true}).click();
+        await page.getByRole("button",{name:"Optional group AI help",exact:true}).click();
+        if(options.groupAiFailure) {
+            await page.getByRole("checkbox",{name:/I agree to send/}).check();
+            await page.getByRole("button",{name:"Suggest saved group checks",exact:true}).click();
+            await expect(page.locator("[data-group-assistance]")).toContainText("No suggestion was applied");
+            await expect(page.getByRole("checkbox",{name:/I agree to send/})).not.toBeChecked();
+        } else await expect(page.locator("[data-group-assistance]")).toContainText("Optional assistance is disabled");
+        await page.getByLabel("Course group name",{exact:true}).fill("Staff can continue editing");
+        expect(f.calls.some(c=>c.path.endsWith("/save/") || c.path.endsWith("/publish/"))).toBe(false);
+        expect(f.errors).toEqual([]);
+    }
 });

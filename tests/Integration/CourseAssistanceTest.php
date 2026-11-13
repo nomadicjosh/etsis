@@ -61,13 +61,29 @@ final class CourseAssistanceTest extends TestCase
             $this->f->audit,
         );
     }
+    public function testGroupTaskCannotUseCourseEndpoint(): void
+    {
+        $p = $this->service->preview($this->course);
+        self::assertNotContains("group_readiness", $p["tasks"]);
+        try {
+            $this->service->suggest($this->course, AuthoringTask::GroupReadiness, true, $p["revision"]);
+            self::fail();
+        } catch (InvalidArgumentException) {
+            self::assertSame([], $this->assistant->calls);
+        }
+    }
     public function testSectionTaskCannotBeUsedThroughCourseAssistance(): void
     {
         $preview = $this->service->preview($this->course);
-        self::assertNotContains('section_readiness', $preview['tasks']);
+        self::assertNotContains("section_readiness", $preview["tasks"]);
         try {
-            $this->service->suggest($this->course, AuthoringTask::SectionReadiness, true, $preview['revision']);
-            self::fail('A section action was accepted through a course endpoint.');
+            $this->service->suggest(
+                $this->course,
+                AuthoringTask::SectionReadiness,
+                true,
+                $preview["revision"],
+            );
+            self::fail("A section action was accepted through a course endpoint.");
         } catch (InvalidArgumentException) {
             self::assertSame([], $this->assistant->calls);
         }

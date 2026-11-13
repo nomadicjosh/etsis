@@ -696,6 +696,138 @@ window.createWorkspaceDegreeAudit = function (ui) {
         d.courses = d.courses.filter((c) => used.has(c.course_id));
         return d;
     }
+    // Both builders share one consent and stale-editor workflow. No browser storage.
+    function readinessButton(kind, body, current, normalize) {
+        return button(`Optional ${kind} AI help`, async () => {
+            const saved = current();
+            const baseline = JSON.stringify(saved.definition);
+            if (JSON.stringify(normalize()) !== baseline) {
+                throw new Error("Save changes before reviewing optional assistance.");
+            }
+            const preview = await request(
+                `/sis/${kind === "group" ? "course-groups" : "degree-audits"}/${saved.id}/assistance/`,
+            );
+            if (!body.isConnected) return;
+            if (preview.saved_revision !== current().revision || JSON.stringify(normalize()) !== baseline) {
+                throw new Error("The saved draft changed. Reload it and inspect a fresh preview.");
+            }
+            body.querySelector(`[data-${kind}-assistance]`)?.remove();
+            const panel = node(
+                "section",
+                {
+                    [`data-${kind}-assistance`]: "",
+                    "aria-label": `Optional ${kind} assistance`,
+                    class: "record-section",
+                },
+                node("h3", { tabindex: "-1" }, `Saved ${kind} setup readiness`),
+            );
+            body.append(panel);
+            panel.querySelector("h3").focus();
+            if (!preview.enabled) {
+                panel.append(
+                    node(
+                        "p",
+                        { role: "status" },
+                        "Optional assistance is disabled. Normal editing and publication remain available.",
+                    ),
+                );
+                return;
+            }
+            const consent = node("input", {
+                type: "checkbox",
+                id: `${kind}-ai-consent`,
+                class: "form-check-input",
+                required: true,
+            });
+            const progress = node("p", { role: "status", class: "form-text" });
+            const results = node("div", { "aria-live": "polite" });
+            const controls = node(
+                "fieldset",
+                { class: "border-0 p-0" },
+                node("legend", { class: "h5" }, `Consent for one ${kind} request`),
+                node(
+                    "div",
+                    { class: "form-check mb-3" },
+                    consent,
+                    node(
+                        "label",
+                        { for: consent.id, class: "form-check-label" },
+                        `I agree to send the displayed saved ${kind} setup to ${preview.label} for this request.`,
+                    ),
+                ),
+                button(`Suggest saved ${kind} checks`, async () => {
+                    if (!consent.reportValidity()) return;
+                    if (
+                        JSON.stringify(normalize()) !== baseline ||
+                        current().revision !== preview.saved_revision
+                    ) {
+                        throw new Error("The saved draft changed. Save it and inspect a fresh preview.");
+                    }
+                    controls.disabled = true;
+                    consent.checked = false;
+                    results.replaceChildren();
+                    progress.textContent = "Requesting suggestions… No requirements are being changed.";
+                    try {
+                        const response = await request(
+                            `/sis/${kind === "group" ? "course-groups" : "degree-audits"}/${saved.id}/assistance/`,
+                            "POST",
+                            {
+                                consent: true,
+                                revision: preview.revision,
+                            },
+                        );
+                        if (!results.isConnected) return;
+                        if (
+                            JSON.stringify(normalize()) !== baseline ||
+                            current().revision !== preview.saved_revision
+                        ) {
+                            progress.textContent =
+                                "Your draft changed. Suggestions were discarded; review a fresh saved preview.";
+                            return;
+                        }
+                        const list = node("ul");
+                        response.advice.suggestions.forEach((value) => list.append(node("li", {}, value)));
+                        results.append(
+                            node("h4", {}, "Suggestions to review"),
+                            node("p", {}, response.advice.summary),
+                            list,
+                        );
+                        progress.textContent =
+                            "Suggestions received. No draft, publication or student requirements were changed.";
+                    } finally {
+                        controls.disabled = false;
+                        if (!results.childNodes.length && !progress.textContent.includes("discarded"))
+                            progress.textContent =
+                                "No suggestion was applied. Another request requires fresh consent.";
+                    }
+                }),
+            );
+            panel.append(
+                node(
+                    "p",
+                    {},
+                    `Provider: ${preview.label}. Inspect the displayed facts. Do not consent if they contain confidential content. Suggestions may be incorrect.`,
+                ),
+                node(
+                    "p",
+                    {},
+                    kind === "group"
+                        ? "This reviews a reusable group and its exact selected course publications. Numeric positions connect courses to rules; they are not database IDs. Student records, descriptions, internal identifiers and publication reasons are excluded. Verify institutional policy separately."
+                        : "This reviews saved minimums, policy choices and group publication selections only. Group contents, student records and unsaved edits are excluded. Verify course coverage and institutional policy separately.",
+                ),
+                node(
+                    "details",
+                    {},
+                    node("summary", {}, `Inspect saved ${kind} facts to be sent`),
+                    node("pre", { class: "text-wrap text-break" }, JSON.stringify(preview.draft, null, 2)),
+                ),
+                controls,
+                progress,
+                results,
+            );
+        });
+    }
+
     function groupEditor(saved, back, state = null) {
         if (!state && !saved.definition.requirement_type) {
             const body = screen("Update course group settings");
@@ -752,6 +884,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 button(back.returnLabel || "Back to library", back),
                 button("Requirements preview", () =>
                     preview({ definition: normalGroup(model), course_details: details }, "group", restore),
+                ),
+                readinessButton(
+                    "group",
+                    body,
+                    () => saved,
+                    () => normalGroup(model),
                 ),
                 button("Save group draft", async () => {
                     saved = await save();
@@ -1233,125 +1371,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         restore();
                     }),
                 ),
-                button("Optional degree AI help", async () => {
-                    const baseline = JSON.stringify(saved.definition);
-                    if (JSON.stringify(normalDegree(model)) !== baseline) {
-                        throw new Error("Save degree changes before reviewing optional assistance.");
-                    }
-                    const preview = await request(`/sis/degree-audits/${saved.id}/assistance/`);
-                    if (!body.isConnected) return;
-                    if (preview.saved_revision !== saved.revision || JSON.stringify(normalDegree(model)) !== baseline) {
-                        throw new Error("The degree draft changed. Reload it and inspect a fresh preview.");
-                    }
-                    body.querySelector("[data-degree-assistance]")?.remove();
-                    const panel = node(
-                        "section",
-                        {
-                            "data-degree-assistance": "",
-                            "aria-label": "Optional degree assistance",
-                            class: "record-section",
-                        },
-                        node("h3", { tabindex: "-1" }, "Saved degree setup readiness"),
-                    );
-                    body.append(panel);
-                    panel.querySelector("h3").focus();
-                    if (!preview.enabled) {
-                        panel.append(
-                            node(
-                                "p",
-                                { role: "status" },
-                                "Optional assistance is disabled. Normal editing and publication remain available.",
-                            ),
-                        );
-                        return;
-                    }
-                    const consent = node("input", {
-                        type: "checkbox",
-                        id: "degree-ai-consent",
-                        class: "form-check-input",
-                        required: true,
-                    });
-                    const progress = node("p", { role: "status", class: "form-text" });
-                    const results = node("div", { "aria-live": "polite" });
-                    const controls = node(
-                        "fieldset",
-                        { class: "border-0 p-0" },
-                        node("legend", { class: "h5" }, "Consent for one degree request"),
-                        node(
-                            "div",
-                            { class: "form-check mb-3" },
-                            consent,
-                            node(
-                                "label",
-                                { for: consent.id, class: "form-check-label" },
-                                `I agree to send the displayed saved degree setup to ${preview.label} for this request.`,
-                            ),
-                        ),
-                        button("Suggest saved degree checks", async () => {
-                            if (!consent.reportValidity()) return;
-                            if (
-                                JSON.stringify(normalDegree(model)) !== baseline ||
-                                saved.revision !== preview.saved_revision
-                            ) {
-                                throw new Error("The degree draft changed. Save it and inspect a fresh preview.");
-                            }
-                            controls.disabled = true;
-                            consent.checked = false;
-                            results.replaceChildren();
-                            progress.textContent = "Requesting suggestions… No requirements are being changed.";
-                            try {
-                                const response = await request(`/sis/degree-audits/${saved.id}/assistance/`, "POST", {
-                                    consent: true,
-                                    revision: preview.revision,
-                                });
-                                if (!results.isConnected) return;
-                                if (
-                                    JSON.stringify(normalDegree(model)) !== baseline ||
-                                    saved.revision !== preview.saved_revision
-                                ) {
-                                    progress.textContent =
-                                        "Your degree draft changed. Suggestions were discarded; review a fresh saved preview.";
-                                    return;
-                                }
-                                const list = node("ul");
-                                response.advice.suggestions.forEach((value) => list.append(node("li", {}, value)));
-                                results.append(
-                                    node("h4", {}, "Suggestions to review"),
-                                    node("p", {}, response.advice.summary),
-                                    list,
-                                );
-                                progress.textContent =
-                                    "Suggestions received. No draft, publication or student requirements were changed.";
-                            } finally {
-                                controls.disabled = false;
-                                if (!results.childNodes.length && !progress.textContent.includes("discarded"))
-                                    progress.textContent =
-                                        "No suggestion was applied. Another request requires fresh consent.";
-                            }
-                        }),
-                    );
-                    panel.append(
-                        node(
-                            "p",
-                            {},
-                            `Provider: ${preview.label}. Inspect the displayed facts. Do not consent if they contain confidential content. Suggestions may be incorrect.`,
-                        ),
-                        node(
-                            "p",
-                            {},
-                            "This reviews saved minimums, policy choices and group publication selections only. Group contents, student records and unsaved edits are excluded. Verify course coverage and institutional policy separately.",
-                        ),
-                        node(
-                            "details",
-                            {},
-                            node("summary", {}, "Inspect saved degree facts to be sent"),
-                            node("pre", { class: "text-wrap" }, JSON.stringify(preview.draft, null, 2)),
-                        ),
-                        controls,
-                        progress,
-                        results,
-                    );
-                }),
+                readinessButton(
+                    "degree",
+                    body,
+                    () => saved,
+                    () => normalDegree(model),
+                ),
                 button("Save degree draft", async () => {
                     saved = await save();
                     status.textContent = "Degree draft saved.";
@@ -4330,7 +4355,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     input.setAttribute("aria-invalid", "true");
                     descriptions.push(errorId);
                     input.parentElement.append(
-                        node("p", { id: errorId, class: "invalid-feedback d-block audit-field-error" }, error.message),
+                        node(
+                            "p",
+                            { id: errorId, class: "invalid-feedback d-block audit-field-error" },
+                            error.message,
+                        ),
                     );
                 }
                 if (descriptions.length) input.setAttribute("aria-describedby", descriptions.join(" "));

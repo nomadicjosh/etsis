@@ -264,6 +264,34 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             }
         }
     }
+    public function testGroupReadinessUsesPerCourseGradeThresholdAndNeverReturnsReplacementText(): void
+    {
+        $mock = new MockHandler([
+            new Response(200, [], json_encode(self::response())),
+            new Response(
+                200,
+                [],
+                json_encode(
+                    self::response([
+                        "summary" => "Review.",
+                        "suggestions" => [],
+                        "description" => "Unrequested replacement",
+                    ]),
+                ),
+            ),
+        ]);
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
+        $service->suggest(AuthoringTask::GroupReadiness, ["max_course_grade_points_milli" => 7000]);
+        $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
+        self::assertStringContainsString(
+            "EACH completed course, not an average GPA",
+            $body["input"][0]["content"],
+        );
+        self::assertStringContainsString("never assume a 4-point scale", $body["input"][0]["content"]);
+        self::assertFalse($body["store"]);
+        $this->expectException(AssistanceUnavailableException::class);
+        $service->suggest(AuthoringTask::GroupReadiness, []);
+    }
     public static function invalidSettings(): iterable
     {
         yield [["enabled" => false]];

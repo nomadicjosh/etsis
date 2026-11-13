@@ -1,6 +1,6 @@
 # Optional catalog authoring assistance
 
-Catalog editors can request publication-readiness suggestions, generate a description draft, or rewrite/expand an existing description from **Titles & description → Optional AI help**. Assistance is disabled by default. Course assistance supports saved drafts. Sections also have a saved-setup readiness review; degrees have a saved-setup readiness review; student progress guidance stays inside etsis and does not use an AI provider.
+Catalog editors can request publication-readiness suggestions, generate a description draft, or rewrite/expand an existing description from **Titles & description → Optional AI help**. Assistance is disabled by default. Course assistance supports saved drafts. Sections and reusable course groups also have saved-setup readiness reviews; degrees have a saved-setup readiness review; student progress guidance stays inside etsis and does not use an AI provider.
 
 Staff inspect the exact course facts, select consent for one request, and choose an action. Rewrite improves clarity while preserving the source meaning; expand asks for fuller explanations of supplied facts. Both require a saved, nonblank description and have their own action grants. Missing facts should be raised as questions rather than invented. Suggestions can still be inaccurate and require staff review.
 
@@ -45,6 +45,16 @@ In **Sections → Published section details → Optional section AI help**, staf
 This action excludes student records, faculty identities, fees, reasons, internal IDs and unsaved instructional dates in the publication form. Check proposed dates and reasons separately. The form stays open with its existing values; suggestions cannot edit, publish, activate or select an offering. Online delivery does not imply a room requirement. Staff must verify suggestions against institutional policy.
 
 Section assistance requires both **sis:catalog:manage** and **sis:ai:section:readiness**; course AI grants do not provide section authority. The snapshot uses short section/course/term locks and indexed retained-definition reads, without replaying publication history. Network work starts after those locks are released. Saved setup, provider configuration, actor and permissions are rechecked before returning results; a changed source requires a new preview. Consent is reset after each attempt, including failures.
+
+## Saved course-group readiness
+
+Open **Academic catalog → Course group library → Build a group → Optional group AI help**. Save the group's settings first, inspect the saved facts, consent to one request, then choose **Suggest saved group checks**. This action requires both `sis:catalog:manage` and the independent protected permission `sis:ai:group:readiness`. Migration `20261112000010_CreateSisCourseGroupAssistancePermission.php` adds it without changing existing roles or grants. Course, degree and description assistance permissions do not imply it. Earlier groups using the average-GPA format must first be updated explicitly through the existing builder.
+
+The preview includes the saved group name, credit/course quantity, optional per-course grade-point floor, saved grading maximum, a program-grading-context selection flag and all/choose/pool rules. Course code, catalog title and credits come from the exact selected immutable publications. One-based positions connect rules to those courses; they are request-local references, not database keys. Internal IDs, student records, course descriptions, publication reasons, raw history and credential details are excluded. Inspect all supplied text before consenting.
+
+Verification uses one shared history budget across all selected course streams: at most 200 pages and 2,000 events per snapshot, plus the 64 KiB outbound business-input limit. Oversized or unverifiable groups are not partially sent. One short transaction locks the saved group for a consistent preview; network work runs after that transaction ends. The saved group, selected facts, provider and current authorizations are rechecked before results are returned. A later edit in the builder discards the pending suggestions.
+
+The grade floor applies to **each course**, not an average GPA. The maximum comes from the saved group; the provider must not assume a 4-point scale or invent institutional minimums. Suggestions may highlight quantities or overlapping rules that need review, but they cannot certify curriculum validity, accreditation, course availability, degree coverage or student eligibility. Results are advisory plain text; there is no automatic edit, save or publication. Groups remain independent reusable blocks. The group and degree editors share one consent and stale-draft interface.
 
 ## Saved degree setup readiness
 

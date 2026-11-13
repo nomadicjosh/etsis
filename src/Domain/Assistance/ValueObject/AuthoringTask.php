@@ -11,6 +11,7 @@ enum AuthoringTask: string
     case Rewrite = "rewrite";
     case Expand = "expand";
     case SectionReadiness = "section_readiness";
+    case GroupReadiness = "group_readiness";
     case DegreeReadiness = "degree_readiness";
 
     public function requiresExistingDescription(): bool
