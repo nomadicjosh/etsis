@@ -498,24 +498,3 @@ h3 { font-size: .9rem; font-weight: 650; }
 .audit-builder-grid.audit-adjustment-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
 .audit-adjustment-grid .audit-panel:last-child { grid-column: auto; }
 @media (max-width: 700px) { .audit-builder-grid.audit-adjustment-grid { grid-template-columns: minmax(0, 1fr); } }
-
-/* Local guide stays inside the authorized review and follows its DOM reading order. */
-.progress-guide-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; align-items: start; }
-.progress-guide-layout[data-guide-side="right"] { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); }
-.progress-guide-layout[data-guide-side="left"] { grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr); }
-.progress-guide-review { min-width: 0; }
-.progress-guide-inline:empty { display: none; }
-.progress-guide-panel { min-width: 0; padding: 1.25rem; border: 1px solid #bdcddd; border-top: 4px solid #245d96; border-radius: 1rem; background: linear-gradient(155deg, #edf4fb, #fff 60%); box-shadow: 0 .4rem 1.4rem #294e7510; overflow-wrap: anywhere; }
-.progress-guide-panel h2 { color: #163f67; font-size: 1.35rem; }
-.progress-guide-panel h3 { font-size: 1.1rem; }
-.progress-guide-topics { display: grid; gap: .5rem; margin-block: 1rem; }
-.progress-guide-topics .btn { text-align: left; }
-.progress-guide-topics [aria-pressed="true"] { color: #fff; background: #245d96; border-color: #245d96; }
-.progress-guide-answer { border-top: 1px solid #bdcddd; padding-top: 1rem; }
-.progress-guide-answer .btn { margin: .3rem .25rem .3rem 0; }
-.progress-guide-answer .list-group-item { background: #fff; padding: .8rem; }
-.progress-guide-answer summary { font-size: 1.1rem; }
-@media (max-width: 1050px) {
-    .progress-guide-layout[data-guide-side] { grid-template-columns: minmax(0, 1fr); }
-}
-.progress-guide-panel h2:focus, .progress-guide-review [data-progress-minimums]:focus { outline: 3px solid #174f88; outline-offset: 3px; }

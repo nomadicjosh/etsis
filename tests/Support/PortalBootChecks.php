@@ -126,6 +126,35 @@ if ($app->router->match($post->withHeader("X-CSRF-Token", "fictionalcsrftoken"))
     throw new RuntimeException("A protected portal mutation did not accept its typed form envelope.");
 }
 
+// New owner-only progress endpoints retain real routing, provider, CSRF and privacy boundaries.
+$priorActor = $sis->access->actor;
+$sis->access->actor = $sis->admissions->person($teachingStudent->personId)->ownerUserId;
+$progressRequest = $get->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid/portal/api/students/" . $teachingStudent->id->value . "/degree-programs/",
+))->withMethod("POST")->withHeader("Accept", "application/json")->withParsedBody(["after" => null]);
+if ($app->router->match($progressRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException("Program choices bypassed framework CSRF.");
+}
+$programResponse = $app->router->match($progressRequest->withHeader("X-CSRF-Token", "fictionalcsrftoken"));
+$programs = json_decode((string)$programResponse->getBody(),true,flags:JSON_THROW_ON_ERROR);
+if ($programResponse->getStatusCode() !== 200 || count($programs["items"] ?? []) !== 1 ||
+    !str_contains($programResponse->getHeaderLine("Cache-Control"),"no-store")) {
+    throw new RuntimeException("Owned progress program choices failed their private route.");
+}
+$progressRequest = $progressRequest->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid/portal/api/students/" . $teachingStudent->id->value .
+    "/programs/" . $programs["items"][0]["id"] . "/degree-progress/",
+));
+if ($app->router->match($progressRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException("Progress review bypassed framework CSRF.");
+}
+$progressResponse = $app->router->match($progressRequest->withHeader("X-CSRF-Token","fictionalcsrftoken"));
+if ($progressResponse->getStatusCode() !== 200 || !str_contains($progressResponse->getHeaderLine("Cache-Control"),"no-store") ||
+    !isset(json_decode((string)$progressResponse->getBody(),true)["status"])) {
+    throw new RuntimeException("Owned degree progress failed its private route.");
+}
+$sis->access->actor = $priorActor;
+
 // Resolve the new staff controllers through the real provider and protect their browser mutations.
 $course = $sis->sql->rows("sis_courses")[0];
 $catalogController = $app->make(\Application\Http\Controller\SisCatalogEditorController::class);

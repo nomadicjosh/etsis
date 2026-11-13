@@ -80,7 +80,10 @@ final readonly class CampusPortalController
         if (
             !in_array(
                 $section,
-                ["overview", "profile", "applications", "grades", "registration", "transcripts", "accounts", "updates"],
+                [
+                    "overview", "profile", "applications", "grades", "progress",
+                    "registration", "transcripts", "accounts", "updates",
+                ],
                 true,
             )
         ) {

@@ -18,7 +18,7 @@ use Domain\Student\Repository\StudentRecordRepository;
 use InvalidArgumentException;
 
 /** Current general minimums and structural placement from one authorized, bounded input boundary. */
-final readonly class DegreeProgressService
+final readonly class DegreeProgressService implements DegreeProgressReader
 {
     public function __construct(
         private AcademicInputService $inputs,

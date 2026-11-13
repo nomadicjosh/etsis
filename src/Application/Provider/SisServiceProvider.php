@@ -64,6 +64,8 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Lms\Service\MoodleInstanceReader::class => \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Lms\Service\MoodleRecordReader::class => \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Lms\Service\MoodleConnectionProbe::class => \Infrastructure\Lms\RestMoodleGateway::class,
+            \Domain\DegreeAudit\Service\DegreeProgressReader::class =>
+                \Domain\DegreeAudit\Service\DegreeProgressService::class,
             \Domain\Assistance\Service\AuthoringAssistant::class =>
                 \Infrastructure\Assistance\ConfiguredAuthoringAssistant::class,
             \Domain\Catalog\Repository\ProgramDefinitionRepository::class =>

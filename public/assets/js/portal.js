@@ -1001,6 +1001,371 @@
         return details;
     }
 
+    async function progress(container) {
+        if (!me.students.length) {
+            container.append(
+                empty(
+                    "Your academic journey is taking shape.",
+                    "Degree progress becomes available once you have a student record and a program pursuit.",
+                ),
+            );
+            return;
+        }
+        container.append(
+            el(
+                "p",
+                { class: "campus-muted" },
+                "Choose a program to review its retained requirements. A progress review does not certify graduation eligibility.",
+            ),
+        );
+        const choices = el("div", { class: "portal-progress-cards", "aria-label": "Your program pursuits" });
+        const result = el("div", { "aria-live": "polite" });
+        container.append(choices, result);
+        let generation = 0;
+        async function review(student, pursuit) {
+            const current = ++generation;
+            result.replaceChildren(el("p", { role: "status" }, "Reviewing your recorded work…"));
+            try {
+                const data = await request(
+                    `/portal/api/students/${student}/programs/${pursuit}/degree-progress/`,
+                    "POST",
+                    {},
+                );
+                if (pageLeaving || current !== generation || !result.isConnected) return;
+                renderPortalProgress(result, data, () => review(student, pursuit));
+            } catch (error) {
+                if (pageLeaving || current !== generation || !result.isConnected) return;
+                result.replaceChildren(
+                    el("p", {}, "This review is unavailable. Try again or contact the registrar."),
+                );
+                throw error;
+            }
+        }
+        for (const student of me.students) {
+            const list = el(
+                "section",
+                { class: "portal-progress-card" },
+                el("h2", {}, programName(student.primary_program_id)),
+            );
+            choices.append(list);
+            let more = null;
+            async function page(after = null) {
+                const data = await request(`/portal/api/students/${student.id}/degree-programs/`, "POST", {
+                    after,
+                });
+                more?.remove();
+                data.items.forEach((pursuit) =>
+                    list.append(
+                        el(
+                            "article",
+                            { class: "mb-3" },
+                            el("h3", {}, `${pursuit.program_code} · ${pursuit.program_title}`),
+                            el(
+                                "p",
+                                { class: "campus-muted" },
+                                `${pursuit.status === "closed" ? "Closed pursuit" : "Active pursuit"} · Entry term ${pursuit.term_code} · ${pursuit.catalog_year || "Catalog year not available"}`,
+                            ),
+                            button(
+                                `Review progress · ${pursuit.program_code} · ${pursuit.term_code}`,
+                                () => review(student.id, pursuit.id),
+                                true,
+                            ),
+                        ),
+                    ),
+                );
+                if (!data.items.length && !after)
+                    list.append(
+                        el(
+                            "p",
+                            {},
+                            "No program pursuit is available. Contact the registrar to confirm your program setup.",
+                        ),
+                    );
+                more = data.next_after ? button("More program pursuits", () => page(data.next_after)) : null;
+                if (more) list.append(more);
+            }
+            await page();
+        }
+    }
+
+    function renderPortalProgress(container, data, refresh) {
+        const heading = el(
+            "h2",
+            { tabindex: "-1" },
+            data.status === "review"
+                ? `${data.context.name} · ${data.context.academic_year_code} · Version ${data.context.version}`
+                : "Your progress review",
+        );
+        const layout = el("div", { class: "progress-guide-layout" });
+        const body = el("div", { class: "progress-guide-review" });
+        layout.append(body);
+        container.replaceChildren(heading, layout);
+        const state = { open: false, side: "right", topic: "steps" };
+        const steps = window.createDegreeProgressNextSteps(el, data);
+        const slot = el("div", { class: "progress-guide-inline" }, steps);
+        const groups = el(
+            "details",
+            { class: "portal-progress-detail" },
+            el("summary", {}, "Course-group details"),
+        );
+        const groupHeading = el("h3", { tabindex: "-1" }, "Your selected course groups");
+        const records = el(
+            "details",
+            { class: "portal-progress-detail" },
+            el("summary", {}, "Credit/GPA treatment and pending work"),
+        );
+        const recordHeading = el("h3", { tabindex: "-1" }, "Recorded work in this review");
+        const minimumHeading = el(
+            "h3",
+            { tabindex: "-1", "data-progress-minimums": "" },
+            "General degree minimums",
+        );
+        const actions = (...children) => el("div", { class: "d-flex flex-wrap gap-2 mb-3" }, ...children);
+        const guide = window.createDegreeProgressGuide(
+            { node: el, button, actions },
+            layout,
+            steps,
+            slot,
+            data,
+            state,
+            {
+                minimums: () => minimumHeading.focus(),
+                contributions: () => {
+                    records.open = true;
+                    recordHeading.focus();
+                },
+                groups: () => {
+                    groups.open = true;
+                    groupHeading.focus();
+                },
+            },
+        );
+        body.append(actions(guide, button("Refresh degree progress", refresh)), slot);
+        if (data.status !== "review") {
+            body.append(
+                el(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    data.status === "needs_selection"
+                        ? "The registrar needs to select published degree requirements for this program. Contact your registrar or advisor."
+                        : data.status === "inconsistent"
+                          ? "Your recorded inputs could not be verified. Contact the registrar for a record review."
+                          : "The review reached its work limit. No partial totals or placements are shown. Ask the registrar to arrange a controlled review.",
+                ),
+            );
+            heading.focus();
+            return;
+        }
+        body.append(
+            el(
+                "p",
+                {},
+                `${data.current_record_count} current academic records checked. Earlier historical completeness and final award requirements still need institutional review.`,
+            ),
+        );
+        if (data.input_status === "history_gaps")
+            body.append(
+                el(
+                    "p",
+                    { class: "alert alert-info" },
+                    "Earlier history is unknown for some records. These checks use known current facts.",
+                ),
+            );
+        if (data.context.cohort_changed)
+            body.append(
+                el(
+                    "p",
+                    { class: "alert alert-info" },
+                    "Your matriculation context changed. Ask the registrar to review your retained requirements selection.",
+                ),
+            );
+        const milli = (value) => (value == null ? "Unavailable" : String(value / 1000));
+        const labels = {
+            min_credits_milli: "Earned credits",
+            min_resident_milli: "Institutional residency credits",
+            min_cumulative_gpa_milli: "Cumulative GPA",
+            min_overall_gpa_milli: "Overall GPA",
+        };
+        const statuses = {
+            satisfied: "Minimum met",
+            below_minimum: "Below minimum",
+            unknown: "Needs review",
+            not_required: "No minimum required",
+        };
+        const cards = el("div", { class: "portal-progress-cards" });
+        data.minimums.forEach((check) => {
+            const gpa =
+                check.key === "min_cumulative_gpa_milli"
+                    ? data.gpa.cumulative
+                    : check.key === "min_overall_gpa_milli"
+                      ? data.gpa.overall
+                      : null;
+            cards.append(
+                el(
+                    "article",
+                    { class: "portal-progress-card" },
+                    el("h4", {}, labels[check.key]),
+                    el(
+                        "p",
+                        {},
+                        gpa?.ready && gpa.credits_milli === 0 && check.status === "unknown"
+                            ? "GPA not yet established"
+                            : statuses[check.status],
+                    ),
+                    el(
+                        "p",
+                        { class: "portal-progress-value" },
+                        check.actual_minimum_milli === check.actual_maximum_milli
+                            ? milli(check.actual_minimum_milli)
+                            : `${milli(check.actual_minimum_milli)}–${milli(check.actual_maximum_milli)}`,
+                    ),
+                    el(
+                        "p",
+                        {},
+                        check.required_milli == null
+                            ? "No published minimum"
+                            : `Required: ${milli(check.required_milli)}`,
+                    ),
+                    ...(check.adjusted
+                        ? [
+                              el(
+                                  "p",
+                                  {},
+                                  `Approved minimum reduction · Published minimum: ${milli(check.published_milli)}`,
+                              ),
+                          ]
+                        : []),
+                ),
+            );
+        });
+        body.append(
+            minimumHeading,
+            cards,
+            el(
+                "p",
+                { class: "campus-muted" },
+                "These comparisons use the retained program policies. Meeting them does not confirm graduation eligibility. No GPA is rounded upward to meet a minimum.",
+            ),
+        );
+        const outcomes = {
+            feasible: "A complete course-group placement was found",
+            infeasible: "No complete course-group placement found",
+            undetermined: "The search reached its limit",
+            needs_review: "Course-group inputs need review",
+            unsupported: "Some retained group rules need registrar review",
+        };
+        groups.append(
+            groupHeading,
+            el("p", { role: "status" }, outcomes[data.allocation.outcome] || "Placement needs review"),
+            el(
+                "p",
+                {},
+                "This is a proposed arrangement for supported rules. Equally valid attempts or another plan may differ.",
+            ),
+        );
+        data.allocation.groups.forEach((group) =>
+            groups.append(
+                el(
+                    "section",
+                    { class: "portal-progress-card mb-3" },
+                    el("h4", {}, group.name),
+                    el(
+                        "p",
+                        {},
+                        group.requirement_type === "courses"
+                            ? `Required courses: ${group.required_courses}`
+                            : `Required credits: ${milli(group.required_credits_milli)}`,
+                    ),
+                    ...(group.minimum_grade_points_milli == null
+                        ? []
+                        : [
+                              el(
+                                  "p",
+                                  {},
+                                  `Minimum recorded grade points for each course: ${milli(group.minimum_grade_points_milli)}`,
+                              ),
+                          ]),
+                    ...(group.placements.length
+                        ? [
+                              el(
+                                  "ul",
+                                  {},
+                                  ...group.placements.map((placement) =>
+                                      el(
+                                          "li",
+                                          {},
+                                          `${placement.course_code} · ${placement.course_title} · ${milli(placement.credits_milli)} credits${placement.via_substitution ? ` · Approved alternative for ${placement.target_code}` : ""}`,
+                                      ),
+                                  ),
+                              ),
+                          ]
+                        : [el("p", {}, "No complete proposed placement is shown for this group.")]),
+                ),
+            ),
+        );
+        records.append(
+            recordHeading,
+            el(
+                "p",
+                {},
+                "Pending attempts do not predict earned credits or GPA. Unused completed work may still count toward totals; another complete plan may use it.",
+            ),
+        );
+        const recordsPage = el("div");
+        records.append(recordsPage);
+        const workStates = {
+            awaiting_grade: "Awaiting a final grade",
+            completed: "Completed passing work",
+            grade_unknown: "Grade evidence needs review",
+            not_passing: "Not passing",
+            no_earned_credit: "No earned credit",
+            voided: "Voided award",
+            late_drop: "Late drop",
+        };
+        const disposition = (value) => window.degreeProgressCalculationReasons[value] || "Needs review";
+        function page(offset = 0, focus = false) {
+            const items = data.records.slice(offset, offset + 20);
+            recordsPage.replaceChildren(
+                el(
+                    "p",
+                    { role: "status", tabindex: "-1" },
+                    data.records.length
+                        ? `Showing ${offset + 1}–${offset + items.length} of ${data.records.length} records`
+                        : "No current academic work is recorded.",
+                ),
+                table(
+                    [
+                        "Course",
+                        "Posting term",
+                        "Academic status",
+                        "Credit treatment",
+                        "Cumulative GPA",
+                        "Overall GPA",
+                    ],
+                    items.map((record) => [
+                        `${record.course_code} · ${record.course_title}`,
+                        record.term_label_retained ? record.term_code : "Earlier term label not retained",
+                        workStates[record.academic_state] || "Needs review",
+                        disposition(record.credit),
+                        disposition(record.cumulative_gpa),
+                        disposition(record.overall_gpa),
+                    ]),
+                    "Your current academic work and retained policy treatment",
+                ),
+                actions(
+                    ...(offset ? [button("Previous progress records", () => page(offset - 20, true))] : []),
+                    ...(offset + 20 < data.records.length
+                        ? [button("More progress records", () => page(offset + 20, true))]
+                        : []),
+                ),
+            );
+            if (focus) recordsPage.querySelector('[role="status"]').focus();
+        }
+        page();
+        body.append(groups, records);
+        heading.focus();
+    }
+
     async function grades(container) {
         if (!me.students.length) {
             container.append(
@@ -1021,18 +1386,6 @@
                     (!item.ends_on ||
                         item.ends_on >= new Date().toISOString().slice(0, 10)),
             );
-            const gpaCredits = credits.items
-                .filter((item) => item.counts_gpa)
-                .reduce(
-                    (total, item) => total + Number(item.attempted_milli),
-                    0,
-                );
-            const gradePoints = credits.items
-                .filter((item) => item.counts_gpa)
-                .reduce(
-                    (total, item) => total + Number(item.grade_points_milli),
-                    0,
-                );
             container.append(
                 surface(
                     programName(student.primary_program_id),
@@ -1045,9 +1398,8 @@
                     el(
                         'p',
                         { class: 'campus-muted' },
-                        gpaCredits
-                            ? `Unofficial GPA from recorded GPA-bearing credits: ${(gradePoints / gpaCredits).toFixed(3)}`
-                            : 'GPA will appear when GPA-bearing final grades have been recorded.',
+                        'GPA depends on your program’s retained grading, repeat and transfer policies. ',
+                        el('a', { href: '/portal/student/progress/' }, 'Review degree progress'),
                     ),
                     holds.length
                         ? el(
@@ -1706,6 +2058,7 @@
             profile,
             applications,
             grades,
+            progress,
             registration,
             transcripts,
             accounts,

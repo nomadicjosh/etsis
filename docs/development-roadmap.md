@@ -172,7 +172,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] Extend optional saved-degree readiness to exact selected group/course publications, shared-course positions and retained current/earlier grading semantics. Use one replay budget, deduplicated course streams, fresh consent and the shared group-facts allowlist. Suggestions may flag composition questions; curriculum certification and student eligibility remain outside authoring assistance.
 - [x] Add local next-step guidance to the captured degree-progress review, with no provider calls, extra record reads or academic mutations. External AI data sharing remains separate.
 - [x] Add a dockable local guide to the staff degree-progress review, with keyboard controls, responsive reading order, captured-result detail links and no provider calls or new record reads. Refreshing or closing the review clears guide state; no browser storage or academic decisions are added. See [guide behavior](student-degree-progress.md#dockable-local-guide).
-- [ ] Extend contextual local helpers to the student portal and other authorized workflows. External student-progress AI remains deferred by project direction; catalog-authoring AI stays separate. No automated academic decisions.
+- [x] Add owner-only student-portal degree progress with indexed pursuit choices, canonical on-demand calculations, a minimized student response, local detail paging and the shared guide. Remove the portal's separate transcript-row GPA calculation. No new academic writes or provider calls. See [student workflow](student-degree-progress.md#student-portal).
+- [ ] Extend contextual local helpers to other authorized workflows. External student-progress AI remains deferred by project direction; catalog-authoring AI stays separate. No automated academic decisions.
 
 ## 7. Scheduling, employment and office workflows
 

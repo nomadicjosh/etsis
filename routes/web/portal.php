@@ -32,6 +32,14 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/portal/api/campus-news/", [Portal::class, "campusNews"])
         ->name("portal.campus.news");
     $router->map(["GET"], "/portal/api/courses/", [Portal::class, "courses"])->name("portal.catalog");
+    $progress = \Application\Http\Controller\PortalStudentProgressController::class;
+    $router->map(["POST"], "/portal/api/students/{student}/degree-programs/", [$progress, "programs"])
+        ->name("portal.degree.programs");
+    $router->map(
+        ["POST"],
+        "/portal/api/students/{student}/programs/{assignment}/degree-progress/",
+        [$progress, "review"],
+    )->name("portal.degree.progress");
     $router->map(["GET"], "/portal/api/me/", [Portal::class, "me"])->name("portal.me");
     $router->map(["POST"], "/portal/api/contact/", [Portal::class, "contact"])->name("portal.contact");
     $router

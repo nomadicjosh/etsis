@@ -46,7 +46,7 @@ In the staff **Degree progress review**, choose **Open degree progress guide** f
 
 Detail links reuse the captured contribution and course-group results. Returning to degree progress restores the guide's topic, position and focus. **Refresh degree progress** requests a new authorized review and starts with the guide closed; closing the review removes the guide. Its state stays in the open review's memory, with no browser storage, persistent cache or new endpoints. No migration or permission grant is added. The guide does not declare graduation eligibility or treat a verification/search limit as an academic failure.
 
-This first guide is in the staff review, including read-only users who already have access to that student/program scope. Student-portal helpers and guidance for other workflows remain on the roadmap.
+The guide is shared with the student portal. Staff access still uses the existing student/program scope; portal access strictly verifies ownership, including when the account also has staff privileges. Guidance for other workflows remains on the roadmap.
 
 ## Inspecting the same result
 
@@ -91,3 +91,20 @@ Browser requests retain CSRF protection, private/no-store responses and debug su
 Private POST endpoint: `/sis/students/{student}/programs/{assignment}/degree-requirements/progress/`.
 
 No migration, stored policy/event conversion, new event table, academic write or retained evaluation is introduced. Full historical equivalence/chronology coverage, specialization/exclusion rules, controlled retained evaluations and graduation decisions remain on the [roadmap](development-roadmap.md).
+
+## Student portal
+
+**My campus → Degree progress** (`/portal/student/progress/`) offers the signed-in student's own program pursuits, including closed pursuits and separate dual-degree choices. Program/entry-term labels distinguish choices. Choices use indexed 20-record pages without academic replay; selecting a pursuit requests one bounded review through the same canonical `DegreeProgressService` used by staff. The portal does not implement a second GPA, repeat or placement calculation.
+
+The student view shows retained degree/year/version context, general minimum comparisons, approved minimum reductions, group quantities and a complete proposed placement when available. Unknown GPA or missing evidence remains unavailable, not zero. Read/search limits do not produce partial totals or a speculative group plan. Earlier-history and changed-cohort notices remain visible. These are current, non-retained reviews of available sources; closed-pursuit access does not turn them into historical graduation results.
+
+The shared dockable guide opens group details and locally paged academic-work treatment from the captured result. Contribution rows show retained course/term labels, academic state and independent credit/cumulative-GPA/overall-GPA treatment. They omit internal identities, approval reasons, actors, raw rules, event payloads and alternative-source references. Staff reasons and raw requirement grammar never enter the student response. The view does not certify degree completion or permit academic changes.
+
+The Grades screen links here for GPA rather than adding raw transcript rows in JavaScript. The removed calculation could ignore retained repeat and transfer policies. Grades and assignment-score views otherwise retain their existing workflows.
+
+Private, CSRF-protected POST routes:
+
+- `/portal/api/students/{student}/degree-programs/` — owner-scoped pursuit choices, with an optional ULID cursor.
+- `/portal/api/students/{student}/programs/{assignment}/degree-progress/` — one owner-scoped review. Requests cannot override requirements, policy or replay budgets.
+
+Ownership and assignment scope are verified before and after the read. Broad staff/super authority does not bypass portal ownership; staff review other students through the authorized workspace. Routes retain private/no-store responses and debug suppression. No provider call, browser storage, academic write, new grant or migration is introduced.

@@ -101,7 +101,8 @@ test('student applications, records, registration and accounts stay in one acces
     await expect(page.locator('#campus-service-content')).toContainText('one step closer');
     expect(mutations.at(-1).data.answers).toEqual({ transfer: true, college: 'Fictional College' });
     await page.goto('/portal/student/grades/');
-    await expect(page.locator('#campus-service-content')).toContainText('4.000');
+    await expect(page.getByRole('link', { name: 'Review degree progress', exact: true })).toHaveAttribute('href', '/portal/student/progress/');
+    await expect(page.locator('#campus-service-content')).not.toContainText('4.000');
     await page.getByRole('button', { name: /assignment scores/ }).click();
     await expect(page.locator('#campus-dialog')).toContainText('95');
     await accessible(page);
