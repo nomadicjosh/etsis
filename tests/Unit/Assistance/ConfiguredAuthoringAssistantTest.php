@@ -62,7 +62,7 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             ],
         ];
     }
-    public function testDegreeSetupInstructionsDoNotClaimToReviewGroupsOrStudentEligibility(): void
+    public function testDegreeInstructionsReviewSelectedGroupsWithoutDeclaringEligibility(): void
     {
         $mock = new MockHandler([new Response(200, [], json_encode(self::response()))]);
         $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
@@ -73,10 +73,13 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
         );
         $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
         self::assertStringContainsString(
-            "Group contents and student records are not supplied.",
+            "Student records and course descriptions are not supplied.",
             $body["input"][0]["content"],
         );
         self::assertStringContainsString("Return description as null.", $body["input"][0]["content"]);
+        self::assertStringContainsString("degree_course_position", $body["input"][0]["content"]);
+        self::assertStringContainsString("legacy_average_group_gpa_milli", $body["input"][0]["content"]);
+        self::assertStringContainsString("one_group from allow_shared", $body["input"][0]["content"]);
     }
     public function testSectionReadinessHasItsOwnInstructionsAndRejectsDescriptionOutput(): void
     {

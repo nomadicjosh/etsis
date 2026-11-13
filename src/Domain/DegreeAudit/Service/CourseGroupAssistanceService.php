@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\Assistance\Exception\AssistanceUnavailableException;
+use Domain\Assistance\ValueObject\AssistanceFailure;
 use Domain\Assistance\Service\AuthoringAssistant;
 use Domain\Assistance\ValueObject\AuthoringTask;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Service\PublishedCourseReader;
 use Domain\DegreeAudit\Repository\CourseGroupRepository;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
+use Domain\DegreeAudit\ValueObject\CourseGroupAuthoringFacts;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -123,50 +125,23 @@ final readonly class CourseGroupAssistanceService
                         "Update the group to credit/course settings before requesting assistance.",
                     );
                 }
-                $d = $definition->definition;
-                $draft = array_intersect_key(
-                    $d,
-                    array_flip([
-                        "name",
-                        "requirement_type",
-                        "min_credits_milli",
-                        "min_courses",
-                        "min_course_grade_points_milli",
-                        "max_course_grade_points_milli",
-                    ]),
-                );
-                $draft["program_grading_context_selected"] = $d["grade_scale_program_id"] !== null;
-                $draft["courses"] = [];
-                $positions = [];
+                $details = [];
                 $budget = new HistoryReadBudget(maximumPages: 200, maximumEvents: 2000);
-                foreach ($d["courses"] as $index => $reference) {
+                foreach ($definition->definition["courses"] as $reference) {
                     $course = $this->courses->version(
                         new EntityId($reference["course_id"]),
                         new EntityId($reference["version_id"]),
                         $budget,
                     )->definition;
-                    $position = $index + 1;
-                    $positions[$reference["course_id"]] = $position;
-                    $draft["courses"][] = [
-                        "position" => $position,
+                    $details[$reference["course_id"]] = [
                         "code" => $course->code,
                         "title" => $course->title,
                         "credits_milli" => $course->creditsMilli,
                     ];
                 }
-                $draft["rules"] = [];
-                foreach ($d["rules"] as $rule) {
-                    $draft["rules"][] = [
-                        "mode" => $rule["mode"],
-                        "minimum_courses" => $rule["minimum_courses"],
-                        "course_positions" => array_map(
-                            static fn(string $id): int => $positions[$id],
-                            $rule["course_ids"],
-                        ),
-                    ];
-                }
+                $draft = new CourseGroupAuthoringFacts($definition, $details)->describe();
                 if (strlen(json_encode($draft, JSON_THROW_ON_ERROR)) > 65536) {
-                    throw new AssistanceUnavailableException();
+                    throw new AssistanceUnavailableException(AssistanceFailure::VerificationLimit);
                 }
                 $this->actor($actor);
                 return [
@@ -177,7 +152,7 @@ final readonly class CourseGroupAssistanceService
             });
         } catch (HistoryReadLimitException) {
             // Never send a partial group after exhausting verification work.
-            throw new AssistanceUnavailableException();
+            throw new AssistanceUnavailableException(AssistanceFailure::VerificationLimit);
         }
     }
 

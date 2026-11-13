@@ -160,3 +160,9 @@ The [structural allocation engine](degree-audit-allocation.md) now handles norma
 ## Optional saved-group review
 
 **Optional group AI help** in the course-group builder offers a consent-based readiness review of saved quantity/grade settings, rules and the exact selected course publications. It uses its own permission and never changes the group or evaluates student work. See [setup, payload and verification limits](optional-authoring-assistance.md#saved-course-group-readiness). Group and degree assistance share the same consent interface; normal saving and reviewed publication remain explicit.
+
+## Review a saved degree composition
+
+**Optional degree AI help** now includes the exact published groups and courses selected in the saved composition, alongside minimums and policy choices. The consent preview uses numbered course references to make cross-group overlap visible without sending internal IDs. Unselected groups do not contribute current draft contents. Existing selections keep earlier publication facts after later edits or publication changes.
+
+This is advisory authoring assistance, not degree completion or accreditation approval. It cannot modify requirements, read student records or make academic decisions. Oversized or unverifiable compositions are not partially sent. See [payload, consent and limits](optional-authoring-assistance.md#saved-degree-setup-readiness).

@@ -120,6 +120,7 @@ final class ReusableGroupFixture
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
         ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+        ?\Domain\DegreeAudit\Service\PublishedRequirementsReader $publishedReader = null,
     ): RequirementsService {
         $f = $this->sis;
         return new RequirementsService(
@@ -139,7 +140,7 @@ final class ReusableGroupFixture
                     new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
                 ),
             ),
-            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($this->history),
+            $publishedReader ?? new \Domain\DegreeAudit\Service\PublishedRequirementsReader($this->history),
         );
     }
     public function publishGroup(): EntityId

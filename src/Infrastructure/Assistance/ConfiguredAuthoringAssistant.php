@@ -157,11 +157,22 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                 " or institutional policy." .
                 " Do not suggest specific institutional minimums. Return description as null.",
                 AuthoringTask::DegreeReadiness
-                => "Review saved degree minimums, policies and group publication selection flags." .
-                " Group contents and student records are not supplied. Do not infer course coverage, eligibility," .
-                " accreditation or completeness. Do not invent institutional policies or recommended thresholds." .
-                " Ask staff to review missing settings and verify group contents separately." .
+                => "Review saved degree minimums, policies and the supplied selected group/course publications." .
+                " Groups without a selected publication have no supplied requirements; do not infer their contents." .
+                " Rule course_positions address courses within that group; degree_course_position identifies" .
+                " the same course across groups, including when different published revisions are selected." .
+                " Use those positions rather than matching names or codes to flag possible overlaps." .
+                " Respect the supplied group_reuse policy, distinguishing one_group from allow_shared." .
+                " All requires every listed course; choose requires minimum_courses distinct choices;" .
+                " pool contributes toward the group quantity in credits or courses." .
+                " A per-course grade-point floor applies to EACH course, not an average GPA." .
+                " legacy_average_group_gpa_milli is an earlier average-group rule; never reinterpret it" .
+                " as a per-course floor or invent its missing scale. Use supplied saved maxima, not an assumed 4." .
                 " Milli values use 1000 units per credit or GPA point." .
+                " Flag missing setup and questions for staff review; do not invent institutional policies," .
+                " minimums, accreditation, course availability or missing requirements." .
+                " Student records and course descriptions are not supplied. Do not infer student eligibility," .
+                " prove curriculum completeness or declare that a program's requirements are satisfied." .
                 " Return description as null.",
                 AuthoringTask::SectionReadiness
                 => "Review saved section readiness only. Identify missing setup; do not invent policy." .

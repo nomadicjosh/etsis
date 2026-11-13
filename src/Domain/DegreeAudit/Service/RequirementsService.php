@@ -5,6 +5,12 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Assistance\Exception\AssistanceUnavailableException;
+use Domain\Assistance\ValueObject\AssistanceFailure;
+use Domain\DegreeAudit\ValueObject\CourseGroupAuthoringFacts;
+use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
+use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Catalog\Service\CoursePublicationService;
 use Domain\Communications\Service\MessageCipher;
 use Domain\DegreeAudit\Event\RequirementsWerePublished;
@@ -47,7 +53,7 @@ final readonly class RequirementsService
     ) {
     }
 
-    /** Minimized saved degree setup, without student reads or publication-history replay.
+    /** Saved degree and selected publications, with bounded replay and no student reads.
      * @return array{draft:array<string,mixed>,revision:string,saved_revision:int}
      */
     public function assistanceSnapshot(EntityId $id): array
@@ -81,17 +87,52 @@ final readonly class RequirementsService
                 "program_title" => $context["program_title"],
                 "academic_year" => $context["academic_year_code"],
             ];
-            $draft["groups"] = array_map(
-                static fn(array $group): array => [
-                    "published_version_selected" => $group["version_id"] !== null,
-                ],
-                $definition->definition["groups"],
+            $references = array_values(
+                array_filter(
+                    $definition->definition["groups"],
+                    static fn(array $group): bool => $group["version_id"] !== null,
+                ),
             );
+            try {
+                $selected = $this->publishedPrograms->groupVersions(
+                    $references,
+                    new HistoryReadBudget(maximumPages: 200, maximumEvents: 2000),
+                );
+            } catch (HistoryReadLimitException) {
+                throw new AssistanceUnavailableException(AssistanceFailure::VerificationLimit);
+            }
+            $positions = [];
+            foreach ($selected as $group) {
+                foreach ($group["definition"]["courses"] as $course) {
+                    if (!isset($positions[$course["course_id"]])) {
+                        $positions[$course["course_id"]] = count($positions) + 1;
+                    }
+                }
+            }
+            $draft["groups"] = [];
+            foreach ($definition->definition["groups"] as $index => $reference) {
+                $group = [
+                    "position" => $index + 1,
+                    "published_version_selected" => $reference["version_id"] !== null,
+                ];
+                if ($reference["version_id"] !== null) {
+                    $published = $selected[$reference["group_id"]];
+                    $group["requirements"] = new CourseGroupAuthoringFacts(
+                        CourseGroupDefinitionV2::draft($published["definition"]),
+                        $published["course_details"],
+                        $positions,
+                    )->describe();
+                }
+                $draft["groups"][] = $group;
+            }
+            if (strlen(json_encode($draft, JSON_THROW_ON_ERROR)) > 65536) {
+                throw new AssistanceUnavailableException(AssistanceFailure::VerificationLimit);
+            }
             $this->authorize($actor);
             return [
                 "draft" => $draft,
                 "saved_revision" => $row["revision"],
-                "revision" => hash("sha256", json_encode([$row, $context], JSON_THROW_ON_ERROR)),
+                "revision" => hash("sha256", json_encode([$row, $context, $draft], JSON_THROW_ON_ERROR)),
             ];
         });
     }

@@ -8,6 +8,7 @@ namespace Domain\Assistance\ValueObject;
 enum AssistanceFailure
 {
     case Unavailable;
+    case VerificationLimit;
     case Configuration;
     case Authentication;
     case Capacity;
@@ -16,19 +17,17 @@ enum AssistanceFailure
     public function message(): string
     {
         return match ($this) {
+            self::VerificationLimit => "This draft exceeds the optional assistance review limit. " .
+            "Continue editing and reviewing requirements normally; no partial draft was sent.",
             self::Unavailable
             => "Optional assistance is unavailable. Your draft is unchanged; continue editing or try again later.",
-            self::Configuration
-            => "AI assistance settings are incomplete or invalid. " .
+            self::Configuration => "AI assistance settings are incomplete or invalid. " .
             "Ask an administrator to check the endpoint, model and authentication settings. Your draft is unchanged.",
-            self::Authentication
-            => "The assistance provider rejected authentication. " .
+            self::Authentication => "The assistance provider rejected authentication. " .
             "Ask an administrator to check the AI credential and authentication setting. Your draft is unchanged.",
-            self::Capacity
-            => "The assistance provider is at its usage or rate limit. " .
+            self::Capacity => "The assistance provider is at its usage or rate limit. " .
             "Try later or ask an administrator to check provider usage and billing. Your draft is unchanged.",
-            self::RequestRejected
-            => "The assistance provider rejected this request. " .
+            self::RequestRejected => "The assistance provider rejected this request. " .
             "Ask an administrator to check model access and support for the configured " .
             "API protocol and structured output. " .
             "Your draft is unchanged.",

@@ -21,7 +21,7 @@ use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 
-/** Internal immutable reader. Call only after the workflow authorizes the student and scope. */
+/** Internal immutable reader. Call only after the workflow authorizes its academic or authoring scope. */
 final readonly class PublishedRequirementsReader
 {
     public function __construct(private HistoricalEventStore $history)
@@ -127,6 +127,36 @@ final readonly class PublishedRequirementsReader
             "academic_year_code" => $payload["academic_year_code"],
             "definition" => ProgramDefinition::fromArray($payload["definition"])->describe(),
         ];
+    }
+
+    /** Selected reusable publications with one shared replay budget and deduplicated course reads.
+     * Calling authoring/academic workflows must authorize their own scope first.
+     * @param array<mixed> $references Validated before reading any stream.
+     * @return array<string,array<string,mixed>>
+     */
+    public function groupVersions(array $references, HistoryReadBudget $budget): array
+    {
+        if (count($references) > 25 || !array_is_list($references)) {
+            throw new \InvalidArgumentException("Use at most 25 selected course-group publications.");
+        }
+        $seen = [];
+        $selected = [];
+        foreach ($references as $reference) {
+            if (
+                !is_array($reference) ||
+                count($reference) !== 2 ||
+                !is_string($reference["group_id"] ?? null) ||
+                !is_string($reference["version_id"] ?? null) ||
+                isset($seen[$reference["group_id"]])
+            ) {
+                throw new \InvalidArgumentException("Choose one publication per reusable group.");
+            }
+            new EntityId($reference["group_id"]);
+            new EntityId($reference["version_id"]);
+            $seen[$reference["group_id"]] = true;
+            $selected[] = ["group_id" => $reference["group_id"], "version_id" => $reference["version_id"]];
+        }
+        return $this->groups($selected, $budget);
     }
 
     /** Resolve shared courses once per invocation, retaining only requested versions.

@@ -813,7 +813,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     {},
                     kind === "group"
                         ? "This reviews a reusable group and its exact selected course publications. Numeric positions connect courses to rules; they are not database IDs. Student records, descriptions, internal identifiers and publication reasons are excluded. Verify institutional policy separately."
-                        : "This reviews saved minimums, policy choices and group publication selections only. Group contents, student records and unsaved edits are excluded. Verify course coverage and institutional policy separately.",
+                        : "This reviews saved minimums, policies and exact selected group/course publications. Numeric course positions identify overlaps without sending database IDs. Groups without a selected publication have no supplied contents. Student records, descriptions, publication reasons and unsaved edits are excluded. Verify coverage and institutional policy separately.",
                 ),
                 node(
                     "details",

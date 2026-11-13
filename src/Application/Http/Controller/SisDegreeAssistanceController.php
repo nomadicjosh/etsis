@@ -19,7 +19,11 @@ final readonly class SisDegreeAssistanceController
     }
     public function preview(string $id): ResponseInterface
     {
-        return new JsonResponse($this->service->preview(new EntityId($id)));
+        try {
+            return new JsonResponse($this->service->preview(new EntityId($id)));
+        } catch (AssistanceUnavailableException $exception) {
+            return new JsonResponse(["error" => $exception->getMessage()], 503);
+        }
     }
     public function suggest(ServerRequest $request, string $id): ResponseInterface
     {

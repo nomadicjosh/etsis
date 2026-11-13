@@ -316,12 +316,22 @@ async function fixture(page, options = {}) {
             response = row();
         } else if (path === `/sis/degree-audits/${template}/`) response = row();
         else if (path === `/sis/degree-audits/${template}/assistance/`) {
+            if (!body && options.aiReviewLimit) return route.fulfill({status:503,json:{error:"This draft exceeds the optional assistance review limit. Continue editing normally; no partial draft was sent."}});
             if (body && options.aiFailure) {
                 await route.fulfill({ status: 503, json: { error: 'Optional assistance is unavailable.' } });
                 return;
             }
             response = body ? { advice: { summary: '<script>window.degreeAiExecuted = true</script> Review policies.', suggestions: ['Verify group contents separately.'], description: null } } :
-                { enabled: !options.aiDisabled, label: 'Fictional provider', saved_revision: degreeRevision, revision: 'a'.repeat(64), draft: { name: definition.name, min_credits_milli: definition.min_credits_milli, policies: definition.policies, groups: definition.groups.map(g => ({ published_version_selected: g.version_id !== null })) } };
+                { enabled: !options.aiDisabled, label: 'Fictional provider', saved_revision: degreeRevision, revision: 'a'.repeat(64), draft: { name: definition.name, min_credits_milli: definition.min_credits_milli, policies: definition.policies, groups: definition.groups.map((g, index) => {
+                    const value = { position: index + 1, published_version_selected: g.version_id !== null };
+                    if (g.version_id) {
+                        const selected = groups.get(g.group_id).versions.find(v => v.version_id === g.version_id).definition;
+                        value.requirements = { name: selected.name, requirement_type: selected.requirement_type, min_credits_milli: selected.min_credits_milli,
+                            courses: [{ position:1, code:"MATH.101", title:"Algebra", credits_milli:3000, degree_course_position:1 }],
+                            rules:[{mode:"all",minimum_courses:1,course_positions:[1]}] };
+                    }
+                    return value;
+                }) } };
         }
         else if (path === `/sis/degree-audits/${template}/save/`) {
             definition = body.definition;
@@ -1170,6 +1180,10 @@ test('degree assistance requires saved setup and fresh consent without changing 
     await page.getByRole('button', { name: 'Optional degree AI help', exact: true }).click();
     await page.getByText('Inspect saved degree facts to be sent', { exact: true }).click();
     await expect(page.locator('[data-degree-assistance] pre')).not.toContainText(f.groupVersion);
+    await expect(page.locator('[data-degree-assistance] pre')).toContainText("degree_course_position");
+    await expect(page.locator('[data-degree-assistance] pre')).toContainText("General education");
+    await expect(page.locator('[data-degree-assistance] pre')).not.toContainText(f.course);
+    await expect(page.locator('[data-degree-assistance]')).toContainText("exact selected group/course publications");
     const send = page.getByRole('button', { name: 'Suggest saved degree checks', exact: true });
     await send.click();
     expect(f.calls.filter(c => c.path.endsWith('/assistance/') && c.body)).toHaveLength(0);
@@ -1263,4 +1277,16 @@ test("disabled or failed group assistance leaves normal editing available", asyn
         expect(f.calls.some(c=>c.path.endsWith("/save/") || c.path.endsWith("/publish/"))).toBe(false);
         expect(f.errors).toEqual([]);
     }
+});
+
+
+test("degree review limits leave editing available without consent or a provider request", async ({page}) => {
+    const f = await fixture(page,{existing:true,aiReviewLimit:true});
+    await openDegree(page,true);
+    await page.getByRole("button",{name:"Optional degree AI help",exact:true}).click();
+    await expect(page.getByRole("alert").filter({hasText:"optional assistance review limit"})).toBeVisible();
+    await page.getByLabel("Requirement title",{exact:true}).fill("Staff can continue reviewing");
+    expect(f.calls.filter(c=>c.path.endsWith("/assistance/") && c.body)).toHaveLength(0);
+    expect(f.calls.some(c=>c.path.endsWith("/save/") || c.path.endsWith("/publish/"))).toBe(false);
+    expect(f.errors).toEqual([]);
 });
