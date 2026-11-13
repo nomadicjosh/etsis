@@ -9,7 +9,9 @@ use Domain\DegreeAudit\ValueObject\AllocationProblem;
 use Domain\DegreeAudit\ValueObject\AuditCalculationPolicy;
 use Domain\DegreeAudit\ValueObject\CourseGroupReuse;
 use Domain\DegreeAudit\ValueObject\PolicyAttempt;
+use Domain\DegreeAudit\ValueObject\RepeatCreditPolicy;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
+use JsonException;
 
 /** Structural group review for supplied verified current work, not full degree completion. */
 final readonly class GroupAllocationEvaluator
@@ -29,6 +31,7 @@ final readonly class GroupAllocationEvaluator
      * @param array<string,mixed> $effective
      * @param list<array<string,mixed>> $eligibility Complete captured saved-rule decisions for this work.
      * @return array<string,mixed>
+     * @throws JsonException
      */
     public function evaluate(
         #[\SensitiveParameter] array $work,
@@ -159,40 +162,40 @@ final readonly class GroupAllocationEvaluator
         $evidence = [];
         $evidenceCount = 0;
         foreach ($candidates as $key => $attempts) {
-            $result = $this->credits->evaluate($attempts, $policy);
-            if ($result->earnedMilli === null || count($result->creditPools) !== 1) {
-                throw new CorruptHistoryException();
-            }
-            $pool = $result->creditPools[0];
-            $options = array_column($pool["options"], "work_ids");
-            // Structurally interchangeable evidence stays explicit. Never infer a residency/GPA winner.
-            sort($options, SORT_REGULAR);
-            $evidenceCount += array_sum(array_map(count(...), $options));
-            if ($evidenceCount > 20000) {
-                throw new AllocationBudgetExhaustedException();
-            }
             $pair = $pairs[$key];
-            if ($pair['dynamic_target'] ?? false) {
-                $representative = $records[$options[0][0]];
-                $labels[$pair['group_id']]['courses'][$pair['required_course_id']] = [
-                    'code' => $representative['course_code'], 'title' => $representative['course_title'],
+            $memberships = ($pair['dynamic_target'] ?? false)
+            ? $requirements['dynamic_rule_memberships'][$pair['group_id']][$pair['actual_course_id']]
+            : null;
+            $selected = [];
+            foreach ($this->pools($attempts, $policy, $memberships) as $pool) {
+                $options = $pool['options'];
+                $evidenceCount += array_sum(array_map(count(...), $options));
+                if ($evidenceCount > 20000) {
+                    throw new AllocationBudgetExhaustedException();
+                }
+                $course = $pair['actual_course_id'];
+                $choice = [
+                    'group_id' => $pair['group_id'],
+                    'target_course_id' => $pair['required_course_id'],
                     'credits_milli' => $pool['credits_milli'],
-                ];
+                    'work_ids' => $options[0],
+                ] + (isset($pool['rule_credits_milli']) ? ['rule_credits_milli' => $pool['rule_credits_milli']] : []);
+                $resources[$course]['course_id'] = $course;
+                $resources[$course]['choices'][] = $choice;
+                $evidence[$key . $this->contributionKey($choice)] = $options;
+                array_push($selected, ...array_merge(...$options));
+                if ($pair['dynamic_target'] ?? false) {
+                    $representative = $records[$options[0][0]];
+                    $labels[$pair['group_id']]['courses'][$pair['required_course_id']] = [
+                        'code' => $representative['course_code'], 'title' => $representative['course_title'],
+                        'credits_milli' => $pool['credits_milli'],
+                    ];
+                }
             }
-            $course = $pair["actual_course_id"];
-            $resources[$course]["course_id"] = $course;
-            $resources[$course]["choices"][] = [
-                "group_id" => $pair["group_id"],
-                "target_course_id" => $pair["required_course_id"],
-                "credits_milli" => $pool["credits_milli"],
-                "work_ids" => $options[0],
-            ];
-            $evidence[$key] = $options;
-            $selected = array_merge(...$options);
             foreach ($attempts as $attempt) {
                 if (!in_array($attempt->id->value, $selected, true)) {
                     $record = $records[$attempt->id->value] ?? throw new CorruptHistoryException();
-                    $record["statuses"]["repeat_not_selected"] = true;
+                    $record['statuses']['repeat_not_selected'] = true;
                     $records[$attempt->id->value] = $record;
                 }
             }
@@ -222,7 +225,7 @@ final readonly class GroupAllocationEvaluator
                 ":" .
                 $placement["target_course_id"];
                 $pair = $pairs[$key];
-                $options = $evidence[$key];
+                $options = $evidence[$key . $this->contributionKey($placement)];
                 $workLabel = $records[$options[0][0]];
                 $labels[$placement["group_id"]]["placements"][] = [
                     "course_id" => $placement["course_id"],
@@ -236,7 +239,14 @@ final readonly class GroupAllocationEvaluator
                     "via_substitution" => $pair["via_substitution"],
                     "credits_milli" => $placement["credits_milli"],
                     "work_options" => $options,
-                ];
+                ] + (isset($placement['rule_credits_milli'])
+                    ? ['rule_credits_milli' => $placement['rule_credits_milli']] : []);
+                if ($pair['dynamic_target'] ?? false) {
+                    $labels[$placement['group_id']]['courses'][$placement['target_course_id']] = [
+                        'code' => $workLabel['course_code'], 'title' => $workLabel['course_title'],
+                        'credits_milli' => $placement['credits_milli'],
+                    ];
+                }
                 foreach ($options as $option) {
                     foreach ($option as $id) {
                         $record = $records[$id] ?? throw new CorruptHistoryException();
@@ -254,6 +264,12 @@ final readonly class GroupAllocationEvaluator
             sort($record["statuses"], SORT_STRING);
         }
         unset($record);
+        foreach ($labels as &$label) {
+            $courseLabels = $label['courses'] ?? throw new CorruptHistoryException();
+            ksort($courseLabels, SORT_STRING);
+            $label['courses'] = $courseLabels;
+        }
+        unset($label);
         ksort($issues, SORT_STRING);
         return [
             "outcome" => $outcome,
@@ -262,5 +278,67 @@ final readonly class GroupAllocationEvaluator
             "records" => array_values($records),
             "issues" => array_keys($issues),
         ];
+    }
+
+    /**
+     * Highest eligible awards with different rule memberships are distinct placement alternatives.
+     * All-eligible awards form one pool, retaining only each card's own eligible earned credits.
+     * @param list<PolicyAttempt> $attempts
+     * @param array<string,list<string>>|null $memberships
+     * @return list<array{credits_milli:int,options:list<list<string>>,rule_credits_milli?:array<string,int>}>
+     */
+    private function pools(
+        #[\SensitiveParameter] array $attempts,
+        AuditCalculationPolicy $policy,
+        #[\SensitiveParameter] ?array $memberships = null,
+    ): array {
+        $sets = [];
+        $byId = [];
+        foreach ($attempts as $attempt) {
+            $byId[$attempt->id->value] = $attempt;
+            $signature = $memberships !== null && $policy->credit === RepeatCreditPolicy::HighestEarned
+            ? implode(':', $memberships[$attempt->id->value]) : '';
+            $sets[$signature][] = $attempt;
+        }
+        ksort($sets, SORT_STRING);
+        $pools = [];
+        foreach ($sets as $set) {
+            $result = $this->credits->evaluate($set, $policy);
+            if ($result->earnedMilli === null || count($result->creditPools) !== 1) {
+                throw new CorruptHistoryException();
+            }
+            $pool = $result->creditPools[0];
+            $options = array_column($pool['options'], 'work_ids');
+            sort($options, SORT_REGULAR);
+            $entry = ['credits_milli' => $pool['credits_milli'], 'options' => $options];
+            if ($memberships !== null) {
+                $expected = null;
+                foreach ($options as $option) {
+                    $contributions = [];
+                    foreach ($option as $work) {
+                        foreach ($memberships[$work] as $rule) {
+                            $contributions[$rule] = ($contributions[$rule] ?? 0) + $byId[$work]->earnedMilli;
+                        }
+                    }
+                    ksort($contributions, SORT_STRING);
+                    if ($expected !== null && $contributions !== $expected) {
+                        throw new CorruptHistoryException();
+                    }
+                    $expected = $contributions;
+                }
+                $entry['rule_credits_milli'] = $expected ?? throw new CorruptHistoryException();
+            }
+            $pools[] = $entry;
+        }
+        return $pools;
+    }
+
+    /**
+     * @param array<string,mixed> $choice
+     * @throws JsonException
+     */
+    private function contributionKey(#[\SensitiveParameter] array $choice): string
+    {
+        return ':' . hash('sha256', json_encode($choice['rule_credits_milli'] ?? null, JSON_THROW_ON_ERROR));
     }
 }

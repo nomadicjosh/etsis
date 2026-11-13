@@ -15,7 +15,7 @@ final readonly class AllocationGapAnalyzer
     {
         $resources = [];
         $targets = [];
-        $targetResources = [];
+        $choicesByGroup = [];
         foreach ($problem->courses as $course) {
             foreach ($course["choices"] as $choice) {
                 $g = $choice["group_id"];
@@ -24,7 +24,7 @@ final readonly class AllocationGapAnalyzer
                 $credits = $choice["credits_milli"];
                 $resources[$g][$c] = max($resources[$g][$c] ?? 0, $credits);
                 $targets[$g][$t] = max($targets[$g][$t] ?? 0, $credits);
-                $targetResources[$g][$t][$c] = max($targetResources[$g][$t][$c] ?? 0, $credits);
+                $choicesByGroup[$g][] = [$c, $choice];
             }
         }
         $waived = array_fill_keys($problem->waivedCourseIds, true);
@@ -47,6 +47,23 @@ final readonly class AllocationGapAnalyzer
             $shortfall = $creditShortfall > 0 || $courseShortfall > 0;
             $rules = [];
             foreach ($group["rules"] as $rule) {
+                // Build one card's bounds at a time; never multiply the full evidence graph by every card.
+                $ruleTargets = [];
+                $actualListed = [];
+                $allowed = array_fill_keys($rule['course_ids'], true);
+                foreach ($choicesByGroup[$id] ?? [] as [$course, $choice]) {
+                    $target = $choice['target_course_id'];
+                    if (
+                        !isset($allowed[$target]) ||
+                        (isset($choice['rule_credits_milli']) && !isset($choice['rule_credits_milli'][$rule['id']]))
+                    ) {
+                        continue;
+                    }
+                    $amount = $choice['rule_credits_milli'][$rule['id']] ?? $choice['credits_milli'];
+                    $ruleTargets[$target] = max($ruleTargets[$target] ?? 0, $amount);
+                    $actualListed[$course] = max($actualListed[$course] ?? 0, $amount);
+                }
+                ksort($ruleTargets, SORT_STRING);
                 $required = $rule["mode"] === "choose" ? $rule["minimum_courses"] : 0;
                 $available = 0;
                 foreach ($rule["course_ids"] as $target) {
@@ -56,7 +73,7 @@ final readonly class AllocationGapAnalyzer
                         }
                         $required++;
                     }
-                    if (isset($eligible[$target])) {
+                    if (isset($ruleTargets[$target])) {
                         $available++;
                     }
                 }
@@ -67,18 +84,15 @@ final readonly class AllocationGapAnalyzer
                     "required_courses" => $required,
                     "eligible_target_count" => $available,
                     "shortfall_courses" => $missing,
+                    "eligible_target_ids" => array_keys($ruleTargets),
                 ];
                 if ($rule["mode"] === "credits") {
                     $requiredCredits = $rule["minimum_credits_milli"] ??
                     throw new \InvalidArgumentException("A credit rule needs its retained minimum.");
-                    $listed = array_intersect_key($eligible, array_fill_keys($rule["course_ids"], true));
-                    $actualListed = [];
-                    foreach ($rule["course_ids"] as $target) {
-                        foreach ($targetResources[$id][$target] ?? [] as $course => $amount) {
-                            $actualListed[$course] = max($actualListed[$course] ?? 0, $amount);
-                        }
-                    }
-                    $upper = min($this->sum($listed, $requiredCredits), $this->sum($actualListed, $requiredCredits));
+                    $upper = min(
+                        $this->sum($ruleTargets, $requiredCredits),
+                        $this->sum($actualListed, $requiredCredits),
+                    );
                     $report += [
                         "required_credits_milli" => $requiredCredits,
                         "credit_upper_bound_milli" => $upper,
@@ -101,7 +115,8 @@ final readonly class AllocationGapAnalyzer
         return $reports;
     }
 
-    /** Proven cross-group shortages only; absence is not proof that a placement exists.
+    /**
+     * Proven cross-group shortages only; absence is not proof that a placement exists.
      * Examine overlapping pairs and complete connected components, never all subsets.
      * @return array{conflicts:list<array<string,mixed>>,more_conflicts:bool}
      */

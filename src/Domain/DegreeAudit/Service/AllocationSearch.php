@@ -6,6 +6,7 @@ namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
+use JsonException;
 
 /**
  * @internal One bounded search invocation. No application state, I/O or shared cache.
@@ -18,16 +19,16 @@ final class AllocationSearch
     private array $failed = [];
     /** @var array<string,array<string,mixed>> */
     private array $groups = [];
-    /** @var array<string,array<string,int>> */
+    /** @var array<string,array<string,array<string,int>>> */
     private array $last = [];
     /** @var array<int,array<string,int>> */
     private array $remainingCredits = [];
     /** @var array<int,array<string,int>> */
     private array $remainingCourses = [];
-    /** @var array<string,array<string,int>> Optimistic target maxima, never claimed as an actual placement. */
+    /** @var array<string,array<string,array<string,int>>> Optimistic per-rule target maxima. */
     private array $targetCredits = [];
-    /** @var array<string,int> */
-    private array $targetCaps = [];
+    /** @var array<string,array<string,int>> */
+    private array $ruleCaps = [];
 
     public function __construct(
         private readonly AllocationProblem $problem,
@@ -35,7 +36,10 @@ final class AllocationSearch
     ) {
     }
 
-    /** @return list<CoursePlacement>|null */
+    /**
+     * @return list<CoursePlacement>|null
+     * @throws JsonException
+     */
     public function run(): ?array
     {
         $state = [];
@@ -44,7 +48,9 @@ final class AllocationSearch
             $id = $group["id"];
             $this->groups[$id] = $group + ["waived" => $waived];
             $state[$id] = ["credits" => 0, "targets" => []];
-            $this->targetCaps[$id] = max(array_column($group["rules"], "minimum_credits_milli") ?: [0]);
+            foreach ($group['rules'] as $rule) {
+                $this->ruleCaps[$id][$rule['id']] = $rule['minimum_credits_milli'] ?? 0;
+            }
         }
         $count = count($this->problem->courses);
         $credits = array_fill_keys(array_keys($this->groups), 0);
@@ -57,11 +63,14 @@ final class AllocationSearch
                 $this->spend();
                 $g = $choice["group_id"];
                 $target = $choice["target_course_id"];
-                $this->last[$g][$target] ??= $i;
-                $this->targetCredits[$g][$target] = max(
-                    $this->targetCredits[$g][$target] ?? 0,
-                    min($this->targetCaps[$g], $choice["credits_milli"]),
-                );
+                foreach ($this->problem->ruleCredits($choice) as $rule => $amount) {
+                    $this->spend();
+                    $this->last[$g][$rule][$target] ??= $i;
+                    $this->targetCredits[$g][$rule][$target] = max(
+                        $this->targetCredits[$g][$rule][$target] ?? 0,
+                        min($this->ruleCaps[$g][$rule], $amount),
+                    );
+                }
                 $byGroup[$g] = max($byGroup[$g] ?? 0, $choice["credits_milli"]);
             }
             foreach ($byGroup as $g => $maximum) {
@@ -80,9 +89,11 @@ final class AllocationSearch
         return $this->steps;
     }
 
-    /** @param array<string,array{credits:int,targets:array<string,int>}> $state
+    /**
+     * @param array<string,array{credits:int,targets:array<string,array<string,int>>}> $state
      * @param list<CoursePlacement> $placements
      * @return list<CoursePlacement>|null
+     * @throws JsonException
      */
     private function search(int $index, array $state, array $placements): ?array
     {
@@ -118,7 +129,14 @@ final class AllocationSearch
                 continue;
             }
             $next = $state;
-            $next[$g]["targets"][$target] = min($this->targetCaps[$g], $choice["credits_milli"]);
+            $contributions = $this->problem->ruleCredits($choice);
+            foreach ($contributions as $rule => &$amount) {
+                $this->spend();
+                $amount = min($this->ruleCaps[$g][$rule], $amount);
+            }
+            unset($amount);
+            ksort($contributions, SORT_STRING);
+            $next[$g]["targets"][$target] = $contributions;
             // Surplus cannot affect feasibility; actual awarded amounts remain in the returned evidence.
             $next[$g]["credits"] = min(
                 $this->groups[$g]["min_credits_milli"],
@@ -138,8 +156,9 @@ final class AllocationSearch
         return $found;
     }
 
-    /** @param array<string,mixed> $group
-     * @param array{credits:int,targets:array<string,int>} $state
+    /**
+     * @param array<string,mixed> $group
+     * @param array{credits:int,targets:array<string,array<string,int>>} $state
      */
     private function met(array $group, array $state): bool
     {
@@ -160,9 +179,12 @@ final class AllocationSearch
             $requiredCredits = $rule["minimum_credits_milli"] ?? 0;
             foreach ($rule["course_ids"] as $target) {
                 $this->spend();
-                if (isset($state["targets"][$target])) {
+                if (isset($state["targets"][$target][$rule["id"]])) {
                     $covered++;
-                    $credits = min($requiredCredits, $credits + min($requiredCredits, $state["targets"][$target]));
+                    $credits = min(
+                        $requiredCredits,
+                        $credits + min($requiredCredits, $state["targets"][$target][$rule["id"]]),
+                    );
                 } elseif ($rule["mode"] === "all" && !isset($group["waived"][$target])) {
                     return false;
                 }
@@ -177,7 +199,7 @@ final class AllocationSearch
         return true;
     }
 
-    /** @param array<string,array{credits:int,targets:array<string,int>}> $state */
+    /** @param array<string,array{credits:int,targets:array<string,array<string,int>>}> $state */
     private function possible(int $index, array $state): bool
     {
         foreach ($this->groups as $id => $group) {
@@ -198,11 +220,15 @@ final class AllocationSearch
                 $requiredCredits = $rule["minimum_credits_milli"] ?? 0;
                 foreach ($rule["course_ids"] as $target) {
                     $this->spend();
-                    $available =
-                    isset($state[$id]["targets"][$target]) || ($this->last[$id][$target] ?? -1) >= $index;
+                    $placed = isset($state[$id]['targets'][$target]);
+                    $available = $placed
+                    ? isset($state[$id]['targets'][$target][$rule['id']])
+                    : ($this->last[$id][$rule['id']][$target] ?? -1) >= $index;
                     if ($available) {
                         $possible++;
-                        $amount = $state[$id]["targets"][$target] ?? ($this->targetCredits[$id][$target] ?? 0);
+                        $amount = $placed
+                        ? $state[$id]["targets"][$target][$rule["id"]]
+                        : ($this->targetCredits[$id][$rule["id"]][$target] ?? 0);
                         $credits = min($requiredCredits, $credits + min($requiredCredits, $amount));
                     } elseif ($rule["mode"] === "all" && !isset($group["waived"][$target])) {
                         return false;

@@ -58,7 +58,6 @@ final readonly class RuleAllocationCompiler
             }
             $courses = [];
             $eligibleLabels = [];
-            $signatures = [];
             $targets = [];
             foreach ($work as $item) {
                 $courseId = $item['course_id'];
@@ -123,16 +122,12 @@ final readonly class RuleAllocationCompiler
                 if (!isset($named[$courseId])) {
                     $requirements['dynamic_versions'][$groupId][$courseId][$item['course_version_id']] = true;
                     $requirements['dynamic_work_ids'][$groupId][$courseId][$item['id']] = true;
+                    sort($membership, SORT_STRING);
+                    $requirements['dynamic_rule_memberships'][$groupId][$courseId][$item['id']] = $membership;
                 }
                 if ($status !== CourseMatchStatus::Candidate) {
                     continue;
                 }
-                sort($membership, SORT_STRING);
-                $signature = implode(':', $membership);
-                if (isset($signatures[$courseId]) && $signatures[$courseId] !== $signature) {
-                    $issues['rule_repeat_conflict'] = true;
-                }
-                $signatures[$courseId] = $signature;
                 if (isset($named[$courseId]) && $named[$courseId] !== $item['course_version_id']) {
                     $issues['rule_publication_conflict'] = true;
                 }

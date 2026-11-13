@@ -324,9 +324,9 @@ final class CourseAllocationPlannerTest extends TestCase
             $used = [];
             foreach ($result->placements as $placement) {
                 $key =
-                    $reuse === Reuse::OneGroup
-                        ? $placement["course_id"]
-                        : $placement["course_id"] . $placement["group_id"];
+                $reuse === Reuse::OneGroup
+                ? $placement["course_id"]
+                : $placement["course_id"] . $placement["group_id"];
                 self::assertArrayNotHasKey($key, $used);
                 $used[$key] = true;
                 $totals[$placement["group_id"]] += $placement["credits_milli"];
@@ -463,6 +463,108 @@ final class CourseAllocationPlannerTest extends TestCase
         }
     }
 
+    public function testMembershipChoicesAgreeWithIndependentEnumerationAcrossSharingPolicies(): void
+    {
+        for ($seed = 0; $seed < 64; $seed++) {
+            $rules = [
+                $this->rule("choose", [self::id(1), self::id(2), self::id(3)], 1),
+                $this->rule("credits", [self::id(1), self::id(2), self::id(3)], 0, 101) + [
+                    "minimum_credits_milli" => 2000,
+                ],
+            ];
+            $groups = [$this->group(10, 3000, 1, $rules), $this->group(11, 2000, 1, $rules)];
+            $courses = [];
+            foreach (range(1, 3) as $id) {
+                $choices = [];
+                foreach ([10, 11] as $g) {
+                    foreach ([100, 101] as $rule) {
+                        if (($seed & (1 << ($id + $g + $rule) % 6)) === 0) {
+                            continue;
+                        }
+                        $choices[] = $this->choice($g, $id, $id * 1000, 1000 + $id) + [
+                            "rule_credits_milli" => [self::id($rule) => $id * 1000],
+                        ];
+                    }
+                }
+                $courses[] = $this->course($id, $choices);
+            }
+            foreach ([Reuse::OneGroup, Reuse::MultipleGroups] as $reuse) {
+                $expected = $this->enumerate($groups, $courses, $reuse, 0, []);
+                $problem = $this->problem($groups, $courses, $reuse);
+                $result = new CourseAllocationPlanner()->plan($problem);
+                self::assertSame(
+                    $expected ? Outcome::Feasible : Outcome::Infeasible,
+                    $result->outcome,
+                    "Membership case " . $seed . ":" . $reuse->value,
+                );
+                if ($expected) {
+                    self::assertTrue($this->literalConstraints($groups, $result->placements));
+                }
+                $bounds = new \Domain\DegreeAudit\Service\AllocationGapAnalyzer()->analyze($problem);
+                foreach ($bounds as $report) {
+                    if ($report["has_shortfall"]) {
+                        self::assertFalse($expected, "False membership shortage " . $seed);
+                    }
+                }
+            }
+        }
+    }
+
+    public function testMaximumCardContributionsStayBoundedAndInterruptedSearchReturnsNoPlan(): void
+    {
+        $targets = array_map(self::id(...), range(1, 200));
+        $rules = [];
+        $contributions = [];
+        foreach (range(500, 599) as $rule) {
+            $rules[] = $this->rule("credits", $targets, 0, $rule) + ["minimum_credits_milli" => 1000];
+            $contributions[self::id($rule)] = 1000;
+        }
+        $groups = [$this->group(10, 200000, 200, $rules)];
+        $courses = [];
+        foreach (range(1, 200) as $c) {
+            $courses[] = $this->course($c, [
+                $this->choice(10, $c, 1000, 1000 + $c) + ["rule_credits_milli" => $contributions],
+            ]);
+        }
+        $problem = $this->problem($groups, $courses, Reuse::OneGroup);
+        $bounds = new \Domain\DegreeAudit\Service\AllocationGapAnalyzer()->analyze($problem);
+        self::assertFalse($bounds[self::id(10)]["has_shortfall"]);
+        self::assertCount(100, $bounds[self::id(10)]["rules"]);
+        $result = new CourseAllocationPlanner(100)->plan($problem);
+        self::assertSame(Outcome::Undetermined, $result->outcome);
+        self::assertSame([], $result->placements);
+        $extra = $courses[0]["choices"][0];
+        $extra["rule_credits_milli"][self::id(500)] = 0;
+        $courses[0]["choices"][] = $extra;
+        $this->expectException(InvalidArgumentException::class);
+        $this->problem($groups, $courses, Reuse::OneGroup);
+    }
+
+    public function testInvalidPerRuleCreditOverridesAreRejected(): void
+    {
+        $g = $this->group(10);
+        $invalidValues = [
+            null,
+            [],
+            [self::id(999) => 1000],
+            [self::id(100) => -1],
+            [self::id(100) => 4000],
+            [self::id(100) => "3000"],
+        ];
+        foreach ($invalidValues as $invalid) {
+            try {
+                $this->problem(
+                    [$g],
+                    [$this->course(1, [$this->choice(10, 1) + ["rule_credits_milli" => $invalid]])],
+                    Reuse::OneGroup,
+                );
+                self::fail("Invalid contributions were accepted.");
+            } catch (InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     private function enumerate(array $groups, array $courses, Reuse $reuse, int $index, array $placed): bool
     {
         if ($index === count($courses)) {
@@ -523,17 +625,31 @@ final class CourseAllocationPlannerTest extends TestCase
                 return false;
             }
             foreach ($group["rules"] as $rule) {
-                if (
-                    $rule["mode"] === "all" &&
-                    array_diff($rule["course_ids"], array_keys($targets), $waived) !== []
-                ) {
+                $covered = [];
+                $ruleCredits = 0;
+                foreach ($placed as $p) {
+                    if (
+                        $p["group_id"] !== $group["id"] ||
+                        !in_array($p["target_course_id"], $rule["course_ids"], true)
+                    ) {
+                        continue;
+                    }
+                    if (
+                        isset($p["rule_credits_milli"]) &&
+                        !array_key_exists($rule["id"], $p["rule_credits_milli"])
+                    ) {
+                        continue;
+                    }
+                    $covered[] = $p["target_course_id"];
+                    $ruleCredits += $p["rule_credits_milli"][$rule["id"]] ?? $p["credits_milli"];
+                }
+                if ($rule["mode"] === "all" && array_diff($rule["course_ids"], $covered, $waived) !== []) {
                     return false;
                 }
-                if (
-                    $rule["mode"] === "choose" &&
-                    count(array_intersect($rule["course_ids"], array_keys($targets))) <
-                        $rule["minimum_courses"]
-                ) {
+                if ($rule["mode"] === "choose" && count($covered) < $rule["minimum_courses"]) {
+                    return false;
+                }
+                if ($rule["mode"] === "credits" && $ruleCredits < $rule["minimum_credits_milli"]) {
                     return false;
                 }
             }

@@ -71,6 +71,11 @@ async function fixture(page, options = {}) {
         baseGroup.courses=[];
         baseGroup.rules=[{id:id(10),mode:"credits",minimum_courses:0,minimum_credits_milli:3000,course_ids:[],eligibility:savedRules.get(id(80))}];
     }
+    if (options.mixedRulePlacement) {
+        baseGroup.min_credits_milli=7000;
+        baseGroup.rules.push({...structuredClone(baseGroup.rules[0]), id:id(11), minimum_credits_milli:4000,
+            eligibility:{...structuredClone(savedRules.get(id(80))),code:"DA.HUMANITIES"}});
+    }
     if (options.legacyGroup) {
         delete baseGroup.requirement_type;
         delete baseGroup.min_courses;
@@ -121,6 +126,7 @@ async function fixture(page, options = {}) {
             min_credits_milli: 120000,
             groups: [{ group_id: group, version_id: groupVersion }],
         };
+    if (options.mixedRulePlacement) definition.policies.repeat_credit="all_eligible";
     if (options.legacy)
         definition = {
             ...definition,
@@ -366,8 +372,17 @@ async function fixture(page, options = {}) {
                 response.allocation.groups=[{
                     id:group,name:"General education",version_id:groupVersion,requirement_type:"credits",required_credits_milli:3000,required_courses:0,minimum_grade_points_milli:null,
                     rules:baseGroup.rules.map(r=>({...r,course_ids:[course]})),courses:{[course]:{code:"MATH.201",title:"Retained course",credits_milli:3000}},waived_courses:[],gaps:null,
-                    placements:[{course_id:course,course_code:"MATH.201",course_title:"Retained course",target_course_id:course,target_code:"MATH.201",target_title:"Retained course",via_substitution:false,credits_milli:3000,work_options:[[id(100)]]}],
+                    placements:[{course_id:course,course_code:"MATH.201",course_title:"Retained course",target_course_id:course,target_code:"MATH.201",target_title:"Retained course",via_substitution:false,credits_milli:3000,work_options:[[id(100)]],rule_credits_milli:{[id(10)]:3000}}],
                 }];
+            }
+            if (options.mixedRulePlacement) {
+                const g=response.allocation.groups[0];
+                g.required_credits_milli=7000;
+                g.placements[0].credits_milli=7000;
+                g.placements[0].work_options=[[id(100),id(101)]];
+                g.placements[0].rule_credits_milli={[id(10)]:3000,[id(11)]:4000};
+                response.current_record_count=2;
+                response.policy.repeat_credit="all_eligible";
             }
             if (options.ruleBacked) response.rule_eligibility=Array.from({length:options.rulePlacement ? 1:21},(_,i)=>({work_id:id(100+i),group_id:group,group_name:"General education",requirement_id:id(10),course_code:`MATH.${201+i}`,course_title:"Retained course <b>fictional</b>",rule_code:"DA.MATH.UPPER",rule_title:"Upper-level math",rule_revision:1,outcome:i===20 ? "unknown":"matches"}));
         }
@@ -1573,6 +1588,32 @@ test("runtime review applies a known saved-rule award to group placement without
     await page.getByRole("button",{name:"Inspect group General education",exact:true}).click();
     await expect(page.getByRole("dialog")).toContainText("MATH.201");
     await expect(page.getByRole("dialog")).toContainText("3 actual earned credits");
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(f.calls.filter(c=>c.path.endsWith("/test/"))).toHaveLength(1);
+    expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("mixed repeat memberships show each card's own credits without counting another course", async ({page}) => {
+    const f=await fixture(page,{existing:true,ruleBacked:true,rulePlacement:true,mixedRulePlacement:true});
+    await openDegree(page,true);
+    await page.getByRole("button",{name:"Test with a student",exact:true}).click();
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).press("Enter");
+    await page.getByRole("button",{name:"Fictional Learner <b>example</b> · S-EXAMPLE",exact:true}).click();
+    await page.getByRole("button",{name:"Computing · 27/FA · active",exact:true}).click();
+    await page.getByRole("button",{name:"Run temporary audit",exact:true}).click();
+    await page.getByRole("button",{name:"Inspect course-group placement",exact:true}).click();
+    await page.getByRole("button",{name:"Inspect group General education",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("7 actual earned credits · One distinct course");
+    await expect(page.getByRole("dialog")).toContainText("2 eligible awards support this placement");
+    await page.getByText("Requirement contributions",{exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("DA.MATH.UPPER · Revision 1: 3 eligible credits · One distinct course");
+    await expect(page.getByRole("dialog")).toContainText("DA.HUMANITIES · Revision 1: 4 eligible credits · One distinct course");
+    await expect(page.getByRole("dialog").locator("b")).toHaveCount(0);
     await page.setViewportSize({width:375,height:812});
     await accessible(page);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

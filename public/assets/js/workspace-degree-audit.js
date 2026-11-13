@@ -2255,8 +2255,6 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const messages = {
             rule_facts_unknown:
                 "Some potentially usable work lacks the retained course facts needed by a saved rule. No complete placement is shown.",
-            rule_repeat_conflict:
-                "Attempts of the same course match different combinations of requirements. They have not been combined into one award; registrar review is needed.",
             rule_publication_conflict:
                 "A named requirement and a saved rule use incompatible course publications for the same course. Review the retained definitions.",
             rule_substitution_overlap:
@@ -3169,12 +3167,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     const waived = group.waived_courses.includes(id);
                     const placed =
                         data.outcome === "feasible" &&
-                        group.placements.some((p) => p.target_course_id === id);
+                        group.placements.some(
+                            (p) =>
+                                p.target_course_id === id &&
+                                (!p.rule_credits_milli || Object.hasOwn(p.rule_credits_milli, rule.id)),
+                        );
+                    const eligible = (gap?.eligible_target_ids || group.gaps?.eligible_target_ids || []).includes(id);
                     list.append(
                         node(
                             "li",
                             {},
-                            `${course.code} · ${course.title}${waived ? " · Course requirement waived" : placed ? " · Proposed placement" : ""}${group.gaps ? (group.gaps.eligible_target_ids.includes(id) ? " · Eligible completed evidence available" : " · No eligible completed evidence") : ""}`,
+                            `${course.code} · ${course.title}${waived ? " · Course requirement waived" : placed ? " · Proposed placement" : ""}${group.gaps ? (eligible ? " · Eligible completed evidence available" : " · No eligible completed evidence") : ""}`,
                         ),
                     );
                 }
@@ -3191,33 +3194,53 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         if (ruleOffset + 20 < group.rules.length)
             rulePages.append(
-                button("Next requirement cards", () =>
-                    groupPlacementDetails(data, group, back, offset, ruleOffset + 20),
-                ),
+                button("Next requirement cards", () => groupPlacementDetails(data, group, back, offset, ruleOffset + 20)),
             );
         body.append(rulePages, node("h2", {}, "Proposed placements"));
         const cards = node("div", { class: "audit-library-grid" });
-        for (const p of group.placements.slice(offset, offset + 20))
-            cards.append(
+        for (const p of group.placements.slice(offset, offset + 20)) {
+            const article = node(
+                "article",
+                { class: "audit-card" },
+                node("h2", {}, `${p.course_code} · ${p.course_title}`),
+                node("p", {}, `${text(p.credits_milli)} actual earned credits · One distinct course`),
                 node(
-                    "article",
-                    { class: "audit-card" },
-                    node("h2", {}, `${p.course_code} · ${p.course_title}`),
-                    node("p", {}, `${text(p.credits_milli)} actual earned credits · One distinct course`),
-                    node(
-                        "p",
-                        {},
-                        `${p.via_substitution ? "Approved alternative for" : "Supports requirement"} ${p.target_code} · ${p.target_title}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        p.work_options.length > 1
-                            ? `${p.work_options.length} equivalent earned-credit evidence alternatives remain available. No overall credit or GPA winner is selected here.`
-                            : `${p.work_options[0].length} eligible award${p.work_options[0].length === 1 ? "" : "s"} support this placement.`,
-                    ),
+                    "p",
+                    {},
+                    `${p.via_substitution ? "Approved alternative for" : "Supports requirement"} ${p.target_code} · ${p.target_title}`,
+                ),
+                node(
+                    "p",
+                    {},
+                    p.work_options.length > 1
+                        ? `${p.work_options.length} equivalent earned-credit evidence alternatives remain available. No overall credit or GPA winner is selected here.`
+                        : `${p.work_options[0].length} eligible award${p.work_options[0].length === 1 ? "" : "s"} support this placement.`,
                 ),
             );
+            if (p.rule_credits_milli) {
+                const contributions = node("details", {}, node("summary", {}, "Requirement contributions"));
+                let loaded = false;
+                contributions.addEventListener("toggle", () => {
+                    if (!contributions.open || loaded) return;
+                    loaded = true;
+                    const list = node("ul", {});
+                    for (const [id, credits] of Object.entries(p.rule_credits_milli)) {
+                        const rule = group.rules.find((r) => r.id === id);
+                        if (!rule) continue;
+                        list.append(
+                            node(
+                                "li",
+                                {},
+                                `${rule.eligibility ? `${rule.eligibility.code} · Revision ${rule.eligibility.revision}` : "Named requirement"}: ${text(credits)} eligible credits · One distinct course`,
+                            ),
+                        );
+                    }
+                    contributions.append(list);
+                });
+                article.append(contributions);
+            }
+            cards.append(article);
+        }
         body.append(cards);
         if (group.placements.length)
             body.append(
@@ -3230,15 +3253,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const pages = actions();
         if (offset > 0)
             pages.append(
-                button("Previous placements", () =>
-                    groupPlacementDetails(data, group, back, offset - 20, ruleOffset),
-                ),
+                button("Previous placements", () => groupPlacementDetails(data, group, back, offset - 20, ruleOffset)),
             );
         if (offset + 20 < group.placements.length)
             pages.append(
-                button("Next placements", () =>
-                    groupPlacementDetails(data, group, back, offset + 20, ruleOffset),
-                ),
+                button("Next placements", () => groupPlacementDetails(data, group, back, offset + 20, ruleOffset)),
             );
         body.append(pages);
     }
@@ -3251,8 +3270,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             "Some grades use a different grading publication. Compatibility must be established before combining them.",
         ordering_policy_unknown:
             "The institutional choice for ordering repeat attempts was not retained. Current defaults cannot replace that missing choice.",
-        chronology_unknown:
-            "Retained academic-period or completion dates needed to compare repeats are unavailable.",
+        chronology_unknown: "Retained academic-period or completion dates needed to compare repeats are unavailable.",
         ambiguous_repeat: "Tied repeat attempts have different GPA weights; no winner has been assumed.",
         arithmetic_limit: "The calculation reached its supported numeric limit.",
     };
@@ -3260,6 +3278,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const data = await post(`${base}academic-work/calculations/`, {});
         renderCalculations(base, back, data);
     }
+
     function renderCalculations(base, back, data, offset = 0) {
         const body = screen("Credits & GPA", "RETAINED ACADEMIC POLICIES");
         body.append(

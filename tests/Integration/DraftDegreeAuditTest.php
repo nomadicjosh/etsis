@@ -286,7 +286,7 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($before, $this->digest($f));
     }
 
-    private function savedCourseRule(StudentRequirementsFixture $f, array $tree): array
+    private function savedCourseRule(StudentRequirementsFixture $f, array $tree, string $code = 'DA.FICTIONAL'): array
     {
         $s = $f->f->sis;
         $service = new \Domain\Rules\Service\CourseRuleService(
@@ -294,7 +294,7 @@ final class DraftDegreeAuditTest extends TestCase
             new PublishedCourseReader($f->f->history),
             $s->access, $s->transactions, $s->audit, $s->clock,
         );
-        return $service->save(null, null, 'DA.FICTIONAL', 'Fictional course eligibility', $tree);
+        return $service->save(null, null, $code, 'Fictional course eligibility', $tree);
     }
 
     private function ruleGroup(StudentRequirementsFixture $f, array $saved): array
@@ -359,6 +359,118 @@ final class DraftDegreeAuditTest extends TestCase
         $private = new \Domain\Portal\ValueObject\StudentDegreeProgress($published)->describe();
         self::assertArrayNotHasKey('rule_eligibility', $private);
         self::assertStringNotContainsString('eligibility', json_encode($private));
+    }
+
+    public function testRepeatedAcceptedPublicationsKeepTheirOwnRuleCreditsInDraftAndPublishedTests(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $s = $f->f->sis;
+        $subjects = new \Infrastructure\Persistence\Repository\SqlSubjectRepository($s->sql);
+        $course = new EntityId($f->f->groupDefinition["courses"][0]["course_id"]);
+        $cards = [];
+        foreach (["ENG", "HUM"] as $index => $code) {
+            $subject = EntityId::generate();
+            $subjects->save(
+                new \Domain\Catalog\ValueObject\SubjectSnapshot($subject, $code, "Fictional " . $code),
+                true,
+                true,
+            );
+            $subjects->assign($course, $subject);
+            $publications = $f->f->catalog->publications();
+            $review = $publications->review($course, "Fictional subject change");
+            $f->f->groupDefinition["courses"][0]["version_id"] = $publications->publish(
+                $course,
+                $review["review_token"],
+            )["operation_id"];
+            if ($index === 1) {
+                $s->term = EntityId::generate();
+                $s->sql->insert("sis_terms", [
+                    "id" => $s->term->value,
+                    "code" => "FICTIONAL.REPEAT",
+                    "starts_on" => "2026-08-01",
+                    "ends_on" => "2026-12-20",
+                    "add_drop_ends_on" => "2026-08-15",
+                ]);
+                $s->transactions->run(
+                    fn() => $s->registration->configureWindow(
+                        $s->term,
+                        new \Domain\Registration\RegistrationWindow(
+                            new \Domain\Shared\ValueObject\DateRange(
+                                new DateTimeImmutable("2026-08-01"),
+                                new DateTimeImmutable("2026-08-31"),
+                            ),
+                            5,
+                        ),
+                    ),
+                );
+            }
+            $this->work($f);
+            $saved = $this->savedCourseRule(
+                $f,
+                [
+                    "condition" => "AND",
+                    "rules" => [["id" => "subject_id", "operator" => "equal", "value" => $subject->value]],
+                ],
+                "DA." . $code,
+            );
+            $cards[] = [
+                "id" => EntityId::generate()->value,
+                "mode" => "credits",
+                "minimum_courses" => 0,
+                "minimum_credits_milli" => 3000,
+                "course_ids" => [],
+                "eligibility" => $saved,
+            ];
+        }
+        [$group, $groupDefinition] = $this->ruleGroup($f, $cards[0]["eligibility"]);
+        $groupDefinition["min_credits_milli"] = 6000;
+        $groupDefinition["rules"] = $cards;
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($groupDefinition));
+        $degree = $f->f->definition;
+        $degree["min_credits_milli"] = 6000;
+        $degree["min_resident_milli"] = 0;
+        $degree["groups"] = [["group_id" => $group->value, "version_id" => null]];
+        $degree["policies"]["repeat_credit"] = "all_eligible";
+        $service = $this->service($f);
+        $before = $this->digest($f);
+        $draft = $service->test($f->f->degree, $f->student, $f->assignment, new AuditRequirementsV3($degree));
+        self::assertSame("feasible", $draft["allocation"]["outcome"]);
+        $p = $draft["allocation"]["groups"][0]["placements"][0];
+        self::assertSame(6000, $p["credits_milli"]);
+        self::assertCount(2, $p["work_options"][0]);
+        self::assertSame([3000, 3000], array_values($p["rule_credits_milli"]));
+        self::assertSame($before, $this->digest($f));
+        $degree["policies"]["repeat_credit"] = "highest_earned";
+        $before = $this->digest($f);
+        $highest = $service->test(
+            $f->f->degree,
+            $f->student,
+            $f->assignment,
+            new AuditRequirementsV3($degree),
+        );
+        self::assertSame("infeasible", $highest["allocation"]["outcome"]);
+        self::assertSame([], $highest["allocation"]["groups"][0]["placements"]);
+        self::assertSame($before, $this->digest($f));
+        $degree["policies"]["repeat_credit"] = "all_eligible";
+        $review = $f->f->groups->review($group, "Fictional mixed rule group");
+        $degree["groups"][0]["version_id"] = $f->f->groups->publish($group, $review["review_token"])[
+        "operation_id"
+        ];
+        $row = $f->f->degrees->view($f->f->degree);
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($degree));
+        $version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $before = $this->digest($f);
+        $published = $service->testPublication($f->f->degree, $version, $f->student, $f->assignment);
+        self::assertSame(
+            $draft["allocation"]["groups"][0]["placements"],
+            $published["allocation"]["groups"][0]["placements"],
+        );
+        self::assertSame($before, $this->digest($f));
+        $private = new \Domain\Portal\ValueObject\StudentDegreeProgress($published)->describe();
+        self::assertStringNotContainsString("rule_credits_milli", json_encode($private, JSON_THROW_ON_ERROR));
+        foreach ($cards as $card) {
+            self::assertStringNotContainsString($card["id"], json_encode($private, JSON_THROW_ON_ERROR));
+        }
     }
 
     public function testMissingPublishedClassificationsRemainUnknownForSavedRulePreview(): void

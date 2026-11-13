@@ -6,6 +6,7 @@ namespace Domain\DegreeAudit\ValueObject;
 
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
+use JsonException;
 
 /**
  * Normalized structural constraints, with eligible awards already selected by retained policies.
@@ -13,7 +14,10 @@ use InvalidArgumentException;
  *     id:string,mode:string,minimum_courses:int,course_ids:list<string>,minimum_credits_milli?:int
  * }
  * @phpstan-type AllocationGroup array{id:string,min_credits_milli:int,min_courses:int,rules:list<AllocationRule>}
- * @phpstan-type AllocationChoice array{group_id:string,target_course_id:string,credits_milli:int,work_ids:list<string>}
+ * @phpstan-type AllocationChoice array{
+ *     group_id:string,target_course_id:string,credits_milli:int,work_ids:list<string>,
+ *     rule_credits_milli?:array<string,int>
+ * }
  * @phpstan-type AllocationCourse array{course_id:string,choices:list<AllocationChoice>}
  */
 final readonly class AllocationProblem
@@ -26,9 +30,14 @@ final readonly class AllocationProblem
     /** @var list<string> */
     public array $waivedCourseIds;
 
-    /** @param list<AllocationGroup> $groups
+    /** @var array<string,array<string,array<string,true>>> Rule memberships by group and target. */
+    private array $memberships;
+
+    /**
+     * @param list<AllocationGroup> $groups
      * @param list<AllocationCourse> $courses
      * @param list<string> $waivedCourseIds Pursuit-wide approvals; absent courses add no requirements.
+     * @throws JsonException
      */
     public function __construct(
         array $groups,
@@ -51,6 +60,7 @@ final readonly class AllocationProblem
             self::invalid();
         }
         $targets = [];
+        $memberships = [];
         foreach ($groups as &$group) {
             self::keys($group, ["id", "min_credits_milli", "min_courses", "rules"]);
             self::listing($group["rules"], 100);
@@ -97,6 +107,7 @@ final readonly class AllocationProblem
                 foreach ($rule["course_ids"] as $id) {
                     self::id($id);
                     $targets[$group["id"]][$id] = true;
+                    $memberships[$group['id']][$id][$rule['id']] = true;
                 }
                 sort($rule["course_ids"], SORT_STRING);
             }
@@ -112,6 +123,7 @@ final readonly class AllocationProblem
         $choiceCount = 0;
         $evidenceCount = 0;
         $amounts = [];
+        $contributionCount = 0;
         foreach ($courses as &$course) {
             self::keys($course, ["course_id", "choices"]);
             self::listing($course["choices"], 5000);
@@ -122,12 +134,23 @@ final readonly class AllocationProblem
             $courseIds[$course["course_id"]] = true;
             $pairs = [];
             foreach ($course["choices"] as &$choice) {
-                self::keys($choice, ["group_id", "target_course_id", "credits_milli", "work_ids"]);
+                $keys = ["group_id", "target_course_id", "credits_milli", "work_ids"];
+                if (array_key_exists('rule_credits_milli', $choice)) {
+                    $keys[] = 'rule_credits_milli';
+                    $choice['rule_credits_milli'] = self::validateContributions(
+                        $choice['rule_credits_milli'],
+                        $memberships[$choice['group_id']][$choice['target_course_id']] ?? [],
+                        $choice['credits_milli'],
+                        $contributionCount,
+                    );
+                }
+                self::keys($choice, $keys);
                 self::listing($choice["work_ids"], 200);
                 self::id($choice["group_id"]);
                 self::id($choice["target_course_id"]);
                 self::quantity($choice["credits_milli"], 2147483646);
-                $pair = $choice["group_id"] . ":" . $choice["target_course_id"];
+                $pair = $choice["group_id"] . ":" . $choice["target_course_id"] . ':' .
+                json_encode($choice['rule_credits_milli'] ?? null, JSON_THROW_ON_ERROR);
                 if (
                     ++$choiceCount > 5000 ||
                     isset($pairs[$pair]) ||
@@ -162,7 +185,11 @@ final readonly class AllocationProblem
             usort(
                 $course["choices"],
                 static fn(array $a, array $b): int => strcmp($a["group_id"], $b["group_id"]) ?:
-                strcmp($a["target_course_id"], $b["target_course_id"]),
+                strcmp($a["target_course_id"], $b["target_course_id"]) ?:
+                strcmp(
+                    json_encode($a['rule_credits_milli'] ?? null, JSON_THROW_ON_ERROR),
+                    json_encode($b['rule_credits_milli'] ?? null, JSON_THROW_ON_ERROR),
+                ),
             );
         }
         unset($course);
@@ -175,9 +202,43 @@ final readonly class AllocationProblem
         );
         $this->groups = $groups;
         $this->courses = $courses;
+        $this->memberships = $memberships;
     }
 
-    /** @param array<string,mixed> $row
+    /**
+     * Exact per-card contributions; omitted overrides use the named target's full award.
+     * @param AllocationChoice $choice
+     * @return array<string,int>
+     */
+    public function ruleCredits(#[\SensitiveParameter] array $choice): array
+    {
+        return $choice['rule_credits_milli'] ?? array_fill_keys(
+            array_keys($this->memberships[$choice['group_id']][$choice['target_course_id']]),
+            $choice['credits_milli'],
+        );
+    }
+
+    /**
+     * @param array<string,true> $allowed
+     * @return array<string,int>
+     */
+    private static function validateContributions(mixed $value, array $allowed, int $maximum, int &$count): array
+    {
+        if (!is_array($value) || $value === [] || count($value) > 100) {
+            self::invalid();
+        }
+        foreach ($value as $id => $amount) {
+            if (++$count > 20000 || !isset($allowed[$id]) || !is_int($amount)) {
+                self::invalid();
+            }
+            self::quantity($amount, $maximum);
+        }
+        ksort($value, SORT_STRING);
+        return $value;
+    }
+
+    /**
+     * @param array<string,mixed> $row
      * @param list<string> $keys
      */
     private static function keys(array $row, array $keys): void

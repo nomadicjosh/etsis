@@ -6,7 +6,8 @@ namespace Domain\DegreeAudit\ValueObject;
 
 /**
  * @phpstan-type CoursePlacement array{
- *     course_id:string,group_id:string,target_course_id:string,credits_milli:int,work_ids:list<string>
+ *     course_id:string,group_id:string,target_course_id:string,credits_milli:int,work_ids:list<string>,
+ *     rule_credits_milli?:array<string,int>
  * }
  */
 final readonly class AllocationResult

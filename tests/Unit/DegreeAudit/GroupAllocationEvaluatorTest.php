@@ -230,7 +230,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertCount(1, $many["groups"][1]["placements"]);
     }
 
-    public function testIncompatibleRepeatedRuleMembershipCannotBeCombinedIntoCompletion(): void
+    public function testHighestEligibleCannotCombineDisjointRepeatMembershipsIntoCompletion(): void
     {
         $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);
         $work = [$this->work(10), $this->work(11)];
@@ -242,8 +242,8 @@ final class GroupAllocationEvaluatorTest extends TestCase
             $this->effective($r),
             $this->decisions($work, $r, $matrix),
         );
-        self::assertSame("needs_review", $result["outcome"]);
-        self::assertContains("rule_repeat_conflict", $result["issues"]);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame([], $result["issues"]);
         self::assertSame([], $result["groups"][0]["placements"]);
         // A failed earlier award cannot lend its rule membership to a passing later award.
         $work[0] = $this->work(10, points: 0);
@@ -359,6 +359,101 @@ final class GroupAllocationEvaluatorTest extends TestCase
                 self::assertTrue(true);
             }
         }
+    }
+
+    public function testAllEligibleKeepsSeparateCardCreditsAcrossDifferentRepeatMemberships(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);
+        $r["definition"]["policies"]["repeat_credit"] = "all_eligible";
+        $work = [$this->work(10), $this->work(11, credits: 4000)];
+        $work[1]["course_version_id"] = self::id(500);
+        $matrix = ["matches", "does_not_match", "does_not_match", "matches"];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("feasible", $result["outcome"]);
+        $p = $result["groups"][0]["placements"][0];
+        self::assertSame(7000, $p["credits_milli"]);
+        self::assertSame([self::id(301) => 3000, self::id(302) => 4000], $p["rule_credits_milli"]);
+        self::assertSame([[self::id(10), self::id(11)]], $p["work_options"]);
+        $r["group_details"][self::id(1)]["definition"]["rules"][0]["minimum_credits_milli"] = 4000;
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(1000, $result["groups"][0]["gaps"]["rules"][0]["credit_shortfall_milli"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testHighestEligibleBacktracksBetweenMembershipsWithoutLendingCreditsAcrossCards(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);
+        $r["group_details"][self::id(1)]["definition"]["min_credits_milli"] = 7000;
+        $r["group_details"][self::id(1)]["definition"]["rules"][1]["minimum_credits_milli"] = 4000;
+        $work = [$this->work(10), $this->work(11, credits: 4000), $this->work(12, course: 2)];
+        $work[1]["course_version_id"] = self::id(500);
+        $matrix = ["matches", "does_not_match", "matches", "does_not_match", "matches", "does_not_match"];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertCount(2, $result["groups"][0]["placements"]);
+        $p = $result["groups"][0]["placements"][0];
+        self::assertSame([[self::id(11)]], $p["work_options"]);
+        self::assertSame([self::id(302) => 4000], $p["rule_credits_milli"]);
+        $reversed = $this->evaluator()->evaluate(
+            array_reverse($work),
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame($result["groups"], $reversed["groups"]);
+    }
+
+    public function testEqualCreditAwardsWithDifferentMembershipsArePlacementChoicesRatherThanEquivalentEvidence(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);
+        $work = [$this->work(10), $this->work(11), $this->work(12, course: 2)];
+        $work[1]["course_version_id"] = self::id(500);
+        $matrix = ["matches", "does_not_match", "matches", "does_not_match", "matches", "does_not_match"];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame([[self::id(11)]], $result["groups"][0]["placements"][0]["work_options"]);
+        self::assertSame(
+            [self::id(302) => 3000],
+            $result["groups"][0]["placements"][0]["rule_credits_milli"],
+        );
+    }
+
+    public function testZeroCreditMatchingAwardStillSuppliesOneCourseToAChooseCard(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1)]);
+        $g = &$r["group_details"][self::id(1)]["definition"];
+        $g["requirement_type"] = "courses";
+        $g["min_credits_milli"] = 0;
+        $g["min_courses"] = 1;
+        $g["rules"][0]["mode"] = "choose";
+        $g["rules"][0]["minimum_courses"] = 1;
+        unset($g["rules"][0]["minimum_credits_milli"]);
+        $work = [$this->work(10, credits: 0)];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame([self::id(301) => 0], $result["groups"][0]["placements"][0]["rule_credits_milli"]);
+        self::assertSame(1, $result["groups"][0]["gaps"]["rules"][0]["eligible_target_count"]);
     }
 
     private function evaluator(int $steps = 100000): GroupAllocationEvaluator
