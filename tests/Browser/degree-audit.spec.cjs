@@ -356,10 +356,20 @@ async function fixture(page, options = {}) {
                 minimums:[{key:"min_credits_milli",required_milli:selected.min_credits_milli,actual_minimum_milli:0,actual_maximum_milli:0,status:"below_minimum",adjusted:false}],
                 gpa:{cumulative:{ready:false},overall:{ready:false}},
                 work_summary:{awaiting_grade_count:0,awaiting_grade_milli:0,placement_established:false,unused_completed_count:0},
-                records:[],issues:[],allocation:{outcome:options.ruleBacked ? "unsupported":"infeasible",groups:[],records:[],issues:options.ruleBacked ? ["saved_rule_allocation_pending"]:[],competition:null},
+                records:[],issues:[],allocation:{outcome:options.rulePlacement ? "feasible" : options.ruleBacked ? "needs_review":"infeasible",groups:[],records:[],issues:options.ruleBacked ? ["rule_facts_unknown"]:[],competition:null},
                 policy:{repeat_credit:"highest_earned",repeat_gpa:"all_eligible",transfer_overall_gpa:"exclude",attempt_order:"academic_period"},
             };
-            if (options.ruleBacked) response.rule_eligibility=Array.from({length:21},(_,i)=>({work_id:id(100+i),group_id:group,group_name:"General education",requirement_id:id(10),course_code:`MATH.${201+i}`,course_title:"Retained course <b>fictional</b>",rule_code:"DA.MATH.UPPER",rule_title:"Upper-level math",rule_revision:1,outcome:i===20 ? "unknown":"matches"}));
+            if (options.rulePlacement) {
+                response.current_record_count=1;
+                response.work_summary.placement_established=true;
+                response.allocation.issues=[];
+                response.allocation.groups=[{
+                    id:group,name:"General education",version_id:groupVersion,requirement_type:"credits",required_credits_milli:3000,required_courses:0,minimum_grade_points_milli:null,
+                    rules:baseGroup.rules.map(r=>({...r,course_ids:[course]})),courses:{[course]:{code:"MATH.201",title:"Retained course",credits_milli:3000}},waived_courses:[],gaps:null,
+                    placements:[{course_id:course,course_code:"MATH.201",course_title:"Retained course",target_course_id:course,target_code:"MATH.201",target_title:"Retained course",via_substitution:false,credits_milli:3000,work_options:[[id(100)]]}],
+                }];
+            }
+            if (options.ruleBacked) response.rule_eligibility=Array.from({length:options.rulePlacement ? 1:21},(_,i)=>({work_id:id(100+i),group_id:group,group_name:"General education",requirement_id:id(10),course_code:`MATH.${201+i}`,course_title:"Retained course <b>fictional</b>",rule_code:"DA.MATH.UPPER",rule_title:"Upper-level math",rule_revision:1,outcome:i===20 ? "unknown":"matches"}));
         }
         else if (path === `/sis/degree-audits/${template}/save/`) {
             definition = body.definition;
@@ -1531,7 +1541,7 @@ test("runtime audit pages saved-rule eligibility locally without claiming comple
     await page.getByRole("button",{name:"Fictional Learner <b>example</b> · S-EXAMPLE",exact:true}).click();
     await page.getByRole("button",{name:"Computing · 27/FA · active",exact:true}).click();
     await page.getByRole("button",{name:"Run temporary audit",exact:true}).click();
-    await expect(page.getByRole("dialog")).toContainText("No group completion or unused-course result is claimed");
+    await expect(page.getByRole("dialog")).toContainText("No complete placement is shown");
     await page.getByRole("button",{name:"Inspect saved-rule eligibility",exact:true}).click();
     await expect(page.getByRole("dialog")).toContainText("Showing 1–20 of 21");
     await expect(page.getByRole("dialog")).toContainText("Matches course rule");
@@ -1539,6 +1549,30 @@ test("runtime audit pages saved-rule eligibility locally without claiming comple
     await expect(page.getByRole("dialog")).toContainText("Unknown: required retained course facts are missing");
     await expect(page.getByRole("dialog")).toContainText("Showing 21–21 of 21");
     await expect(page.getByRole("dialog").locator("b")).toHaveCount(0);
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(f.calls.filter(c=>c.path.endsWith("/test/"))).toHaveLength(1);
+    expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("runtime review applies a known saved-rule award to group placement without saving a result", async ({page}) => {
+    const f=await fixture(page,{existing:true,ruleBacked:true,rulePlacement:true});
+    await openDegree(page,true);
+    await page.getByRole("button",{name:"Test with a student",exact:true}).click();
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).press("Enter");
+    await page.getByRole("button",{name:"Fictional Learner <b>example</b> · S-EXAMPLE",exact:true}).click();
+    await page.getByRole("button",{name:"Computing · 27/FA · active",exact:true}).click();
+    await page.getByRole("button",{name:"Run temporary audit",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("A complete course-group placement was found");
+    await expect(page.getByRole("dialog")).not.toContainText("not yet calculated");
+    await page.getByRole("button",{name:"Inspect course-group placement",exact:true}).click();
+    await page.getByRole("button",{name:"Inspect group General education",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("MATH.201");
+    await expect(page.getByRole("dialog")).toContainText("3 actual earned credits");
     await page.setViewportSize({width:375,height:812});
     await accessible(page);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

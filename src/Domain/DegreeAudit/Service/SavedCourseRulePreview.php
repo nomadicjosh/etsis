@@ -25,7 +25,7 @@ final readonly class SavedCourseRulePreview
      * @return list<array<string,mixed>>
      * @throws JsonException
      */
-    public function preview(array $work, array $requirements, HistoryReadBudget $budget): array
+    public function preview(#[\SensitiveParameter] array $work, array $requirements, HistoryReadBudget $budget): array
     {
         $rules = [];
         foreach ($requirements['group_details'] as $groupId => $group) {

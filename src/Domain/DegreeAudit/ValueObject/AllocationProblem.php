@@ -68,7 +68,7 @@ final readonly class AllocationProblem
                     $keys[] = "minimum_credits_milli";
                 }
                 self::keys($rule, $keys);
-                self::listing($rule["course_ids"], 50);
+                self::listing($rule["course_ids"], 200);
                 self::id($rule["id"]);
                 if (
                     isset($ruleIds[$rule["id"]]) ||
@@ -77,7 +77,7 @@ final readonly class AllocationProblem
                 ) {
                     self::invalid();
                 }
-                self::quantity($rule["minimum_courses"], count($rule["course_ids"]));
+                self::quantity($rule["minimum_courses"], 200);
                 if (
                     ($rule["mode"] === "all" && $rule["minimum_courses"] !== count($rule["course_ids"])) ||
                     ($rule["mode"] === "choose" && $rule["minimum_courses"] < 1) ||

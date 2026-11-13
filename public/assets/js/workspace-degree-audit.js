@@ -190,7 +190,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             if (!pattern.test(String(raw))) required = null;
             else required = definition.requirement_type === "courses" ? Number(raw) : milli(String(raw));
         }
-        if (definition.rules.some(r=>r.eligibility)) summary.warnings.push("Listed totals exclude saved-rule matches. Test student work to inspect eligibility; rule-backed placement is not yet calculated.");
+        if (definition.rules.some(r=>r.eligibility)) summary.warnings.push("Listed totals exclude saved-rule matches. Run a student test to evaluate matching work.");
         else if (!ids.length) summary.warnings.push("Add published courses to plan this group.");
         else if (required == null)
             summary.warnings.push("Enter a valid required total to compare it with the listed courses.");
@@ -2251,6 +2251,25 @@ window.createWorkspaceDegreeAudit = function (ui) {
     const degreeProgressGuide = (...args) =>
         window.createDegreeProgressGuide({ node, button, actions }, ...args);
     const progressNextSteps = (data) => window.createDegreeProgressNextSteps(node, data);
+    function ruleAllocationNotices(issues) {
+        const messages = {
+            rule_facts_unknown:
+                "Some potentially usable work lacks the retained course facts needed by a saved rule. No complete placement is shown.",
+            rule_repeat_conflict:
+                "Attempts of the same course match different combinations of requirements. They have not been combined into one award; registrar review is needed.",
+            rule_publication_conflict:
+                "A named requirement and a saved rule use incompatible course publications for the same course. Review the retained definitions.",
+            rule_substitution_overlap:
+                "A course is both an approved substitute for a named requirement and a saved-rule match. Their combined placement needs review.",
+        };
+        return node(
+            "div",
+            {},
+            (issues || [])
+                .filter((code) => messages[code])
+                .map((code) => node("p", { class: "alert alert-info", role: "status" }, messages[code])),
+        );
+    }
     function renderDegreeProgress(base, back, data, guideState = null, trial = null) {
         const shell = screen(
             trial ? "Temporary degree audit result" : "Degree progress review",
@@ -2478,19 +2497,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node(
                         "p",
                         {},
-                        "These checks compare retained course facts with the selected rule revision. A match does not mean the grade, credit or course-group placement has been accepted. Rule-backed placement is not yet calculated.",
+                        "These checks compare retained course facts with the selected rule revision. Grades, repeat-credit policy and sharing are applied separately in the course-group placement review below.",
                     ),
                     button("Inspect saved-rule eligibility", () => ruleEligibility(data, restore)),
                 ),
             );
-        if (data.allocation.issues?.includes("saved_rule_allocation_pending"))
-            body.append(
-                node(
-                    "p",
-                    { class: "alert alert-info", role: "status" },
-                    "Saved-rule conditions are retained, but full course-group placement for these rules is not yet supported. No group completion or unused-course result is claimed.",
-                ),
-            );
+        body.append(ruleAllocationNotices(data.allocation.issues));
         const outcomes = {
             feasible: "A complete course-group placement was found",
             infeasible: "No complete course-group placement found",
@@ -2821,7 +2833,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
             return;
         }
-        if (data.issues?.includes("saved_rule_allocation_pending")) body.append(node("p",{class:"alert alert-info",role:"status"},"This group uses retained saved rules. Full placement for those rules is not yet calculated; these quantities are not completion results."));
+        body.append(ruleAllocationNotices(data.issues));
         const headings = {
             feasible: "A complete group placement was found",
             infeasible: "No complete group placement found",
@@ -3663,7 +3675,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     { class: "alert alert-info" },
-                    "This list covers named-course matches. Inspect saved-rule eligibility in Degree progress; rule-backed placement is not yet calculated.",
+                    "This list covers named-course matches. Use Degree progress for saved-rule eligibility and complete course-group placement.",
                 ),
             );
         const matches = item.requirement_matches || [];

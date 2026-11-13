@@ -14,12 +14,13 @@ use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\DegreeMinimumEvaluator;
-use Domain\DegreeAudit\Service\DegreeWorkReview;
 use Domain\DegreeAudit\Service\DegreeProgressService;
+use Domain\DegreeAudit\Service\DegreeWorkReview;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
 use Domain\DegreeAudit\Service\PublishedRequirementsReader;
 use Domain\DegreeAudit\Service\RequirementAdjustmentService;
 use Domain\DegreeAudit\Service\RetainedAttemptReader;
+use Domain\DegreeAudit\Service\RuleAllocationCompiler;
 use Domain\DegreeAudit\ValueObject\AcademicInputInventory;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\Finance\ValueObject\Money;
@@ -86,6 +87,7 @@ final class DegreeProgressTest extends TestCase
                     new AcademicPolicyEvaluator(),
                     new CourseAllocationPlanner($steps),
                     new AllocationGapAnalyzer(),
+                new RuleAllocationCompiler(new CourseMatchEvaluator()),
                 ),
                 new DegreeWorkReview(),
                 new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),

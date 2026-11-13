@@ -57,6 +57,7 @@ final readonly class DegreeProgressEvaluator
             $inputs->items,
             $requirements,
             $effective,
+            $ruleEligibility,
         );
         $byId = array_column($inputs->items, null, "id");
         $workReview = $this->workReview->review($inputs->items, $allocation);

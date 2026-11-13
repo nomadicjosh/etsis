@@ -25,6 +25,7 @@ final readonly class StudentGroupAllocationService
         private GroupAllocationEvaluator $evaluator,
         private StudentRecordRepository $students,
         private UnitOfWork $transactions,
+        private SavedCourseRulePreview $rulePreview,
     ) {
     }
 
@@ -53,6 +54,7 @@ final readonly class StudentGroupAllocationService
                     $inputs->items,
                     $requirements,
                     $context["effective_minimums"],
+                    $this->rulePreview->preview($inputs->items, $requirements, $budget),
                 );
                 $this->requirements->authorizeRead($student, $assignment);
                 return [

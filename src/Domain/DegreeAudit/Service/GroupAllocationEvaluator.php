@@ -19,6 +19,7 @@ final readonly class GroupAllocationEvaluator
         private AcademicPolicyEvaluator $credits,
         private CourseAllocationPlanner $planner,
         private AllocationGapAnalyzer $gaps,
+        private RuleAllocationCompiler $rules,
     ) {
     }
 
@@ -26,17 +27,21 @@ final readonly class GroupAllocationEvaluator
      * @param list<array<string,mixed>> $work
      * @param array<string,mixed> $requirements
      * @param array<string,mixed> $effective
+     * @param list<array<string,mixed>> $eligibility Complete captured saved-rule decisions for this work.
      * @return array<string,mixed>
      */
-    public function evaluate(array $work, array $requirements, array $effective): array
-    {
+    public function evaluate(
+        #[\SensitiveParameter] array $work,
+        #[\SensitiveParameter] array $requirements,
+        #[\SensitiveParameter] array $effective,
+        #[\SensitiveParameter] array $eligibility = [],
+    ): array {
         if (count($work) > 200) {
             throw new AllocationBudgetExhaustedException();
         }
         foreach ($work as $item) {
             PolicyAttempt::fromAcademicWork($item);
         }
-        $groups = [];
         $labels = [];
         $issues = [];
         $reuse = $requirements["definition"]["policies"]["group_reuse"] ?? null;
@@ -52,21 +57,10 @@ final readonly class GroupAllocationEvaluator
         }
         foreach ($requirements["group_details"] as $id => $group) {
             $d = $group["definition"];
-            foreach ($d['rules'] as $rule) {
-                if (isset($rule['eligibility'])) {
-                    $issues['saved_rule_allocation_pending'] = true;
-                }
-            }
             $e = $effective["groups"][$id];
             if (($e["min_gpa_milli"] ?? ($d["min_gpa_milli"] ?? 0)) > 0) {
                 $issues["group_average_gpa_unsupported"] = true;
             }
-            $groups[] = [
-                "id" => $id,
-                "min_credits_milli" => $e["min_credits_milli"],
-                "min_courses" => $e["min_courses"] ?? 0,
-                "rules" => $d["rules"],
-            ];
             $labels[$id] = [
                 "id" => $id,
                 "name" => $d["name"],
@@ -94,6 +88,28 @@ final readonly class GroupAllocationEvaluator
                 "records" => [],
                 "issues" => array_keys($issues),
             ];
+        }
+        $compiled = $this->rules->compile($work, $requirements, $effective, $eligibility);
+        $requirements = $compiled['requirements'];
+        $issues = array_fill_keys($compiled['issues'], true);
+        $groups = [];
+        foreach ($requirements['group_details'] as $id => $group) {
+            $groups[] = [
+                'id' => $id,
+                'min_credits_milli' => $effective['groups'][$id]['min_credits_milli'],
+                'min_courses' => $effective['groups'][$id]['min_courses'] ?? 0,
+                'rules' => $group['definition']['rules'],
+            ];
+            $label = $labels[$id] ?? throw new CorruptHistoryException();
+            $label['courses'] = $group['course_details'];
+            $byId = array_column($group['definition']['rules'], null, 'id');
+            foreach ($label['rules'] as &$rule) {
+                if (isset($rule['eligibility'])) {
+                    $rule['course_ids'] = $byId[$rule['id']]['course_ids'];
+                }
+            }
+            unset($rule);
+            $labels[$id] = $label;
         }
         if (($effective["substitution_conflicts"] ?? []) !== []) {
             $issues["approval_conflict"] = true;
@@ -156,6 +172,13 @@ final readonly class GroupAllocationEvaluator
                 throw new AllocationBudgetExhaustedException();
             }
             $pair = $pairs[$key];
+            if ($pair['dynamic_target'] ?? false) {
+                $representative = $records[$options[0][0]];
+                $labels[$pair['group_id']]['courses'][$pair['required_course_id']] = [
+                    'code' => $representative['course_code'], 'title' => $representative['course_title'],
+                    'credits_milli' => $pool['credits_milli'],
+                ];
+            }
             $course = $pair["actual_course_id"];
             $resources[$course]["course_id"] = $course;
             $resources[$course]["choices"][] = [
@@ -206,8 +229,10 @@ final readonly class GroupAllocationEvaluator
                     "course_code" => $workLabel["course_code"],
                     "course_title" => $workLabel["course_title"],
                     "target_course_id" => $placement["target_course_id"],
-                    "target_code" => $pair["required_course_code"],
-                    "target_title" => $pair["required_course_title"],
+                    "target_code" => ($pair['dynamic_target'] ?? false)
+                        ? $workLabel['course_code'] : $pair["required_course_code"],
+                    "target_title" => ($pair['dynamic_target'] ?? false)
+                        ? $workLabel['course_title'] : $pair["required_course_title"],
                     "via_substitution" => $pair["via_substitution"],
                     "credits_milli" => $placement["credits_milli"],
                     "work_options" => $options,

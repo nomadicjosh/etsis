@@ -68,24 +68,38 @@ final readonly class CourseMatchEvaluator
         foreach ($work as $item) {
             $matches = [];
             foreach ($index[$item["course_id"]] ?? [] as $candidate) {
+                if (isset($candidate['matched_work_ids']) && !isset($candidate['matched_work_ids'][$item['id']])) {
+                    continue;
+                }
                 if (++$checks > 5000) {
                     throw new \Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException();
                 }
-                $eligibility = array_replace($candidate, ["waived" => false]);
-                $status = $this->status(
+                $status = $this->allocationStatus(
                     $item,
-                    $eligibility,
+                    $candidate,
                     $requirements["grade_scale"] ?? null,
                     $effective["placements"][$item["course_id"]]["group_id"] ?? null
                 );
-                if ($status === Status::InProgress && $item["quality_points_milli"] !== 0) {
-                    $status = Status::GradeUnknown;
-                }
                 $matches[] = $candidate + ["status" => $status->value];
             }
             $items[] = array_replace($item, ["requirement_matches" => $matches]);
         }
         return $items;
+    }
+
+    /** @param array<string,mixed> $work
+     * @param array<string,mixed> $candidate
+     * @param array<string,mixed>|null $scale
+     */
+    public function allocationStatus(
+        #[\SensitiveParameter] array $work,
+        #[\SensitiveParameter] array $candidate,
+        ?array $scale,
+        ?string $preferredGroup = null,
+    ): Status {
+        $status = $this->status($work, array_replace($candidate, ['waived' => false]), $scale, $preferredGroup);
+        return $status === Status::InProgress && $work['quality_points_milli'] !== 0
+        ? Status::GradeUnknown : $status;
     }
     /**
      * @param array<string,mixed> $requirements
@@ -121,6 +135,11 @@ final readonly class CourseMatchEvaluator
                     "waived" => in_array($id, $effective["waived_course_ids"], true),
                     "approval_conflict" => isset($effective["substitution_conflicts"][$id]),
                 ];
+                if (isset($requirements['dynamic_versions'][$groupId][$id])) {
+                    $candidate['accepted_course_versions'] = $requirements['dynamic_versions'][$groupId][$id];
+                    $candidate['matched_work_ids'] = $requirements['dynamic_work_ids'][$groupId][$id];
+                    $candidate['dynamic_target'] = true;
+                }
                 $index[$id][] = $candidate;
                 if (
                     isset($effective["substitutions"][$id]) &&
@@ -188,7 +207,11 @@ final readonly class CourseMatchEvaluator
         if ($work["course_version_id"] === null) {
             return Status::CourseVersionUnknown;
         }
-        if ($work["course_version_id"] !== $candidate["expected_course_version_id"]) {
+        if (
+            isset($candidate['accepted_course_versions'])
+            ? !isset($candidate['accepted_course_versions'][$work['course_version_id']])
+            : $work["course_version_id"] !== $candidate["expected_course_version_id"]
+        ) {
             return Status::CourseVersionDiffers;
         }
         $minimum = $candidate["minimum_grade_points_milli"];

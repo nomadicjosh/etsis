@@ -6,6 +6,8 @@ namespace Tests\Integration;
 
 require_once dirname(__DIR__) . "/Support/StudentRequirementsFixture.php";
 
+use Domain\Catalog\Service\PublishedCourseReader;
+use Domain\DegreeAudit\Repository\AcademicInputRepository;
 use Domain\DegreeAudit\Service\AcademicInputService;
 use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
 use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
@@ -14,18 +16,22 @@ use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
 use Domain\DegreeAudit\Service\PublishedRequirementsReader;
 use Domain\DegreeAudit\Service\RequirementAdjustmentService;
+use Domain\DegreeAudit\Service\RuleAllocationCompiler;
+use Domain\DegreeAudit\Service\SavedCourseRulePreview;
 use Domain\DegreeAudit\Service\StudentGroupAllocationService;
-use Domain\DegreeAudit\Repository\AcademicInputRepository;
 use Domain\DegreeAudit\ValueObject\AcademicInputInventory;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
+use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Section;
+use Domain\Rules\Service\CourseRuleService;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\Repository\SqlAcademicInputRepository;
+use Infrastructure\Persistence\Repository\SqlCourseRuleRepository;
 use Infrastructure\Persistence\Repository\SqlReplacementCourseRepository;
 use Infrastructure\Persistence\Repository\SqlRequirementAdjustmentRepository;
 use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
@@ -75,11 +81,65 @@ final class StudentGroupAllocationTest extends TestCase
                 new AcademicPolicyEvaluator(),
                 new CourseAllocationPlanner($steps),
                 new AllocationGapAnalyzer(),
+                new RuleAllocationCompiler(new CourseMatchEvaluator()),
             ),
             $students,
             $s->transactions,
+            new SavedCourseRulePreview(new PublishedCourseReader($f->f->history)),
         );
     }
+    public function testSelectedRuleBackedRequirementsUseTheSameCapturedEligibilityAndWriteNothing(): void
+    {
+        $f = $this->institution();
+        $this->work($f, 0);
+        $s = $f->f->sis;
+        $rules = new CourseRuleService(
+            new SqlCourseRuleRepository($s->sql),
+            new PublishedCourseReader($f->f->history),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $s->clock,
+        );
+        $snapshot = $rules->save(null, null, "DA.FICTIONAL", "Fictional named identity", [
+            "condition" => "AND",
+            "rules" => [
+                [
+                    "id" => "course_id",
+                    "operator" => "equal",
+                    "value" => $f->f->groupDefinition["courses"][0]["course_id"],
+                ],
+            ],
+        ]);
+        $id = EntityId::generate();
+        $d = CourseGroupDefinitionV2::blank("Fictional saved rule")->definition;
+        $d["min_credits_milli"] = 3000;
+        $d["rules"] = [
+            [
+                "id" => EntityId::generate()->value,
+                "mode" => "credits",
+                "minimum_courses" => 0,
+                "minimum_credits_milli" => 3000,
+                "course_ids" => [],
+                "eligibility" => $snapshot,
+            ],
+        ];
+        $f->f->groups->create($id, new CourseGroupDefinitionV2($d));
+        $review = $f->f->groups->review($id, "Fictional rule publication");
+        $version = $f->f->groups->publish($id, $review["review_token"])["operation_id"];
+        $row = $f->f->degrees->view($f->f->degree);
+        $d = $row["definition"];
+        $d["groups"] = [["group_id" => $id->value, "version_id" => $version]];
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($d));
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        $before = $f->f->digest("sis_history_events");
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(3000, $result["groups"][0]["placements"][0]["credits_milli"]);
+        self::assertSame($before, $f->f->digest("sis_history_events"));
+    }
+
     private function institution(): StudentRequirementsFixture
     {
         $f = new StudentRequirementsFixture();

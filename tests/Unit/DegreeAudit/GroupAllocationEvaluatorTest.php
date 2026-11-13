@@ -10,6 +10,7 @@ use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
+use Domain\DegreeAudit\Service\RuleAllocationCompiler;
 use PHPUnit\Framework\TestCase;
 
 final class GroupAllocationEvaluatorTest extends TestCase
@@ -121,6 +122,245 @@ final class GroupAllocationEvaluatorTest extends TestCase
             ],
         ];
     }
+    private function ruleGroup(int $id, int $minimum = 3000, int $cards = 1): array
+    {
+        $g = $this->group($id, [], $minimum);
+        $g["definition"]["rules"] = [];
+        for ($i = 0; $i < $cards; $i++) {
+            $g["definition"]["rules"][] = [
+                "id" => self::id(300 + $id + $i),
+                "mode" => "credits",
+                "minimum_courses" => 0,
+                "minimum_credits_milli" => $minimum,
+                "course_ids" => [],
+                "eligibility" => ["id" => self::id(800 + $i)],
+            ];
+        }
+        return $g;
+    }
+
+    /** Predicate results are supplied by the protected-reader boundary, tested separately in integration. */
+    private function decisions(array $work, array $requirements, array $outcomes = []): array
+    {
+        $rows = [];
+        foreach ($requirements["group_details"] as $group => $definition) {
+            foreach ($definition["definition"]["rules"] as $rule) {
+                if (!isset($rule["eligibility"])) {
+                    continue;
+                }
+                foreach ($work as $item) {
+                    $rows[] = [
+                        "group_id" => $group,
+                        "requirement_id" => $rule["id"],
+                        "work_id" => $item["id"],
+                        "outcome" => $outcomes[count($rows)] ?? "matches",
+                    ];
+                }
+            }
+        }
+        return $rows;
+    }
+
+    public function testOverlappingSavedRulesUseOneAwardWithoutMultiplyingGroupCredits(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);
+        $work = [$this->work(10)];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertCount(1, $result["groups"][0]["placements"]);
+        self::assertSame(3000, $result["groups"][0]["placements"][0]["credits_milli"]);
+        self::assertSame([], $r["group_details"][self::id(1)]["definition"]["courses"]);
+        self::assertSame([self::id(1)], $result["groups"][0]["rules"][0]["course_ids"]);
+    }
+
+    public function testRuleExclusionsAndGradeFloorsApplyBeforeHighestEligibleRepeatSelection(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 6000)]);
+        $work = [$this->work(10), $this->work(11, credits: 6000)];
+        $work[1]["course_version_id"] = self::id(500);
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, ["matches", "does_not_match"]),
+        );
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(3000, $result["groups"][0]["gaps"]["credit_shortfall_milli"]);
+        $work[1] = $this->work(11, credits: 6000, points: 1000);
+        $r["group_details"][self::id(1)]["definition"]["min_course_grade_points_milli"] = 2000;
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(3000, $result["groups"][0]["gaps"]["credit_shortfall_milli"]);
+        self::assertContains("insufficient_grade", $result["records"][1]["statuses"]);
+    }
+
+    public function testAllEligibleRepeatAwardsSupplyCreditsButRemainOneCourseIdentity(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 7000)]);
+        $r["definition"]["policies"]["repeat_credit"] = "all_eligible";
+        $work = [$this->work(10), $this->work(11, credits: 4000)];
+        $work[1]["course_version_id"] = self::id(500);
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(7000, $result["groups"][0]["placements"][0]["credits_milli"]);
+        self::assertSame(
+            [[self::id(10), self::id(11)]],
+            $result["groups"][0]["placements"][0]["work_options"],
+        );
+        $g = &$r["group_details"][self::id(1)]["definition"];
+        $g["rules"][0]["mode"] = "choose";
+        $g["rules"][0]["minimum_courses"] = 2;
+        unset($g["rules"][0]["minimum_credits_milli"]);
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(1, $result["groups"][0]["gaps"]["rules"][0]["shortfall_courses"]);
+    }
+
+    public function testSavedRulesRespectTheRetainedSharingPolicy(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1), self::id(2) => $this->ruleGroup(2)]);
+        $work = [$this->work(10)];
+        $one = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("infeasible", $one["outcome"]);
+        self::assertSame([], $one["groups"][0]["placements"]);
+        $r["definition"]["policies"]["group_reuse"] = "multiple_groups";
+        $many = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("feasible", $many["outcome"]);
+        self::assertCount(1, $many["groups"][0]["placements"]);
+        self::assertCount(1, $many["groups"][1]["placements"]);
+    }
+
+    public function testIncompatibleRepeatedRuleMembershipCannotBeCombinedIntoCompletion(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);
+        $work = [$this->work(10), $this->work(11)];
+        $work[1]["course_version_id"] = self::id(500);
+        $matrix = ["matches", "does_not_match", "does_not_match", "matches"];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("rule_repeat_conflict", $result["issues"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+        // A failed earlier award cannot lend its rule membership to a passing later award.
+        $work[0] = $this->work(10, points: 0);
+        $work[0]["grade"]["passes"] = false;
+        $work[0]["completed_milli"] = 0;
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(3000, $result["groups"][0]["gaps"]["rules"][0]["credit_shortfall_milli"]);
+    }
+
+    public function testUnknownRuleFactsDoNotBecomeAnAcademicFailureOrPoisonKnownUnusableWork(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1)]);
+        $work = [$this->work(10), $this->work(11, course: 2)];
+        $matrix = ["matches", "unknown"];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("rule_facts_unknown", $result["issues"]);
+        self::assertNull($result["groups"][0]["gaps"]);
+        $work[1] = $this->work(11, course: 2, points: 0);
+        $work[1]["grade"]["passes"] = false;
+        $work[1]["completed_milli"] = 0;
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, $matrix),
+        );
+        self::assertSame("feasible", $result["outcome"]);
+    }
+
+    public function testNamedPublicationAndSavedRuleCannotUseOneCourseUnderConflictingDefinitions(): void
+    {
+        $g = $this->ruleGroup(1);
+        $named = $this->group(1);
+        $g["definition"]["courses"] = $named["definition"]["courses"];
+        $g["course_details"] = $named["course_details"];
+        $g["definition"]["rules"][] = [
+            "id" => self::id(399),
+            "mode" => "all",
+            "minimum_courses" => 1,
+            "course_ids" => [self::id(1)],
+        ];
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10)];
+        $work[0]["course_version_id"] = self::id(500);
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("rule_publication_conflict", $result["issues"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testHighestMatchingAwardKeepsItsOwnAcceptedCourseLabels(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 4000)]);
+        $work = [$this->work(10), $this->work(11, credits: 4000)];
+        $work[1]["course_version_id"] = self::id(500);
+        $work[1]["course_code"] = "UPDATED.101";
+        $work[1]["course_title"] = "Later accepted title";
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $this->decisions($work, $r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame("Later accepted title", $result["groups"][0]["placements"][0]["target_title"]);
+        self::assertSame("UPDATED.101", $result["groups"][0]["courses"][self::id(1)]["code"]);
+        self::assertSame([[self::id(11)]], $result["groups"][0]["placements"][0]["work_options"]);
+        self::assertContains("repeat_not_selected", $result["records"][0]["statuses"]);
+    }
+
+    public function testSubstitutionOverlapNeedsReviewInsteadOfAnInventedFailureOrDoubleUse(): void
+    {
+        $g = $this->ruleGroup(1);
+        $named = $this->group(1, [2]);
+        $g["definition"]["courses"] = $named["definition"]["courses"];
+        $g["course_details"] = $named["course_details"];
+        $g["definition"]["rules"][] = [
+            "id" => self::id(399),
+            "mode" => "all",
+            "minimum_courses" => 1,
+            "course_ids" => [self::id(2)],
+        ];
+        $r = $this->requirements([self::id(1) => $g]);
+        $effective = $this->effective($r);
+        $effective["substitutions"][self::id(2)] = [
+            "course_id" => self::id(1),
+            "version_id" => self::id(101),
+        ];
+        $work = [$this->work(10)];
+        $result = $this->evaluator()->evaluate($work, $r, $effective, $this->decisions($work, $r));
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("rule_substitution_overlap", $result["issues"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testMissingOrDuplicateCapturedRuleDecisionsCannotBecomeAnEmptyEligibleUniverse(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1)]);
+        $work = [$this->work(10)];
+        $rows = $this->decisions($work, $r);
+        foreach ([[], array_merge($rows, $rows)] as $invalid) {
+            try {
+                $this->evaluator()->evaluate($work, $r, $this->effective($r), $invalid);
+                self::fail("Incomplete or duplicate eligibility was accepted.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     private function evaluator(int $steps = 100000): GroupAllocationEvaluator
     {
         return new GroupAllocationEvaluator(
@@ -128,6 +368,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
             new AcademicPolicyEvaluator(),
             new CourseAllocationPlanner($steps),
             new AllocationGapAnalyzer(),
+            new RuleAllocationCompiler(new CourseMatchEvaluator()),
         );
     }
     public function testApprovedPreferenceRestrictsTheCourseWithoutBypassingEligibilityOrOtherGroupSharing(): void

@@ -10,13 +10,14 @@ use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
 use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\Service\CourseMatchEvaluator;
+use Domain\DegreeAudit\Service\DegreeAuditTrialService;
 use Domain\DegreeAudit\Service\DegreeMinimumEvaluator;
 use Domain\DegreeAudit\Service\DegreeProgressEvaluator;
 use Domain\DegreeAudit\Service\DegreeWorkReview;
-use Domain\DegreeAudit\Service\DegreeAuditTrialService;
 use Domain\DegreeAudit\Service\GroupAllocationEvaluator;
 use Domain\DegreeAudit\Service\PublishedRequirementsReader;
 use Domain\DegreeAudit\Service\RetainedAttemptReader;
+use Domain\DegreeAudit\Service\RuleAllocationCompiler;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
 use Domain\Finance\ValueObject\Money;
@@ -63,6 +64,7 @@ final class DraftDegreeAuditTest extends TestCase
                     new AcademicPolicyEvaluator(),
                     new CourseAllocationPlanner(),
                     new AllocationGapAnalyzer(),
+                new RuleAllocationCompiler(new CourseMatchEvaluator()),
                 ),
                 new DegreeWorkReview(),
                 new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
@@ -334,9 +336,9 @@ final class DraftDegreeAuditTest extends TestCase
         $trial = $this->service($f)->test($f->f->degree, $f->student, $f->assignment, new AuditRequirementsV3($degree));
         self::assertSame('matches', $trial['rule_eligibility'][0]['outcome']);
         self::assertSame(1, $trial['rule_eligibility'][0]['rule_revision']);
-        self::assertSame('unsupported', $trial['allocation']['outcome']);
-        self::assertContains('saved_rule_allocation_pending', $trial['allocation']['issues']);
-        self::assertFalse($trial['work_summary']['placement_established']);
+        self::assertSame('feasible', $trial['allocation']['outcome']);
+        self::assertSame([], $trial['allocation']['issues']);
+        self::assertTrue($trial['work_summary']['placement_established']);
         self::assertSame($before, $this->digest($f));
         $review = $f->f->groups->review($group, 'Fictional rule-backed group');
         $groupVersion = $f->f->groups->publish($group, $review['review_token'])['operation_id'];
@@ -350,6 +352,8 @@ final class DraftDegreeAuditTest extends TestCase
         $before = $this->digest($f);
         $published = $this->service($f)->testPublication($f->f->degree, $version, $f->student, $f->assignment);
         self::assertSame('matches', $published['rule_eligibility'][0]['outcome']);
+        self::assertSame('feasible', $published['allocation']['outcome']);
+        self::assertSame(3000, $published['allocation']['groups'][0]['placements'][0]['credits_milli']);
         self::assertSame(1, $published['rule_eligibility'][0]['rule_revision']);
         self::assertSame($before, $this->digest($f));
         $private = new \Domain\Portal\ValueObject\StudentDegreeProgress($published)->describe();

@@ -87,7 +87,7 @@ final readonly class CourseGroupAuthoringFacts
                 ),
             ] + ($rule["mode"] === "credits" ? ["minimum_credits_milli" => $rule["minimum_credits_milli"]] : [])
             + (isset($rule['eligibility']) ? [
-                    'saved_rule_selected' => true, 'saved_rule_evaluation_pending' => true,
+                    'saved_rule_selected' => true, 'saved_rule_requires_student_work' => true,
                 ] : []);
         }
         $this->facts = $facts;

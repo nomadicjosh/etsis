@@ -2,7 +2,7 @@
 
 Course groups and degree audits are separate authoring elements. A **course group is an independent, reusable block**; it belongs to no degree, program or academic year. A **degree requirement definition composes particular published versions of those blocks** for a program and academic year. General education can therefore be shared across many degrees, while a specialized group may be used by just one.
 
-This stage provides authoring, immutable publication, historical previews and cloning. Explicit [student program requirement assignment](student-degree-requirements.md) is now implemented. The [adjusted requirements preview](student-degree-exceptions.md#preview-requirements-with-approved-exceptions) now combines a selected baseline with approved exceptions without calculating completion. [Student waivers, substitutions and minimum exceptions](student-degree-exceptions.md) are also implemented. Student evaluation, transcript allocation and specialization exclusions remain pending. The preview shows requirements without claiming that a student completed them.
+This stage provides authoring, immutable publication, historical previews and cloning. Explicit [student program requirement assignment](student-degree-requirements.md) is now implemented. The [adjusted requirements preview](student-degree-exceptions.md#preview-requirements-with-approved-exceptions) now combines a selected baseline with approved exceptions without calculating completion. [Student waivers, substitutions and minimum exceptions](student-degree-exceptions.md) are also implemented. Bounded student progress and course-group placement reviews are implemented separately; retained final evaluations, remaining historical equivalence and specialization exclusions remain open. The adjusted-requirements preview shows requirements without claiming that a student completed them.
 
 ## Setup and navigation
 
@@ -25,7 +25,7 @@ Both workspaces open full-width dialogs with a source panel, visual requirement 
 
 Every rule in a group is required along with the selected group quantity. The optional grade-point minimum applies to each applied course individually, using its retained grade definition; it is neither an average group GPA nor credit-weighted quality points. A passing course below that minimum cannot count as completed in this group. For example, an institution may require 1.7 out of 4.3, 2.0 out of 4.0, or another value its scale permits. Blank means no additional point floor.
 
-New group definitions keep credits and course count mutually exclusive. A course-count total counts distinct eligible courses. Grades, allocation, repeated awards and actual completion still need the student evaluator.
+New group definitions keep credits and course count mutually exclusive. A course-count total counts distinct eligible courses. The student evaluator separately applies grades, actual earned awards, repeats and sharing; authoring totals do not establish completion.
 
 Rule controls:
 
@@ -37,7 +37,7 @@ Rule controls:
 
 `MATH.101; ENG.203; CS.201 OR CS.301; CLIT.505` becomes four cards: Math, English, choose one of the two CS courses, and CLIT. With three-credit courses the group minimum is 12 credits. This relationship defines requirements; it does not allocate student credit or authorize double counting.
 
-The grammar currently uses explicit course lists. Subject/level/department criteria depend on normalized, historically versioned classification fields. No SQL, PHP, callbacks or executable expressions are accepted. Nested rule trees and specialization relationships remain later grammar stages.
+Cards can use explicit course lists or a selected saved-rule revision. Subject/level/department criteria use normalized, historically versioned classification fields. No SQL, PHP, callbacks or executable expressions are accepted. Nested rule trees and specialization relationships remain later grammar stages.
 
 ## Group planning summary
 
@@ -97,7 +97,7 @@ The allocation engine uses actual eligible earned awards after grade floors, rep
 
 This extends the current rule contract with mode `credits`, zero `minimum_courses` and a required positive integer `minimum_credits_milli`. Other rule modes reject that extra field. The publication remains in the existing protected journal; no numbered model wrapper, event table, migration or historical rewrite is added. The configured development database was inspected first: one group draft, one degree draft and no group/degree publication streams were present. Existing drafts were not changed automatically.
 
-## Planned saved-rule and classification requirements
+## Saved-rule and classification requirements
 
 The degree-audit plan's addendum now distinguishes five requirement sources:
 
@@ -106,12 +106,12 @@ The degree-audit plan's addendum now distinguishes five requirement sources:
 | Take ENG-101 and ENG-102 | **All of these**, using selected publications. |
 | Take 2 of a listed set | **Choose a number**, using distinct completed course targets. |
 | Take 6 credits from a listed set | **Take credits**, with an independent per-list threshold. |
-| Take courses using saved rule DA.BUS.UPPER | Group cards now retain an explicitly selected rule revision and its full conditions. Runtime progress shows eligibility against verified accepted course publications. Allocating those matches to group quantities remains open. |
-| Take credits from a subject or department | Build the subject/department, exclusion and numeric-level conditions in RULE, then attach that saved revision to a **Take credits** card. Conditions and thresholds are retained; rule-backed award allocation remains open. `SUBJ`/`SUBJECT` and `DEPT`/`DEPARTMENT` describe the same respective source. |
+| Take courses using saved rule DA.BUS.UPPER | Group cards retain an explicitly selected revision and its conditions. Runtime reviews apply eligible matching awards to count/credit requirements and the separate group quantity, subject to the review limits below. |
+| Take credits from a subject or department | Build the subject/department, exclusion and numeric-level conditions in RULE, then attach that saved revision to a **Take credits** card. Runtime placement uses those retained conditions and actual eligible awards, with repeats and sharing applied. `SUBJ`/`SUBJECT` and `DEPT`/`DEPARTMENT` describe the same respective source. |
 
 Saved/classification rules must support combined conditions and exceptions, including “subject ENG except ENG-500” and “subject MATH with course level greater than 200.” Resolve readable codes to stable identities; retain explicit excluded course identities and typed numeric comparisons. Do not infer subject or numeric level by parsing a course code. A course's later reassignment to another subject/department, or a later saved-rule edit, must not silently change the earlier student's requirement or accepted academic facts.
 
-The saved-rule library now provides visual condition controls rather than executable SQL or a requirement for staff to type TAKE syntax. Eligibility filters are distinct from student-specific course waivers, substitutions and credit/GPA minimum exceptions. Missing historical classifications, numeric-level evidence or retained rule versions must remain a review issue rather than silently matching or excluding work. Group publication now retains the complete selected revision, and runtime eligibility uses verified student inputs. Complete group allocation still needs integration; a pointer to today's mutable rule is never used to reinterpret earlier requirements.
+The saved-rule library now provides visual condition controls rather than executable SQL or a requirement for staff to type TAKE syntax. Eligibility filters are distinct from student-specific course waivers, substitutions and credit/GPA minimum exceptions. Missing historical classifications, numeric-level evidence or retained rule versions must remain a review issue rather than silently matching or excluding work. Group publication now retains the complete selected revision, and runtime eligibility uses verified student inputs. The placement review consumes captured eligibility decisions without reading today's rule library again. A pointer to today's mutable rule is never used to reinterpret earlier requirements.
 
 ## Test any degree audit against a student
 
@@ -133,7 +133,7 @@ The trial shares the production progress evaluator, institutional/transfer input
 
 Working groups must contain valid, testable requirements, but need no group or degree publication. Course definitions still use explicitly selected retained course publications; tests do not invent missing historical course/grade evidence from current catalog rows. Unknown/inconsistent evidence and replay/search limits remain review outcomes with no speculative partial plan. Earlier-history gaps remain visible. A successful test does not certify a complete academic archive, final degree completion or graduation eligibility.
 
-The current trial calculates the existing named-course, choose-count and listed-credit grammar. **Rule-backed cards now retain selected conditions and show course eligibility before group/degree publication**, through the same runtime path. Full placement for those cards remains unsupported: the review returns no complete group plan or unused-course result for them. Course-condition matches do not themselves establish grade eligibility, repeat selection, earned credit or completion.
+The trial supports named-course cards and saved-rule count/credit/pool cards through the same runtime placement path, before or after group/degree publication. Predicate checks remain available separately: a course-condition match still requires an eligible grade/award, repeat-credit treatment and a valid combined placement. Missing facts and the unresolved combinations described below produce review outcomes, with no partial plan or unused-work claim.
 
 Private POST endpoint: `/sis/degree-audits/{id}/test/`. It accepts `source: draft` with the degree editor definition and explicit working-group choice, or `source: publication` with an exact `version_id`; both require student and pursuit identities. A publication must belong to the selected degree audit. Clients cannot provide academic attempts, grade facts, approved exceptions or larger replay limits. The source manifest and definition hash describe only the returned temporary calculation; they are not a publication or authorization for a later academic command.
 
@@ -152,7 +152,7 @@ Previews accept at most 20 explicitly selected publications and share one bounde
 
 `sis_course_rules` stores immutable authoring revisions with ULID identities, unique code/revision and family/revision constraints, reference labels, an author and time, and a definition checksum. Each save and its audit record commit together. The checksum detects damaged contents; it does not provide the protected journal's guarantees or make an authoring row an academic decision. The migration was applied after inspecting the configured development database; checksums confirmed existing student-rule rows and event, stream-head and operation-receipt rows were unchanged.
 
-**Remaining:** connect rule-backed candidates to eligible awards, repeats and exact group placement. Saving or previewing a rule changes no student requirement, earned credits, GPA or completion result; publishing a group retains its definition without assigning it to a student.
+Saving or previewing a rule changes no student requirement, earned credits, GPA or completion result; publishing a group retains its definition without assigning it to a student. Runtime placement now uses captured matches as described below. Remaining work includes mixed repeat memberships, combined substitution/rule evidence and broader historical equivalence.
 
 ## Use a saved rule in a course group
 
@@ -164,9 +164,17 @@ Saving and publication review verify every supplied rule snapshot against its or
 
 **Inspect saved-rule eligibility** in a runtime test or staff degree-progress review shows the captured student's course-condition checks, 20 at a time. Paging reuses that result without another request or replay. The shared reader uses accepted institutional/transfer course-publication references, deduplicates repeated version reads and never substitutes current subject/department/level assignments. If an earlier course has no publication reference, only independently known course identity can decide a condition; missing classifications remain unknown. This does not parse a numeric level from a course number.
 
-The request shares the existing student lock and history budget, accepts no caller-supplied academic work and caps rule/work comparisons at 5,000 across at most 200 current records. Verification failures or an exhausted budget return no partial review. The student portal omits the rule snapshots and detailed eligibility records; no raw rules, internal authoring IDs or author narratives are sent there. Optional authoring AI receives only flags indicating a selected rule and pending evaluation, through the existing consent allowlist; it receives no rule snapshot or student data.
+The request shares the existing student lock and history budget, accepts no caller-supplied academic work and caps rule/work comparisons at 5,000 across at most 200 current records. Verification failures or an exhausted budget return no partial review. The student portal omits the rule snapshots and detailed eligibility records; no raw rules, internal authoring IDs or author narratives are sent there. Optional authoring AI receives only flags indicating a selected rule and that student work is needed for evaluation, through the existing consent allowlist; it receives no rule snapshot or student data.
 
-**Placement remains incomplete for these cards.** The allocator explicitly returns unsupported instead of treating an empty named-course list as a satisfied rule. It produces no group completion, speculative placement, unused-work count or graduation claim. The older named-course match screen also states that its list does not include rule-backed matches. Integrating repeats, overlapping rules, substitutions and sharing into exact placement is the next stage.
+### Place matching awards in course groups
+
+Runtime tests, staff degree progress and the standalone course-placement review now feed those captured checks into the existing exact bounded search. The compiler derives temporary course targets from the student's accepted work, then applies passing-grade facts, the group's grade-point floor and placement preferences **before** selecting repeat credits. It never scans today's catalog to invent candidates. A larger attempt excluded by the rule cannot replace a smaller eligible award. A failed or below-floor attempt cannot lend its rule membership to a different passing attempt.
+
+A matching award can satisfy overlapping cards within one group, but contributes credits once to that group. Highest-eligible and all-eligible repeat-credit policies remain distinct: all-eligible can add several actual awards' credits, while those awards still represent one distinct course for a course-count requirement. The retained one-group/multiple-group sharing policy governs placement across groups; overall earned-credit/GPA calculations remain independent. Group quantity and each card's credit/count minimum must all be met. Too few known matching courses is a genuine current-work shortage, not an invalid rule or a satisfied empty list.
+
+Some combinations still need registrar review. Eligible attempts of one course that match different nonempty combinations of rule cards are not merged into a single award. A course that conflicts with a named target's retained publication, or simultaneously supplies an approved substitute for another named target and a rule match, also requires review. Potentially usable work with unknown predicate, grade, publication or grading-context evidence blocks a definitive plan. Unknown rule facts on known unusable failed/dropped work do not make an otherwise verified plan inconclusive. These cases return **needs review**, without a complete or speculative partial placement or shortage claim. Broader equivalence and combined substitution/rule placement remain open.
+
+Derived target lists and labels exist only in the current review. They do not alter rule revisions, published groups, student rows or the protected journal. Display labels follow the accepted work supporting the selected award, including its retained course version. At most 200 course targets per group and 5,000 rule/work checks enter preparation; existing evidence/search/replay bounds remain in force. Local inspection reuses the result. No audit result is persisted, and a feasible group plan does not certify graduation. The older named-course match screen covers only named targets and directs staff to degree progress for saved-rule placement.
 
 ## Course sharing across groups
 
@@ -178,7 +186,7 @@ The current composition model validates `policies.group_reuse` as `one_group` or
 
 Earlier inline publication contracts still omit this policy and display it as not recorded. Explicitly moving an inline working draft into a new reusable-group composition assigns the new-draft default; it does not rewrite an earlier publication. Legacy conversion/import of historical facts must not infer a missing allocation policy.
 
-This stage retains the policy input. The allocation and repeat/GPA domain cores now consume retained choices. The current-work credit/GPA review now connects the repeat/GPA core to verified student inputs. Allocation integration and complete degree evaluation remain on the roadmap; publishing or editing a choice never automatically recalculates students.
+This stage retains the policy input. The allocation and repeat/GPA domain cores now consume retained choices. The current-work credit/GPA review now connects the repeat/GPA core to verified student inputs. Remaining equivalence/constraint integration and complete degree evaluation remain on the roadmap; publishing or editing a choice never automatically recalculates students.
 
 ## Existing inline drafts and publications
 
@@ -236,7 +244,7 @@ The student program now has a **Degree requirements** action for inspecting its 
 
 After assigning a published degree to a student pursuit, use **Degree requirements → Academic work → Check requirement matches** for [per-course candidate explanations](student-academic-work.md#checking-requirement-matches). The view uses retained course/grading references and applicable exceptions. It identifies possible uses without allocating courses, calculating GPA or deciding degree completion.
 
-The [structural allocation engine](degree-audit-allocation.md) now handles normalized eligible courses, named/quantity constraints and the retained sharing choice. It remains separate from the student-screen candidate preview until complete verified inputs and repeat/GPA evaluation are integrated.
+The [structural allocation engine](degree-audit-allocation.md) handles normalized eligible courses, named and saved-rule quantity constraints and the retained sharing choice. [Course placement](student-course-placement.md) and [degree progress](student-degree-progress.md) connect it to verified student inputs and retained repeat policies; the per-course candidate preview remains a separate inspection tool.
 
 ## Optional saved-group review
 
