@@ -1900,6 +1900,174 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const data = await post(`${base}progress/`, {});
         renderDegreeProgress(base, back, data);
     }
+    function degreeProgressGuide(layout, steps, slot, data, state, links) {
+        const heading = node(
+            "h2",
+            { id: "degree-progress-guide-title", tabindex: "-1" },
+            "Degree progress guide",
+        );
+        const panel = node("aside", {
+            class: "progress-guide-panel",
+            "aria-labelledby": heading.id,
+            "data-progress-guide": "",
+        });
+        const content = node("div", { class: "progress-guide-answer", "aria-live": "polite" });
+        const announcement = node("p", { class: "visually-hidden", role: "status" });
+        const launch = button("Open degree progress guide", () => open(true));
+        launch.setAttribute("aria-controls", "degree-progress-guide");
+        launch.setAttribute("aria-expanded", "false");
+        panel.id = "degree-progress-guide";
+        const topics = [
+            ["steps", "What should I review next?"],
+            ...(data.status === "review"
+                ? [
+                      ["credits", "Understand credits and GPA"],
+                      ["groups", "Understand course placement"],
+                      ["work", "Understand unused and pending work"],
+                  ]
+                : []),
+            ["meaning", "What can this review confirm?"],
+        ];
+        if (!topics.some(([key]) => key === state.topic)) state.topic = "steps";
+        const localButton = (label, run) =>
+            node("button", { type: "button", class: "btn btn-outline-primary", onclick: run }, label);
+        const choices = new Map();
+        const topicsBox = node("div", {
+            class: "progress-guide-topics",
+            role: "group",
+            "aria-label": "Degree guide topics",
+        });
+        const paragraph = (value) => node("p", {}, value);
+        function answer() {
+            steps.remove();
+            for (const [key, choice] of choices)
+                choice.setAttribute("aria-pressed", String(key === state.topic));
+            if (state.topic === "steps") {
+                steps.open = true;
+                content.replaceChildren(steps);
+            } else if (state.topic === "credits") {
+                content.replaceChildren(
+                    node("h3", {}, "Credits and GPA answer different questions"),
+                    paragraph(
+                        "Earned credits, residency credits and GPA are separate checks. A course may affect one without satisfying a course group.",
+                    ),
+                    paragraph(
+                        "Cumulative GPA uses institutional work. Overall GPA uses the retained transfer-GPA policy. Each grade's recorded treatment and the selected repeat rules determine its contribution.",
+                    ),
+                    paragraph(
+                        data.minimums.some((check) => check.status === "unknown")
+                            ? "Some minimum checks need review. Missing evidence or a GPA not yet established must not be treated as zero."
+                            : "Use the minimum cards to compare this review's results with the retained requirements. GPA is not rounded upward to meet a minimum.",
+                    ),
+                    button("Show minimum cards", links.minimums),
+                    button("Open credit and GPA detail", links.contributions),
+                );
+            } else if (state.topic === "groups") {
+                const explanations = {
+                    feasible:
+                        "This review found a complete placement for the supported course-group rules. Another valid plan may use different courses.",
+                    infeasible:
+                        "This review did not find a complete placement. Inspect the recorded shortfalls and competing course uses with the registrar.",
+                    undetermined:
+                        "The placement search reached its limit. This does not prove that completing the groups is impossible.",
+                    needs_review:
+                        "Course-group evidence needs review. The review does not offer a speculative partial placement.",
+                    unsupported:
+                        "Some retained rules are not supported by the current placement review. Ask the registrar to review those requirements.",
+                };
+                content.replaceChildren(
+                    node("h3", {}, "Placement follows the selected requirements"),
+                    paragraph(explanations[data.allocation.outcome] || explanations.needs_review),
+                    paragraph(
+                        "Approved waivers, substitutions, grade thresholds, repeat treatment and course-sharing rules affect placement. Earned-credit and GPA treatment remains separate.",
+                    ),
+                    button("Open course-group detail", links.groups),
+                );
+            } else if (state.topic === "work") {
+                content.replaceChildren(
+                    node("h3", {}, "Unused does not mean unnecessary"),
+                    paragraph(
+                        data.work_summary.placement_established
+                            ? "Unused completed work was not selected in this proposed complete group plan. It may still count toward earned credits or GPA, and another valid plan may use it."
+                            : "Unused completed work cannot be identified until a complete placement is established. Unplaced courses are not treated as unnecessary.",
+                    ),
+                    paragraph(
+                        "Attempts awaiting a final grade do not predict earned credits, GPA or completed requirements. Their attempted-credit summary covers all posting terms in this review, not current-term enrollment load.",
+                    ),
+                    button("Open unused and pending work", links.contributions),
+                );
+            } else {
+                content.replaceChildren(
+                    node("h3", {}, "A review supports the next conversation"),
+                    paragraph(
+                        data.status === "review"
+                            ? "This review compares available recorded work with selected general minimums and supported course groups. It does not certify that earlier academic history is complete."
+                            : "This review is not ready to provide completion comparisons. Follow the next steps to resolve the missing selection or arrange a controlled review.",
+                    ),
+                    paragraph(
+                        "Meeting displayed minimums or finding a group placement is not a graduation decision. The registrar must verify remaining institutional requirements and the final award process.",
+                    ),
+                );
+            }
+        }
+        topics.forEach(([key, label]) => {
+            const choice = localButton(label, () => {
+                state.topic = key;
+                answer();
+            });
+            choices.set(key, choice);
+            topicsBox.append(choice);
+        });
+        const move = localButton("", () => {
+            state.side = state.side === "left" ? "right" : "left";
+            dock();
+            announcement.textContent = `Guide moved to the ${state.side} of the review. On narrow screens it appears ${state.side === "left" ? "before" : "after"} the review.`;
+            move.focus({ preventScroll: true });
+        });
+        function dock() {
+            layout.dataset.guideSide = state.side;
+            if (state.side === "left") layout.prepend(panel);
+            else layout.append(panel);
+            move.textContent = state.side === "left" ? "Move guide right" : "Move guide left";
+        }
+        function open(focus) {
+            if (!state.open) state.inlineOpen = steps.open;
+            state.open = true;
+            launch.setAttribute("aria-expanded", "true");
+            dock();
+            answer();
+            if (focus) heading.focus();
+        }
+        function dismiss() {
+            state.open = false;
+            steps.open = Boolean(state.inlineOpen);
+            slot.append(steps);
+            panel.remove();
+            delete layout.dataset.guideSide;
+            launch.setAttribute("aria-expanded", "false");
+            launch.focus({ preventScroll: true });
+        }
+        panel.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            dismiss();
+        });
+        panel.append(
+            node("p", { class: "report-workbench-eyebrow" }, "YOUR REVIEW · LOCAL GUIDANCE"),
+            heading,
+            paragraph(
+                "Uses the review already on this screen. Refresh degree progress after records change. Nothing is sent to an AI provider.",
+            ),
+            actions(move, button("Close progress guide", dismiss)),
+            announcement,
+            topicsBox,
+            content,
+        );
+        if (state.open) open(true);
+        return launch;
+    }
+
     function progressNextSteps(data) {
         const steps = [];
         const add = (title, description) =>
@@ -1977,9 +2145,29 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node("ol", { class: "list-group list-group-numbered" }, ...steps),
         );
     }
-    function renderDegreeProgress(base, back, data) {
-        const body = screen("Degree progress review", "GENERAL MINIMUMS & COURSE GROUPS");
-        const restore = () => renderDegreeProgress(base, back, data);
+    function renderDegreeProgress(base, back, data, guideState = null) {
+        const shell = screen("Degree progress review", "GENERAL MINIMUMS & COURSE GROUPS");
+        const state = guideState || { open: false, side: "right", topic: "steps" };
+        const layout = node("div", { class: "progress-guide-layout" });
+        const body = node("div", { class: "progress-guide-review" });
+        layout.append(body);
+        shell.append(layout);
+        const restore = () => renderDegreeProgress(base, back, data, state);
+        restore.returnLabel = "Back to degree progress";
+        const steps = progressNextSteps(data);
+        const slot = node("div", { class: "progress-guide-inline" }, steps);
+        const guide = degreeProgressGuide(layout, steps, slot, data, state, {
+            minimums: () => body.querySelector("[data-progress-minimums]")?.focus(),
+            contributions: () => degreeProgressContributions(data, restore),
+            groups: () =>
+                renderGroupAllocation(base, restore, {
+                    status: "review",
+                    input_status: data.input_status,
+                    current_record_count: data.current_record_count,
+                    context: data.context,
+                    ...data.allocation,
+                }),
+        });
         body.append(
             node(
                 "p",
@@ -1989,11 +2177,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         body.append(
             actions(
+                guide,
                 button("Refresh degree progress", () => degreeProgress(base, back)),
                 button("Back to degree requirements", back),
             ),
         );
-        body.append(progressNextSteps(data));
+        body.append(slot);
         if (data.status !== "review") {
             body.append(
                 node(
@@ -2036,7 +2225,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "The matriculation cohort changed. The retained degree selection still applies; ask the registrar to review it.",
                 ),
             );
-        body.append(node("h2", {}, "General degree minimums"));
+        body.append(node("h2", { tabindex: "-1", "data-progress-minimums": "" }, "General degree minimums"));
         const cards = node("div", { class: "audit-library-grid" });
         for (const check of data.minimums) {
             const gpa =
@@ -2423,7 +2612,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(
             actions(
                 button("Refresh course placement", () => groupAllocation(base, back)),
-                button("Back to previous screen", back),
+                button(back.returnLabel || "Back to previous screen", back),
             ),
         );
         if (data.status === "needs_selection" || data.status === "limited") {

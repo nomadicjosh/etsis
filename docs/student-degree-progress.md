@@ -38,6 +38,16 @@ Expand **Next steps for this review** for local guidance based on the same captu
 
 Student progress guidance stays inside etsis by project direction. The guide does not load more records, call an AI service, recalculate totals, recommend specific courses or save decisions. Catalog-authoring AI permissions do not authorize sending this review to a provider. Returning from contribution or placement views reuses the same guidance and snapshot; **Refresh degree progress** obtains a new result. Even when displayed minimums and group placements are satisfied, the guide directs staff to verify remaining institutional requirements with the registrar rather than declaring graduation eligibility.
 
+### Dockable local guide
+
+In the staff **Degree progress review**, choose **Open degree progress guide** for contextual explanations and links to the detail already captured in that review. Topics cover next steps, credits/GPA, course placement, unused/pending work and what the review can confirm. This is local guidance, not an AI conversation: it makes no provider calls, discovers no additional records and saves no academic decisions.
+
+**Move guide left/right** changes both the visible position and reading order. Narrow screens stack the guide before or after the review. Topic selection and movement work with the keyboard; **Escape** inside the guide closes it and returns focus to its launcher. Escape elsewhere retains the existing close-review behavior. The inline **Next steps for this review** and the guide reuse the same list, without duplicate guidance.
+
+Detail links reuse the captured contribution and course-group results. Returning to degree progress restores the guide's topic, position and focus. **Refresh degree progress** requests a new authorized review and starts with the guide closed; closing the review removes the guide. Its state stays in the open review's memory, with no browser storage, persistent cache or new endpoints. No migration or permission grant is added. The guide does not declare graduation eligibility or treat a verification/search limit as an academic failure.
+
+This first guide is in the staff review, including read-only users who already have access to that student/program scope. Student-portal helpers and guidance for other workflows remain on the roadmap.
+
 ## Inspecting the same result
 
 **Inspect credit and GPA contributions** shows each current record's earned-credit, cumulative-GPA and overall-GPA treatment. Transfer exclusion in the cumulative column describes the institutional-only scope; it does not claim that the institution's overall transfer policy excludes transfers. Contribution cards page 20 records at a time.
