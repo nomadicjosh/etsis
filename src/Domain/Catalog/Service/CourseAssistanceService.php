@@ -99,6 +99,9 @@ final readonly class CourseAssistanceService
             if ($task === AuthoringTask::Readiness && $advice->description !== null) {
                 throw new AssistanceUnavailableException();
             }
+        } catch (AssistanceUnavailableException $exception) {
+            $this->actor($actor, $task);
+            throw $exception;
         } catch (Throwable) {
             $this->actor($actor, $task);
             throw new AssistanceUnavailableException();

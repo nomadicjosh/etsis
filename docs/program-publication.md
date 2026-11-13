@@ -49,3 +49,7 @@ Schools, majors/minors, specializations, CIP/location classifications, effective
 Fictional checks cover year-specific student labels/bindings, report joins, retained history, stale/expired/competing reviews, reference changes, permission rechecks, rollback, exact retries, frozen pages and framework replay. Actual-provider/router checks cover CSRF, private responses, permission boundaries and curated history. Browser checks cover combined editing, draft preservation, year/reason review, keyboard confirmation, narrow-screen accessibility and literal rendering.
 
 New degree-requirement publications now retain the reviewed program revision; see [the linked publication workflow](degree-program-publication-link.md). Earlier requirements remain unlinked.
+
+## Optional description assistance
+
+The details editor offers [consent-based program description assistance](optional-authoring-assistance.md#academic-program-descriptions) using the institution's configured provider. Authorized authors can generate, rewrite or expand saved descriptions, inspect suggestions and copy them into the unchanged editor. Assistance never saves or publishes automatically. Normal revision checks and academic-year publication preserve earlier student references.

@@ -65,24 +65,49 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
     public function testDegreeSetupInstructionsDoNotClaimToReviewGroupsOrStudentEligibility(): void
     {
         $mock = new MockHandler([new Response(200, [], json_encode(self::response()))]);
-        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(['handler' => $mock]));
-        self::assertNull($service->suggest(AuthoringTask::DegreeReadiness, ['min_credits_milli' => 120000])->description);
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
+        self::assertNull(
+            $service->suggest(AuthoringTask::DegreeReadiness, [
+                "min_credits_milli" => 120000,
+            ])->description,
+        );
         $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
-        self::assertStringContainsString('Group contents and student records are not supplied.', $body['input'][0]['content']);
-        self::assertStringContainsString('Return description as null.', $body['input'][0]['content']);
+        self::assertStringContainsString(
+            "Group contents and student records are not supplied.",
+            $body["input"][0]["content"],
+        );
+        self::assertStringContainsString("Return description as null.", $body["input"][0]["content"]);
     }
     public function testSectionReadinessHasItsOwnInstructionsAndRejectsDescriptionOutput(): void
     {
-        $draft = ['section_code' => 'MATH.101.A', 'delivery_mode' => 'online'];
+        $draft = ["section_code" => "MATH.101.A", "delivery_mode" => "online"];
         $mock = new MockHandler([new Response(200, [], json_encode(self::response()))]);
-        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(['handler' => $mock]));
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
         self::assertNull($service->suggest(AuthoringTask::SectionReadiness, $draft)->description);
         $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
-        self::assertStringContainsString('Review saved section readiness only.', $body['input'][0]['content']);
-        self::assertStringContainsString('Do not require rooms for online sections', $body['input'][0]['content']);
-        self::assertSame($draft, json_decode($body['input'][1]['content'], true));
-        $bad = new MockHandler([new Response(200, [], json_encode(self::response(['summary' => 'Review.', 'suggestions' => [], 'description' => 'Unauthorized replacement text.'])))]);
-        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(['handler' => $bad]));
+        self::assertStringContainsString(
+            "Review saved section readiness only.",
+            $body["input"][0]["content"],
+        );
+        self::assertStringContainsString(
+            "Do not require rooms for online sections",
+            $body["input"][0]["content"],
+        );
+        self::assertSame($draft, json_decode($body["input"][1]["content"], true));
+        $bad = new MockHandler([
+            new Response(
+                200,
+                [],
+                json_encode(
+                    self::response([
+                        "summary" => "Review.",
+                        "suggestions" => [],
+                        "description" => "Unauthorized replacement text.",
+                    ]),
+                ),
+            ),
+        ]);
+        $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $bad]));
         $this->expectException(AssistanceUnavailableException::class);
         $service->suggest(AuthoringTask::SectionReadiness, $draft);
     }
@@ -96,7 +121,10 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             ]);
             $mock = new MockHandler([new Response(200, [], json_encode($payload))]);
             $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
-            $draft = ["title" => "Algebra", "description" => "An introduction to algebra."];
+            $draft = [
+                "title" => "Algebra",
+                "description" => "An introduction to algebra.",
+            ];
             self::assertSame("A clearer description.", $service->suggest($task, $draft)->description);
             $body = json_decode((string) $mock->getLastRequest()->getBody(), true);
             self::assertStringContainsString(
@@ -190,6 +218,52 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             self::assertFalse($body["store"]);
         }
     }
+    public function testOfficialOpenAiRequiresBearerAuthenticationBeforeNetworkWork(): void
+    {
+        $mock = new MockHandler([]);
+        $service = new ConfiguredAuthoringAssistant(
+            $this->config([
+                "endpoint" => "https://api.openai.com/v1",
+                "auth" => "none",
+            ]),
+            new Client(["handler" => $mock]),
+        );
+        try {
+            $service->suggest(AuthoringTask::Description, []);
+            self::fail("An unauthenticated OpenAI request was accepted.");
+        } catch (AssistanceUnavailableException $e) {
+            self::assertSame(\Domain\Assistance\ValueObject\AssistanceFailure::Configuration, $e->failure);
+            self::assertNull($mock->getLastRequest());
+        }
+    }
+    public function testProviderFailuresExposeOnlyFixedActionableCategories(): void
+    {
+        foreach (
+            [
+                401 => "Authentication",
+                403 => "Authentication",
+                429 => "Capacity",
+                400 => "RequestRejected",
+                404 => "RequestRejected",
+                500 => "Unavailable",
+            ]
+            as $status => $category
+        ) {
+            $mock = new MockHandler([
+                new Response($status, [], "fictional-secret private prompt and upstream body"),
+            ]);
+            $service = new ConfiguredAuthoringAssistant($this->config(), new Client(["handler" => $mock]));
+            try {
+                $service->suggest(AuthoringTask::Description, []);
+                self::fail("A rejected response was accepted.");
+            } catch (AssistanceUnavailableException $e) {
+                self::assertSame($category, $e->failure->name);
+                self::assertStringNotContainsString("fictional-secret", (string) $e);
+                self::assertStringNotContainsString("upstream body", (string) $e);
+                self::assertNull($e->getPrevious());
+            }
+        }
+    }
     public static function invalidSettings(): iterable
     {
         yield [["enabled" => false]];
@@ -228,7 +302,10 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
             new Response(
                 200,
                 [],
-                json_encode(["status" => "completed", "output" => [["type" => "function_call"]]]),
+                json_encode([
+                    "status" => "completed",
+                    "output" => [["type" => "function_call"]],
+                ]),
             ),
         ];
         yield [
@@ -297,7 +374,9 @@ final class ConfiguredAuthoringAssistantTest extends TestCase
         $before = $service->availability()["fingerprint"];
         $config->setConfigKey(
             "assistance",
-            array_replace($config->getConfigKey("assistance"), ["key" => "another-fictional-key"]),
+            array_replace($config->getConfigKey("assistance"), [
+                "key" => "another-fictional-key",
+            ]),
         );
         self::assertNotSame($before, $service->availability()["fingerprint"]);
         $advice = new AuthoringAdvice("Private draft words.", [], "Private suggested description.");

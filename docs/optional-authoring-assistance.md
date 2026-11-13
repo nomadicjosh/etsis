@@ -54,6 +54,20 @@ The summary includes the requirement title, program code/title, academic year, d
 
 Only saved composition drafts using reusable course groups are supported. Earlier embedded-group drafts must be converted through the existing builder first. Short program/year/template locks protect the snapshot; assistance does not replay group or degree history. Provider calls run after the transaction ends. Changed saved context, provider settings or revoked permissions invalidate the result. The browser also discards suggestions if the editor changes during the request. Suggestions cannot modify a draft, publish requirements or assign requirements to a student.
 
+## Academic program descriptions
+
+Open **Academic catalog → Programs → Program details & publications → Optional AI help**. Save working program changes first, inspect exactly what will be sent, then consent to one request. **Suggest a program description**, **Rewrite description** and **Expand description** have independent permissions: `sis:ai:program:description`, `sis:ai:program:rewrite` and `sis:ai:program:expand`, each also requiring `sis:catalog:manage`. Rewrite and expansion appear only after a nonblank description has been saved. Apply migration `20261112000009_CreateSisProgramAssistancePermissions.php`; it creates protected system permissions without adding broad role grants. Super administrators already have access; grant other authors the selected actions through access administration.
+
+Only program code, title, saved description and department/academic-level/award labels are sent, identified as an academic program. Internal identifiers, students, curriculum requirements, publication reasons and historical publications are excluded. The same configured provider and structured-output contract serve courses and programs. Suggestions cannot invent accreditation or academic requirements.
+
+**Use suggested description in this editor** copies text only if the program editor is unchanged. **Save program details** remains explicit, and publishing for an academic year remains a separate reviewed decision. Changes to the saved definition, provider or current permissions invalidate pending assistance. The request records only actor/program/action metadata; prompts and suggestions are not added to historical events.
+
+## Troubleshooting unavailable assistance
+
+For OpenAI, use `SIS_AI_AUTH=bearer` with a server-side `SIS_AI_KEY`; `none` omits the credential even when a key is present. Use `api-key` only for a service expecting that header, such as the Azure configuration above. `none` is reserved for explicitly configured services that require no authentication. The official OpenAI endpoint rejects non-bearer configuration locally before a network request. See [OpenAI authentication](https://developers.openai.com/api/reference/overview#authentication).
+
+After changing `.env`, reload the editor and open a fresh consent preview. Earlier previews are invalidated when provider settings change. Authentication failures now ask the administrator to check the credential and authentication mode; usage/rate-limit failures ask them to check provider usage and billing; rejected requests ask them to check model access, API protocol and structured-output support. These are fixed messages derived from HTTP status, without upstream error bodies or exception chains. A successful connection does not establish that an institution's provider terms satisfy its data policy.
+
 ## Student progress stays local
 
 Student progress guidance runs inside etsis using the already authorized, captured [degree-progress review](student-degree-progress.md#next-steps-for-this-review). Do not send student progress, grades, earned-credit totals or group-placement results to an AI provider. This includes institution-operated model endpoints: no student-progress model calls are implemented or enabled by the catalog assistance configuration. Any future change to this boundary requires a new explicit project decision.

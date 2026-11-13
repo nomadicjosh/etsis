@@ -2,9 +2,9 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}`;
 
-async function fixture(page) {
+async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
-    let definition = { code: 'BSCS', title: 'Computer Science', description: null, classifications: { department: null, academic_level: null, award: null } };
+    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null } };
     const rows = [
         { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true },
         { id: id(4), kind: 'academic_level', code: 'UG', title: 'Undergraduate', active: true },
@@ -26,6 +26,15 @@ async function fixture(page) {
                 return [kind, row ? { id: row.id, code: row.code, title: row.title } : null];
             })) };
             result = { id: id(1), definition, revision: 'a'.repeat(64) };
+        } else if (path === `/sis/programs/${id(1)}/assistance/`) {
+            if (data && options.assistanceFailure) {
+                await route.fulfill({ status: 503, json: { error: 'The assistance provider rejected authentication. Ask an administrator to check the AI credential and authentication setting. Your draft is unchanged.' } }); return;
+            }
+            if (data && options.editWhileRunning) await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('My later edit');
+            result = data ? { task: data.task, advice: { summary: '<script>window.programAiExecuted = true</script> Review this suggestion.', suggestions: ['Verify the description.'], description: 'A fictional program <img src=x onerror=alert(1)>.' } } : {
+                enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: options.tasks || ['description', ...(definition.description ? ['rewrite', 'expand'] : [])], revision: 'b'.repeat(64), saved_revision: 'a'.repeat(64),
+                draft: { kind: 'academic_program', code: definition.code, title: definition.title, description: definition.description, classifications: Object.fromEntries(Object.entries(definition.classifications).map(([kind, row]) => [kind, row ? { code: row.code, title: row.title } : null])) },
+            };
         } else if (path.startsWith('/sis/catalog/classifications/')) {
             result = { items: rows.filter(row => row.kind === path.split('/')[4] && `${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())), next_after: null };
         } else if (path === '/sis/academic-years/') result = { items: [{ id: id(2), code: '2024-2025' }].filter(year => year.code.includes(data.search)), next_after: null };
@@ -106,4 +115,64 @@ test('choosers and publication history preserve unsaved program text without sav
     await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('A private draft in page memory.');
     expect(f.calls.filter(call => call.path.endsWith('/details/') || call.path.endsWith('/publication/commit/'))).toHaveLength(0);
     expect(f.errors).toEqual([]);
+});
+
+
+test('program assistance requires consent, renders plain text and needs explicit copy and save', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Optional program assistance' })).toBeFocused();
+    await page.getByText('Inspect exactly what will be sent', { exact: true }).click();
+    await expect(page.locator('#drawer-body pre')).toContainText('academic_program');
+    await page.getByRole('button', { name: 'Suggest a program description', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toHaveLength(0);
+    await accessible(page);
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Suggest a program description', exact: true }).click();
+    await expect(page.getByText('Suggestions received. No text has been saved or published.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox')).not.toBeChecked();
+    await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('');
+    expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toEqual([{ path: `/sis/programs/${id(1)}/assistance/`, csrf: 'fictional-test-token', data: { task: 'description', consent: true, revision: 'b'.repeat(64) } }]);
+    expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(0);
+    expect(await page.evaluate(() => window.programAiExecuted)).toBeUndefined();
+    expect(await page.locator('#drawer-body script, #drawer-body img').count()).toBe(0);
+    await page.getByRole('button', { name: 'Use suggested description in this editor', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('A fictional program <img src=x onerror=alert(1)>.');
+    await expect(page.getByRole('button', { name: 'Publish for an academic year', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(1);
+    expect(f.calls.filter(call => call.path.endsWith('/publication/commit/'))).toHaveLength(0);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('program assistance protects unsaved edits and offers only granted text actions', async ({ page }) => {
+    const f = await fixture(page, { description: 'Saved fictional program.', tasks: ['rewrite'], editWhileRunning: true });
+    await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Suggest a program description', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Expand description', exact: true })).toHaveCount(0);
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Rewrite description', exact: true }).click();
+    await page.getByRole('button', { name: 'Use suggested description in this editor', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('My later edit');
+    await expect(page.getByRole('alert').filter({ hasText: 'Your program has changed' })).toBeVisible();
+    expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('disabled and failed program assistance leave editing available with fresh consent', async ({ page }) => {
+    for (const options of [{ assistanceDisabled: true }, { assistanceFailure: true }]) {
+        const f = await fixture(page, options);
+        await page.getByRole('button', { name: 'Optional AI help', exact: true }).click();
+        if (options.assistanceFailure) {
+            await page.getByRole('checkbox').check();
+            await page.getByRole('button', { name: 'Suggest a program description', exact: true }).click();
+            await expect(page.getByRole('alert').filter({ hasText: 'rejected authentication' })).toBeVisible();
+            await expect(page.getByRole('checkbox')).not.toBeChecked();
+        } else await expect(page.locator('#drawer-body')).toContainText('Optional assistance is disabled');
+        await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('Staff can still edit.');
+        await expect(page.getByRole('button', { name: 'Save program details', exact: true })).toBeEnabled();
+        expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(0);
+        expect(f.errors).toEqual([]);
+    }
 });

@@ -2,7 +2,11 @@
 window.createWorkspacePrograms = function (ui) {
     "use strict";
     const { node, request, task, buildForm, formData, openDrawer } = ui;
-    const categories = { department: "Department", academic_level: "Academic level", award: "Award" };
+    const categories = {
+        department: "Department",
+        academic_level: "Academic level",
+        award: "Award",
+    };
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -41,7 +45,10 @@ window.createWorkspacePrograms = function (ui) {
 
     async function open(id, notice = false) {
         const current = await request(`/sis/programs/${id}/details/`);
-        const draft = { ...current.definition, classifications: { ...current.definition.classifications } };
+        const draft = {
+            ...current.definition,
+            classifications: { ...current.definition.classifications },
+        };
         async function render() {
             const body = openDrawer(
                 "Program details",
@@ -61,6 +68,7 @@ window.createWorkspacePrograms = function (ui) {
             ];
             const form = await buildForm(fields, draft);
             form.elements.namedItem("code").maxLength = 80;
+            form.elements.namedItem("description").maxLength = 10000;
             const cards = node("div", { class: "row g-3 mb-3" });
             const capture = () =>
                 Object.assign(draft, formData(form, fields), {
@@ -147,6 +155,159 @@ window.createWorkspacePrograms = function (ui) {
                     return history(id, render);
                 }),
             );
+            let assistantPanel = null;
+            body.append(
+                button("Optional AI help", async () => {
+                    capture();
+                    const unchanged = () => {
+                        capture();
+                        return JSON.stringify(draft) === JSON.stringify(current.definition);
+                    };
+                    if (!unchanged())
+                        throw new Error("Save your program changes before reviewing optional assistance.");
+                    const preview = await request(`/sis/programs/${id}/assistance/`);
+                    if (!body.isConnected) return;
+                    if (assistantPanel) assistantPanel.remove();
+                    const heading = node("h3", { tabindex: "-1" }, "Optional program assistance");
+                    assistantPanel = node(
+                        "section",
+                        {
+                            class: "record-section",
+                            "aria-label": "Optional program assistance",
+                        },
+                        heading,
+                    );
+                    body.append(assistantPanel);
+                    heading.focus();
+                    if (!preview.enabled || !preview.tasks.length) {
+                        assistantPanel.append(
+                            node(
+                                "p",
+                                { role: "status" },
+                                "Optional assistance is disabled or no action is assigned to your account. Normal editing remains available.",
+                            ),
+                        );
+                        return;
+                    }
+                    if (preview.saved_revision !== current.revision || !unchanged()) {
+                        throw new Error(
+                            "The saved program changed. Reload this editor before requesting assistance.",
+                        );
+                    }
+                    const consent = node("input", {
+                        type: "checkbox",
+                        id: "program-assistance-consent",
+                        class: "form-check-input",
+                        required: true,
+                    });
+                    const results = node("div", { "aria-live": "polite" });
+                    const progress = node("p", { role: "status", class: "form-text" });
+                    const run = async (action) => {
+                        if (!consent.reportValidity()) return;
+                        if (!unchanged())
+                            throw new Error(
+                                "Your program changed. Save it and inspect a fresh preview before requesting assistance.",
+                            );
+                        controls.disabled = true;
+                        consent.checked = false;
+                        results.replaceChildren();
+                        progress.textContent = "Requesting suggestions… Your draft is not being changed.";
+                        try {
+                            const response = await request(`/sis/programs/${id}/assistance/`, "POST", {
+                                task: action,
+                                consent: true,
+                                revision: preview.revision,
+                            });
+                            if (!results.isConnected) return;
+                            const suggestions = node("ul");
+                            response.advice.suggestions.forEach((value) =>
+                                suggestions.append(node("li", {}, value)),
+                            );
+                            results.append(
+                                node("h4", {}, "Suggestions to review"),
+                                node("p", {}, response.advice.summary),
+                                suggestions,
+                            );
+                            if (response.advice.description) {
+                                results.append(
+                                    node(
+                                        "p",
+                                        { class: "course-description-text" },
+                                        response.advice.description,
+                                    ),
+                                    button("Use suggested description in this editor", () => {
+                                        if (!unchanged())
+                                            throw new Error(
+                                                "Your program has changed. Review it before replacing any text.",
+                                            );
+                                        const description = form.elements.namedItem("description");
+                                        description.value = response.advice.description;
+                                        description.dispatchEvent(new Event("input", { bubbles: true }));
+                                        description.focus();
+                                        progress.textContent =
+                                            "Suggestion copied into the editor. Review it and use Save program details when ready; publication is a separate decision.";
+                                    }),
+                                );
+                            }
+                            progress.textContent =
+                                "Suggestions received. No text has been saved or published.";
+                        } finally {
+                            controls.disabled = false;
+                            if (!results.childNodes.length)
+                                progress.textContent =
+                                    "No suggestion was applied. Normal editing remains available; another request requires fresh consent.";
+                        }
+                    };
+                    const labels = {
+                        description: "Suggest a program description",
+                        rewrite: "Rewrite description",
+                        expand: "Expand description",
+                    };
+                    const controls = node(
+                        "fieldset",
+                        { class: "border-0 p-0" },
+                        node("legend", { class: "h5" }, "Consent for one request"),
+                        node(
+                            "div",
+                            { class: "form-check mb-3" },
+                            consent,
+                            node(
+                                "label",
+                                { for: consent.id, class: "form-check-label" },
+                                `I agree to send the displayed saved program draft to ${preview.label} for this request.`,
+                            ),
+                        ),
+                        ...Object.entries(labels)
+                            .filter(([action]) => preview.tasks.includes(action))
+                            .map(([action, label]) => button(label, () => run(action))),
+                    );
+                    assistantPanel.append(
+                        node(
+                            "p",
+                            {},
+                            `Provider: ${preview.label}. Only the displayed saved program facts will be sent. Inspect free text and remove personal or confidential information before consenting. Suggestions are optional and may be incorrect.`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            "No student records, internal identifiers, publication reasons or histories are selected. Saving and publication require your normal review.",
+                        ),
+                        node(
+                            "details",
+                            {},
+                            node("summary", {}, "Inspect exactly what will be sent"),
+                            node(
+                                "pre",
+                                { class: "text-wrap text-break" },
+                                JSON.stringify(preview.draft, null, 2),
+                            ),
+                        ),
+                        controls,
+                        progress,
+                        results,
+                    );
+                }),
+            );
         }
         await render();
     }
@@ -211,7 +372,10 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function years(id, draft, search = "", after = null, stack = []) {
-        const data = await request("/sis/academic-years/", "POST", { search, ...(after ? { after } : {}) });
+        const data = await request("/sis/academic-years/", "POST", {
+            search,
+            ...(after ? { after } : {}),
+        });
         const body = openDrawer("Choose program academic year", "EXISTING ACADEMIC YEARS");
         body.append(
             node(

@@ -78,6 +78,9 @@ final readonly class DegreeAssistanceService
             if ($advice->description !== null) {
                 throw new AssistanceUnavailableException();
             }
+        } catch (AssistanceUnavailableException $exception) {
+            $this->actor($actor);
+            throw $exception;
         } catch (Throwable) {
             $this->actor($actor);
             throw new AssistanceUnavailableException();

@@ -101,7 +101,7 @@ test('course offerings stay drafts until a separately reviewed publication and c
     await page.getByRole('combobox', { name: /^Offering term/ }).selectOption(f.term);
     await page.getByRole('button', { name: 'Choose sections', exact: true }).click();
     await page.getByRole('combobox', { name: /^Course/ }).selectOption(f.course);
-    await page.getByLabel('Section code').fill('MATH.101.26FA.A');
+    await page.locator('#drawer-body').getByLabel('Section code').fill('MATH.101.26FA.A');
     await page.getByLabel('Section fee').fill('125.50');
     await page.getByLabel('Delivery mode', { exact: false }).selectOption('online');
     await page.getByLabel('Enable self-registration when published').check();

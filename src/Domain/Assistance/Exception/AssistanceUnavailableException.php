@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Domain\Assistance\Exception;
 
+use Domain\Assistance\ValueObject\AssistanceFailure;
+
 final class AssistanceUnavailableException extends \DomainException
 {
-    public function __construct()
+    public function __construct(public readonly AssistanceFailure $failure = AssistanceFailure::Unavailable)
     {
-        parent::__construct(
-            "Optional assistance is unavailable. Your draft is unchanged; continue editing or try again later.",
-        );
+        parent::__construct($failure->message());
     }
 }

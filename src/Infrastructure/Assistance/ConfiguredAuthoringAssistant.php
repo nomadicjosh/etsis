@@ -7,6 +7,7 @@ namespace Infrastructure\Assistance;
 use Domain\Assistance\Exception\AssistanceUnavailableException;
 use Domain\Assistance\Service\AuthoringAssistant;
 use Domain\Assistance\ValueObject\AuthoringAdvice;
+use Domain\Assistance\ValueObject\AssistanceFailure;
 use Domain\Assistance\ValueObject\AuthoringTask;
 use GuzzleHttp\Client;
 use Qubus\Config\ConfigContainer;
@@ -48,7 +49,11 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
         try {
             $fingerprint = hash("sha256", json_encode($settings, JSON_THROW_ON_ERROR));
         } catch (Throwable) {
-            return ["enabled" => false, "label" => $label, "fingerprint" => hash("sha256", "unavailable")];
+            return [
+                "enabled" => false,
+                "label" => $label,
+                "fingerprint" => hash("sha256", "unavailable"),
+            ];
         }
         return [
             "enabled" =>
@@ -82,7 +87,7 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                 !in_array($auth, ["bearer", "api-key", "none"], true) ||
                 ($auth !== "none" && $key === "")
             ) {
-                throw new AssistanceUnavailableException();
+                throw new AssistanceUnavailableException(AssistanceFailure::Configuration);
             }
             $url = parse_url($base);
             if (
@@ -98,13 +103,19 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                         $this->config->getConfigKey("assistance.allow_http", false) === true
                     ))
             ) {
-                throw new AssistanceUnavailableException();
+                throw new AssistanceUnavailableException(AssistanceFailure::Configuration);
+            }
+            if (strtolower($url["host"]) === "api.openai.com" && $auth !== "bearer") {
+                throw new AssistanceUnavailableException(AssistanceFailure::Configuration);
             }
             $schema = [
                 "type" => "object",
                 "properties" => [
                     "summary" => ["type" => "string"],
-                    "suggestions" => ["type" => "array", "items" => ["type" => "string"]],
+                    "suggestions" => [
+                        "type" => "array",
+                        "items" => ["type" => "string"],
+                    ],
                     "description" => ["type" => ["string", "null"]],
                 ],
                 "required" => ["summary", "suggestions", "description"],
@@ -163,7 +174,11 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                 ["role" => "system", "content" => $instructions],
                 ["role" => "user", "content" => $data],
             ];
-            $format = ["name" => "course_authoring_advice", "strict" => true, "schema" => $schema];
+            $format = [
+                "name" => "course_authoring_advice",
+                "strict" => true,
+                "schema" => $schema,
+            ];
             $body = ["model" => $model, "store" => false];
             if ($protocol === "responses") {
                 $body += [
@@ -175,10 +190,16 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                 $body += [
                     "messages" => $messages,
                     "max_completion_tokens" => 2000,
-                    "response_format" => ["type" => "json_schema", "json_schema" => $format],
+                    "response_format" => [
+                        "type" => "json_schema",
+                        "json_schema" => $format,
+                    ],
                 ];
             }
-            $headers = ["Accept" => "application/json", "Content-Type" => "application/json"];
+            $headers = [
+                "Accept" => "application/json",
+                "Content-Type" => "application/json",
+            ];
             if ($auth !== "none") {
                 $headers[$auth === "bearer" ? "Authorization" : "api-key"] =
                 $auth === "bearer" ? "Bearer " . $key : $key;
@@ -203,7 +224,14 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
             );
             if ($response->getStatusCode() !== 200) {
                 $response->getBody()->close();
-                throw new AssistanceUnavailableException();
+                throw new AssistanceUnavailableException(
+                    match ($response->getStatusCode()) {
+                        401, 403 => AssistanceFailure::Authentication,
+                        429 => AssistanceFailure::Capacity,
+                        400, 404, 405, 422 => AssistanceFailure::RequestRejected,
+                        default => AssistanceFailure::Unavailable,
+                    },
+                );
             }
             $stream = $response->getBody();
             try {
@@ -246,6 +274,8 @@ final readonly class ConfiguredAuthoringAssistant implements AuthoringAssistant
                 throw new AssistanceUnavailableException();
             }
             return $result;
+        } catch (AssistanceUnavailableException $exception) {
+            throw $exception;
         } catch (Throwable) {
             // Never retain upstream messages, bodies, request options or previous exception chains.
             throw new AssistanceUnavailableException();

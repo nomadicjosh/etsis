@@ -166,6 +166,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] Keep network calls outside transactions; validate bounded structured results, recheck draft/provider/actor changes, and require staff to copy/save/publish explicitly. Use an isolated client without framework HTTP debug hooks.
 - [ ] Verify institution-selected OpenAI/Azure/local deployments and approved no-training/retention terms before enabling a real service.
 - [x] Add saved-description rewrite and expansion, independent action grants, source-text validation and explicit copying that protects later staff edits.
+- [x] Add program-description generation, rewriting and expansion in the existing program details editor, with independent action grants, minimized saved previews, explicit consent and copy/save/publication controls.
 - [x] Add optional saved-section readiness with a minimized preview, independent action permission, fresh consent, stale-source checks and no automatic publication changes. Unsaved dates/reasons remain outside this review.
 - [x] Add optional saved-degree setup readiness for minimums, institutional policy selections and group-publication selections, with independent permission, exact preview and no student data. Group-content/coverage analysis remains outside this first review.
 - [x] Add local next-step guidance to the captured degree-progress review, with no provider calls, extra record reads or academic mutations. External AI data sharing remains separate.
