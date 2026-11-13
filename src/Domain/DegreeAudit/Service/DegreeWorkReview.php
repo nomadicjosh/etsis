@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\ValueObject\PolicyAttempt;
+use Domain\DegreeAudit\ValueObject\AcademicWorkEvidence;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use InvalidArgumentException;
 
@@ -70,13 +71,13 @@ final readonly class DegreeWorkReview
             if ($state === "completed" && $placement === "not_used") {
                 $unused++;
             }
-            $records[$id] = [
+            $records[$id] = AcademicWorkEvidence::fromAttempt($a) + [
                 "academic_state" => $state,
                 "placement" => $placement,
                 "uses" => $uses,
                 "attempted_milli" => $a->attemptedMilli,
                 "term_id" => $item["term_id"],
-                "term_code" => $item["term_code"],
+                "term_code" => $item["term_label_retained"] ? $item["term_code"] : null,
                 "term_label_retained" => $item["term_label_retained"],
             ];
         }

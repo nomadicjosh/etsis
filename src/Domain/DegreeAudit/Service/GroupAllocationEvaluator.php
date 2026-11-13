@@ -6,6 +6,7 @@ namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
+use Domain\DegreeAudit\ValueObject\AcademicWorkEvidence;
 use Domain\DegreeAudit\ValueObject\AuditCalculationPolicy;
 use Domain\DegreeAudit\ValueObject\CourseGroupReuse;
 use Domain\DegreeAudit\ValueObject\PolicyAttempt;
@@ -43,8 +44,13 @@ final readonly class GroupAllocationEvaluator
         if (count($work) > 200) {
             throw new AllocationBudgetExhaustedException();
         }
+        $observed = [];
         foreach ($work as $item) {
-            PolicyAttempt::fromAcademicWork($item);
+            $attempt = PolicyAttempt::fromAcademicWork($item);
+            if (isset($observed[$attempt->id->value])) {
+                throw new CorruptHistoryException();
+            }
+            $observed[$attempt->id->value] = AcademicWorkEvidence::fromAttempt($attempt);
         }
         $labels = [];
         $namedMemberships = [];
@@ -134,10 +140,13 @@ final readonly class GroupAllocationEvaluator
         $items = $this->matches->allocation($work, $requirements, $effective);
         foreach ($items as $item) {
             $id = $item["id"];
-            $records[$id] = [
+            $records[$id] = $observed[$id] + [
                 "id" => $id,
                 "course_code" => $item["course_code"],
                 "course_title" => $item["course_title"],
+                "term_code" => ($item['term_label_retained'] ?? false) ? ($item['term_code'] ?? null) : null,
+                "term_label_retained" => $item['term_label_retained'] ?? false,
+                "attempted_milli" => $item['attempted_milli'],
                 "statuses" => [],
                 "uses" => [],
                 "preferred_group_id" => $effective["placements"][$item["course_id"]]["group_id"] ?? null,

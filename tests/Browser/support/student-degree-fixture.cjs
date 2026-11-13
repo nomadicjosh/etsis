@@ -483,6 +483,19 @@ async function fixture(page, options = {}) {
                 },
             };
         }
+        if (options.allocationEvidence) {
+            result.records.forEach((record, i) => Object.assign(record, {
+                grade_state: 'retained', credit_type: i === 1 ? 'transfer' : 'institutional',
+                retained_grade: {code: i === 1 ? 'B <b>fictional</b>' : 'A', points_milli:i === 1 ? 3000 : 4000, grading_publication_retained:i !== 1},
+                recorded_earned_milli: 3000, completed_on: i === 0 ? '2026-12-15' : null,
+                term_code:i === 1 ? 'CURRENT.UNRETAINED' : '26/FA', term_label_retained:i !== 1,
+            }));
+            if (options.allocationEvidence === 'pool') {
+                const g = result.groups[0];
+                const p = {...g.placements[0], credits_milli:63000, work_options:[result.records.map(r=>r.id)]};
+                g.placements = [p];
+            }
+        }
         return result;
     }
     await page.route("**/sis/**", async (route) => {
@@ -656,6 +669,12 @@ async function fixture(page, options = {}) {
                         : [],
                     records: allocation.records.map((r, index) => ({
                         id: r.id,
+                        ...(options.allocationEvidence ? {
+                            grade_state: options.progressWorkMix && index===18 ? 'unknown' : options.progressWorkMix && index===19 ? 'awaiting_grade' : r.grade_state,
+                            retained_grade: options.progressWorkMix && [18,19].includes(index) ? null : r.retained_grade,
+                            credit_type:r.credit_type,recorded_earned_milli:options.progressWorkMix && [18,19].includes(index)?0:r.recorded_earned_milli,
+                            completed_on:r.completed_on,
+                        } : {}),
                         course_code: r.course_code,
                         course_title: r.course_title,
                         credit:

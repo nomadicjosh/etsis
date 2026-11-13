@@ -2839,6 +2839,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     { class: "audit-card" },
                     node("h2", {}, `${record.course_code} · ${record.course_title}`),
                     node("p", {}, degreeWorkStates[record.academic_state]),
+                    node("p", {}, window.degreeProgressGradeText(record, text)),
+                    ...(record.recorded_earned_milli == null ? [] : [node("p", {}, `${text(record.recorded_earned_milli)} recorded earned credits before overall repeat-policy treatment.`)]),
                     node(
                         "p",
                         {},
@@ -3355,6 +3357,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         body.append(rulePages, node("h2", {}, "Proposed placements"));
         const cards = node("div", { class: "audit-library-grid" });
+        const records = new Map(data.records.map(record => [record.id, record]));
         for (const p of group.placements.slice(offset, offset + 20)) {
             const article = node(
                 "article",
@@ -3374,6 +3377,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         : `${p.work_options[0].length} eligible award${p.work_options[0].length === 1 ? "" : "s"} support this placement.`,
                 ),
             );
+            article.append(window.createDegreeProgressEvidence(
+                { node, button, milli: text }, p.work_options, id => records.get(id),
+            ));
             if (p.rule_credits_milli) {
                 const contributions = node("details", {}, node("summary", {}, "Requirement contributions"));
                 let loaded = false;

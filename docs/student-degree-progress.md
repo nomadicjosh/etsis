@@ -70,6 +70,14 @@ Known ungraded attempts remain distinct from recorded grades whose retained defi
 
 The workspace retains keyboard access, pressed-state filter labels, focus after filter/term changes, narrow-screen reflow and escaped course/group labels. No work is stored in browser storage or used to authorize a later academic mutation.
 
+## Recorded grades and supporting coursework
+
+The contribution review now includes each accepted record's grade code, per-course grade points and recorded earned-credit amount, separately from overall credit/GPA treatment. Unknown definitions and pending institutional grades stay distinct; known zero-point grades do not become unknown. Unretained posting-term labels are withheld instead of borrowed from today's calendar. No grading maximum or completion date is guessed.
+
+Within **Inspect course-group placement**, each proposed placement has a [Supporting coursework](student-course-placement.md#supporting-coursework) drilldown with its recorded grades, terms, source and completion-date evidence. The owner portal offers the same view under **Course-group details**, and its work table includes recorded grades and award credits. Tied alternatives remain separate choices for inspection; multi-award pools retain their own twenty-record pages. These inspections perform no new read/replay, policy calculation or write. Temporary draft/published audit tests reuse the same evidence.
+
+Portal evidence links use only positions in that response's curated work array. They are neither database identities nor inputs accepted by any command, and they are never persisted. Mapping rejects missing/duplicate records, invalid evidence options and more than 20,000 supporting references over at most 200 work records. Grade/scale IDs, raw work/stream IDs, reasons, actors and raw rule expressions remain private. Ownership is checked before and after the canonical read; staff use their existing authorized workspace. Earlier captured reviews remain unchanged when a fresh review includes a later grade correction. Issued documents and authoritative history are unaffected.
+
 ## Applied requirement checklist
 
 When course-group placement is complete, **Inspect course-group placement → Inspect group …** shows [actual group quantities and per-card coverage](student-course-placement.md#applied-requirement-checklist). Card totals use only their eligible awards, not the whole group's credit total. Overlapping cards and shared groups do not create extra earned credits or GPA. Waived course obligations remain separate from actual completed work. Unknown or incomplete plans display no applied checklist or substituted zeros.

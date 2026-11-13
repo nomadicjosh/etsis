@@ -266,3 +266,137 @@ window.degreeProgressCalculationReasons = Object.freeze({
     undetermined: "The complete total cannot be established",
     eligible: "Eligible for review",
 });
+
+/* Shared presentation of captured evidence; no reads, calculations, storage or academic decisions. */
+window.degreeProgressGradeText = function (record, milli) {
+    if (record?.grade_state === "retained" && record.retained_grade) {
+        const grade = record.retained_grade;
+        return `Recorded grade: ${grade.code} · ${milli(grade.points_milli)} grade points${grade.grading_publication_retained ? "" : " · Grading publication not retained"}`;
+    }
+    return record?.grade_state === "awaiting_grade" ? "Awaiting a final grade" : "Grade evidence unavailable";
+};
+
+window.createDegreeProgressEvidence = function (ui, options, resolve) {
+    const { node, button, milli } = ui;
+    if (!options?.length) return null;
+    const detail = node("details", { class: "my-2" }, node("summary", { class: "py-2" }, "Supporting coursework"));
+    let loaded = false;
+    detail.addEventListener("toggle", () => {
+        if (!detail.open || loaded) return;
+        loaded = true;
+        const content = node("div");
+        detail.append(
+            node(
+                "p",
+                {},
+                options.length > 1
+                    ? "These are equally eligible earned-credit evidence alternatives for this placement. No overall GPA or residency winner is selected here."
+                    : "These recorded awards support the proposed placement under the retained repeat-credit policy. Recorded credit is not necessarily applied to every requirement card.",
+            ),
+            content,
+        );
+        function show(alternative = 0, offset = 0, focus = false) {
+            content.replaceChildren();
+            const rows = options[alternative];
+            const status = node(
+                "p",
+                { role: "status", tabindex: "-1" },
+                `${options.length > 1 ? `Evidence alternative ${alternative + 1} of ${options.length} · ` : ""}Showing supporting records ${offset + 1}–${Math.min(offset + 20, rows.length)} of ${rows.length}.`,
+            );
+            const table = node(
+                "table",
+                { class: "table table-striped align-middle" },
+                node("caption", {}, "Retained course records supporting this proposed placement"),
+                node(
+                    "thead",
+                    {},
+                    node(
+                        "tr",
+                        {},
+                        ...[
+                            "Course",
+                            "Posting term",
+                            "Source",
+                            "Recorded grade",
+                            "Recorded earned credits",
+                            "Completion date",
+                        ].map((label) => node("th", { scope: "col" }, label)),
+                    ),
+                ),
+            );
+            const body = node("tbody");
+            for (const reference of rows.slice(offset, offset + 20)) {
+                const record = resolve(reference);
+                if (!record) {
+                    body.append(
+                        node(
+                            "tr",
+                            {},
+                            node(
+                                "td",
+                                { colspan: "6" },
+                                "Supporting record unavailable. Ask the registrar to review this record.",
+                            ),
+                        ),
+                    );
+                    continue;
+                }
+                body.append(
+                    node(
+                        "tr",
+                        {},
+                        ...[
+                            `${record.course_code} · ${record.course_title}`,
+                            record.term_label_retained && record.term_code
+                                ? record.term_code
+                                : "Posting term label not retained",
+                            record.credit_type === "institutional"
+                                ? "Institutional"
+                                : record.credit_type === "transfer"
+                                  ? "Transfer"
+                                  : "Source not retained",
+                            window.degreeProgressGradeText(record, milli),
+                            record.recorded_earned_milli == null
+                                ? "Unavailable"
+                                : milli(record.recorded_earned_milli),
+                            record.completed_on || "Not recorded",
+                        ].map((value) => node("td", {}, value)),
+                    ),
+                );
+            }
+            table.append(body);
+            const controls = node("div", { class: "d-flex flex-wrap gap-2 mb-3" });
+            if (alternative > 0)
+                controls.append(
+                    button("Previous evidence alternative", () => show(alternative - 1, 0, true)),
+                );
+            if (alternative + 1 < options.length)
+                controls.append(button("Next evidence alternative", () => show(alternative + 1, 0, true)));
+            if (offset > 0)
+                controls.append(
+                    button("Previous supporting records", () => show(alternative, offset - 20, true)),
+                );
+            if (offset + 20 < rows.length)
+                controls.append(
+                    button("More supporting records", () => show(alternative, offset + 20, true)),
+                );
+            content.append(
+                status,
+                node(
+                    "div",
+                    {
+                        class: "table-responsive",
+                        tabindex: "0",
+                        role: "region",
+                        "aria-label": "Supporting coursework table",
+                    },
+                    table,
+                ),
+                controls,
+            );
+            if (focus) status.focus();
+        }
+        show();
+    });
+    return detail;
+};

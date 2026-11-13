@@ -31,6 +31,16 @@ async function fixture(page,options={}) {
                 records:Array.from({length:21},(_,index)=>({course_code:index===20?'LAST.101':'MATH.101',course_title:'Retained work <b>fictional</b>',term_code:'26/FA',term_label_retained:true,academic_state:index===0?'awaiting_grade':'completed',placement:'not_used',credit:'included',cumulative_gpa:'included',overall_gpa:'undetermined'})),
             };
         } else throw new Error(`Unexpected private request ${path}`);
+        if (options.evidence && data.allocation) {
+            data.records.forEach((record,i)=>Object.assign(record,{
+                credit_type:i===1?'transfer':'institutional',grade_state:'retained',recorded_earned_milli:3000,
+                retained_grade:{code:i===1?'B <b>fictional</b>':'A',points_milli:i===1?3000:4000,grading_publication_retained:i!==1},
+                completed_on:i===0?'2026-12-15':null,academic_state:'completed',
+                term_code:i===1?'CURRENT.UNRETAINED':'26/FA',term_label_retained:i!==1,
+            }));
+            data.allocation.groups[0].placements[0].evidence_options=options.evidence==='pool'
+                ? [data.records.map((_,i)=>i)] : [[0],[1]];
+        }
         if (options.coverage && data.allocation) {
             const group = data.allocation.groups[0];
             group.required_credits_milli = 3000;
@@ -173,3 +183,45 @@ test("student requirement checklist is private, lazy, locally paged and keyboard
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
+
+
+for (const mode of ["ties", "pool"])
+    test(`portal inspects ${mode} supporting evidence from one private captured review`, async ({ page }) => {
+        const f = await fixture(page, { evidence: mode });
+        await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+        await page.locator("summary").filter({ hasText: "Course-group details" }).click();
+        const detail = page
+            .locator("details")
+            .filter({ has: page.locator("summary").filter({ hasText: "Supporting coursework" }) })
+            .last();
+        await expect(detail.getByRole("table")).toHaveCount(0);
+        await detail.locator("summary").filter({ hasText: "Supporting coursework" }).focus();
+        await page.keyboard.press("Enter");
+        const table = detail.getByRole("table", {
+            name: "Retained course records supporting this proposed placement",
+            exact: true,
+        });
+        await expect(table).toContainText("Recorded grade: A · 4 grade points");
+        if (mode === "ties") {
+            await detail.getByRole("button", { name: "Next evidence alternative", exact: true }).click();
+            await expect(detail.getByRole("status")).toBeFocused();
+            await expect(table).toContainText("Recorded grade: B <b>fictional</b> · 3 grade points");
+            await expect(table).toContainText("Grading publication not retained");
+            await expect(table).toContainText("Posting term label not retained");
+            await expect(table).not.toContainText("CURRENT.UNRETAINED");
+            await expect(detail).toContainText("No overall GPA or residency winner is selected");
+        } else {
+            await expect(table.locator("tbody tr")).toHaveCount(20);
+            await detail.getByRole("button", { name: "More supporting records", exact: true }).click();
+            await expect(table.locator("tbody tr")).toHaveCount(1);
+            await expect(table).toContainText("LAST.101");
+        }
+        await page.setViewportSize({ width: 375, height: 812 });
+        await accessible(page);
+        await expect(page.locator("#campus-service-content b, #campus-service-content script")).toHaveCount(
+            0,
+        );
+        expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+        expect(f.errors).toEqual([]);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    });

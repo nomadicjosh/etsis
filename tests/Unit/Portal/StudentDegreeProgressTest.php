@@ -107,6 +107,14 @@ final class StudentDegreeProgressTest extends TestCase
                     "credit" => "included",
                     "overall_gpa" => "undetermined",
                     "cumulative_gpa" => "excluded",
+                    "grade_state" => "retained",
+                    "credit_type" => "institutional",
+                    "recorded_earned_milli" => 3000,
+                    "completed_on" => "2026-12-15",
+                    "retained_grade" => [
+                        "code" => "A", "points_milli" => 4000, "grading_publication_retained" => true,
+                        "id" => $secret, "scale_version_id" => $secret, "reason" => $secret,
+                    ],
                     "uses" => [$secret],
                 ],
             ],
@@ -130,6 +138,10 @@ final class StudentDegreeProgressTest extends TestCase
         self::assertSame(3000, $coverage['applied_credits_milli']);
         self::assertSame(1, $coverage['applied_courses']);
         self::assertSame([0], array_keys($coverage['rules']));
+        self::assertSame([[0]], $data['allocation']['groups'][0]['placements'][0]['evidence_options']);
+        self::assertSame(['code' => 'A', 'points_milli' => 4000, 'grading_publication_retained' => true], $data['records'][0]['retained_grade']);
+        self::assertSame(3000, $data['records'][0]['recorded_earned_milli']);
+        self::assertStringNotContainsString('work_options', json_encode($data));
         self::assertSame(3000, $coverage['rules'][0]['required_credits_milli']);
     }
     public function testIncompletePlacementCannotExposeAProposedPartialPlan(): void
@@ -137,6 +149,38 @@ final class StudentDegreeProgressTest extends TestCase
         $data = new StudentDegreeProgress($this->review("undetermined"))->describe();
         self::assertSame([], $data["allocation"]["groups"][0]["placements"]);
         self::assertNull($data['allocation']['groups'][0]['coverage']);
+    }
+    public function testMissingDuplicateAndUnboundedEvidenceReferencesAreRejected(): void
+    {
+        $cases = [
+            [],
+            [[]],
+            [["foreign-record"]],
+            [["fictional-staff-only-detail", "fictional-staff-only-detail"]],
+        ];
+        foreach ($cases as $options) {
+            $review = $this->review();
+            $review["allocation"]["groups"][0]["placements"][0]["work_options"] = $options;
+            try {
+                new StudentDegreeProgress($review);
+                self::fail("Invalid evidence was presented as retained coursework.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+        $review = $this->review();
+        $record = $review["records"][0];
+        $review["records"] = [];
+        $ids = [];
+        foreach (range(1, 200) as $i) {
+            $ids[] = $id = str_pad((string) $i, 26, "0", STR_PAD_LEFT);
+            $review["records"][] = array_replace($record, ["id" => $id]);
+        }
+        $placement = $review["allocation"]["groups"][0]["placements"][0];
+        $placement["work_options"] = [$ids];
+        $review["allocation"]["groups"][0]["placements"] = array_fill(0, 101, $placement);
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new StudentDegreeProgress($review);
     }
     public function testLimitedResultsCannotExposePartialTotalsOrWork(): void
     {

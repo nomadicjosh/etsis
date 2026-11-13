@@ -796,6 +796,30 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertTrue($result["records"][0]["uses"][0]["alternative"]);
         self::assertTrue($result["records"][1]["uses"][0]["alternative"]);
     }
+    public function testTiedAwardsKeepEachAcceptedGradeAndDoNotBorrowCurrentTermLabels(): void
+    {
+        $r = $this->requirements([self::id(10) => $this->group(10)]);
+        $a = $this->work(1001);
+        $a["grade"]["code"] = "A";
+        $a["term_code"] = "26/FA";
+        $a["term_label_retained"] = true;
+        $b = $this->work(1002, points: 3000, origin: "transfer");
+        $b["grade"]["code"] = "B";
+        $b["term_code"] = "CURRENT.MUTABLE";
+        $b["term_label_retained"] = false;
+        $result = $this->evaluator()->evaluate([$a, $b], $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertCount(2, $result["groups"][0]["placements"][0]["work_options"]);
+        $records = array_column($result["records"], null, "id");
+        self::assertSame("A", $records[$a["id"]]["retained_grade"]["code"]);
+        self::assertSame(4000, $records[$a["id"]]["retained_grade"]["points_milli"]);
+        self::assertSame("B", $records[$b["id"]]["retained_grade"]["code"]);
+        self::assertSame(3000, $records[$b["id"]]["retained_grade"]["points_milli"]);
+        self::assertSame("transfer", $records[$b["id"]]["credit_type"]);
+        self::assertSame("26/FA", $records[$a["id"]]["term_code"]);
+        self::assertNull($records[$b["id"]]["term_code"]);
+        self::assertStringNotContainsString("CURRENT.MUTABLE", json_encode($result));
+    }
     public function testAllEligibleRepeatsRemainOneCourseForCourseCountsAndUseActualAwardAmounts(): void
     {
         $r = $this->requirements([self::id(10) => $this->group(10, count: 2)]);

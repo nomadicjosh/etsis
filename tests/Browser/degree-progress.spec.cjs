@@ -410,3 +410,28 @@ test("guide reflows on narrow screens, preserves inline guidance and clears on r
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test("contribution records distinguish captured grades, pending work and unavailable definitions", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        allocationEvidence: "ties",
+        progressWorkMix: true,
+    });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    await page.getByRole("button", { name: "Inspect credit and GPA contributions", exact: true }).click();
+    const unknown = minimumCard(page, "MATH.18 · Retained work <b>fictional</b>");
+    const pending = minimumCard(page, "MATH.19 · Retained work <b>fictional</b>");
+    await expect(unknown).toContainText("Grade evidence unavailable");
+    await expect(unknown).not.toContainText("Awaiting a final grade");
+    await expect(pending).toContainText("Awaiting a final grade");
+    await expect(pending).not.toContainText("Grade evidence unavailable");
+    await expect(minimumCard(page, "MATH.0 · Retained work <b>fictional</b>")).toContainText(
+        "Recorded grade: A · 4 grade points",
+    );
+    expect(f.calls.filter((c) => c.path === `${f.base}progress/`)).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});

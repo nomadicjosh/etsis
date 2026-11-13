@@ -382,6 +382,13 @@ final class DegreeProgressTest extends TestCase
         $current = $service->preview($f->student, $f->assignment);
         self::assertSame(4000, $original["gpa"]["cumulative"]["milli"]);
         self::assertSame(0, $current["gpa"]["cumulative"]["milli"]);
+        self::assertSame('A', $original['records'][0]['retained_grade']['code']);
+        self::assertSame(4000, $original['records'][0]['retained_grade']['points_milli']);
+        self::assertSame(3000, $original['records'][0]['recorded_earned_milli']);
+        self::assertSame('F', $current['records'][0]['retained_grade']['code']);
+        self::assertSame(0, $current['records'][0]['retained_grade']['points_milli']);
+        self::assertSame(0, $current['records'][0]['recorded_earned_milli']);
+        self::assertTrue($original['records'][0]['retained_grade']['grading_publication_retained']);
         self::assertSame("below_minimum", $current["minimums"][2]["status"]);
     }
     public function testNoGpaDenominatorAndEarlyRemovalCannotBecomeAFakeZeroOrAVisibleRemovedRecord(): void

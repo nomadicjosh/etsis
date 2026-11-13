@@ -144,6 +144,61 @@ final class DegreeWorkReviewTest extends TestCase
         );
     }
 
+    public function testCuratedEvidencePreservesActualGradePointsAndOmitsGradeAndScaleIdentities(): void
+    {
+        $work = $this->work(1);
+        $work["completed_on"] = "2026-12-15";
+        $work["private"] = "fictional-sensitive-source";
+        $evidence = \Domain\DegreeAudit\ValueObject\AcademicWorkEvidence::fromAttempt(
+            \Domain\DegreeAudit\ValueObject\PolicyAttempt::fromAcademicWork($work),
+        );
+        self::assertSame("institutional", $evidence["credit_type"]);
+        self::assertSame("2026-12-15", $evidence["completed_on"]);
+        self::assertSame(3000, $evidence["recorded_earned_milli"]);
+        self::assertSame("retained", $evidence["grade_state"]);
+        self::assertSame(
+            ["code" => "A", "points_milli" => 4000, "grading_publication_retained" => true],
+            $evidence["retained_grade"],
+        );
+        $serialized = json_encode($evidence, JSON_THROW_ON_ERROR);
+        $privateValues = [self::id(400), self::id(401), self::id(402), "fictional-sensitive-source"];
+        foreach ($privateValues as $private) {
+            self::assertStringNotContainsString($private, $serialized);
+        }
+        $work["grade"]["scale_id"] = $work["grade"]["scale_version_id"] = null;
+        $evidence = \Domain\DegreeAudit\ValueObject\AcademicWorkEvidence::fromAttempt(
+            \Domain\DegreeAudit\ValueObject\PolicyAttempt::fromAcademicWork($work),
+        );
+        self::assertFalse($evidence["retained_grade"]["grading_publication_retained"]);
+        self::assertSame(4000, $evidence["retained_grade"]["points_milli"]);
+        self::assertArrayNotHasKey("maximum_milli", $evidence["retained_grade"]);
+    }
+
+    public function testMissingAndZeroGradesKeepDistinctEvidenceWithoutInferringPendingTransferWork(): void
+    {
+        $unknown = array_replace($this->work(2), ["grade" => null]);
+        $unexplained = array_replace($this->pending(3), ["quality_points_milli" => 12000]);
+        $transfer = array_replace($this->pending(4), ["credit_type" => "transfer"]);
+        $drop = array_replace($this->pending(5), ["status" => "W"]);
+        $fail = $this->work(6);
+        $fail["completed_milli"] = $fail["quality_points_milli"] = 0;
+        $fail["grade"] = array_replace($fail["grade"], [
+            "code" => "F",
+            "points_milli" => 0,
+            "passes" => false,
+        ]);
+        $result = new DegreeWorkReview()->review(
+            [$this->pending(1), $unknown, $unexplained, $transfer, $drop, $fail],
+            $this->allocation([], "needs_review"),
+        );
+        self::assertSame(
+            ["awaiting_grade", "unknown", "unknown", "unknown", "unknown", "retained"],
+            array_column($result["records"], "grade_state"),
+        );
+        self::assertSame(0, $result["records"][self::id(6)]["retained_grade"]["points_milli"]);
+        self::assertSame("F", $result["records"][self::id(6)]["retained_grade"]["code"]);
+        self::assertNull($result["records"][self::id(2)]["retained_grade"]);
+    }
     public function testPendingArithmeticLimitRetainsTheCountButNeverReturnsAPartialOrZeroTotal(): void
     {
         $r = new DegreeWorkReview()->review(

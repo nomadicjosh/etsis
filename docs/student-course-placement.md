@@ -16,6 +16,16 @@ A proposed placement shows the actual course, the required-course target, any ap
 
 Approved substitute courses can now have their own [reviewed group preference](student-degree-exceptions.md#course-placement-preferences), selected through the existing substitution approval. The restriction follows the actual course identity across named and saved-rule matches. It does not approve a substitute or restore a revoked approval; passing-grade, publication and repeat gates remain independent. Revocation of the substitution preserves the separate placement decision and its retained labels.
 
+## Supporting coursework
+
+Open **Inspect group … → a proposed placement → Supporting coursework** to see the accepted academic records behind that placement. The table shows actual course labels, the retained local posting term when known, institutional/transfer origin, recorded grade code and per-course grade points, recorded earned credits and the actual completion date when known. Missing grade evidence is **unavailable**, while a verified ungraded institutional attempt is **awaiting a final grade**. A grade with zero recorded points remains a known zero. No current grading default, course title, term label or completion date supplies missing historical evidence.
+
+A known grade without a retained grading publication is labeled explicitly. Earlier-history gaps keep their existing notice; displaying a current accepted grade does not invent an earlier publication or prove archive completeness. Recorded grade points are not an average GPA or an implicit conversion between scales.
+
+Equal-credit repeat alternatives are shown one at a time with **Previous/Next evidence alternative**. The viewer preserves each alternative's own grade, posting term and source; it does not choose an institutional-origin, resident-credit or overall-GPA winner. When several accepted awards contribute together, **More supporting records** pages their twenty-row table. Those rows remain one actual-course placement. Recorded award credits are not necessarily applied to every requirement card and must not be summed as another overall earned-credit total.
+
+Opening, paging and returning reuse the captured review; they trigger no request, replay, recalculation or academic mutation. Wide tables have a labeled keyboard-focusable scroll area, and paging moves focus to the new range. Course/grade labels are escaped. Raw events, grade/scale identities, actors and protected reasons do not enter the evidence view. Refreshing after a correction obtains new accepted facts without changing the previously captured response. This remains a transient explanation rather than a retained audit result or graduation decision.
+
 ## Applied requirement checklist
 
 For a complete supported plan, group cards show **applied credits and distinct courses**, using actual eligible awards. **Inspect group …** shows **Group quantity met in this proposed plan** and a concise checklist on each requirement-card summary. All/choose cards show covered versus required courses; credit cards show the actual credits applied against their own minimum. A pool has no separate card minimum. Open a card to inspect its retained course choices and the applied contribution.

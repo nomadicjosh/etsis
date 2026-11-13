@@ -353,3 +353,68 @@ test("unestablished plans never display supplied coverage as applied work", asyn
     await expect(studio).not.toContainText("Met in proposed plan");
     expect(f.errors).toEqual([]);
 });
+
+
+test("supporting coursework retains each tied grade and source without choosing an overall winner", async ({
+    page,
+}) => {
+    const f = await fixture(page, { assigned: true, readOnly: true, allocationEvidence: "ties" });
+    await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+    await page
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    const card = studio
+        .locator("article.audit-card")
+        .filter({
+            has: page.getByRole("heading", { name: "MATH.0 · Actual course <b>fictional</b>", exact: true }),
+        });
+    await expect(card.getByRole("table")).toHaveCount(0);
+    await card.locator("summary").filter({ hasText: "Supporting coursework" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(card).toContainText("Evidence alternative 1 of 2");
+    await expect(card.getByRole("table")).toContainText("Recorded grade: A · 4 grade points");
+    await expect(card.getByRole("table")).toContainText("2026-12-15");
+    await card.getByRole("button", { name: "Next evidence alternative", exact: true }).click();
+    await expect(card.getByRole("status")).toBeFocused();
+    await expect(card).toContainText("Evidence alternative 2 of 2");
+    await expect(card.getByRole("table")).toContainText(
+        "Recorded grade: B <b>fictional</b> · 3 grade points",
+    );
+    await expect(card.getByRole("table")).toContainText("Grading publication not retained");
+    await expect(card.getByRole("table")).toContainText("Posting term label not retained");
+    await expect(card.getByRole("table")).not.toContainText("CURRENT.UNRETAINED");
+    await expect(card.getByRole("table")).toContainText("Transfer");
+    await expect(studio.locator("b,script")).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test("supporting repeat pools page captured awards without creating more placements or requests", async ({
+    page,
+}) => {
+    const f = await fixture(page, { assigned: true, readOnly: true, allocationEvidence: "pool" });
+    await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+    await page
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await studio.locator("summary").filter({ hasText: "Supporting coursework" }).click();
+    const table = studio.getByRole("table", {
+        name: "Retained course records supporting this proposed placement",
+        exact: true,
+    });
+    await expect(table.locator("tbody tr")).toHaveCount(20);
+    await expect(studio).toContainText("63 actual earned credits · One distinct course");
+    await expect(studio).toContainText("recorded awards support the proposed placement");
+    await studio.getByRole("button", { name: "More supporting records", exact: true }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(1);
+    await expect(table).toContainText("LAST.101");
+    await studio.getByRole("button", { name: "Previous supporting records", exact: true }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(20);
+    expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
