@@ -1263,6 +1263,65 @@
                 "This is a proposed arrangement for supported rules. Equally valid attempts or another plan may differ.",
             ),
         );
+        function groupCoverage(group) {
+            if (data.allocation.outcome !== "feasible" || !group.coverage) return null;
+            const coverage = group.coverage;
+            const box = el("section", { "aria-label": `Applied requirement checklist for ${group.name}` });
+            box.append(
+                el(
+                    "p",
+                    {},
+                    `Group quantity met in this proposed plan: ${milli(coverage.applied_credits_milli)} applied credits · ${coverage.applied_courses} distinct course${coverage.applied_courses === 1 ? "" : "s"}. Group sharing does not create additional earned credit or GPA.`,
+                ),
+            );
+            const detail = el("details", {}, el("summary", {}, "Requirement checklist"));
+            box.append(detail);
+            let loaded = false;
+            detail.addEventListener("toggle", () => {
+                if (!detail.open || loaded) return;
+                loaded = true;
+                const list = el("div");
+                detail.append(list);
+                function show(offset = 0, focus = false) {
+                    list.replaceChildren();
+                    const heading = el("h5", { tabindex: "-1" }, "Requirements in this proposed plan");
+                    list.append(heading);
+                    coverage.rules.slice(offset, offset + 20).forEach((rule, i) => {
+                        const label =
+                            rule.mode === "credits"
+                                ? `Met in proposed plan · ${milli(rule.applied_credits_milli)} of ${milli(rule.required_credits_milli)} required credits applied.`
+                                : rule.mode === "pool"
+                                  ? `Eligible pool · No separate minimum on this card.`
+                                  : `Met in proposed plan · ${rule.covered_courses} of ${rule.required_courses} required courses covered.${rule.waived_courses ? ` ${rule.waived_courses} course requirement${rule.waived_courses === 1 ? "" : "s"} waived; no credit created.` : ""}`;
+                        list.append(
+                            el(
+                                "article",
+                                {},
+                                el("h6", {}, `Requirement ${offset + i + 1}`),
+                                el("p", {}, label),
+                                el(
+                                    "p",
+                                    {},
+                                    `${milli(rule.applied_credits_milli)} applied credits · ${rule.applied_courses} distinct course${rule.applied_courses === 1 ? "" : "s"}. Overlapping cards do not create additional group credit.`,
+                                ),
+                            ),
+                        );
+                    });
+                    const controls = el("div", { class: "d-flex flex-wrap gap-2" });
+                    const pageButton = (label, target) => {
+                        const control = el("button", { type: "button", class: "btn btn-outline-primary" }, label);
+                        control.addEventListener("click", () => show(target, true));
+                        controls.append(control);
+                    };
+                    if (offset > 0) pageButton("Previous checklist requirements", offset - 20);
+                    if (offset + 20 < coverage.rules.length) pageButton("More checklist requirements", offset + 20);
+                    list.append(controls);
+                    if (focus) heading.focus();
+                }
+                show();
+            });
+            return box;
+        }
         data.allocation.groups.forEach((group) =>
             groups.append(
                 el(
@@ -1285,6 +1344,7 @@
                                   `Minimum recorded grade points for each course: ${milli(group.minimum_grade_points_milli)}`,
                               ),
                           ]),
+                    groupCoverage(group),
                     ...(group.placements.length
                         ? [
                               el(

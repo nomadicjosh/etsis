@@ -16,6 +16,16 @@ A proposed placement shows the actual course, the required-course target, any ap
 
 Approved substitute courses can now have their own [reviewed group preference](student-degree-exceptions.md#course-placement-preferences), selected through the existing substitution approval. The restriction follows the actual course identity across named and saved-rule matches. It does not approve a substitute or restore a revoked approval; passing-grade, publication and repeat gates remain independent. Revocation of the substitution preserves the separate placement decision and its retained labels.
 
+## Applied requirement checklist
+
+For a complete supported plan, group cards show **applied credits and distinct courses**, using actual eligible awards. **Inspect group …** shows **Group quantity met in this proposed plan** and a concise checklist on each requirement-card summary. All/choose cards show covered versus required courses; credit cards show the actual credits applied against their own minimum. A pool has no separate card minimum. Open a card to inspect its retained course choices and the applied contribution.
+
+Group quantities and card contributions are different scopes. A three-credit course satisfying two overlapping cards contributes three credits to each eligible card and three credits once to the group. An all-eligible repeat pool may contribute seven group credits while only three satisfy one card and four satisfy another. Several supporting awards still represent one distinct actual course. Shared groups may each use a course under the retained policy; these displays never sum those uses into additional overall earned credit or GPA.
+
+An all-card waiver reduces its required-course obligations without creating applied credit or a completion. Actual eligible work for a waived course can still contribute to group quantity and other cards. Choose and credit minimums remain unchanged unless independently reduced through their supported controls. The checklist distinguishes waivers from actual applied work.
+
+No applied checklist or zero totals are returned for unknown, unsupported, unsuccessful or interrupted plans. Those outcomes retain their existing evidence-bound explanations without a speculative partial placement. The checklist only describes the complete plan already found; it performs no new search, database read, replay or academic write, and does not establish graduation eligibility. It is shared by staff degree progress, temporary draft/published audit tests and the owner's portal progress. Requirement cards retain their existing paging and lazy course lists.
+
 ## Understanding shortfalls
 
 Group cards now identify clear shortages in current eligible work. Choose **Inspect group … → What current work can support** for details:

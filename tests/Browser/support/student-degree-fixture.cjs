@@ -456,6 +456,33 @@ async function fixture(page, options = {}) {
                         shortfall_courses:0,eligible_target_ids:[target,actual],eligible_course_ids:[actual],
                         required_credits_milli:3000,credit_upper_bound_milli:3000,credit_shortfall_milli:0}]};
         }
+        if (options.allocationCoverage) {
+            const g = result.groups[0];
+            g.coverage = {
+                applied_credits_milli: 3000,
+                applied_courses: 1,
+                rules: {
+                    [g.rules[0].id]: {
+                        mode: "all",
+                        applied_courses: 1,
+                        applied_credits_milli: 3000,
+                        covered_courses: 1,
+                        required_courses: 1,
+                        required_credits_milli: null,
+                        waived_courses: 0,
+                    },
+                    [g.rules[1].id]: {
+                        mode: "credits",
+                        applied_courses: 1,
+                        applied_credits_milli: 3000,
+                        covered_courses: 1,
+                        required_courses: null,
+                        required_credits_milli: 3000,
+                        waived_courses: 0,
+                    },
+                },
+            };
+        }
         return result;
     }
     await page.route("**/sis/**", async (route) => {

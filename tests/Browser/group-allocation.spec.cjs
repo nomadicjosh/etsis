@@ -304,3 +304,52 @@ test("an approved substitute supports named and saved-rule cards with one course
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test("a complete plan explains each card without adding overlapping contributions to the group total", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        allocationRuleSubstitution: true,
+        allocationCoverage: true,
+    });
+    await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio).toContainText("3 applied credits · 1 distinct course in this proposed plan");
+    await page
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    await expect(studio).toContainText("Group quantity met in this proposed plan: 3 applied credits");
+    await expect(studio).toContainText("Met in proposed plan · 1 of 1 required courses covered");
+    await expect(studio).toContainText("Met in proposed plan · 3 of 3 required credits applied");
+    await expect(studio).not.toContainText("6 applied credits");
+    await studio.locator("summary").filter({ hasText: "Take 3 matching credits" }).click();
+    await expect(studio).toContainText("Applied to this card: 3 credits · 1 distinct course");
+    await expect(studio).not.toContainText("At most 3 eligible credits");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test("unestablished plans never display supplied coverage as applied work", async ({ page }) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        allocationOutcome: "undetermined",
+        allocationRuleSubstitution: true,
+        allocationCoverage: true,
+    });
+    await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await page
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    await expect(studio).toContainText("No complete placement was established");
+    await expect(studio).not.toContainText("Group quantity met");
+    await expect(studio).not.toContainText("Met in proposed plan");
+    expect(f.errors).toEqual([]);
+});

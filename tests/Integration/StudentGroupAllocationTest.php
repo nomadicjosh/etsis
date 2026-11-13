@@ -82,6 +82,7 @@ final class StudentGroupAllocationTest extends TestCase
                 new CourseAllocationPlanner($steps),
                 new AllocationGapAnalyzer(),
                 new RuleAllocationCompiler(new CourseMatchEvaluator()),
+                new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
             ),
             $students,
             $s->transactions,
@@ -211,7 +212,9 @@ final class StudentGroupAllocationTest extends TestCase
         };
         $service = $this->service($f);
         $before = $state();
-        self::assertSame("infeasible", $service->preview($f->student, $f->assignment)["outcome"]);
+        $incomplete = $service->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $incomplete["outcome"]);
+        self::assertNull($incomplete['groups'][0]['coverage']);
         self::assertSame($before, $state());
         $approvals = $this->adjustments($f);
         $review = $approvals->reviewGrant(
@@ -238,6 +241,13 @@ final class StudentGroupAllocationTest extends TestCase
         $contributions = [$named->value => 3000, $dynamic->value => 3000];
         ksort($contributions, SORT_STRING);
         self::assertSame($contributions, $p["rule_credits_milli"]);
+        $coverage = $result['groups'][0]['coverage'];
+        self::assertSame(3000, $coverage['applied_credits_milli']);
+        self::assertSame(1, $coverage['applied_courses']);
+        self::assertSame([$named->value, $dynamic->value], array_keys($coverage['rules']));
+        self::assertSame(3000, $coverage['rules'][$named->value]['applied_credits_milli']);
+        self::assertSame(3000, $coverage['rules'][$dynamic->value]['applied_credits_milli']);
+        self::assertSame(1, $coverage['rules'][$named->value]['covered_courses']);
         self::assertSame([$replacement["course_id"]], $result["groups"][0]["rules"][1]["course_ids"]);
         self::assertSame(
             [$replacement["course_id"]],

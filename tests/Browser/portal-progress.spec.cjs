@@ -31,6 +31,23 @@ async function fixture(page,options={}) {
                 records:Array.from({length:21},(_,index)=>({course_code:index===20?'LAST.101':'MATH.101',course_title:'Retained work <b>fictional</b>',term_code:'26/FA',term_label_retained:true,academic_state:index===0?'awaiting_grade':'completed',placement:'not_used',credit:'included',cumulative_gpa:'included',overall_gpa:'undetermined'})),
             };
         } else throw new Error(`Unexpected private request ${path}`);
+        if (options.coverage && data.allocation) {
+            const group = data.allocation.groups[0];
+            group.required_credits_milli = 3000;
+            group.coverage = {
+                applied_credits_milli: 3000,
+                applied_courses: 1,
+                rules: Array.from({ length: 21 }, (_, i) => ({
+                    mode: i === 0 ? "all" : "credits",
+                    applied_credits_milli: i === 0 ? 0 : 3000,
+                    applied_courses: i === 0 ? 0 : 1,
+                    required_credits_milli: i === 0 ? null : 3000,
+                    required_courses: i === 0 ? 0 : null,
+                    covered_courses: i === 0 ? 0 : 1,
+                    waived_courses: i === 0 ? 1 : 0,
+                })),
+            };
+        }
         if (path.includes(`/programs/${id(44)}/`) && data.context) data.context.name = 'Second selected program';
         await route.fulfill({json:data,headers:{'Cache-Control':'private, no-store'}});
     });
@@ -118,4 +135,41 @@ test('a slower earlier pursuit response cannot replace the latest selected progr
     await expect(page.getByRole('heading',{name:'B.S. Computing <script>fictional</script> · 2026-2027 · Version 1',exact:true})).toHaveCount(0);
     expect(f.calls.filter(c=>c.path.endsWith('/degree-progress/'))).toHaveLength(2);
     expect(f.errors).toEqual([]);
+});
+
+
+test("student requirement checklist is private, lazy, locally paged and keyboard accessible", async ({
+    page,
+}) => {
+    const f = await fixture(page, { coverage: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    await page.locator("summary").filter({ hasText: "Course-group details" }).click();
+    const group = page.getByRole("region", {
+        name: "Applied requirement checklist for General education <b>fictional</b>",
+        exact: true,
+    });
+    await expect(group).toContainText(
+        "Group quantity met in this proposed plan: 3 applied credits · 1 distinct course",
+    );
+    await expect(group.getByRole("heading", { name: "Requirement 1", exact: true })).toHaveCount(0);
+    await group.locator("summary").filter({ hasText: "Requirement checklist" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(group).toContainText(
+        "0 of 0 required courses covered. 1 course requirement waived; no credit created",
+    );
+    await expect(group).toContainText("3 of 3 required credits applied");
+    await expect(group.getByRole("article")).toHaveCount(20);
+    await expect(group.getByRole("heading", { name: "Requirement 21", exact: true })).toHaveCount(0);
+    await group.getByRole("button", { name: "More checklist requirements", exact: true }).click();
+    await expect(
+        group.getByRole("heading", { name: "Requirements in this proposed plan", exact: true }),
+    ).toBeFocused();
+    await expect(group.getByRole("article")).toHaveCount(1);
+    await expect(group.getByRole("heading", { name: "Requirement 21", exact: true })).toBeVisible();
+    await group.getByRole("button", { name: "Previous checklist requirements", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

@@ -22,6 +22,7 @@ final readonly class GroupAllocationEvaluator
         private CourseAllocationPlanner $planner,
         private AllocationGapAnalyzer $gaps,
         private RuleAllocationCompiler $rules,
+        private AllocationCoverageReview $coverage,
     ) {
     }
 
@@ -90,6 +91,7 @@ final readonly class GroupAllocationEvaluator
                 ),
                 "placements" => [],
                 "gaps" => null,
+                "coverage" => null,
             ];
         }
         if ($issues !== []) {
@@ -231,6 +233,15 @@ final readonly class GroupAllocationEvaluator
             }
             $planned = $this->planner->plan($problem);
             $outcome = $planned->outcome->value;
+            foreach ($this->coverage->review($problem, $planned) as $id => $coverage) {
+                $ordered = [];
+                $retainedRules = $labels[$id]['rules'] ?? throw new CorruptHistoryException();
+                foreach ($retainedRules as $rule) {
+                    $ordered[$rule['id']] = $coverage['rules'][$rule['id']];
+                }
+                $coverage['rules'] = $ordered;
+                $labels[$id]['coverage'] = $coverage;
+            }
             if ($outcome === "infeasible") {
                 $competition = $this->gaps->competition($problem);
             }

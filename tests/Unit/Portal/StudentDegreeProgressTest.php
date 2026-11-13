@@ -69,6 +69,14 @@ final class StudentDegreeProgressTest extends TestCase
                         "name" => "Fictional group",
                         "version_id" => $secret,
                         "rules" => [$secret],
+                        "coverage" => [
+                            "applied_credits_milli" => 3000, "applied_courses" => 1, "reason" => $secret,
+                            "rules" => [$secret => [
+                                "mode" => "credits", "applied_credits_milli" => 3000, "applied_courses" => 1,
+                                "covered_courses" => 1, "required_courses" => null, "required_credits_milli" => 3000,
+                                "waived_courses" => 0, "rule_id" => $secret, "eligibility" => [$secret],
+                            ]],
+                        ],
                         "placements" => [
                             [
                                 "course_id" => $secret,
@@ -118,11 +126,17 @@ final class StudentDegreeProgressTest extends TestCase
             $data["allocation"]["groups"][0]["placements"][0]["course_title"],
         );
         self::assertStringNotContainsString("Fictional Algebra", print_r($view, true));
+        $coverage = $data['allocation']['groups'][0]['coverage'];
+        self::assertSame(3000, $coverage['applied_credits_milli']);
+        self::assertSame(1, $coverage['applied_courses']);
+        self::assertSame([0], array_keys($coverage['rules']));
+        self::assertSame(3000, $coverage['rules'][0]['required_credits_milli']);
     }
     public function testIncompletePlacementCannotExposeAProposedPartialPlan(): void
     {
         $data = new StudentDegreeProgress($this->review("undetermined"))->describe();
         self::assertSame([], $data["allocation"]["groups"][0]["placements"]);
+        self::assertNull($data['allocation']['groups'][0]['coverage']);
     }
     public function testLimitedResultsCannotExposePartialTotalsOrWork(): void
     {

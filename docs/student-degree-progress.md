@@ -70,6 +70,12 @@ Known ungraded attempts remain distinct from recorded grades whose retained defi
 
 The workspace retains keyboard access, pressed-state filter labels, focus after filter/term changes, narrow-screen reflow and escaped course/group labels. No work is stored in browser storage or used to authorize a later academic mutation.
 
+## Applied requirement checklist
+
+When course-group placement is complete, **Inspect course-group placement → Inspect group …** shows [actual group quantities and per-card coverage](student-course-placement.md#applied-requirement-checklist). Card totals use only their eligible awards, not the whole group's credit total. Overlapping cards and shared groups do not create extra earned credits or GPA. Waived course obligations remain separate from actual completed work. Unknown or incomplete plans display no applied checklist or substituted zeros.
+
+The student portal offers the same group quantities and a **Requirement checklist** on demand. Opening it or paging its twenty-item list uses the captured review, with no extra request. Student responses contain numeric coverage and requirement kinds; internal rule/work/course identities, saved predicates, approval reasons and actors remain withheld. The checklist is an explanation of a proposed plan, not a retained audit or graduation decision.
+
 ## Inspecting group placement and refreshing
 
 **Inspect course-group placement** opens the [existing placement review](student-course-placement.md) from this same captured result. Staff can inspect group quantities, retained named-course lists, waivers, approved substitutions, grade floors, repeat/sharing treatment and equivalent evidence alternatives. Returning to degree progress does not rerun the read.

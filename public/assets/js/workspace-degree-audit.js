@@ -3040,7 +3040,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         "p",
                         {},
                         data.outcome === "feasible"
-                            ? `${group.placements.length} proposed course placements`
+                            ? (group.coverage
+                                ? `${text(group.coverage.applied_credits_milli)} applied credits · ${group.coverage.applied_courses} distinct course${group.coverage.applied_courses === 1 ? "" : "s"} in this proposed plan`
+                                : `${group.placements.length} proposed course placements`)
                             : "Placement not established",
                     ),
                     node("p", {}, groupGapSummary(group, data.outcome)),
@@ -3228,6 +3230,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         return section;
     }
+    function ruleCoverageSummary(coverage) {
+        if (coverage.mode === "pool")
+            return `Eligible pool · ${text(coverage.applied_credits_milli)} credits from ${coverage.applied_courses} distinct course${coverage.applied_courses === 1 ? "" : "s"} applied; this card has no separate minimum.`;
+        if (coverage.mode === "credits")
+            return `Met in proposed plan · ${text(coverage.applied_credits_milli)} of ${text(coverage.required_credits_milli)} required credits applied.`;
+        return `Met in proposed plan · ${coverage.covered_courses} of ${coverage.required_courses} required courses covered.${coverage.waived_courses ? ` ${coverage.waived_courses} course requirement${coverage.waived_courses === 1 ? "" : "s"} waived; no credit created.` : ""}`;
+    }
     function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
         const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
         body.append(
@@ -3253,9 +3262,18 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "No complete placement was established. No speculative partial plan is shown.",
                 ),
             );
+        if (data.outcome === "feasible" && group.coverage)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-success", role: "status" },
+                    `Group quantity met in this proposed plan: ${text(group.coverage.applied_credits_milli)} applied credits · ${group.coverage.applied_courses} distinct course${group.coverage.applied_courses === 1 ? "" : "s"}. These group contributions do not add to overall earned credit or GPA.`,
+                ),
+            );
         body.append(groupGapDetails(group, data.outcome), node("h2", {}, "Retained course requirements"));
         for (const rule of group.rules.slice(ruleOffset, ruleOffset + 20)) {
             const gap = group.gaps?.rules.find((r) => r.id === rule.id);
+            const coverage = data.outcome === "feasible" ? group.coverage?.rules[rule.id] : null;
             const detail = node(
                 "details",
                 { class: "audit-tree-section" },
@@ -3267,8 +3285,20 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         : `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} credits from this list` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
                 ),
             );
+            if (coverage) {
+                detail.querySelector("summary").append(
+                    node("span", { class: "d-block audit-status" }, ruleCoverageSummary(coverage)),
+                );
+                detail.append(
+                    node(
+                        "p",
+                        {},
+                        `Applied to this card: ${text(coverage.applied_credits_milli)} credits · ${coverage.applied_courses} distinct course${coverage.applied_courses === 1 ? "" : "s"}. A course can support overlapping cards while counting once in the group.`,
+                    ),
+                );
+            }
             if (rule.eligibility) detail.append(courseRuleTree(rule.eligibility));
-            if (gap && rule.mode === "credits")
+            if (!coverage && gap && rule.mode === "credits")
                 detail.append(
                     node(
                         "p",
@@ -3276,7 +3306,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         `At most ${text(gap.credit_upper_bound_milli)} eligible credits toward this list's ${text(gap.required_credits_milli)}-credit minimum.${gap.credit_shortfall_milli > 0 ? ` At least ${text(gap.credit_shortfall_milli)} more eligible credits from this list are needed.` : " This bound does not establish completion; courses may compete for other requirements."}`,
                     ),
                 );
-            else if (gap && rule.mode !== "pool")
+            else if (!coverage && gap && rule.mode !== "pool")
                 detail.append(
                     node(
                         "p",

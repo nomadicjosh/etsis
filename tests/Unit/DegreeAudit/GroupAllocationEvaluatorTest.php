@@ -662,6 +662,7 @@ final class GroupAllocationEvaluatorTest extends TestCase
             new CourseAllocationPlanner($steps),
             new AllocationGapAnalyzer(),
             new RuleAllocationCompiler(new CourseMatchEvaluator()),
+            new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
         );
     }
     public function testApprovedPreferenceRestrictsTheCourseWithoutBypassingEligibilityOrOtherGroupSharing(): void

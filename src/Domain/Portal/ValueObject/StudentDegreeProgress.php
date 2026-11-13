@@ -68,6 +68,17 @@ final readonly class StudentDegreeProgress
                 "required_courses",
                 "minimum_grade_points_milli",
             ]);
+            $group['coverage'] = null;
+            if ($review['allocation']['outcome'] === 'feasible' && ($value['coverage'] ?? null) !== null) {
+                $group['coverage'] = $pick($value['coverage'], ['applied_credits_milli', 'applied_courses']);
+                $group['coverage']['rules'] = array_values(array_map(
+                    static fn(array $rule): array => $pick($rule, [
+                        'mode', 'applied_courses', 'applied_credits_milli', 'covered_courses',
+                        'required_courses', 'required_credits_milli', 'waived_courses',
+                    ]),
+                    $value['coverage']['rules'],
+                ));
+            }
             $group["placements"] =
             $review["allocation"]["outcome"] !== "feasible"
             ? []

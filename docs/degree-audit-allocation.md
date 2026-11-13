@@ -48,6 +48,14 @@ Diagnostic preparation traverses the existing bounded choices, resources and rul
 
 GPA, residency, specialization exclusions and other constraints outside this input contract are not silently evaluated. Unknown extra group fields are rejected. A future adapter must explicitly refuse unsupported retained requirements, such as an older average group-GPA constraint, rather than drop those fields. Constraints affecting which placement is valid must enter the appropriate evaluator/search; rejecting a student merely because one structural plan fails a later omitted constraint would be incorrect.
 
+## Explaining an established plan
+
+`AllocationCoverageReview` describes only a feasible result against the exact normalized problem that produced it. It verifies selected choices, actual amounts, supporting awards, target uniqueness and sharing before reporting group quantities and per-card credit/course contributions. A missing or incompatible plan cannot be presented as satisfying requirements. The helper uses `AllocationProblem::ruleCredits`, preserving explicit attempt-specific amounts and zero-credit completions. Named all-card waivers reduce obligations without adding awards or credits; choose/credit thresholds retain their separate meaning.
+
+Coverage retains one actual-course contribution per group. Overlapping cards can each receive eligible amounts without inflating that group total. The helper returns no overall earned-credit or GPA total and never ranks tied evidence alternatives again. Infeasible/undetermined results return no coverage; the student adapter also leaves unknown/unsupported outcomes unavailable. This is a bounded explanation pass, not another placement search or database/history read. It aggregates counts and amounts per group/card instead of retaining another matrix of every target's contributions.
+
+The staff checklist keeps the publication's requirement-card order. The portal strips internal identities and raw rule grammar, then shows lazily created, locally paged summaries. Runtime audit tests remain transient. No event, projection, persistent evaluation or graduation decision is added.
+
 ## Resource limits and reproducibility
 
 Input validation bounds a problem to 25 groups, 200 distinct eligible course resources, 100 cards per group, 200 targets per normalized card, 200 distinct targets per group, 5,000 eligible placement choices, 20,000 supporting-work references and 20,000 explicit per-card contributions. Named-course authoring retains its separate 50-course-per-card limit; a dynamic student-derived list can use the larger normalized bound. Pursuit waivers are capped at 5,000 identities. Courses with no eligible choices are excluded from the search after validation. These are engine limits, not permission to truncate a student's history.
