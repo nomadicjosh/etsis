@@ -55,7 +55,11 @@ final readonly class CourseGroupDefinition
             $courses[$course["course_id"]] = true;
         }
         foreach ($definition["rules"] as $rule) {
-            self::keys($rule, ["id", "mode", "minimum_courses", "course_ids"]);
+            $keys = ["id", "mode", "minimum_courses", "course_ids"];
+            if (($rule["mode"] ?? null) === "credits") {
+                $keys[] = "minimum_credits_milli";
+            }
+            self::keys($rule, $keys);
             if (!is_string($rule["id"])) {
                 self::invalid();
             }
@@ -76,10 +80,13 @@ final readonly class CourseGroupDefinition
                 !is_int($rule["minimum_courses"]) ||
                 $rule["minimum_courses"] < 0 ||
                 $rule["minimum_courses"] > count($rule["course_ids"]) ||
-                !in_array($rule["mode"], ["all", "choose", "pool"], true) ||
+                !in_array($rule["mode"], ["all", "choose", "pool", "credits"], true) ||
                 ($rule["mode"] === "all" && $rule["minimum_courses"] !== count($rule["course_ids"])) ||
                 ($rule["mode"] === "choose" && $rule["minimum_courses"] < 1) ||
-                ($rule["mode"] === "pool" && $rule["minimum_courses"] !== 0)
+                (in_array($rule["mode"], ["pool", "credits"], true) && $rule["minimum_courses"] !== 0) ||
+                ($rule["mode"] === "credits" &&
+                    (!is_int($rule["minimum_credits_milli"]) || $rule["minimum_credits_milli"] < 1 ||
+                        $rule["minimum_credits_milli"] > 9999999))
             ) {
                 self::invalid();
             }
@@ -142,7 +149,7 @@ final readonly class CourseGroupDefinition
     private static function invalid(): never
     {
         throw new InvalidArgumentException(
-            "Use a bounded course group with valid published course references and all/choose/credit-pool rules.",
+            "Use a bounded course group with valid published courses and all/choose/credit-minimum/pool rules.",
         );
     }
 }

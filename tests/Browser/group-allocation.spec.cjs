@@ -64,6 +64,32 @@ test("group placement is on demand, explains retained rules and alternatives, an
     expect(f.errors).toEqual([]);
 });
 
+test("credit-list shortages explain their own minimum without inventing a partial placement", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        allocationOutcome: "infeasible",
+        allocationCreditRule: true,
+    });
+    await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await studio
+        .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+        .click();
+    await expect(studio).toContainText("Take 6 credits from this list");
+    const requirement = studio
+        .locator("details")
+        .filter({ has: page.locator("summary").filter({ hasText: "Take 6 credits from this list" }) });
+    await requirement.locator("summary").click();
+    await expect(requirement).toContainText("At most 2 eligible credits toward this list's 6-credit minimum");
+    await expect(requirement).toContainText("At least 4 more eligible credits from this list are needed");
+    await expect(studio).toContainText("No speculative partial plan is shown");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
 for (const outcome of ["infeasible", "needs_review", "unsupported", "undetermined"]) {
     test(`placement ${outcome} stays distinct and never shows a partial plan`, async ({ page }) => {
         const f = await fixture(page, { assigned: true, allocationOutcome: outcome });

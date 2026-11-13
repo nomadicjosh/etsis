@@ -9,7 +9,9 @@ use InvalidArgumentException;
 
 /**
  * Normalized structural constraints, with eligible awards already selected by retained policies.
- * @phpstan-type AllocationRule array{id:string,mode:string,minimum_courses:int,course_ids:list<string>}
+ * @phpstan-type AllocationRule array{
+ *     id:string,mode:string,minimum_courses:int,course_ids:list<string>,minimum_credits_milli?:int
+ * }
  * @phpstan-type AllocationGroup array{id:string,min_credits_milli:int,min_courses:int,rules:list<AllocationRule>}
  * @phpstan-type AllocationChoice array{group_id:string,target_course_id:string,credits_milli:int,work_ids:list<string>}
  * @phpstan-type AllocationCourse array{course_id:string,choices:list<AllocationChoice>}
@@ -61,12 +63,16 @@ final readonly class AllocationProblem
             $targets[$group["id"]] = [];
             $ruleIds = [];
             foreach ($group["rules"] as &$rule) {
-                self::keys($rule, ["id", "mode", "minimum_courses", "course_ids"]);
+                $keys = ["id", "mode", "minimum_courses", "course_ids"];
+                if (array_key_exists("minimum_credits_milli", $rule)) {
+                    $keys[] = "minimum_credits_milli";
+                }
+                self::keys($rule, $keys);
                 self::listing($rule["course_ids"], 50);
                 self::id($rule["id"]);
                 if (
                     isset($ruleIds[$rule["id"]]) ||
-                    !in_array($rule["mode"], ["all", "choose", "pool"], true) ||
+                    !in_array($rule["mode"], ["all", "choose", "pool", "credits"], true) ||
                     count(array_unique($rule["course_ids"])) !== count($rule["course_ids"])
                 ) {
                     self::invalid();
@@ -75,9 +81,17 @@ final readonly class AllocationProblem
                 if (
                     ($rule["mode"] === "all" && $rule["minimum_courses"] !== count($rule["course_ids"])) ||
                     ($rule["mode"] === "choose" && $rule["minimum_courses"] < 1) ||
-                    ($rule["mode"] === "pool" && $rule["minimum_courses"] !== 0)
+                    (in_array($rule["mode"], ["pool", "credits"], true) && $rule["minimum_courses"] !== 0) ||
+                    ($rule["mode"] !== "credits" && array_key_exists("minimum_credits_milli", $rule))
                 ) {
                     self::invalid();
+                }
+                if ($rule["mode"] === "credits") {
+                    $minimum = $rule["minimum_credits_milli"] ?? 0;
+                    self::quantity($minimum, 9999999);
+                    if ($minimum < 1) {
+                        self::invalid();
+                    }
                 }
                 $ruleIds[$rule["id"]] = true;
                 foreach ($rule["course_ids"] as $id) {

@@ -22,6 +22,37 @@ final class CourseGroupQuantityTest extends TestCase
             "grade_scale_program_id" => null,
         ];
     }
+    public function testCreditListThresholdPublishesAndReplaysWithoutChangingEarlierDefinitions(): void
+    {
+        $f = new ReusableGroupFixture();
+        $old = $f->groups->version($f->group, $f->groupVersion);
+        $events = $f->sis->sql->rows("sis_history_events");
+        $d = $this->definition($f);
+        $d["min_course_grade_points_milli"] = null;
+        $d["rules"] = [[
+            "id" => EntityId::generate()->value,
+            "mode" => "credits", "minimum_courses" => 0, "minimum_credits_milli" => 6000,
+            "course_ids" => array_column($d["courses"], "course_id"),
+        ]];
+        $f->groups->save($f->group, 0, new CourseGroupDefinitionV2($d));
+        $version = $f->publishGroup();
+        $published = $f->groups->version($f->group, $version);
+        self::assertSame(2, $published["schema_version"]);
+        self::assertSame(6000, $published["definition"]["rules"][0]["minimum_credits_milli"]);
+        $facts = new \Domain\DegreeAudit\ValueObject\CourseGroupAuthoringFacts(
+            new CourseGroupDefinitionV2($d), $published["course_details"],
+        )->describe();
+        self::assertSame(6000, $facts["rules"][0]["minimum_credits_milli"]);
+        self::assertArrayNotHasKey("course_ids", $facts["rules"][0]);
+        $d["rules"][0]["minimum_credits_milli"] = 3000;
+        $f->groups->save($f->group, 1, new CourseGroupDefinitionV2($d));
+        $f->publishGroup();
+        self::assertSame($published, $f->groups->version($f->group, $version));
+        self::assertSame($old, $f->groups->version($f->group, $f->groupVersion));
+        foreach ($events as $event) {
+            self::assertSame($event, $f->sis->sql->one("sis_history_events", ["id" => $event["id"]]));
+        }
+    }
     public function testCreditsAndCourseCountPublishAsDifferentGroupChoicesWithoutChangingOldVersions(): void
     {
         $f = new ReusableGroupFixture();

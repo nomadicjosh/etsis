@@ -15,6 +15,7 @@ final readonly class AllocationGapAnalyzer
     {
         $resources = [];
         $targets = [];
+        $targetResources = [];
         foreach ($problem->courses as $course) {
             foreach ($course["choices"] as $choice) {
                 $g = $choice["group_id"];
@@ -23,6 +24,7 @@ final readonly class AllocationGapAnalyzer
                 $credits = $choice["credits_milli"];
                 $resources[$g][$c] = max($resources[$g][$c] ?? 0, $credits);
                 $targets[$g][$t] = max($targets[$g][$t] ?? 0, $credits);
+                $targetResources[$g][$t][$c] = max($targetResources[$g][$t][$c] ?? 0, $credits);
             }
         }
         $waived = array_fill_keys($problem->waivedCourseIds, true);
@@ -60,12 +62,31 @@ final readonly class AllocationGapAnalyzer
                 }
                 $missing = max(0, $required - $available);
                 $shortfall = $shortfall || $missing > 0;
-                $rules[] = [
+                $report = [
                     "id" => $rule["id"],
                     "required_courses" => $required,
                     "eligible_target_count" => $available,
                     "shortfall_courses" => $missing,
                 ];
+                if ($rule["mode"] === "credits") {
+                    $requiredCredits = $rule["minimum_credits_milli"] ??
+                    throw new \InvalidArgumentException("A credit rule needs its retained minimum.");
+                    $listed = array_intersect_key($eligible, array_fill_keys($rule["course_ids"], true));
+                    $actualListed = [];
+                    foreach ($rule["course_ids"] as $target) {
+                        foreach ($targetResources[$id][$target] ?? [] as $course => $amount) {
+                            $actualListed[$course] = max($actualListed[$course] ?? 0, $amount);
+                        }
+                    }
+                    $upper = min($this->sum($listed, $requiredCredits), $this->sum($actualListed, $requiredCredits));
+                    $report += [
+                        "required_credits_milli" => $requiredCredits,
+                        "credit_upper_bound_milli" => $upper,
+                        "credit_shortfall_milli" => $requiredCredits - $upper,
+                    ];
+                    $shortfall = $shortfall || $upper < $requiredCredits;
+                }
+                $rules[] = $report;
             }
             $reports[$id] = [
                 "has_shortfall" => $shortfall,
@@ -95,7 +116,8 @@ final readonly class AllocationGapAnalyzer
         $demands = [];
         foreach ($problem->groups as $group) {
             $all = [];
-            $count = max($group["min_courses"], $group["min_credits_milli"] > 0 ? 1 : 0);
+            $credits = $group["min_credits_milli"];
+            $count = $group["min_courses"];
             foreach ($group["rules"] as $rule) {
                 if ($rule["mode"] === "all") {
                     foreach ($rule["course_ids"] as $target) {
@@ -106,11 +128,15 @@ final readonly class AllocationGapAnalyzer
                 } elseif ($rule["mode"] === "choose") {
                     // Overlapping rules can share a placement within a group: never add their counts.
                     $count = max($count, $rule["minimum_courses"]);
+                } elseif ($rule["mode"] === "credits") {
+                    // Credit cards may overlap; adding their minimums could invent a shortage.
+                    $credits = max($credits, $rule["minimum_credits_milli"] ??
+                        throw new \InvalidArgumentException("A credit rule needs its retained minimum."));
                 }
             }
-            $count = max($count, count($all));
+            $count = max($count, count($all), $credits > 0 ? 1 : 0);
             if ($count > 0 && !$individual[$group["id"]]["has_shortfall"]) {
-                $demands[$group["id"]] = ["credits" => $group["min_credits_milli"], "courses" => $count];
+                $demands[$group["id"]] = ["credits" => $credits, "courses" => $count];
             }
         }
         ksort($demands, SORT_STRING);

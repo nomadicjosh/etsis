@@ -484,6 +484,42 @@ test("independent course group uses cards, checkboxes, requirement types and rev
     });
     expect(f.errors).toEqual([]);
 });
+test("credit-list cards retain fractional thresholds through save, reopen and publication", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    await page.getByRole("button", { name: "Take credits", exact: true }).click();
+    await page.getByLabel("Requirement 1 credits from this list", { exact: true }).fill("3.125");
+    await page.getByRole("button", { name: "Save group draft", exact: true }).click();
+    await expect(page.locator(".audit-status")).toContainText("Course group draft saved.");
+    const save = f.calls.find((c) => c.path.includes("/course-groups/") && c.path.endsWith("/save/"));
+    expect(save.body.definition.rules[0]).toMatchObject({
+        mode: "credits",
+        minimum_courses: 0,
+        minimum_credits_milli: 3125,
+    });
+    await page.getByRole("button", { name: "Close builder", exact: true }).click();
+    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    await expect(page.getByLabel("Requirement 1 credits from this list", { exact: true })).toHaveValue(
+        "3.125",
+    );
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
+    await page
+        .getByLabel("Reason for publication", { exact: true })
+        .fill("Fictional credit-list requirement approval");
+    await page.getByRole("button", { name: "Prepare publication", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Take 3.125 credits from this list");
+    await page.getByRole("button", { name: "Publish reviewed version", exact: true }).click();
+    await page.getByRole("button", { name: "Inspect version 2", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Take 3.125 credits from this list");
+    expect(f.errors).toEqual([]);
+});
 test("degree composer selects pinned blocks, keeps unsaved fields while editing the library and publishes", async ({
     page,
 }, testInfo) => {

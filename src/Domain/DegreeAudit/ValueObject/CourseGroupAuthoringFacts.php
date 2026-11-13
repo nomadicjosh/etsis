@@ -84,7 +84,7 @@ final readonly class CourseGroupAuthoringFacts
                     static fn(string $id): int => $positions[$id],
                     $rule["course_ids"],
                 ),
-            ];
+            ] + ($rule["mode"] === "credits" ? ["minimum_credits_milli" => $rule["minimum_credits_milli"]] : []);
         }
         $this->facts = $facts;
     }

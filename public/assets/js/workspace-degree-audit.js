@@ -269,9 +269,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             ? "Take all"
                             : r.mode === "choose"
                               ? `Choose ${r.minimum_courses}`
-                              : d.requirement_type
-                                ? "Eligible courses"
-                                : "Credit pool",
+                              : r.mode === "credits"
+                                ? `Take ${text(r.minimum_credits_milli)} credits from this list`
+                                : d.requirement_type
+                                  ? "Eligible courses"
+                                  : "Credit pool",
                     ),
                     node(
                         "ul",
@@ -690,7 +692,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const used = new Set();
         for (const r of d.rules) {
             r.minimum_courses =
-                r.mode === "all" ? r.course_ids.length : r.mode === "pool" ? 0 : Number(r.minimum_courses);
+                r.mode === "all" ? r.course_ids.length : r.mode === "choose" ? Number(r.minimum_courses) : 0;
+            if (r.mode === "credits") r.minimum_credits_milli = milli(String(r.minimum_credits_milli));
+            else delete r.minimum_credits_milli;
             r.course_ids.forEach((id) => used.add(id));
         }
         d.courses = d.courses.filter((c) => used.has(c.course_id));
@@ -868,6 +872,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         let scale = state?.scale || saved.grade_point_scale;
         const model = state?.model || {
             ...structuredClone(saved.definition),
+            rules: saved.definition.rules.map((rule) => ({
+                ...structuredClone(rule),
+                ...(rule.mode === "credits"
+                    ? { minimum_credits_milli: text(rule.minimum_credits_milli) }
+                    : {}),
+            })),
             max_course_grade_points_milli: scale.maximum_milli,
             min_credits_milli: text(saved.definition.min_credits_milli),
             min_courses: String(saved.definition.min_courses),
@@ -1132,11 +1142,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         [
                             ["all", "All of these"],
                             ["choose", "Choose a number"],
+                            ["credits", "Take credits"],
                             ["pool", "Eligible courses"],
                         ].map(([mode, label]) => {
                             const b = button(label, () => {
                                 r.mode = mode;
                                 r.minimum_courses = mode === "choose" ? 1 : 0;
+                                if (mode === "credits") r.minimum_credits_milli = "3";
+                                else delete r.minimum_credits_milli;
                                 render();
                             });
                             b.setAttribute("aria-pressed", String(r.mode === mode));
@@ -1151,6 +1164,20 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             r.minimum_courses,
                             (v) => (r.minimum_courses = v),
                             { type: "number", min: 1, max: 50 },
+                        ),
+                    );
+                if (r.mode === "credits")
+                    card.append(
+                        field(
+                            `Requirement ${i + 1} credits from this list`,
+                            r.minimum_credits_milli,
+                            (v) => (r.minimum_credits_milli = v),
+                            { type: "number", min: "0.001", max: "9999.999", step: "0.001" },
+                        ),
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            "Only eligible earned credits from this list meet this requirement. The group minimum still applies separately.",
                         ),
                     );
                 const list = node("ul", { class: "audit-course-list" });
@@ -2698,10 +2725,18 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "summary",
                     {},
-                    `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
+                    `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} credits from this list` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
                 ),
             );
-            if (gap && rule.mode !== "pool")
+            if (gap && rule.mode === "credits")
+                detail.append(
+                    node(
+                        "p",
+                        {},
+                        `At most ${text(gap.credit_upper_bound_milli)} eligible credits toward this list's ${text(gap.required_credits_milli)}-credit minimum.${gap.credit_shortfall_milli > 0 ? ` At least ${text(gap.credit_shortfall_milli)} more eligible credits from this list are needed.` : " This bound does not establish completion; courses may compete for other requirements."}`,
+                    ),
+                );
+            else if (gap && rule.mode !== "pool")
                 detail.append(
                     node(
                         "p",

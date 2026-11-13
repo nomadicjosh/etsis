@@ -273,12 +273,22 @@ async function fixture(page, options = {}) {
     function allocationReview() {
         const outcome = options.allocationOutcome || "feasible";
         const courseIds = Array.from({ length: 21 }, (_, index) => id(200 + index));
-        const rules = options.allocationNamedRules
+        const rules = options.allocationCreditRule
             ? [
-                  { id: id(99), mode: "all", minimum_courses: 3, course_ids: courseIds.slice(0, 3) },
-                  { id: id(98), mode: "choose", minimum_courses: 2, course_ids: courseIds.slice(0, 3) },
+                  {
+                      id: id(99),
+                      mode: "credits",
+                      minimum_courses: 0,
+                      minimum_credits_milli: 6000,
+                      course_ids: courseIds.slice(0, 3),
+                  },
               ]
-            : [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }];
+            : options.allocationNamedRules
+              ? [
+                    { id: id(99), mode: "all", minimum_courses: 3, course_ids: courseIds.slice(0, 3) },
+                    { id: id(98), mode: "choose", minimum_courses: 2, course_ids: courseIds.slice(0, 3) },
+                ]
+              : [{ id: id(99), mode: "pool", minimum_courses: 0, course_ids: courseIds }];
         const eligible =
             outcome === "infeasible" ? (options.allocationNamedRules ? [courseIds[1]] : []) : courseIds;
         const gaps = ["needs_review", "unsupported"].includes(outcome)
@@ -299,6 +309,13 @@ async function fixture(page, options = {}) {
                       required_courses: rule.mode === "all" ? 2 : rule.mode === "choose" ? 2 : 0,
                       eligible_target_count: eligible.length,
                       shortfall_courses: rule.mode === "pool" ? 0 : Math.max(0, 2 - eligible.length),
+                      ...(rule.mode === "credits"
+                          ? {
+                                required_credits_milli: 6000,
+                                credit_upper_bound_milli: 2000,
+                                credit_shortfall_milli: 4000,
+                            }
+                          : {}),
                   })),
               };
         const result = {

@@ -17,7 +17,7 @@ Both workspaces open full-width dialogs with a source panel, visual requirement 
 
 1. Choose **Create course group**, enter its name, then create the independent draft. No program/year selection is requested.
 2. Choose **Require credits** or **Require courses**, then enter the required total. Optionally set **Minimum grade points for each course**. The institution chooses this value; 2.0 is only an example. **Maximum grade points** comes from grade definitions, with a 4.0 display default only before setup. **Choose grading context** lets a reusable group use a program override while authoring without giving the group a program owner.
-3. Choose **Add requirement**. Select its card, then choose **All of these**, **Choose a number**, or **Eligible courses**. These are direct controls, not a series of dropdown fields.
+3. Choose **Add requirement**. Select its card, then choose **All of these**, **Choose a number**, **Take credits**, or **Eligible courses**. These are direct controls, not a series of dropdown fields. **Take credits** adds a positive credit minimum for that card's course list; it is independent of the group's total.
 4. Search courses in the source panel and expand a course to browse its published versions. Check the version you intend to use and choose **Add checked courses**, or drag that published version onto a requirement card. The builder never silently selects today's latest publication.
 5. Add further cards, remove courses, and arrange requirements by dragging or with **Move requirement … up/down**. A course may appear in multiple rules, but one group uses a single explicit publication per course. To replace it, select the intended publication. The builder shows its title/credit changes and affected requirement cards; **Adopt selected course versions** explicitly replaces the reference throughout the working group. Previously published groups are preserved.
 6. **Requirements preview** shows an expandable tree with course labels, credits, alternatives and thresholds. **Save group draft** stores incomplete work. **Save & review publication** saves, asks for a reason, then displays the exact saved definition. **Publish reviewed version** publishes only that reviewed snapshot.
@@ -86,6 +86,32 @@ Use **Academic catalog → Grading scales** for the global setup, and **Programs
 | Course waivers | Remove a required course everywhere without creating earned credits or GPA points. Credit/GPA minimum changes require separate attributed exceptions. |
 
 The repeat-credit, repeat-GPA and transfer-GPA choices start unselected and must be explicit before degree publication. Group sharing defaults to one group in new compositions and can be changed before publication. These are frozen inputs for this program/year, not an installation-wide mutable profile. The [calculation core](degree-audit-calculations.md) now processes these retained choices for supplied verified inputs. The [current-work credit/GPA review](student-credit-gpa-review.md) now uses these policies with verified available sources. Wider completeness reconciliation, remaining chronology evidence and full degree evaluation remain open; authoring never recalculates students. Unknown earlier policy inputs remain unknown.
+
+## Credit requirements within a course list
+
+Use **Take credits** for a requirement such as “Take 6 credits from ENG-100, ENG-101 and ENG-102.” Enter the minimum, then select the exact published course versions as usual. Fractional credits are supported to three decimal places. Saving, reopening, previewing, publishing and cloning retain that number; later publications do not change an earlier selected requirement.
+
+Several cards may express different obligations in one group: all named courses, a selected number of courses and credits from a particular list. Every card and the group quantity must be satisfied together. Credits earned outside a card's list cannot satisfy its minimum, even when the group's overall minimum is already met. An eligible placement can satisfy overlapping cards within one group, but contributes its credits once to the group total. The degree's retained sharing policy still controls reuse across groups.
+
+The allocation engine uses actual eligible earned awards after grade floors, repeats and approved substitutions, rather than today's catalog credit values. Waivers do not create credits or lower a card's credit minimum. A single actual course cannot inflate two alternative required targets into two awards. The staff placement review shows a card-specific optimistic credit bound and shortage without returning a speculative partial plan. Independent credit/GPA totals keep their existing rules.
+
+This extends the current rule contract with mode `credits`, zero `minimum_courses` and a required positive integer `minimum_credits_milli`. Other rule modes reject that extra field. The publication remains in the existing protected journal; no numbered model wrapper, event table, migration or historical rewrite is added. The configured development database was inspected first: one group draft, one degree draft and no group/degree publication streams were present. Existing drafts were not changed automatically.
+
+## Planned saved-rule and classification requirements
+
+The degree-audit plan's addendum now distinguishes five requirement sources:
+
+| Example | Current support |
+| --- | --- |
+| Take ENG-101 and ENG-102 | **All of these**, using selected publications. |
+| Take 2 of a listed set | **Choose a number**, using distinct completed course targets. |
+| Take 6 credits from a listed set | **Take credits**, with an independent per-list threshold. |
+| Take courses using saved rule DA.BUS.UPPER | Planned: retain the selected rule definition/version with the academic requirement. The ordinary mutable RULE screen is not yet an authoritative degree-rule publication. |
+| Take credits from a subject or department | Planned: classification-based eligibility using retained course-publication facts. `SUBJ`/`SUBJECT` and `DEPT`/`DEPARTMENT` describe the same respective source. |
+
+Saved/classification rules must support combined conditions and exceptions, including “subject ENG except ENG-500” and “subject MATH with course level greater than 200.” Resolve readable codes to stable identities; retain explicit excluded course identities and typed numeric comparisons. Do not infer subject or numeric level by parsing a course code. A course's later reassignment to another subject/department, or a later saved-rule edit, must not silently change the earlier student's requirement or accepted academic facts.
+
+These will be visual condition controls rather than executable SQL or a requirement for staff to type TAKE syntax. Eligibility filters are distinct from student-specific course waivers, substitutions and credit/GPA minimum exceptions. Missing historical classifications, numeric-level evidence or retained rule versions must remain a review issue rather than silently matching or excluding work. This work needs historical publication and input support before it can be presented as implemented; a dropdown pointing to today's mutable rule is insufficient.
 
 ## Course sharing across groups
 
