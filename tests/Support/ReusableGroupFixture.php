@@ -100,6 +100,14 @@ final class ReusableGroupFixture
             $this->catalog->fixture->cipher,
             $f->clock,
             $this->gradingScales(),
+            new \Domain\Rules\Service\CourseRuleService(
+                new \Infrastructure\Persistence\Repository\SqlCourseRuleRepository($f->sql),
+                new \Domain\Catalog\Service\PublishedCourseReader($history ?? $this->history),
+                $f->access,
+                $transactions ?? $f->transactions,
+                $audit ?? $f->audit,
+                $f->clock,
+            ),
         );
     }
     public function gradingScales(

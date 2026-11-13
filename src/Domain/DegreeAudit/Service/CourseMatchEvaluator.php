@@ -12,7 +12,8 @@ final readonly class CourseMatchEvaluator
 {
     public const int MATCH_LIMIT = 25;
 
-    /** @param list<array<string,mixed>> $work
+    /**
+     * @param list<array<string,mixed>> $work
      * @param array<string,mixed> $requirements Verified published composition, not an authoring draft.
      * @param array<string,mixed> $effective Verified effective exceptions for the same pursuit/selection.
      * @return list<array<string,mixed>>
@@ -42,12 +43,14 @@ final readonly class CourseMatchEvaluator
             $items[] = array_replace($item, [
                 "requirement_matches" => $matches,
                 "more_requirement_matches" => count($candidates) > self::MATCH_LIMIT,
+                'saved_rule_matches_pending' => $this->hasSavedRules($requirements),
             ]);
         }
         return $items;
     }
 
-    /** Complete bounded eligibility for structural placement; never use truncated candidate pages.
+    /**
+     * Complete bounded eligibility for structural placement; never use truncated candidate pages.
      * Earned work for a waived target can still meet quantity constraints.
      * @param list<array<string,mixed>> $work
      * @param array<string,mixed> $requirements
@@ -84,7 +87,8 @@ final readonly class CourseMatchEvaluator
         }
         return $items;
     }
-    /** @param array<string,mixed> $requirements
+    /**
+     * @param array<string,mixed> $requirements
      * @param array<string,mixed> $effective
      * @return array<string,list<array<string,mixed>>>
      */
@@ -133,7 +137,21 @@ final readonly class CourseMatchEvaluator
         return $index;
     }
 
-    /** @param array<string,mixed> $work
+    /** @param array<string,mixed> $requirements */
+    private function hasSavedRules(array $requirements): bool
+    {
+        foreach ($requirements['group_details'] as $group) {
+            foreach ($group['definition']['rules'] as $rule) {
+                if (isset($rule['eligibility'])) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param array<string,mixed> $work
      * @param array<string,mixed> $candidate
      * @param array<string,mixed>|null $scale
      */

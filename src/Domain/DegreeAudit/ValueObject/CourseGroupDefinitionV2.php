@@ -6,11 +6,15 @@ namespace Domain\DegreeAudit\ValueObject;
 
 use Domain\Gradebook\GradeDefinition;
 use InvalidArgumentException;
+use JsonException;
 
 /** Group quantity and per-course grade eligibility; no average-GPA reinterpretation. */
 final readonly class CourseGroupDefinitionV2
 {
-    /** @param array<string,mixed> $definition */
+    /**
+     * @param array<string,mixed> $definition
+     * @throws JsonException
+     */
     public function __construct(public array $definition)
     {
         $keys = [
@@ -39,7 +43,7 @@ final readonly class CourseGroupDefinitionV2
             "min_gpa_milli" => null,
             "courses" => $definition["courses"],
             "rules" => $definition["rules"],
-        ]);
+        ], allowEligibility: true);
         if (
             !in_array($definition["requirement_type"], ["credits", "courses"], true) ||
             !is_int($definition["min_courses"]) ||
@@ -62,6 +66,9 @@ final readonly class CourseGroupDefinitionV2
             self::invalid();
         }
     }
+    /**
+     * @throws JsonException
+     */
     public static function blank(string $name, int $maximumPointsMilli = 4000): self
     {
         return new self([
@@ -76,7 +83,10 @@ final readonly class CourseGroupDefinitionV2
             "rules" => [],
         ]);
     }
-    /** @param array<string,mixed> $definition */
+    /**
+     * @param array<string,mixed> $definition
+     * @throws JsonException
+     */
     public static function draft(array $definition): self|CourseGroupDefinition
     {
         return array_key_exists("requirement_type", $definition)
@@ -86,18 +96,19 @@ final readonly class CourseGroupDefinitionV2
     public function assertPublishable(): void
     {
         $d = $this->definition;
+        $dynamic = count(array_filter($d['rules'], static fn(array $r): bool => isset($r['eligibility']))) > 0;
         if (
             $d["rules"] === [] ||
             ($d["requirement_type"] === "credits" && $d["min_credits_milli"] < 1) ||
             ($d["requirement_type"] === "courses" &&
-                ($d["min_courses"] < 1 || $d["min_courses"] > count($d["courses"])))
+                ($d["min_courses"] < 1 || (!$dynamic && $d["min_courses"] > count($d["courses"]))))
         ) {
             throw new InvalidArgumentException(
                 "Choose a positive group credit/course requirement with enough listed courses.",
             );
         }
         foreach ($d["rules"] as $r) {
-            if ($r["course_ids"] === []) {
+            if ($r["course_ids"] === [] && !isset($r['eligibility'])) {
                 throw new InvalidArgumentException("Every published course list needs at least one course.");
             }
         }
@@ -109,6 +120,9 @@ final readonly class CourseGroupDefinitionV2
         ($this->definition["min_course_grade_points_milli"] === null ||
         $grade->pointsMilli >= $this->definition["min_course_grade_points_milli"]);
     }
+    /**
+     * @throws JsonException
+     */
     public function hash(): string
     {
         return hash("sha256", json_encode($this->definition, JSON_THROW_ON_ERROR));

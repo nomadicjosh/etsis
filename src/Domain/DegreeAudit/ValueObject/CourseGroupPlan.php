@@ -36,7 +36,11 @@ final readonly class CourseGroupPlan
         }
         $count = count($definition["courses"]);
         $warnings = [];
-        if ($count === 0) {
+        $dynamic = count(array_filter($definition['rules'], static fn(array $r): bool => isset($r['eligibility']))) > 0;
+        if ($dynamic) {
+            $warnings[] = 'Listed totals exclude saved-rule matches. Test student work to inspect eligibility; '
+            . 'rule-backed placement is not yet calculated.';
+        } elseif ($count === 0) {
             $warnings[] = "Add published courses to plan this group.";
         } elseif (($definition["requirement_type"] ?? "credits") === "courses") {
             if ($definition["min_courses"] > $count) {

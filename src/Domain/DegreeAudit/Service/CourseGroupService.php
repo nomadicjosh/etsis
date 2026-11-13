@@ -42,6 +42,7 @@ final readonly class CourseGroupService
         private MessageCipher $cipher,
         private Clock $clock,
         private GradingScaleService $gradeScale,
+        private \Domain\Rules\Service\CourseRuleService $rules,
     ) {
     }
     /** @return array<string, mixed> */
@@ -77,6 +78,7 @@ final readonly class CourseGroupService
                 return $this->view($id);
             }
             $this->assertCurrentScale($definition);
+            $this->assertRules($definition);
             $this->groups->create($id, $definition->definition);
             $this->audit->record($actor, "course_group.draft_created", $id);
             return $this->view($id);
@@ -109,6 +111,7 @@ final readonly class CourseGroupService
         return $this->transactions->run(function () use ($id, $revision, $definition, $actor): array {
             $this->groups->lock($id);
             $row = $this->groups->get($id);
+            $this->assertRules($definition);
             if (
                 in_array($row["revision"], [$revision, $revision + 1], true) &&
                 CourseGroupDefinitionV2::draft($row["definition"])->hash() === $definition->hash()
@@ -137,6 +140,7 @@ final readonly class CourseGroupService
             $row = $this->groups->get($id);
             $d = CourseGroupDefinitionV2::draft($row["definition"]);
             $d->assertPublishable();
+            $this->assertRules($d);
             $this->assertCurrentScale($d);
             $details = $this->courseDetails($d);
             [$state] = $this->load($id);
@@ -290,6 +294,7 @@ final readonly class CourseGroupService
             }
             $definition = CourseGroupDefinitionV2::draft($data["definition"]);
             $definition->assertPublishable();
+            $this->assertRules($definition);
             $this->assertCurrentScale($definition);
             $this->courseDetails($definition);
             $this->authorize($actor);
@@ -429,7 +434,23 @@ final readonly class CourseGroupService
         };
         return hash("sha256", json_encode($normalize($value), JSON_THROW_ON_ERROR));
     }
-    /** @return array<string, array<string, mixed>> */
+    private function assertRules(CourseGroupDefinition|CourseGroupDefinitionV2 $definition): void
+    {
+        $seen = [];
+        foreach ($definition->definition['rules'] as $rule) {
+            if (!isset($rule['eligibility'])) {
+                continue;
+            }
+            $snapshot = new \Domain\Rules\SavedCourseRule($rule['eligibility']);
+            $id = $snapshot->snapshot['id'];
+            $expected = $seen[$id] ??= $this->rules->get(new EntityId($id));
+            if ($this->fingerprint($expected) !== $this->fingerprint($snapshot->snapshot)) {
+                throw new InvalidArgumentException('The selected course rule differs from its saved revision.');
+            }
+        }
+    }
+
+    /** @return array<string, array<string,mixed>> */
     private function courseDetails(CourseGroupDefinition|CourseGroupDefinitionV2 $definition): array
     {
         $rows = [];

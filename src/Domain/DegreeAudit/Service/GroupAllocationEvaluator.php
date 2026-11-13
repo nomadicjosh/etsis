@@ -22,7 +22,8 @@ final readonly class GroupAllocationEvaluator
     ) {
     }
 
-    /** @param list<array<string,mixed>> $work
+    /**
+     * @param list<array<string,mixed>> $work
      * @param array<string,mixed> $requirements
      * @param array<string,mixed> $effective
      * @return array<string,mixed>
@@ -51,6 +52,11 @@ final readonly class GroupAllocationEvaluator
         }
         foreach ($requirements["group_details"] as $id => $group) {
             $d = $group["definition"];
+            foreach ($d['rules'] as $rule) {
+                if (isset($rule['eligibility'])) {
+                    $issues['saved_rule_allocation_pending'] = true;
+                }
+            }
             $e = $effective["groups"][$id];
             if (($e["min_gpa_milli"] ?? ($d["min_gpa_milli"] ?? 0)) > 0) {
                 $issues["group_average_gpa_unsupported"] = true;

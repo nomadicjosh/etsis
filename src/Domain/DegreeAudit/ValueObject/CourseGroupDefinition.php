@@ -6,12 +6,16 @@ namespace Domain\DegreeAudit\ValueObject;
 
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
+use JsonException;
 
 /** Standalone, program-independent reusable course-group contract. */
 final readonly class CourseGroupDefinition
 {
-    /** @param array<string, mixed> $definition */
-    public function __construct(public array $definition)
+    /**
+     * @param array<string, mixed> $definition
+     * @throws JsonException
+     */
+    public function __construct(public array $definition, bool $allowEligibility = false)
     {
         self::keys($definition, ["name", "min_credits_milli", "min_gpa_milli", "courses", "rules"]);
         $name = $definition["name"];
@@ -56,10 +60,20 @@ final readonly class CourseGroupDefinition
         }
         foreach ($definition["rules"] as $rule) {
             $keys = ["id", "mode", "minimum_courses", "course_ids"];
+            $dynamic = $allowEligibility && isset($rule['eligibility']);
+            if ($dynamic) {
+                $keys[] = 'eligibility';
+            }
             if (($rule["mode"] ?? null) === "credits") {
                 $keys[] = "minimum_credits_milli";
             }
             self::keys($rule, $keys);
+            if ($dynamic) {
+                if (!is_array($rule['eligibility']) || $rule['course_ids'] !== [] || $rule['mode'] === 'all') {
+                    self::invalid();
+                }
+                new \Domain\Rules\SavedCourseRule($rule['eligibility']);
+            }
             if (!is_string($rule["id"])) {
                 self::invalid();
             }
@@ -79,7 +93,7 @@ final readonly class CourseGroupDefinition
                 count(array_unique($rule["course_ids"])) !== count($rule["course_ids"]) ||
                 !is_int($rule["minimum_courses"]) ||
                 $rule["minimum_courses"] < 0 ||
-                $rule["minimum_courses"] > count($rule["course_ids"]) ||
+                $rule["minimum_courses"] > ($dynamic ? 200 : count($rule["course_ids"])) ||
                 !in_array($rule["mode"], ["all", "choose", "pool", "credits"], true) ||
                 ($rule["mode"] === "all" && $rule["minimum_courses"] !== count($rule["course_ids"])) ||
                 ($rule["mode"] === "choose" && $rule["minimum_courses"] < 1) ||
@@ -98,6 +112,9 @@ final readonly class CourseGroupDefinition
             self::invalid();
         }
     }
+    /**
+     * @throws JsonException
+     */
     public static function blank(string $name): self
     {
         return new self([
@@ -114,7 +131,7 @@ final readonly class CourseGroupDefinition
             throw new InvalidArgumentException("Add a course requirement before publishing this group.");
         }
         foreach ($this->definition["rules"] as $r) {
-            if ($r["course_ids"] === []) {
+            if ($r["course_ids"] === [] && !isset($r['eligibility'])) {
                 throw new InvalidArgumentException("Every published requirement needs at least one course.");
             }
         }
@@ -125,6 +142,9 @@ final readonly class CourseGroupDefinition
             throw new InvalidArgumentException("A credit-pool group needs a positive credit requirement.");
         }
     }
+    /**
+     * @throws JsonException
+     */
     public function hash(): string
     {
         return hash("sha256", json_encode($this->definition, JSON_THROW_ON_ERROR));

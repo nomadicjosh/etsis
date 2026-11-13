@@ -52,6 +52,10 @@ async function fixture(page, options = {}) {
             },
         });
     const courses = { [course]: { code: "MATH.101", title: "Algebra", credits_milli: 3000 } };
+    const savedRules = new Map([1,2].map(revision=>[id(79+revision),{
+        id:id(79+revision),rule_id:id(80),revision,code:"DA.MATH.UPPER",title:"Upper-level math <b>fictional</b>",created_at:"2026-11-13T12:00:00.000000Z",definition_hash:"a".repeat(64),
+        definition:{tree:{condition:"AND",rules:[{id:"course_level_number",operator:"greater",value:revision===1?200:300}]},references:{}},
+    }]));
     const baseGroup = {
         name: "General education",
         min_credits_milli: 3000,
@@ -63,6 +67,10 @@ async function fixture(page, options = {}) {
         courses: [{ course_id: course, version_id: courseVersion }],
         rules: [{ id: id(10), mode: "all", minimum_courses: 1, course_ids: [course] }],
     };
+    if (options.ruleBacked) {
+        baseGroup.courses=[];
+        baseGroup.rules=[{id:id(10),mode:"credits",minimum_courses:0,minimum_credits_milli:3000,course_ids:[],eligibility:savedRules.get(id(80))}];
+    }
     if (options.legacyGroup) {
         delete baseGroup.requirement_type;
         delete baseGroup.min_courses;
@@ -229,6 +237,9 @@ async function fixture(page, options = {}) {
                 ],
                 next_after: null,
             };
+        else if (path === "/sis/course-rules/page/") response={items:[savedRules.get(id(81))],next_after:null};
+        else if (path === `/sis/course-rules/${id(80)}/revisions/`) response={items:[savedRules.get(id(81)),savedRules.get(id(80))],next_before:null};
+        else if (path === `/sis/course-rules/${id(80)}/` || path === `/sis/course-rules/${id(81)}/`) response=savedRules.get(path.split("/")[3]);
         else if (path === "/sis/course-groups/page/")
             response = {
                 grade_point_scale: scale,
@@ -345,9 +356,10 @@ async function fixture(page, options = {}) {
                 minimums:[{key:"min_credits_milli",required_milli:selected.min_credits_milli,actual_minimum_milli:0,actual_maximum_milli:0,status:"below_minimum",adjusted:false}],
                 gpa:{cumulative:{ready:false},overall:{ready:false}},
                 work_summary:{awaiting_grade_count:0,awaiting_grade_milli:0,placement_established:false,unused_completed_count:0},
-                records:[],issues:[],allocation:{outcome:"infeasible",groups:[],records:[],issues:[],competition:null},
+                records:[],issues:[],allocation:{outcome:options.ruleBacked ? "unsupported":"infeasible",groups:[],records:[],issues:options.ruleBacked ? ["saved_rule_allocation_pending"]:[],competition:null},
                 policy:{repeat_credit:"highest_earned",repeat_gpa:"all_eligible",transfer_overall_gpa:"exclude",attempt_order:"academic_period"},
             };
+            if (options.ruleBacked) response.rule_eligibility=Array.from({length:21},(_,i)=>({work_id:id(100+i),group_id:group,group_name:"General education",requirement_id:id(10),course_code:`MATH.${201+i}`,course_title:"Retained course <b>fictional</b>",rule_code:"DA.MATH.UPPER",rule_title:"Upper-level math",rule_revision:1,outcome:i===20 ? "unknown":"matches"}));
         }
         else if (path === `/sis/degree-audits/${template}/save/`) {
             definition = body.definition;
@@ -615,8 +627,10 @@ test("dragging published blocks and courses has the same result as keyboard sele
     await page.getByRole("button", { name: "Edit block 1 in library", exact: true }).click();
     await page.getByRole("button", { name: "Add requirement", exact: true }).click();
     await page.locator(".audit-source-card > summary").click();
-    await page.locator(".audit-version-card").dragTo(page.locator(".audit-rule-card").nth(1));
+    // Use the visible card header; the entire card can extend beyond the dialog viewport.
+    await page.locator(".audit-version-card").dragTo(page.getByRole("button", { name: "Select requirement 2", exact: true }));
     await expect(page.locator(".audit-rule-card").nth(1)).toContainText("MATH.101 · Algebra");
+    await expect(page.locator(".audit-rule-card").nth(1)).not.toContainText("null");
     await page.getByRole("button", { name: "Save group draft", exact: true }).click();
     expect(f.calls.filter((c) => c.path.endsWith("/save/")).at(-1).body.definition.rules).toHaveLength(2);
     expect(f.errors).toEqual([]);
@@ -1472,5 +1486,64 @@ test("publication history opens a runtime test without loading the working degre
     expect(f.calls.some(c=>c.path.endsWith("/test/"))).toBe(false);
     await page.getByRole("button",{name:"Return to audit versions",exact:true}).click();
     await expect(page.getByRole("heading",{name:"Published requirement versions",exact:true})).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test("group requirement pins an explicit saved-rule revision through preview and publication", async ({page}) => {
+    const f = await fixture(page);
+    await page.getByRole("button",{name:"Course group library",exact:true}).click();
+    await page.getByRole("button",{name:"Build General education",exact:true}).click();
+    await page.getByRole("button",{name:"Choose saved rule for requirement 1",exact:true}).click();
+    await page.getByRole("button",{name:"Browse DA.MATH.UPPER revisions",exact:true}).click();
+    await page.getByRole("button",{name:"Use DA.MATH.UPPER revision 1 — Upper-level math <b>fictional</b>",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Numeric course level is greater than 200");
+    await expect(page.getByRole("dialog").locator("b")).toHaveCount(0);
+    await page.getByLabel("Requirement 1 credits matching this rule",{exact:true}).fill("6");
+    await page.getByLabel("Group required credits",{exact:true}).fill("6");
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    const saved=f.calls.find(c=>c.path===`/sis/course-groups/${f.group}/save/`).body.definition;
+    expect(saved.courses).toEqual([]);
+    expect(saved.rules[0]).toMatchObject({mode:"credits",minimum_credits_milli:6000,course_ids:[],eligibility:{id:id(80),revision:1,definition:{tree:{rules:[{id:"course_level_number",operator:"greater",value:200}]}}}});
+    await page.getByRole("button",{name:"Requirements preview",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Take 6 credits matching this rule");
+    await expect(page.getByRole("dialog")).toContainText("Revision 1");
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole("button",{name:"Back to builder",exact:true}).click();
+    await page.getByRole("button",{name:"Save & review publication",exact:true}).click();
+    await page.getByLabel("Reason for publication",{exact:true}).fill("Fictional saved-rule approval");
+    await page.getByRole("button",{name:"Prepare publication",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Numeric course level is greater than 200");
+    await page.getByRole("button",{name:"Publish reviewed version",exact:true}).click();
+    await page.getByRole("button",{name:"Inspect version 2",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Numeric course level is greater than 200");
+    await expect(page.getByRole("dialog")).not.toContainText(id(80));
+    expect(f.errors).toEqual([]);
+});
+
+test("runtime audit pages saved-rule eligibility locally without claiming completed placement", async ({page}) => {
+    const f = await fixture(page,{existing:true,ruleBacked:true});
+    await openDegree(page,true);
+    await page.getByRole("button",{name:"Test with a student",exact:true}).click();
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).press("Enter");
+    await page.getByRole("button",{name:"Fictional Learner <b>example</b> · S-EXAMPLE",exact:true}).click();
+    await page.getByRole("button",{name:"Computing · 27/FA · active",exact:true}).click();
+    await page.getByRole("button",{name:"Run temporary audit",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("No group completion or unused-course result is claimed");
+    await page.getByRole("button",{name:"Inspect saved-rule eligibility",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Showing 1–20 of 21");
+    await expect(page.getByRole("dialog")).toContainText("Matches course rule");
+    await page.getByRole("button",{name:"Next eligibility checks",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Unknown: required retained course facts are missing");
+    await expect(page.getByRole("dialog")).toContainText("Showing 21–21 of 21");
+    await expect(page.getByRole("dialog").locator("b")).toHaveCount(0);
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(f.calls.filter(c=>c.path.endsWith("/test/"))).toHaveLength(1);
+    expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

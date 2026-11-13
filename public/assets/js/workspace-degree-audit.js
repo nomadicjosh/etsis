@@ -190,7 +190,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             if (!pattern.test(String(raw))) required = null;
             else required = definition.requirement_type === "courses" ? Number(raw) : milli(String(raw));
         }
-        if (!ids.length) summary.warnings.push("Add published courses to plan this group.");
+        if (definition.rules.some(r=>r.eligibility)) summary.warnings.push("Listed totals exclude saved-rule matches. Test student work to inspect eligibility; rule-backed placement is not yet calculated.");
+        else if (!ids.length) summary.warnings.push("Add published courses to plan this group.");
         else if (required == null)
             summary.warnings.push("Enter a valid required total to compare it with the listed courses.");
         else if (definition.requirement_type === "courses") {
@@ -236,6 +237,50 @@ window.createWorkspaceDegreeAudit = function (ui) {
             },
         };
     }
+    function courseRuleTree(saved) {
+        const fields = {
+            course_id: "Course",
+            subject_id: "Subject",
+            department_id: "Department",
+            academic_level_id: "Academic level",
+            course_level_id: "Course level",
+            course_level_number: "Numeric course level",
+        };
+        const operators = {
+            equal: "is",
+            not_equal: "is not",
+            in: "is one of",
+            not_in: "is not one of",
+            greater: "is greater than",
+            less: "is less than",
+        };
+        const group = (value) =>
+            node(
+                "div",
+                { class: "audit-tree-section" },
+                node("strong", {}, value.condition === "AND" ? "All conditions" : "Any condition"),
+                node(
+                    "ul",
+                    {},
+                    value.rules.map((rule) => {
+                        if (rule.condition) return node("li", {}, group(rule));
+                        const values = Array.isArray(rule.value) ? rule.value : [rule.value];
+                        const labels = values.map((v) =>
+                            rule.id === "course_level_number"
+                                ? String(v)
+                                : saved.definition.references[rule.id]?.[v]?.code || "Selected reference",
+                        );
+                        return node("li", {}, `${fields[rule.id]} ${operators[rule.operator]} ${labels.join(", ")}`);
+                    }),
+                ),
+            );
+        return node(
+            "section",
+            { class: "audit-preview" },
+            node("h3", { class: "h6" }, `${saved.code} · ${saved.title} · Revision ${saved.revision}`),
+            group(saved.definition.tree),
+        );
+    }
     function groupTree(item, open = true) {
         const d = item.definition,
             details = item.course_details || {};
@@ -270,11 +315,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             : r.mode === "choose"
                               ? `Choose ${r.minimum_courses}`
                               : r.mode === "credits"
-                                ? `Take ${text(r.minimum_credits_milli)} credits from this list`
+                                ? `Take ${text(r.minimum_credits_milli)} credits ${r.eligibility ? "matching this rule" : "from this list"}`
                                 : d.requirement_type
                                   ? "Eligible courses"
                                   : "Credit pool",
                     ),
+                    r.eligibility ? courseRuleTree(r.eligibility) : null,
                     node(
                         "ul",
                         {},
@@ -876,9 +922,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ...structuredClone(saved.definition),
             rules: saved.definition.rules.map((rule) => ({
                 ...structuredClone(rule),
-                ...(rule.mode === "credits"
-                    ? { minimum_credits_milli: text(rule.minimum_credits_milli) }
-                    : {}),
+                ...(rule.mode === "credits" ? { minimum_credits_milli: text(rule.minimum_credits_milli) } : {}),
             })),
             max_course_grade_points_milli: scale.maximum_milli,
             min_credits_milli: text(saved.definition.min_credits_milli),
@@ -1046,9 +1090,70 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 definition: normalGroup(model),
             });
         }
+        async function pickRule(rule, query = "", after = null, stack = []) {
+            const previous = dialog;
+            const data = await post("/sis/course-rules/page/", { search: query, ...(after ? { after } : {}) });
+            if (dialog !== previous) return;
+            const body = screen("Choose a saved course rule", "EXPLICIT REVISION SELECTION");
+            body.append(
+                search("Find a course rule by code", query, (q) => pickRule(rule, q)),
+                node(
+                    "p",
+                    {},
+                    "Browse a rule's saved revisions. Selecting one retains its conditions in this group; later rule edits do not replace it.",
+                ),
+            );
+            for (const item of data.items) body.append(button(`Browse ${item.code} revisions`, () => revisions(item)));
+            if (!data.items.length)
+                body.append(
+                    node("p", {}, "No matching saved course rules. Create a rule in Rules → Course eligibility first."),
+                );
+            pager(body, data, after, stack, (a, s) => pickRule(rule, query, a, s));
+            body.append(button("Back to group draft", restore));
+            async function revisions(item, before = null, history = []) {
+                const previous = dialog;
+                const page = await post(`/sis/course-rules/${item.rule_id}/revisions/`, before ? { before } : {});
+                if (dialog !== previous) return;
+                const body = screen("Choose a course-rule revision");
+                for (const version of page.items)
+                    body.append(
+                        button(`Use ${version.code} revision ${version.revision} — ${version.title}`, async () => {
+                            const previous = dialog;
+                            const selected = await request(`/sis/course-rules/${version.id}/`);
+                            if (dialog !== previous) return;
+                            rule.eligibility = selected;
+                            rule.course_ids = [];
+                            if (rule.mode === "all") {
+                                rule.mode = "credits";
+                                rule.minimum_courses = 0;
+                                rule.minimum_credits_milli = "3";
+                            }
+                            const used = new Set(model.rules.flatMap((r) => r.course_ids));
+                            model.courses = model.courses.filter((c) => used.has(c.course_id));
+                            restore();
+                        }),
+                    );
+                if (history.length)
+                    body.append(
+                        button("Newer saved-rule revisions", () => revisions(item, history.at(-1), history.slice(0, -1))),
+                    );
+                if (page.next_before)
+                    body.append(
+                        button("Earlier saved-rule revisions", () =>
+                            revisions(item, page.next_before, [...history, before]),
+                        ),
+                    );
+                body.append(
+                    button("Back to saved rules", () => pickRule(rule, query, after, stack)),
+                    button("Back to group draft", restore),
+                );
+            }
+        }
         function add(picks, confirmed = false, targetId = active) {
             const r = model.rules.find((rule) => rule.id === targetId);
             if (!r) throw new Error("Add or select a requirement card first.");
+            if (r.eligibility)
+                throw new Error("Choose Use listed courses on this requirement before adding individual courses.");
             if (new Set(picks.map((p) => p.course_id)).size !== picks.length)
                 throw new Error("Choose one published version of each course.");
             const replacements = picks.filter((p) =>
@@ -1109,9 +1214,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         }
         function render() {
             updatePlan();
-            const focusedLabel = cards.contains(document.activeElement)
-                ? document.activeElement.textContent
-                : null;
+            const focusedLabel = cards.contains(document.activeElement) ? document.activeElement.textContent : null;
             cards.replaceChildren();
             if (!model.rules.length)
                 cards.append(
@@ -1146,32 +1249,50 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             ["choose", "Choose a number"],
                             ["credits", "Take credits"],
                             ["pool", "Eligible courses"],
-                        ].map(([mode, label]) => {
-                            const b = button(label, () => {
-                                r.mode = mode;
-                                r.minimum_courses = mode === "choose" ? 1 : 0;
-                                if (mode === "credits") r.minimum_credits_milli = "3";
-                                else delete r.minimum_credits_milli;
-                                render();
-                            });
-                            b.setAttribute("aria-pressed", String(r.mode === mode));
-                            return b;
-                        }),
+                        ]
+                            .filter(([mode]) => !r.eligibility || mode !== "all")
+                            .map(([mode, label]) => {
+                                const b = button(label, () => {
+                                    r.mode = mode;
+                                    r.minimum_courses = mode === "choose" ? 1 : 0;
+                                    if (mode === "credits") r.minimum_credits_milli = "3";
+                                    else delete r.minimum_credits_milli;
+                                    render();
+                                });
+                                b.setAttribute("aria-pressed", String(r.mode === mode));
+                                return b;
+                            }),
                     ),
                 );
+                card.append(...[
+                    r.eligibility
+                        ? courseRuleTree(r.eligibility)
+                        : node("p", { class: "form-text" }, "Source: selected published courses"),
+                    ui.can("sis:rules:manage")
+                        ? button(`Choose saved rule for requirement ${i + 1}`, () => pickRule(r))
+                        : null,
+                    r.eligibility
+                        ? button(`Use listed courses for requirement ${i + 1}`, () => {
+                              delete r.eligibility;
+                              r.mode = "all";
+                              r.minimum_courses = 0;
+                              delete r.minimum_credits_milli;
+                              render();
+                          })
+                        : null,
+                ].filter(Boolean));
                 if (r.mode === "choose")
                     card.append(
-                        field(
-                            `Requirement ${i + 1} number of courses`,
-                            r.minimum_courses,
-                            (v) => (r.minimum_courses = v),
-                            { type: "number", min: 1, max: 50 },
-                        ),
+                        field(`Requirement ${i + 1} number of courses`, r.minimum_courses, (v) => (r.minimum_courses = v), {
+                            type: "number",
+                            min: 1,
+                            max: r.eligibility ? 200 : 50,
+                        }),
                     );
                 if (r.mode === "credits")
                     card.append(
                         field(
-                            `Requirement ${i + 1} credits from this list`,
+                            `Requirement ${i + 1} credits ${r.eligibility ? "matching this rule" : "from this list"}`,
                             r.minimum_credits_milli,
                             (v) => (r.minimum_credits_milli = v),
                             { type: "number", min: "0.001", max: "9999.999", step: "0.001" },
@@ -1203,13 +1324,19 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     );
                 card.append(
                     list,
-                    r.course_ids.length
-                        ? badge(`${r.course_ids.length} selected courses`)
-                        : node(
+                    r.eligibility
+                        ? node(
                               "p",
                               { class: "form-text" },
-                              "Drop published course versions here, or add checked courses.",
-                          ),
+                              "Eligibility comes from the retained rule. This card has no hardcoded course list.",
+                          )
+                        : r.course_ids.length
+                          ? badge(`${r.course_ids.length} selected courses`)
+                          : node(
+                                "p",
+                                { class: "form-text" },
+                                "Drop published course versions here, or add checked courses.",
+                            ),
                     actions(
                         button(`Move requirement ${i + 1} up`, () => {
                             move(model.rules, i, -1);
@@ -1276,11 +1403,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 search("Course search", query, (q) => courseSource(q)),
             );
             for (const c of data.items) {
-                const card = node(
-                    "details",
-                    { class: "audit-source-card" },
-                    node("summary", {}, courseLabel(c)),
-                );
+                const card = node("details", { class: "audit-source-card" }, node("summary", {}, courseLabel(c)));
                 const choices = node("div", { class: "audit-version-list" });
                 let loaded = false;
                 card.append(choices);
@@ -1301,11 +1424,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             }
             if (!data.items.length)
                 source.append(
-                    node(
-                        "p",
-                        {},
-                        "No matching courses. Publish a course in the Academic catalog before using it here.",
-                    ),
+                    node("p", {}, "No matching courses. Publish a course in the Academic catalog before using it here."),
                 );
             pager(source, data, after, stack, (a, s) => courseSource(query, a, s));
         }
@@ -2350,6 +2469,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `${issue.component === "credits" ? "Earned credits" : issue.component === "institutional" ? "Cumulative GPA" : "Overall GPA"}: ${calculationIssues[issue.code] || "A retained input needs review."}`,
                 ),
             );
+        if (data.rule_eligibility?.length)
+            body.append(
+                node(
+                    "section",
+                    { class: "audit-preview" },
+                    node("h2", {}, "Saved-rule course eligibility"),
+                    node(
+                        "p",
+                        {},
+                        "These checks compare retained course facts with the selected rule revision. A match does not mean the grade, credit or course-group placement has been accepted. Rule-backed placement is not yet calculated.",
+                    ),
+                    button("Inspect saved-rule eligibility", () => ruleEligibility(data, restore)),
+                ),
+            );
+        if (data.allocation.issues?.includes("saved_rule_allocation_pending"))
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "Saved-rule conditions are retained, but full course-group placement for these rules is not yet supported. No group completion or unused-course result is claimed.",
+                ),
+            );
         const outcomes = {
             feasible: "A complete course-group placement was found",
             infeasible: "No complete course-group placement found",
@@ -2428,6 +2569,46 @@ window.createWorkspaceDegreeAudit = function (ui) {
         unplaced: "No proposed course-group placement",
         not_established: "Course-group placement not established",
     };
+    function ruleEligibility(data, back, offset = 0) {
+        const body = screen("Saved-rule eligibility", "COURSE CONDITIONS · NOT COMPLETION");
+        const values = data.rule_eligibility;
+        body.append(
+            node(
+                "p",
+                {},
+                "Only course conditions are checked here. Grades, repeated awards, substitutions, waivers and final placement remain separate. These results are temporary.",
+            ),
+        );
+        for (const row of values.slice(offset, offset + 20))
+            body.append(
+                node(
+                    "article",
+                    { class: "audit-card" },
+                    node("h2", { class: "h5" }, `${row.course_code} — ${row.course_title}`),
+                    node("p", {}, `${row.group_name} · ${row.rule_code} · Revision ${row.rule_revision}`),
+                    node(
+                        "p",
+                        { class: "audit-status" },
+                        row.outcome === "matches"
+                            ? "Matches course rule"
+                            : row.outcome === "does_not_match"
+                              ? "Does not match course rule"
+                              : "Unknown: required retained course facts are missing",
+                    ),
+                ),
+            );
+        body.append(
+            node(
+                "p",
+                { role: "status" },
+                `Showing ${offset + 1}–${Math.min(offset + 20, values.length)} of ${values.length} eligibility checks`,
+            ),
+        );
+        if (offset) body.append(button("Previous eligibility checks", () => ruleEligibility(data, back, offset - 20)));
+        if (offset + 20 < values.length)
+            body.append(button("Next eligibility checks", () => ruleEligibility(data, back, offset + 20)));
+        body.append(button("Back to degree progress", back));
+    }
     function degreeProgressContributions(data, back, offset = 0, filter = "all", term = "all") {
         const body = screen("Degree progress contributions", "SAME VERIFIED CURRENT WORK");
         body.append(
@@ -2640,6 +2821,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
             return;
         }
+        if (data.issues?.includes("saved_rule_allocation_pending")) body.append(node("p",{class:"alert alert-info",role:"status"},"This group uses retained saved rules. Full placement for those rules is not yet calculated; these quantities are not completion results."));
         const headings = {
             feasible: "A complete group placement was found",
             infeasible: "No complete group placement found",
@@ -2943,9 +3125,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "summary",
                     {},
-                    `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} credits from this list` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
+                    rule.eligibility
+                        ? `${rule.mode === "choose" ? `Choose ${rule.minimum_courses} matching courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} matching credits` : "Eligible course pool"} · ${rule.eligibility.code} · Revision ${rule.eligibility.revision}`
+                        : `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} credits from this list` : "Eligible course pool"} · ${rule.course_ids.length} listed`,
                 ),
             );
+            if (rule.eligibility) detail.append(courseRuleTree(rule.eligibility));
             if (gap && rule.mode === "credits")
                 detail.append(
                     node(
@@ -3473,6 +3658,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
             { class: "audit-tree-section", "aria-label": "Course requirement matches" },
             node("h3", { class: "h6" }, "Requirement matches"),
         );
+        if (item.saved_rule_matches_pending)
+            section.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "This list covers named-course matches. Inspect saved-rule eligibility in Degree progress; rule-backed placement is not yet calculated.",
+                ),
+            );
         const matches = item.requirement_matches || [];
         if (!matches.length)
             section.append(

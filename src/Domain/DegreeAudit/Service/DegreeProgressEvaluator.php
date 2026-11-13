@@ -18,10 +18,12 @@ final readonly class DegreeProgressEvaluator
         private DegreeMinimumEvaluator $minimums,
         private GroupAllocationEvaluator $groups,
         private DegreeWorkReview $workReview,
+        private SavedCourseRulePreview $rulePreview,
     ) {
     }
 
-    /** Caller authorizes and holds the student lock; this method creates no academic decisions.
+    /**
+     * Caller authorizes and holds the student lock; this method creates no academic decisions.
      * @param array<string,mixed> $requirements
      * @param array<string,mixed> $effective
      * @return array<string,mixed>
@@ -32,6 +34,7 @@ final readonly class DegreeProgressEvaluator
         array $effective,
         HistoryReadBudget $budget,
     ): array {
+        $ruleEligibility = $this->rulePreview->preview($inputs->items, $requirements, $budget);
         $policy = AuditCalculationPolicy::fromRequirements($requirements);
         $attempts = $this->attempts->forPolicy($inputs, $policy, $budget);
         $overall = $this->policies->evaluate($attempts, $policy);
@@ -83,6 +86,7 @@ final readonly class DegreeProgressEvaluator
         ksort($issues, SORT_STRING);
         return [
             "status" => "review",
+            'rule_eligibility' => $ruleEligibility,
             "input_status" => $inputs->status->value,
             "current_record_count" => count($inputs->items),
             "minimums" => $checks,

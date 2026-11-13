@@ -12,7 +12,8 @@ final readonly class CourseGroupAuthoringFacts
     /** @var array<string,mixed> */
     private array $facts;
 
-    /** @param array<string,array<string,mixed>> $courses Exact selected publications, keyed by course identity.
+    /**
+     * @param array<string,array<string,mixed>> $courses Exact selected publications, keyed by course identity.
      * @param array<string,int> $degreePositions Optional request-local identities for cross-group comparisons.
      */
     public function __construct(
@@ -84,7 +85,10 @@ final readonly class CourseGroupAuthoringFacts
                     static fn(string $id): int => $positions[$id],
                     $rule["course_ids"],
                 ),
-            ] + ($rule["mode"] === "credits" ? ["minimum_credits_milli" => $rule["minimum_credits_milli"]] : []);
+            ] + ($rule["mode"] === "credits" ? ["minimum_credits_milli" => $rule["minimum_credits_milli"]] : [])
+            + (isset($rule['eligibility']) ? [
+                    'saved_rule_selected' => true, 'saved_rule_evaluation_pending' => true,
+                ] : []);
         }
         $this->facts = $facts;
     }

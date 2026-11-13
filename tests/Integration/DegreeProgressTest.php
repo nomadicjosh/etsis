@@ -88,6 +88,7 @@ final class DegreeProgressTest extends TestCase
                     new AllocationGapAnalyzer(),
                 ),
                 new DegreeWorkReview(),
+                new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
             ),
             $students,
             $s->transactions,

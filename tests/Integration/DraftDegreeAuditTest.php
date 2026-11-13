@@ -65,6 +65,7 @@ final class DraftDegreeAuditTest extends TestCase
                     new AllocationGapAnalyzer(),
                 ),
                 new DegreeWorkReview(),
+                new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
             ),
             $students,
             $s->access,
@@ -281,6 +282,114 @@ final class DraftDegreeAuditTest extends TestCase
         $result = $this->service($f)->test($degree, $f->student, $f->assignment, $definition);
         self::assertSame(['status' => 'inconsistent', 'mode' => 'runtime_test'], $result);
         self::assertSame($before, $this->digest($f));
+    }
+
+    private function savedCourseRule(StudentRequirementsFixture $f, array $tree): array
+    {
+        $s = $f->f->sis;
+        $service = new \Domain\Rules\Service\CourseRuleService(
+            new \Infrastructure\Persistence\Repository\SqlCourseRuleRepository($s->sql),
+            new PublishedCourseReader($f->f->history),
+            $s->access, $s->transactions, $s->audit, $s->clock,
+        );
+        return $service->save(null, null, 'DA.FICTIONAL', 'Fictional course eligibility', $tree);
+    }
+
+    private function ruleGroup(StudentRequirementsFixture $f, array $saved): array
+    {
+        $id = EntityId::generate();
+        $d = CourseGroupDefinitionV2::blank('Fictional rule-based group')->definition;
+        $d['min_credits_milli'] = 3000;
+        $d['rules'] = [[
+            'id' => EntityId::generate()->value, 'mode' => 'credits', 'minimum_courses' => 0,
+            'minimum_credits_milli' => 3000, 'course_ids' => [], 'eligibility' => $saved,
+        ]];
+        $f->f->groups->create($id, new CourseGroupDefinitionV2($d));
+        return [$id, $d];
+    }
+
+    public function testSavedRuleBindingIsRetainedThroughPublicationAndRuntimeEligibilityReads(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $s = $f->f->sis;
+        $subject = EntityId::generate();
+        $other = EntityId::generate();
+        $subjects = new \Infrastructure\Persistence\Repository\SqlSubjectRepository($s->sql);
+        $subjects->save(new \Domain\Catalog\ValueObject\SubjectSnapshot($subject, 'MATH', 'Mathematics'), true, true);
+        $subjects->save(new \Domain\Catalog\ValueObject\SubjectSnapshot($other, 'OTHER', 'Other'), true, true);
+        $course = new EntityId($f->f->groupDefinition['courses'][0]['course_id']);
+        $subjects->assign($course, $subject);
+        $publications = $f->f->catalog->publications();
+        $review = $publications->review($course, 'Fictional subject publication');
+        $f->f->groupDefinition['courses'][0]['version_id'] = $publications->publish($course, $review['review_token'])['operation_id'];
+        $this->work($f);
+        $saved = $this->savedCourseRule($f, ['condition'=>'AND','rules'=>[['id'=>'subject_id','operator'=>'equal','value'=>$subject->value]]]);
+        [$group, $definition] = $this->ruleGroup($f, $saved);
+        $degree = $f->f->definition;
+        $degree['min_credits_milli'] = 3000;
+        $degree['min_resident_milli'] = 0;
+        $degree['groups'] = [['group_id'=>$group->value,'version_id'=>null]];
+        $subjects->assign($course, $other);
+        $before = $this->digest($f);
+        $trial = $this->service($f)->test($f->f->degree, $f->student, $f->assignment, new AuditRequirementsV3($degree));
+        self::assertSame('matches', $trial['rule_eligibility'][0]['outcome']);
+        self::assertSame(1, $trial['rule_eligibility'][0]['rule_revision']);
+        self::assertSame('unsupported', $trial['allocation']['outcome']);
+        self::assertContains('saved_rule_allocation_pending', $trial['allocation']['issues']);
+        self::assertFalse($trial['work_summary']['placement_established']);
+        self::assertSame($before, $this->digest($f));
+        $review = $f->f->groups->review($group, 'Fictional rule-backed group');
+        $groupVersion = $f->f->groups->publish($group, $review['review_token'])['operation_id'];
+        $degree['groups'][0]['version_id'] = $groupVersion;
+        $row = $f->f->degrees->view($f->f->degree);
+        $f->f->degrees->save($f->f->degree, $row['revision'], new AuditRequirementsV3($degree));
+        $version = new EntityId($f->f->publishDegree()['operation_id']);
+        $s->sql->update('sis_course_rules', ['definition_json'=>'damaged authoring reference'], ['id'=>$saved['id']]);
+        $s->access->staff = false;
+        $s->access->grants = ['sis:catalog:manage','sis:student:read'];
+        $before = $this->digest($f);
+        $published = $this->service($f)->testPublication($f->f->degree, $version, $f->student, $f->assignment);
+        self::assertSame('matches', $published['rule_eligibility'][0]['outcome']);
+        self::assertSame(1, $published['rule_eligibility'][0]['rule_revision']);
+        self::assertSame($before, $this->digest($f));
+        $private = new \Domain\Portal\ValueObject\StudentDegreeProgress($published)->describe();
+        self::assertArrayNotHasKey('rule_eligibility', $private);
+        self::assertStringNotContainsString('eligibility', json_encode($private));
+    }
+
+    public function testMissingPublishedClassificationsRemainUnknownForSavedRulePreview(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        $saved = $this->savedCourseRule($f, ['condition'=>'AND','rules'=>[['id'=>'course_level_number','operator'=>'greater','value'=>200]]]);
+        [$group] = $this->ruleGroup($f,$saved);
+        $degree = $f->f->definition;
+        $degree['groups'] = [['group_id'=>$group->value,'version_id'=>null]];
+        $before = $this->digest($f);
+        $result = $this->service($f)->test($f->f->degree,$f->student,$f->assignment,new AuditRequirementsV3($degree));
+        self::assertSame('unknown',$result['rule_eligibility'][0]['outcome']);
+        self::assertSame($before,$this->digest($f));
+    }
+
+    public function testForgedRuleConditionsAndLabelsCannotBeSavedAsCurriculumFacts(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $saved = $this->savedCourseRule($f,['condition'=>'AND','rules'=>[['id'=>'course_level_number','operator'=>'greater','value'=>200]]]);
+        foreach (['title','definition'] as $field) {
+            $forged = $saved;
+            if ($field === 'title') $forged['title'] = 'Forged label';
+            else {
+                $forged['definition']['tree']['rules'][0]['value'] = 100;
+                $forged['definition_hash'] = hash('sha256',json_encode($forged['definition'],JSON_THROW_ON_ERROR));
+            }
+            $before = $this->digest($f);
+            try {
+                $this->ruleGroup($f,$forged);
+                self::fail('A modified saved-rule snapshot was accepted.');
+            } catch (InvalidArgumentException) {
+                self::assertSame($before,$this->digest($f));
+            }
+        }
     }
 
     public function testSharedReplayExhaustionReturnsNoPartialRecordsOrPlacements(): void
