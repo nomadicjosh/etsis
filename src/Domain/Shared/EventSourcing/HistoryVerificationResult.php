@@ -14,8 +14,9 @@ final readonly class HistoryVerificationResult implements JsonSerializable
         public int $streams,
         public int $events,
         #[\SensitiveParameter] public ?string $nextCursor = null,
+        public int $inventoryEvents = 0,
     ) {
-        if ($streams < 0 || $events < 0 || $complete !== ($nextCursor === null)) {
+        if ($streams < 0 || $events < 0 || $inventoryEvents < 0 || $complete !== ($nextCursor === null)) {
             throw new InvalidArgumentException(
                 "Use consistent bounded verification counts and continuation state.",
             );
@@ -30,6 +31,7 @@ final readonly class HistoryVerificationResult implements JsonSerializable
             "status" => $this->complete ? "complete" : "limited",
             "streams_completed" => $this->streams,
             "events_checked" => $this->events,
+            "inventory_rows_checked" => $this->inventoryEvents,
             "next_cursor" => $this->nextCursor,
         ];
     }

@@ -39,17 +39,36 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             );
         }
         $state = $this->state($cursor);
-        $events = $completed = 0;
+        $events = $completed = $inventory = 0;
         $started = $state["active"] === null ? 0 : 1;
         $begin = hrtime(true);
-        while ($events < $eventLimit && ($state["active"] !== null || $started < $streamLimit)) {
+        while ($events + $inventory < $eventLimit) {
             if (hrtime(true) - $begin >= 5_000_000_000) {
                 break;
+            }
+            if ($state["stage"] === "inventory") {
+                $rows = $this->eventRows($state["after"], min(20, $eventLimit - $events - $inventory));
+                if ($rows === []) {
+                    return new HistoryVerificationResult(
+                        true,
+                        $completed,
+                        $events,
+                        inventoryEvents: $inventory,
+                    );
+                }
+                $this->assertRecordedHeads($rows);
+                $inventory += count($rows);
+                $state["after"] = $rows[array_key_last($rows)]["id"];
+                continue;
             }
             if ($state["active"] === null) {
                 $row = $this->nextHead($state["after"]);
                 if ($row === null) {
-                    return new HistoryVerificationResult(true, $completed, $events);
+                    $state = ["stage" => "inventory", "after" => null, "active" => null];
+                    continue;
+                }
+                if ($started >= $streamLimit) {
+                    break;
                 }
                 $state["active"] = ["id" => $row["id"], "cursor" => null];
                 $started++;
@@ -67,7 +86,7 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
                 $page = $this->history->page(
                     $stream,
                     $state["active"]["cursor"],
-                    min(20, $eventLimit - $events),
+                    min(20, $eventLimit - $events - $inventory),
                 );
                 $events += count($page->events);
                 if ($page->nextCursor === null) {
@@ -83,21 +102,29 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
                 throw new HistoryVerificationFailedException($reference);
             }
         }
-        if ($state["active"] === null && $this->nextHead($state["after"]) === null) {
-            return new HistoryVerificationResult(true, $completed, $events);
+        if (
+            $state["stage"] === "streams" &&
+            $state["active"] === null &&
+            $this->nextHead($state["after"]) === null
+        ) {
+            $state = ["stage" => "inventory", "after" => null, "active" => null];
+        }
+        if ($state["stage"] === "inventory" && $this->eventRows($state["after"], 1) === []) {
+            return new HistoryVerificationResult(true, $completed, $events, inventoryEvents: $inventory);
         }
         return new HistoryVerificationResult(
             false,
             $completed,
             $events,
             $this->codec->seal("history.verification.v1", $state),
+            $inventory,
         );
     }
-    /** @return array{after:?string,active:?array{id:string,cursor:?string}} */
+    /** @return array{stage:'streams'|'inventory',after:?string,active:?array{id:string,cursor:?string}} */
     private function state(#[\SensitiveParameter] ?string $cursor): array
     {
         if ($cursor === null) {
-            return ["after" => null, "active" => null];
+            return ["stage" => "streams", "after" => null, "active" => null];
         }
         try {
             if ($cursor === "" || strlen($cursor) > 32768) {
@@ -105,7 +132,8 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             }
             $state = $this->codec->open("history.verification.v1", $cursor);
             if (
-                count($state) !== 2 ||
+                count($state) !== 3 ||
+                !in_array($state["stage"] ?? null, ["streams", "inventory"], true) ||
                 !array_key_exists("after", $state) ||
                 !array_key_exists("active", $state)
             ) {
@@ -120,6 +148,7 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
             if ($state["active"] !== null) {
                 $active = $state["active"];
                 if (
+                    $state["stage"] !== "streams" ||
                     !is_array($active) ||
                     count($active) !== 2 ||
                     !is_string($active["id"] ?? null) ||
@@ -132,12 +161,62 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
                 }
                 new EntityId($active["id"]);
             }
-            return ["after" => $state["after"], "active" => $state["active"]];
+            return ["stage" => $state["stage"], "after" => $state["after"], "active" => $state["active"]];
         } catch (Throwable) {
             throw new InvalidArgumentException(
                 "The verification cursor could not be validated. Start a fresh check.",
             );
         }
+    }
+    /** @param list<array<string,mixed>> $rows */
+    private function assertRecordedHeads(array $rows): void
+    {
+        try {
+            $ids = [];
+            foreach ($rows as $row) {
+                new EntityId($row["id"]);
+                $ids[] = new EntityId($row["stream_id"])->value;
+            }
+            $ids = array_values(array_unique($ids));
+            $q = $this->sql->quote(...);
+            $heads = $this->sql->fetch(
+                "SELECT " .
+                    $q("id") .
+                    " FROM " .
+                    $q("sis_history_streams") .
+                    " WHERE " .
+                    $q("id") .
+                    " IN (" .
+                    implode(", ", array_fill(0, count($ids), "?")) .
+                    ")",
+                $ids,
+                count($ids),
+            );
+            if (count($heads) !== count($ids)) {
+                throw new \RuntimeException();
+            }
+        } catch (Throwable) {
+            // A damaged foreign key could contain a person ID; never expose it as a support reference.
+            throw new HistoryVerificationFailedException();
+        }
+    }
+    /** @return list<array<string,mixed>> */
+    private function eventRows(?string $after, int $limit): array
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch(
+            "SELECT " .
+                $q("id") .
+                ", " .
+                $q("stream_id") .
+                " FROM " .
+                $q("sis_history_events") .
+                ($after === null ? "" : " WHERE " . $q("id") . " > ?") .
+                " ORDER BY " .
+                $q("id"),
+            $after === null ? [] : [$after],
+            $limit,
+        );
     }
     /** One indexed statement compares against the currently committed head, allowing concurrent atomic appends. */
     private function assertNoUncommittedPositions(EntityId $stream): void
@@ -145,8 +224,13 @@ final readonly class SqlHistoricalIntegrityVerifier implements HistoricalIntegri
         $q = $this->sql->quote(...);
         $conditions = [
             "< 1",
-            "> (SELECT " . $q("version") . " FROM " . $q("sis_history_streams") .
-            " WHERE " . $q("id") . " = ?)",
+            "> (SELECT " .
+            $q("version") .
+            " FROM " .
+            $q("sis_history_streams") .
+            " WHERE " .
+            $q("id") .
+            " = ?)",
         ];
         foreach ($conditions as $condition) {
             $parameters = [$stream->value];

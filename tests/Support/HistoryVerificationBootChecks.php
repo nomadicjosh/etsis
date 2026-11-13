@@ -39,7 +39,8 @@ if (
     $next["status"] !== "complete" ||
     $next["events_checked"] !== 2 ||
     $next["streams_completed"] !== 1 ||
-    $next["next_cursor"] !== null
+    $next["next_cursor"] !== null ||
+    $next["inventory_rows_checked"] !== 3
 ) {
     throw new RuntimeException("History verification returned incorrect bounded counts.");
 }
@@ -87,4 +88,20 @@ if (
     $broken !== $f->digest()
 ) {
     throw new RuntimeException("Failure output leaked data or changed history.");
+}
+$f->sis->sql->execute("PRAGMA foreign_keys = OFF");
+$f->sis->sql->execute('DELETE FROM "sis_history_streams"');
+$orphans = $f->digest();
+if ($test->execute(["--json" => true]) !== 1) {
+    throw new RuntimeException("Orphan events were accepted as an empty journal.");
+}
+$failed = json_decode($test->getDisplay(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $failed["error"] !== "stream_unverified" ||
+    $failed["stream_reference"] !== null ||
+    str_contains($test->getDisplay(), $row["stream_id"]) ||
+    str_contains($test->getDisplay(), "fictional-confidential-error") ||
+    $orphans !== $f->digest()
+) {
+    throw new RuntimeException("Orphan failure exposed damaged references or changed history.");
 }

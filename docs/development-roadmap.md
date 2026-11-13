@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-13**, after adding owner-only portal degree progress and a bounded read-only protected-event verification command. Moodle recovery remains consolidated; publication-triggered course creation, first-use account provisioning and SIS-controlled subject/department category organization are implemented. Gradebook import and native institutional acceptance remain open.
+Last reviewed: **2026-11-13**, after adding owner-only portal degree progress and bounded read-only protected-event chain/reference verification with orphan detection. Moodle recovery remains consolidated; publication-triggered course creation, first-use account provisioning and SIS-controlled subject/department category organization are implemented. Gradebook import and native institutional acceptance remain open.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -65,7 +65,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [ ] Reconcile remaining consequential hiatus/return and policy/status writers into canonical streams without duplicating actions or discarding existing case evidence.
 - [x] [Resolve shared retained course histories once per degree read](student-degree-requirements.md#shared-course-history-reads), with exact version selection, bounded verification and no reuse across separate invocations. This reduces repeated replay in student requirement reads/reviews/confirmations; it does not complete evaluation or operational rebuilds.
 - [ ] Provide bounded, read-only integrity/reconciliation tools and independently verified projection checkpoints; rebuild into isolated output, validate it and deliberately switch readers. Replay must never send messages, issue refunds or grant access.
-- [x] Add one [bounded read-only event-chain verification command](event-history-foundation.md#read-only-operator-verification), with protected continuation, indexed head traversal, authenticated paging and safe output. Operation receipts, orphan-event inventory, projection checkpoints, isolated rebuilds and restore acceptance remain open under the preceding item.
+- [x] Add one [bounded read-only event-chain and reference verification command](event-history-foundation.md#read-only-operator-verification), with protected continuation, indexed head/event traversal, authenticated paging, orphan-event detection and safe output. Chain checks and reference inventory share one work budget. Operation receipts, projection checkpoints, isolated rebuilds and restore acceptance remain open under the preceding item.
 - [ ] Implement and exercise key rotation/recovery, independently protected integrity anchors, least-privilege database access and backup/restore procedures.
 - [ ] Establish institutional retention categories, legal holds, protected artifact/document retention and access/export evidence, including backups. Preserve necessary facts without retaining unnecessary sensitive material indefinitely.
 

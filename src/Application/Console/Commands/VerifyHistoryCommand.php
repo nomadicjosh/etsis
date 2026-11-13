@@ -18,8 +18,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
     protected string $name = "sis:history:verify";
     protected string $description = "Verify a bounded batch of protected event chains without changing records.";
     protected array $options = [
-        ["streams", null, "required", "Maximum streams visited (1–50).", "10"],
-        ["events", null, "required", "Maximum events checked (1–2000).", "500"],
+        ["streams", null, "required", "Maximum stream chains visited (1–50).", "10"],
+        ["events", null, "required", "Maximum combined chain/inventory event rows checked (1–2000).", "500"],
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
     ];
@@ -66,7 +66,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 $json,
                 "unavailable",
                 "History verification is unavailable. Check protected storage and key configuration; " .
-                "no records were changed.",
+                    "no records were changed.",
                 self::FAILURE,
             );
         }
@@ -81,16 +81,18 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     $result->streams .
                     " streams completed; " .
                     $result->events .
-                    " events checked in this batch.",
+                    " events authenticated; " .
+                    $result->inventoryEvents .
+                    " event references checked in this batch.",
             );
             $this->terminalRaw(
                 $result->complete
-                    ? "Traversal finished for the stream heads visible to this pass."
+                    ? "Stream-chain and event-reference traversals finished for the rows visible to this pass."
                     : "More history remains. Use --json for the protected continuation cursor; rerun with --cursor.",
             );
             $this->terminalRaw(
                 "This checks stored event chains; it does not certify projections, operation receipts, " .
-                "archive completeness or restore readiness.",
+                    "archive completeness or restore readiness.",
             );
         }
         return $result->complete ? self::SUCCESS : 3;

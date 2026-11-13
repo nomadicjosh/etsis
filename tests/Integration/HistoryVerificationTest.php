@@ -29,17 +29,19 @@ final class HistoryVerificationTest extends TestCase
         $f->stream(3);
         $before = $f->digest();
         $cursor = null;
-        $events = $streams = $calls = 0;
+        $events = $streams = $inventory = $calls = 0;
         do {
             $r = $f->verifier->verify(cursor: $cursor, streamLimit: 1, eventLimit: 7);
-            self::assertLessThanOrEqual(7, $r->events);
+            self::assertLessThanOrEqual(7, $r->events + $r->inventoryEvents);
             self::assertLessThanOrEqual(1, $r->streams);
             $events += $r->events;
             $streams += $r->streams;
+            $inventory += $r->inventoryEvents;
             $cursor = $r->nextCursor;
-            self::assertLessThan(10, ++$calls);
+            self::assertLessThan(20, ++$calls);
         } while (!$r->complete);
         self::assertSame(48, $events);
+        self::assertSame(48, $inventory);
         self::assertSame(2, $streams);
         self::assertSame($before, $f->digest());
     }
@@ -190,6 +192,102 @@ final class HistoryVerificationTest extends TestCase
         $f->sis->sql->execute('CREATE TABLE "event_store" ("id" VARCHAR(26))');
         $this->expectException(LogicException::class);
         $f->verifier->verify();
+    }
+    public function testEventsWithoutAnyRecordedHeadCannotLookLikeAnEmptyJournal(): void
+    {
+        $f = new HistoryVerificationFixture();
+        $f->stream(2);
+        $row = $f->sis->sql->rows("sis_history_events", [], 1)[0];
+        // Simulate a damaged restore with foreign keys disabled, only in this fictional SQLite fixture.
+        $f->sis->sql->execute("PRAGMA foreign_keys = OFF");
+        $f->sis->sql->execute('DELETE FROM "sis_history_streams"');
+        $before = $f->digest();
+        try {
+            $f->verifier->verify();
+            self::fail("Orphan events were accepted as an empty journal.");
+        } catch (HistoryVerificationFailedException $e) {
+            self::assertNull($e->streamReference);
+            self::assertNull($e->getPrevious());
+            self::assertStringNotContainsString($row["stream_id"], (string) $e);
+            self::assertSame($before, $f->digest());
+        }
+    }
+    public function testInventoryResumesWithoutReplayingPreviouslyCheckedChains(): void
+    {
+        $f = new HistoryVerificationFixture();
+        $f->stream(3);
+        $before = $f->digest();
+        $first = $f->verifier->verify(eventLimit: 4);
+        self::assertFalse($first->complete);
+        self::assertSame(3, $first->events);
+        self::assertSame(1, $first->inventoryEvents);
+        self::assertSame(1, $first->streams);
+        $next = $f->verifier->verify($first->nextCursor, eventLimit: 1);
+        self::assertFalse($next->complete);
+        self::assertSame(0, $next->events);
+        self::assertSame(1, $next->inventoryEvents);
+        self::assertSame(0, $next->streams);
+        $last = $f->verifier->verify($next->nextCursor, eventLimit: 1);
+        self::assertTrue($last->complete);
+        self::assertSame(0, $last->events);
+        self::assertSame(1, $last->inventoryEvents);
+        self::assertSame($before, $f->digest());
+    }
+    public function testOrphanAfterSeveralInventoryPagesFailsWithoutExposingTheDamagedReference(): void
+    {
+        $f = new HistoryVerificationFixture();
+        $f->stream(25);
+        $row = $f->sis->sql->rows("sis_history_events", [], 1)[0];
+        $row["id"] = "7ZZZZZZZZZZZZZZZZZZZZZZZZZ";
+        $row["event_id"] = EntityId::generate()->value;
+        $row["stream_id"] = EntityId::generate()->value;
+        $row["sealed_event"] = "fictional-private-orphan-body";
+        $f->sis->sql->execute("PRAGMA foreign_keys = OFF");
+        $f->sis->sql->insert("sis_history_events", $row);
+        $before = $f->digest();
+        $result = $f->verifier->verify(eventLimit: 25);
+        self::assertFalse($result->complete);
+        self::assertSame(25, $result->events);
+        self::assertSame(0, $result->inventoryEvents);
+        for ($page = 0; $page < 3; $page++) {
+            $result = $f->verifier->verify($result->nextCursor, eventLimit: 7);
+            self::assertFalse($result->complete);
+            self::assertSame(7, $result->inventoryEvents);
+            self::assertSame(0, $result->events);
+        }
+        try {
+            $f->verifier->verify($result->nextCursor, eventLimit: 7);
+            self::fail("A later orphan event was ignored.");
+        } catch (HistoryVerificationFailedException $e) {
+            self::assertNull($e->streamReference);
+            self::assertNull($e->getPrevious());
+            self::assertStringNotContainsString($row["stream_id"], (string) $e);
+            self::assertStringNotContainsString($row["sealed_event"], (string) $e);
+            self::assertSame($before, $f->digest());
+        }
+    }
+    public function testInventoryStageCannotCarryAnActiveStreamAndOldCursorShapeIsRejected(): void
+    {
+        $f = new HistoryVerificationFixture();
+        foreach (
+            [
+                ["after" => null, "active" => null],
+                ["stage" => "invalid", "after" => null, "active" => null],
+                [
+                    "stage" => "inventory",
+                    "after" => null,
+                    "active" => ["id" => EntityId::generate()->value, "cursor" => null],
+                ],
+            ]
+            as $state
+        ) {
+            try {
+                $f->verifier->verify($f->codec->seal("history.verification.v1", $state));
+                self::fail("An inconsistent inventory cursor was accepted.");
+            } catch (InvalidArgumentException $e) {
+                self::assertNull($e->getPrevious());
+            }
+        }
     }
     public function testRecordedGradingScalesUseTheSameAllowlistedStreamLookup(): void
     {
