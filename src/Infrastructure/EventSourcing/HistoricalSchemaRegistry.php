@@ -812,6 +812,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Gradebook\GradingScale::class => "grading_scale",
             \Domain\Catalog\ProgramPublication::class => "program_publication",
             \Domain\Registration\SectionOfferingBinding::class => "section_offering_binding",
             \Domain\Registration\SectionPublication::class => "section_publication",
@@ -841,6 +842,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),
             "section_offering_binding" => new \Domain\Registration\ValueObject\SectionOfferingBindingId($id),
             "section_publication" => new \Domain\Registration\ValueObject\SectionPublicationId($id),
             "admission_decision" => new \Domain\Admissions\ValueObject\AdmissionDecisionId($id),

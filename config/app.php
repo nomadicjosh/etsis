@@ -170,6 +170,7 @@ return [
     | requested. Feel free to add your own console commands.
     */
     "commands" => [
+        \Application\Console\Commands\VerifyHistoryCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
         \Application\Console\Commands\BootstrapAccessCommand::class,
         \Application\Console\Commands\MoodleCheckCommand::class,

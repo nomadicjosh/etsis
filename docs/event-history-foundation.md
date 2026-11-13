@@ -67,9 +67,45 @@ The framework compatibility adapter verifies history using bounded SQL pages, in
 
 An append checks the head and tail without rescanning the entire stream. A paged reader checks the records it consumes and completes verification at its captured head. A valid earlier whole-database restore may be undetectable to a fresh reader without an independent trusted checkpoint. Newer cursors detect a head rolled below their captured version, but do not replace protected external anchors, restricted database roles, backups and restore verification. No compliance or privileged-administrator tamper-proof guarantee is claimed. Policy-driven retention/legal holds and external integrity anchors remain outstanding; no runtime purge API is provided.
 
+## Read-only operator verification
+
+Deployment operators can check protected event chains with the existing console runner:
+
+```sh
+ddev codex sis:history:verify
+ddev codex sis:history:verify --streams=10 --events=500 --json
+```
+
+This command reads indexed stream heads and verifies their events through the journal's existing authenticated paging. It checks protected head bindings, contiguous positions, event bindings, registered schemas and hash chains, and rejects event positions outside the committed head. It supports the shared User, financial, grading and academic streams. It does not invoke aggregate handlers, projectors, notifications or external integrations, and does not change database records. No migration is required.
+
+Each invocation visits at most `--streams` streams (default 10, allowed 1–50) and checks at most `--events` events (default 500, allowed 1–2000). Event pages contain at most 20 records. A five-second work budget is checked between pages; this is not a database-query timeout. The bounds keep work and memory finite without loading the complete journal.
+
+JSON output contains `status`, `streams_completed`, `events_checked` and `next_cursor`. Counts describe that invocation; a partially checked stream is counted as completed only in the batch that finishes it. When the status is `limited`, pass the exact opaque `next_cursor` into the same command:
+
+```sh
+ddev codex sis:history:verify --streams=10 --events=500 --json --cursor='<next_cursor from the preceding JSON output>'
+```
+
+The continuation is encrypted and purpose-bound. It retains the last completed head and the current stream's verified position and captured upper version/hash. Text output omits it; only explicit `--json` output supplies it. Treat operator output and shell history as private maintenance information. A cursor grants no database or application access and is not a durable integrity attestation. No new checkpoint table or file is created.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Traversal finished for the stream heads visible to this pass. |
+| 1 | A stream could not be verified, or protected storage/configuration is unavailable. No repair is attempted. |
+| 2 | Invalid limits or continuation. Start a fresh pass if the cursor cannot be validated. |
+| 3 | This batch reached a limit; continue using its JSON cursor. |
+
+Failures expose fixed messages and, when available, the stream support-row reference. They do not return aggregate/person identifiers, event contents, keys or upstream exception chains. Keep the command restricted to trusted deployment operators; there is no browser or reporting endpoint for it.
+
+A pass is not a global database snapshot. Each stream is checked through the boundary captured when it is opened; later appends are outside that prefix. Concurrently committed heads behind the traversal position can also require a fresh pass. Previously checked rows changing between batches require a fresh check to detect. Use a quiet maintenance window when assessing a stable dataset.
+
+This stage verifies chains reached through recorded heads. It does not discover every orphan event, prove archive completeness or detect every valid earlier whole-database restore. It does not verify operation receipts, reconcile projections, replay business decisions, certify legal compliance or establish backup/restore readiness. Independent anchors, verified projection checkpoints and isolated rebuild/restore exercises remain open. Extend this operator tool as those checks become supported, rather than introducing separate recovery screens for each check.
+
 ## Verification and next steps
 
 The schema compiles with the installed MySQL, PostgreSQL, SQLite, SQL Server and Oracle compilers. Fictional SQLite tests exercise populated and empty conversion, all thirteen existing event types, preserved identity/provenance, restart and source-prefix verification, failed conversion without source deletion, shared framework/domain replay, version conflicts, transaction rollback, tampering, cursor boundaries and key rotation. Other engines still need live multi-session locking, DDL recovery and LOB integration tests; compiler coverage is not live-driver certification.
+
+Operator-verification tests additionally cover long and mixed streams, bounded continuation, concurrent appends, grading-scale stream lookup, altered events/heads, missing events, out-of-range positions, safe failure output and unchanged stored rows. On 2026-11-13, a bounded check of the configured development MySQL database verified 17 streams and 20 events; before/after checksums of the three journal tables were unchanged. This small live check does not establish cross-driver or production readiness.
 
 The first [published course-definition slice](course-publication.md) is implemented for currently recorded fields. Next are the remaining immutable course/section definitions and version pinning from the [legacy field review](academic-history-field-review.md), explicit academic schemas and authorized domain commands. Grade/credit, registration and lifecycle conversions follow. Logging a mutable SQL update without making the retained academic history authoritative would not complete those conversions.
 

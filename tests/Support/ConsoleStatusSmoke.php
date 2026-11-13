@@ -95,6 +95,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-moodle-resolution') {
             require __DIR__.'/MoodleResolutionBootChecks.php';
             $status=0;
+        } elseif (($argv[1] ?? '') === 'check-history-verification') {
+            require __DIR__.'/HistoryVerificationBootChecks.php';
+            $status=0;
         } elseif (($argv[1] ?? '') === 'check-session-retention') {
             require __DIR__.'/SessionRetentionBootChecks.php';
             $status=0;
