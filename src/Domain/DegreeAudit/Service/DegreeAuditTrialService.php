@@ -80,6 +80,11 @@ final readonly class DegreeAuditTrialService
                 'sources' => $sources,
                 'version' => null,
                 'version_id' => null,
+                'specialization' => ($row['specialization_id'] ?? null) === null ? null :
+                    $this->templates->specialization(
+                        new EntityId($row['program_id']),
+                        new EntityId($row['specialization_id']),
+                    ),
             ];
         }, $budget);
     }
@@ -117,6 +122,7 @@ final readonly class DegreeAuditTrialService
                 'sources' => $sources,
                 'version' => $requirements['version'],
                 'version_id' => $version->value,
+                'specialization' => $requirements['specialization'] ?? null,
             ];
         }, $budget);
     }
@@ -181,6 +187,7 @@ final readonly class DegreeAuditTrialService
                         'cohort_changed' => false,
                         'version' => $source['version'],
                         'requirements_version_id' => $source['version_id'],
+                        'specialization' => $source['specialization'] ?? null,
                     ],
                     'sources' => $source['sources'],
                     'definition_hash' => hash('sha256', json_encode($requirements, JSON_THROW_ON_ERROR)),

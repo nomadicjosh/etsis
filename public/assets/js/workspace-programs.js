@@ -551,6 +551,9 @@ window.createWorkspacePrograms = function (ui) {
                         button(`Edit specialization ${item.code}`, () =>
                             editSpecialization(program, item.id, restore),
                         ),
+                        button(`Requirements for ${item.code}`, () =>
+                            ui.degreeAudit().launch(program, null, [], item.id, restore),
+                        ),
                     ),
                 ),
             ),

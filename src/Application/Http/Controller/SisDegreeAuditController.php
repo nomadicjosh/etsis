@@ -24,6 +24,28 @@ final readonly class SisDegreeAuditController
             $this->service->page(new EntityId($program), FormInput::from($request)->optionalId("after")),
         );
     }
+    public function specializationPage(
+        ServerRequest $request,
+        string $program,
+        string $specialization,
+    ): ResponseInterface {
+        return new JsonResponse($this->service->page(
+            new EntityId($program),
+            FormInput::from($request)->optionalId('after'),
+            new EntityId($specialization),
+        ));
+    }
+    public function specializationOpen(
+        ServerRequest $request,
+        string $program,
+        string $specialization,
+    ): ResponseInterface {
+        return new JsonResponse($this->service->open(
+            new EntityId($program),
+            FormInput::from($request)->id('academic_year_id'),
+            new EntityId($specialization),
+        ));
+    }
     public function open(ServerRequest $request, string $program): ResponseInterface
     {
         return new JsonResponse(
@@ -88,6 +110,7 @@ final readonly class SisDegreeAuditController
                 $f->id("version_id"),
                 $f->id("program_id"),
                 $f->id("academic_year_id"),
+                $f->optionalId('specialization_id'),
             ),
             201,
         );

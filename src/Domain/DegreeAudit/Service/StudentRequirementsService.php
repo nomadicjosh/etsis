@@ -74,6 +74,7 @@ final readonly class StudentRequirementsService
                     $budget,
                 );
                 if (
+                    ($requirements['specialization_id'] ?? null) !== null ||
                     $requirements["program_id"] !== $scope["program_id"] ||
                     $requirements["academic_year_id"] !== $selected["academic_year_id"]
                 ) {
@@ -119,6 +120,7 @@ final readonly class StudentRequirementsService
             $budget,
         );
         if (
+            ($requirements['specialization_id'] ?? null) !== null ||
             $requirements["program_id"] !== $scope["program_id"] ||
             $requirements["academic_year_id"] !== $selected["academic_year_id"]
         ) {
@@ -376,6 +378,11 @@ final readonly class StudentRequirementsService
      * @param array<string, mixed> $requirements */
     private function assertRequirements(array $scope, array $requirements): void
     {
+        if (($requirements['specialization_id'] ?? null) !== null) {
+            throw new InvalidArgumentException(
+                'Specialization requirements cannot replace a student’s degree baseline.',
+            );
+        }
         if (
             ($requirements["program_version_id"] ?? null) !== null &&
             $requirements["program_version_id"] !== $scope["cohort_catalog_id"]

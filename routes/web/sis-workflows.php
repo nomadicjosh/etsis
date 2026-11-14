@@ -769,6 +769,9 @@ return static function (Psr7Router $router): void {
     $specializations = \Application\Http\Controller\SisProgramSpecializationController::class;
     $router->post("/sis/programs/{id}/specializations/page/", [$specializations, "page"]);
     $router->post("/sis/programs/{id}/specializations/save/", [$specializations, "save"]);
+    $specializationAudits = '/sis/programs/{program}/specializations/{specialization}/degree-audits/';
+    $router->post($specializationAudits . 'page/', [SisDegreeAuditController::class, 'specializationPage']);
+    $router->post($specializationAudits . 'open/', [SisDegreeAuditController::class, 'specializationOpen']);
     $router->get("/sis/programs/{id}/specializations/policy/", [$specializations, "policy"]);
     $router->post("/sis/programs/{id}/specializations/policy/", [$specializations, "savePolicy"]);
     $router->post("/sis/catalog/specialization-policy/", [$specializations, "saveInstitutionPolicy"]);

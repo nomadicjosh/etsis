@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Infrastructure\Persistence\Repository;
 
 use Domain\DegreeAudit\Repository\RequirementsRepository;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
@@ -32,19 +34,30 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
         $this->sql->lock("sis_programs", $program->value, "id");
         $this->sql->lock("sis_academic_years", $year->value, "id");
     }
+    public function specialization(EntityId $program, EntityId $specialization): array
+    {
+        $row = $this->sql->one('sis_program_specializations', [
+            'id' => $specialization->value, 'program_id' => $program->value,
+        ]);
+        return ['id' => $row['id'], 'code' => $row['code'], 'title' => $row['title']];
+    }
     public function lock(EntityId $id): void
     {
-        $this->sql->lock("sis_degree_audit_templates", $id->value, "id");
+        $this->sql->lock($this->table($id), $id->value, 'id');
     }
     /**
      * @throws JsonException
      */
-    public function find(EntityId $program, EntityId $year): ?array
+    public function find(EntityId $program, EntityId $year, ?EntityId $specialization = null): ?array
     {
+        $criteria = ['program_id' => $program->value, 'academic_year_id' => $year->value];
+        if ($specialization !== null) {
+            $criteria['specialization_id'] = $specialization->value;
+        }
         $r =
         $this->sql->rows(
-            "sis_degree_audit_templates",
-            ["program_id" => $program->value, "academic_year_id" => $year->value],
+            $specialization === null ? 'sis_degree_audit_templates' : 'sis_specialization_audit_templates',
+            $criteria,
             1,
         )[0] ?? null;
         return $r === null ? null : $this->decode($r);
@@ -54,9 +67,9 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
      */
     public function get(EntityId $id): array
     {
-        return $this->decode($this->sql->one("sis_degree_audit_templates", ["id" => $id->value]));
+        return $this->decode($this->sql->one($this->table($id), ['id' => $id->value]));
     }
-    public function page(EntityId $program, ?EntityId $after = null): array
+    public function page(EntityId $program, ?EntityId $after = null, ?EntityId $specialization = null): array
     {
         $q = $this->sql->quote(...);
         $columns = array_map(static fn(string $column): string => "t." . $q($column), [
@@ -75,7 +88,7 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
                 " AS " .
                 $q("academic_year_code") .
                 " FROM " .
-                $q("sis_degree_audit_templates") .
+                $q($specialization === null ? 'sis_degree_audit_templates' : 'sis_specialization_audit_templates') .
                 " t JOIN " .
                 $q("sis_academic_years") .
                 " y ON y." .
@@ -85,11 +98,13 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
                 " WHERE t." .
                 $q("program_id") .
                 " = ?" .
+                ($specialization === null ? '' : ' AND t.' . $q('specialization_id') . ' = ?') .
                 ($after === null ? "" : " AND t." . $q("id") . " < ?") .
                 " ORDER BY t." .
                 $q("id") .
                 " DESC",
-            $after === null ? [$program->value] : [$program->value, $after->value],
+            [$program->value, ...($specialization === null ? [] : [$specialization->value]),
+                ...($after === null ? [] : [$after->value])],
             51,
         );
         foreach ($rows as &$row) {
@@ -102,9 +117,20 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
     /**
      * @throws JsonException
      */
-    public function create(EntityId $id, EntityId $program, EntityId $year, array $definition): void
-    {
-        $this->sql->insert("sis_degree_audit_templates", [
+    public function create(
+        EntityId $id,
+        EntityId $program,
+        EntityId $year,
+        array $definition,
+        ?EntityId $specialization = null,
+    ): void {
+        if ($specialization !== null) {
+            $this->sql->one('sis_program_specializations', [
+                'id' => $specialization->value, 'program_id' => $program->value,
+            ]);
+        }
+        $table = $specialization === null ? 'sis_degree_audit_templates' : 'sis_specialization_audit_templates';
+        $this->sql->insert($table, [
             "id" => $id->value,
             "program_id" => $program->value,
             "academic_year_id" => $year->value,
@@ -112,13 +138,13 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
             "draft_json" => json_encode($definition, JSON_THROW_ON_ERROR),
             "published_version_id" => null,
             "publication_position" => 0,
-        ]);
+        ] + ($specialization === null ? [] : ['specialization_id' => $specialization->value]));
     }
     public function save(EntityId $id, int $expected, array $definition): void
     {
         if (
             $this->sql->update(
-                "sis_degree_audit_templates",
+                $this->table($id),
                 ["revision" => $expected + 1, "draft_json" => json_encode($definition, JSON_THROW_ON_ERROR)],
                 ["id" => $id->value, "revision" => $expected],
             ) !== 1
@@ -129,7 +155,7 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
     public function published(EntityId $id, EntityId $version, int $position): void
     {
         $this->sql->update(
-            "sis_degree_audit_templates",
+            $this->table($id),
             ["published_version_id" => $version->value, "publication_position" => $position],
             ["id" => $id->value],
         );
@@ -145,6 +171,19 @@ final readonly class SqlRequirementsRepository implements RequirementsRepository
         unset($row["draft_json"]);
         $row["revision"] = (int) $row["revision"];
         $row["publication_position"] = (int) $row["publication_position"];
+        $row['specialization_id'] ??= null;
         return $row;
+    }
+    private function table(EntityId $id): string
+    {
+        $degree = $this->sql->rows('sis_degree_audit_templates', ['id' => $id->value], 1) !== [];
+        $specialization = $this->sql->rows('sis_specialization_audit_templates', ['id' => $id->value], 1) !== [];
+        if ($degree && $specialization) {
+            throw new CorruptHistoryException();
+        }
+        if (!$degree && !$specialization) {
+            throw new RecordNotFoundException('Requirements draft not found.');
+        }
+        return $degree ? 'sis_degree_audit_templates' : 'sis_specialization_audit_templates';
     }
 }

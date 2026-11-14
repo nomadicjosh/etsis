@@ -27,6 +27,10 @@ $app->delegate(
 );
 $app->delegate(\Domain\Shared\Service\Clock::class, static fn() => $sis->clock);
 $app->delegate(
+    \Domain\Communications\Service\MessageCipher::class,
+    static fn() => $f->f->catalog->fixture->cipher,
+);
+$app->delegate(
     \Infrastructure\EventSourcing\ProtectedEventCodec::class,
     static fn() => new \Infrastructure\EventSourcing\ProtectedEventCodec(
         EventStoreFixture::config($sis->connection->queryBuilder()),
@@ -138,3 +142,62 @@ foreach ([['sis:catalog:manage'], ['sis:student:read']] as $grants) {
 if ($before !== $digest()) {
     throw new RuntimeException('Runtime audit changed a draft, student selection or event history.');
 }
+
+// Specialization requirements use the same authoring, publication and trial services under a distinct scope.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$specialization = $app->make(\Domain\Catalog\Service\ProgramSpecializationService::class)->save(
+    $sis->program, null, null, 'DATA', 'Fictional retained data path', null, true,
+);
+$specializationBase = '/sis/programs/' . $sis->program->value . '/specializations/' .
+    $specialization['id'] . '/degree-audits/';
+$openData = ['academic_year_id' => $f->f->year->value];
+if ($send($specializationBase . 'open/', $openData, false)->getStatusCode() !== 403) {
+    throw new RuntimeException('Specialization authoring bypassed browser CSRF.');
+}
+$openedResponse = $send($specializationBase . 'open/', $openData);
+$opened = json_decode((string) $openedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($openedResponse->getStatusCode() !== 200 || ($opened['specialization_id'] ?? null) !== $specialization['id']) {
+    throw new RuntimeException('Specialization scope did not resolve through the actual repository/provider.');
+}
+$specializationPath = '/sis/degree-audits/' . $opened['id'] . '/';
+if ($send($specializationPath . 'save/', ['revision' => 0, 'definition' => $f->f->definition])->getStatusCode() !== 200) {
+    throw new RuntimeException('Specialization requirements did not use the shared draft save.');
+}
+$programs = $app->make(\Domain\Catalog\Service\ProgramPublicationService::class);
+$programReview = $programs->review($sis->program, $f->f->year, 'Fictional offered program approval.');
+$programs->publish($sis->program, $programReview['review_token']);
+$reviewResponse = $send($specializationPath . 'review/', ['reason' => 'Fictional protected specialization publication.']);
+$specializationReview = json_decode((string) $reviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($reviewResponse->getStatusCode() !== 200 || ($specializationReview['specialization']['code'] ?? null) !== 'DATA') {
+    throw new RuntimeException('Specialization review lost its retained program context.');
+}
+$confirmedResponse = $send($specializationPath . 'publish/', ['review_token' => $specializationReview['review_token']]);
+$confirmed = json_decode((string) $confirmedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($confirmedResponse->getStatusCode() !== 200 ||
+    $send($specializationPath . 'publish/', ['review_token' => $specializationReview['review_token']])->getStatusCode() !== 200) {
+    throw new RuntimeException('Specialization publication or exact retry failed.');
+}
+$historyResponse = $send($specializationPath . 'versions/');
+if ($historyResponse->getStatusCode() !== 200 ||
+    str_contains((string) $historyResponse->getBody(), 'Fictional protected specialization publication.')) {
+    throw new RuntimeException('Specialization history exposed protected publication context.');
+}
+$specializationTest = $send($specializationPath . 'test/', [
+    'source' => 'publication', 'version_id' => $confirmed['operation_id'],
+    'student_id' => $f->student->value, 'assignment_id' => $f->assignment->value,
+]);
+$specializationResult = json_decode((string) $specializationTest->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($specializationTest->getStatusCode() !== 200 ||
+    ($specializationResult['context']['specialization']['id'] ?? null) !== $specialization['id']) {
+    throw new RuntimeException('Specialization runtime testing lost its component scope.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read'];
+if ($send($specializationBase . 'page/')->getStatusCode() !== 403 ||
+    $send($specializationBase . 'open/', $openData)->getStatusCode() !== 403 ||
+    $send($specializationPath, [], method: 'GET')->getStatusCode() !== 403) {
+    throw new RuntimeException('Student-read authority exposed specialization authoring.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];

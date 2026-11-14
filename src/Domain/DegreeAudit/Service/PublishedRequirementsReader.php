@@ -39,6 +39,7 @@ final readonly class PublishedRequirementsReader
                 "version" => $stored->event->playhead(),
                 "schema_version" => $stored->event->metaParam("schema_version", 1),
                 "program_version_id" => $stored->event->metaParam("curriculum_version_id"),
+                'specialization_id' => $stored->event->metaParam('specialization_id'),
                 "name" => $p["definition"]["name"],
                 "academic_year_code" => $p["labels"]["academic_year_code"],
             ];
@@ -82,6 +83,17 @@ final readonly class PublishedRequirementsReader
             $budget,
         );
         $groups = [];
+        $specialization = null;
+        if (($found['specialization_id'] ?? null) !== null) {
+            foreach ($program['specializations']['offered'] ?? [] as $choice) {
+                if ($choice['id'] === $found['specialization_id']) {
+                    $specialization = $choice;
+                }
+            }
+            if ($specialization === null) {
+                throw new CorruptHistoryException();
+            }
+        }
         if ($includeGroups && $found["schema_version"] >= 3) {
             $groups = $this->groups($p["definition"]["groups"], $budget);
         }
@@ -91,6 +103,8 @@ final readonly class PublishedRequirementsReader
             "version" => $found["version"],
             "schema_version" => $found["schema_version"],
             "program_version_id" => $found["program_version_id"],
+            'specialization_id' => $found['specialization_id'] ?? null,
+            'specialization' => $specialization,
             "program_publication" => $program,
             "program_id" => $p["program_id"],
             "academic_year_id" => $p["academic_year_id"],
@@ -272,6 +286,7 @@ final readonly class PublishedRequirementsReader
                         "version" => $event->playhead(),
                         "schema_version" => $event->metaParam("schema_version", 1),
                         "program_version_id" => $event->metaParam("curriculum_version_id"),
+                        'specialization_id' => $event->metaParam('specialization_id'),
                         "payload" => $payload,
                     ];
                 }

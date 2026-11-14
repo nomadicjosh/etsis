@@ -96,6 +96,7 @@ async function fixture(page, options = {}) {
             },
         ],
     ]);
+    const specialization = options.specialization ? { id: id(17), code: "DATA", title: "Data <b>fictional</b>" } : null;
     const context = {
         program_id: program,
         program_title: "Computing",
@@ -157,6 +158,8 @@ async function fixture(page, options = {}) {
     function row() {
         return {
             id: template,
+            specialization_id: specialization?.id || null,
+            specialization,
             program_id: program,
             academic_year_id: year,
             revision: degreeRevision,
@@ -333,9 +336,16 @@ async function fixture(page, options = {}) {
                 ],
                 next_cursor: null,
             };
+        else if (path === `/sis/programs/${program}/details/`) response = { id: program, revision: "fictional", definition: {
+            code: "BSCS", title: "Computing", description: null, classifications: {department:null,academic_level:null,award:null},
+        } };
+        else if (path === `/sis/programs/${program}/specializations/page/`) response = {
+            program:{id:program,code:"BSCS",title:"Computing"}, items:[{...specialization,active:true,revision:1}],next_after:null,
+        };
         else if (path.endsWith("/degree-audits/page/"))
             response = {
                 items: opened ? [{ ...row(), academic_year_code: context.academic_year_code }] : [],
+                specialization,
                 next_after: null,
             };
         else if (path.endsWith("/degree-audits/open/")) {
@@ -366,7 +376,7 @@ async function fixture(page, options = {}) {
             if (options.trialFailure) return route.fulfill({status:503,json:{error:"The temporary test could not be completed. No changes were saved."}});
             const selected = body.source === "publication" ? publishedDefinition : body.definition;
             response = {status:"review",mode:"runtime_test",input_status:"verified",current_record_count:0,
-                context:{mode:"runtime_test",source:body.source,program_code:"BSCS",program_title:"Computing",name:selected.name,academic_year_code:context.academic_year_code,version:body.source === "publication" ? 1:null,cohort_changed:false,group_reuse:"one_group"},
+                context:{specialization,mode:"runtime_test",source:body.source,program_code:"BSCS",program_title:"Computing",name:selected.name,academic_year_code:context.academic_year_code,version:body.source === "publication" ? 1:null,cohort_changed:false,group_reuse:"one_group"},
                 sources:selected.groups.map(g=>({name:"General education",source:body.use_group_drafts || !g.version_id ? "draft":"publication",revision:1})),
                 minimums:[{key:"min_credits_milli",required_milli:selected.min_credits_milli,actual_minimum_milli:0,actual_maximum_milli:0,status:"below_minimum",adjusted:false}],
                 gpa:{cumulative:{ready:false},overall:{ready:false}},
@@ -458,7 +468,7 @@ async function fixture(page, options = {}) {
             response = { operation_id: id(15), last_version: 1 };
         } else if (path === `/sis/degree-audits/${template}/versions/`)
             response = {
-                items: degreePublished ? [{ version_id: options.publicationPaging && !body.cursor ? id(16) : id(15), version: options.publicationPaging && !body.cursor ? 2:1, definition: options.published ? publishedDefinition : definition, context }] : [],
+                items: degreePublished ? [{ version_id: options.publicationPaging && !body.cursor ? id(16) : id(15), version: options.publicationPaging && !body.cursor ? 2:1, definition: options.published ? publishedDefinition : definition, context, specialization_id: specialization?.id || null }] : [],
                 next_cursor: options.publicationPaging && !body.cursor ? "fictional-older-page" : null,
             };
         else if (path === `/sis/degree-audits/${template}/versions/${id(15)}/`) response = row();
@@ -477,7 +487,7 @@ async function fixture(page, options = {}) {
     });
     await page.goto("/admin/");
     await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
-    return { calls, errors, program, template, course, courseVersion, group, groupVersion, groups };
+    return { calls, errors, program, template, course, courseVersion, group, groupVersion, groups, specialization };
 }
 async function openDegree(page, existing = false) {
     await page.getByRole("link", { name: "Programs", exact: true }).click();
@@ -1649,6 +1659,53 @@ test("curriculum authors explicitly accept additional publications without repla
     await expect(page.getByRole("dialog")).toContainText("Version 2 · MATH.101 · Advanced Algebra · 4 credits");
     await page.setViewportSize({width:375,height:812});await accessible(page);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test("specialization requirements reuse the audit builder, preserve scope and test without changing a student", async ({page}) => {
+    const f = await fixture(page, {specialization:true,existing:true,linkedProgram:true});
+    await page.getByRole("link", { name: "Programs", exact: true }).click();
+    await page.getByRole("button",{name:"Computing",exact:true}).click();
+    await page.getByRole("button",{name:"Program details & publications",exact:true}).click();
+    await page.getByRole("button",{name:"Program specializations",exact:true}).click();
+    await page.getByRole("button",{name:"Requirements for DATA",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Specialization audit builder",exact:true})).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Data <b>fictional</b>");
+    await page.getByRole("button",{name:"Edit 2027-2028 requirements",exact:true}).click();
+    await page.getByLabel("Requirement title",{exact:true}).fill("Data pathway requirements");
+    await page.getByLabel("Highest earned award per course", {exact:true}).check();
+    await page.getByLabel("All eligible graded attempts", {exact:true}).check();
+    await page.getByLabel("Exclude transfer awards", {exact:true}).check();
+    await page.getByRole("button",{name:"Requirements preview",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Specialization requirements · DATA");
+    await page.getByRole("button",{name:"Back to builder",exact:true}).click();
+    await page.getByRole("button",{name:"Test with a student",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Test a specialization audit",exact:true})).toBeVisible();
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID",{exact:true}).press("Enter");
+    await page.getByRole("button",{name:"Fictional Learner <b>example</b> · S-EXAMPLE",exact:true}).click();
+    await page.getByRole("button",{name:"Computing · 27/FA · active",exact:true}).click();
+    await page.getByRole("button",{name:"Run temporary audit",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Temporary specialization audit result",exact:true})).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Specialization only · DATA");
+    expect(f.calls.some(c=>/\/(save|publish|review|assign)\/$/.test(c.path))).toBe(false);
+    await page.getByRole("button",{name:"Back to test setup",exact:true}).click();
+    await page.getByRole("button",{name:"Return to specialization builder",exact:true}).click();
+    await expect(page.getByLabel("Requirement title",{exact:true})).toHaveValue("Data pathway requirements");
+    await page.setViewportSize({width:390,height:844});
+    await accessible(page);
+    await page.getByRole("button",{name:"Save & review publication",exact:true}).click();
+    await page.getByLabel("Reason for publication",{exact:true}).fill("Fictional specialization approval.");
+    await page.getByRole("button",{name:"Prepare publication",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Specialization requirements · DATA");
+    await page.getByRole("button",{name:"Publish reviewed version",exact:true}).click();
+    await page.getByRole("button",{name:"Clone version 1 to another academic year",exact:true}).click();
+    await page.getByRole("button",{name:"Use 2028-2029",exact:true}).click();
+    expect(f.calls.find(c=>c.path.endsWith("/clone/")).body.specialization_id).toBe(f.specialization.id);
+    await expect(page.getByRole("heading",{name:"Specialization audit builder",exact:true})).toBeVisible();
+    expect(f.calls.some(c=>c.path===`/sis/programs/${f.program}/specializations/${f.specialization.id}/degree-audits/page/`)).toBe(true);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

@@ -84,7 +84,7 @@ final class DraftDegreeAuditTest extends TestCase
         $rows = [];
         foreach ([
             'sis_history_events', 'sis_history_streams', 'sis_history_operations',
-            'sis_degree_audit_templates', 'sis_course_groups', 'sis_student_requirements', 'sis_course_rules',
+            'sis_degree_audit_templates', 'sis_specialization_audit_templates', 'sis_course_groups', 'sis_student_requirements', 'sis_course_rules',
             'sis_academic_credits', 'sis_student_programs', 'sis_audit',
         ] as $table) {
             $rows[$table] = $f->f->sis->sql->rows($table);
@@ -613,4 +613,46 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame(['status' => 'limited', 'mode' => 'runtime_test'], $result);
         self::assertSame($before, $this->digest($f));
     }
+    public function testSpecializationDraftAndPublicationUseTheSameRuntimeEngineWithoutChangingStudentSelections(): void
+    {
+        require_once dirname(__DIR__) . '/Support/ProgramPublicationFixture.php';
+        $f = new StudentRequirementsFixture();
+        $s = $f->f->sis;
+        $this->work($f);
+        [, $definition] = $this->draft($f);
+        $choice = new \Domain\Catalog\Service\ProgramSpecializationService(
+            new \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql),
+            $s->access, $s->transactions, $s->audit,
+        )->save($s->program, null, null, 'DATA', 'Fictional data path', null, true);
+        $scope = $f->f->degrees->open($s->program, $f->f->year, new EntityId($choice['id']));
+        $id = new EntityId($scope['id']);
+        $f->f->degrees->save($id, 0, $definition);
+        $before = $this->digest($f);
+        $service = $this->service($f);
+        $result = $service->test($id, $f->student, $f->assignment, $definition);
+        self::assertSame('review', $result['status']);
+        self::assertSame($choice['id'], $result['context']['specialization']['id']);
+        self::assertSame('draft', $result['sources'][0]['source']);
+        self::assertSame($before, $this->digest($f));
+        $group = new EntityId($definition->definition['groups'][0]['group_id']);
+        $groupReview = $f->f->groups->review($group, 'Fictional specialization group approval.');
+        $groupVersion = $f->f->groups->publish($group, $groupReview['review_token']);
+        $publishedDefinition = $definition->definition;
+        $publishedDefinition['groups'][0]['version_id'] = $groupVersion['operation_id'];
+        $f->f->degrees->save($id, 1, new AuditRequirementsV3($publishedDefinition));
+        $program = new ProgramPublicationFixture($s);
+        $programReview = $program->service->review($s->program, $f->f->year, 'Fictional specialization program.');
+        $program->service->publish($s->program, $programReview['review_token']);
+        $review = $f->f->degrees->review($id, 'Fictional specialization requirements.');
+        $version = new EntityId($f->f->degrees->publish($id, $review['review_token'])['operation_id']);
+        $before = $this->digest($f);
+        $published = $service->testPublication($id, $version, $f->student, $f->assignment);
+        self::assertSame('review', $published['status']);
+        self::assertSame($choice['id'], $published['context']['specialization']['id']);
+        self::assertSame('publication', $published['sources'][0]['source']);
+        self::assertSame($version->value, $published['context']['requirements_version_id']);
+        self::assertSame($before, $this->digest($f));
+    }
+
 }

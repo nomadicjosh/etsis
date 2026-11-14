@@ -23,6 +23,7 @@ require_once $registrationCompilerMigrations . "20261113000000_CreateSisCourseRu
 require_once $registrationCompilerMigrations . "20261113000001_CreateSisProgramSpecializations.php";
 require_once $registrationCompilerMigrations . "20261113000002_CreateSisSpecializationPolicies.php";
 require_once $registrationCompilerMigrations . "20261113000003_CreateSisStudentSpecializations.php";
+require_once $registrationCompilerMigrations . '20261113000004_CreateSisSpecializationAuditTemplates.php';
 
 require_once $registrationCompilerMigrations . "20261107000000_CreateCampusPortalTables.php";
 
@@ -344,7 +345,7 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(128))
+            ->expects(self::exactly(129))
             ->method("create")
             ->willReturnCallback(static function (string $name, callable $callback) use (
                 &$tables,
@@ -418,6 +419,7 @@ final class MigrationCompilationTest extends TestCase
             new CreateSisProgramSpecializations("program-specializations"),
             new CreateSisSpecializationPolicies("specialization-policies"),
             new CreateSisStudentSpecializations('student-specializations'),
+            new CreateSisSpecializationAuditTemplates('specialization-audits'),
         ];
         foreach ($historyCases2 as $migration) {
             $migration->setObjectMap(new ArrayObject(["phpmig.adapter" => $adapter]));

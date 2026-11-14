@@ -686,6 +686,16 @@ final readonly class HistoricalSchemaRegistry
                 if ($name === "schema_version" && $value === $version) {
                     continue;
                 }
+                if ($name === 'specialization_id') {
+                    if (
+                        $class !== \Domain\DegreeAudit\Event\RequirementsWerePublished::class || $version !== 4 ||
+                        !is_string($value) || !is_string($metadata['curriculum_version_id'] ?? null)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    new \Domain\Shared\ValueObject\EntityId($value);
+                    continue;
+                }
                 if (
                     !in_array(
                         $name,

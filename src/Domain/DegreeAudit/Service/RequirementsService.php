@@ -138,33 +138,38 @@ final readonly class RequirementsService
     }
 
     /** @return array<string, mixed> */
-    public function page(EntityId $program, ?EntityId $after = null): array
+    public function page(EntityId $program, ?EntityId $after = null, ?EntityId $specialization = null): array
     {
         $this->access->requirePermission("sis:catalog:manage");
-        $rows = $this->templates->page($program, $after);
+        $scope = $specialization === null ? null : $this->templates->specialization($program, $specialization);
+        $rows = $this->templates->page($program, $after, $specialization);
         $items = array_map(static function ($r) {
             unset($r["definition"]);
             return $r;
         }, array_slice($rows, 0, 50));
-        return ["items" => $items, "next_after" => count($rows) > 50 ? $rows[49]["id"] : null];
+        return ["items" => $items, "next_after" => count($rows) > 50 ? $rows[49]["id"] : null,
+            "specialization" => $scope];
     }
     /** Open/create one working draft for a program and an existing academic year.
      * @return array<string, mixed>
      */
-    public function open(EntityId $program, EntityId $year): array
+    public function open(EntityId $program, EntityId $year, ?EntityId $specialization = null): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        return $this->transactions->run(function () use ($program, $year, $actor): array {
+        return $this->transactions->run(function () use ($program, $year, $actor, $specialization): array {
             $this->templates->lockContext($program, $year);
+            $this->authorize($actor);
             $context = $this->templates->context($program, $year);
-            $row = $this->templates->find($program, $year);
+            $scope = $specialization === null ? null : $this->templates->specialization($program, $specialization);
+            $row = $this->templates->find($program, $year, $specialization);
             if ($row === null) {
                 $id = EntityId::generate();
                 $this->templates->create(
                     $id,
                     $program,
                     $year,
-                    AuditRequirementsV3::blank($context["program_title"])->definition,
+                    AuditRequirementsV3::blank($scope["title"] ?? $context["program_title"])->definition,
+                    $specialization,
                 );
                 $this->audit->record($actor, "degree_audit.draft_created", $id);
                 $row = $this->templates->get($id);
@@ -179,6 +184,10 @@ final readonly class RequirementsService
         $row = $this->templates->get($id);
         AuditRequirementsV3::draft($row["definition"]);
         return $row + [
+            "specialization" => ($row["specialization_id"] ?? null) === null ? null : $this->templates->specialization(
+                new EntityId($row["program_id"]),
+                new EntityId($row["specialization_id"]),
+            ),
             "grade_scale" => $this->groups->gradingScale(new EntityId($row["program_id"])),
             "context" => $this->templates->context(
                 new EntityId($row["program_id"]),
@@ -194,6 +203,7 @@ final readonly class RequirementsService
         $actor = $this->access->requirePermission("sis:catalog:manage");
         return $this->transactions->run(function () use ($id, $revision, $definition, $actor): array {
             $row = $this->lock($id);
+            $this->authorize($actor);
             if (
                 in_array($row["revision"], [$revision, $revision + 1], true) &&
                 AuditRequirementsV3::draft($row["definition"])->hash() === $definition->hash()
@@ -211,14 +221,28 @@ final readonly class RequirementsService
     /** Clone a specific published definition into a fresh, empty target draft, never into student records.
      * @return array<string, mixed>
      */
-    public function cloneTo(EntityId $source, EntityId $version, EntityId $program, EntityId $year): array
-    {
+    public function cloneTo(
+        EntityId $source,
+        EntityId $version,
+        EntityId $program,
+        EntityId $year,
+        ?EntityId $specialization = null,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $selected = $this->published($source, $version);
-        return $this->transactions->run(function () use ($selected, $program, $year, $actor): array {
+        return $this->transactions->run(function () use ($selected, $program, $year, $actor, $specialization): array {
             $this->templates->lockContext($program, $year);
+            $this->authorize($actor);
             $this->templates->context($program, $year);
-            if ($this->templates->find($program, $year) !== null) {
+            if ($specialization !== null) {
+                $this->templates->specialization($program, $specialization);
+            }
+            if (($selected["specialization_id"] ?? null) !== null && $specialization === null) {
+                throw new InvalidArgumentException(
+                    'Choose a specialization scope when cloning specialization requirements.',
+                );
+            }
+            if ($this->templates->find($program, $year, $specialization) !== null) {
                 throw new ConcurrentModificationException(
                     "The target year already has a draft. Cloning never overwrites it.",
                 );
@@ -237,7 +261,7 @@ final readonly class RequirementsService
             unset($g);
             $definition = AuditRequirementsV3::draft($definition);
             $id = EntityId::generate();
-            $this->templates->create($id, $program, $year, $definition->definition);
+            $this->templates->create($id, $program, $year, $definition->definition, $specialization);
             $this->audit->record($actor, "degree_audit.draft_cloned", $id);
             return $this->view($id);
         });
@@ -262,7 +286,7 @@ final readonly class RequirementsService
             $this->assertScale($row["program_id"], $definition);
             $details = $this->courseDetails($definition);
             [$state] = $this->load($id);
-            $state->assertScope($row["program_id"], $row["academic_year_id"]);
+            $state->assertScope($row["program_id"], $row["academic_year_id"], $row["specialization_id"] ?? null);
             if (
                 $state->playhead() !== $row["publication_position"] ||
                 $state->versionId() !== $row["published_version_id"]
@@ -275,6 +299,7 @@ final readonly class RequirementsService
                 new EntityId($row["program_id"]),
                 new EntityId($row["academic_year_id"]),
             );
+            $specialization = $this->specializationContext($row, $programPublication);
             $labels = $this->publicationContext($row, $programPublication);
             if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
                 throw new AccessDeniedException("The publication reviewer changed.");
@@ -282,6 +307,8 @@ final readonly class RequirementsService
             $data = [
                 "kind" => "degree-audit-publication-review",
                 "program_publication" => $programPublication,
+                "specialization_id" => $row["specialization_id"] ?? null,
+                "specialization" => $specialization,
                 "grade_scale" => $this->groups->gradingScale(new EntityId($row["program_id"])),
                 "template_id" => $id->value,
                 "actor_id" => $actor->value,
@@ -362,6 +389,9 @@ final readonly class RequirementsService
             }
             $c = $data["context"];
             $metadata = ["__aggregate_type" => "degree_audit_requirements"];
+            if (($data["specialization_id"] ?? null) !== null) {
+                $metadata["specialization_id"] = $data["specialization_id"];
+            }
             if (($data["program_publication"] ?? null) !== null) {
                 $metadata["curriculum_version_id"] = $data["program_publication"]["version_id"];
             }
@@ -401,7 +431,7 @@ final readonly class RequirementsService
             )->withPlayhead($data["expected_version"] + 1);
             [$state, $accepted] = $this->load($id, $op);
             $this->authorize($actor);
-            $state->assertScope($row["program_id"], $row["academic_year_id"]);
+            $state->assertScope($row["program_id"], $row["academic_year_id"], $row["specialization_id"] ?? null);
             if ($accepted !== null) {
                 if (
                     $accepted->context->actor?->value !== $actor->value ||
@@ -409,6 +439,7 @@ final readonly class RequirementsService
                     $accepted->event->playhead() !== $event->playhead() ||
                     $accepted->event->metaParam("schema_version", 1) !==
                         $event->metaParam("schema_version", 1) ||
+                    $accepted->event->metaParam("specialization_id") !== $event->metaParam("specialization_id") ||
                     $accepted->event->metaParam("curriculum_version_id") !==
                         $event->metaParam("curriculum_version_id") ||
                     $this->fingerprint($accepted->event->payload()) !==
@@ -458,6 +489,12 @@ final readonly class RequirementsService
                 throw new ConcurrentModificationException(
                     "The applicable program publication changed. Review these requirements again.",
                 );
+            }
+            if (
+                ($row['specialization_id'] ?? null) !== ($data['specialization_id'] ?? null) ||
+                $this->specializationContext($row, $programPublication) !== ($data['specialization'] ?? null)
+            ) {
+                throw new ConcurrentModificationException('The specialization scope changed. Review again.');
             }
             $currentContext = $this->publicationContext($row, $programPublication);
             if (
@@ -509,6 +546,7 @@ final readonly class RequirementsService
             $items[] = [
                 "schema_version" => $stored->event->metaParam("schema_version", 1),
                 "program_version_id" => $stored->event->metaParam("curriculum_version_id"),
+                "specialization_id" => $stored->event->metaParam("specialization_id"),
                 "version_id" => $p["version_id"],
                 "version" => $stored->event->playhead(),
                 "definition" => $p["definition"],
@@ -530,19 +568,39 @@ final readonly class RequirementsService
     {
         $this->access->requirePermission("sis:catalog:manage");
         $selected = $this->published($id, $version);
+        $program = ($selected['program_version_id'] ?? null) === null
+        ? null : $this->publishedPrograms->programDefinition(
+            new EntityId($selected['context']['program_id']),
+            new EntityId($selected['context']['academic_year_id']),
+            new EntityId($selected['program_version_id']),
+            $selected['context'],
+        );
+        $specialization = $this->specializationContext($selected, $program);
         return $selected + [
-            "program_publication" =>
-                ($selected["program_version_id"] ?? null) === null
-                    ? null
-                    : $this->publishedPrograms->programDefinition(
-                        new EntityId($selected["context"]["program_id"]),
-                        new EntityId($selected["context"]["academic_year_id"]),
-                        new EntityId($selected["program_version_id"]),
-                        $selected["context"],
-                    ),
+            'specialization' => $specialization,
+            "program_publication" => $program,
             "course_details" => $this->courseDetails(AuditRequirementsV3::draft($selected["definition"])),
             "group_details" => $this->groupDetails(AuditRequirementsV3::draft($selected["definition"])),
         ];
+    }
+
+    /** @param array<string,mixed> $row
+     * @param array<string,mixed>|null $publication
+     * @return array<string,mixed>|null */
+    private function specializationContext(array $row, ?array $publication): ?array
+    {
+        if (($row['specialization_id'] ?? null) === null) {
+            return null;
+        }
+        foreach ($publication['specializations']['offered'] ?? [] as $choice) {
+            if ($choice['id'] === $row['specialization_id']) {
+                return $choice;
+            }
+        }
+        throw new InvalidArgumentException(
+            'Publish this specialization as an offered choice for the academic year ' .
+                'before publishing its requirements.',
+        );
     }
 
     /** @param array<string,mixed> $row
@@ -590,8 +648,13 @@ final readonly class RequirementsService
     {
         $found = null;
         $cursor = null;
+        $pages = $events = 0;
         do {
+            if (++$pages > 200 || $events >= 2000) {
+                throw new HistoryReadLimitException();
+            }
             $page = $this->versions($id, $cursor);
+            $events += count($page['items']);
             foreach ($page["items"] as $item) {
                 if ($item["version_id"] === $version->value) {
                     $found = $item;
@@ -693,8 +756,9 @@ final readonly class RequirementsService
         $state = RequirementsPublication::root($s->aggregateId);
         $accepted = null;
         $cursor = null;
+        $budget = new HistoryReadBudget();
         do {
-            $page = $this->history->page($s, $cursor, 20);
+            $page = $budget->page($this->history, $s, $cursor);
             foreach ($page->events as $stored) {
                 $state->acceptHistorical($stored->event);
                 if ($operation !== null && $stored->event->payload()["version_id"] === $operation->value) {

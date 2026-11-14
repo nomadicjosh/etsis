@@ -424,6 +424,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `${text(d.min_credits_milli)} total credits · ${text(d.min_resident_milli)} resident credits`,
                 ),
             );
+        if (item.specialization) tree.append(node("p", { class: "alert alert-info" },
+            `Specialization requirements · ${item.specialization.code} — ${item.specialization.title}`));
         if (item.program_publication) {
             const program = item.program_publication;
             const definition = program.definition;
@@ -610,9 +612,24 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
     }
-    async function launch(program, after = null, stack = []) {
-        const result = await post(`/sis/programs/${program}/degree-audits/page/`, after ? { after } : {}),
-            body = screen("Degree audit builder");
+    const auditScopePath = (program, specialization = null) =>
+        specialization
+            ? `/sis/programs/${program}/specializations/${specialization}/degree-audits/`
+            : `/sis/programs/${program}/degree-audits/`;
+    async function launch(program, after = null, stack = [], specialization = null, back = null) {
+        const result = await post(auditScopePath(program, specialization) + "page/", after ? { after } : {}),
+            body = screen(specialization ? "Specialization audit builder" : "Degree audit builder");
+        const directory = () => launch(program, after, stack, specialization, back);
+        if (specialization)
+            body.append(
+                node("h2", { class: "h5" }, `${result.specialization.code} — ${result.specialization.title}`),
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "Build and test requirements for this specialization and academic year. Publication retains its offered program revision. Combined degree/specialization placement and exclusions remain in development.",
+                ),
+            );
+        if (back) body.append(button("Back to specializations", back));
         body.append(
             node(
                 "p",
@@ -620,8 +637,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "Compose the requirements for a program and academic year from published course-group blocks. Each selection keeps its exact published version.",
             ),
             actions(
-                button("Set up an academic year", () => years(program), "btn-primary"),
-                button("Course group library", () => library("", null, [], () => launch(program))),
+                button(
+                    "Set up an academic year",
+                    () => years(program, null, "", null, [], specialization, back),
+                    "btn-primary",
+                ),
+                button("Course group library", () => library("", null, [], directory)),
             ),
         );
         const cards = node("div", { class: "audit-library-grid" });
@@ -635,39 +656,46 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node("p", {}, `Draft revision ${row.revision}`),
                     actions(
                         button(`Edit ${row.academic_year_code} requirements`, async () =>
-                            degreeEditor(await request(`/sis/degree-audits/${row.id}/`)),
+                            degreeEditor(await request(`/sis/degree-audits/${row.id}/`), null, directory),
                         ),
                         ui.can("sis:student:read")
                             ? button(`Test ${row.academic_year_code} audit`, async () => {
                                   const saved = await request(`/sis/degree-audits/${row.id}/`);
-                                  auditTrial(saved, saved.definition, () => launch(program, after, stack));
+                                  auditTrial(saved, saved.definition, directory);
                               })
                             : null,
-                        button("Published requirements", () => history("degree", row.id, program, () => launch(program))),
+                        button("Published requirements", () => history("degree", row.id, program, directory)),
                     ),
                 ),
             );
         if (!result.items.length)
             cards.append(node("p", {}, "No requirements for this program yet. Choose an academic year to start."));
         body.append(cards);
-        pager(body, result, after, stack, (a, s) => launch(program, a, s));
+        pager(body, result, after, stack, (a, s) => launch(program, a, s, specialization, back));
     }
-    async function years(program, source = null, query = "", after = null, stack = []) {
+    async function years(
+        program,
+        source = null,
+        query = "",
+        after = null,
+        stack = [],
+        specialization = null,
+        back = null,
+    ) {
+        specialization = specialization || source?.specialization_id || null;
         query = query.trim();
         const result = await post("/sis/academic-years/", {
             ...(query ? { search: query } : {}),
             ...(after ? { after } : {}),
         });
-        const body = screen(
-            source ? "Clone requirements to another academic year" : "Choose an academic year",
-        );
+        const body = screen(source ? "Clone requirements to another academic year" : "Choose an academic year");
         body.append(
             node(
                 "p",
                 {},
                 "Academic years are set up in the Academic catalog. Catalog years remain derived from matriculation.",
             ),
-            search("Academic year search", query, (q) => years(program, source, q)),
+            search("Academic year search", query, (q) => years(program, source, q, null, [], specialization, back)),
         );
         for (const y of result.items)
             body.append(
@@ -681,24 +709,22 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                   version_id: source.version,
                                   program_id: program,
                                   academic_year_id: y.id,
+                                  ...(specialization ? { specialization_id: specialization } : {}),
                               })
-                            : await post(`/sis/programs/${program}/degree-audits/open/`, {
+                            : await post(auditScopePath(program, specialization) + "open/", {
                                   academic_year_id: y.id,
+                                  ...(specialization ? { specialization_id: specialization } : {}),
                               });
-                        degreeEditor(row);
+                        degreeEditor(row, null, () => launch(program, null, [], specialization, back));
                     }),
                 ),
             );
         if (!result.items.length)
             body.append(
-                node(
-                    "p",
-                    {},
-                    "No matching academic years. Set up an academic year in the Academic catalog first.",
-                ),
+                node("p", {}, "No matching academic years. Set up an academic year in the Academic catalog first."),
             );
-        pager(body, result, after, stack, (a, s) => years(program, source, query, a, s));
-        body.append(button("Back to requirement drafts", () => launch(program)));
+        pager(body, result, after, stack, (a, s) => years(program, source, query, a, s, specialization, back));
+        body.append(button("Back to requirement drafts", () => launch(program, null, [], specialization, back)));
     }
     function workbench(body, titles) {
         const grid = node("div", { class: "audit-builder-grid" }),
@@ -1602,7 +1628,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const published = model.source === "publication" ? model.publication : null;
         let choiceRequest = 0,
             sourceRequest = 0;
-        const body = screen("Test a degree audit", "RUNTIME ONLY · NO SAVED RESULTS");
+        const body = screen(saved.specialization_id ? "Test a specialization audit" : "Test a degree audit", "RUNTIME ONLY · NO SAVED RESULTS");
         const restore = () => auditTrial(saved, snapshot, back, model);
         restore.returnLabel = "Back to test setup";
         body.append(
@@ -1620,8 +1646,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     : `${saved.context.program_title} · ${saved.context.academic_year_code} · Current editor snapshot, including unsaved degree edits.`,
             ),
             actions(
-                button(snapshot === null ? "Return to audit versions" : "Return to degree builder", back),
-                button("Choose another degree audit", () => launch(saved.program_id)),
+                button(snapshot === null ? "Return to audit versions" : saved.specialization_id ? "Return to specialization builder" : "Return to degree builder", back),
+                button(saved.specialization_id ? "Choose another specialization audit" : "Choose another degree audit",
+                    () => launch(saved.program_id, null, [], saved.specialization_id || null)),
             ),
         );
         const sourceChoices = node("section", { class: "audit-panel", "aria-label": "Audit source" });
@@ -1799,7 +1826,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
         for (const key of ["min_cumulative_gpa_milli", "min_overall_gpa_milli"]) d[key] = milli(d[key], true);
         return d;
     }
-    function degreeEditor(saved, state = null) {
+    function degreeEditor(saved, state = null, back = null) {
+        const specialization = saved.specialization_id || null;
+        const directory = back || (() => launch(saved.program_id, null, [], specialization));
         if (Object.hasOwn(saved.definition, "courses")) return legacy(saved);
         const model = state?.model || structuredClone(saved.definition),
             details = state?.details || structuredClone(saved.group_details || {});
@@ -1813,20 +1842,22 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 model[k] = text(model[k]);
             model.length_months = model.length_months == null ? "" : String(model.length_months);
         }
-        const restore = () => degreeEditor(saved, { model, details }),
-            body = screen("Degree audit builder", `${saved.context.academic_year_code} · ${saved.context.program_title}`),
+        const restore = () => degreeEditor(saved, { model, details }, directory),
+            body = screen(specialization ? "Specialization audit builder" : "Degree audit builder", `${saved.context.academic_year_code} · ${saved.context.program_title}`),
             status = node("p", { role: "status", class: "audit-status" });
-        restore.returnLabel = "Return to degree draft";
+        restore.returnLabel = specialization ? "Return to specialization draft" : "Return to degree draft";
+        if (specialization) body.append(node("p", { class: "alert alert-info" },
+            `Specialization: ${saved.specialization.code} — ${saved.specialization.title}. Publish the program’s offered choice for this academic year before publishing these requirements. Runtime tests evaluate this component independently.`));
         body.append(
             actions(
-                button("Back to requirement drafts", () => launch(saved.program_id)),
+                button("Back to requirement drafts", directory),
                 button("Course group library", () => library("", null, [], restore)),
                 button("Requirements preview", () =>
                     preview(
                         {
                             definition: normalDegree(model),
                             group_details: details,
-                            grade_scale: saved.grade_scale,
+                            grade_scale: saved.grade_scale, specialization: saved.specialization,
                         },
                         "degree",
                         restore,
@@ -1847,15 +1878,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     () => saved,
                     () => normalDegree(model),
                 ),
-                button("Save degree draft", async () => {
+                button(specialization ? "Save specialization draft" : "Save degree draft", async () => {
                     saved = await save();
-                    status.textContent = "Degree draft saved.";
+                    status.textContent = specialization ? "Specialization draft saved." : "Degree draft saved.";
                 }),
                 button(
                     "Save & review publication",
                     async () => {
                         saved = await save();
-                        reasonScreen("degree", saved, restore, () => launch(saved.program_id));
+                        reasonScreen("degree", saved, restore, directory);
                     },
                     "btn-primary",
                 ),
@@ -2169,7 +2200,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function reasonScreen(kind, saved, back, directory) {
         const body = screen(
-            kind === "group" ? "Review course group publication" : "Review degree publication",
+            kind === "group" ? "Review course group publication" : saved.specialization_id ? "Review specialization publication" : "Review degree publication",
         );
         let reason = "";
         body.append(
@@ -2273,7 +2304,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             : null,
                         kind === "degree"
                             ? button(`Clone version ${row.version} to another academic year`, () =>
-                                  years(program, { id, version: row.version_id }),
+                                  years(program, { id, version: row.version_id, specialization_id: row.specialization_id }),
                               )
                             : null,
                     ),
@@ -2397,12 +2428,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function renderDegreeProgress(base, back, data, guideState = null, trial = null) {
         const shell = screen(
-            trial ? "Temporary degree audit result" : "Degree progress review",
+            trial ? (data.context?.specialization ? "Temporary specialization audit result" : "Temporary degree audit result") : "Degree progress review",
             trial ? "RUNTIME AUDIT TEST · NOT SAVED" : "GENERAL MINIMUMS & COURSE GROUPS",
         );
         const state = guideState || { open: false, side: "right", topic: "steps" };
         const layout = node("div", { class: "progress-guide-layout" });
         const body = node("div", { class: "progress-guide-review" });
+        if (data.context?.specialization) body.append(node("p", { class: "alert alert-info" },
+            `Specialization only · ${data.context.specialization.code} — ${data.context.specialization.title}. This test evaluates this component independently. Combined degree/specialization sharing and exclusions are not applied.`));
         layout.append(body);
         shell.append(layout);
         const restore = () => renderDegreeProgress(base, back, data, state, trial);

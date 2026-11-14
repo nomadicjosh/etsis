@@ -181,7 +181,7 @@
     const courseRuleStudio = window.createWorkspaceCourseRules({ node, request, task, can, openDrawer, closeDrawer: () => drawer.hide(), table });
     const catalogStudio = window.createWorkspaceCatalog({ templates: () => offeringTemplates, deliveryModes, node, request, task, buildForm, formData, openDrawer, table, money, openRecord, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, publications: course => catalogStudio.publications(course) });
-    const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, degreeAudit: () => degreeAuditStudio, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
     const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
