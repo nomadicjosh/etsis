@@ -11,6 +11,8 @@ async function fixture(page, options = {}) {
         { id: id(5), kind: 'award', code: 'BA', title: 'Bachelor of Arts <script>fictional</script>', active: true },
     ];
     let reviews = 0, accepted = null;
+    const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true})) : [];
+    let specializationFailure = !!options.specializationFailure;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -26,6 +28,16 @@ async function fixture(page, options = {}) {
                 return [kind, row ? { id: row.id, code: row.code, title: row.title } : null];
             })) };
             result = { id: id(1), definition, revision: 'a'.repeat(64) };
+        } else if (path === `/sis/programs/${id(1)}/specializations/page/`) {
+            const matches = specializations.filter(row=>(!data.after||row.id>data.after)&&`${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id));
+            result={program:{id:id(1),code:definition.code,title:definition.title},items:matches.slice(0,20).map(({description,...row})=>row),next_after:matches.length>20?matches[19].id:null};
+        } else if (path === `/sis/programs/${id(1)}/specializations/save/`) {
+            if (specializationFailure) {specializationFailure=false;await route.fulfill({status:409,json:{error:'Reload this specialization before saving your changes.'}});return;}
+            const previous=data.id?specializations.find(row=>row.id===data.id):null;
+            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1};
+            if(previous) Object.assign(previous,result);else specializations.push(result);
+        } else if (path.startsWith(`/sis/programs/${id(1)}/specializations/`)) {
+            result=specializations.find(row=>row.id===path.split('/').at(-2));
         } else if (path === `/sis/programs/${id(1)}/assistance/`) {
             if (data && options.assistanceFailure) {
                 await route.fulfill({ status: 503, json: { error: 'The assistance provider rejected authentication. Ask an administrator to check the AI credential and authentication setting. Your draft is unchanged.' } }); return;
@@ -175,4 +187,96 @@ test('disabled and failed program assistance leave editing available with fresh 
         expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(0);
         expect(f.errors).toEqual([]);
     }
+});
+
+test("program specialization setup preserves the program draft and saves literal text with explicit availability", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await page.getByRole("textbox", { name: "Program title", exact: true }).fill("My unsaved program title");
+    await page
+        .getByRole("textbox", { name: "Program description", exact: true })
+        .fill("My unsaved program description");
+    await page.getByRole("button", { name: "Program specializations", exact: true }).click();
+    await expect(page.getByText("No specializations match this search.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Add a specialization", exact: true }).click();
+    await page.getByRole("textbox", { name: "Specialization code", exact: true }).fill("DATA.SCI");
+    await page
+        .getByRole("textbox", { name: "Specialization title", exact: true })
+        .fill("Data science <b>fictional</b>");
+    await page
+        .getByRole("textbox", { name: "Specialization description", exact: true })
+        .fill("Fictional first paragraph.\nSecond paragraph.");
+    await page.getByRole("checkbox", { name: "Active specialization", exact: true }).uncheck();
+    await accessible(page);
+    await page.getByRole("button", { name: "Save specialization", exact: true }).click();
+    await expect(page.getByText("Specialization saved.", { exact: true })).toBeVisible();
+    await expect(page.getByText("DATA.SCI — Data science <b>fictional</b>", { exact: true })).toBeVisible();
+    await expect(page.getByText("Inactive — retained for reference", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Edit specialization DATA.SCI", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Specialization description", exact: true })).toHaveValue(
+        "Fictional first paragraph.\nSecond paragraph.",
+    );
+    await expect(
+        page.getByRole("checkbox", { name: "Active specialization", exact: true }),
+    ).not.toBeChecked();
+    await page.getByRole("button", { name: "Cancel specialization changes", exact: true }).click();
+    await page.getByRole("button", { name: "Back to program details", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Program title", exact: true })).toHaveValue(
+        "My unsaved program title",
+    );
+    await expect(page.getByRole("textbox", { name: "Program description", exact: true })).toHaveValue(
+        "My unsaved program description",
+    );
+    const saves = f.calls.filter((c) => c.path.endsWith("/specializations/save/"));
+    expect(saves).toHaveLength(1);
+    expect(saves[0].data).toMatchObject({ id: null, revision: null, active: false });
+    expect(f.calls.some((c) => c.path.endsWith("/details/") || c.path.endsWith("/publication/commit/"))).toBe(
+        false,
+    );
+    expect(f.calls.every((c) => c.csrf === "fictional-test-token")).toBe(true);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test("specialization lists page and search within their program and rejected edits preserve entered values", async ({
+    page,
+}) => {
+    const f = await fixture(page, { specializations: true, specializationFailure: true });
+    await page.getByRole("button", { name: "Program specializations", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(20);
+    await page.getByRole("button", { name: "More specializations", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(3);
+    await page.getByRole("button", { name: "Edit specialization FOCUS.22", exact: true }).click();
+    await page
+        .getByRole("textbox", { name: "Specialization title", exact: true })
+        .fill("Updated focus <script>fictional</script>");
+    await page.getByRole("checkbox", { name: "Active specialization", exact: true }).uncheck();
+    await page.getByRole("button", { name: "Save specialization", exact: true }).click();
+    await expect(
+        page.getByText("Reload this specialization before saving your changes.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Specialization title", exact: true })).toHaveValue(
+        "Updated focus <script>fictional</script>",
+    );
+    await page.getByRole("button", { name: "Save specialization", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(3);
+    await page.getByRole("button", { name: "Previous specializations", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(20);
+    await page
+        .getByRole("searchbox", { name: "Search this program's specializations", exact: true })
+        .fill("FOCUS.03");
+    await page.getByRole("button", { name: "Search specializations", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(1);
+    await expect(
+        page.getByRole("button", { name: "Edit specialization FOCUS.03", exact: true }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.locator("#record-drawer b,#record-drawer script").count()).toBe(0);
+    expect(
+        f.calls.filter((c) => c.path.endsWith("/specializations/save/")).map((c) => c.data.revision),
+    ).toEqual([1, 1]);
+    expect(f.errors).toEqual([]);
 });

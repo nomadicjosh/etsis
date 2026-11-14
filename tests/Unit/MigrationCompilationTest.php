@@ -20,6 +20,7 @@ require_once $registrationCompilerMigrations . "20261106000005_CreateSisAccessTa
 
 require_once $registrationCompilerMigrations . "20261106000006_CreateSisWorkspaceTables.php";
 require_once $registrationCompilerMigrations . "20261113000000_CreateSisCourseRules.php";
+require_once $registrationCompilerMigrations . "20261113000001_CreateSisProgramSpecializations.php";
 
 require_once $registrationCompilerMigrations . "20261107000000_CreateCampusPortalTables.php";
 
@@ -341,7 +342,7 @@ final class MigrationCompilationTest extends TestCase
         );
         $schema = $this->createMock(Schema::class);
         $schema
-            ->expects(self::exactly(124))
+            ->expects(self::exactly(125))
             ->method("create")
             ->willReturnCallback(static function (string $name, callable $callback) use (
                 &$tables,
@@ -412,6 +413,7 @@ final class MigrationCompilationTest extends TestCase
             new CreateSisSectionVersions("38"),
             new CreateSisSectionOfferingSelections("39"),
             new CreateSisCourseRules("course-rules"),
+            new CreateSisProgramSpecializations("program-specializations"),
         ];
         foreach ($historyCases2 as $migration) {
             $migration->setObjectMap(new ArrayObject(["phpmig.adapter" => $adapter]));

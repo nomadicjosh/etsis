@@ -3539,3 +3539,30 @@ if (
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+
+// Specialization setup uses catalog authority, program scope and the same private CSRF pipeline.
+$sis->access->staff = true;
+$specializationBase = '/sis/programs/' . $sis->program->value . '/specializations/';
+$specializationSave = ['id'=>null,'revision'=>null,'code'=>'FOCUS.FICTIONAL','title'=>'Fictional specialization','description'=>null,'active'=>true];
+$specializationResponse = $teachingPost($specializationBase . 'save/', $specializationSave);
+$specializationRow = json_decode((string)$specializationResponse->getBody(),true,flags:JSON_THROW_ON_ERROR);
+if ($specializationResponse->getStatusCode() !== 200 || ($specializationRow['revision'] ?? null) !== 1) {
+    throw new RuntimeException('Specialization setup did not resolve through the provider/router pipeline.');
+}
+$specializationRequest = $programDetailsRequest->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $specializationBase . $specializationRow['id'] . '/'));
+$specializationRead = $app->router->match($specializationRequest);
+$specializationPage = $teachingPost($specializationBase . 'page/', ['search'=>'FOCUS.FICTIONAL']);
+if ($specializationRead->getStatusCode() !== 200 || !str_contains($specializationRead->getHeaderLine('Cache-Control'),'no-store') ||
+    !str_contains((string)$specializationPage->getBody(),'FOCUS.FICTIONAL') ||
+    $teachingPost($specializationBase.'save/',array_replace($specializationSave,['id'=>$specializationRow['id'],'revision'=>0]))->getStatusCode() !== 422) {
+    throw new RuntimeException('Specialization reads or typed revision validation failed.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read'];
+if ($app->router->match($specializationRequest)->getStatusCode() !== 403 ||
+    $teachingPost($specializationBase.'page/',[])->getStatusCode() !== 403 ||
+    $teachingPost($specializationBase.'save/',$specializationSave)->getStatusCode() !== 403) {
+    throw new RuntimeException('Student authority allowed specialization setup.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];

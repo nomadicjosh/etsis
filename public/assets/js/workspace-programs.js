@@ -154,6 +154,10 @@ window.createWorkspacePrograms = function (ui) {
                     capture();
                     return history(id, render);
                 }),
+                button("Program specializations", () => {
+                    capture();
+                    return specializations(id, render);
+                }),
             );
             let assistantPanel = null;
             body.append(
@@ -482,6 +486,158 @@ window.createWorkspacePrograms = function (ui) {
         );
     }
 
+    async function specializations(program, back, state = { search: "", after: null, stack: [] }, notice = "") {
+        const base = `/sis/programs/${program}/specializations/`;
+        const data = await request(`${base}page/`, "POST", { search: state.search, after: state.after });
+        const body = openDrawer("Program specializations", "FOCUSED PATHS WITHIN AN ACADEMIC PROGRAM");
+        const restore = (notice = "") => specializations(program, back, state, notice);
+        body.append(
+            node("h3", { class: "h5" }, `${data.program.code} — ${data.program.title}`),
+            node(
+                "p",
+                {},
+                "Maintain specialization names and availability for this program. This setup does not change a student's recorded program or degree requirements.",
+            ),
+            node(
+                "div",
+                { class: "d-flex flex-wrap gap-2 mb-3" },
+                button("Add a specialization", () => editSpecialization(program, null, restore)),
+                button("Back to program details", back),
+            ),
+        );
+        if (notice) body.append(node("p", { role: "status", class: "alert alert-success" }, notice));
+        const search = node("input", {
+            id: "program-specialization-search",
+            type: "search",
+            class: "form-control",
+            maxlength: "100",
+            value: state.search,
+        });
+        const form = node(
+            "form",
+            { class: "mb-3" },
+            node("label", { for: search.id, class: "form-label" }, "Search this program's specializations"),
+            node(
+                "div",
+                { class: "d-flex flex-wrap gap-2" },
+                search,
+                node("button", { type: "submit", class: "btn btn-outline-primary" }, "Search specializations"),
+            ),
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(
+                () => specializations(program, back, { search: search.value, after: null, stack: [] }),
+                form.querySelector("button"),
+            );
+        });
+        body.append(form);
+        if (!data.items.length)
+            body.append(node("p", { role: "status" }, "No specializations match this search."));
+        const cards = node("div", { class: "row g-3" });
+        data.items.forEach((item) =>
+            cards.append(
+                node(
+                    "div",
+                    { class: "col-12" },
+                    node(
+                        "article",
+                        { class: "surface p-3" },
+                        node("h3", { class: "h5" }, `${item.code} — ${item.title}`),
+                        node("p", {}, item.active ? "Active" : "Inactive — retained for reference"),
+                        button(`Edit specialization ${item.code}`, () =>
+                            editSpecialization(program, item.id, restore),
+                        ),
+                    ),
+                ),
+            ),
+        );
+        body.append(cards);
+        const controls = node("div", { class: "d-flex flex-wrap gap-2 mt-3" });
+        if (state.stack.length)
+            controls.append(
+                button("Previous specializations", () =>
+                    specializations(program, back, {
+                        ...state,
+                        after: state.stack.at(-1),
+                        stack: state.stack.slice(0, -1),
+                    }),
+                ),
+            );
+        if (data.next_after)
+            controls.append(
+                button("More specializations", () =>
+                    specializations(program, back, {
+                        ...state,
+                        after: data.next_after,
+                        stack: [...state.stack, state.after],
+                    }),
+                ),
+            );
+        body.append(controls);
+    }
+
+    async function editSpecialization(program, id, back) {
+        const base = `/sis/programs/${program}/specializations/`;
+        const value = id
+            ? await request(`${base}${id}/`)
+            : { id: null, revision: null, code: "", title: "", description: null, active: true };
+        const body = openDrawer(
+            id ? "Edit specialization" : "Add specialization",
+            "PROGRAM SPECIALIZATION SETUP",
+        );
+        body.append(
+            node(
+                "p",
+                {},
+                "Use a clear code and name. Deactivate a specialization when it should no longer be offered; its reference is preserved.",
+            ),
+        );
+        const fields = [
+            ["code", "Specialization code"],
+            ["title", "Specialization title"],
+            ["description", "Specialization description", "textarea", "", false],
+        ];
+        const form = await buildForm(fields, value);
+        form.elements.namedItem("code").maxLength = 80;
+        form.elements.namedItem("code").pattern = "[A-Za-z0-9][A-Za-z0-9._-]{0,79}";
+        form.elements.namedItem("code").title = "Use letters, numbers, dots, underscores or hyphens.";
+        form.elements.namedItem("description").maxLength = 10000;
+        const active = node("input", {
+            id: "program-specialization-active",
+            type: "checkbox",
+            class: "form-check-input",
+        });
+        active.checked = value.active;
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save specialization");
+        form.append(
+            node(
+                "div",
+                { class: "form-check my-3" },
+                active,
+                node("label", { for: active.id, class: "form-check-label" }, "Active specialization"),
+            ),
+            node("div", { class: "d-flex flex-wrap gap-2" }, save, button("Cancel specialization changes", back)),
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const draft = formData(form, fields);
+                await request(`${base}save/`, "POST", {
+                    id: value.id,
+                    revision: value.revision,
+                    code: draft.code,
+                    title: draft.title,
+                    description: form.elements.namedItem("description").value || null,
+                    active: active.checked,
+                });
+                if (!body.isConnected) return;
+                await back("Specialization saved.");
+            }, save);
+        });
+        body.append(form);
+    }
     async function history(id, back, cursor = null, stack = []) {
         const data = await request(`/sis/programs/${id}/publication/page/`, "POST", cursor ? { cursor } : {});
         const body = openDrawer("Published program details", "RETAINED ACADEMIC DEFINITIONS");
