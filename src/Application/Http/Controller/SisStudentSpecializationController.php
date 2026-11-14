@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
+use Domain\DegreeAudit\Service\DegreeProgressService;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Service\StudentSpecializationService;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -13,8 +14,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisStudentSpecializationController
 {
-    public function __construct(private StudentSpecializationService $service)
-    {
+    public function __construct(
+        private StudentSpecializationService $service,
+        private DegreeProgressService $progress,
+    ) {
     }
     public function view(string $student, string $assignment): ResponseInterface
     {
@@ -67,6 +70,21 @@ final readonly class SisStudentSpecializationController
             new EntityId($assignment),
             new EntityId($specialization),
         ));
+    }
+    public function progress(string $student, string $assignment, string $specialization): ResponseInterface
+    {
+        $result = $this->progress->specialization(
+            new EntityId($student),
+            new EntityId($assignment),
+            new EntityId($specialization),
+        );
+        if ($result['status'] === 'inconsistent') {
+            return new JsonResponse([
+                'error' => 'Specialization progress could not be verified. Ask a registrar to review this record.',
+                'status' => 'inconsistent',
+            ], 409);
+        }
+        return new JsonResponse($result);
     }
     public function requirementChoices(
         ServerRequest $request,

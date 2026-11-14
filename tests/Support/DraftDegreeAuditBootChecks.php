@@ -252,13 +252,25 @@ if ($read->getStatusCode() !== 200 || ($assigned['requirements']['version_id'] ?
     ($assigned['can_manage'] ?? true) !== false) {
     throw new RuntimeException('Read-only student staff could not inspect the exact assigned requirements.');
 }
+$progressBefore = $digest();
+if ($send($assignmentPath . 'progress/', [], false)->getStatusCode() !== 403) {
+    throw new RuntimeException('Specialization progress bypassed browser CSRF.');
+}
+$progressResponse = $send($assignmentPath . 'progress/');
+$progressResult = json_decode((string) $progressResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($progressResponse->getStatusCode() !== 200 || ($progressResult['mode'] ?? null) !== 'assigned_specialization' ||
+    ($progressResult['context']['requirements_version_id'] ?? null) !== $confirmed['operation_id'] ||
+    ($progressResult['context']['specialization']['id'] ?? null) !== $specialization['id'] || $progressBefore !== $digest()) {
+    throw new RuntimeException('Specialization progress lost its retained scope or changed academic records.');
+}
 foreach (['choices/' => [], 'review/' => $requirementData, 'commit/' => $commitData] as $suffix => $data) {
     if ($send($assignmentPath . $suffix, $data)->getStatusCode() !== 403) {
         throw new RuntimeException('Read-only student staff assigned specialization requirements.');
     }
 }
 $sis->access->grants = ['sis:catalog:manage', 'sis:degree-audit:assign'];
-if ($send($assignmentPath, [], method: 'GET')->getStatusCode() !== 403) {
+if ($send($assignmentPath, [], method: 'GET')->getStatusCode() !== 403 ||
+    $send($assignmentPath . 'progress/')->getStatusCode() !== 403) {
     throw new RuntimeException('Catalog/assignment authority bypassed private student-read permissions.');
 }
 $sis->access->staff = true;

@@ -7,6 +7,7 @@ namespace Domain\DegreeAudit\Service;
 use Domain\DegreeAudit\ValueObject\AcademicGpaScope;
 use Domain\DegreeAudit\ValueObject\AcademicInputSet;
 use Domain\DegreeAudit\ValueObject\AuditCalculationPolicy;
+use Domain\DegreeAudit\ValueObject\RequirementAdjustmentDefinitionV2;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 
 /** Shared calculations for verified assigned requirements and explicitly hypothetical authoring inputs. */
@@ -21,6 +22,25 @@ final readonly class DegreeProgressEvaluator
         private SavedCourseRulePreview $rulePreview,
         private GradingRepublicationVerifier $grading,
     ) {
+    }
+
+    /** Published requirements without student-specific overlays.
+     * @param array<string,mixed> $requirements
+     * @return array<string,mixed>
+     */
+    public static function unadjusted(array $requirements): array
+    {
+        return [
+            'degree' => array_intersect_key(
+                $requirements['definition'],
+                array_flip(RequirementAdjustmentDefinitionV2::DEGREE_MINIMUMS),
+            ),
+            'groups' => array_map(static fn(array $g): array => $g['definition'], $requirements['group_details']),
+            'waived_course_ids' => [],
+            'substitutions' => [],
+            'substitution_conflicts' => [],
+            'placements' => [],
+        ];
     }
 
     /**

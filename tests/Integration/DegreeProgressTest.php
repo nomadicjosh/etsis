@@ -6,6 +6,7 @@ namespace Tests\Integration;
 
 require_once dirname(__DIR__) . "/Support/StudentRequirementsFixture.php";
 require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+require_once dirname(__DIR__) . "/Support/DegreeProgressFixture.php";
 
 use Domain\DegreeAudit\Repository\AcademicInputRepository;
 use Domain\DegreeAudit\Service\AcademicInputService;
@@ -63,41 +64,8 @@ final class DegreeProgressTest extends TestCase
         ?AcademicInputRepository $repository = null,
         int $steps = 100000,
     ): DegreeProgressService {
-        $s = $f->f->sis;
-        $students = new SqlStudentRecordRepository($s->sql);
-        $inputs = new AcademicInputService(
-            $repository ?? new SqlAcademicInputRepository($s->sql),
-            $s->academicCredits(),
-            $s->transferCredits(),
-            $s->enrollmentLedger(),
-            $students,
-            $f->service,
-            $s->transactions,
-        );
-        return new DegreeProgressService(
-            $inputs,
-            $f->service,
-            $this->adjustments($f),
-            new \Domain\DegreeAudit\Service\DegreeProgressEvaluator(
-                new AcademicPolicyEvaluator(),
-                new RetainedAttemptReader(new RetainedSectionReader($f->f->history)),
-                new DegreeMinimumEvaluator(),
-                new GroupAllocationEvaluator(
-                    new CourseMatchEvaluator(),
-                    new AcademicPolicyEvaluator(),
-                    new CourseAllocationPlanner($steps),
-                    new AllocationGapAnalyzer(),
-                    new RuleAllocationCompiler(new CourseMatchEvaluator()),
-                    new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
-                ),
-                new DegreeWorkReview(),
-                new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
-                new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
-                    new \Domain\Gradebook\Service\RetainedGradingReader($f->f->history),
-                ),
-            ),
-            $students,
-            $s->transactions,
+        return \DegreeProgressFixture::service(
+            $f->f->sis, $f->f->history, $f->service, $f->f->catalog->fixture->cipher, $repository, $steps,
         );
     }
     private function institution(): StudentRequirementsFixture

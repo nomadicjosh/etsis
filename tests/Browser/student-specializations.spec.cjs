@@ -11,6 +11,7 @@ async function fixture(
         reject = false,
         rejectRequirements = false,
         assigned = false,
+        progressStatus = "review",
     } = {},
 ) {
     const calls = [],
@@ -142,6 +143,64 @@ async function fixture(
                 cohort_changed: cohortChanged,
                 can_manage: !readOnly && !cohortChanged,
             };
+        else if (path === requirementsPath + "progress/")
+            result =
+                progressStatus === "review"
+                    ? {
+                          status: "review",
+                          mode: "assigned_specialization",
+                          input_status: "verified",
+                          current_record_count: 0,
+                          context: {
+                              mode: "assigned_specialization",
+                              specialization: offered[0],
+                              name: requirements.definition.name,
+                              academic_year_code: "2024-2025",
+                              version: 1,
+                              group_reuse: "one_group",
+                              cohort_changed: cohortChanged,
+                          },
+                          minimums: [
+                              {
+                                  key: "min_credits_milli",
+                                  required_milli: 6000,
+                                  published_milli: 6000,
+                                  actual_minimum_milli: 0,
+                                  actual_maximum_milli: 0,
+                                  status: "below_minimum",
+                                  adjusted: false,
+                              },
+                          ],
+                          gpa: {
+                              cumulative: { ready: false },
+                              overall: { ready: false },
+                          },
+                          work_summary: {
+                              awaiting_grade_count: 0,
+                              awaiting_grade_milli: 0,
+                              placement_established: false,
+                              unused_completed_count: 0,
+                          },
+                          records: [],
+                          issues: [],
+                          allocation: {
+                              outcome: "infeasible",
+                              groups: [],
+                              records: [],
+                              issues: [],
+                              competition: null,
+                          },
+                          policy: {
+                              repeat_credit: "highest_earned",
+                              repeat_gpa: "all_eligible",
+                              transfer_overall_gpa: "exclude",
+                              attempt_order: "academic_period",
+                          },
+                      }
+                    : {
+                          status: progressStatus,
+                          mode: "assigned_specialization",
+                      };
         else if (path === requirementsPath + "choices/")
             result = {
                 specialization: offered[0],
@@ -604,4 +663,200 @@ test("requirements review failures preserve the reason and earlier cohort assign
             }),
     ).toBeVisible();
     expect(readOnly.errors).toEqual([]);
+});
+
+test("assigned specialization progress is an independent read with captured drilldowns and an explicit refresh", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        cohortChanged: true,
+    });
+    await page
+        .getByRole("button", { name: "Requirements for CHOICE.1", exact: true })
+        .click();
+    await page
+        .getByRole("button", {
+            name: "Review specialization progress",
+            exact: true,
+        })
+        .click();
+    const review = page.getByRole("dialog", {
+        name: "Specialization progress review",
+        exact: true,
+    });
+    await expect(review).toBeVisible();
+    await expect(
+        review.getByText("General specialization minimums", { exact: true }),
+    ).toBeVisible();
+    await expect(
+        review.getByText("Student-specific exceptions are not applied", {
+            exact: false,
+        }),
+    ).toBeVisible();
+    await expect(
+        review
+            .getByRole("status")
+            .filter({
+                hasText:
+                    "The cohort changed after this specialization assignment.",
+            }),
+    ).toBeVisible();
+    await expect(
+        review.getByRole("button", {
+            name: "Open degree progress guide",
+            exact: true,
+        }),
+    ).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const scan = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(
+        scan.violations.map((v) => ({
+            id: v.id,
+            targets: v.nodes.map((n) => n.target),
+        })),
+    ).toEqual([]);
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+    ).toBe(true);
+    await review
+        .getByRole("button", {
+            name: "Inspect course-group placement",
+            exact: true,
+        })
+        .click();
+    const group = page.getByRole("dialog", {
+        name: "Specialization course-group placement",
+        exact: true,
+    });
+    await expect(group).toBeVisible();
+    await expect(
+        group.getByRole("button", {
+            name: "Refresh course placement",
+            exact: true,
+        }),
+    ).toHaveCount(0);
+    await group
+        .getByRole("button", {
+            name: "Back to specialization progress",
+            exact: true,
+        })
+        .click();
+    await review
+        .getByRole("button", {
+            name: "Inspect credit and GPA contributions",
+            exact: true,
+        })
+        .click();
+    await page
+        .getByRole("button", {
+            name: "Back to specialization progress",
+            exact: true,
+        })
+        .click();
+    expect(
+        f.calls.filter(
+            (call) => call.path === f.requirementsPath + "progress/",
+        ),
+    ).toHaveLength(1);
+    await review
+        .getByRole("button", {
+            name: "Refresh specialization review",
+            exact: true,
+        })
+        .focus();
+    await page.keyboard.press("Enter");
+    await expect
+        .poll(
+            () =>
+                f.calls.filter(
+                    (call) => call.path === f.requirementsPath + "progress/",
+                ).length,
+        )
+        .toBe(2);
+    await review
+        .getByRole("button", {
+            name: "Back to specialization requirements",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page.getByRole("button", {
+            name: "Review specialization progress",
+            exact: true,
+        }),
+    ).toBeVisible();
+    expect(
+        f.calls.some((call) =>
+            /degree-requirements.*progress|academic-work.*allocation/.test(
+                call.path,
+            ),
+        ),
+    ).toBe(false);
+    expect(f.calls.every((call) => call.csrf === "fictional-test-token")).toBe(
+        true,
+    );
+    expect(
+        await page.evaluate(() => [localStorage.length, sessionStorage.length]),
+    ).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("specialization progress explains a removed assignment and bounded review without partial results", async ({
+    page,
+}) => {
+    await fixture(page, { assigned: true, progressStatus: "needs_selection" });
+    await page
+        .getByRole("button", { name: "Requirements for CHOICE.1", exact: true })
+        .click();
+    await page
+        .getByRole("button", {
+            name: "Review specialization progress",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page
+            .getByRole("status")
+            .filter({
+                hasText: "Assign published requirements to this specialization",
+            }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("heading", {
+            name: "General specialization minimums",
+            exact: true,
+        }),
+    ).toHaveCount(0);
+    await page.unroute("**/sis/**");
+    const f = await fixture(page, {
+        assigned: true,
+        progressStatus: "limited",
+    });
+    await page
+        .getByRole("button", { name: "Requirements for CHOICE.1", exact: true })
+        .click();
+    await page
+        .getByRole("button", {
+            name: "Review specialization progress",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page
+            .getByRole("status")
+            .filter({ hasText: "The review reached its work limit." }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("button", {
+            name: "Inspect credit and GPA contributions",
+            exact: true,
+        }),
+    ).toHaveCount(0);
+    expect(f.errors).toEqual([]);
 });

@@ -53,6 +53,17 @@ final readonly class StudentSpecializationService
     ) {
     }
 
+    /** Staff read scope without history collection; used before and after an internal progress review. */
+    public function authorizeRead(EntityId $student, EntityId $assignment, ?EntityId $actor = null): EntityId
+    {
+        $actor = $this->authorize($actor);
+        $record = $this->admissions->student($student);
+        if ($this->records->assignment($assignment)->studentId->value !== $record->id->value) {
+            throw new RecordNotFoundException('Student program not found.');
+        }
+        return $actor;
+    }
+
     /** @return array<string,mixed> */
     public function view(EntityId $student, EntityId $assignment): array
     {
@@ -332,12 +343,22 @@ final readonly class StudentSpecializationService
     }
 
     /** @return array<string,mixed> */
-    public function assignedRequirements(EntityId $student, EntityId $assignment, EntityId $specialization): array
-    {
+    public function assignedRequirements(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $specialization,
+        ?HistoryReadBudget $budget = null,
+    ): array {
         $actor = $this->authorize();
-        return $this->transactions->run(function () use ($student, $assignment, $specialization, $actor): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $assignment,
+            $specialization,
+            $actor,
+            $budget,
+        ): array {
             $this->records->lock($student);
-            $budget = new HistoryReadBudget();
+            $budget ??= new HistoryReadBudget();
             $scope = $this->scope($student, $assignment, $actor, $budget);
             $root = $this->load($assignment, $scope, $budget)['root'];
             $selected = $root->requirements()[$specialization->value] ?? null;

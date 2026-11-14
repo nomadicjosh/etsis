@@ -2427,42 +2427,62 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
     }
     function renderDegreeProgress(base, back, data, guideState = null, trial = null) {
+        const component = data.mode === "assigned_specialization";
         const shell = screen(
-            trial ? (data.context?.specialization ? "Temporary specialization audit result" : "Temporary degree audit result") : "Degree progress review",
-            trial ? "RUNTIME AUDIT TEST · NOT SAVED" : "GENERAL MINIMUMS & COURSE GROUPS",
+            component
+                ? "Specialization progress review"
+                : trial
+                  ? data.context?.specialization
+                      ? "Temporary specialization audit result"
+                      : "Temporary degree audit result"
+                  : "Degree progress review",
+            component
+                ? "ASSIGNED SPECIALIZATION · INDEPENDENT REVIEW"
+                : trial
+                  ? "RUNTIME AUDIT TEST · NOT SAVED"
+                  : "GENERAL MINIMUMS & COURSE GROUPS",
         );
         const state = guideState || { open: false, side: "right", topic: "steps" };
         const layout = node("div", { class: "progress-guide-layout" });
         const body = node("div", { class: "progress-guide-review" });
-        if (data.context?.specialization) body.append(node("p", { class: "alert alert-info" },
-            `Specialization only · ${data.context.specialization.code} — ${data.context.specialization.title}. This test evaluates this component independently. Combined degree/specialization sharing and exclusions are not applied.`));
+        if (data.context?.specialization)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    `Specialization only · ${data.context.specialization.code} — ${data.context.specialization.title}. ${component ? "This review uses the assigned publication." : "This test evaluates this component independently."} Combined degree/specialization sharing and exclusions are not applied.`,
+                ),
+            );
         layout.append(body);
         shell.append(layout);
         const restore = () => renderDegreeProgress(base, back, data, state, trial);
-        restore.returnLabel = "Back to degree progress";
+        restore.returnLabel = component ? "Back to specialization progress" : "Back to degree progress";
         const steps = progressNextSteps(data);
         const slot = node("div", { class: "progress-guide-inline" }, steps);
-        const guide = trial
-            ? null
-            : degreeProgressGuide(layout, steps, slot, data, state, {
-                  minimums: () => body.querySelector("[data-progress-minimums]")?.focus(),
-                  contributions: () => degreeProgressContributions(data, restore),
-                  groups: () =>
-                      renderGroupAllocation(base, restore, {
-                          status: "review",
-                          input_status: data.input_status,
-                          current_record_count: data.current_record_count,
-                          context: data.context,
-                          ...data.allocation,
-                      }),
-              });
+        const guide =
+            trial || component
+                ? null
+                : degreeProgressGuide(layout, steps, slot, data, state, {
+                      minimums: () => body.querySelector("[data-progress-minimums]")?.focus(),
+                      contributions: () => degreeProgressContributions(data, restore),
+                      groups: () =>
+                          renderGroupAllocation(base, restore, {
+                              status: "review",
+                              input_status: data.input_status,
+                              current_record_count: data.current_record_count,
+                              context: data.context,
+                              ...data.allocation,
+                          }),
+                  });
         body.append(
             node(
                 "p",
                 {},
-                trial
-                    ? "Temporary test of the selected audit requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
-                    : "Review current work against the selected degree's general minimums and course groups, including approved exceptions. All checks use one verified read. This is not a completed degree audit or graduation decision, and it saves no academic changes.",
+                component
+                    ? "Compare verified current work with the exact assigned specialization requirements. Student-specific exceptions are not applied in this independent comparison. Credits and GPA are calculated once within this review, not added to the degree's totals. No result or academic change is saved; this does not establish combined completion or graduation eligibility."
+                    : trial
+                      ? "Temporary test of the selected audit requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
+                      : "Review current work against the selected degree's general minimums and course groups, including approved exceptions. All checks use one verified read. This is not a completed degree audit or graduation decision, and it saves no academic changes.",
             ),
         );
         body.append(
@@ -2470,11 +2490,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 guide,
                 trial
                     ? button("Back to test setup", trial.setup)
-                    : button("Refresh degree progress", () => degreeProgress(base, back)),
-                trial ? null : button("Back to degree requirements", back),
+                    : button(component ? "Refresh specialization review" : "Refresh degree progress", () =>
+                          degreeProgress(base, back),
+                      ),
+                trial
+                    ? null
+                    : button(component ? "Back to specialization requirements" : "Back to degree requirements", back),
             ),
         );
-        if (!trial) body.append(slot);
+        if (!trial && !component) body.append(slot);
         if (trial) body.append(node("p", { class: "audit-status" }, trial.student));
         if (trial && data.context?.program_title)
             body.append(
@@ -2501,7 +2525,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "p",
                     { class: "alert alert-info", role: "status" },
                     data.status === "needs_selection"
-                        ? "Select published degree requirements for this pursuit before reviewing degree progress."
+                        ? component
+                            ? "Assign published requirements to this specialization before reviewing its progress."
+                            : "Select published degree requirements for this pursuit before reviewing degree progress."
                         : data.status === "inconsistent"
                           ? "The academic inputs could not be verified. No partial minimum checks, records or placements are shown. Ask the registrar to review the records."
                           : "The review reached its work limit. No partial minimum checks, records or placements are shown. Ask the registrar to arrange a controlled review.",
@@ -2536,10 +2562,18 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     { class: "alert alert-info", role: "status" },
-                    "The matriculation cohort changed. The retained degree selection still applies; ask the registrar to review it.",
+                    component
+                        ? "The cohort changed after this specialization assignment. This comparison shows the earlier retained requirements. Ask the registrar to review the specialization choices and requirements for the current cohort."
+                        : "The matriculation cohort changed. The retained degree selection still applies; ask the registrar to review it.",
                 ),
             );
-        body.append(node("h2", { tabindex: "-1", "data-progress-minimums": "" }, "General degree minimums"));
+        body.append(
+            node(
+                "h2",
+                { tabindex: "-1", "data-progress-minimums": "" },
+                component ? "General specialization minimums" : "General degree minimums",
+            ),
+        );
         const cards = node("div", { class: "audit-library-grid" });
         for (const check of data.minimums) {
             const gpa =
@@ -2673,7 +2707,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "section",
                 { class: "audit-preview" },
                 node("h2", {}, "Course groups"),
-                node("p", { role: "status" }, outcomes[data.allocation.outcome] || "Course-group placement needs review"),
+                node(
+                    "p",
+                    { role: "status" },
+                    outcomes[data.allocation.outcome] || "Course-group placement needs review",
+                ),
                 node(
                     "p",
                     {},
@@ -2777,17 +2815,20 @@ window.createWorkspaceDegreeAudit = function (ui) {
         if (offset) body.append(button("Previous eligibility checks", () => ruleEligibility(data, back, offset - 20)));
         if (offset + 20 < values.length)
             body.append(button("Next eligibility checks", () => ruleEligibility(data, back, offset + 20)));
-        body.append(button("Back to degree progress", back));
+        body.append(button(back.returnLabel || "Back to degree progress", back));
     }
     function degreeProgressContributions(data, back, offset = 0, filter = "all", term = "all") {
-        const body = screen("Degree progress contributions", "SAME VERIFIED CURRENT WORK");
+        const body = screen(
+            data.mode === "assigned_specialization" ? "Specialization progress contributions" : "Degree progress contributions",
+            "SAME VERIFIED CURRENT WORK",
+        );
         body.append(
             node(
                 "p",
                 {},
                 "Earned credit, cumulative GPA and overall GPA have separate retained rules. A course-group placement does not create another contribution to these totals.",
             ),
-            actions(button("Back to degree progress", back)),
+            actions(button(back.returnLabel || "Back to degree progress", back)),
         );
         const termRecords = data.records.filter((r) => term === "all" || r.term_id === term);
         const filters = {
@@ -2957,25 +2998,30 @@ window.createWorkspaceDegreeAudit = function (ui) {
         renderGroupAllocation(base, back, data);
     }
     function renderGroupAllocation(base, back, data, offset = 0) {
+        const component = data.context?.mode === "assigned_specialization";
         const body = screen(
-            "Course-group placement",
-            data.context?.mode === "runtime_test"
-                ? "TEMPORARY AUDIT TEST · NOT SAVED"
-                : "RETAINED REQUIREMENTS & APPROVALS",
+            component ? "Specialization course-group placement" : "Course-group placement",
+            component
+                ? "ASSIGNED SPECIALIZATION · INDEPENDENT REVIEW"
+                : data.context?.mode === "runtime_test"
+                  ? "TEMPORARY AUDIT TEST · NOT SAVED"
+                  : "RETAINED REQUIREMENTS & APPROVALS",
         );
         const restore = () => renderGroupAllocation(base, back, data, offset);
         body.append(
             node(
                 "p",
                 {},
-                data.context?.mode === "runtime_test"
-                    ? "Temporary placement against the tested audit requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
-                    : "Review a proposed placement of current work against course-group quantities and required courses, including approved exceptions. Overall GPA, residency, specialization rules and graduation eligibility are not evaluated here. This review saves no academic changes or audit result.",
+                component
+                    ? "Independent placement against the assigned specialization requirements. Student-specific exceptions and cross-component sharing/exclusions are not applied. This is a current comparison, not a retained result or a graduation decision."
+                    : data.context?.mode === "runtime_test"
+                      ? "Temporary placement against the tested audit requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
+                      : "Review a proposed placement of current work against course-group quantities and required courses, including approved exceptions. Overall GPA, residency, specialization rules and graduation eligibility are not evaluated here. This review saves no academic changes or audit result.",
             ),
         );
         body.append(
             actions(
-                data.context?.mode === "runtime_test"
+                data.context?.mode === "runtime_test" || component
                     ? null
                     : button("Refresh course placement", () => groupAllocation(base, back)),
                 button(back.returnLabel || "Back to previous screen", back),
@@ -3075,9 +3121,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         "p",
                         {},
                         data.outcome === "feasible"
-                            ? (group.coverage
+                            ? group.coverage
                                 ? `${text(group.coverage.applied_credits_milli)} applied credits · ${group.coverage.applied_courses} distinct course${group.coverage.applied_courses === 1 ? "" : "s"} in this proposed plan`
-                                : `${group.placements.length} proposed course placements`)
+                                : `${group.placements.length} proposed course placements`
                             : "Placement not established",
                     ),
                     node("p", {}, groupGapSummary(group, data.outcome)),
@@ -5294,6 +5340,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         library,
         studentRequirements,
         gradingScale,
+        specializationProgress: (base, back) => degreeProgress(base, () => {
+            close();
+            return back();
+        }),
         inspectRequirements: (item, back) =>
             preview(item, "degree", () => {
                 close();

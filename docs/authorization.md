@@ -116,3 +116,5 @@ Report request cases reuse `sis:reporting:run` for own requests and `sis:reporti
 ## Student requirement exceptions
 
 `sis:degree-audit:adjust` plus `sis:student:read` is required to approve/revoke a course waiver or minimum exception. Catalog, registration and requirement assignment alone do not grant this. It is an independent protected system permission with no automatic expansion of office/user grants; access administrators may grant it to a custom registrar role or user. Owner/student-read authority permits curated reads only. [Setup and scope](student-degree-exceptions.md) describe the one-pursuit boundary and immutable approval history.
+
+[Assigned specialization progress](student-degree-progress.md#assigned-specialization-review) is a staff read requiring `sis:student:read`, independent of catalog management or degree-assignment permission. It verifies student-program scope and rechecks the original actor/current authority after collection. It adds no owner-only portal route or role grant, and does not apply student-specific exceptions or perform combined degree/specialization allocation.

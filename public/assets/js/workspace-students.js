@@ -1445,6 +1445,9 @@ window.createWorkspaceStudents = function (ui) {
                         .degreeAudit()
                         .inspectRequirements(data.requirements, reopen),
                 ),
+                button("Review specialization progress", () =>
+                    ui.degreeAudit().specializationProgress(path, reopen),
+                ),
             );
         else
             body.append(

@@ -19,9 +19,9 @@ final class StudentSpecializationRequirementsFixture
     public \Domain\Student\Service\StudentSpecializationService $service;
     public string $programVersion;
 
-    public function __construct()
+    public function __construct(?ReusableGroupFixture $r = null)
     {
-        $this->r = $r = new ReusableGroupFixture();
+        $this->r = $r ??= new ReusableGroupFixture();
         $s = $r->sis;
         $this->program = new ProgramPublicationFixture($s);
         $references = new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql);

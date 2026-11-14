@@ -11,7 +11,6 @@ use Domain\DegreeAudit\Repository\RequirementsRepository;
 use Domain\DegreeAudit\ValueObject\AcademicInputStatus;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
-use Domain\DegreeAudit\ValueObject\RequirementAdjustmentDefinitionV2;
 use Domain\Gradebook\Service\GradingScaleService;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
@@ -151,20 +150,7 @@ final readonly class DegreeAuditTrialService
                 $budget ??= new HistoryReadBudget();
                 $source = $resolve($budget);
                 $requirements = $source['requirements'];
-                $effective = [
-                    'degree' => array_intersect_key(
-                        $requirements['definition'],
-                        array_flip(RequirementAdjustmentDefinitionV2::DEGREE_MINIMUMS),
-                    ),
-                    'groups' => array_map(
-                        static fn(array $g): array => $g['definition'],
-                        $requirements['group_details'],
-                    ),
-                    'waived_course_ids' => [],
-                    'substitutions' => [],
-                    'substitution_conflicts' => [],
-                    'placements' => [],
-                ];
+                $effective = DegreeProgressEvaluator::unadjusted($requirements);
                 $inputs = $this->inputs->collect($student, $assignment, $budget);
                 if ($inputs->status === AcademicInputStatus::Limited) {
                     throw new HistoryReadLimitException();

@@ -432,6 +432,23 @@ final class SisFixture
             $this->clock,
         );
     }
+    public function specializations(
+        \Domain\Shared\EventSourcing\HistoricalEventStore $history,
+    ): \Domain\Student\Service\StudentSpecializationService {
+        return new \Domain\Student\Service\StudentSpecializationService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            $this->programStatusLedger(),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                $history, new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
+            ),
+            new \Infrastructure\Persistence\Repository\SqlStudentSpecializationRepository($this->sql),
+            $history, $this->access, $this->transactions, $this->audit, $this->dropCipher, $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($this->sql),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
+        );
+    }
     public function programStatusService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Student\Service\StudentProgramStatusService {

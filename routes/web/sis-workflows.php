@@ -768,6 +768,7 @@ return static function (Psr7Router $router): void {
     $router->post($studentSpecializationPath . 'history/', [$studentSpecializations, 'history']);
     $specializationRequirements = $studentSpecializationPath . '{specialization}/requirements/';
     $router->get($specializationRequirements, [$studentSpecializations, 'requirements']);
+    $router->post($specializationRequirements . 'progress/', [$studentSpecializations, 'progress']);
     $router->post($specializationRequirements . 'choices/', [$studentSpecializations, 'requirementChoices']);
     $router->post($specializationRequirements . 'review/', [$studentSpecializations, 'requirementReview']);
     $router->post($specializationRequirements . 'commit/', [$studentSpecializations, 'requirementCommit']);
