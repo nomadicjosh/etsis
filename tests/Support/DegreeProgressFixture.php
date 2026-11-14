@@ -48,11 +48,7 @@ final class DegreeProgressFixture
             $requirements,
             $s->transactions,
         );
-        return new \Domain\DegreeAudit\Service\DegreeProgressService(
-            $inputs,
-            $requirements,
-            $adjustments,
-            new \Domain\DegreeAudit\Service\DegreeProgressEvaluator(
+        $evaluator = new \Domain\DegreeAudit\Service\DegreeProgressEvaluator(
                 new AcademicPolicyEvaluator(),
                 new RetainedAttemptReader(new RetainedSectionReader($history)),
                 new DegreeMinimumEvaluator(),
@@ -69,10 +65,18 @@ final class DegreeProgressFixture
                 new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
                     new \Domain\Gradebook\Service\RetainedGradingReader($history),
                 ),
-            ),
+            );
+        return new \Domain\DegreeAudit\Service\DegreeProgressService(
+            $inputs,
+            $requirements,
+            $adjustments,
+            $evaluator,
             $students,
             $s->transactions,
             $specializations ?? $s->specializations($history),
+            new \Domain\DegreeAudit\Service\CombinedAllocationEvaluator(
+                $evaluator, new CourseAllocationPlanner($steps), new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
+            ),
         );
     }
 }

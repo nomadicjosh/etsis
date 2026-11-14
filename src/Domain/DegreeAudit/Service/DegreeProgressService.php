@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
+use Domain\Catalog\ValueObject\ComponentCourseSharing;
 use Domain\DegreeAudit\ValueObject\AcademicInputStatus;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
@@ -27,6 +28,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
         private StudentRecordRepository $students,
         private UnitOfWork $transactions,
         private StudentSpecializationService $specializations,
+        private CombinedAllocationEvaluator $combined,
     ) {
     }
 
@@ -80,6 +82,79 @@ final readonly class DegreeProgressService implements DegreeProgressReader
             },
             $budget,
         ) + ['mode' => 'assigned_specialization'];
+    }
+
+    /** Staff combined review of exact assigned components; no graduation or retained-result decision.
+     * @return array<string,mixed>
+     */
+    public function combined(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array
+    {
+        $actor = $this->specializations->authorizeRead($student, $assignment);
+        try {
+            $result = $this->transactions->run(function () use ($student, $assignment, $budget, $actor): array {
+                $this->students->lock($student);
+                $this->specializations->authorizeRead($student, $assignment, $actor);
+                $budget ??= new HistoryReadBudget();
+                $degree = $this->adjustments->allocationContext($student, $assignment, $budget);
+                if ($degree['requirements'] === null) {
+                    return ['status' => 'needs_selection'];
+                }
+                $specializations = $this->specializations->evaluationContext($student, $assignment, $budget);
+                if ($degree['cohort_changed'] || $specializations['cohort_changed']) {
+                    return ['status' => 'needs_review', 'issues' => ['cohort_changed']];
+                }
+                $r = $degree['requirements'];
+                $program = $specializations['program'];
+                if (
+                    $program === null || $r['program_version_id'] === null ||
+                    $r['program_version_id'] !== $specializations['scope']['program_version_id']
+                ) {
+                    return ['status' => 'needs_review', 'issues' => ['program_publication_unknown']];
+                }
+                $sharing = ComponentCourseSharing::tryFrom($program['specializations']['component_sharing'] ?? '');
+                if ($sharing === null) {
+                    return ['status' => 'needs_review', 'issues' => ['sharing_policy_unknown']];
+                }
+                $selected = $specializations['selection']['specialization_ids'] ?? [];
+                if (
+                    count($selected) < $program['specializations']['effective']['minimum'] ||
+                    array_diff($selected, array_keys($specializations['requirements'])) !== []
+                ) {
+                    return ['status' => 'needs_review', 'issues' => ['specialization_requirements_missing']];
+                }
+                $components = [[
+                    'kind' => 'degree', 'requirements' => $r, 'effective' => $degree['effective_minimums'],
+                ]];
+                foreach ($selected as $id) {
+                    $requirements = $specializations['requirements'][$id];
+                    if (
+                        $requirements['program_version_id'] !== $r['program_version_id'] ||
+                        $requirements['academic_year_id'] !== $r['academic_year_id']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $effective = DegreeProgressEvaluator::unadjusted($requirements);
+                    $effective['waived_course_ids'] = $degree['pursuit_waived_course_ids'];
+                    $components[] = [
+                        'kind' => 'specialization', 'requirements' => $requirements, 'effective' => $effective,
+                    ];
+                }
+                $inputs = $this->inputs->collect($student, $assignment, $budget);
+                if ($inputs->status === AcademicInputStatus::Limited) {
+                    throw new HistoryReadLimitException();
+                }
+                if ($inputs->status === AcademicInputStatus::Inconsistent) {
+                    throw new CorruptHistoryException();
+                }
+                return $this->combined->evaluate($inputs, $components, $sharing, $budget);
+            });
+        } catch (HistoryReadLimitException | AllocationBudgetExhaustedException) {
+            $result = ['status' => 'limited'];
+        } catch (CorruptHistoryException | RecordNotFoundException | InvalidArgumentException) {
+            $result = ['status' => 'inconsistent'];
+        }
+        $this->specializations->authorizeRead($student, $assignment, $actor);
+        return $result + ['mode' => 'combined_curriculum'];
     }
 
     /** @param \Closure():mixed $authorize

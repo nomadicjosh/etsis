@@ -253,6 +253,34 @@ if ($read->getStatusCode() !== 200 || ($assigned['requirements']['version_id'] ?
     throw new RuntimeException('Read-only student staff could not inspect the exact assigned requirements.');
 }
 $progressBefore = $digest();
+$combinedPath = '/sis/students/' . $f->student->value . '/programs/' . $f->assignment->value . '/degree-requirements/combined/';
+if ($send($combinedPath, [], false)->getStatusCode() !== 403) {
+    throw new RuntimeException('Combined curriculum review bypassed browser CSRF.');
+}
+$unassignedCombined = json_decode((string) $send($combinedPath)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (($unassignedCombined['status'] ?? null) !== 'needs_selection' || $progressBefore !== $digest()) {
+    throw new RuntimeException('A combined review inferred an unassigned degree.');
+}
+$sis->access->staff = true;
+$f->assign();
+$sis->access->staff = false;
+$progressBefore = $digest();
+$unknownCombined = json_decode((string) $send($combinedPath)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (($unknownCombined['status'] ?? null) !== 'needs_review' || $progressBefore !== $digest()) {
+    throw new RuntimeException('An earlier unversioned degree borrowed current combined policy or changed records.');
+}
+$sis->access->staff = true;
+$f->version = new \Domain\Shared\ValueObject\EntityId($f->f->publishDegree()['operation_id']);
+$f->assign();
+$sis->access->staff = false;
+$progressBefore = $digest();
+$combinedResponse = $send($combinedPath);
+$combinedResult = json_decode((string) $combinedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($combinedResponse->getStatusCode() !== 200 || ($combinedResult['status'] ?? null) !== 'review' ||
+    ($combinedResult['mode'] ?? null) !== 'combined_curriculum' || count($combinedResult['components'] ?? []) !== 2 ||
+    $progressBefore !== $digest()) {
+    throw new RuntimeException('Combined curriculum review lost scope, provider wiring or read-only behavior.');
+}
 if ($send($assignmentPath . 'progress/', [], false)->getStatusCode() !== 403) {
     throw new RuntimeException('Specialization progress bypassed browser CSRF.');
 }
@@ -270,7 +298,8 @@ foreach (['choices/' => [], 'review/' => $requirementData, 'commit/' => $commitD
 }
 $sis->access->grants = ['sis:catalog:manage', 'sis:degree-audit:assign'];
 if ($send($assignmentPath, [], method: 'GET')->getStatusCode() !== 403 ||
-    $send($assignmentPath . 'progress/')->getStatusCode() !== 403) {
+    $send($assignmentPath . 'progress/')->getStatusCode() !== 403 ||
+    $send($combinedPath)->getStatusCode() !== 403) {
     throw new RuntimeException('Catalog/assignment authority bypassed private student-read permissions.');
 }
 $sis->access->staff = true;

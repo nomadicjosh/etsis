@@ -70,7 +70,15 @@ final readonly class RequirementAdjustmentService
         $state = $this->state($assignment, $parent, $budget);
         $effective = $this->effective($parent, $state->active(), $budget);
         $this->requirements->authorizeRead($student, $assignment);
-        return $parent + ["effective_minimums" => $effective];
+        $waived = [];
+        foreach ($state->active() as $item) {
+            if ($item['definition']['kind'] === 'waiver') {
+                $waived[$item['definition']['course_id']] = true;
+            }
+        }
+        $waived = array_keys($waived);
+        sort($waived, SORT_STRING);
+        return $parent + ['effective_minimums' => $effective, 'pursuit_waived_course_ids' => $waived];
     }
     /** @return array<string,mixed> */
     private function read(EntityId $student, EntityId $assignment, bool $includeRequirements): array

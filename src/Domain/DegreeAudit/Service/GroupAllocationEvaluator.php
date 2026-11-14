@@ -6,6 +6,8 @@ namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
+use Domain\DegreeAudit\ValueObject\AllocationPreparation;
+use Domain\DegreeAudit\ValueObject\AllocationResult;
 use Domain\DegreeAudit\ValueObject\AcademicWorkEvidence;
 use Domain\DegreeAudit\ValueObject\AuditCalculationPolicy;
 use Domain\DegreeAudit\ValueObject\CourseGroupReuse;
@@ -41,6 +43,21 @@ final readonly class GroupAllocationEvaluator
         #[\SensitiveParameter] array $effective,
         #[\SensitiveParameter] array $eligibility = [],
     ): array {
+        return $this->prepare($work, $requirements, $effective, $eligibility)->review();
+    }
+
+    /** Build normalized choices once, without searching or exposing partial placements.
+     * @param list<array<string,mixed>> $work
+     * @param array<string,mixed> $requirements
+     * @param array<string,mixed> $effective
+     * @param list<array<string,mixed>> $eligibility
+     */
+    public function prepare(
+        #[\SensitiveParameter] array $work,
+        #[\SensitiveParameter] array $requirements,
+        #[\SensitiveParameter] array $effective,
+        #[\SensitiveParameter] array $eligibility = [],
+    ): AllocationPreparation {
         if (count($work) > 200) {
             throw new AllocationBudgetExhaustedException();
         }
@@ -59,12 +76,12 @@ final readonly class GroupAllocationEvaluator
         $sharing = is_string($reuse) ? CourseGroupReuse::tryFrom($reuse) : null;
         $policy = AuditCalculationPolicy::fromRequirements($requirements);
         if ($sharing === null || $policy->credit === null || $requirements["group_details"] === []) {
-            return [
+            return new AllocationPreparation(null, static fn(?AllocationResult $result): array => [
                 "outcome" => "needs_review",
                 "groups" => [],
                 "records" => [],
                 "issues" => ["policy_unknown"],
-            ];
+            ]);
         }
         foreach ($requirements["group_details"] as $id => $group) {
             $d = $group["definition"];
@@ -102,12 +119,12 @@ final readonly class GroupAllocationEvaluator
             ];
         }
         if ($issues !== []) {
-            return [
+            return new AllocationPreparation(null, static fn(?AllocationResult $result): array => [
                 "outcome" => "unsupported",
                 "groups" => array_values($labels),
                 "records" => [],
                 "issues" => array_keys($issues),
-            ];
+            ]);
         }
         $namedRequirements = $requirements;
         $compiled = $this->rules->compile($work, $requirements, $effective, $eligibility);
@@ -232,101 +249,113 @@ final readonly class GroupAllocationEvaluator
                 }
             }
         }
-        $outcome = "needs_review";
-        $competition = null;
-        if ($issues === []) {
-            $problem = new AllocationProblem(
-                $groups,
-                array_values($resources),
-                $sharing,
-                $effective["waived_course_ids"],
-            );
-            foreach ($this->gaps->analyze($problem) as $id => $report) {
-                $labels[$id]["gaps"] = $report;
-            }
-            $planned = $this->planner->plan($problem);
-            $outcome = $planned->outcome->value;
-            foreach ($this->coverage->review($problem, $planned) as $id => $coverage) {
-                $ordered = [];
-                $retainedRules = $labels[$id]['rules'] ?? throw new CorruptHistoryException();
-                foreach ($retainedRules as $rule) {
-                    $ordered[$rule['id']] = $coverage['rules'][$rule['id']];
+        $problem = $issues === [] ? new AllocationProblem(
+            $groups,
+            array_values($resources),
+            $sharing,
+            $effective['waived_course_ids'],
+        ) : null;
+        return new AllocationPreparation($problem, function (#[\SensitiveParameter] ?AllocationResult $planned) use (
+            $problem,
+            $labels,
+            $records,
+            $issues,
+            $pairs,
+            $evidence,
+            $namedRequirements,
+            $items,
+            $effective,
+        ): array {
+            $outcome = 'needs_review';
+            $competition = null;
+            if ($problem !== null) {
+                foreach ($this->gaps->analyze($problem) as $id => $report) {
+                    $labels[$id]["gaps"] = $report;
                 }
-                $coverage['rules'] = $ordered;
-                $labels[$id]['coverage'] = $coverage;
-            }
-            if ($outcome === "infeasible") {
-                $competition = $this->gaps->competition($problem);
-            }
-            foreach ($planned->placements as $placement) {
-                $key =
-                $placement["course_id"] .
-                ":" .
-                $placement["group_id"] .
-                ":" .
-                $placement["target_course_id"];
-                $pair = $pairs[$key];
-                $options = $evidence[$key . $this->contributionKey($placement)];
-                $workLabel = $records[$options[0][0]];
-                $labels[$placement["group_id"]]["placements"][] = [
-                    "course_id" => $placement["course_id"],
-                    "course_code" => $workLabel["course_code"],
-                    "course_title" => $workLabel["course_title"],
-                    "target_course_id" => $placement["target_course_id"],
-                    "target_code" => ($pair['dynamic_target'] ?? false)
-                        ? $workLabel['course_code'] : $pair["required_course_code"],
-                    "target_title" => ($pair['dynamic_target'] ?? false)
-                        ? $workLabel['course_title'] : $pair["required_course_title"],
-                    "via_substitution" => $pair["via_substitution"],
-                    "credits_milli" => $placement["credits_milli"],
-                    "work_options" => $options,
-                ] + (isset($placement['rule_credits_milli'])
+                $planned ??= $this->planner->plan($problem);
+                $outcome = $planned->outcome->value;
+                foreach ($this->coverage->review($problem, $planned) as $id => $coverage) {
+                    $ordered = [];
+                    $retainedRules = $labels[$id]['rules'] ?? throw new CorruptHistoryException();
+                    foreach ($retainedRules as $rule) {
+                        $ordered[$rule['id']] = $coverage['rules'][$rule['id']];
+                    }
+                    $coverage['rules'] = $ordered;
+                    $labels[$id]['coverage'] = $coverage;
+                }
+                if ($outcome === "infeasible") {
+                    $competition = $this->gaps->competition($problem);
+                }
+                foreach ($planned->placements as $placement) {
+                    $key =
+                    $placement["course_id"] .
+                    ":" .
+                    $placement["group_id"] .
+                    ":" .
+                    $placement["target_course_id"];
+                    $pair = $pairs[$key];
+                    $options = $evidence[$key . $this->contributionKey($placement)];
+                    $workLabel = $records[$options[0][0]];
+                    $labels[$placement["group_id"]]["placements"][] = [
+                        "course_id" => $placement["course_id"],
+                        "course_code" => $workLabel["course_code"],
+                        "course_title" => $workLabel["course_title"],
+                        "target_course_id" => $placement["target_course_id"],
+                        "target_code" => ($pair['dynamic_target'] ?? false)
+                            ? $workLabel['course_code'] : $pair["required_course_code"],
+                        "target_title" => ($pair['dynamic_target'] ?? false)
+                            ? $workLabel['course_title'] : $pair["required_course_title"],
+                        "via_substitution" => $pair["via_substitution"],
+                        "credits_milli" => $placement["credits_milli"],
+                        "work_options" => $options,
+                    ] + (isset($placement['rule_credits_milli'])
                     ? ['rule_credits_milli' => $placement['rule_credits_milli']] : []);
-                if ($pair['dynamic_target'] ?? false) {
-                    $labels[$placement['group_id']]['courses'][$placement['target_course_id']] = [
-                        'code' => $workLabel['course_code'], 'title' => $workLabel['course_title'],
-                        'credits_milli' => $placement['credits_milli'],
-                    ];
-                }
-                foreach ($options as $option) {
-                    foreach ($option as $id) {
-                        $record = $records[$id] ?? throw new CorruptHistoryException();
-                        $record["uses"][] = [
-                            "group_id" => $placement["group_id"],
-                            "alternative" => count($options) > 1,
+                    if ($pair['dynamic_target'] ?? false) {
+                        $labels[$placement['group_id']]['courses'][$placement['target_course_id']] = [
+                            'code' => $workLabel['course_code'], 'title' => $workLabel['course_title'],
+                            'credits_milli' => $placement['credits_milli'],
                         ];
-                        $records[$id] = $record;
+                    }
+                    foreach ($options as $option) {
+                        foreach ($option as $id) {
+                            $record = $records[$id] ?? throw new CorruptHistoryException();
+                            $record["uses"][] = [
+                                "group_id" => $placement["group_id"],
+                                "alternative" => count($options) > 1,
+                            ];
+                            $records[$id] = $record;
+                        }
                     }
                 }
             }
-        }
-        foreach ($records as &$record) {
-            $record["statuses"] = array_keys($record["statuses"]);
-            sort($record["statuses"], SORT_STRING);
-        }
-        unset($record);
-        $courseReviews = $this->matches->namedReview(
-            $namedRequirements,
-            $items,
-            array_values($labels),
-            $effective['waived_course_ids'],
-            $outcome === 'feasible',
-        );
-        foreach ($labels as $groupId => &$label) {
-            $label['course_review'] = $courseReviews[$groupId];
-            $courseLabels = $label['courses'] ?? throw new CorruptHistoryException();
-            ksort($courseLabels, SORT_STRING);
-            $label['courses'] = $courseLabels;
-        }
-        unset($label);
-        ksort($issues, SORT_STRING);
-        return [
-            "outcome" => $outcome,
-            "competition" => $competition,
-            "groups" => array_values($labels),
-            "records" => array_values($records),
-            "issues" => array_keys($issues),
-        ];
+            foreach ($records as &$record) {
+                $record["statuses"] = array_keys($record["statuses"]);
+                sort($record["statuses"], SORT_STRING);
+            }
+            unset($record);
+            $courseReviews = $this->matches->namedReview(
+                $namedRequirements,
+                $items,
+                array_values($labels),
+                $effective['waived_course_ids'],
+                $outcome === 'feasible',
+            );
+            foreach ($labels as $groupId => &$label) {
+                $label['course_review'] = $courseReviews[$groupId];
+                $courseLabels = $label['courses'] ?? throw new CorruptHistoryException();
+                ksort($courseLabels, SORT_STRING);
+                $label['courses'] = $courseLabels;
+            }
+            unset($label);
+            ksort($issues, SORT_STRING);
+            return [
+                "outcome" => $outcome,
+                "competition" => $competition,
+                "groups" => array_values($labels),
+                "records" => array_values($records),
+                "issues" => array_keys($issues),
+            ];
+        });
     }
 
     /**

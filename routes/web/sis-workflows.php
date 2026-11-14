@@ -1020,6 +1020,10 @@ return static function (Psr7Router $router): void {
         \Application\Http\Controller\SisAcademicWorkController::class,
         "progress",
     ]);
+    $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/combined/", [
+        \Application\Http\Controller\SisAcademicWorkController::class,
+        "combined",
+    ]);
     $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/academic-work/allocation/", [
         \Application\Http\Controller\SisAcademicWorkController::class,
         "allocation",

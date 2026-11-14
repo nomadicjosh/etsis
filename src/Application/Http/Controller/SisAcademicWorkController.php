@@ -64,6 +64,17 @@ final readonly class SisAcademicWorkController
         }
         return new JsonResponse($result);
     }
+    public function combined(string $student, string $assignment): ResponseInterface
+    {
+        $result = $this->progress->combined(new EntityId($student), new EntityId($assignment));
+        if ($result['status'] === 'inconsistent') {
+            return new JsonResponse([
+                'error' => 'Combined progress could not be verified. Ask a registrar to review this record.',
+                'status' => 'inconsistent',
+            ], 409);
+        }
+        return new JsonResponse($result);
+    }
     public function allocation(ServerRequest $request, string $student, string $assignment): ResponseInterface
     {
         $result = $this->allocations->preview(new EntityId($student), new EntityId($assignment));

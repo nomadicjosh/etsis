@@ -19,7 +19,7 @@ final class StudentSpecializationRequirementsFixture
     public \Domain\Student\Service\StudentSpecializationService $service;
     public string $programVersion;
 
-    public function __construct(?ReusableGroupFixture $r = null)
+    public function __construct(?ReusableGroupFixture $r = null, string $sharing = 'one_component')
     {
         $this->r = $r ??= new ReusableGroupFixture();
         $s = $r->sis;
@@ -31,7 +31,7 @@ final class StudentSpecializationRequirementsFixture
             $choices, $references, $s->access, $s->transactions, $s->audit,
         );
         $policy->saveInstitution(0, 2, 1);
-        $policy->saveProgram($s->program, 0, 0, 2);
+        $policy->saveProgram($s->program, 0, 0, 2, $sharing);
         $setup = new \Domain\Catalog\Service\ProgramSpecializationService(
             $choices, $references, $s->access, $s->transactions, $s->audit,
         );
@@ -71,6 +71,18 @@ final class StudentSpecializationRequirementsFixture
             $history, $s->access, $s->transactions, $audit ?? $s->audit, $this->r->catalog->fixture->cipher, $s->clock,
             new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($s->sql),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
+        );
+    }
+    public function requirements(): \Domain\DegreeAudit\Service\StudentRequirementsService
+    {
+        $s = $this->r->sis;
+        return new \Domain\DegreeAudit\Service\StudentRequirementsService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRequirementsRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($s->sql), $s->admissions,
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($s->sql),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($this->r->history),
+            $this->r->history, $s->access, $s->transactions, $s->audit, $this->r->catalog->fixture->cipher, $s->clock,
         );
     }
     public function publish(string $code = 'DATA'): string

@@ -578,7 +578,7 @@ async function fixture(page, options = {}) {
                 anticipated_completion_on: selection ? "2030-08-01" : null,
                 cohort_changed: Boolean(options.changed),
             };
-        else if (path === `${base}progress/`) {
+        else if (path === `${base}progress/` || path === `${base}combined/`) {
             if (options.rejectProgress)
                 return route.fulfill({
                     status: 409,
@@ -750,6 +750,32 @@ async function fixture(page, options = {}) {
                         attempt_order: "academic_period",
                     },
                 };
+            }
+            if (path === `${base}combined/`) {
+                if (options.combinedIssue) response = { status: "needs_review", issues: [options.combinedIssue] };
+                if (response.status === "review") {
+                    const parts = ["degree", "specialization"].map(kind => {
+                        const progress = structuredClone(response);
+                        progress.mode = "combined_component";
+                        progress.context = { ...progress.context, mode: "combined_component", kind,
+                            requirements_version_id: kind === "degree" ? version : id(71),
+                            specialization: kind === "degree" ? null : { id: id(70), code: "DATA", title: "Data <b>fictional</b>" },
+                            name: kind === "degree" ? requirements.definition.name : "Data <b>fictional</b> requirements" };
+                        if (options.combinedInfeasible) {
+                            progress.allocation.outcome = "infeasible";
+                            for (const g of progress.allocation.groups) { g.placements = []; g.coverage = null; }
+                            for (const r of progress.allocation.records) r.uses = [];
+                            for (const r of progress.records) { r.uses = []; r.placement = "not_established"; }
+                            progress.work_summary.placement_established = false;
+                            progress.work_summary.unused_completed_count = null;
+                        }
+                        return { kind, progress };
+                    });
+                    response = { status: "review", outcome: options.combinedInfeasible ? "infeasible" : "feasible",
+                        sharing: options.combinedSharing || "one_component", input_status: response.input_status,
+                        current_record_count: response.current_record_count, components: parts };
+                }
+                response.mode = "combined_curriculum";
             }
         } else if (path === `${base}academic-work/allocation/`) {
             if (options.rejectAllocation)

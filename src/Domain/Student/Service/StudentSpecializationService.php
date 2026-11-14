@@ -374,6 +374,31 @@ final readonly class StudentSpecializationService
         });
     }
 
+    /** Internal combined-review inputs; caller holds the student lock and shared replay allowance.
+     * @return array<string,mixed>
+     */
+    public function evaluationContext(EntityId $student, EntityId $assignment, HistoryReadBudget $budget): array
+    {
+        $actor = $this->authorizeRead($student, $assignment);
+        $scope = $this->scope($student, $assignment, $actor, $budget);
+        $root = $this->load($assignment, $scope, $budget)['root'];
+        $program = $this->publication($scope, $budget);
+        $selection = $root->selection();
+        $changed = $selection !== null && !$this->sameCohort($scope, $selection);
+        $requirements = [];
+        if (!$changed && $program !== null) {
+            if ($selection !== null) {
+                $this->summary($selection, $program);
+            }
+            foreach ($root->requirements() as $id => $binding) {
+                $requirements[$id] = $this->bindingPublication($binding, $budget);
+            }
+        }
+        $this->authorize($actor);
+        return ['scope' => $scope, 'program' => $program, 'selection' => $selection,
+            'requirements' => $requirements, 'cohort_changed' => $changed];
+    }
+
     /** @return array<string,mixed> */
     public function reviewRequirements(
         EntityId $student,
