@@ -14,8 +14,8 @@ async function fixture(page, options = {}) {
     const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true})) : [];
     let specializationFailure = !!options.specializationFailure;
     let institution = {revision:0,minimum:0,maximum:1,default_maximum:1};
-    let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null};
-    const specializationSnapshot = () => ({program_id:id(1),institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision})=>({id,code,title,description,revision}))});
+    let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null,component_sharing:"one_component"};
+    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision})=>({id,code,title,description,revision}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -309,6 +309,7 @@ test('institutional ceilings and program specialization limits are reviewed with
     await page.getByRole('spinbutton',{name:'Required specializations (zero means optional)',exact:true}).fill('1');
     await page.getByRole('checkbox',{name:'Use institutional default maximum',exact:true}).uncheck();
     await page.getByRole('spinbutton',{name:'Program maximum specializations',exact:true}).fill('2');
+    await page.getByLabel('Course sharing between degree and specializations',{exact:true}).selectOption('multiple_components');
     await page.getByRole('button',{name:'Save program specialization policy',exact:true}).click();
     await expect(page.getByRole('spinbutton',{name:'Program maximum specializations',exact:true})).toHaveValue('2');
     await page.getByRole('button',{name:'Back to specializations',exact:true}).click();
@@ -319,6 +320,7 @@ test('institutional ceilings and program specialization limits are reviewed with
     await page.getByRole('button',{name:'Use academic year 2024-2025',exact:true}).click();
     await page.getByRole('button',{name:'Review program publication',exact:true}).click();
     const context=page.getByRole('region',{name:'Published specialization choices and policy',exact:true});
+    await expect(context).toContainText('A completed course may satisfy degree and specialization requirements.');
     await expect(context).toContainText('Required: 1 · Maximum per pursuit: 2 · Institutional ceiling: 3.');
     await expect(context.getByRole('article')).toHaveCount(0);
     await context.locator('summary').filter({hasText:'23 offered specializations'}).click();
@@ -334,7 +336,7 @@ test('institutional ceilings and program specialization limits are reviewed with
     await page.locator('summary').filter({hasText:'2024-2025 · Revision 1'}).click();
     await expect(page.getByRole('region',{name:'Published specialization choices and policy',exact:true})).toContainText('Maximum per pursuit: 2');
     expect(f.calls.find(c=>c.path==='/sis/catalog/specialization-policy/').data).toEqual({revision:0,maximum:3,default_maximum:1});
-    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2});
+    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2,component_sharing:"multiple_components"});
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });
@@ -346,8 +348,11 @@ test('catalog staff see institutional boundaries and retain rejected program pol
     await expect(page.getByText('Institution-wide boundaries',{exact:true})).toHaveCount(0);
     const required=page.getByRole('spinbutton',{name:'Required specializations (zero means optional)',exact:true});
     await required.fill('2');
+    await page.getByLabel('Course sharing between degree and specializations',{exact:true}).selectOption('multiple_components');
     await page.getByRole('button',{name:'Save program specialization policy',exact:true}).click();
     await expect(page.getByText(/The required number must fit within the program maximum\./)).toBeVisible();
+    await expect(page.getByLabel('Course sharing between degree and specializations',{exact:true})).toHaveValue('multiple_components');
+    await page.setViewportSize({width:390,height:844}); await accessible(page);
     await expect(required).toHaveValue('2');
     await required.fill('0');
     await page.getByRole('button',{name:'Save program specialization policy',exact:true}).click();

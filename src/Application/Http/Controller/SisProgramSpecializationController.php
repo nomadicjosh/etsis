@@ -50,6 +50,7 @@ final readonly class SisProgramSpecializationController
             $input->integer('revision'),
             $input->integer('minimum', 0, 100),
             $input->optionalInteger('maximum'),
+            $input->text('component_sharing', 24),
         );
         return new JsonResponse(['status' => 'saved']);
     }

@@ -9,6 +9,7 @@ use Domain\Catalog\Repository\CatalogRevisionRepository;
 use Domain\Catalog\Repository\ProgramSpecializationRepository;
 use Domain\Catalog\Repository\SpecializationPolicyRepository;
 use Domain\Catalog\ValueObject\ProgramSpecializationSnapshot;
+use Domain\Catalog\ValueObject\ComponentCourseSharing;
 use Domain\Catalog\ValueObject\SpecializationPolicy;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -60,10 +61,27 @@ final readonly class SpecializationPolicyService
         ];
     }
 
-    public function saveProgram(EntityId $program, int $revision, int $minimum, ?int $maximum): void
-    {
+    public function saveProgram(
+        EntityId $program,
+        int $revision,
+        int $minimum,
+        ?int $maximum,
+        string $componentSharing = ComponentCourseSharing::OneComponent->value,
+    ): void {
         $actor = $this->access->requirePermission('sis:catalog:manage');
-        $this->transactions->run(function () use ($program, $revision, $minimum, $maximum, $actor): void {
+        if (ComponentCourseSharing::tryFrom($componentSharing) === null) {
+            throw new ValidationException([['field' => 'component_sharing',
+                'message' => 'Choose whether completed courses may satisfy more than one curriculum component.',
+            ]]);
+        }
+        $this->transactions->run(function () use (
+            $program,
+            $revision,
+            $minimum,
+            $maximum,
+            $componentSharing,
+            $actor,
+        ): void {
             $this->policies->lockInstitution();
             $this->programs->lock('programs', $program);
             $this->authorize($actor, 'sis:catalog:manage');
@@ -74,6 +92,7 @@ final readonly class SpecializationPolicyService
                 'minimum' => $minimum,
                 'maximum' => $maximum,
                 'default_maximum' => null,
+                'component_sharing' => $componentSharing,
             ];
             $this->resolve($this->policies->get(null), $local);
             $this->policies->save($program, $local);
@@ -139,6 +158,8 @@ final readonly class SpecializationPolicyService
             ],
             'effective' => ['minimum' => $policy->minimum, 'maximum' => $policy->effectiveMaximum],
             'offered' => $offered,
+            'component_sharing' => $local['component_sharing'] ??
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException(),
         ];
         if (strlen(json_encode($snapshot, JSON_THROW_ON_ERROR)) > 49152) {
             throw new ValidationException([
@@ -149,8 +170,8 @@ final readonly class SpecializationPolicyService
         return new ProgramSpecializationSnapshot($snapshot);
     }
 
-    /** @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int} $institution
-     * @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int} $local */
+    /** @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int,component_sharing?:?string} $institution
+     * @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int,component_sharing?:?string} $local */
     private function resolve(array $institution, array $local): SpecializationPolicy
     {
         if ($institution['maximum'] === null || $institution['default_maximum'] === null) {

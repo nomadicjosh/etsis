@@ -44,6 +44,7 @@ final readonly class AllocationProblem
         array $courses,
         public CourseGroupReuse $reuse,
         array $waivedCourseIds = [],
+        public ?AllocationSharing $sharing = null,
     ) {
         self::listing($waivedCourseIds, 5000);
         if (count(array_unique($waivedCourseIds)) !== count($waivedCourseIds)) {
@@ -118,6 +119,14 @@ final readonly class AllocationProblem
             usort($group["rules"], static fn(array $a, array $b): int => strcmp($a["id"], $b["id"]));
         }
         unset($group);
+        if (
+            $sharing !== null && (
+            count($sharing->groupComponents) !== count($groups) ||
+            array_diff(array_keys($sharing->groupComponents), array_column($groups, 'id')) !== []
+            )
+        ) {
+            self::invalid();
+        }
         $courseIds = [];
         $owners = [];
         $choiceCount = 0;
@@ -203,6 +212,14 @@ final readonly class AllocationProblem
         $this->groups = $groups;
         $this->courses = $courses;
         $this->memberships = $memberships;
+    }
+
+    /** @param list<string> $usedGroups */
+    public function permits(array $usedGroups, string $group): bool
+    {
+        return $this->sharing?->permits($usedGroups, $group) ??
+        (!in_array($group, $usedGroups, true) &&
+        ($this->reuse === CourseGroupReuse::MultipleGroups || $usedGroups === []));
     }
 
     /**

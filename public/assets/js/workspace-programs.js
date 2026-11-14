@@ -717,6 +717,14 @@ window.createWorkspacePrograms = function (ui) {
             if (inherit.checked) maximum.input.value = data.institution.default_maximum;
             status.textContent = `Institutional ceiling: ${data.institution.maximum}. Institutional default maximum: ${data.institution.default_maximum}. Program maximum: ${inherit.checked ? data.institution.default_maximum : maximum.input.value || "not entered"}.`;
         }
+        const sharing = node("select", {
+            id: "specialization-component-sharing", name: "component_sharing", class: "form-select", required: true,
+        });
+        for (const [value, label] of [
+            ["one_component", "Apply a course to one component"],
+            ["multiple_components", "Allow a course in degree and specialization requirements"],
+        ]) sharing.append(node("option", { value }, label));
+        sharing.value = data.settings.component_sharing || "one_component";
         const form = node(
             "form",
             { class: "surface p-3 my-3" },
@@ -739,6 +747,11 @@ window.createWorkspacePrograms = function (ui) {
                 "A maximum of zero disables specialization selection for this program. A required number above zero needs enough active offered choices before publication.",
             ),
             status,
+            node("h3", { class: "h5" }, "Course sharing between curriculum components"),
+            node("label", { for: sharing.id, class: "form-label" }, "Course sharing between degree and specializations"),
+            sharing,
+            node("p", { class: "form-text" },
+                "Choose whether the same completed course can satisfy the degree and selected specializations. Sharing across groups inside a component is configured in its requirements. Overall credits and GPA are counted once. Publish the program to retain this choice; earlier publications stay unchanged. Independent component reviews do not apply this cross-component rule."),
         );
         const save = node(
             "button",
@@ -756,6 +769,7 @@ window.createWorkspacePrograms = function (ui) {
                     revision: data.settings.revision,
                     minimum: Number(minimum.input.value),
                     maximum: inherit.checked ? null : Number(maximum.input.value),
+                    component_sharing: sharing.value,
                 });
                 if (body.isConnected)
                     await specializationPolicy(
@@ -837,6 +851,10 @@ window.createWorkspacePrograms = function (ui) {
                 `Required: ${snapshot.effective.minimum} · Maximum per pursuit: ${snapshot.effective.maximum} · Institutional ceiling: ${snapshot.institution.maximum}. ${snapshot.program.maximum == null ? "Uses the recorded institutional default." : "Uses the recorded program maximum."}`,
             ),
         );
+        section.append(node("p", {}, "Course sharing between components: " + ({
+            one_component: "Apply a completed course to one component.",
+            multiple_components: "A completed course may satisfy degree and specialization requirements.",
+        }[snapshot.component_sharing] || "Not recorded in this earlier publication.")));
         if (!snapshot.offered.length) {
             section.append(node("p", {}, "No specialization choices offered in this publication."));
             return section;

@@ -7,7 +7,6 @@ namespace Domain\DegreeAudit\Service;
 use Domain\DegreeAudit\ValueObject\AllocationOutcome;
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
 use Domain\DegreeAudit\ValueObject\AllocationResult;
-use Domain\DegreeAudit\ValueObject\CourseGroupReuse;
 use InvalidArgumentException;
 
 /** Describe an established plan, without searching again or treating optimistic bounds as applied work. */
@@ -31,7 +30,7 @@ final readonly class AllocationCoverageReview
             }
         }
         $waived = array_fill_keys($problem->waivedCourseIds, true);
-        $totals = $targets = $resources = $contributions = [];
+        $totals = $targets = $resources = $contributions = $courseGroups = [];
         foreach ($result->placements as $placement) {
             $course = $placement["course_id"];
             $group = $placement["group_id"];
@@ -46,12 +45,13 @@ final readonly class AllocationCoverageReview
                 $work !== $choice["work_ids"] ||
                 isset($targets[$group][$target]) ||
                 isset($resources[$group][$course]) ||
-                ($problem->reuse === CourseGroupReuse::OneGroup && isset($resources["all"][$course]))
+                !$problem->permits($courseGroups[$course] ?? [], $group)
             ) {
                 self::invalid();
             }
+            $courseGroups[$course][] = $group;
             $targets[$group][$target] = true;
-            $resources[$group][$course] = $resources["all"][$course] = true;
+            $resources[$group][$course] = true;
             $totals[$group] = self::add($totals[$group] ?? 0, $choice["credits_milli"]);
             foreach ($problem->ruleCredits($choice) as $rule => $credits) {
                 $amount = $contributions[$group][$rule] ?? ["credits" => 0, "courses" => 0, "unwaived" => 0];

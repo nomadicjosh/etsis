@@ -127,7 +127,7 @@ final readonly class AllocationGapAnalyzer
     public function competition(AllocationProblem $problem): array
     {
         $result = ["conflicts" => [], "more_conflicts" => false];
-        if ($problem->reuse !== CourseGroupReuse::OneGroup) {
+        if ($problem->sharing !== null || $problem->reuse !== CourseGroupReuse::OneGroup) {
             return $result;
         }
         $individual = $this->analyze($problem);

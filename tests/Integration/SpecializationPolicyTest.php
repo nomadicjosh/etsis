@@ -301,4 +301,46 @@ final class SpecializationPolicyTest extends TestCase
         self::assertSame($original, $repository->retained($id));
         self::assertSame($rows, $f->sql->rows('sis_history_events'));
     }
+    public function testComponentSharingIsRetainedByPublicationAndChangesInvalidatePendingReviews(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $f = $p->sis;
+        $service = $this->policies($p);
+        self::assertSame('one_component', $service->settings($f->program)['settings']['component_sharing']);
+        $this->offer($p);
+        $f->access->staff = false;
+        $f->access->grants = ['sis:catalog:manage'];
+        $service->saveProgram($f->program, 0, 0, null, 'multiple_components');
+        $review = $this->review($p);
+        self::assertSame('multiple_components', $review['specializations']['component_sharing']);
+        $receipt = $p->service->publish($f->program, $review['review_token']);
+        $before = $f->sql->rows('sis_history_events');
+        $service->saveProgram($f->program, 1, 0, null, 'one_component');
+        $retained = new SqlProgramDefinitionRepository($f->sql)->retained(new EntityId($receipt['operation_id']));
+        self::assertSame('multiple_components', $retained['specializations']['component_sharing']);
+        self::assertSame($receipt, $p->service->publish($f->program, $review['review_token']));
+        self::assertSame($before, $f->sql->rows('sis_history_events'));
+        $pending = $this->review($p);
+        $service->saveProgram($f->program, 2, 0, null, 'multiple_components');
+        $service->saveProgram($f->program, 3, 0, null, 'one_component');
+        try {
+            $p->service->publish($f->program, $pending['review_token']);
+            self::fail('A changed-and-restored sharing policy accepted a stale review.');
+        } catch (ConcurrentModificationException) { self::assertSame($before, $f->sql->rows('sis_history_events')); }
+        $this->expectException(ValidationException::class);
+        $service->saveProgram($f->program, 4, 0, null, 'infer_from_academic_level');
+    }
+    public function testEarlierSpecializationSnapshotsRemainWithoutAnInferredSharingPolicy(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $snapshot = $this->policies($p)->snapshot($p->sis->program)->data;
+        self::assertSame('one_component', $snapshot['component_sharing']);
+        unset($snapshot['component_sharing']);
+        $earlier = new ProgramSpecializationSnapshot($snapshot)->data;
+        self::assertArrayNotHasKey('component_sharing', $earlier);
+        self::assertSame($snapshot, $earlier);
+        $this->expectException(\InvalidArgumentException::class);
+        new ProgramSpecializationSnapshot($earlier + ['component_sharing' => null]);
+    }
+
 }

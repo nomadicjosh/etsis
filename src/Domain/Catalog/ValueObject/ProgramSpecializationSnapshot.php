@@ -16,7 +16,17 @@ final readonly class ProgramSpecializationSnapshot
     /** @param array<string,mixed> $data */
     public function __construct(array $data)
     {
-        self::keys($data, ['program_id', 'institution', 'program', 'effective', 'offered']);
+        $keys = ['program_id', 'institution', 'program', 'effective', 'offered'];
+        if (array_key_exists('component_sharing', $data)) {
+            $keys[] = 'component_sharing';
+            if (
+                !is_string($data['component_sharing']) ||
+                ComponentCourseSharing::tryFrom($data['component_sharing']) === null
+            ) {
+                throw new InvalidArgumentException('Retain an explicit supported component-sharing policy.');
+            }
+        }
+        self::keys($data, $keys);
         $program = new EntityId($data['program_id']);
         self::keys($data['institution'], ['revision', 'maximum', 'default_maximum']);
         self::keys($data['program'], ['revision', 'minimum', 'maximum']);

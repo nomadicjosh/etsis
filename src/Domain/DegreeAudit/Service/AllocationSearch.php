@@ -15,6 +15,7 @@ use JsonException;
 final class AllocationSearch
 {
     private int $steps = 0;
+    private readonly bool $multipleGroups;
     /** @var array<string,true> */
     private array $failed = [];
     /** @var array<string,array<string,mixed>> */
@@ -34,10 +35,12 @@ final class AllocationSearch
         private readonly AllocationProblem $problem,
         private readonly int $maximumSteps,
     ) {
+        $this->multipleGroups = $problem->sharing?->permitsMultipleGroups() ?? false;
     }
 
     /**
      * @return list<CoursePlacement>|null
+     * @throws AllocationBudgetExhaustedException
      * @throws JsonException
      */
     public function run(): ?array
@@ -93,6 +96,7 @@ final class AllocationSearch
      * @param array<string,array{credits:int,targets:array<string,array<string,int>>}> $state
      * @param list<CoursePlacement> $placements
      * @return list<CoursePlacement>|null
+     * @throws AllocationBudgetExhaustedException
      * @throws JsonException
      */
     private function search(int $index, array $state, array $placements): ?array
@@ -121,7 +125,7 @@ final class AllocationSearch
             return null;
         }
         $course = $this->problem->courses[$index];
-        foreach ($course["choices"] as $choice) {
+        foreach ($course["choices"] as $position => $choice) {
             $this->spend();
             $g = $choice["group_id"];
             $target = $choice["target_course_id"];
@@ -144,7 +148,9 @@ final class AllocationSearch
             );
             $assigned = $placements;
             $assigned[] = ["course_id" => $course["course_id"]] + $choice;
-            $found = $this->search($index + 1, $next, $assigned);
+            $found = !$this->multipleGroups
+            ? $this->search($index + 1, $next, $assigned)
+            : $this->shared($index, $position + 1, $next, $assigned, [$g]);
             if ($found !== null) {
                 return $found;
             }
@@ -154,6 +160,52 @@ final class AllocationSearch
             $this->failed[$key] = true;
         }
         return $found;
+    }
+
+    /** Extend one resource within its permitted sharing scope, then advance to the next course.
+     * @param array<string,array{credits:int,targets:array<string,array<string,int>>}> $state
+     * @param list<CoursePlacement> $placements
+     * @param list<string> $usedGroups
+     * @return list<CoursePlacement>|null
+     * @throws AllocationBudgetExhaustedException
+     * @throws JsonException
+     */
+    private function shared(int $index, int $start, array $state, array $placements, array $usedGroups): ?array
+    {
+        $this->spend();
+        $course = $this->problem->courses[$index];
+        for ($i = $start; $i < count($course['choices']); $i++) {
+            $this->spend();
+            $choice = $course['choices'][$i];
+            $g = $choice['group_id'];
+            $target = $choice['target_course_id'];
+            if (
+                !$this->problem->permits($usedGroups, $g) || isset($state[$g]['targets'][$target]) ||
+                $this->met($this->groups[$g], $state[$g])
+            ) {
+                continue;
+            }
+            $next = $state;
+            $contributions = $this->problem->ruleCredits($choice);
+            foreach ($contributions as $rule => &$amount) {
+                $this->spend();
+                $amount = min($this->ruleCaps[$g][$rule], $amount);
+            }
+            unset($amount);
+            ksort($contributions, SORT_STRING);
+            $next[$g]['targets'][$target] = $contributions;
+            $next[$g]['credits'] = min(
+                $this->groups[$g]['min_credits_milli'],
+                $state[$g]['credits'] + min($this->groups[$g]['min_credits_milli'], $choice['credits_milli'])
+            );
+            $assigned = $placements;
+            $assigned[] = ['course_id' => $course['course_id']] + $choice;
+            $found = $this->shared($index, $i + 1, $next, $assigned, [...$usedGroups, $g]);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+        return $this->search($index + 1, $state, $placements);
     }
 
     /**

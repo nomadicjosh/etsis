@@ -24,7 +24,32 @@ final readonly class CourseAllocationPlanner
     public function plan(AllocationProblem $problem): AllocationResult
     {
         $problems = [$problem];
-        if ($problem->reuse === CourseGroupReuse::MultipleGroups) {
+        if ($problem->sharing !== null) {
+            $problems = [];
+            foreach ($problem->sharing->partitions() as $groups) {
+                $selected = array_fill_keys($groups, true);
+                $courses = [];
+                foreach ($problem->courses as $course) {
+                    $choices = array_values(array_filter(
+                        $course['choices'],
+                        static fn(array $c): bool => isset($selected[$c['group_id']]),
+                    ));
+                    if ($choices !== []) {
+                        $courses[] = ['course_id' => $course['course_id'], 'choices' => $choices];
+                    }
+                }
+                $problems[] = new AllocationProblem(
+                    array_values(array_filter(
+                        $problem->groups,
+                        static fn(array $g): bool => isset($selected[$g['id']]),
+                    )),
+                    $courses,
+                    CourseGroupReuse::OneGroup,
+                    $problem->waivedCourseIds,
+                    $problem->sharing->subset($groups),
+                );
+            }
+        } elseif ($problem->reuse === CourseGroupReuse::MultipleGroups) {
             // With sharing, groups are independent. Avoid enumerating subsets of every group per course.
             $problems = [];
             foreach ($problem->groups as $group) {

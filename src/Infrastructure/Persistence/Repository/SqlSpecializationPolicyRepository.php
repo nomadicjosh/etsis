@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infrastructure\Persistence\Repository;
 
 use Domain\Catalog\Repository\SpecializationPolicyRepository;
+use Domain\Catalog\ValueObject\ComponentCourseSharing;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
@@ -30,7 +31,8 @@ final readonly class SqlSpecializationPolicyRepository implements Specialization
             if ($program === null) {
                 throw new CorruptHistoryException();
             }
-            return ['revision' => 0, 'minimum' => 0, 'maximum' => null, 'default_maximum' => null];
+            return ['revision' => 0, 'minimum' => 0, 'maximum' => null, 'default_maximum' => null,
+                'component_sharing' => ComponentCourseSharing::OneComponent->value];
         }
         if ($row['program_id'] !== $program?->value) {
             throw new CorruptHistoryException();
@@ -46,6 +48,13 @@ final readonly class SqlSpecializationPolicyRepository implements Specialization
                 throw new CorruptHistoryException();
             }
             $out[$key] = $value;
+        }
+        if ($program !== null) {
+            $sharing = $row['component_sharing'] ?? ComponentCourseSharing::OneComponent->value;
+            if (!is_string($sharing) || ComponentCourseSharing::tryFrom($sharing) === null) {
+                throw new CorruptHistoryException();
+            }
+            $out['component_sharing'] = $sharing;
         }
         return $out;
     }

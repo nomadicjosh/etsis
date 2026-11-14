@@ -11,9 +11,9 @@ interface SpecializationPolicyRepository
     public const string INSTITUTION_ID = '00000000000000000000000001';
     public function lockInstitution(): void;
     /** Null means the institutional boundary, not a program fallback.
-     * @return array{revision:int,minimum:int,maximum:?int,default_maximum:?int} */
+     * @return array{revision:int,minimum:int,maximum:?int,default_maximum:?int,component_sharing?:string} */
     public function get(?EntityId $program): array;
     /** Caller holds institution then program locks, as applicable.
-     * @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int} $values */
+     * @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int,component_sharing?:string} $values */
     public function save(?EntityId $program, array $values): void;
 }
