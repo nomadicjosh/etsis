@@ -517,4 +517,56 @@ final class DegreeProgressTest extends TestCase
     }
 
 
+    public function testReviewedInstitutionalCourseAcceptanceResolvesAnUnknownAuditBindingWithoutRewritingOldFacts(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        foreach ([1, 2, 4] as $i) {
+            $this->work($f, $i);
+        }
+        $course = $f->f->groupDefinition["courses"][0];
+        $section = new Section(
+            EntityId::generate(),
+            new EntityId($course["course_id"]),
+            $s->term,
+            $s->access->actor,
+            "FICTIONAL.UNBOUND",
+            20,
+            true,
+            true,
+            new Money(0, "USD"),
+        );
+        $s->registration->addSection($section);
+        $enrollment = $s->service->register($f->student, $section->id)->id;
+        $grade = array_column(
+            $s->academicCredits()->choices($f->student, $section->id, $enrollment)["items"],
+            "id",
+            "code",
+        )["A"];
+        $g = $s->academicCredits()->review($f->student, $section->id, $enrollment, new EntityId($grade), 0);
+        $s->academicCredits()->commit($f->student, $section->id, $g["review_token"]);
+        $earlier = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("needs_review", $earlier["allocation"]["outcome"]);
+        $events = $s->sql->rows("sis_history_events");
+        $finance = $s->financialEvents();
+        $r = $s
+            ->academicCourses()
+            ->review(
+                $f->student,
+                $section->id,
+                $enrollment,
+                new EntityId($course["version_id"]),
+                1,
+                $s->clock->now()->format("Y-m-d"),
+                "Fictional registrar evidence for an unknown reference.",
+            );
+        $s->academicCourses()->commit($f->student, $section->id, $r["review_token"]);
+        $fresh = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $fresh["allocation"]["outcome"]);
+        self::assertSame("needs_review", $earlier["allocation"]["outcome"]);
+        self::assertSame($events, array_slice($s->sql->rows("sis_history_events"), 0, count($events)));
+        self::assertSame($finance, $s->financialEvents());
+    }
+
+
 }

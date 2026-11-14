@@ -219,6 +219,11 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
                 "fields" => ["decision_id", "previous_decision_id", "grade", "assignment_id"],
             ],
+            \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => ['decision_id', 'previous_decision_id', 'previous_course_version_id', 'course_version_id',
+                    'course_code', 'course_title'],
+            ],
             \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class => [
                 "type" => "academic_credit",
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
@@ -648,7 +653,8 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 if (str_ends_with((string) $name, "_id")) {
                     if (
-                        $class === \Domain\Transfer\Event\TransferCourseWasAccepted::class &&
+                        in_array($class, [\Domain\Transfer\Event\TransferCourseWasAccepted::class,
+                            \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class], true) &&
                         $name === "previous_course_version_id" && $value === null
                     ) {
                         continue;

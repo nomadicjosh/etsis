@@ -10,6 +10,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished;
 use Domain\AcademicRecord\Event\FinalGradeWasDecided;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
+use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 
 final class AcademicCredit extends EventSourcedAggregate
@@ -25,6 +26,7 @@ final class AcademicCredit extends EventSourcedAggregate
     private ?string $provenance = null;
     private ?string $sectionVersion = null;
     private ?string $completedOn = null;
+    private ?string $originalCourseVersion = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -35,6 +37,7 @@ final class AcademicCredit extends EventSourcedAggregate
                     FinalGradeWasDecided::class,
                     InstitutionalCreditWasDropped::class,
                     AcademicCompletionWasRecorded::class,
+                    InstitutionalCourseWasAccepted::class,
                 ],
                 true,
             ) ||
@@ -62,6 +65,7 @@ final class AcademicCredit extends EventSourcedAggregate
         }
         $this->provenance = $p["provenance"];
         $this->credit = $p["credit"];
+        $this->originalCourseVersion = $p["credit"]["course_version_id"];
         $this->grade = $p["grade"];
         $this->section = $p["section_id"];
         $this->policies = $p["policies"];
@@ -103,6 +107,32 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->decision = $p["decision_id"];
         new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
     }
+    public function whenInstitutionalCourseWasAccepted(InstitutionalCourseWasAccepted $event): void
+    {
+        $p = $event->payload();
+        $this->assertNext($p);
+        if (
+            !$this->canAcceptCourse() ||
+            $this->credit === null ||
+            !in_array($this->credit["status"], ["A", "N"], true) ||
+            $p["previous_course_version_id"] !== $this->credit["course_version_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->credit["course_version_id"] = $p["course_version_id"];
+        $this->credit["course_code"] = $p["course_code"];
+        $this->credit["course_title"] = $p["course_title"];
+        ++$this->credit["version"];
+        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
+        $this->decision = $p["decision_id"];
+    }
+
+    /** Acceptances resolve an unknown inception reference; they never replace known offering facts. */
+    public function canAcceptCourse(): bool
+    {
+        return $this->originalCourseVersion === null && $this->sectionVersion === null;
+    }
+
     public function whenInstitutionalCreditWasDropped(InstitutionalCreditWasDropped $event): void
     {
         $p = $event->payload();

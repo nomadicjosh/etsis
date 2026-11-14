@@ -17,6 +17,7 @@ final readonly class SisGradebookController
     public function __construct(
         private GradebookService $service,
         private \Domain\AcademicRecord\Service\AcademicCompletionService $completion,
+        private \Domain\AcademicRecord\Service\AcademicCourseService $courses,
     ) {
     }
 
@@ -162,6 +163,44 @@ final readonly class SisGradebookController
     {
         return new JsonResponse(
             $this->completion->commit(
+                new EntityId($student),
+                new EntityId($id),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+
+    public function coursePublications(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->courses->choices(
+                new EntityId($student),
+                new EntityId($id),
+                $f->id("enrollment_id"),
+                $f->optionalText("cursor", 4096),
+            ),
+        );
+    }
+    public function reviewCoursePublication(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->courses->review(
+                new EntityId($student),
+                new EntityId($id),
+                $f->id("enrollment_id"),
+                $f->id("course_version_id"),
+                $f->integer("version", 0),
+                $f->text("effective_on", 10),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+    public function commitCoursePublication(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->courses->commit(
                 new EntityId($student),
                 new EntityId($id),
                 FormInput::from($request)->text("review_token", 16384),

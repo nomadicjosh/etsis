@@ -8,6 +8,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished;
 use Domain\AcademicRecord\Event\FinalGradeWasDecided;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
+use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
@@ -26,18 +27,21 @@ final class AcademicEventSchema
                 "grade",
             ],
             FinalGradeWasDecided::class => ["decision_id", "previous_decision_id", "grade", "assignment_id"],
+            InstitutionalCourseWasAccepted::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_course_version_id",
+                "course_version_id",
+                "course_code",
+                "course_title",
+            ],
             AcademicCompletionWasRecorded::class => [
                 "decision_id",
                 "previous_decision_id",
                 "previous_completed_on",
                 "completed_on",
             ],
-            InstitutionalCreditWasDropped::class => [
-                "decision_id",
-                "previous_decision_id",
-                "outcome",
-                "grade",
-            ],
+            InstitutionalCreditWasDropped::class => ["decision_id", "previous_decision_id", "outcome", "grade"],
             default => [],
         };
         if (count($payload) !== count($keys) || array_diff(array_keys($payload), $keys) !== []) {
@@ -88,7 +92,32 @@ final class AcademicEventSchema
                 self::invalid();
             }
             new EntityId($payload["previous_decision_id"]);
-            if ($class === AcademicCompletionWasRecorded::class) {
+            if ($class === InstitutionalCourseWasAccepted::class) {
+                foreach (["course_version_id", "previous_course_version_id"] as $key) {
+                    if ($key === "previous_course_version_id" && $payload[$key] === null) {
+                        continue;
+                    }
+                    if (!is_string($payload[$key])) {
+                        self::invalid();
+                    }
+                    new EntityId($payload[$key]);
+                }
+                if ($payload["course_version_id"] === $payload["previous_course_version_id"]) {
+                    self::invalid();
+                }
+                foreach (["course_code" => 96, "course_title" => 191] as $key => $maximum) {
+                    $value = $payload[$key];
+                    if (
+                        !is_string($value) ||
+                        trim($value) === "" ||
+                        !mb_check_encoding($value, "UTF-8") ||
+                        mb_strlen($value) > $maximum ||
+                        preg_match('/[\x00-\x1F\x7F]/', $value)
+                    ) {
+                        self::invalid();
+                    }
+                }
+            } elseif ($class === AcademicCompletionWasRecorded::class) {
                 foreach (["previous_completed_on", "completed_on"] as $key) {
                     $date = $payload[$key];
                     if ($date === null) {

@@ -160,6 +160,9 @@ final readonly class InstitutionalCreditLedger
             "enrollment_id" => $enrollment->value,
             "completed_on" => $root->completedOn(),
             "can_amend" => $this->canAmend(),
+            "can_accept_course" => $this->canAmend() && $root->canAcceptCourse() &&
+                ($root->playhead() > 0 || $facts['course_version_id'] === null),
+            "course_version_id" => $facts['course_version_id'],
             "history_recorded" => $root->playhead() > 0,
             "posted" => new CreditSnapshot($facts)->posted(),
             "current_grade_code" =>
@@ -541,9 +544,13 @@ final readonly class InstitutionalCreditLedger
                         ? $p["provenance"]
                         : ($e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded
                             ? "completion_recorded"
-                            : ($e instanceof FinalGradeWasDecided
+                            : ($e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted
+                                ? "course_accepted"
+                                : ($e instanceof FinalGradeWasDecided
                                 ? "grade_decided"
-                                : "dropped")),
+                                : "dropped"))),
+                "course_code" => $p['course_code'] ?? null,
+                "course_title" => $p['course_title'] ?? null,
                 "completed_on" => $p["completed_on"] ?? null,
                 "previous_completed_on" => $p["previous_completed_on"] ?? null,
                 "grade_code" => $p["grade"]["code"] ?? ($p["outcome"]["grade_code"] ?? null),
@@ -564,6 +571,7 @@ final readonly class InstitutionalCreditLedger
         EntityId $student,
         EntityId $section,
         ?HistoryReadBudget $budget = null,
+        bool $allowRemoved = false,
     ): array {
         $m =
         $this->records->forEnrollment($enrollment) ??
@@ -575,16 +583,22 @@ final readonly class InstitutionalCreditLedger
         $root = $this->load($id, $budget);
         $facts =
         $this->records->projection($id) ??
-        throw new RecordNotFoundException("Current academic record not found.");
+        (($allowRemoved && ($root->credit()["status"] ?? null) === "D" ? $root->credit() : null) ??
+        throw new RecordNotFoundException("Current academic record not found."));
         return [$id, $root, $facts];
     }
     /** Internal command context. Caller must authorize and hold student/section locks.
      * @return array{EntityId,AcademicCredit,array<string,mixed>}
      */
-    public function decisionRecord(EntityId $student, EntityId $section, EntityId $enrollment): array
-    {
-        return $this->source($enrollment, $student, $section, new HistoryReadBudget());
+    public function decisionRecord(
+        EntityId $student,
+        EntityId $section,
+        EntityId $enrollment,
+        bool $allowRemoved = false,
+    ): array {
+        return $this->source($enrollment, $student, $section, new HistoryReadBudget(), $allowRemoved);
     }
+
     private function load(EntityId $id, ?HistoryReadBudget $budget = null): AcademicCredit
     {
         $root = AcademicCredit::root(new AcademicCreditId($id->value));

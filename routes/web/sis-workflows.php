@@ -77,6 +77,15 @@ return static function (Psr7Router $router): void {
             "gradeChoices",
         ])
         ->name("sis.gradebook.choices");
+    $router->post('/sis/sections/{id}/students/{student}/course-publication/choices/', [
+        SisGradebookController::class, 'coursePublications',
+    ]);
+    $router->post('/sis/sections/{id}/students/{student}/course-publication/review/', [
+        SisGradebookController::class, 'reviewCoursePublication',
+    ]);
+    $router->post('/sis/sections/{id}/students/{student}/course-publication/commit/', [
+        SisGradebookController::class, 'commitCoursePublication',
+    ]);
     $router
         ->map(["POST"], "/sis/sections/{id}/students/{student}/completion-date/review/", [
             SisGradebookController::class,

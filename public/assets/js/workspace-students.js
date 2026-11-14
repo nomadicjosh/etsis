@@ -772,6 +772,17 @@ window.createWorkspaceStudents = function (ui) {
                                           ? node(
                                                 "div",
                                                 { class: "inline-actions" },
+                                                can("sis:gradebook:amend") &&
+                                                    can("sis:student:read") &&
+                                                    ["A", "N"].includes(item.status)
+                                                    ? button("Course publication", () =>
+                                                          ui.teaching().reviewCoursePublication(
+                                                              { id: item.section_id },
+                                                              { student_id: id },
+                                                              back,
+                                                          ),
+                                                      )
+                                                    : null,
                                                 button("Grade history", () =>
                                                     ui
                                                         .teaching()

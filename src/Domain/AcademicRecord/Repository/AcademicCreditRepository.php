@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\AcademicRecord\Repository;
 
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Catalog\ValueObject\PublishedCourseDefinition;
 
 interface AcademicCreditRepository
 {
@@ -18,6 +19,7 @@ interface AcademicCreditRepository
     public function project(array $facts, EntityId $section, ?int $expectedVersion): void;
     /** @return array<string,mixed> */
     public function section(EntityId $section): array;
+    public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void;
     /** @return array<string,mixed>|null */
     public function enrollment(EntityId $enrollment): ?array;
     public function lockStudent(EntityId $student): void;

@@ -63,6 +63,7 @@ async function fixture(page, options = {}) {
                 current_grade_code: "A",
                 posted: true,
                 can_amend: !options.readOnly,
+                can_accept_course: !!options.courseAcceptance && !options.readOnly,
                 current_version: version,
                 completed_on: date,
                 enrollment_id: enrollment,
@@ -70,6 +71,18 @@ async function fixture(page, options = {}) {
                 needs_assignment: false,
                 pursuits: [],
             };
+        else if (path.endsWith("/course-publication/choices/")) result = {
+            items:[{version_id:id(data.cursor?7:6),version:data.cursor?2:1,code:"CS.101",transcript_title:data.cursor?"Revised <b>fictional</b> title":"Retained course title"}],
+            next_cursor:data.cursor?null:"fictional-next",current_version:version,effective_on_default:"2026-08-11",
+            current_course_code:"CS.101",current_course_title:"Earlier unknown reference",
+        };
+        else if (path.endsWith("/course-publication/review/")) {
+            if(options.rejectCourse) return route.fulfill({status:409,json:{error:"The academic record changed. Reload before reviewing."}});
+            result={before:{course_code:"CS.101",course_title:"Earlier unknown reference"},
+                after:{course_code:"CS.101",course_title:"Revised <b>fictional</b> title"},reason:data.reason,
+                effective_on:data.effective_on,review_token:"fictional-course-review"};
+        }
+        else if (path.endsWith("/course-publication/commit/")) version++;
         else if (path.endsWith("/completion-date/review/")) {
             if (options.reject)
                 return route.fulfill({
@@ -95,7 +108,8 @@ async function fixture(page, options = {}) {
     await page.locator("#directory-search").press("Enter");
     await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
-    await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+    if(options.directCourse) await page.getByRole("button",{name:"Course publication",exact:true}).click();
+    else await page.getByRole("button", { name: "Review final grade", exact: true }).click();
     return { calls, errors, student, section, enrollment };
 }
 
@@ -189,5 +203,78 @@ test("stale completion review keeps the entered correction available and never c
     ).toHaveValue("2026-08-02");
     await expect(page.locator("#drawer-body")).toContainText("The academic record changed");
     expect(f.calls.some((c) => c.path.endsWith("/completion-date/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+
+test("registrar resolves an unknown course reference with explicit review, paged choices and preserved form values", async ({
+    page,
+}) => {
+    const f = await fixture(page, { courseAcceptance: true, directCourse: true });
+    const drawer = page.locator("#drawer-body");
+    await expect(drawer).toContainText("does not prove which publication applied at registration");
+    await page.getByRole("button", { name: "Load more course publications", exact: true }).click();
+    await page.getByRole("combobox", { name: "Accepted course publication", exact: true }).selectOption("00000000000000000000000007");
+    await page.getByLabel(/Acceptance effective date/).fill("2026-08-10");
+    await page
+        .getByLabel(/Reason and course-publication evidence/)
+        .fill("Fictional <b>evidence</b> confirmed.");
+    await page.getByRole("button", { name: "Review course publication acceptance", exact: true }).click();
+    await expect(drawer).toContainText("Earlier unknown reference → CS.101 · Revised <b>fictional</b> title");
+    await expect(drawer.locator("b")).toHaveCount(0);
+    expect(f.calls.some((c) => c.path.endsWith("/course-publication/commit/"))).toBe(false);
+    await page.getByRole("button", { name: "Change course publication review", exact: true }).click();
+    await expect(page.getByLabel(/Reason and course-publication evidence/)).toHaveValue(
+        "Fictional <b>evidence</b> confirmed.",
+    );
+    await expect(page.getByRole("combobox", { name: "Accepted course publication", exact: true })).toHaveValue(
+        "00000000000000000000000007",
+    );
+    await page.getByRole("button", { name: "Review course publication acceptance", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const audit = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(audit.violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Confirm course publication acceptance", exact: true }).click();
+    expect(f.calls.find((c) => c.path.endsWith("/course-publication/review/"))).toMatchObject({
+        csrf: "fictional-test-token",
+        data: {
+            enrollment_id: f.enrollment,
+            version: 3,
+            effective_on: "2026-08-10",
+            course_version_id: "00000000000000000000000007",
+        },
+    });
+    expect(f.calls.find((c) => c.path.endsWith("/course-publication/commit/"))).toMatchObject({
+        data: { review_token: "fictional-course-review" },
+    });
+    expect(f.calls.some((c) => c.path.includes("/final-grades/") || c.path.includes("/completion-date/"))).toBe(false);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("course publication review failure leaves evidence available without confirming", async ({ page }) => {
+    const f = await fixture(page, { courseAcceptance: true, rejectCourse: true });
+    await page.getByRole("button", { name: "Review course publication", exact: true }).click();
+    await page.getByRole("combobox", { name: "Accepted course publication", exact: true }).selectOption("00000000000000000000000006");
+    await page
+        .getByLabel(/Reason and course-publication evidence/)
+        .fill("Fictional concurrent review.");
+    await page.getByRole("button", { name: "Review course publication acceptance", exact: true }).click();
+    await expect(page.getByLabel(/Reason and course-publication evidence/)).toHaveValue(
+        "Fictional concurrent review.",
+    );
+    expect(f.calls.some((c) => c.path.endsWith("/course-publication/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("a known registration-time publication is explained without offering a replacement", async ({ page }) => {
+    const f = await fixture(page, { directCourse: true });
+    await expect(page.locator("#drawer-body")).toContainText("retained registration-time course or offering publication");
+    await expect(page.getByRole("button", { name: "Review course publication acceptance", exact: true })).toHaveCount(0);
+    expect(f.calls.some((c) => c.path.includes("/course-publication/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });

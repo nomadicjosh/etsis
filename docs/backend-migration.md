@@ -246,3 +246,8 @@ Individual group and requirement-card shortages now reach the owner-only portal 
 ### Temporary combined curriculum tests
 
 The existing audit test workspace now combines a degree editor snapshot or exact publication with saved specialization drafts/publications from the same program and academic year. Staff explicitly choose hypothetical component sharing; retained group/repeat/grading policies still apply within each source. The existing runtime source resolver, verified input collection and joint allocator are reused, with one student lock/inventory/read allowance, captured drilldowns and stale-response guards. Tests neither apply student exceptions nor approve specialization choices. Drafts retain real template identities internally and display no fabricated publication ID. See [the testing workflow](degree-audit-builder.md#test-a-degree-with-specializations). No migration or academic/result persistence is introduced.
+
+
+### Institutional course-publication acceptance
+
+Active institutional credits with an originally unknown course/offering reference now have a reasoned registrar review, confirmation and curated history through the existing academic-credit journal. Exact same-course publications are verified and indexed without changing grades, completion dates, enrollment or money. Untracked older rows start with an explicit current observation; known registration-time references cannot be replaced. Actor/version/expiry checks, original retries after later decisions or early removal, atomic rollback and subsequent degree-audit matching are covered by fictional tests. See [the staff workflow](academic-credit-history.md#resolve-an-unknown-course-publication). No migration or live data conversion is needed.

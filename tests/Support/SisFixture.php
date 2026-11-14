@@ -314,6 +314,32 @@ final class SisFixture
             $this->transactions, $this->access, $this->dropCipher, $this->clock, $audit ?? $this->audit,
         );
     }
+    public function academicCourses(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\AcademicRecord\Service\AcademicCourseService {
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql,
+            $this->transactions,
+            $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                EventStoreFixture::config($this->connection->queryBuilder()),
+            ),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        return new \Domain\AcademicRecord\Service\AcademicCourseService(
+            $this->academicCredits(),
+            new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
+            new \Domain\Catalog\Service\PublishedCourseReader($history),
+            $this->gradeCatalog(),
+            $history,
+            $this->transactions,
+            $this->access,
+            $this->dropCipher,
+            $this->clock,
+            $audit ?? $this->audit,
+        );
+    }
+
     public function activityLedger(): \Domain\Student\Service\StudentActivityLedger
     {
         return new \Domain\Student\Service\StudentActivityLedger(

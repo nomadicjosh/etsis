@@ -9,6 +9,7 @@ use Domain\AcademicRecord\ValueObject\CreditSnapshot;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Catalog\ValueObject\PublishedCourseDefinition;
 use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlAcademicCreditRepository implements AcademicCreditRepository
@@ -122,6 +123,26 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
             ) {
                 throw new ConcurrentModificationException("The academic record changed.");
             }
+        }
+    }
+    public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void
+    {
+        $facts = $this->projection($credit) ?? throw new CorruptHistoryException();
+        if (
+            $facts["course_id"] !== $definition->courseId->value ||
+            $facts['course_version_id'] !== $previous?->value
+        ) {
+            throw new CorruptHistoryException();
+        }
+        new SqlCourseVersionProjection($this->sql)->retain($definition);
+        $r = ["course_version_id" => $definition->versionId->value];
+        if ($previous === null) {
+            $this->sql->insert("sis_credit_course_versions", ["id" => $credit->value] + $r);
+        } elseif (
+            $this->sql->update("sis_credit_course_versions", $r, ["id" => $credit->value,
+            "course_version_id" => $previous->value]) !== 1
+        ) {
+            throw new ConcurrentModificationException("Review the accepted course publication again.");
         }
     }
     public function section(EntityId $section): array
