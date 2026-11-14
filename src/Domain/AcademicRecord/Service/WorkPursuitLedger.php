@@ -49,6 +49,43 @@ final readonly class WorkPursuitLedger
         return $root;
     }
 
+    /**
+     * Internal curated page. The caller verifies current academic work and holds its student's lock.
+     * @param array<string,string> $source
+     * @return array{items:list<array<string,mixed>>,next_cursor:?string,through_version:int}
+     */
+    public function timeline(
+        EntityId $credit,
+        array $source,
+        HistoryReadBudget $budget,
+        ?string $cursor = null,
+    ): array {
+        $root = $this->load($credit, $budget);
+        $projection = $root->projection();
+        if ($projection !== null && self::fingerprint($projection['source']) !== self::fingerprint($source)) {
+            throw new CorruptHistoryException();
+        }
+        // The store binds the continuation to this stream and freezes its original committed head.
+        $page = $budget->page($this->history, $this->stream($credit), $cursor);
+        if ($page->throughVersion > $root->playhead()) {
+            throw new CorruptHistoryException();
+        }
+        $items = [];
+        foreach ($page->events as $stored) {
+            $event = $stored->event;
+            if (!$event instanceof AcademicWorkPursuitWasRecorded) {
+                throw new CorruptHistoryException();
+            }
+            $payload = $event->payload();
+            $items[] = ['version' => $event->playhead(), 'action' => $payload['action'],
+                'assignment_id' => $payload['assignment_id'],
+                'effective_at' => $stored->context->effectiveAt?->format(DATE_ATOM),
+                'recorded_at' => $stored->recordedAt->format(DATE_ATOM)];
+        }
+        return ['items' => $items, 'next_cursor' => $page->nextCursor,
+            'through_version' => $page->throughVersion];
+    }
+
     /** Internal creation only, after the genuine institutional/transfer award is projected.
      * @param array<string,mixed> $credit Canonical credit facts supplied by the actual creator.
      */

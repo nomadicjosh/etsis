@@ -27,6 +27,18 @@ Reviews expire after 20 minutes and are bound to their staff member, student, se
 
 If a confirmation is interrupted, retrying that same accepted review returns its original results without reapplying approvals. This remains true after a later revocation, pursuit closure or review expiry. A new selection requires a fresh review. Selections and reasons live only in the open workspace's memory, not browser storage. Reads never create attribution or approve reuse.
 
+### Attribution and reuse history
+
+Each work card now offers **Attribution & reuse history**. It shows original attribution, corrections, reuse approvals and revocations in recorded decision order, with effective and recorded times. An empty history says that no pursuit decisions were recorded; opening it never assigns older work or invents missing decisions. Closed pursuits remain identifiable, and revoked approvals remain visible.
+
+Pages contain at most 20 decisions. The first page fixes the history boundary for subsequent pages; **Refresh decision history** starts a new review that includes later decisions. **Back to work selection** preserves selected records and the entered shared reason. A response arriving after the review was closed or replaced cannot reopen it. History is fetched only when requested and is never stored in browser storage.
+
+Program names, entry terms and statuses identify today's verified pursuit records. The screen explicitly distinguishes these current labels from the recorded actions and times: earlier decisions did not retain program-name snapshots. It does not present a renamed program as its historical name.
+
+The same two independent registrar permissions apply on every page. Current academic work, source ownership, pursuit decisions and projections are verified under one student lock and shared replay allowance. A changed or missing projection, invalid continuation, exhausted allowance or lost authority stops the read without partial results or repairs. Another student's work and restricted early removals remain unavailable. Successful reads require a metadata-only access audit; a failed audit or final authority check rolls it back. No events, receipts, academic projections, grades, charges or reuse approvals are created by this view.
+
+The private browser POST route is `/sis/students/{student}/academic-work-pursuits/{credit}/history/`. It retains framework CSRF protection, private/no-store responses and debug suppression. Responses contain curated decision references, current pursuit labels and times; protected reasons, staff identities, payloads, operation references and source hashes are excluded. This adds no schema or event format.
+
 ## Understanding the result
 
 - **Available references checked:** current records agree with the available history and routing references. The count includes current institutional and transfer records, including in-progress work, late drops and voided awards. It is not a count of passed courses.

@@ -277,7 +277,7 @@ Authoring requires `sis:catalog:manage`; academic-read/registration permissions 
 
 ## Student evaluation still to implement
 
-The user confirmed that repeat handling, transfer GPA treatment and waiver effects should be explicit, versioned institutional policies. The updated waiver definition is authoritative: **a course waiver removes the requirement to take that course wherever it is required for the student**. A waiver does not manufacture earned credits, a completed attempt or GPA points. Changes to credit/GPA minima belong to explicitly attributed exceptions; per-pursuit waiver/minimum approval and revocation now use a dedicated registrar permission and protected history. A waiver is course based across the one student-program pursuit, including all its groups; a dual-degree pursuit has separate approvals.
+The user confirmed that repeat handling, transfer GPA treatment and waiver effects should be explicit, versioned institutional policies. The updated waiver definition is authoritative: **a course waiver removes the requirement to take that course wherever it is required for the student**. A waiver does not manufacture earned credits, a completed attempt or GPA points. Changes to credit/GPA minima belong to explicitly attributed exceptions; per-pursuit waiver/minimum approval and revocation now use a dedicated registrar permission and protected history. A waiver is course based across the one student-program pursuit, including all its groups; a separate student-program pursuit needs separate approvals. A combined dual-degree program can remain within one pursuit and share its course waivers.
 
 Future work must preserve these distinctions:
 

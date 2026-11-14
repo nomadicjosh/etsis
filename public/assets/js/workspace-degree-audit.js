@@ -5,7 +5,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
     let dialog = null,
         opener = null,
         lastTrigger = null,
-        sequence = 0;
+        sequence = 0,
+        scopeHistoryRequest = 0;
     document.addEventListener(
         "click",
         (e) => {
@@ -2597,6 +2598,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node("h2", {}, `${work.course_code} · ${work.course_title}`),
                 node("p", {}, `${work.credit_type} · ${work.term_code || "Term not recorded"}`),
                 node("p", {}, work.owner ? `Belongs to ${pursuitLabel(work.owner)}` : "Pursuit not recorded. Review source evidence before assigning it."));
+            card.append(button("Attribution & reuse history", () => scopeHistory(base, work, restore)));
             if (!work.owner) {
                 card.append(button("Attribute this work", () => scopeTarget(base, work, "attribute", restore)));
             } else {
@@ -2629,6 +2631,35 @@ window.createWorkspaceDegreeAudit = function (ui) {
         renderSelection();
         pager(body, data, after, stack, (a, st) => workPursuits(student, receiving, back, a, st, state), "next_after");
         body.append(button(state.backLabel, back));
+    }
+
+    async function scopeHistory(base, work, back, cursor = null, stack = []) {
+        const origin = dialog, requestId = ++scopeHistoryRequest;
+        let data;
+        try {
+            data = await post(`${base}${work.id}/history/`, cursor ? { cursor } : {});
+        } catch (error) {
+            if (dialog === origin && origin?.isConnected && requestId === scopeHistoryRequest) throw error;
+            return;
+        }
+        if (dialog !== origin || !origin?.isConnected || requestId !== scopeHistoryRequest) return;
+        const body = screen("Attribution & reuse history", "REGISTRAR DECISION HISTORY");
+        body.append(node("h2", {}, `${work.course_code} · ${work.course_title}`),
+            node("p", {}, "Recorded attribution, corrections, reuse approvals and revocations remain here. This view does not include protected reasons or staff identities. Earlier decisions that were never recorded cannot be reconstructed."),
+            node("p", { class: "form-text" }, "Program names, entry terms and status identify the current pursuit records. They are not labels captured when each decision was made."));
+        const labels = { attribute: "Original pursuit recorded", correct_attribution: "Original pursuit corrected",
+            approve_reuse: "Reuse approved", revoke_reuse: "Reuse revoked" };
+        if (data.through_version) body.append(node("p", { class: "form-text" },
+            `Showing recorded decisions through decision ${data.through_version}. Refresh to include later decisions.`));
+        for (const item of data.items) body.append(node("article", { class: "audit-library-card" },
+            node("h3", { class: "h5" }, `Decision ${item.version} · ${labels[item.action] || "Recorded decision"}`),
+            node("p", {}, `Pursuit: ${pursuitLabel(item.pursuit)}`),
+            node("p", {}, `Effective ${item.effective_at || "time not recorded"}. Recorded ${item.recorded_at}.`)));
+        if (!data.items.length) body.append(node("p", { role: "status" },
+            "No pursuit decisions have been recorded for this current academic record. Attribution requires institutional evidence."));
+        pager(body, data, cursor, stack, (next, previous) => scopeHistory(base, work, back, next, previous), "next_cursor");
+        body.append(actions(button("Refresh decision history", () => scopeHistory(base, work, back)),
+            button("Back to work selection", back)));
     }
 
     async function reuseReason(base, receiving, state, back) {

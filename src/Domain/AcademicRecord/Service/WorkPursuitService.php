@@ -186,6 +186,34 @@ final readonly class WorkPursuitService
         });
     }
 
+    /** Office-only decision references, never raw events or protected approval narratives.
+     * @return array<string,mixed>
+     */
+    public function history(EntityId $student, EntityId $credit, ?string $cursor = null): array
+    {
+        $actor = $this->authorize();
+        return $this->transactions->run(function () use ($student, $credit, $cursor, $actor): array {
+            $this->students->lock($student);
+            $this->authorize($actor);
+            $budget = new HistoryReadBudget();
+            // Current verified work is required: restricted early removals have no office work card.
+            $work = $this->work($student, $credit, $budget);
+            $page = $this->ledger->timeline($credit, $this->source($student, $work), $budget, $cursor);
+            $items = $pursuits = [];
+            foreach ($page['items'] as $item) {
+                $id = $item['assignment_id'];
+                $pursuits[$id] ??= $this->target($student, new EntityId($id), 'read', $budget);
+                unset($item['assignment_id']);
+                $items[] = $item + ['pursuit' => $pursuits[$id]];
+            }
+            $this->authorize($actor);
+            $this->audit->record($actor, 'academic.work_pursuit_history_read', $credit);
+            $this->authorize($actor);
+            return ['items' => $items, 'next_cursor' => $page['next_cursor'],
+                'through_version' => $page['through_version'], 'pursuit_labels' => 'current'];
+        });
+    }
+
     /** Independent office permission. Reviewing scope does not confer access through a faculty role. */
     private function authorize(?EntityId $expected = null): EntityId
     {

@@ -34,6 +34,15 @@ final readonly class SisWorkPursuitController
         ));
     }
 
+    public function history(ServerRequest $request, string $student, string $credit): ResponseInterface
+    {
+        return new JsonResponse($this->service->history(
+            new EntityId($student),
+            new EntityId($credit),
+            FormInput::from($request)->optionalText('cursor', 4096)
+        ));
+    }
+
     public function review(ServerRequest $request, string $student, string $credit): ResponseInterface
     {
         $form = FormInput::from($request);

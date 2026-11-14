@@ -1052,9 +1052,15 @@ return static function (Psr7Router $router): void {
         [\Application\Http\Controller\SisStudentProgramAssignmentController::class, 'changeProgram']
     );
     foreach (
-        [['', 'page'], ['pursuits/', 'pursuits'],
-        ['reuse/review/', 'reviewReuse'], ['reuse/commit/', 'commitReuse'],
-        ['{credit}/review/', 'review'], ['{credit}/commit/', 'commit']] as [$suffix, $action]
+        [
+            ['', 'page'],
+            ['pursuits/', 'pursuits'],
+            ['reuse/review/', 'reviewReuse'],
+            ['reuse/commit/', 'commitReuse'],
+            ['{credit}/history/', 'history'],
+            ['{credit}/review/', 'review'],
+            ['{credit}/commit/', 'commit'],
+        ] as [$suffix, $action]
     ) {
         $router->post(
             '/sis/students/{student}/academic-work-pursuits/' . $suffix,

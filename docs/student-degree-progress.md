@@ -112,7 +112,7 @@ No migration, stored policy/event conversion, new event table, academic write or
 
 ## Student portal
 
-**My campus → Degree progress** (`/portal/student/progress/`) offers the signed-in student's own program pursuits, including closed pursuits and separate dual-degree choices. Program/entry-term labels distinguish choices. Choices use indexed 20-record pages without academic replay; selecting a pursuit requests one bounded review through the same canonical `DegreeProgressService` used by staff. The portal does not implement a second GPA, repeat or placement calculation.
+**My campus → Degree progress** (`/portal/student/progress/`) offers the signed-in student's own program pursuits, including closed pursuits and any separately recorded additional pursuits. A combined dual-degree program can remain within one pursuit. Program/entry-term labels distinguish choices. Choices use indexed 20-record pages without academic replay; selecting a pursuit requests one bounded review through the same canonical `DegreeProgressService` used by staff. The portal does not implement a second GPA, repeat or placement calculation.
 
 The student view shows retained degree/year/version context, general minimum comparisons, approved minimum reductions, group quantities and a complete proposed placement when available. Unknown GPA or missing evidence remains unavailable, not zero. Read/search limits do not produce partial totals or a speculative group plan. Earlier-history and changed-cohort notices remain visible. These are current, non-retained reviews of available sources; closed-pursuit access does not turn them into historical graduation results.
 

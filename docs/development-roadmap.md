@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after connecting program changes directly to grouped earlier-coursework review. Registrars can select up to 20 records across pages and approve them atomically using existing pursuit decisions and receipts. Pending reviews detect changed evidence; accepted retries preserve original results and later decisions. Full prerequisite/co-requisite policy expressions, final evaluations and graduation remain subsequent milestones.
+Last reviewed: **2026-11-14**, after adding on-demand attribution/reuse history to the registrar workbench. Bounded pages show recorded decisions and times, distinguish current pursuit labels, preserve the work selection/reason and retain independent permission, integrity and access-audit checks. Grouped approvals and original retries keep their existing shared command path. Full prerequisite/co-requisite policy expressions, final evaluations and graduation remain subsequent milestones.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -78,6 +78,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [x] Confine prerequisite and degree-audit inputs to the selected pursuit, with explicit registrar attribution/correction/reuse/revocation. New work records its current pursuit; unknown older attribution requires review. [Workflow and limits](academic-input-verification.md#which-pursuit-can-use-the-work).
 - [x] Process a registrar program change on one screen: add/select the new pursuit and close the former pursuit atomically, preserving student activity, original work and retry results. [Workflow](student-program-assignments.md#change-program).
 - [x] Connect the completed program change to [grouped earlier-work reuse](academic-input-verification.md#registrar-review), with cross-page selection, one reason/review/confirmation, atomic approval, shared evidence collection and original retries. No new schema or parallel recovery workflow.
+- [x] Inspect [recorded attribution and reuse decisions](academic-input-verification.md#attribution-and-reuse-history) from each work card, with frozen bounded pages, explicit refresh, preserved work selection, current-label disclosure and private audited reads. Do not expose protected narratives, another student's work or removed early drops; add no journal or migration.
 - [x] [Retain exact verified prerequisite support in accepted registrations](registration-history.md#retained-prerequisite-evidence), show group readiness before confirmation, invalidate pending reviews on changed grade/reuse support, preserve original receipts and keep earlier unrecorded evidence unknown. No new migration or journal.
 - [ ] Complete versioned prerequisite/co-requisite expressions, schedule-conflict checks and retained eligibility-policy inputs.
 - [ ] Add waitlists with an explicit institutional ordering/allocation policy, accepted server ordering and atomic seat/billing decisions. Browser click time is not a fairness guarantee.
@@ -149,7 +150,7 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 - [ ] Extend the current accessible progress reviews with remaining unmet-requirement explanations and controlled retained evaluation results, including enough input/version context to reproduce them.
 - [ ] Add reviewed graduation eligibility, authorized award/credential decisions and later corrections. An audit result alone must not automatically confer a degree.
 
-**Done when:** the same retained inputs reproduce the same explained result; later catalog changes leave earlier results interpretable; dual-degree pursuits remain separate; an authorized graduation decision is retained independently.
+**Done when:** the same retained inputs reproduce the same explained result; later catalog changes leave earlier results interpretable; distinct student-program pursuits remain separate unless reuse is explicitly approved; an authorized graduation decision is retained independently.
 
 Authoring, exception inputs and [paged academic-work review](student-academic-work.md) already exist: [builders with live group planning totals](degree-audit-builder.md#group-planning-summary), [student requirement assignment](student-degree-requirements.md), [exceptions](student-degree-exceptions.md). Structural group placement is implemented; complete degree evaluation and retained final results are still outstanding.
 
