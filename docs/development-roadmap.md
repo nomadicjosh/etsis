@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after connecting saved dynamic student reports to reviewed group registration and adding static captures plus optional expiry for either report mode. Distinct populations, a bounded shortlist and live membership/version checks preserve independent report/source and registration authority. Encrypted static results stay fixed; expiry cleanup preserves linked case and academic history. Larger export jobs, broader population actions, prerequisite/co-requisite policies, final evaluations and graduation remain subsequent milestones.
+Last reviewed: **2026-11-14**, after adding chronological latest-registration reporting to the Students source, including students with no retained registration. The same builder supports live/static reports, optional expiry and reviewed registration handoffs. General latest-row editors, broader financial report sources, larger exports, prerequisite/co-requisite policies, final evaluations and graduation remain subsequent milestones.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -170,7 +170,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 ## 5. Reporting, populations and conversion
 
-- [ ] Cover the remaining [legacy SELECT acceptance cases](legacy-reporting-review.md): financial aggregates at a declared grain, latest-row/anti-join patterns, repeated relationship aliases and richer typed expression trees.
+- [ ] Cover the remaining [legacy SELECT acceptance cases](legacy-reporting-review.md): financial aggregates at a declared grain, general latest-row/anti-join editors, repeated relationship aliases and richer typed expression trees.
+- [x] [Latest registered term reporting](workflow-review.md#latest-registration-reports): a one-term-per-student relationship, date-based chronology, optional unmatched students, explicit all-pursuit scope, indexed bounded lookup and two visual starting points. Restricted removed registration history remains excluded.
 - [ ] Extend authorized datasets for finance, contact/admissions, scheduling and other completed domains. Prevent one-to-many joins from inflating headcounts, credits or balances; keep mixed currencies separate.
 - [x] [Hand off selected students from saved dynamic Report Studio student detail reports to reviewed group registration](workflow-review.md#register-students-selected-from-a-saved-report), with distinct 50-student pages, a cross-page shortlist of up to 25, current membership/definition checks, full source permission checks and the existing atomic registration command. Summaries and non-student sources cannot be reinterpreted as populations; selection grants no new authority.
 - [ ] Extend reviewed population handoffs to further sources and independently authorized billing/messaging actions. Retain explicit selection semantics and bounded work rather than automatically acting on an entire live report.

@@ -14,6 +14,8 @@ async function fixture(page, options = {}) {
         active: { label: 'Active student', type: 'boolean', relation: 'student' },
         program_code: { label: 'Primary program code', type: 'string', relation: 'program' },
         entry_term: { label: 'Institutional entry term', type: 'string', relation: 'term' },
+        latest_term_code: { label: 'Latest registered term', type: 'string', relation: 'latest_registration' },
+        latest_term_starts_on: { label: 'Latest registered term starts', type: 'date', relation: 'latest_registration' },
     } : {
         section_code: { label: 'Section code', type: 'string', relation: 'section' },
         term_code: { label: 'Academic term', type: 'string', relation: 'term' },
@@ -30,6 +32,7 @@ async function fixture(page, options = {}) {
             identity: { label: 'Institutional IDs', parent: 'person', many: false },
             program: { label: 'Academic programs', parent: 'student', many: false },
             term: { label: 'Academic terms', parent: 'student', many: false },
+            latest_registration: { label: 'Latest registered term (all pursuits)', parent: 'student', many: false },
         },
     } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
@@ -57,7 +60,10 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const rows = options.students ? [{ c0: 'S-FICTIONAL', c1: 'Alex Example', c2: 'BS.CS', c3: '26/FA' }]
+            const values = { institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+                entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
+                latest_term_starts_on: options.never ? null : '2027-01-04' };
+            const rows = options.students ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
                 next_offset: options.students || data.offset ? null : 50, limit: 50, grouped: !options.students };
@@ -100,6 +106,70 @@ test('the Students source opens with useful columns and supports preview, save a
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+for (const never of [false, true]) {
+    test(`the latest-registration starting point supports ${never ? 'students with no retained registration' : 'latest terms'} without SQL`, async ({ page }) => {
+        const f = await fixture(page, { students: true, never });
+        await page.getByRole('button', { name: never ? 'Students with no retained registration'
+            : 'Students and their latest registered term', exact: true }).click();
+        const studio = page.locator('dialog.report-studio');
+        await expect(studio.getByLabel('Column 4 label', { exact: true })).toHaveValue('Latest registered term');
+        await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+        await expect(studio.getByLabel('Row conditions: field', { exact: true })
+            .locator('option[value="latest_term_code"]')).toHaveText('Latest registered term');
+        await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+        await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+        const definition = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
+        expect(definition.joins).toMatchObject({ latest_registration: 'left' });
+        if (never) expect(definition.filters.rules[0]).toMatchObject({ id: 'latest_term_code', operator: 'is_null' });
+        else {
+            expect(definition.filters).toBeNull();
+            await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('27/SP');
+        }
+        await page.setViewportSize({ width: 375, height: 812 });
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(f.errors).toEqual([]);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    });
+}
+
+test('date conditions use native date inputs and submit typed ranges and date lists', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Students and their latest registered term', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional latest-term dates');
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    const conditions = studio.getByRole('group', { name: 'Row conditions', exact: true });
+    await conditions.getByLabel('Row conditions: field', { exact: true }).selectOption('latest_term_starts_on');
+    await conditions.getByLabel('Row conditions: comparison', { exact: true }).selectOption('between');
+    const values = conditions.getByLabel('Row conditions: value', { exact: true });
+    await expect(values).toHaveCount(2);
+    await expect(values.first()).toHaveAttribute('type', 'date');
+    await values.first().fill('2027-01-01');
+    await values.nth(1).fill('2027-06-30');
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+    expect(f.calls.find(call => call.path.endsWith('/preview/')).data.definition.filters.rules[0])
+        .toMatchObject({ id: 'latest_term_starts_on', operator: 'between', value: ['2027-01-01', '2027-06-30'] });
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await conditions.getByLabel('Row conditions: comparison', { exact: true }).selectOption('in');
+    await expect(values).toHaveCount(1);
+    await expect(values).toHaveAttribute('type', 'text');
+    await values.fill('2027-01-01,2028-01-01');
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.filters.rules[0])
+        .toMatchObject({ id: 'latest_term_starts_on', operator: 'in', value: ['2027-01-01', '2028-01-01'] });
+    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await expect(studio).toContainText('Definition revision 1');
+    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await expect(conditions.getByLabel('Row conditions: value', { exact: true }))
+        .toHaveValue('2027-01-01,2028-01-01');
+    await expect(studio.locator('.report-local-error')).toBeHidden();
     expect(f.errors).toEqual([]);
 });
 

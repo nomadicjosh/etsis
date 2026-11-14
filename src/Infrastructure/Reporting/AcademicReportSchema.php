@@ -101,6 +101,9 @@ final class AcademicReportSchema
             'relationships' => $personJoins + [
                 'program' => $join('sis_programs', 'student', 'primary_program_id', 'id'),
                 'term' => $join('sis_terms', 'student', 'entry_term_id', 'id'),
+                'latest_registration' => $join('sis_terms', 'student', 'id', 'id') + [
+                    'source' => 'latest_registration_term',
+                ],
             ],
             'fields' => $personFields + [
                 'primary_program_id' => $field('Primary program reference', 'string', 'student', 'primary_program_id'),
@@ -113,8 +116,23 @@ final class AcademicReportSchema
                 'program_code' => $field('Primary program code', 'string', 'program', 'code'),
                 'program_title' => $field('Primary program title', 'string', 'program', 'title'),
                 'entry_term' => $field('Institutional entry term', 'string', 'term', 'code'),
+                'latest_term_id' => $field('Latest registered term reference', 'string', 'latest_registration', 'id'),
+                'latest_term_code' => $field('Latest registered term', 'string', 'latest_registration', 'code'),
+                'latest_term_starts_on' => $field(
+                    'Latest registered term starts',
+                    'date',
+                    'latest_registration',
+                    'starts_on'
+                ),
+                'latest_term_ends_on' => $field(
+                    'Latest registered term ends',
+                    'date',
+                    'latest_registration',
+                    'ends_on'
+                ),
             ],
         ];
+        $students['relationships']['latest_registration']['label'] = 'Latest registered term (all pursuits)';
         $program = [
             "student_population" => true,
             "table" => "sis_student_programs",

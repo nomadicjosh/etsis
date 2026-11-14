@@ -137,6 +137,22 @@ Population derivation reuses the typed query compiler, preserving original filte
 
 Every population page and selection requires `sis:reporting:run`, `sis:student:read`, `sis:registration:manage`, access to the saved report and all original/derived source-field permissions. Sharing a report grants none of those additional duties. Current actor/authority are rechecked after the metadata-only access audit; failure rolls back that audit and returns no population. The existing registration command independently enforces eligibility, locks, history, atomic charges and original retries. The new POST endpoints retain CSRF, private/no-store responses and debug suppression. Choices remain only in workspace memory; denied access clears displayed/cached population choices. Population selection adds no stored population snapshot, event format or parallel registration implementation. The separate report-lifecycle migration supports optional fixed results and expiry. Billing and messaging actions remain separate future work.
 
+### Latest registration reports
+
+Report Studio now includes **Students and their latest registered term** and **Students with no retained registration** starting points. Both open the existing visual builder with editable fields, conditions and preview; they can be saved as dynamic reports or captured using the existing static report settings.
+
+The Students source also offers **Latest registered term (all pursuits)** as an optional relationship. Keep all students with a left relationship, including students whose latest-term fields are blank, or require a matching registration with an inner relationship. Add a row condition on the latest-term code or dates to find the population needed. Repeated course registrations in one term do not repeat the student.
+
+“Latest” compares the current academic term's start date, then end date. Equal dates use the stable term ID as a deterministic tie-breaker. Arbitrary codes and the time someone entered a registration do not decide term chronology. Future-term registrations can therefore be the latest term. These are current reporting dates, not retained proof of an earlier term definition or a student's course-completion date.
+
+Current staff/self registrations and retained late drops/withdrawals count. Cancelled registrations and removed early drops do not. A blank value means **no qualifying registration remains in the current projection**; it does not claim that the student has never registered. Restricted early-drop history stays in the journal and is not queried or exposed here.
+
+The relationship intentionally describes institutional registration across all pursuits. It does not approve reuse of earlier coursework, change the current primary pursuit, or replace the pursuit-specific inputs used by prerequisites and degree audits. The report-to-registration handoff still reviews each student's current pursuit and authority independently.
+
+Source permissions, saved sharing, private responses, formula-safe page exports, static capture limits and report expiry all reuse the existing reporting workflow. SQL selects at most one term through the existing student registration index and cross-database SELECT-limit helper, with no stream replay, new projection, schema migration or academic/financial write. SQLite query-plan checks verify the indexed lookup; a bounded MariaDB query check uses an impossible student filter and returns no personal results. Other engines have identifier/limit compilation checks rather than runtime certification. General latest-row editors, repeated aliases and derived financial report sources remain roadmap work.
+
+Date conditions now use supported QueryBuilder custom inputs with native date pickers. Ranges use two date controls; date lists use comma-separated ISO dates such as `2027-01-04,2028-01-03`. Saved predicates contain only field, operator, value and nested conditions, keeping widget callbacks out of saved report definitions.
+
 ## Reusable offering templates
 
 Catalog staff can save a planned section list, or its reviewed saved offering defaults, as a named reusable template. Codes, courses, capacity, faculty, delivery mode, section fees and intended self-registration settings are defaults. Template payloads exclude source section/term identities, rooms/bookings, enrollment, finance and catalog-year assignments. Program requirements and matriculation cohorts stay independent.

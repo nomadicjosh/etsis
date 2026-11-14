@@ -167,10 +167,33 @@ window.createWorkspaceReportStudio = function (ui) {
             surface.append(
                 node("p", {}, "Your account needs an authorized source-data permission before it can build reports."),
             );
+        const students = catalog.datasets.find((item) => item.id === "students");
         const sections = catalog.datasets.find((item) => item.id === "sections");
+        if (students?.fields.latest_term_code || sections?.fields.enrollment_id)
+            surface.append(node("h3", {}, "Try a useful starting point"));
+        if (students?.fields.latest_term_code) {
+            const latestDefinition = (neverRegistered) => ({
+                dataset: "students",
+                columns: ["institutional_id", "full_name", "program_code", "latest_term_code", "latest_term_starts_on"]
+                    .filter((field) => students.fields[field])
+                    .map((field) => ({ field, label: students.fields[field].label, aggregate: "none" })),
+                joins: { latest_registration: "left" },
+                join_filters: {},
+                filters: neverRegistered ? { condition: "AND", rules: [
+                    { id: "latest_term_code", operator: "is_null", value: null },
+                ] } : null,
+                having: null,
+                sort: [],
+                distinct: false,
+            });
+            surface.append(
+                button("Students and their latest registered term", () => edit(students, latestDefinition(false))),
+                button("Students with no retained registration", () => edit(students, latestDefinition(true))),
+                node("p", { class: "form-text" }, "Latest term uses academic term dates across all pursuits. Retained late drops and withdrawals count; cancellations and removed early drops do not. This is a reporting view, not an eligibility or coursework-reuse decision."),
+            );
+        }
         if (sections?.fields.enrollment_id)
             surface.append(
-                node("h3", {}, "Try a useful starting point"),
                 button("Section headcounts, including empty sections", () =>
                     edit(sections, {
                         dataset: "sections",
@@ -287,7 +310,10 @@ window.createWorkspaceReportStudio = function (ui) {
                         ],
                     }
                   : {
-                        ...(field.type === "date" ? { input: "date" } : {}),
+                        ...(field.type === "date" ? {
+                            input: (rule, name) => `<input class="form-control" type="${rule.operator.multiple ? "text" : "date"}" name="${escapeLabel(name)}">`,
+                            value_separator: ",",
+                        } : {}),
                         operators: [
                             "equal",
                             "not_equal",
@@ -320,6 +346,16 @@ window.createWorkspaceReportStudio = function (ui) {
             },
         });
         widgets.push(widget);
+        widget.on("afterUpdateRuleOperator.queryBuilder", (_event, rule) => {
+            if (rule.filter?.type !== "date" || !rule.operator) return;
+            const type = rule.operator.multiple ? "text" : "date";
+            // QueryBuilder reuses one input when switching equality and date-list operators.
+            rule.$el.find(".rule-value-container input").each((_, input) => {
+                if (input.type === type) return;
+                input.type = type;
+                $(input).trigger("change");
+            });
+        });
         const accessible = () => {
             $(holder).find(".rule-filter-container select").attr("aria-label", `${label}: field`);
             $(holder).find(".rule-operator-container select").attr("aria-label", `${label}: comparison`);
@@ -342,10 +378,19 @@ window.createWorkspaceReportStudio = function (ui) {
         widget.on("rulesChanged.queryBuilder", changed);
         if (rules) widget.queryBuilder("setRules", rules);
         accessible();
+        const conditions = (group) => ({
+            condition: group.condition,
+            rules: group.rules.map((rule) => rule.condition ? conditions(rule) : {
+                id: rule.id,
+                operator: rule.operator,
+                value: rule.value,
+            }),
+        });
         return (relaxed = false) => {
             const value = widget.queryBuilder("getRules", { skip_empty: true, allow_invalid: relaxed });
             if (value === false) throw new Error(`Complete the ${label.toLowerCase()} before continuing.`);
-            return value?.rules?.length ? value : null;
+            // Persist typed predicates only; widget metadata may include custom input callbacks.
+            return value?.rules?.length ? conditions(value) : null;
         };
     }
     async function edit(dataset, original, saved = null) {

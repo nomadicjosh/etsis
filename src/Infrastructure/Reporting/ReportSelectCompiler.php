@@ -6,6 +6,7 @@ namespace Infrastructure\Reporting;
 
 use Domain\Reporting\ValueObject\ReportQuery;
 use Infrastructure\Persistence\SqlRecords;
+use Infrastructure\Persistence\SqlSelectLimit;
 
 final readonly class ReportSelectCompiler
 {
@@ -89,13 +90,7 @@ final readonly class ReportSelectCompiler
             " " .
             $q($name) .
             " ON " .
-            $q($r["parent"]) .
-            "." .
-            $q($r["left"]) .
-            " = " .
-            $q($name) .
-            "." .
-            $q($r["right"]);
+            $this->relationshipCondition($name, $r);
             $condition = $this->condition(
                 $d["join_filters"][$name] ?? null,
                 $expression,
@@ -185,6 +180,31 @@ final readonly class ReportSelectCompiler
                 implode(", ", $order),
             "parameters" => $parameters,
         ];
+    }
+
+    /** Repository-owned latest-row relationships never accept SQL from a saved definition or request.
+     * @param array<string,mixed> $relation
+     */
+    private function relationshipCondition(string $name, array $relation): string
+    {
+        $q = $this->sql->quote(...);
+        $column = static fn(string $alias, string $field): string => $q($alias) . '.' . $q($field);
+        if (!isset($relation['source'])) {
+            return $column($relation['parent'], $relation['left']) . ' = ' . $column($name, $relation['right']);
+        }
+        if ($relation['source'] !== 'latest_registration_term') {
+            throw new \LogicException('Unknown reporting relationship source.');
+        }
+        $e = static fn(string $field): string => $column('latest_e', $field);
+        $t = static fn(string $field): string => $column('latest_t', $field);
+        // Search only this student's indexed registrations. Repeated courses return the same term.
+        // Retained late drops/withdrawals count, cancellations do not. Codes/click time never rank terms.
+        $select = 'SELECT ' . $t('id') . ' FROM ' . $q('sis_enrollments') . ' ' . $q('latest_e')
+        . ' INNER JOIN ' . $q('sis_terms') . ' ' . $q('latest_t') . ' ON ' . $t('id') . ' = ' . $e('term_id')
+        . ' WHERE ' . $e('student_id') . ' = ' . $column($relation['parent'], 'id')
+        . ' AND ' . $e('status') . " IN ('A', 'N', 'D', 'W')"
+        . ' ORDER BY ' . $t('starts_on') . ' DESC, ' . $t('ends_on') . ' DESC, ' . $t('id') . ' DESC';
+        return $column($name, 'id') . ' = (' . SqlSelectLimit::apply($select, $this->sql->driver(), 1) . ')';
     }
 
     /** @param array<string, mixed>|null $group
