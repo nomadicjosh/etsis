@@ -127,7 +127,7 @@ final readonly class AllocationGapAnalyzer
     public function competition(AllocationProblem $problem): array
     {
         $result = ["conflicts" => [], "more_conflicts" => false];
-        if ($problem->sharing !== null || $problem->reuse !== CourseGroupReuse::OneGroup) {
+        if ($problem->sharing === null && $problem->reuse !== CourseGroupReuse::OneGroup) {
             return $result;
         }
         $individual = $this->analyze($problem);
@@ -149,8 +149,11 @@ final readonly class AllocationGapAnalyzer
                     $count = max($count, $rule["minimum_courses"]);
                 } elseif ($rule["mode"] === "credits") {
                     // Credit cards may overlap; adding their minimums could invent a shortage.
-                    $credits = max($credits, $rule["minimum_credits_milli"] ??
-                        throw new \InvalidArgumentException("A credit rule needs its retained minimum."));
+                    $credits = max(
+                        $credits,
+                        $rule["minimum_credits_milli"] ??
+                            throw new \InvalidArgumentException("A credit rule needs its retained minimum."),
+                    );
                 }
             }
             $count = max($count, count($all), $credits > 0 ? 1 : 0);
@@ -209,8 +212,7 @@ final readonly class AllocationGapAnalyzer
         }
         usort(
             $sets,
-            static fn(array $a, array $b): int => count($a) <=> count($b) ?:
-            strcmp(implode(":", $a), implode(":", $b)),
+            static fn(array $a, array $b): int => count($a) <=> count($b) ?: strcmp(implode(":", $a), implode(":", $b)),
         );
         foreach ($sets as $set) {
             // A smaller explanation already demonstrates this larger set cannot be satisfied.
@@ -225,13 +227,25 @@ final readonly class AllocationGapAnalyzer
                 $credits += $demands[$id]["credits"];
                 $count += $demands[$id]["courses"];
                 foreach ($resources[$id] ?? [] as $course => $amount) {
-                    // An actual course contributes once across the set, at its most optimistic eligible amount.
-                    $available[$course] = max($available[$course] ?? 0, $amount);
+                    $available[$course][$id] = $amount;
                 }
             }
-            $upper = $this->sum($available, $credits);
+            $creditAmounts = $courseAmounts = [];
+            foreach ($available as $course => $amounts) {
+                $creditAmounts[$course] =
+                $problem->sharing === null
+                ? max($amounts)
+                : $problem->sharing->contributionUpperBound($amounts, $credits);
+                $courseAmounts[$course] =
+                $problem->sharing === null
+                ? 1
+                : $problem->sharing->contributionUpperBound(array_fill_keys(array_keys($amounts), 1), $count);
+            }
+            $upper = $this->sum($creditAmounts, $credits);
+            $courseUpper =
+            $problem->sharing === null ? min($count, count($available)) : $this->sum($courseAmounts, $count);
             $creditGap = $credits - $upper;
-            $courseGap = max(0, $count - count($available));
+            $courseGap = $count - $courseUpper;
             if ($creditGap === 0 && $courseGap === 0) {
                 continue;
             }
@@ -245,7 +259,7 @@ final readonly class AllocationGapAnalyzer
                 "credit_upper_bound_milli" => $upper,
                 "credit_shortfall_milli" => $creditGap,
                 "required_courses" => $count,
-                "course_upper_bound" => count($available),
+                "course_upper_bound" => $courseUpper,
                 "course_shortfall" => $courseGap,
             ];
         }

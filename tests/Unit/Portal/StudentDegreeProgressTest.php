@@ -264,4 +264,79 @@ final class StudentDegreeProgressTest extends TestCase
         $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
         new StudentDegreeProgress($review);
     }
+    private function combined(): array
+    {
+        $part = $this->review("infeasible");
+        $specialization = $part;
+        $specialization["context"]["specialization"] = ["code" => "DATA", "title" => "Data science"];
+        return [
+            "status" => "review",
+            "outcome" => "infeasible",
+            "sharing" => "one_component",
+            "current_record_count" => 1,
+            "components" => [
+                ["kind" => "degree", "progress" => $part],
+                ["kind" => "specialization", "progress" => $specialization],
+            ],
+            "competition" => [
+                "more_conflicts" => false,
+                "conflicts" => [
+                    [
+                        "groups" => [
+                            ["component" => 0, "group" => 0, "secret" => "fictional-staff-only-detail"],
+                            ["component" => 1, "group" => 0],
+                        ],
+                        "required_credits_milli" => 6000,
+                        "credit_upper_bound_milli" => 3000,
+                        "credit_shortfall_milli" => 3000,
+                        "required_courses" => 2,
+                        "course_upper_bound" => 1,
+                        "course_shortfall" => 1,
+                        "raw_alias" => "fictional-staff-only-detail",
+                    ],
+                ],
+            ],
+        ];
+    }
+    public function testCombinedShortagesExposeOnlyCapturedPositionsAndValidatedNumericBounds(): void
+    {
+        $result = new StudentDegreeProgress($this->combined())->describe();
+        self::assertSame(
+            [["component" => 0, "group" => 0], ["component" => 1, "group" => 0]],
+            $result["competition"]["conflicts"][0]["groups"],
+        );
+        self::assertSame(3000, $result["competition"]["conflicts"][0]["credit_shortfall_milli"]);
+        self::assertStringNotContainsString("fictional-staff-only-detail", json_encode($result, JSON_THROW_ON_ERROR));
+    }
+    public function testCombinedShortagesRejectForeignDuplicateOrInconsistentReferences(): void
+    {
+        foreach (range(0, 5) as $case) {
+            $r = $this->combined();
+            if ($case === 0) {
+                $r["competition"]["conflicts"][0]["groups"][0]["component"] = 99;
+            }
+            if ($case === 1) {
+                $r["competition"]["conflicts"][0]["groups"][0]["group"] = -1;
+            }
+            if ($case === 2) {
+                $r["competition"]["conflicts"][0]["groups"][1] = $r["competition"]["conflicts"][0]["groups"][0];
+            }
+            if ($case === 3) {
+                $r["competition"]["conflicts"][0]["credit_shortfall_milli"] = 0;
+            }
+            if ($case === 4) {
+                $r["competition"]["conflicts"][0]["required_courses"] = "2";
+            }
+            if ($case === 5) {
+                $r["outcome"] = "feasible";
+            }
+            try {
+                new StudentDegreeProgress($r);
+                self::fail("Invalid combined shortage was returned.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
 }

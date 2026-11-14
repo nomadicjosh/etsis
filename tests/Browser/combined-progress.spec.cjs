@@ -207,3 +207,38 @@ test("missing retained policies, assignments and read limits explain the next st
         expect(f.errors).toEqual([]);
     }
 });
+
+
+test("staff shared-course shortages inspect the captured affected group and return to the joint review", async ({
+    page,
+}) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        combinedInfeasible: true,
+        combinedCompetition: true,
+    });
+    await page.getByRole("button", { name: "Combined curriculum progress", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    const shortage = studio.getByRole("region", { name: "Shared-course shortages", exact: true });
+    await expect(shortage).toContainText("At least 3 credit contributions more are needed");
+    await expect(shortage).toContainText("shortfall is at least 1 course contribution");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await accessible(page);
+    await shortage
+        .getByRole("button", { name: "Inspect Specialization DATA · General education <b>fictional</b>", exact: true })
+        .focus();
+    await page.keyboard.press("Enter");
+    await expect(
+        studio.getByRole("heading", { name: "General education <b>fictional</b>", exact: true }),
+    ).toBeVisible();
+    await expect(studio).toContainText("No speculative partial plan is shown");
+    await studio.getByRole("button", { name: "Back to combined progress", exact: true }).click();
+    await expect(shortage).toBeVisible();
+    expect(f.calls.filter((c) => c.path === `${f.base}combined/`)).toHaveLength(1);
+    expect(f.calls.some((c) => /progress\/$|academic-work\/allocation\/$/.test(c.path))).toBe(false);
+    await studio.getByRole("button", { name: "Refresh combined review", exact: true }).click();
+    await expect.poll(() => f.calls.filter((c) => c.path === `${f.base}combined/`).length).toBe(2);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});

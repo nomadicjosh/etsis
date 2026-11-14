@@ -2458,6 +2458,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const body = screen("Combined curriculum progress", "DEGREE & SELECTED SPECIALIZATIONS");
         const restore = () => renderCombinedProgress(base, back, data);
         restore.refresh = () => combinedProgress(base, back);
+        restore.groupReturnLabel = "Back to combined progress";
         body.append(
             node(
                 "p",
@@ -2528,6 +2529,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 `${data.current_record_count} current academic records checked once against available sources.`,
             ),
         );
+        const competition = window.createCurriculumCompetition({ node, button }, data, (componentIndex, groupIndex) => {
+            const progress = data.components[componentIndex].progress;
+            groupPlacementDetails(
+                { ...progress.allocation, context: progress.context, mode: progress.mode },
+                progress.allocation.groups[groupIndex],
+                restore,
+            );
+        });
+        if (competition) body.append(competition);
         const cards = node("div", { class: "audit-library-grid" });
         for (const component of data.components) {
             const progress = component.progress,
@@ -3507,7 +3517,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 `${group.waived_courses.length} approved course waivers in this group. Waivers create no earned credit and do not reduce quantity minimums.`,
             ),
         );
-        body.append(actions(button("Back to course groups", back)));
+        body.append(actions(button(back.groupReturnLabel || "Back to course groups", back)));
         if (data.outcome !== "feasible")
             body.append(
                 node(

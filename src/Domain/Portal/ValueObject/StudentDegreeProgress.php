@@ -34,7 +34,7 @@ final readonly class StudentDegreeProgress
             }
             $this->data = ['status' => 'review', 'mode' => 'combined_curriculum', 'sharing' => $review['sharing'],
                 'outcome' => $review['outcome'], 'current_record_count' => $review['current_record_count'],
-                'components' => $components];
+                'components' => $components, 'competition' => self::combinedCompetition($review, $components)];
             return;
         }
         $pick = static fn(array $value, array $keys): array => array_intersect_key($value, array_flip($keys));
@@ -142,6 +142,86 @@ final readonly class StudentDegreeProgress
             $data["allocation"]["groups"][] = $group;
         }
         $this->data = $data;
+    }
+
+    /** Curated response-local links and numeric bounds only; no raw search aliases or evidence identities.
+     * @param array<string,mixed> $review
+     * @param list<array<string,mixed>> $components
+     * @return array<string,mixed>
+     */
+    private static function combinedCompetition(array $review, array $components): array
+    {
+        $source = $review["competition"] ?? ["conflicts" => [], "more_conflicts" => false];
+        if (
+            !is_array($source) ||
+            !is_array($source["conflicts"] ?? null) ||
+            !array_is_list($source["conflicts"]) ||
+            count($source["conflicts"]) > 10 ||
+            !is_bool($source["more_conflicts"] ?? null) ||
+            (($review["outcome"] ?? null) !== "infeasible" &&
+                ($source["conflicts"] !== [] || $source["more_conflicts"]))
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $conflicts = [];
+        foreach ($source["conflicts"] as $conflict) {
+            if (
+                !is_array($conflict) ||
+                !is_array($conflict["groups"] ?? null) ||
+                !array_is_list($conflict["groups"]) ||
+                count($conflict["groups"]) < 2 ||
+                count($conflict["groups"]) > 25
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $row = ["groups" => []];
+            $seen = [];
+            foreach ($conflict["groups"] as $reference) {
+                if (
+                    !is_array($reference) ||
+                    !is_int($reference["component"] ?? null) ||
+                    !is_int($reference["group"] ?? null) ||
+                    !isset(
+                        $components[$reference["component"]]["progress"]["allocation"]["groups"][$reference["group"]],
+                    )
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $key = $reference["component"] . ":" . $reference["group"];
+                if (isset($seen[$key])) {
+                    throw new CorruptHistoryException();
+                }
+                $seen[$key] = true;
+                $row["groups"][] = ["component" => $reference["component"], "group" => $reference["group"]];
+            }
+            foreach (
+                [
+                    "required_credits_milli",
+                    "credit_upper_bound_milli",
+                    "credit_shortfall_milli",
+                    "required_courses",
+                    "course_upper_bound",
+                    "course_shortfall",
+                ] as $field
+            ) {
+                $value = $conflict[$field] ?? null;
+                if (!is_int($value) || $value < 0 || $value > (str_contains($field, "milli") ? 249999975 : 5000)) {
+                    throw new CorruptHistoryException();
+                }
+                $row[$field] = $value;
+            }
+            if (
+                $row["credit_upper_bound_milli"] > $row["required_credits_milli"] ||
+                $row["course_upper_bound"] > $row["required_courses"] ||
+                $row["credit_shortfall_milli"] !== $row["required_credits_milli"] - $row["credit_upper_bound_milli"] ||
+                $row["course_shortfall"] !== $row["required_courses"] - $row["course_upper_bound"] ||
+                $row["credit_shortfall_milli"] + $row["course_shortfall"] === 0
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $conflicts[] = $row;
+        }
+        return ["conflicts" => $conflicts, "more_conflicts" => $source["more_conflicts"]];
     }
 
     /**

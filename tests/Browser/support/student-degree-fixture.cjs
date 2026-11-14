@@ -774,7 +774,12 @@ async function fixture(page, options = {}) {
                     });
                     response = { status: "review", outcome: options.combinedInfeasible ? "infeasible" : "feasible",
                         sharing: options.combinedSharing || "one_component", input_status: response.input_status,
-                        current_record_count: response.current_record_count, components: parts };
+                        current_record_count: response.current_record_count, components: parts,
+                        competition: { conflicts: options.combinedCompetition ? [{
+                            groups: [{ component: 0, group: 0 }, { component: 1, group: 0 }],
+                            required_credits_milli: 6000, credit_upper_bound_milli: 3000, credit_shortfall_milli: 3000,
+                            required_courses: 2, course_upper_bound: 1, course_shortfall: 1,
+                        }] : [], more_conflicts: !!options.moreCompetition } };
                 }
                 response.mode = "combined_curriculum";
             }

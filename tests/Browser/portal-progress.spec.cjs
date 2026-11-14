@@ -77,7 +77,20 @@ async function fixture(page,options={}) {
             const degree = structuredClone(data), specialization = structuredClone(data);
             specialization.context.name = "Data <b>fictional</b> requirements";
             specialization.context.kind = "specialization";
-            data = { status: "review", mode: "combined_curriculum", outcome: "feasible", sharing: "multiple_components", current_record_count: 21,
+            if (options.combinedShortage) {
+                for (const progress of [degree, specialization]) {
+                    progress.allocation.outcome = "infeasible";
+                    for (const group of progress.allocation.groups) { group.placements = []; group.coverage = null; }
+                    progress.work_summary.placement_established = false;
+                    progress.work_summary.unused_completed_count = null;
+                }
+            }
+            data = { status: "review", mode: "combined_curriculum", outcome: options.combinedShortage ? "infeasible" : "feasible", sharing: "multiple_components", current_record_count: 21,
+                competition: { conflicts: options.combinedShortage ? [{
+                    groups: [{ component: 0, group: 0 }, { component: 1, group: 0 }],
+                    required_credits_milli: 6000, credit_upper_bound_milli: 3000, credit_shortfall_milli: 3000,
+                    required_courses: 2, course_upper_bound: 1, course_shortfall: 1,
+                }] : [], more_conflicts: false },
                 components: [{ kind: "degree", label: "Degree", progress: degree },
                     { kind: "specialization", label: "Specialization DATA", progress: specialization }] };
         }
@@ -328,4 +341,39 @@ test("student combined progress keeps component drilldowns in the captured joint
     await expect.poll(() => f.calls.filter((c) => c.path.endsWith("/degree-progress/")).length).toBe(2);
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+});
+
+
+test("student shared-course shortages open captured group detail without a second private request", async ({
+    page,
+}) => {
+    const f = await fixture(page, { combined: true, combinedShortage: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    const shortage = page.getByRole("region", { name: "Shared-course shortages", exact: true });
+    await expect(shortage).toContainText("At least 3 credit contributions more are needed");
+    await expect(shortage).toContainText("not a recommended number of new courses");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await accessible(page);
+    await shortage
+        .getByRole("button", { name: "Inspect Specialization DATA · General education <b>fictional</b>", exact: true })
+        .focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "General education <b>fictional</b>", exact: true })).toBeFocused();
+    await expect(
+        page
+            .locator("details")
+            .filter({ has: page.locator("[data-progress-group-index='0']") })
+            .first(),
+    ).toHaveAttribute("open", "");
+    await expect(page.locator("[data-progress-group-index='0'] b, [data-progress-group-index='0'] script")).toHaveCount(
+        0,
+    );
+    await accessible(page);
+    await page.getByRole("button", { name: "Back to degree and specializations", exact: true }).click();
+    await expect(shortage).toBeVisible();
+    expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    await page.getByRole("button", { name: "Refresh progress", exact: true }).click();
+    await expect.poll(() => f.calls.filter((c) => c.path.endsWith("/degree-progress/")).length).toBe(2);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
 });

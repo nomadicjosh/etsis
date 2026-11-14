@@ -60,11 +60,21 @@ For example, two groups may each require six credits and each accept the same tw
 
 Explanations can show a credit shortage, a distinct-course contribution shortage, or both. Course-count bounds retain zero-credit completed courses. Required-course waivers remove their all-rule obligations but create no earned credit and do not lower group quantities or choose counts. Overlapping rules inside one group are not added as though they require separate copies of the same course. A course with different eligible repeat-award amounts is counted once at the most optimistic eligible amount, so a smaller alternative cannot create a false shortage.
 
-These are **lower bounds on a shared shortage**, not an exact plan for which courses a student must take. They do not change retained requirements, approvals, academic records, earned-credit/GPA totals or sharing policy. Groups with a simple individual shortage keep their existing local explanation. A multi-group sharing policy produces no one-group competition claim.
+These are **lower bounds on a shared shortage**, not an exact plan for which courses a student must take. They do not change retained requirements, approvals, academic records, earned-credit/GPA totals or sharing policy. Groups with a simple individual shortage keep their existing local explanation. A multi-group sharing policy produces no one-group competition claim within an independently reviewed component.
 
 The analyzer checks overlapping pairs and complete connected groups of competing evidence. It does not enumerate every subset or explain every possible target/rule conflict. It returns at most ten nonredundant explanations and indicates when more were found. No explanation does not mean that the groups can be satisfied; the exact search remains authoritative. Relevant unknown inputs, unsupported rules and interrupted/limited searches produce no cross-group shortage claim.
 
 This adds bounded comparisons over the already prepared inputs, with no database query, stream replay, additional placement search, stored evaluation or write. Existing student ownership/office checks, CSRF, private/no-store responses and debug suppression remain in force. Fictional tests compare reported shortages with exact searches across small deterministic cases, and cover published student selections, unchanged events/receipts/finance, sharing, escaped labels, mobile reflow and automated accessibility checks.
+
+### Degree and specialization shortages
+
+The combined curriculum review uses this same analyzer and displays **Shared-course shortages** when eligible work cannot meet the joint requirements. It honors both the published program policy for sharing between components and each component's own policy for sharing between groups. A course may supply several requirement contributions when those policies permit it; these are uses toward requirements, never additional earned credits or GPA points.
+
+For each course, the analyzer takes the largest eligible contribution within a component that allows one group, or adds eligible contributions when that component permits several groups. It then takes the largest component contribution when only one component is permitted, or adds component contributions when sharing is permitted. Amounts are capped at the requirements being checked. These optimistic bounds can prove a shortage but cannot establish feasibility, choose a replacement course, or diagnose every target/rule conflict.
+
+The review reuses the same overlapping-pair/connected-component checks and ten-explanation cap. A shortage may involve groups inside one component, groups across components, or several components whose pairs have enough work individually. Groups with known individual shortages keep their local explanations. Feasible, unresolved and limited joint reviews make no shared-shortage claim.
+
+**Inspect Degree · …** or **Inspect Specialization … · …** opens the affected captured group; returning restores the combined review. Staff and student screens share this presentation. The portal receives only numeric bounds and response-local component/group positions, with labels supplied by its existing curated component view. Private identities, raw search aliases, protected approvals and rule grammar are not exposed. Neither explanation nor drilldown repeats history reads or placement search, stores an evaluation, or changes academic/financial facts.
 
 ## Rules applied
 

@@ -6,6 +6,7 @@ namespace Tests\Unit\DegreeAudit;
 
 use Domain\Catalog\ValueObject\ComponentCourseSharing as Sharing;
 use Domain\DegreeAudit\Service\AllocationCoverageReview;
+use Domain\DegreeAudit\Service\AllocationGapAnalyzer;
 use Domain\DegreeAudit\Service\CourseAllocationPlanner;
 use Domain\DegreeAudit\ValueObject\AllocationOutcome as Outcome;
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
@@ -136,9 +137,180 @@ final class ComponentAllocationTest extends TestCase
             $expected = $solve(0, [0,0,0]);
             $result = new CourseAllocationPlanner()->plan($p);
             self::assertSame($expected ? Outcome::Feasible : Outcome::Infeasible, $result->outcome, 'Case ' . $case);
+            $conflicts = new AllocationGapAnalyzer()->competition($p)['conflicts'];
             if ($expected) {
+                self::assertSame([], $conflicts, 'False shortage for feasible case ' . $case);
                 self::assertCount(3, new AllocationCoverageReview()->review($p, $result));
+            }
+            if ($conflicts !== []) {
+                self::assertFalse($expected);
             }
         }
     }
+    public function testOneCourseContributionBoundsAgreeWithExhaustiveAllowedSubsets(): void
+    {
+        foreach ([Sharing::OneComponent, Sharing::MultipleComponents] as $sharing) {
+            foreach ([Reuse::OneGroup, Reuse::MultipleGroups] as $degree) {
+                foreach ([Reuse::OneGroup, Reuse::MultipleGroups] as $specialization) {
+                    $policy = new AllocationSharing(
+                        [
+                            self::id(10) => self::id(50),
+                            self::id(11) => self::id(50),
+                            self::id(12) => self::id(51),
+                            self::id(13) => self::id(51),
+                        ],
+                        [self::id(50) => $degree, self::id(51) => $specialization],
+                        $sharing,
+                    );
+                    for ($available = 0; $available < 16; $available++) {
+                        $amounts = [];
+                        foreach ([1500, 3000, 4500, 2000] as $i => $amount) {
+                            if ($available & (1 << $i)) {
+                                $amounts[self::id(10 + $i)] = $amount;
+                            }
+                        }
+                        $expected = 0;
+                        $ids = array_keys($amounts);
+                        for ($mask = 0; $mask < 1 << count($ids); $mask++) {
+                            $used = [];
+                            $total = 0;
+                            foreach ($ids as $i => $id) {
+                                if (!($mask & (1 << $i))) {
+                                    continue;
+                                }
+                                if (!$policy->permits($used, $id)) {
+                                    continue 2;
+                                }
+                                $used[] = $id;
+                                $total += $amounts[$id];
+                            }
+                            $expected = max($expected, $total);
+                        }
+                        foreach ([0, 1000, 5000, PHP_INT_MAX] as $ceiling) {
+                            self::assertSame(
+                                min($expected, $ceiling),
+                                $policy->contributionUpperBound($amounts, $ceiling),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    public function testContributionBoundsSaturateWithoutOverflowAndRejectUnknownGroups(): void
+    {
+        $policy = $this->problem(Sharing::MultipleComponents, Reuse::MultipleGroups, Reuse::OneGroup)->sharing;
+        self::assertNotNull($policy);
+        self::assertSame(
+            PHP_INT_MAX,
+            $policy->contributionUpperBound(
+                [self::id(10) => PHP_INT_MAX, self::id(11) => PHP_INT_MAX, self::id(12) => PHP_INT_MAX],
+                PHP_INT_MAX,
+            ),
+        );
+        foreach ([[self::id(99) => 1], [self::id(10) => -1]] as $invalid) {
+            try {
+                $policy->contributionUpperBound($invalid, 100);
+                self::fail("Invalid contribution accepted.");
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+    public function testMixedSharingShortagesAreBoundsForTheSameRetainedPlacementRules(): void
+    {
+        $gaps = new AllocationGapAnalyzer();
+        foreach ([Sharing::OneComponent, Sharing::MultipleComponents] as $sharing) {
+            foreach ([Reuse::OneGroup, Reuse::MultipleGroups] as $degree) {
+                $p = $this->problem($sharing, $degree, Reuse::OneGroup);
+                $conflicts = $gaps->competition($p)["conflicts"];
+                if ($sharing === Sharing::MultipleComponents && $degree === Reuse::MultipleGroups) {
+                    self::assertSame([], $conflicts);
+                } else {
+                    self::assertNotEmpty($conflicts);
+                    self::assertSame(Outcome::Infeasible, new CourseAllocationPlanner()->plan($p)->outcome);
+                }
+            }
+        }
+    }
+    public function testThreeComponentsCanHaveAProvenShortageEvenWhenEveryPairHasEnoughWork(): void
+    {
+        $base = $this->problem(Sharing::MultipleComponents, Reuse::MultipleGroups, Reuse::OneGroup, [
+            [0, 1, 2],
+            [0, 1, 2],
+        ]);
+        $sharing = new AllocationSharing(
+            [self::id(10) => self::id(50), self::id(11) => self::id(51), self::id(12) => self::id(52)],
+            [self::id(50) => Reuse::OneGroup, self::id(51) => Reuse::OneGroup, self::id(52) => Reuse::OneGroup],
+            Sharing::OneComponent,
+        );
+        $p = new AllocationProblem($base->groups, $base->courses, Reuse::OneGroup, [], $sharing);
+        $result = new AllocationGapAnalyzer()->competition($p);
+        self::assertCount(1, $result["conflicts"]);
+        $conflict = $result["conflicts"][0];
+        self::assertCount(3, $conflict["group_ids"]);
+        self::assertSame(9000, $conflict["required_credits_milli"]);
+        self::assertSame(6000, $conflict["credit_upper_bound_milli"]);
+        self::assertSame(3000, $conflict["credit_shortfall_milli"]);
+        self::assertSame(1, $conflict["course_shortfall"]);
+        self::assertSame(
+            $result,
+            new AllocationGapAnalyzer()->competition(
+                new AllocationProblem(
+                    array_reverse($base->groups),
+                    array_reverse($base->courses),
+                    Reuse::OneGroup,
+                    [],
+                    $sharing,
+                ),
+            ),
+        );
+    }
+
+    public function testMixedSharingCompetitionIsCappedAndSkipsIndividuallyShortGroups(): void
+    {
+        $groups = $map = $reuse = $choices = [];
+        for ($i = 0; $i < 6; $i++) {
+            $group = self::id(10 + $i);
+            $component = self::id(50 + $i);
+            $groups[] = [
+                "id" => $group,
+                "min_credits_milli" => 3000,
+                "min_courses" => 1,
+                "rules" => [
+                    [
+                        "id" => self::id(20 + $i),
+                        "mode" => "pool",
+                        "minimum_courses" => 0,
+                        "course_ids" => [self::id(1)],
+                    ],
+                ],
+            ];
+            $choices[] = [
+                "group_id" => $group,
+                "target_course_id" => self::id(1),
+                "credits_milli" => 3000,
+                "work_ids" => [self::id(100)],
+            ];
+            $map[$group] = $component;
+            $reuse[$component] = Reuse::OneGroup;
+        }
+        $sharing = new AllocationSharing($map, $reuse, Sharing::OneComponent);
+        $courses = [["course_id" => self::id(1), "choices" => $choices]];
+        $analyzer = new AllocationGapAnalyzer();
+        $result = $analyzer->competition(new AllocationProblem($groups, $courses, Reuse::OneGroup, [], $sharing));
+        self::assertCount(10, $result["conflicts"]);
+        self::assertTrue($result["more_conflicts"]);
+        foreach ($result["conflicts"] as $conflict) {
+            self::assertSame(1, $conflict["course_shortfall"]);
+            self::assertSame(3000, $conflict["credit_shortfall_milli"]);
+        }
+        // Removing a group's eligible evidence makes it an individual shortage, not a competition explanation.
+        array_pop($courses[0]["choices"]);
+        $result = $analyzer->competition(new AllocationProblem($groups, $courses, Reuse::OneGroup, [], $sharing));
+        foreach ($result["conflicts"] as $conflict) {
+            self::assertNotContains(self::id(15), $conflict["group_ids"]);
+        }
+    }
+
 }

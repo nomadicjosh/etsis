@@ -78,6 +78,7 @@ final class DegreeProgressFixture
             $specializations ?? $s->specializations($history),
             new \Domain\DegreeAudit\Service\CombinedAllocationEvaluator(
                 $evaluator, new CourseAllocationPlanner($steps), new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
+                new AllocationGapAnalyzer(),
             ),
         );
     }

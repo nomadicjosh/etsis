@@ -22,6 +22,7 @@ final readonly class CombinedAllocationEvaluator
         private DegreeProgressEvaluator $progress,
         private CourseAllocationPlanner $planner,
         private AllocationCoverageReview $coverage,
+        private AllocationGapAnalyzer $gaps,
     ) {
     }
 
@@ -42,13 +43,13 @@ final readonly class CombinedAllocationEvaluator
         $choiceCount = $evidenceCount = $contributionCount = 0;
         $occurrence = 0;
         foreach ($components as $component) {
-            $id = $component['requirements']['version_id'];
+            $id = $component["requirements"]["version_id"];
             if (isset($prepared[$id])) {
                 throw new CorruptHistoryException();
             }
-            $part = $this->progress->prepare($inputs, $component['requirements'], $component['effective'], $budget);
+            $part = $this->progress->prepare($inputs, $component["requirements"], $component["effective"], $budget);
             if ($part->problem === null) {
-                return ['status' => 'needs_review', 'issues' => ['component_inputs_need_review']];
+                return ["status" => "needs_review", "issues" => ["component_inputs_need_review"]];
             }
             $prepared[$id] = $part;
             $reuse[$id] = $part->problem->reuse;
@@ -57,23 +58,23 @@ final readonly class CombinedAllocationEvaluator
                     throw new AllocationBudgetExhaustedException();
                 }
                 // Deterministic request-local keys, never business identities or persisted historical facts.
-                $alias = str_pad((string) $occurrence, 26, '0', STR_PAD_LEFT);
-                $maps[$id][$group['id']] = $alias;
-                $reverseMaps[$id][$alias] = $group['id'];
+                $alias = str_pad((string) $occurrence, 26, "0", STR_PAD_LEFT);
+                $maps[$id][$group["id"]] = $alias;
+                $reverseMaps[$id][$alias] = $group["id"];
                 $groupComponents[$alias] = $id;
-                $group['id'] = $alias;
+                $group["id"] = $alias;
                 $groups[] = $group;
             }
             foreach ($part->problem->courses as $course) {
-                foreach ($course['choices'] as $choice) {
-                    $evidenceCount += count($choice['work_ids']);
-                    $contributionCount += count($choice['rule_credits_milli'] ?? []);
+                foreach ($course["choices"] as $choice) {
+                    $evidenceCount += count($choice["work_ids"]);
+                    $contributionCount += count($choice["rule_credits_milli"] ?? []);
                     if (++$choiceCount > 5000 || $evidenceCount > 20000 || $contributionCount > 20000) {
                         throw new AllocationBudgetExhaustedException();
                     }
-                    $choice['group_id'] = $maps[$id][$choice['group_id']];
-                    $courses[$course['course_id']]['course_id'] = $course['course_id'];
-                    $courses[$course['course_id']]['choices'][] = $choice;
+                    $choice["group_id"] = $maps[$id][$choice["group_id"]];
+                    $courses[$course["course_id"]]["course_id"] = $course["course_id"];
+                    $courses[$course["course_id"]]["choices"][] = $choice;
                 }
             }
             foreach ($part->problem->waivedCourseIds as $course) {
@@ -88,41 +89,68 @@ final readonly class CombinedAllocationEvaluator
             array_values($courses),
             CourseGroupReuse::OneGroup,
             array_keys($waived),
-            new AllocationSharing($groupComponents, $reuse, $sharing)
+            new AllocationSharing($groupComponents, $reuse, $sharing),
         );
         $result = $this->planner->plan($problem);
         if ($result->outcome === AllocationOutcome::Undetermined) {
             throw new AllocationBudgetExhaustedException();
         }
         $this->coverage->review($problem, $result);
+        $competition =
+        $result->outcome === AllocationOutcome::Infeasible
+        ? $this->gaps->competition($problem)
+        : ["conflicts" => [], "more_conflicts" => false];
         $byComponent = [];
         foreach ($result->placements as $placement) {
-            $component = $groupComponents[$placement['group_id']];
-            $original = $reverseMaps[$component][$placement['group_id']];
-            $placement['group_id'] = $original;
+            $component = $groupComponents[$placement["group_id"]];
+            $original = $reverseMaps[$component][$placement["group_id"]];
+            $placement["group_id"] = $original;
             $byComponent[$component][] = $placement;
         }
         $reviews = [];
+        $positions = [];
         foreach ($components as $component) {
-            $r = $component['requirements'];
-            $id = $r['version_id'];
-            $review = $prepared[$id]->review(new AllocationResult(
-                $result->outcome,
-                $byComponent[$id] ?? [],
-                $result->steps,
-            ));
-            $review['mode'] = 'combined_component';
-            $review['context'] = [
-                'mode' => 'combined_component', 'kind' => $component['kind'],
-                'requirements_version_id' => $id, 'version' => $r['version'],
-                'name' => $r['definition']['name'], 'academic_year_code' => $r['context']['academic_year_code'],
-                'specialization' => $r['specialization'] ?? null, 'cohort_changed' => false,
-                'group_reuse' => $r['definition']['policies']['group_reuse'] ?? null,
+            $r = $component["requirements"];
+            $id = $r["version_id"];
+            $review = $prepared[$id]->review(
+                new AllocationResult($result->outcome, $byComponent[$id] ?? [], $result->steps),
+            );
+            $review["mode"] = "combined_component";
+            $review["context"] = [
+                "mode" => "combined_component",
+                "kind" => $component["kind"],
+                "requirements_version_id" => $id,
+                "version" => $r["version"],
+                "name" => $r["definition"]["name"],
+                "academic_year_code" => $r["context"]["academic_year_code"],
+                "specialization" => $r["specialization"] ?? null,
+                "cohort_changed" => false,
+                "group_reuse" => $r["definition"]["policies"]["group_reuse"] ?? null,
             ];
-            $reviews[] = ['kind' => $component['kind'], 'progress' => $review];
+            foreach ($review["allocation"]["groups"] as $index => $group) {
+                $positions[$id][$group["id"]] = ["component" => count($reviews), "group" => $index];
+            }
+            $reviews[] = ["kind" => $component["kind"], "progress" => $review];
         }
-        return ['status' => 'review', 'outcome' => $result->outcome->value,
-            'sharing' => $sharing->value, 'input_status' => $inputs->status->value,
-            'current_record_count' => count($inputs->items), 'components' => $reviews];
+        foreach ($competition["conflicts"] as &$conflict) {
+            $references = [];
+            foreach ($conflict["group_ids"] as $alias) {
+                $component = $groupComponents[$alias];
+                $group = $reverseMaps[$component][$alias];
+                $references[] = $positions[$component][$group] ?? throw new CorruptHistoryException();
+            }
+            unset($conflict["group_ids"]);
+            $conflict["groups"] = $references;
+        }
+        unset($conflict);
+        return [
+            "status" => "review",
+            "outcome" => $result->outcome->value,
+            "sharing" => $sharing->value,
+            "input_status" => $inputs->status->value,
+            "current_record_count" => count($inputs->items),
+            "components" => $reviews,
+            "competition" => $competition,
+        ];
     }
 }

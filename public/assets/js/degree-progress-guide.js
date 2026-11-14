@@ -622,3 +622,74 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
     });
     return detail;
 };
+
+/* Captured combined-review explanations; no network calls, storage or academic calculations. */
+window.createCurriculumCompetition = function (ui, data, inspect) {
+    if (data.status !== "review" || data.outcome !== "infeasible" || !data.competition?.conflicts?.length) return null;
+    const { node, button } = ui;
+    const section = node(
+        "section",
+        { class: "border rounded-3 p-3 mb-3", "aria-label": "Shared-course shortages" },
+        node("h2", {}, "Shared-course shortages"),
+        node(
+            "p",
+            {},
+            "These groups compete for eligible work under the retained sharing rules. The figures describe requirement contributions, not additional earned credits or GPA. No partial placements have been assigned.",
+        ),
+    );
+    const credits = (value) => `${value / 1000} credit contribution${value === 1000 ? "" : "s"}`;
+    for (const conflict of data.competition.conflicts) {
+        const references = conflict.groups.map((reference) => {
+            const component = data.components[reference.component],
+                group = component.progress.allocation.groups[reference.group];
+            const label =
+                component.label ||
+                (component.kind === "degree"
+                    ? "Degree"
+                    : `Specialization ${component.progress.context.specialization.code}`);
+            return { ...reference, label: `${label} · ${group.name}` };
+        });
+        const card = node(
+            "article",
+            { class: "mb-3" },
+            node("h3", { class: "h5" }, references.map((r) => r.label).join(" / ")),
+        );
+        if (conflict.credit_shortfall_milli > 0)
+            card.append(
+                node(
+                    "p",
+                    {},
+                    `Together these groups need ${credits(conflict.required_credits_milli)}. Under their sharing rules, current eligible work can supply at most ${credits(conflict.credit_upper_bound_milli)}. At least ${credits(conflict.credit_shortfall_milli)} more are needed.`,
+                ),
+            );
+        if (conflict.course_shortfall > 0)
+            card.append(
+                node(
+                    "p",
+                    {},
+                    `Together these groups need at least ${conflict.required_courses} course contributions. Current eligible courses can supply at most ${conflict.course_upper_bound} under their sharing rules. The shortfall is at least ${conflict.course_shortfall} course contribution${conflict.course_shortfall === 1 ? "" : "s"}.`,
+                ),
+            );
+        const links = node("div", { class: "d-flex flex-wrap gap-2" });
+        for (const reference of references)
+            links.append(button(`Inspect ${reference.label}`, () => inspect(reference.component, reference.group)));
+        card.append(links);
+        section.append(card);
+    }
+    if (data.competition.more_conflicts)
+        section.append(
+            node(
+                "p",
+                { role: "status" },
+                "More shared-course shortages were found. Showing the first 10 explanations.",
+            ),
+        );
+    section.append(
+        node(
+            "p",
+            { class: "form-text" },
+            "These are minimum shortages from the available evidence, not a recommended number of new courses or a complete diagnosis. Review eligible alternatives and other requirements with the registrar.",
+        ),
+    );
+    return section;
+};

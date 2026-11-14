@@ -55,6 +55,37 @@ final readonly class AllocationSharing
         return true;
     }
 
+    /** Optimistic requirement contributions from one actual course, without selecting a placement.
+     * @param array<string,mixed> $amounts Eligible integer amounts keyed by group occurrence.
+     */
+    public function contributionUpperBound(array $amounts, int $ceiling): int
+    {
+        if ($ceiling < 0) {
+            throw new InvalidArgumentException("Use a nonnegative contribution ceiling.");
+        }
+        $byComponent = [];
+        foreach ($amounts as $group => $amount) {
+            $component =
+            $this->groupComponents[$group] ?? throw new InvalidArgumentException("Unknown group occurrence.");
+            if (!is_int($amount) || $amount < 0) {
+                throw new InvalidArgumentException("Use nonnegative integer contribution amounts.");
+            }
+            $current = $byComponent[$component] ?? 0;
+            $byComponent[$component] =
+            $this->groupReuse[$component] === CourseGroupReuse::OneGroup
+            ? max($current, min($ceiling, $amount))
+            : $current + min($ceiling - $current, $amount);
+        }
+        if ($this->components === ComponentCourseSharing::OneComponent) {
+            return $byComponent === [] ? 0 : max($byComponent);
+        }
+        $total = 0;
+        foreach ($byComponent as $amount) {
+            $total += min($ceiling - $total, $amount);
+        }
+        return $total;
+    }
+
     /** Sharing across components makes their searches independent; shared groups can be independent too.
      * @return list<list<string>>
      */

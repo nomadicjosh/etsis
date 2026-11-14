@@ -116,6 +116,17 @@ final class CombinedDegreeProgressTest extends TestCase
             self::assertSame($expected, $result['outcome']);
             self::assertSame($sharing, $result['sharing']);
             self::assertCount(2, $result['components']);
+            self::assertCount($sharing === 'one_component' ? 1 : 0, $result['competition']['conflicts']);
+            if ($sharing === 'one_component') {
+                $conflict = $result['competition']['conflicts'][0];
+                self::assertSame([['component' => 0, 'group' => 0], ['component' => 1, 'group' => 0]], $conflict['groups']);
+                self::assertSame(3000, $conflict['credit_shortfall_milli']);
+                self::assertSame(1, $conflict['course_shortfall']);
+                self::assertArrayNotHasKey('group_ids', $conflict);
+                $portal = new \Domain\Portal\ValueObject\StudentDegreeProgress($result)->describe();
+                self::assertEquals($conflict, $portal['competition']['conflicts'][0]);
+                self::assertStringNotContainsString($f->r->group->value, json_encode($portal, JSON_THROW_ON_ERROR));
+            }
             foreach ($result['components'] as $component) {
                 $progress = $component['progress'];
                 self::assertSame(1, $progress['current_record_count']);

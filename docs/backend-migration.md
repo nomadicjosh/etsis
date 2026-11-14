@@ -234,3 +234,7 @@ Program specialization setup and retained selection/sharing policies now connect
 ### Saved-rule course placement
 
 Staff can now choose an exact catalog course publication and reserve eligible work for a matching saved-rule group in the assigned degree or specialization. The existing placement editor, reasoned confirmations, approval stream/projection and revocations are reused. Retained course/group definitions supply canonical matching-card references; current rule edits cannot change earlier approvals. Grades, actual accepted publications, repeats and component routing remain separate eligibility gates. Captured decisions are verified before component exclusion, correcting the zero-count/one-decision integrity failure discovered in the fictional combined audit test. See [the shared placement workflow](student-degree-exceptions.md#prefer-a-group-for-a-course-found-by-saved-rules). No schema change is needed.
+
+### Combined progress shortages
+
+Combined degree/specialization progress now includes [shared-course shortage explanations](student-course-placement.md#degree-and-specialization-shortages). The existing analyzer respects both sharing between components and sharing within them; its optimistic contribution bounds explain supported conflicts without another search or history read. Staff and owner-only portal reviews reuse one presentation and captured group links. Requirement uses are distinct from earned credits/GPA, and no partial placement, evaluation result, journal entry or schema change is introduced.

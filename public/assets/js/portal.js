@@ -1088,7 +1088,7 @@
         }
     }
 
-    function renderPortalProgress(container, data, refresh) {
+    function renderPortalProgress(container, data, refresh, selectedGroup = null) {
         if (data.mode === "combined_curriculum" && data.status === "review") {
             const title = el("h2", { tabindex: "-1" }, "Your degree and specializations"),
                 cards = el("div", { class: "row g-3" });
@@ -1108,20 +1108,21 @@
                 ),
                 cards,
             );
-            for (const component of data.components) {
+            const inspect = (componentIndex, groupIndex = null) => {
+                renderPortalProgress(container, data.components[componentIndex].progress, refresh, groupIndex);
+                container.prepend(
+                    button("Back to degree and specializations", () => renderPortalProgress(container, data, refresh)),
+                );
+            };
+            const competition = window.createCurriculumCompetition({ node: el, button }, data, inspect);
+            if (competition) container.insertBefore(competition, cards);
+            for (const [index, component] of data.components.entries()) {
                 const card = el(
                     "article",
                     { class: "col-12 col-md-6" },
                     el("h3", {}, component.label),
                     el("p", {}, component.progress.context.name),
-                    button(`Review ${component.label}`, () => {
-                        renderPortalProgress(container, component.progress, refresh);
-                        container.prepend(
-                            button("Back to degree and specializations", () =>
-                                renderPortalProgress(container, data, refresh),
-                            ),
-                        );
-                    }),
+                    button(`Review ${component.label}`, () => inspect(index)),
                 );
                 cards.append(card);
             }
@@ -1143,11 +1144,7 @@
         const state = { open: false, side: "right", topic: "steps" };
         const steps = window.createDegreeProgressNextSteps(el, data);
         const slot = el("div", { class: "progress-guide-inline" }, steps);
-        const groups = el(
-            "details",
-            { class: "portal-progress-detail" },
-            el("summary", {}, "Course-group details"),
-        );
+        const groups = el("details", { class: "portal-progress-detail" }, el("summary", {}, "Course-group details"));
         const groupHeading = el("h3", { tabindex: "-1" }, "Your selected course groups");
         const records = el(
             "details",
@@ -1190,9 +1187,9 @@
                         ? "The registrar needs to select published degree requirements for this program. Contact your registrar or advisor."
                         : data.status === "needs_review"
                           ? "Your assigned curriculum or an approved course route needs registrar review. No partial placements are shown. Contact your registrar or advisor."
-                        : data.status === "inconsistent"
-                          ? "Your recorded inputs could not be verified. Contact the registrar for a record review."
-                          : "The review reached its work limit. No partial totals or placements are shown. Ask the registrar to arrange a controlled review.",
+                          : data.status === "inconsistent"
+                            ? "Your recorded inputs could not be verified. Contact the registrar for a record review."
+                            : "The review reached its work limit. No partial totals or placements are shown. Ask the registrar to arrange a controlled review.",
                 ),
             );
             heading.focus();
@@ -1364,12 +1361,12 @@
             });
             return box;
         }
-        data.allocation.groups.forEach((group) =>
+        data.allocation.groups.forEach((group, index) =>
             groups.append(
                 el(
                     "section",
-                    { class: "portal-progress-card mb-3" },
-                    el("h4", {}, group.name),
+                    { class: "portal-progress-card mb-3", "data-progress-group-index": index },
+                    el("h4", { tabindex: "-1" }, group.name),
                     el(
                         "p",
                         {},
@@ -1388,8 +1385,9 @@
                           ]),
                     groupCoverage(group),
                     window.createDegreeNamedCourseReview(
-                        { node: el, button, milli }, group.course_review,
-                        attempt => data.records[attempt.record_index],
+                        { node: el, button, milli },
+                        group.course_review,
+                        (attempt) => data.records[attempt.record_index],
                     ),
                     ...(group.placements.length
                         ? [
@@ -1402,8 +1400,9 @@
                                           {},
                                           `${placement.course_code} · ${placement.course_title} · ${milli(placement.credits_milli)} credits${placement.via_substitution ? ` · Approved alternative for ${placement.target_code}` : ""}`,
                                           window.createDegreeProgressEvidence(
-                                              { node: el, button, milli }, placement.evidence_options,
-                                              index => data.records[index],
+                                              { node: el, button, milli },
+                                              placement.evidence_options,
+                                              (index) => data.records[index],
                                           ),
                                       ),
                                   ),
@@ -1477,7 +1476,10 @@
         }
         page();
         body.append(groups, records);
-        heading.focus();
+        if (Number.isInteger(selectedGroup)) {
+            groups.open = true;
+            container.querySelector(`[data-progress-group-index="${selectedGroup}"] h4`)?.focus();
+        } else heading.focus();
     }
 
     async function grades(container) {
