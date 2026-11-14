@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 
-test("registrar reviews a reasoned grade correction from the student record and reads bounded history", async ({
+test("registrar reviews a correction, preserves entries after expiry and reads bounded grade history", async ({
     page,
 }) => {
     const id = (n) => String(n).padStart(26, "0");
@@ -11,13 +11,13 @@ test("registrar reviews a reasoned grade correction from the student record and 
         grade = id(4);
     const calls = [],
         errors = [];
+    let reviews = 0,
+        expireCommit = true;
     page.on("pageerror", (e) => errors.push(e.message));
     await page.route("**/sis/**", async (route) => {
         const req = route.request(),
             path = new URL(req.url()).pathname;
-        const data = req.postData()
-            ? JSON.parse(new URLSearchParams(req.postData()).get("_workspace_json"))
-            : {};
+        const data = req.postData() ? JSON.parse(new URLSearchParams(req.postData()).get("_workspace_json")) : {};
         calls.push({ path, data, csrf: req.headers()["x-csrf-token"] });
         let result = { items: [], next_after: null };
         if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
@@ -82,19 +82,34 @@ test("registrar reviews a reasoned grade correction from the student record and 
                 needs_assignment: false,
                 pursuits: [],
             };
-        else if (path.endsWith("/final-grades/review/"))
+        else if (path.endsWith("/final-grades/review/")) {
+            reviews++;
             result = {
                 grade: { code: "B", points_milli: 3000 },
                 reason: data.reason,
-                review_token: "fictional-reviewed-correction",
+                review_token: `fictional-reviewed-correction-${reviews}`,
                 earlier_history_unknown: true,
             };
-        await route.fulfill({ json: result, headers: { "Cache-Control": "private, no-store" } });
+        } else if (path.endsWith("/final-grades/commit/") && expireCommit) {
+            expireCommit = false;
+            await route.fulfill({
+                status: 409,
+                json: {
+                    error: "This record changed. Reload it before trying again.",
+                },
+                headers: { "Cache-Control": "private, no-store" },
+            });
+            return;
+        }
+        await route.fulfill({
+            json: result,
+            headers: { "Cache-Control": "private, no-store" },
+        });
     });
     await page.goto("/admin/grade-amend-fixture/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
-    await page.locator('#directory-search').fill('a');
-    await page.locator('#directory-search').press('Enter');
+    await page.locator("#directory-search").fill("a");
+    await page.locator("#directory-search").press("Enter");
     await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     await page.getByRole("button", { name: "Grade history", exact: true }).click();
@@ -106,35 +121,59 @@ test("registrar reviews a reasoned grade correction from the student record and 
     await page.getByRole("button", { name: "Back to record", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();
-    await page.getByRole("combobox", { name:"Institutional grade", exact: true }).selectOption(grade);
-    await expect(page.getByRole("textbox", { name:"Reason for correction", exact: true })).toHaveJSProperty(
-        "required",
-        true,
-    );
+    await page.getByRole("combobox", { name: "Institutional grade", exact: true }).selectOption(grade);
+    await expect(
+        page.getByRole("textbox", {
+            name: "Reason for correction",
+            exact: true,
+        }),
+    ).toHaveJSProperty("required", true);
     await page
-        .getByRole("textbox", { name:"Reason for correction", exact: true })
+        .getByRole("textbox", { name: "Reason for correction", exact: true })
         .fill("Approved <b>assessment</b> review.");
-    await page.getByRole("textbox", { name:"Effective date", exact: true }).fill("2026-08-10");
+    await page.getByRole("textbox", { name: "Effective date", exact: true }).fill("2026-08-10");
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("A → B · 3 grade points");
     await expect(page.locator("#drawer-body b")).toHaveCount(0);
     await page.getByRole("button", { name: "Change review", exact: true }).click();
-    await expect(page.getByRole("textbox", { name:"Reason for correction", exact: true })).toHaveValue(
-        "Approved <b>assessment</b> review.",
-    );
-    await expect(page.getByRole("textbox", { name:"Effective date", exact: true })).toHaveValue("2026-08-10");
+    await expect(
+        page.getByRole("textbox", {
+            name: "Reason for correction",
+            exact: true,
+        }),
+    ).toHaveValue("Approved <b>assessment</b> review.");
+    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue("2026-08-10");
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();
     expect(calls.some((c) => c.path.endsWith("/final-grades/commit/"))).toBe(false);
+    await expect(page.locator("#drawer-body")).toContainText("This review expires after 20 minutes.");
     await page.setViewportSize({ width: 390, height: 844 });
-    const scan = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-        .analyze();
+    const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect(scan.violations.map((v) => v.id)).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole("button", { name: "Confirm final grade", exact: true }).click();
+    await expect(page.locator("#drawer-error")).toContainText("This record changed.");
+    await page.getByRole("button", { name: "Change review", exact: true }).click();
+    await expect(
+        page.getByRole("textbox", {
+            name: "Reason for correction",
+            exact: true,
+        }),
+    ).toHaveValue("Approved <b>assessment</b> review.");
+    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue("2026-08-10");
+    await expect(
+        page.getByRole("combobox", {
+            name: "Institutional grade",
+            exact: true,
+        }),
+    ).toHaveValue(grade);
+    await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm final grade", exact: true }).click();
     await expect
-        .poll(() => calls.find((c) => c.path.endsWith("/final-grades/commit/"))?.data)
-        .toEqual({ student_id: student, review_token: "fictional-reviewed-correction" });
+        .poll(() => calls.filter((c) => c.path.endsWith("/final-grades/commit/")).at(-1)?.data)
+        .toEqual({
+            student_id: student,
+            review_token: "fictional-reviewed-correction-3",
+        });
     expect(calls.find((c) => c.path.endsWith("/final-grades/review/"))).toMatchObject({
         data: {
             student_id: student,

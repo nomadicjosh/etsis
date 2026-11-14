@@ -77,6 +77,12 @@ final class SisPrivacyMiddleware implements MiddlewareInterface
                 409,
                 'This record changed. Reload it before trying again.'
             );
+        } catch (\Domain\Shared\EventSourcing\HistoryReadLimitException) {
+            $response = PrivateErrorResponse::make(
+                $request,
+                409,
+                'This record needs a separate history review. Contact your records office before trying again.'
+            );
         } catch (DomainException) {
             $response = PrivateErrorResponse::make($request, 409, 'The requested transition is not permitted.');
         } catch (Throwable) {

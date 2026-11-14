@@ -74,7 +74,9 @@ final class AcademicCreditHistoryTest extends TestCase
         } else {
             $enrollment = $f->service->register($student->id, $section->id)->id;
             $id = new EntityId(
-                $f->sql->one("sis_academic_credits", ["source_id" => $enrollment->value])["id"],
+                $f->sql->one("sis_academic_credits", [
+                    "source_id" => $enrollment->value,
+                ])["id"],
             );
         }
         $grades = $f->academicCredits()->choices($student->id, $section->id, $enrollment)["items"];
@@ -112,10 +114,7 @@ final class AcademicCreditHistoryTest extends TestCase
         self::assertEquals($root->credit(), new SqlAcademicCreditRepository($f->sql)->projection($id));
         self::assertSame($events, array_slice($f->sql->rows("sis_history_events"), 0, count($events)));
         // Protected history does not expose the grade-review reason in stored JSON.
-        self::assertStringNotContainsString(
-            "Initial final grade",
-            json_encode($f->sql->rows("sis_history_events")),
-        );
+        self::assertStringNotContainsString("Initial final grade", json_encode($f->sql->rows("sis_history_events")));
     }
     public function testExactRetryCannotOverwriteALaterCorrection(): void
     {
@@ -134,11 +133,114 @@ final class AcademicCreditHistoryTest extends TestCase
         $ledger->commit($student, $section, $second["review_token"]);
         $events = $f->sql->rows("sis_history_events");
         $receipts = $f->sql->rows("sis_history_operations");
+        $f->clock->time = $f->clock->time->modify("+2 days");
         self::assertSame($receipt, $ledger->commit($student, $section, $first["review_token"]));
+        // Earlier accepted tokens had no expiry. Their original receipt still verifies without
+        // rewriting its event, context, fingerprint or later grade decision.
+        $old = json_decode($f->dropCipher->open($first["review_token"]), true, 16, JSON_THROW_ON_ERROR);
+        unset($old["expires_at"]);
+        $oldToken = $f->dropCipher->seal(json_encode($old, JSON_THROW_ON_ERROR));
+        self::assertSame($receipt, $ledger->commit($student, $section, $oldToken));
         self::assertSame($b->value, $f->sql->one("sis_academic_credits", ["id" => $id->value])["grade_id"]);
         self::assertSame($events, $f->sql->rows("sis_history_events"));
         self::assertSame($receipts, $f->sql->rows("sis_history_operations"));
         self::assertSame(3, $this->replay($f, $id)->playhead());
+    }
+
+    public function testExpiredGradeReviewsRollBackObservedAndTrackedFactsAndCanBeReviewedAgain(): void
+    {
+        foreach ([false, true] as $legacy) {
+            [$f, $student, $section, $enrollment, $id, $a] = $this->setupCredit($legacy);
+            $ledger = $f->academicCredits();
+            $review = $ledger->review($student, $section, $enrollment, $a, 0);
+            self::assertSame($f->clock->now()->getTimestamp() + 1200, $review["expires_at"]);
+            $events = $f->sql->rows("sis_history_events");
+            $receipts = $f->sql->rows("sis_history_operations");
+            $audit = $f->audit->forSubject($id);
+            $projection = new SqlAcademicCreditRepository($f->sql)->projection($id);
+            $finance = $f->financialEvents();
+            $f->clock->time = $f->clock->time->modify("+20 minutes");
+            try {
+                $ledger->commit($student, $section, $review["review_token"]);
+                self::fail("A review remained usable at its expiry boundary.");
+            } catch (ConcurrentModificationException) {
+                self::assertSame($events, $f->sql->rows("sis_history_events"));
+                self::assertSame($receipts, $f->sql->rows("sis_history_operations"));
+                self::assertSame($audit, $f->audit->forSubject($id));
+                self::assertSame($projection, new SqlAcademicCreditRepository($f->sql)->projection($id));
+                self::assertSame($finance, $f->financialEvents());
+                if ($legacy) {
+                    self::assertNull(new SqlAcademicCreditRepository($f->sql)->mapping($id));
+                }
+            }
+            $refreshed = $ledger->review($student, $section, $enrollment, $a, 0);
+            $f->clock->time = $f->clock->time->modify("+1199 seconds");
+            $ledger->commit($student, $section, $refreshed["review_token"]);
+            self::assertSame($a->value, new SqlAcademicCreditRepository($f->sql)->projection($id)["grade_id"]);
+        }
+    }
+
+    public function testUnacceptedEarlierGradeReviewWithoutExpiryRequiresFreshReview(): void
+    {
+        [$f, $student, $section, $enrollment, $id, $a] = $this->setupCredit(true);
+        $ledger = $f->academicCredits();
+        $review = $ledger->review($student, $section, $enrollment, $a, 0);
+        $old = json_decode($f->dropCipher->open($review["review_token"]), true, 16, JSON_THROW_ON_ERROR);
+        unset($old["expires_at"]);
+        $events = $f->sql->rows("sis_history_events");
+        $receipts = $f->sql->rows("sis_history_operations");
+        try {
+            $ledger->commit($student, $section, $f->dropCipher->seal(json_encode($old, JSON_THROW_ON_ERROR)));
+            self::fail("An unaccepted earlier review bypassed expiry.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+            self::assertSame($receipts, $f->sql->rows("sis_history_operations"));
+            self::assertNull(new SqlAcademicCreditRepository($f->sql)->mapping($id));
+        }
+    }
+
+    public function testLostAuthorityOrChangedActorAtConfirmationCompletionRollsBackGradeAndAudit(): void
+    {
+        foreach (["permission", "actor"] as $change) {
+            [$f, $student, $section, $enrollment, $id, $a, $b] = $this->setupCredit();
+            $ledger = $f->academicCredits();
+            $initial = $ledger->review($student, $section, $enrollment, $a, 0);
+            $ledger->commit($student, $section, $initial["review_token"]);
+            $audit = new class ($f, $change) implements AuditTrail {
+                public function __construct(private SisFixture $fixture, private string $change) {}
+                public function record(EntityId $actor, string $action, EntityId $subject): void
+                {
+                    $this->fixture->audit->record($actor, $action, $subject);
+                    if ($this->change === "permission") {
+                        $this->fixture->access->staff = false;
+                        $this->fixture->access->grants = [];
+                    } else {
+                        $this->fixture->access->actor = $this->fixture->user();
+                    }
+                }
+                public function forSubject(EntityId $subject): array
+                {
+                    return $this->fixture->audit->forSubject($subject);
+                }
+            };
+            $ledger = $f->academicCredits($audit);
+            $review = $ledger->review($student, $section, $enrollment, $b, 1, reason: "Fictional approved correction.");
+            $events = $f->sql->rows("sis_history_events");
+            $receipts = $f->sql->rows("sis_history_operations");
+            $auditBefore = $f->audit->forSubject($id);
+            $projection = new SqlAcademicCreditRepository($f->sql)->projection($id);
+            $finance = $f->financialEvents();
+            try {
+                $ledger->commit($student, $section, $review["review_token"]);
+                self::fail("Changed authority or actor committed an academic decision.");
+            } catch (AccessDeniedException) {
+                self::assertSame($events, $f->sql->rows("sis_history_events"));
+                self::assertSame($receipts, $f->sql->rows("sis_history_operations"));
+                self::assertSame($auditBefore, $f->audit->forSubject($id));
+                self::assertSame($projection, new SqlAcademicCreditRepository($f->sql)->projection($id));
+                self::assertSame($finance, $f->financialEvents());
+            }
+        }
     }
     public function testTwoReviewsCannotBothCommitAtTheSameExpectedVersion(): void
     {
@@ -153,6 +255,98 @@ final class AcademicCreditHistoryTest extends TestCase
             self::fail("Stale grade review committed.");
         } catch (ConcurrentModificationException) {
             self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+    }
+
+    public function testTeachingReadsAndGradeConfirmationUseTheDefaultReplayLimitWithoutPartialChanges(): void
+    {
+        [$f, $student, $section, $enrollment, $id, $a] = $this->setupCredit();
+        $ledger = $f->academicCredits();
+        $review = $ledger->review($student, $section, $enrollment, $a, 0);
+        $root = $this->replay($f, $id);
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $f->sql,
+            $f->transactions,
+            $f->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                EventStoreFixture::config($f->connection->queryBuilder()),
+            ),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        $stream = new StreamReference(new AcademicCreditId($id->value), "academic_credit");
+        $repo = new SqlAcademicCreditRepository($f->sql);
+        // Bounded fictional journal fixture: exercise the real encrypted store and ledger, including
+        // the exact 2,000-event boundary, without thousands of separate service/transaction calls.
+        $extend = function (int $count) use ($f, $root, $review, $history, $stream, $repo, $section): void {
+            $expectedRow = $root->credit()["version"];
+            for ($offset = 0; $offset < $count; $offset += 50) {
+                $expected = $root->playhead();
+                $operation = EntityId::generate();
+                $events = [];
+                for ($i = 0; $i < min(50, $count - $offset); ++$i) {
+                    $event = \Domain\AcademicRecord\Event\FinalGradeWasDecided::occur(
+                        $root->aggregateId(),
+                        [
+                            "decision_id" => EntityId::generate()->value,
+                            "previous_decision_id" => $root->decision(),
+                            "grade" => $review["grade"],
+                            "assignment_id" => null,
+                        ],
+                        ["__aggregate_type" => "academic_credit"],
+                    )->withPlayhead($root->playhead() + 1);
+                    $root->acceptHistorical($event);
+                    $events[] = $event;
+                }
+                $history->append(
+                    $stream,
+                    $operation,
+                    $expected,
+                    new \Domain\Shared\EventSourcing\EventContext(
+                        $f->access->actor,
+                        $f->clock->now(),
+                        $operation,
+                        reason: "Fictional bounded historical fixture.",
+                    ),
+                    $events,
+                );
+            }
+            $repo->project($root->credit(), $section, $expectedRow);
+        };
+        $extend(1999);
+        self::assertSame(1999, $ledger->choices($student, $section, $enrollment)["current_version"]);
+        $pending = $ledger->review($student, $section, $enrollment, $a, 1999, reason: "Fictional review.");
+        $extend(1);
+        $events = $f->sql->fetch("SELECT COUNT(*) AS total FROM sis_history_events")[0]["total"];
+        $receipts = $f->sql->fetch("SELECT COUNT(*) AS total FROM sis_history_operations")[0]["total"];
+        $projection = $repo->projection($id);
+        $finance = $f->financialEvents();
+        $audit = $f->audit->forSubject($id);
+        foreach (
+            [
+                fn() => $ledger->choices($student, $section, $enrollment),
+                fn() => $ledger->review($student, $section, $enrollment, $a, 2000, reason: "Fictional review."),
+                fn() => $ledger->commit($student, $section, $pending["review_token"]),
+                fn() => $ledger->history($student, $section, $enrollment),
+            ]
+            as $readOrDecision
+        ) {
+            try {
+                $readOrDecision();
+                self::fail("A teaching operation bypassed the replay limit.");
+            } catch (\Domain\Shared\EventSourcing\HistoryReadLimitException) {
+                self::assertSame(
+                    $events,
+                    $f->sql->fetch("SELECT COUNT(*) AS total FROM sis_history_events")[0]["total"],
+                );
+                self::assertSame(
+                    $receipts,
+                    $f->sql->fetch("SELECT COUNT(*) AS total FROM sis_history_operations")[0]["total"],
+                );
+                self::assertSame($projection, $repo->projection($id));
+                self::assertSame($finance, $f->financialEvents());
+                self::assertSame($audit, $f->audit->forSubject($id));
+                self::assertNotNull($f->registration->enrollment($student, $section));
+            }
         }
     }
     public function testFacultyCannotAmendWithoutBothIndependentPermissionsAndAReason(): void
@@ -262,7 +456,9 @@ final class AcademicCreditHistoryTest extends TestCase
         self::assertNotSame($enrollment->value, $again->id->value);
         self::assertNotSame(
             $id->value,
-            $f->sql->one("sis_academic_credits", ["source_id" => $again->id->value])["id"],
+            $f->sql->one("sis_academic_credits", [
+                "source_id" => $again->id->value,
+            ])["id"],
         );
     }
     public function testEffectiveDateIsBoundedAndTheCapturedUngradedPolicySurvivesPublication(): void
@@ -386,7 +582,9 @@ final class AcademicCreditHistoryTest extends TestCase
     public function testCorrectionPermissionIsProtectedIndependentAndMigrationRetryPreservesHistory(): void
     {
         [$f, $student, $section, $enrollment, $id] = $this->setupCredit();
-        $permission = $f->sql->one("sis_access_permissions", ["name" => "sis:gradebook:amend"]);
+        $permission = $f->sql->one("sis_access_permissions", [
+            "name" => "sis:gradebook:amend",
+        ]);
         self::assertSame(1, (int) $permission["is_system"]);
         $sis = $f->sql->one("sis_access_permissions", ["name" => "sis"]);
         self::assertSame(
@@ -412,7 +610,9 @@ final class AcademicCreditHistoryTest extends TestCase
         self::assertSame($routing, $f->sql->rows("sis_academic_credit_streams"));
         self::assertSame(
             $permission,
-            $f->sql->one("sis_access_permissions", ["name" => "sis:gradebook:amend"]),
+            $f->sql->one("sis_access_permissions", [
+                "name" => "sis:gradebook:amend",
+            ]),
         );
     }
     public function testLateDropReplaysWithoutReversingTheChargeAndAnEarlyDropRejectsAnUncommittedGrade(): void

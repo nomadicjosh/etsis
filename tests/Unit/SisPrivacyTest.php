@@ -15,6 +15,21 @@ use Qubus\Routing\Handlers\CallableRequestHandler;
 
 final class SisPrivacyTest extends TestCase
 {
+    public function testReplayLimitReturnsAnActionablePrivateErrorWithoutExceptionDetails(): void
+    {
+        $handler = new CallableRequestHandler(static function (): never {
+            throw new \Domain\Shared\EventSourcing\HistoryReadLimitException('fictional-private-history');
+        });
+        foreach (['/sis/sections/example/grade-choices/', '/admin/'] as $path) {
+            $request = new ServerRequest([], [], $path, 'POST')->withHeader('Accept', 'text/html');
+            $response = new SisPrivacyMiddleware()->process($request, $handler);
+            self::assertSame(409, $response->getStatusCode());
+            self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
+            self::assertStringContainsString('Contact your records office', (string) $response->getBody());
+            self::assertStringNotContainsString('fictional-private-history', (string) $response->getBody());
+        }
+    }
+
     public function testErrorsNeverExposePrivatePayloads(): void
     {
         $handler = new CallableRequestHandler(static function (): never {

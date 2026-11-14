@@ -341,6 +341,11 @@ window.createWorkspaceTeaching = function (ui) {
                     ),
                     node("p", {}, `Effective date: ${payload.effective_on}`),
                     node("p", {}, review.reason),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "This review expires after 20 minutes. If it expires, choose Change review and review again; your entries are preserved.",
+                    ),
                     review.earlier_history_unknown
                         ? node(
                               "p",

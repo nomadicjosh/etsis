@@ -252,6 +252,7 @@ final readonly class InstitutionalCreditLedger
                 "reason" => $reason,
                 "effective_at" => $when->format(DATE_ATOM),
                 "observed_at" => $this->clock->now()->format(DATE_ATOM),
+                "expires_at" => $this->clock->now()->getTimestamp() + 1200,
                 "earlier_history_unknown" => $baseline || $root->provenance() === "observed_existing",
                 "observed_grade" =>
                     $root->grade() ??
@@ -260,6 +261,8 @@ final readonly class InstitutionalCreditLedger
                         : GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($facts["grade_id"])))
                             ->facts),
             ];
+            $this->actor($actor);
+            $this->authority($section, $amend);
             return $data + ["review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
         });
     }
@@ -335,6 +338,14 @@ final readonly class InstitutionalCreditLedger
                 [$event],
             );
             if ($receipt["event_ids"] === [(string) $event->eventId()]) {
+                // Check new-command expiry after the journal recognizes completed original retries.
+                // Older accepted tokens retain their exact event/receipt contract; an unaccepted
+                // review with no expiry must be refreshed. Failure rolls back both baseline and grade.
+                if (!is_int($d["expires_at"] ?? null) || $d["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                    throw new ConcurrentModificationException(
+                        "This grade review expired. Change the review and review the final grade again.",
+                    );
+                }
                 $current = $this->records->projection($id) ?? throw new CorruptHistoryException();
                 $this->active(
                     new EntityId($d["enrollment_id"]),
@@ -379,6 +390,8 @@ final readonly class InstitutionalCreditLedger
                     $id,
                 );
             }
+            $this->actor($actor);
+            $this->authority($section, $d["amendment"]);
             return $receipt;
         });
     }
@@ -608,13 +621,11 @@ final readonly class InstitutionalCreditLedger
 
     private function load(EntityId $id, ?HistoryReadBudget $budget = null): AcademicCredit
     {
+        $budget ??= new HistoryReadBudget();
         $root = AcademicCredit::root(new AcademicCreditId($id->value));
         $cursor = null;
         do {
-            $page =
-            $budget === null
-            ? $this->history->page($this->stream($id), $cursor, 20)
-            : $budget->page($this->history, $this->stream($id), $cursor);
+            $page = $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $e) {
                 $root->acceptHistorical($e->event);
             }
