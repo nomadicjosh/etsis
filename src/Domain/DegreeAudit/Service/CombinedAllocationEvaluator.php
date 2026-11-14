@@ -43,7 +43,7 @@ final readonly class CombinedAllocationEvaluator
         $choiceCount = $evidenceCount = $contributionCount = 0;
         $occurrence = 0;
         foreach ($components as $component) {
-            $id = $component["requirements"]["version_id"];
+            $id = $component["key"] ?? $component["requirements"]["version_id"];
             if (isset($prepared[$id])) {
                 throw new CorruptHistoryException();
             }
@@ -111,7 +111,7 @@ final readonly class CombinedAllocationEvaluator
         $positions = [];
         foreach ($components as $component) {
             $r = $component["requirements"];
-            $id = $r["version_id"];
+            $id = $component["key"] ?? $r["version_id"];
             $review = $prepared[$id]->review(
                 new AllocationResult($result->outcome, $byComponent[$id] ?? [], $result->steps),
             );
@@ -119,7 +119,7 @@ final readonly class CombinedAllocationEvaluator
             $review["context"] = [
                 "mode" => "combined_component",
                 "kind" => $component["kind"],
-                "requirements_version_id" => $id,
+                "requirements_version_id" => $r["version_id"],
                 "version" => $r["version"],
                 "name" => $r["definition"]["name"],
                 "academic_year_code" => $r["context"]["academic_year_code"],

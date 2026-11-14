@@ -75,32 +75,50 @@ final readonly class SisDegreeAuditController
     {
         $body = $request->getParsedBody();
         if (!is_array($body)) {
-            throw new \InvalidArgumentException('Choose the audit source to test.');
+            throw new \InvalidArgumentException("Choose the audit source to test.");
         }
         $input = FormInput::from($request);
-        $source = $input->text('source', 20);
-        if ($source === 'publication') {
-            if (array_key_exists('definition', $body) || array_key_exists('use_group_drafts', $body)) {
-                throw new \InvalidArgumentException('A published audit test cannot override its retained definitions.');
+        $source = $input->text("source", 20);
+        $companions = $body["companions"] ?? [];
+        if (!is_array($companions) || !array_is_list($companions)) {
+            throw new \InvalidArgumentException("Provide a list of specialization test sources.");
+        }
+        $sharing = array_key_exists("sharing", $body)
+        ? \Domain\Catalog\ValueObject\ComponentCourseSharing::tryFrom($input->text("sharing", 30)) ??
+        throw new \InvalidArgumentException("Choose a supported test sharing policy.")
+        : null;
+
+        if ($source === "publication") {
+            if (array_key_exists("definition", $body) || array_key_exists("use_group_drafts", $body)) {
+                throw new \InvalidArgumentException("A published audit test cannot override its retained definitions.");
             }
-            return new JsonResponse($this->trials->testPublication(
+            return new JsonResponse(
+                $this->trials->testPublication(
+                    new EntityId($id),
+                    $input->id("version_id"),
+                    $input->id("student_id"),
+                    $input->id("assignment_id"),
+                    companions: $companions,
+                    sharing: $sharing,
+                ),
+            );
+        }
+        if ($source !== "draft" || !is_array($body["definition"] ?? null) || array_key_exists("version_id", $body)) {
+            throw new \InvalidArgumentException("Provide a working draft or an exact published audit version.");
+        }
+        return new JsonResponse(
+            $this->trials->test(
                 new EntityId($id),
-                $input->id('version_id'),
-                $input->id('student_id'),
-                $input->id('assignment_id'),
-            ));
-        }
-        if ($source !== 'draft' || !is_array($body['definition'] ?? null) || array_key_exists('version_id', $body)) {
-            throw new \InvalidArgumentException('Provide a working draft or an exact published audit version.');
-        }
-        return new JsonResponse($this->trials->test(
-            new EntityId($id),
-            $input->id('student_id'),
-            $input->id('assignment_id'),
-            new AuditRequirementsV3($body['definition']),
-            $input->boolean('use_group_drafts'),
-        ));
+                $input->id("student_id"),
+                $input->id("assignment_id"),
+                new AuditRequirementsV3($body["definition"]),
+                $input->boolean("use_group_drafts"),
+                companions: $companions,
+                sharing: $sharing,
+            ),
+        );
     }
+
     public function clone(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);

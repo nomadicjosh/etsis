@@ -340,8 +340,10 @@ async function fixture(page, options = {}) {
             code: "BSCS", title: "Computing", description: null, classifications: {department:null,academic_level:null,award:null},
         } };
         else if (path === `/sis/programs/${program}/specializations/page/`) response = {
-            program:{id:program,code:"BSCS",title:"Computing"}, items:[{...specialization,active:true,revision:1}],next_after:null,
+            program:{id:program,code:"BSCS",title:"Computing"}, items:[{...(options.combinedTrials ? {id:id(209),code:"DATA",title:"Data <b>fictional</b>"}:specialization),active:true,revision:1}],next_after:null,
         };
+        else if (options.combinedTrials && path === `/sis/programs/${program}/specializations/${id(209)}/degree-audits/page/`)
+            response = {items:[{id:id(210),academic_year_id:year}],next_after:null};
         else if (path.endsWith("/degree-audits/page/"))
             response = {
                 items: opened ? [{ ...row(), academic_year_code: context.academic_year_code }] : [],
@@ -371,6 +373,8 @@ async function fixture(page, options = {}) {
                 }) } };
         }
         else if (path === `/sis/students/${id(90)}/programs/`) response = {items:[{id:id(91),program_id:options.crossProgram ? id(95) : program,program_title:options.crossProgram ? "Fictional History" : "Computing",term_code:"27/FA",status:"active"}],next_after:null};
+        else if (options.combinedTrials && path === `/sis/degree-audits/${id(210)}/versions/`)
+            response = {items:[{version_id:id(211),version:2}],next_cursor:null};
         else if (path === `/sis/degree-audits/${template}/test/`) {
             if (options.trialGate) await options.trialGate();
             if (options.trialFailure) return route.fulfill({status:503,json:{error:"The temporary test could not be completed. No changes were saved."}});
@@ -404,6 +408,28 @@ async function fixture(page, options = {}) {
                 response.policy.repeat_credit="all_eligible";
             }
             if (options.ruleBacked) response.rule_eligibility=Array.from({length:options.rulePlacement ? 1:21},(_,i)=>({work_id:id(100+i),group_id:group,group_name:"General education",requirement_id:id(10),course_code:`MATH.${201+i}`,course_title:"Retained course <b>fictional</b>",rule_code:"DA.MATH.UPPER",rule_title:"Upper-level math",rule_revision:1,outcome:i===20 ? "unknown":"matches"}));
+            if (body.companions?.length) {
+                const outcome = body.sharing === "one_component" ? "infeasible" : "feasible";
+                const components = [null,...body.companions].map((choice,index)=>{
+                    const progress=structuredClone(response);
+                    progress.mode="combined_component";
+                    progress.context={...progress.context,mode:"combined_component",kind:index?"specialization":"degree",
+                        name:index?"Data <b>fictional</b> requirements":progress.context.name,
+                        specialization:index?{code:"DATA",title:"Data <b>fictional</b>"}:null,
+                        test_source:choice?.source || body.source,version:choice?.source === "publication"?2:null};
+                    progress.sources=[{name:"General education",source:choice?.source || body.source,revision:1}];
+                    progress.allocation.outcome=outcome;
+                    if(outcome === "infeasible") {
+                        for(const group of progress.allocation.groups) {group.placements=[];group.coverage=null;}
+                        progress.work_summary.placement_established=false;
+                    }
+                    return {kind:index?"specialization":"degree",progress};
+                });
+                response={status:"review",mode:"runtime_combined_test",outcome,sharing:body.sharing,input_status:"verified",
+                    current_record_count:1,exceptions_applied:false,components,competition:{conflicts:[],more_conflicts:false}};
+                if(options.combinedStatus) response={status:options.combinedStatus,mode:"runtime_combined_test"};
+            }
+
         }
         else if (path === `/sis/degree-audits/${template}/save/`) {
             definition = body.definition;
@@ -1709,3 +1735,139 @@ test("specialization requirements reuse the audit builder, preserve scope and te
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test("temporary combined audit selects specialization sources and reuses captured component detail", async ({
+    page,
+}) => {
+    const f = await fixture(page, { existing: true, combinedTrials: true, rulePlacement: true });
+    await openDegree(page, true);
+    await page.getByLabel("Requirement title", { exact: true }).fill("Unsaved combined trial");
+    await page.getByRole("button", { name: "Test with a student", exact: true }).click();
+    expect(f.calls.some((c) => c.path.endsWith("/specializations/page/"))).toBe(false);
+    await page.getByRole("button", { name: "Browse specialization audits", exact: true }).click();
+    await page.getByRole("button", { name: "Choose specialization DATA", exact: true }).click();
+    await page.getByRole("button", { name: "Use saved draft · DATA", exact: true }).click();
+    await page
+        .getByRole("checkbox", { name: "Use working course groups · DATA · Data <b>fictional</b>", exact: true })
+        .check();
+    await page.getByLabel("Find a student by name or assigned ID", { exact: true }).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID", { exact: true }).press("Enter");
+    await page.getByRole("button", { name: "Fictional Learner <b>example</b> · S-EXAMPLE", exact: true }).click();
+    await page.getByRole("button", { name: "Computing · 27/FA · active", exact: true }).click();
+    await page.getByRole("button", { name: "Run temporary audit", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Temporary combined audit result", exact: true })).toBeVisible();
+    await expect(dialog).toContainText("explicit test assumption");
+    await expect(dialog).not.toContainText("Publication null");
+    const call = f.calls.find((c) => c.path.endsWith("/test/"));
+    expect(call.body).toMatchObject({
+        sharing: "one_component",
+        companions: [{ template_id: id(210), source: "draft", use_group_drafts: true }],
+        definition: { name: "Unsaved combined trial" },
+    });
+    expect(call.csrf).toBe("fictional-test-token");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await accessible(page);
+    await dialog.getByRole("button", { name: "Inspect specialization data component", exact: true }).click();
+    await expect(dialog).toContainText("explicit test sharing assumption");
+    await expect(dialog).toContainText("Working draft revision 1");
+    await expect(dialog).not.toContainText("Version null");
+    await dialog.getByRole("button", { name: "Inspect course-group placement", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "Refresh course placement", exact: true })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Back to component progress", exact: true }).click();
+    await dialog.getByRole("button", { name: "Back to combined progress", exact: true }).click();
+    expect(f.calls.filter((c) => c.path.endsWith("/test/"))).toHaveLength(1);
+    await dialog.getByRole("button", { name: "Back to test setup", exact: true }).click();
+    await page
+        .getByRole("checkbox", {
+            name: "Allow a completed course in more than one component for this temporary test",
+            exact: true,
+        })
+        .check();
+    await page.getByRole("button", { name: "Browse specialization audits", exact: true }).click();
+    await page.getByRole("button", { name: "Choose specialization DATA", exact: true }).click();
+    await page.getByRole("button", { name: "Choose publication · DATA", exact: true }).click();
+    await page.getByRole("button", { name: "Use DATA publication 2", exact: true }).click();
+    await page.getByRole("button", { name: "Run temporary audit", exact: true }).click();
+    expect(f.calls.filter((c) => c.path.endsWith("/test/"))[1].body).toMatchObject({
+        sharing: "multiple_components",
+        companions: [{ template_id: id(210), source: "publication", version_id: id(211) }],
+    });
+    await expect(dialog).toContainText("Publication 2");
+    await dialog.getByRole("button", { name: "Back to test setup", exact: true }).click();
+    await page.getByRole("button", { name: "Remove DATA · Data <b>fictional</b> from test", exact: true }).click();
+    await expect(dialog).toContainText("No specialization added");
+    await page.getByRole("button", { name: "Return to degree builder", exact: true }).click();
+    await expect(page.getByLabel("Requirement title", { exact: true })).toHaveValue("Unsaved combined trial");
+    expect(f.calls.some((c) => /\/(save|publish|assign)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("changing a combined test sharing assumption discards an outstanding result", async ({ page }) => {
+    let release, requested;
+    const gate = new Promise((resolve) => {
+        release = resolve;
+    });
+    const seen = new Promise((resolve) => {
+        requested = resolve;
+    });
+    const f = await fixture(page, {
+        existing: true,
+        combinedTrials: true,
+        rulePlacement: true,
+        trialGate: async () => {
+            requested();
+            await gate;
+        },
+    });
+    await openDegree(page, true);
+    await page.getByRole("button", { name: "Test with a student", exact: true }).click();
+    await page.getByRole("button", { name: "Browse specialization audits", exact: true }).click();
+    await page.getByRole("button", { name: "Choose specialization DATA", exact: true }).click();
+    await page.getByRole("button", { name: "Use saved draft · DATA", exact: true }).click();
+    await page.getByLabel("Find a student by name or assigned ID", { exact: true }).fill("Example");
+    await page.getByLabel("Find a student by name or assigned ID", { exact: true }).press("Enter");
+    await page.getByRole("button", { name: "Fictional Learner <b>example</b> · S-EXAMPLE", exact: true }).click();
+    await page.getByRole("button", { name: "Computing · 27/FA · active", exact: true }).click();
+    await page.getByRole("button", { name: "Run temporary audit", exact: true }).click();
+    await seen;
+    await page
+        .getByRole("checkbox", {
+            name: "Allow a completed course in more than one component for this temporary test",
+            exact: true,
+        })
+        .check();
+    release();
+    await expect(page.getByRole("button", { name: "Run temporary audit", exact: true })).toBeEnabled();
+    await expect(page.getByRole("heading", { name: "Test a degree audit", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Temporary combined audit result", exact: true })).toHaveCount(0);
+    expect(f.calls.filter((c) => c.path.endsWith("/test/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+
+for (const status of ["limited", "inconsistent"])
+    test(`combined runtime ${status} keeps source setup recoverable without partial components`, async ({ page }) => {
+        const f = await fixture(page, { existing: true, combinedTrials: true, combinedStatus: status });
+        await openDegree(page, true);
+        await page.getByRole("button", { name: "Test with a student", exact: true }).click();
+        await page.getByRole("button", { name: "Browse specialization audits", exact: true }).click();
+        await page.getByRole("button", { name: "Choose specialization DATA", exact: true }).click();
+        await page.getByRole("button", { name: "Use saved draft · DATA", exact: true }).click();
+        await page.getByLabel("Find a student by name or assigned ID", { exact: true }).fill("Example");
+        await page.getByLabel("Find a student by name or assigned ID", { exact: true }).press("Enter");
+        await page.getByRole("button", { name: "Fictional Learner <b>example</b> · S-EXAMPLE", exact: true }).click();
+        await page.getByRole("button", { name: "Computing · 27/FA · active", exact: true }).click();
+        await page.getByRole("button", { name: "Run temporary audit", exact: true }).click();
+        await expect(page.getByRole("dialog")).toContainText(
+            status === "limited" ? "reached its work limit" : "could not be verified",
+        );
+        await expect(page.getByRole("button", { name: "Inspect degree component", exact: true })).toHaveCount(0);
+        await page.getByRole("button", { name: "Back to test setup", exact: true }).click();
+        await expect(
+            page.getByRole("button", { name: "Remove DATA · Data <b>fictional</b> from test", exact: true }),
+        ).toBeVisible();
+        expect(f.errors).toEqual([]);
+    });

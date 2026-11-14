@@ -612,7 +612,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     { class: "alert alert-info" },
-                    "Build and test requirements for this specialization and academic year. Publication retains its offered program revision. Combined degree/specialization placement and exclusions remain in development.",
+                    "Build and test requirements for this specialization and academic year. Publication retains its offered program revision. Use assigned combined progress for retained student choices and approvals, or start from a degree test to compare draft combinations.",
                 ),
             );
         if (back) body.append(button("Back to specializations", back));
@@ -1631,7 +1631,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const snapshot = definition === null ? null : structuredClone(definition);
         const model = state || { student: null, pursuit: null, drafts: false, source: "draft", publication: null };
         const published = model.source === "publication" ? model.publication : null;
+        model.companions ||= [];
+        model.sharing ||= "one_component";
         let choiceRequest = 0,
+            companionRequest = 0,
             sourceRequest = 0;
         const body = screen(
             saved.specialization_id ? "Test a specialization audit" : "Test a degree audit",
@@ -1715,6 +1718,167 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         }
         body.append(sourceChoices);
+        if (!saved.specialization_id) {
+            const panel = node(
+                "section",
+                { class: "audit-panel", "aria-label": "Specializations in this test" },
+                node("h2", { class: "h5" }, "Test with specializations"),
+                node(
+                    "p",
+                    {},
+                    "Optionally combine saved specialization drafts or exact publications from this program and academic year. This hypothetical combination does not approve specialization selection limits, select specializations for the student or apply individual exceptions.",
+                ),
+            );
+            const selectedSources = node("div", { class: "audit-library-grid" }),
+                found = node("div", { class: "audit-library-grid" });
+            const sharing = checkbox(
+                "Allow a completed course in more than one component for this temporary test",
+                (on) => {
+                    model.sharing = on ? "multiple_components" : "one_component";
+                },
+            );
+            sharing.querySelector("input").checked = model.sharing === "multiple_components";
+            panel.append(
+                selectedSources,
+                sharing,
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Unchecked means one component. This is an explicit test assumption, not a change to institutional or published program policy. Each plan keeps its own within-group sharing policy.",
+                ),
+                search("Find specializations by code or name", "", (query) => findSpecializations(query)),
+                button("Browse specialization audits", () => findSpecializations("")),
+                found,
+            );
+            body.append(panel);
+            function selectedCompanions() {
+                selectedSources.replaceChildren();
+                for (const source of model.companions) {
+                    const card = node(
+                        "article",
+                        { class: "audit-card" },
+                        node("h3", { class: "h6" }, source.label),
+                        node(
+                            "p",
+                            {},
+                            source.source === "draft"
+                                ? "Saved specialization draft"
+                                : `Exact publication ${source.version}`,
+                        ),
+                        button(`Remove ${source.label} from test`, () => {
+                            model.companions = model.companions.filter((item) => item !== source);
+                            selectedCompanions();
+                        }),
+                    );
+                    if (source.source === "draft") {
+                        const drafts = checkbox(
+                            `Use working course groups · ${source.label}`,
+                            (on) => (source.use_group_drafts = on),
+                        );
+                        drafts.querySelector("input").checked = source.use_group_drafts;
+                        card.append(drafts);
+                    }
+                    selectedSources.append(card);
+                }
+                if (!model.companions.length)
+                    selectedSources.append(node("p", {}, "No specialization added; the audit runs independently."));
+            }
+            function addSource(row, specialization, publication = null) {
+                const source = {
+                    template_id: row.id,
+                    source: publication ? "publication" : "draft",
+                    label: `${specialization.code} · ${specialization.title}`,
+                    specialization_id: specialization.id,
+                    ...(publication
+                        ? { version_id: publication.version_id, version: publication.version }
+                        : { use_group_drafts: false }),
+                };
+                model.companions = model.companions.filter((item) => item.specialization_id !== specialization.id);
+                if (model.companions.length >= 24) throw new Error("Test at most 24 specialization components.");
+                model.companions.push(source);
+                selectedCompanions();
+                found.replaceChildren(node("p", { role: "status" }, `${source.label} added to the temporary test.`));
+            }
+            async function findSpecializations(query, after = null, stack = []) {
+                const target = dialog,
+                    token = ++companionRequest;
+                const data = await post(`/sis/programs/${saved.program_id}/specializations/page/`, {
+                    search: query,
+                    ...(after ? { after } : {}),
+                });
+                if (dialog !== target || token !== companionRequest) return;
+                found.replaceChildren();
+                for (const item of data.items)
+                    found.append(button(`Choose specialization ${item.code}`, () => plans(item)));
+                if (!data.items.length)
+                    found.append(
+                        node(
+                            "p",
+                            {},
+                            "No specialization found. Set up its requirements separately, then return to this test.",
+                        ),
+                    );
+                pager(found, data, after, stack, (next, previous) => findSpecializations(query, next, previous));
+            }
+            async function plans(specialization, after = null, stack = []) {
+                const target = dialog,
+                    token = ++companionRequest;
+                const data = await post(
+                    auditScopePath(saved.program_id, specialization.id) + "page/",
+                    after ? { after } : {},
+                );
+                if (dialog !== target || token !== companionRequest) return;
+                found.replaceChildren();
+                const matching = data.items.filter((row) => row.academic_year_id === saved.academic_year_id);
+                for (const row of matching)
+                    found.append(
+                        node(
+                            "article",
+                            { class: "audit-card" },
+                            node("h3", { class: "h6" }, `${specialization.code} · ${saved.context.academic_year_code}`),
+                            button(`Use saved draft · ${specialization.code}`, () => addSource(row, specialization)),
+                            button(`Choose publication · ${specialization.code}`, () =>
+                                companionVersions(row, specialization),
+                            ),
+                        ),
+                    );
+                if (!matching.length)
+                    found.append(
+                        node(
+                            "p",
+                            {},
+                            "No saved audit for this academic year on this page. Set it up separately or check the next page.",
+                        ),
+                    );
+                pager(found, data, after, stack, (next, previous) => plans(specialization, next, previous));
+            }
+            async function companionVersions(row, specialization, cursor = null, stack = []) {
+                const target = dialog,
+                    token = ++companionRequest;
+                const data = await post(`/sis/degree-audits/${row.id}/versions/`, cursor ? { cursor } : {});
+                if (dialog !== target || token !== companionRequest) return;
+                found.replaceChildren();
+                for (const publication of data.items)
+                    found.append(
+                        button(`Use ${specialization.code} publication ${publication.version}`, () =>
+                            addSource(row, specialization, publication),
+                        ),
+                    );
+                if (!data.items.length)
+                    found.append(
+                        node("p", {}, "No publications. Browse specializations again to choose the saved draft."),
+                    );
+                pager(
+                    found,
+                    data,
+                    cursor,
+                    stack,
+                    (next, previous) => companionVersions(row, specialization, next, previous),
+                    "next_cursor",
+                );
+            }
+            selectedCompanions();
+        }
         async function versions(cursor = null, stack = []) {
             const target = dialog,
                 token = ++sourceRequest;
@@ -1812,7 +1976,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 pursuit = model.pursuit,
                 drafts = model.drafts,
                 source = model.source,
-                version = model.publication?.version_id;
+                version = model.publication?.version_id,
+                combinedState = JSON.stringify([model.companions, model.sharing]);
             const data = await post(`/sis/degree-audits/${saved.id}/test/`, {
                 source,
                 ...(source === "publication"
@@ -1820,6 +1985,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     : { definition: snapshot, use_group_drafts: drafts }),
                 student_id: student.id,
                 assignment_id: pursuit.id,
+                ...(model.companions.length
+                    ? {
+                          companions: model.companions.map(({ template_id, source, use_group_drafts, version_id }) => ({
+                              template_id,
+                              source,
+                              ...(source === "draft" ? { use_group_drafts } : { version_id }),
+                          })),
+                          sharing: model.sharing,
+                      }
+                    : {}),
             });
             if (
                 dialog !== target ||
@@ -1827,13 +2002,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 model.pursuit !== pursuit ||
                 model.drafts !== drafts ||
                 model.source !== source ||
-                model.publication?.version_id !== version
+                model.publication?.version_id !== version ||
+                JSON.stringify([model.companions, model.sharing]) !== combinedState
             )
                 return;
-            renderDegreeProgress(null, restore, data, null, {
+            const trial = {
                 setup: restore,
+                run,
                 student: `${student.given_name} ${student.family_name} · ${student.institutional_id}`,
-            });
+            };
+            if (data.mode === "runtime_combined_test") renderCombinedProgress(null, restore, data, trial);
+            else renderDegreeProgress(null, restore, data, null, trial);
         }
         selected();
     }
@@ -2454,19 +2633,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const data = await post(`${base}combined/`, {});
         renderCombinedProgress(base, back, data);
     }
-    function renderCombinedProgress(base, back, data) {
-        const body = screen("Combined curriculum progress", "DEGREE & SELECTED SPECIALIZATIONS");
-        const restore = () => renderCombinedProgress(base, back, data);
-        restore.refresh = () => combinedProgress(base, back);
+    function renderCombinedProgress(base, back, data, trial = null) {
+        const body = screen(
+            trial ? "Temporary combined audit result" : "Combined curriculum progress",
+            trial ? "RUNTIME AUDIT TEST · NOT SAVED" : "DEGREE & SELECTED SPECIALIZATIONS",
+        );
+        const restore = () => renderCombinedProgress(base, back, data, trial);
+        restore.refresh = trial ? trial.run : () => combinedProgress(base, back);
         restore.groupReturnLabel = "Back to combined progress";
         body.append(
             node(
                 "p",
                 {},
-                "Review the selected degree and specializations together using their retained requirements and program sharing policy. This checks current work; it saves no academic result or graduation decision.",
+                trial
+                    ? "Temporary test of the chosen degree and specialization sources. Component sharing is an explicit test assumption. No student-specific exceptions or course routes apply. No result, publication, specialization selection or assignment is saved; this is not a graduation decision."
+                    : "Review the selected degree and specializations together using their retained requirements and program sharing policy. This checks current work; it saves no academic result or graduation decision.",
             ),
-            actions(button("Refresh combined review", restore.refresh), button("Back to degree requirements", back)),
+            actions(
+                button(trial ? "Run combined test again" : "Refresh combined review", restore.refresh),
+                button(trial ? "Back to test setup" : "Back to degree requirements", trial ? trial.setup : back),
+            ),
         );
+        if (trial) body.append(node("p", { class: "audit-status" }, trial.student));
         if (data.status !== "review") {
             const issues = {
                 cohort_changed:
@@ -2489,9 +2677,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                       ? [
                             "The combined review reached its work limit. No partial totals or placements are shown. Ask the registrar to arrange a controlled review.",
                         ]
-                      : (data.issues || []).map(
-                            (code) => issues[code] || "The selected curriculum needs registrar review.",
-                        );
+                      : data.status === "inconsistent"
+                        ? ["The academic inputs or source definitions could not be verified. No partial results are shown. Review the records and selected sources before trying again."]
+                        : (data.issues || []).map(
+                              (code) => issues[code] || "The selected curriculum needs registrar review.",
+                          );
             for (const message of messages)
                 body.append(node("p", { role: "status", class: "alert alert-info" }, message));
             return;
@@ -2515,13 +2705,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "p",
                 {},
                 data.sharing === "multiple_components"
-                    ? "Published sharing policy: a completed course may satisfy more than one component."
-                    : "Published sharing policy: a completed course may apply to one component.",
+                    ? `${trial ? "Test assumption" : "Published sharing policy"}: a completed course may satisfy more than one component.`
+                    : `${trial ? "Test assumption" : "Published sharing policy"}: a completed course may apply to one component.`,
             ),
             node(
                 "p",
                 {},
-                "Each component keeps its own group, grading and repeat policies. Overall credit and GPA figures are not added across components. Degree-specific approvals stay with the degree; pursuit-wide course waivers also apply to specializations. Specialization-specific approvals and reviewed course routes apply to their retained assignments.",
+                trial
+                    ? "Each tested source keeps its own group, grading and repeat policies. Overall credit and GPA figures are not added across components. Review the listed draft revisions or exact publications before changing curriculum."
+                    : "Each component keeps its own group, grading and repeat policies. Overall credit and GPA figures are not added across components. Degree-specific approvals stay with the degree; pursuit-wide course waivers also apply to specializations. Specialization-specific approvals and reviewed course routes apply to their retained assignments.",
             ),
             node(
                 "p",
@@ -2548,13 +2740,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 { class: "audit-card" },
                 node("h2", { class: "h4" }, label),
                 node("h3", { class: "h5" }, context.name),
-                node("p", {}, `${context.academic_year_code} · Publication ${context.version}`),
-                node("p", {}, `${progress.allocation.groups.length} retained course groups`),
+                node(
+                    "p",
+                    {},
+                    `${context.academic_year_code} · ${context.test_source === "draft" ? "Working draft" : `Publication ${context.version}`}`,
+                ),
+                node("p", {}, `${progress.allocation.groups.length} ${trial ? "tested" : "retained"} course groups`),
                 button(`Inspect ${label.toLowerCase()} component`, () => renderDegreeProgress(base, restore, progress)),
             );
             cards.append(card);
         }
         body.append(cards);
+    }
+    function progressVersionLabel(context) {
+        if (context.test_source)
+            return context.test_source === "draft"
+                ? "Working draft · Temporary combined test"
+                : `Publication ${context.version} · Temporary combined test`;
+        if (context.mode === "runtime_test")
+            return context.source === "publication"
+                ? `Published audit version ${context.version} · Temporary test`
+                : "Unpublished trial";
+        return `Version ${context.version}`;
     }
     const degreeProgressGuide = (...args) => window.createDegreeProgressGuide({ node, button, actions }, ...args);
     const progressNextSteps = (data) => window.createDegreeProgressNextSteps(node, data);
@@ -2606,7 +2813,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "p",
                     { class: "alert alert-info" },
                     combined
-                        ? `Specialization ${data.context.specialization.code} — ${data.context.specialization.title}. These placements come from the joint search and published component-sharing policy.`
+                        ? `Specialization ${data.context.specialization.code} — ${data.context.specialization.title}. These placements come from the joint search and ${data.context.test_source ? "explicit test sharing assumption" : "published component-sharing policy"}.`
                         : `Specialization only · ${data.context.specialization.code} — ${data.context.specialization.title}. ${component ? "This review uses the assigned publication." : "This test evaluates this component independently."} Combined degree/specialization sharing and exclusions are not applied.`,
                 ),
             );
@@ -2640,7 +2847,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "p",
                 {},
                 combined
-                    ? "Minimum checks use this component's retained policies. Group placements are its part of the single combined plan. Figures are not added to another component's totals. No result or academic change is saved."
+                    ? data.context?.test_source
+                        ? "Temporary comparison using this component's chosen draft or exact publication. Group placements belong to the single combined test plan. Figures are not added to other components, no individual exceptions apply, and no result or academic change is saved."
+                        : "Minimum checks use this component's retained policies. Group placements are its part of the single combined plan. Figures are not added to another component's totals. No result or academic change is saved."
                     : component
                       ? "Compare verified current work with the exact assigned specialization requirements. Approved exceptions for this assignment and pursuit-wide waivers are included. Cross-component routing is evaluated in combined curriculum progress. Credits and GPA are calculated once within this review, not added to the degree's totals. No result or academic change is saved; this does not establish combined completion or graduation eligibility."
                       : trial
@@ -2652,7 +2861,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             actions(
                 guide,
                 combined
-                    ? button("Refresh combined review", back.refresh)
+                    ? button(data.context?.test_source ? "Run combined test again" : "Refresh combined review", back.refresh)
                     : trial
                       ? button("Back to test setup", trial.setup)
                       : button(component ? "Refresh specialization review" : "Refresh degree progress", () =>
@@ -2680,7 +2889,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `Tested program: ${data.context.program_code} — ${data.context.program_title}. This does not change the student's program.`,
                 ),
             );
-        if (trial && data.sources) {
+        if ((trial || data.context?.test_source) && data.sources) {
             body.append(node("h2", { class: "h5" }, "Tested group sources"));
             for (const source of data.sources)
                 body.append(
@@ -2711,7 +2920,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "audit-status" },
-                `${data.context.name} · ${data.context.academic_year_code} · ${data.context.mode === "runtime_test" ? (data.context.source === "publication" ? `Published audit version ${data.context.version} · Temporary test` : "Unpublished trial") : `Version ${data.context.version}`}`,
+                `${data.context.name} · ${data.context.academic_year_code} · ${progressVersionLabel(data.context)}`,
             ),
         );
         body.append(
@@ -3244,7 +3453,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "audit-status" },
-                `${data.context.name} · ${data.context.academic_year_code} · ${data.context.mode === "runtime_test" ? (data.context.source === "publication" ? `Published audit version ${data.context.version} · Temporary test` : "Unpublished trial") : `Version ${data.context.version}`}`,
+                `${data.context.name} · ${data.context.academic_year_code} · ${progressVersionLabel(data.context)}`,
             ),
         );
         body.append(

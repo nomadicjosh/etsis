@@ -35,7 +35,7 @@ use PHPUnit\Framework\TestCase;
 
 final class DraftDegreeAuditTest extends TestCase
 {
-    private function service(StudentRequirementsFixture $f): DegreeAuditTrialService
+    private function service(StudentRequirementsFixture $f, ?\Domain\DegreeAudit\Repository\AcademicInputRepository $repository = null): DegreeAuditTrialService
     {
         $s = $f->f->sis;
         $students = new SqlStudentRecordRepository($s->sql);
@@ -47,7 +47,7 @@ final class DraftDegreeAuditTest extends TestCase
             $f->f->gradingScales(),
             $f->service,
             new AcademicInputService(
-                new SqlAcademicInputRepository($s->sql),
+                $repository ?? new SqlAcademicInputRepository($s->sql),
                 $s->academicCredits(),
                 $s->transferCredits(),
                 $s->enrollmentLedger(),
@@ -55,7 +55,7 @@ final class DraftDegreeAuditTest extends TestCase
                 $f->service,
                 $s->transactions,
             ),
-            new DegreeProgressEvaluator(
+            $evaluator = new DegreeProgressEvaluator(
                 new AcademicPolicyEvaluator(),
                 new RetainedAttemptReader(new RetainedSectionReader($f->f->history)),
                 new DegreeMinimumEvaluator(),
@@ -76,6 +76,10 @@ final class DraftDegreeAuditTest extends TestCase
             $students,
             $s->access,
             $s->transactions,
+            new \Domain\DegreeAudit\Service\CombinedAllocationEvaluator(
+                $evaluator, new CourseAllocationPlanner(), new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
+                new AllocationGapAnalyzer(),
+            ),
         );
     }
 
@@ -652,6 +656,246 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($choice['id'], $published['context']['specialization']['id']);
         self::assertSame('publication', $published['sources'][0]['source']);
         self::assertSame($version->value, $published['context']['requirements_version_id']);
+        self::assertSame($before, $this->digest($f));
+    }
+
+    private function combinedFixture(): array
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        [$degree, $definition, $group] = $this->draft($f);
+        $s = $f->f->sis;
+        $choice = new \Domain\Catalog\Service\ProgramSpecializationService(
+            new \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+        )->save($s->program, null, null, "DATA", "Fictional data path", null, true);
+        $year = new EntityId(new SqlRequirementsRepository($s->sql)->get($degree)["academic_year_id"]);
+        $row = $f->f->degrees->open($s->program, $year, new EntityId($choice["id"]));
+        $specialization = new EntityId($row["id"]);
+        $f->f->degrees->save($specialization, 0, $definition);
+        return [$f, $degree, $definition, $specialization, $group];
+    }
+    public function testCombinedDraftsUseOneInventoryAndOneSharingAwarePlanWithoutCreatingPublications(): void
+    {
+        [$f, $degree, $definition, $specialization] = $this->combinedFixture();
+        $repository = new class ($f->f->sis) implements \Domain\DegreeAudit\Repository\AcademicInputRepository {
+            public int $reads = 0;
+            public function __construct(private \SisFixture $s) {}
+            public function inventory(EntityId $student): \Domain\DegreeAudit\ValueObject\AcademicInputInventory
+            {
+                $this->reads++;
+                return new SqlAcademicInputRepository($this->s->sql)->inventory($student);
+            }
+        };
+        $service = $this->service($f, $repository);
+        $before = $this->digest($f);
+        $companions = [["template_id" => $specialization->value, "source" => "draft", "use_group_drafts" => true]];
+        foreach (\Domain\Catalog\ValueObject\ComponentCourseSharing::cases() as $sharing) {
+            $result = $service->test(
+                $degree,
+                $f->student,
+                $f->assignment,
+                $definition,
+                companions: $companions,
+                sharing: $sharing,
+            );
+            self::assertSame("runtime_combined_test", $result["mode"]);
+            self::assertSame("explicit_hypothesis", $result["sharing_source"]);
+            self::assertFalse($result["exceptions_applied"]);
+            self::assertSame($sharing->value === "one_component" ? "infeasible" : "feasible", $result["outcome"]);
+            self::assertCount(2, $result["components"]);
+            foreach ($result["components"] as $component) {
+                $progress = $component["progress"];
+                self::assertNull($progress["context"]["requirements_version_id"]);
+                self::assertSame("draft", $progress["context"]["test_source"]);
+                self::assertSame("draft", $progress["sources"][0]["source"]);
+                self::assertSame(3000, $progress["minimums"][0]["actual_minimum_milli"]);
+                self::assertCount(
+                    $sharing->value === "one_component" ? 0 : 1,
+                    $progress["allocation"]["groups"][0]["placements"],
+                );
+            }
+        }
+        self::assertSame(2, $repository->reads);
+        self::assertSame($before, $this->digest($f));
+    }
+    public function testCombinedSourcesRejectDuplicatesForeignYearsDegreesAndClientDefinitions(): void
+    {
+        [$f, $degree, $definition, $specialization] = $this->combinedFixture();
+        $service = $this->service($f);
+        $choice = ["template_id" => $specialization->value, "source" => "draft"];
+        $invalid = [
+            [$choice, $choice],
+            [["template_id" => $degree->value, "source" => "draft"]],
+            [["template_id" => $f->f->degree->value, "source" => "draft"]],
+            [$choice + ["definition" => $definition->definition]],
+            [$choice + ["use_group_drafts" => "yes"]],
+            [$choice + ["version_id" => EntityId::generate()->value]],
+        ];
+        $before = $this->digest($f);
+        foreach ($invalid as $companions) {
+            try {
+                $service->test(
+                    $degree,
+                    $f->student,
+                    $f->assignment,
+                    $definition,
+                    companions: $companions,
+                    sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::OneComponent,
+                );
+                self::fail("An invalid combined source was accepted.");
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+        try {
+            $service->test($degree, $f->student, $f->assignment, $definition, companions: [$choice]);
+            self::fail("A combined trial silently chose a sharing policy.");
+        } catch (\InvalidArgumentException) {
+            self::assertTrue(true);
+        }
+        self::assertSame($before, $this->digest($f));
+    }
+    public function testCombinedPublicationUsesExactSourceWhileDraftAndGroupEditsRemainHypothetical(): void
+    {
+        [$f, $degree, $definition, $specialization, $group] = $this->combinedFixture();
+        $groupReview = $f->f->groups->review($group, "Fictional test group publication.");
+        $groupVersion = $f->f->groups->publish($group, $groupReview["review_token"])["operation_id"];
+        $d = $definition->definition;
+        $d["groups"][0]["version_id"] = $groupVersion;
+        $f->f->degrees->save($specialization, 1, new AuditRequirementsV3($d));
+        require_once dirname(__DIR__) . "/Support/ProgramPublicationFixture.php";
+        $program = new ProgramPublicationFixture($f->f->sis);
+        $year = new EntityId(new SqlRequirementsRepository($f->f->sis->sql)->get($degree)["academic_year_id"]);
+        $programReview = $program->service->review($f->f->sis->program, $year, "Fictional combined test curriculum.");
+        $program->service->publish($f->f->sis->program, $programReview["review_token"]);
+        $review = $f->f->degrees->review($specialization, "Fictional combined specialization publication.");
+        $version = $f->f->degrees->publish($specialization, $review["review_token"])["operation_id"];
+        $f->f->degrees->save($degree, 0, new AuditRequirementsV3($d));
+        $degreeReview = $f->f->degrees->review($degree, "Fictional combined degree publication.");
+        $degreeVersion = new EntityId($f->f->degrees->publish($degree, $degreeReview["review_token"])["operation_id"]);
+        $service = $this->service($f);
+        $companions = [["template_id" => $specialization->value, "source" => "publication", "version_id" => $version]];
+        $published = $service->testPublication(
+            $degree,
+            $degreeVersion,
+            $f->student,
+            $f->assignment,
+            companions: $companions,
+            sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::MultipleComponents,
+        );
+        self::assertSame("feasible", $published["outcome"]);
+        $row = $f->f->groups->view($group);
+        $g = $row["definition"];
+        $g["name"] = "Changed unpublished group";
+        $g["min_credits_milli"] = 6000;
+        $f->f->groups->save($group, $row["revision"], new CourseGroupDefinitionV2($g));
+        $before = $this->digest($f);
+        $again = $service->testPublication(
+            $degree,
+            $degreeVersion,
+            $f->student,
+            $f->assignment,
+            companions: $companions,
+            sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::MultipleComponents,
+        );
+        self::assertSame($published, $again);
+        self::assertSame($version, $again["components"][1]["progress"]["context"]["requirements_version_id"]);
+        $mixed = $service->test(
+            $degree,
+            $f->student,
+            $f->assignment,
+            $definition,
+            useGroupDrafts: true,
+            companions: $companions,
+            sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::MultipleComponents,
+        );
+        self::assertSame("infeasible", $mixed["outcome"]);
+        self::assertSame("draft", $mixed["components"][0]["progress"]["context"]["test_source"]);
+        self::assertSame("publication", $mixed["components"][1]["progress"]["context"]["test_source"]);
+        self::assertSame($before, $this->digest($f));
+    }
+    public function testCombinedTrialsKeepReplayFailureAndAuthorityRevocationSeparateFromShortages(): void
+    {
+        [$f, $degree, $definition, $specialization] = $this->combinedFixture();
+        $companions = [["template_id" => $specialization->value, "source" => "draft"]];
+        $service = $this->service($f);
+        $before = $this->digest($f);
+        $limited = $service->test(
+            $degree,
+            $f->student,
+            $f->assignment,
+            $definition,
+            budget: new HistoryReadBudget(maximumPages: 1, maximumEvents: 1),
+            companions: $companions,
+            sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::OneComponent,
+        );
+        self::assertSame(["status" => "limited", "mode" => "runtime_combined_test"], $limited);
+        $f->f->sis->access->staff = false;
+        $f->f->sis->access->grants = ["sis:catalog:manage"];
+        try {
+            $service->test(
+                $degree,
+                $f->student,
+                $f->assignment,
+                $definition,
+                companions: $companions,
+                sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::OneComponent,
+            );
+            self::fail("A combined test bypassed student-record authority.");
+        } catch (AccessDeniedException) {
+            self::assertTrue(true);
+        }
+        self::assertSame($before, $this->digest($f));
+    }
+
+
+    public function testCombinedTrialHttpInputPreservesExactSourcesAndRejectsMalformedOverrides(): void
+    {
+        [$f, $degree, $definition, $specialization] = $this->combinedFixture();
+        $controller = new \Application\Http\Controller\SisDegreeAuditController($f->f->degrees, $this->service($f));
+        $body = [
+            "source" => "draft",
+            "definition" => $definition->definition,
+            "student_id" => $f->student->value,
+            "assignment_id" => $f->assignment->value,
+            "sharing" => "one_component",
+            "companions" => [["template_id" => $specialization->value, "source" => "draft"]],
+        ];
+        $before = $this->digest($f);
+        $request = new \Qubus\Http\ServerRequest()->withParsedBody($body);
+        $response = $controller->test($request, $degree->value);
+        $result = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame("runtime_combined_test", $result["mode"]);
+        self::assertSame("infeasible", $result["outcome"]);
+        foreach (
+            [
+                ["sharing" => "not-a-policy"],
+                ["companions" => "not-a-list"],
+                [
+                    "companions" => [
+                        [
+                            "template_id" => $specialization->value,
+                            "source" => "publication",
+                            "version_id" => EntityId::generate()->value,
+                            "use_group_drafts" => true,
+                        ],
+                    ],
+                ],
+                ["source" => "publication", "version_id" => EntityId::generate()->value],
+            ]
+            as $override
+        ) {
+            try {
+                $controller->test($request->withParsedBody(array_replace($body, $override)), $degree->value);
+                self::fail("An invalid test source override reached evaluation.");
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
         self::assertSame($before, $this->digest($f));
     }
 

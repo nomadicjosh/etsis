@@ -241,3 +241,8 @@ Combined degree/specialization progress now includes [shared-course shortage exp
 
 
 Individual group and requirement-card shortages now reach the owner-only portal through validated numeric projections. Student degree/specialization detail and staff/runtime screens share their support-summary and card presentation; long availability lists load 20 cards at a time from the captured review. Unknown/limited inputs remain distinct from known shortages, and actual feasible placements keep their existing applied checklist. See [student availability](student-course-placement.md#student-group-and-requirement-availability). No academic write or migration is introduced.
+
+
+### Temporary combined curriculum tests
+
+The existing audit test workspace now combines a degree editor snapshot or exact publication with saved specialization drafts/publications from the same program and academic year. Staff explicitly choose hypothetical component sharing; retained group/repeat/grading policies still apply within each source. The existing runtime source resolver, verified input collection and joint allocator are reused, with one student lock/inventory/read allowance, captured drilldowns and stale-response guards. Tests neither apply student exceptions nor approve specialization choices. Drafts retain real template identities internally and display no fabricated publication ID. See [the testing workflow](degree-audit-builder.md#test-a-degree-with-specializations). No migration or academic/result persistence is introduced.
