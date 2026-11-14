@@ -7,7 +7,14 @@ async function accessible(page) {
 }
 async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
-    const fields = {
+    const fields = options.students ? {
+        student_id: { label: 'Student reference', type: 'string', relation: 'student' },
+        institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
+        full_name: { label: 'Student full name', type: 'string', relation: 'person' },
+        active: { label: 'Active student', type: 'boolean', relation: 'student' },
+        program_code: { label: 'Primary program code', type: 'string', relation: 'program' },
+        entry_term: { label: 'Institutional entry term', type: 'string', relation: 'term' },
+    } : {
         section_code: { label: 'Section code', type: 'string', relation: 'section' },
         term_code: { label: 'Academic term', type: 'string', relation: 'term' },
         capacity: { label: 'Section capacity', type: 'integer', relation: 'section' },
@@ -15,7 +22,16 @@ async function fixture(page, options = {}) {
         enrollment_status: { label: 'Enrollment status', type: 'string', relation: 'enrollment' },
         course_title: { label: 'Course title', type: 'string', relation: 'course' },
     };
-    const dataset = { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
+    const dataset = options.students ? {
+        id: 'students', label: 'Students & current primary program',
+        description: 'One row per student, with the current primary program and institutional entry term.', fields,
+        relationships: {
+            person: { label: 'Student names', parent: 'student', many: false },
+            identity: { label: 'Institutional IDs', parent: 'person', many: false },
+            program: { label: 'Academic programs', parent: 'student', many: false },
+            term: { label: 'Academic terms', parent: 'student', many: false },
+        },
+    } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
     const visited = [];
     if (options.recipient) {
@@ -41,8 +57,10 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const rows = data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
-            result = { columns: query.columns.map(column => column.label), items: rows, offset: data.offset, next_offset: data.offset ? null : 50, limit: 50, grouped: true };
+            const rows = options.students ? [{ c0: 'S-FICTIONAL', c1: 'Alex Example', c2: 'BS.CS', c3: '26/FA' }]
+                : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
+            result = { columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
+                next_offset: options.students || data.offset ? null : 50, limit: 50, grouped: !options.students };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
         else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -52,6 +70,38 @@ async function fixture(page, options = {}) {
     await page.getByRole('button', { name: options.recipient ? name : 'Open Report Studio', exact: true }).click();
     return { calls, errors, visited };
 }
+
+test('the Students source opens with useful columns and supports preview, save and reopening', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Explore Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await expect(studio.locator('.report-local-error')).toBeHidden();
+    await expect(studio.getByLabel('Column 1 label', { exact: true })).toHaveValue('Institutional ID');
+    await expect(studio.getByLabel('Column 2 label', { exact: true })).toHaveValue('Student full name');
+    await expect(studio.getByLabel('Column 3 label', { exact: true })).toHaveValue('Primary program code');
+    await expect(studio.getByLabel('Column 4 label', { exact: true })).toHaveValue('Institutional entry term');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional current students');
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+    expect(f.calls.find(call => call.path.endsWith('/preview/')).data.definition).toMatchObject({
+        dataset: 'students', columns: [
+            { field: 'institutional_id', aggregate: 'none' },
+            { field: 'full_name', aggregate: 'none' },
+            { field: 'program_code', aggregate: 'none' },
+            { field: 'entry_term', aggregate: 'none' },
+        ],
+    });
+    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await expect(studio).toContainText('Definition revision 1');
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await expect(studio.getByLabel('Report name', { exact: true })).toHaveValue('Fictional current students');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.errors).toEqual([]);
+});
 
 test('staff build a joined headcount report with visual conditions, live preview, charts, versioned save and page export', async ({ page }) => {
     const f = await fixture(page);

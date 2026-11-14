@@ -227,6 +227,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            students: ["institutional_id", "full_name", "program_code", "entry_term"],
             programs: ["institutional_id", "full_name", "program_code", "catalog_year"],
             credits: ["full_name", "course_code", "course_title", "grade_code"],
             sections: ["section_code", "course_title", "term_code", "capacity"],
