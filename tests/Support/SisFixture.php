@@ -180,6 +180,8 @@ final class SisFixture
             $this->enrollmentLedger(),
             $this->activityLedger(),
             $this->primaryProgramLedger(),
+            $this->workPursuits(),
+            new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits()),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -299,16 +301,60 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            $this->workPursuitLedger(),
+        );
+    }
+    public function workPursuitLedger(): \Domain\AcademicRecord\Service\WorkPursuitLedger
+    {
+        return new \Domain\AcademicRecord\Service\WorkPursuitLedger(
+            new \Infrastructure\Persistence\Repository\SqlWorkPursuitRepository($this->sql),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql, $this->transactions, $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            ), $this->transactions, $this->access, $this->clock,
+        );
+    }
+    public function workPursuits(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\WorkPursuitService
+    {
+        return new \Domain\AcademicRecord\Service\WorkPursuitService(
+            $this->workPursuitLedger(), $this->inputVerifier(),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions, $this->primaryProgramLedger(), $this->programStatusLedger(),
+            $this->access, $this->transactions, $this->dropCipher, $this->clock, $audit ?? $this->audit,
+        );
+    }
+    /** Explicit registrar attribution for fictional older current records; no grade or award history is invented. */
+    public function attributeWork(EntityId $student, EntityId $credit, EntityId $assignment): void
+    {
+        $service = $this->workPursuits();
+        $review = $service->review($student, $credit, $assignment, 'attribute', 'Fictional source evidence identifies this pursuit.');
+        $service->commit($student, $credit, $review['review_token']);
+    }
+    /** Authorized fixture command boundary for the single verified prerequisite implementation. */
+    public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool
+    {
+        return $this->transactions->run(function () use ($student, $course, $required): bool {
+            $this->registration->lockStudent($student);
+            $assignment = $this->workPursuits()->activePursuit($student);
+            return new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits())
+                ->met($student, $assignment, $required ?? $this->registration->requiredCourses($course));
+        });
+    }
+    public function inputVerifier(): \Domain\DegreeAudit\Service\AcademicInputVerifier
+    {
+        return new \Domain\DegreeAudit\Service\AcademicInputVerifier(
+            new \Infrastructure\Persistence\Repository\SqlAcademicInputRepository($this->sql),
+            $this->academicCredits(), $this->transferCredits(), $this->enrollmentLedger(),
         );
     }
     public function academicInputs(
         \Domain\DegreeAudit\Service\StudentRequirementsService $requirements,
     ): \Domain\DegreeAudit\Service\AcademicInputService {
         return new \Domain\DegreeAudit\Service\AcademicInputService(
-            new \Infrastructure\Persistence\Repository\SqlAcademicInputRepository($this->sql),
-            $this->academicCredits(), $this->transferCredits(), $this->enrollmentLedger(),
+            $this->inputVerifier(),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
-            $requirements, $this->transactions,
+            $requirements, $this->transactions, $this->workPursuits(),
         );
     }
     public function academicDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicDateService
@@ -533,6 +579,9 @@ final class SisFixture
             $this->transactions,
             $this->clock,
             new \Domain\Catalog\Service\PublishedCourseReader($history),
+            $this->workPursuitLedger(),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->primaryProgramLedger(), $this->admissions, $this->programStatusLedger(),
         );
     }
     public function coursePublications(): \Domain\Catalog\Service\CoursePublicationService

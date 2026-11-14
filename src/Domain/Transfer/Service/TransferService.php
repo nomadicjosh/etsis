@@ -82,6 +82,7 @@ final readonly class TransferService
         int $gradeRank,
         string $revision,
         EntityId $courseVersion,
+        ?EntityId $assignment = null,
     ): EntityId {
         $actor = $this->access->requirePermission("sis:transfer:manage");
         $initial = $this->catalog->get("equivalencies", $equivalencyId);
@@ -98,6 +99,7 @@ final readonly class TransferService
             $revision,
             $initial,
             $courseVersion,
+            $assignment,
         ): EntityId {
             $this->registration->lockStudent($student);
             TransferCatalogLock::acquire($this->catalog, "equivalencies", $initial);
@@ -135,6 +137,7 @@ final readonly class TransferService
                 $reviewed,
                 $actor,
                 $courseVersion,
+                $assignment,
             );
             $this->audit->record($actor, "transfer.awarded", $credit);
             $this->awardActor($actor);

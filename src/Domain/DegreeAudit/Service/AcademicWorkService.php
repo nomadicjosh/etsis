@@ -27,6 +27,7 @@ final readonly class AcademicWorkService
         private TransferCreditLedger $transfers,
         private StudentAccess $access,
         private UnitOfWork $transactions,
+        private \Domain\AcademicRecord\Service\WorkPursuitService $pursuits,
     ) {
     }
 
@@ -39,16 +40,20 @@ final readonly class AcademicWorkService
             $this->authorize($student, $assignment);
             $rows = $this->work->page($student, $after);
             $items = [];
+            $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
             foreach (array_slice($rows, 0, 20) as $row) {
                 $id = new EntityId($row["id"]);
                 $input = match ($row["credit_type"]) {
-                    "institutional" => $this->institutional->auditFacts($id, $student),
-                    "transfer" => $this->transfers->auditFacts($id, $student),
+                    "institutional" => $this->institutional->auditFacts($id, $student, $budget),
+                    "transfer" => $this->transfers->auditFacts($id, $student, $budget),
                     default => throw new CorruptHistoryException(),
                 };
                 $facts = $input["credit"];
                 if ($facts["id"] !== $id->value || $facts["source_id"] !== $row["source_id"]) {
                     throw new CorruptHistoryException();
+                }
+                if (!$this->pursuits->applies($facts, $assignment, $budget)) {
+                    continue;
                 }
                 $items[] = AcademicWorkView::fromLedger($id->value, $input, $row["term_code"]);
             }

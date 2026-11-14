@@ -68,6 +68,7 @@ final class AcademicPolicyInputsTest extends TestCase
             $f->transferCredits(),
             $f->access,
             $f->transactions,
+            $f->workPursuits(),
         );
         return array_map(
             PolicyAttempt::fromAcademicWork(...),

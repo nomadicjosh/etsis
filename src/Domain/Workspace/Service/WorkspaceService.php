@@ -58,6 +58,7 @@ final readonly class WorkspaceService
         "sis:registration:manage",
         "sis:gradebook:manage",
         "sis:gradebook:amend",
+        "sis:academic-work:scope",
         "sis:scheduling:manage",
         "sis:hr:manage",
         "sis:finance:read",

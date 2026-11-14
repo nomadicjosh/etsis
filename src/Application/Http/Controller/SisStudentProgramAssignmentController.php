@@ -39,4 +39,22 @@ final readonly class SisStudentProgramAssignmentController
             201,
         );
     }
+    public function reviewChange(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reviewChange(
+            new EntityId($id),
+            $f->id('program_id'),
+            $f->id('entry_term_id'),
+            $f->text('revision', 64),
+            $f->bodyText('reason')
+        ));
+    }
+    public function changeProgram(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->changeProgram(
+            new EntityId($id),
+            FormInput::from($request)->text('review_token', 100000)
+        ), 201);
+    }
 }

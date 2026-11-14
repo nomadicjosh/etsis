@@ -59,6 +59,7 @@ final class AcademicWorkMatchTest extends TestCase
             $s->transferCredits(),
             $s->access,
             $s->transactions,
+            $s->workPursuits(),
         );
         return new AcademicWorkMatchService(
             $work,

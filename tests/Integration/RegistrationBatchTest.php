@@ -33,7 +33,8 @@ final class RegistrationBatchTest extends TestCase
             $f->transactions,
             $audit ?? $f->audit,
             $f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql)
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
+            $f->workPursuits(),
         );
     }
 

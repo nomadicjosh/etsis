@@ -9,6 +9,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Event\StudentProgramWasObserved;
 use Domain\Student\Event\StudentProgramStatusWasChanged;
 use Domain\Student\Event\StudentProgramWasAssigned;
+use Domain\Student\Event\StudentProgramWasReplaced;
 use Domain\Student\StudentProgram;
 
 /** Frozen v1 reader; observations describe current facts, never an invented earlier assignment. */
@@ -31,6 +32,9 @@ final class StudentProgramStatusSchema
         $fields = match ($class) {
             StudentProgramWasAssigned::class => ["decision_id", "assignment", "source"],
             StudentProgramWasObserved::class => ["decision_id", "assignment"],
+            StudentProgramWasReplaced::class => [
+                "decision_id", "previous_decision_id", "status", "replacement_assignment_id"
+            ],
             StudentProgramStatusWasChanged::class => ["decision_id", "previous_decision_id", "status"],
             default => throw new CorruptHistoryException(),
         };
@@ -38,9 +42,15 @@ final class StudentProgramStatusSchema
             throw new CorruptHistoryException();
         }
         self::id($p["decision_id"]);
-        if ($class === StudentProgramStatusWasChanged::class) {
+        if (in_array($class, [StudentProgramStatusWasChanged::class, StudentProgramWasReplaced::class], true)) {
             self::id($p["previous_decision_id"]);
             self::status($p["status"]);
+            if ($class === StudentProgramWasReplaced::class) {
+                self::id($p["replacement_assignment_id"]);
+                if ($p["status"] !== "closed") {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($p["decision_id"] === $p["previous_decision_id"]) {
                 throw new CorruptHistoryException();
             }

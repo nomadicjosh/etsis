@@ -32,13 +32,16 @@ final class AcademicInputVerificationTest extends TestCase
     ): AcademicInputService {
         $s = $f->f->sis;
         return new AcademicInputService(
-            $inputs ?? new SqlAcademicInputRepository($s->sql),
-            $s->academicCredits(),
-            $s->transferCredits(),
-            $s->enrollmentLedger(),
+            new \Domain\DegreeAudit\Service\AcademicInputVerifier(
+                $inputs ?? new SqlAcademicInputRepository($s->sql),
+                $s->academicCredits(),
+                $s->transferCredits(),
+                $s->enrollmentLedger(),
+            ),
             new SqlStudentRecordRepository($s->sql),
             $f->service,
             $s->transactions,
+            $s->workPursuits(),
         );
     }
 
@@ -184,6 +187,14 @@ final class AcademicInputVerificationTest extends TestCase
             "status" => "A",
             "version" => 0,
         ]);
+        $before = $s->sql->rows("sis_history_events");
+        try {
+            $this->service($f)->collect($f->student, $f->assignment);
+            self::fail('Unknown pursuit must prevent a partial audit.');
+        } catch (\Domain\AcademicRecord\Exception\WorkPursuitRequiredException) {
+            self::assertSame($before, $s->sql->rows("sis_history_events"));
+        }
+        $s->attributeWork($f->student, new EntityId($s->sql->rows('sis_academic_credits', [], 1)[0]['id']), $f->assignment);
         $before = $s->sql->rows("sis_history_events");
         $result = $this->service($f)->collect($f->student, $f->assignment);
         self::assertSame(AcademicInputStatus::HistoryGaps, $result->status);

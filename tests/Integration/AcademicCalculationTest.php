@@ -34,13 +34,16 @@ final class AcademicCalculationTest extends TestCase
         $s = $f->f->sis;
         $students = new SqlStudentRecordRepository($s->sql);
         $inputs = new AcademicInputService(
-            $repository ?? new SqlAcademicInputRepository($s->sql),
-            $s->academicCredits(),
-            $s->transferCredits(),
-            $s->enrollmentLedger(),
+            new \Domain\DegreeAudit\Service\AcademicInputVerifier(
+                $repository ?? new SqlAcademicInputRepository($s->sql),
+                $s->academicCredits(),
+                $s->transferCredits(),
+                $s->enrollmentLedger(),
+            ),
             $students,
             $f->service,
             $s->transactions,
+            $s->workPursuits(),
         );
         return new AcademicCalculationService(
             $inputs,
@@ -386,7 +389,8 @@ final class AcademicCalculationTest extends TestCase
     public function testUnknownEarlierTransferGradePreventsAnEarnedTotalWithoutInventingHistory(): void
     {
         $f = $this->institution();
-        new TransferAwardFixture($f->f->sis, $f->f->catalog->fixture->cipher, $f->student, legacy: true);
+        $old = new TransferAwardFixture($f->f->sis, $f->f->catalog->fixture->cipher, $f->student, legacy: true);
+        $f->f->sis->attributeWork($f->student, $old->credit, $f->assignment);
         $before = $f->f->sis->sql->rows("sis_history_events");
         $result = $this->service($f)->preview($f->student, $f->assignment);
         self::assertSame("history_gaps", $result["input_status"]);

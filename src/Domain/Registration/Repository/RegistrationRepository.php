@@ -26,8 +26,6 @@ interface RegistrationRepository
     public function lockCourse(EntityId $id): void;
     public function enrolledCount(EntityId $student, EntityId $term): int;
     public function sectionCount(EntityId $section): int;
-    /** @param list<string>|null $required */
-    public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool;
     public function blockingRestriction(
         EntityId $person,
         \DateTimeImmutable $on,

@@ -20,6 +20,8 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Student;
 use Domain\Student\StudentProgram;
+use JsonException;
+use Qubus\Exception\Data\TypeException;
 
 final readonly class StudentProgramAssignmentService
 {
@@ -98,8 +100,11 @@ final readonly class StudentProgramAssignmentService
         });
     }
     /** @return array<string,mixed> */
-    public function commit(EntityId $student, #[\SensitiveParameter] string $token): array
-    {
+    public function commit(
+        EntityId $student,
+        #[\SensitiveParameter] string $token,
+        ?EntityId $correlation = null,
+    ): array {
         $actor = $this->access->requirePermission("sis:registration:manage");
         try {
             if (strlen($token) > 100000) {
@@ -129,7 +134,15 @@ final readonly class StudentProgramAssignmentService
                 ["field" => "review_token", "message" => "Review this program assignment again."],
             ]);
         }
-        return $this->transactions->run(function () use ($student, $program, $term, $id, $p, $actor): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $program,
+            $term,
+            $id,
+            $p,
+            $actor,
+            $correlation
+        ): array {
             $s = $this->lock($student, $program, $term, $actor);
             try {
                 $existing = $this->students->assignment($id);
@@ -162,11 +175,149 @@ final readonly class StudentProgramAssignmentService
             $assignment = new StudentProgram($id, $student, $program, $term);
             $this->students->addAssignment($assignment);
             $source = $this->entry->initialize($assignment, $actor, $source);
-            $result = $this->ledger->assigned($assignment, $source, $actor, $p["reason"]);
+            $result = $this->ledger->assigned($assignment, $source, $actor, $p["reason"], $correlation);
             $this->audit->record($actor, "student.program_assigned", $student);
             return $result;
         });
     }
+    /**
+     * One reviewed replacement of the current pursuit, using the existing assignment/cohort initializer.
+     * @return array<string,mixed>
+     */
+    public function reviewChange(
+        EntityId $student,
+        EntityId $program,
+        EntityId $term,
+        string $revision,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        $actor = $this->access->requirePermission('sis:registration:manage');
+        return $this->transactions->run(function () use ($student, $program, $term, $revision, $reason, $actor): array {
+            $this->students->lock($student);
+            $assignment = $this->review($student, $program, $term, $revision, $reason);
+            $s = $this->admissions->student($student);
+            $before = $this->primary->current($s);
+            $old = $this->students->assignment(new EntityId($before['assignment_id']));
+            if ($old->studentId->value !== $student->value || $old->status !== 'active') {
+                throw new CorruptHistoryException();
+            }
+            $inner = json_decode($this->cipher->open($assignment['review_token']), true, 8, JSON_THROW_ON_ERROR);
+            $data = ['purpose' => 'student-program-change', 'student' => $student->value, 'actor' => $actor->value,
+                'original_assignment_id' => $old->id->value, 'original_version' => $this->ledger->verify($old),
+                'primary_version' => $this->primary->verify($s), 'assignment_id' => $inner['assignment'],
+                'assignment_review' => $assignment['review_token'], 'operation' => EntityId::generate()->value,
+                'expires' => $inner['expires']];
+            $this->changeActor($actor);
+            return ['before' => $before, 'source' => $assignment['source'], 'student_active' => $s->active,
+                'effective_on' => $assignment['effective_on'],
+                'review_token' => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
+        });
+    }
+
+    /**
+     * Creates/selects the new pursuit and closes the old pursuit together; no withdrawal or credit rewrite.
+     * @return array<string,mixed>
+     */
+    public function changeProgram(EntityId $student, #[\SensitiveParameter] string $token): array
+    {
+        $actor = $this->access->requirePermission('sis:registration:manage');
+        try {
+            if (strlen($token) > 100000) {
+                throw new \InvalidArgumentException();
+            }
+            $p = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
+            if (
+                !is_array($p) || count($p) !== 10 || ($p['purpose'] ?? null) !== 'student-program-change' ||
+                ($p['student'] ?? null) !== $student->value || ($p['actor'] ?? null) !== $actor->value ||
+                !is_int($p['expires'] ?? null) || !is_int($p['original_version'] ?? null) ||
+                !is_int($p['primary_version'] ?? null) || !is_string($p['assignment_review'] ?? null)
+            ) {
+                throw new \InvalidArgumentException();
+            }
+            $oldId = new EntityId($p['original_assignment_id']);
+            $newId = new EntityId($p['assignment_id']);
+            $operation = new EntityId($p['operation']);
+        } catch (\Throwable) {
+            throw new ValidationException([
+                ['field' => 'review_token', 'message' => 'Review this program change again.']
+            ]);
+        }
+        return $this->transactions->run(function () use ($student, $p, $oldId, $newId, $operation, $actor): array {
+            $this->students->lock($student);
+            $this->changeActor($actor);
+            $s = $this->admissions->student($student);
+            $this->activity->verify($s);
+            $old = $this->students->assignment($oldId);
+            if ($old->studentId->value !== $student->value) {
+                throw new CorruptHistoryException();
+            }
+            $primaryOperation = \Domain\Gradebook\ValueObject\PublishedGradeId::forVersion(
+                $operation,
+                'program.change.primary'
+            );
+            $receipt = $this->ledger->receipt($old, $operation, $actor);
+            if ($receipt !== null) {
+                $new = $this->students->assignment($newId);
+                if (
+                    $new->studentId->value !== $student->value ||
+                    $this->ledger->receipt($new, $newId, $actor) === null ||
+                    $this->primary->receipt($s, $primaryOperation, $actor) === null
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $this->changeActor($actor);
+                return self::changeResult($receipt, $oldId, $newId);
+            }
+            if (
+                $p['expires'] <= $this->clock->now()->getTimestamp() || $old->status !== 'active' ||
+                $this->ledger->verify($old) !== $p['original_version'] ||
+                $this->primary->verify($s) !== $p['primary_version'] ||
+                $this->primary->current($s)['assignment_id'] !== $oldId->value
+            ) {
+                throw new ConcurrentModificationException(
+                    'The current pursuit changed or this review expired. Review again.'
+                );
+            }
+            $result = $this->commit($student, $p['assignment_review'], $operation);
+            if ($result['assignment_id'] !== $newId->value) {
+                throw new CorruptHistoryException();
+            }
+            $new = $this->students->assignment($newId);
+            $inner = json_decode($this->cipher->open($p['assignment_review']), true, 8, JSON_THROW_ON_ERROR);
+            $this->primary->select(
+                $s,
+                $new,
+                $this->primary->selection($new),
+                $primaryOperation,
+                $actor,
+                $inner['reason'],
+                $operation
+            );
+            $receipt = $this->ledger->change($old, 'closed', $operation, $actor, $inner['reason'], $newId, $operation);
+            $this->audit->record($actor, 'student.program_changed', $student);
+            $this->changeActor($actor);
+            return self::changeResult($receipt, $oldId, $newId);
+        });
+    }
+
+    private function changeActor(EntityId $actor): void
+    {
+        if ($this->access->requirePermission('sis:registration:manage')->value !== $actor->value) {
+            throw new AccessDeniedException('The program-change actor changed.');
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $receipt
+     * @return array<string,mixed>
+     */
+    private static function changeResult(array $receipt, EntityId $old, EntityId $new): array
+    {
+        return ['operation_id' => $receipt['operation_id'], 'from_assignment_id' => $old->value,
+            'assignment_id' => $new->value, 'status' => 'active', 'previous_status' => 'closed',
+            'effective_at' => $receipt['effective_at']];
+    }
+
     private function lock(EntityId $student, EntityId $program, EntityId $term, EntityId $actor): Student
     {
         $this->students->lock($student);
@@ -180,6 +331,9 @@ final readonly class StudentProgramAssignmentService
         $this->primary->verify($s);
         return $s;
     }
+    /**
+     * @throws JsonException
+     */
     private function revision(Student $s): string
     {
         return hash(
@@ -196,7 +350,13 @@ final readonly class StudentProgramAssignmentService
             ),
         );
     }
-    /** @param array<string,mixed> $source */
+    /**
+     * @param Student $s
+     * @param array<string,mixed> $source
+     * @return string
+     * @throws JsonException
+     * @throws TypeException
+     */
     private function context(Student $s, array $source): string
     {
         return hash(

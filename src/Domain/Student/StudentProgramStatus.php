@@ -62,9 +62,20 @@ final class StudentProgramStatus extends EventSourcedAggregate
     {
         return $this->source;
     }
+    public function whenStudentProgramWasReplaced(\Domain\Student\Event\StudentProgramWasReplaced $event): void
+    {
+        if ($event->payload()['replacement_assignment_id'] === (string) $this->aggregateId()) {
+            throw new CorruptHistoryException();
+        }
+        $this->applyStatus($event->payload());
+    }
     public function whenStudentProgramStatusWasChanged(StudentProgramStatusWasChanged $event): void
     {
-        $p = $event->payload();
+        $this->applyStatus($event->payload());
+    }
+    /** @param array<string,mixed> $p */
+    private function applyStatus(array $p): void
+    {
         if (
             $this->facts === null ||
             $p["previous_decision_id"] !== $this->decision ||

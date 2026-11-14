@@ -17,11 +17,13 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Event\StudentProgramWasObserved;
 use Domain\Student\Event\StudentProgramStatusWasChanged;
 use Domain\Student\Event\StudentProgramWasAssigned;
+use Domain\Student\Event\StudentProgramWasReplaced;
 use Domain\Student\Repository\StudentProgramStatusRepository;
 use Domain\Student\StudentProgram;
 use Domain\Student\StudentProgramStatus;
 use Domain\Student\ValueObject\StudentProgramStatusId;
 use Domain\Student\ValueObject\StudentProgramStatusSchema;
+use Qubus\Exception\Data\TypeException;
 
 /** Internal status ledger. Calling services authorize, lock the student and own the transaction. */
 final readonly class StudentProgramStatusLedger
@@ -34,6 +36,9 @@ final readonly class StudentProgramStatusLedger
     ) {
     }
 
+    /**
+     * @throws TypeException
+     */
     public function verify(StudentProgram $assignment, ?HistoryReadBudget $budget = null): int
     {
         return $this->load($assignment, budget: $budget)["root"]->playhead();
@@ -83,7 +88,10 @@ final readonly class StudentProgramStatusLedger
             }
         } while (count($rows) === 50);
     }
-    /** Check both current active pursuits and an existing closed pursuit of the same program/entry term. */
+    /**
+     * Check both current active pursuits and an existing closed pursuit of the same program/entry term.
+     * @throws TypeException
+     */
     public function assertCanAssign(EntityId $student, EntityId $program, EntityId $term): void
     {
         $after = null;
@@ -105,9 +113,12 @@ final readonly class StudentProgramStatusLedger
             }
         } while (count($rows) === 50);
     }
-    /** Called only after a genuinely new assignment and its derived cohort are inserted in this unit of work.
+    /**
+     * Called only after a genuinely new assignment and its derived cohort are inserted in this unit of work.
      * @param array<string,mixed> $source
-     * @return array<string,mixed> */
+     * @return array<string,mixed>
+     * @throws TypeException
+     */
     public function assigned(
         StudentProgram $assignment,
         array $source,
@@ -143,18 +154,26 @@ final readonly class StudentProgramStatusLedger
         $this->records->track($root);
         return $this->result($root, $assignment->id, $at->format(DATE_ATOM));
     }
-    /** @return array<string,mixed>|null */
+    /**
+     * @return array<string,mixed>|null
+     * @throws TypeException
+     */
     public function receipt(StudentProgram $assignment, EntityId $operation, EntityId $actor): ?array
     {
         return $this->load($assignment, $operation, $actor)["receipt"];
     }
-    /** @return array<string,mixed> */
+    /**
+     * @return array<string,mixed>
+     * @throws TypeException
+     */
     public function change(
         StudentProgram $assignment,
         string $status,
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $replacement = null,
+        ?EntityId $correlation = null,
     ): array {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException("The program decision actor changed.");
@@ -188,13 +207,14 @@ final readonly class StudentProgramStatusLedger
             );
         }
         $previous = new EntityId($root->decision() ?? throw new CorruptHistoryException());
-        $event = StudentProgramStatusWasChanged::occur(
+        $eventClass = $replacement === null ? StudentProgramStatusWasChanged::class : StudentProgramWasReplaced::class;
+        $event = $eventClass::occur(
             new StudentProgramStatusId($assignment->id->value),
             [
                 "decision_id" => $operation->value,
                 "previous_decision_id" => $previous->value,
                 "status" => $status,
-            ],
+            ] + ($replacement === null ? [] : ["replacement_assignment_id" => $replacement->value]),
             ["__aggregate_type" => "student_program_status"],
         )->withPlayhead($root->playhead() + 1);
         $version = $root->playhead();
@@ -203,7 +223,7 @@ final readonly class StudentProgramStatusLedger
             $this->stream($assignment->id),
             $operation,
             $version,
-            new EventContext($actor, $at, $operation, $previous, $reason),
+            new EventContext($actor, $at, $correlation ?? $operation, $previous, $reason),
             [$event],
         );
         $this->records->project($root, $assignment->status, $expected);
@@ -220,7 +240,9 @@ final readonly class StudentProgramStatusLedger
             $observed = $stored->event instanceof StudentProgramWasObserved;
             $assigned = $stored->event instanceof StudentProgramWasAssigned;
             $items[] = [
-                "kind" => $assigned ? "assignment" : ($observed ? "observation" : "decision"),
+                "kind" => $stored->event instanceof StudentProgramWasReplaced
+                    ? "program_change" : ($assigned ? "assignment" : ($observed ? "observation" : "decision")),
+                "replacement_assignment_id" => $p["replacement_assignment_id"] ?? null,
                 "status" => $observed || $assigned ? $p["assignment"]["status"] : $p["status"],
                 "effective_at" => $stored->context->effectiveAt?->format(DATE_ATOM),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
@@ -236,24 +258,27 @@ final readonly class StudentProgramStatusLedger
             "next_cursor" => $page->nextCursor,
         ];
     }
-    /** @return array{root:StudentProgramStatus,receipt:?array<string,mixed>} */
+    /**
+     * @return array{root:StudentProgramStatus,receipt:?array<string,mixed>}
+     * @throws TypeException
+     */
     private function load(
         StudentProgram $assignment,
         ?EntityId $operation = null,
         ?EntityId $actor = null,
         ?HistoryReadBudget $budget = null,
     ): array {
+        $budget ??= new HistoryReadBudget();
         $root = StudentProgramStatus::root(new StudentProgramStatusId($assignment->id->value));
         $cursor = null;
         $receipt = null;
         do {
-            $page = $budget === null
-            ? $this->history->page($this->stream($assignment->id), $cursor, 20)
-            : $budget->page($this->history, $this->stream($assignment->id), $cursor);
+            $page = $budget->page($this->history, $this->stream($assignment->id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 if (
                     ($stored->event instanceof StudentProgramStatusWasChanged ||
+                        $stored->event instanceof StudentProgramWasReplaced ||
                         $stored->event instanceof StudentProgramWasAssigned) &&
                     $root->decision() === $operation?->value
                 ) {
@@ -306,6 +331,9 @@ final readonly class StudentProgramStatusLedger
             "effective_at" => $effective,
         ];
     }
+    /**
+     * @throws TypeException
+     */
     private function stream(EntityId $id): StreamReference
     {
         return new StreamReference(new StudentProgramStatusId($id->value), "student_program_status");

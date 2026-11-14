@@ -2557,6 +2557,78 @@ window.createWorkspaceDegreeAudit = function (ui) {
         pager(body, result, cursor, stack, (a, s) => history(kind, id, program, back, a, s), "next_cursor");
         body.append(button("Back", back));
     }
+    const pursuitLabel = (p) => `${p.program_code} · ${p.program_title} · Entry ${p.entry_term_code} · ${p.status}`;
+    async function workPursuits(student, receiving, back, after = null, stack = []) {
+        const base = `/sis/students/${student}/academic-work-pursuits/`;
+        const data = await post(base, after ? { after } : {});
+        const body = screen("Work attribution & reuse", "REGISTRAR REVIEW");
+        body.append(node("p", {}, "Each academic record belongs to one program pursuit. Earlier coursework can support another pursuit only after a separate reuse approval. Attribution and reuse do not change grades, earned credits, bills or the original record."));
+        if (!data.items.length) body.append(node("p", {}, "No current academic work on this page."));
+        const restore = () => workPursuits(student, receiving, back, after, stack);
+        for (const work of data.items) {
+            const card = node("section", { class: "record-section" },
+                node("h2", {}, `${work.course_code} · ${work.course_title}`),
+                node("p", {}, `${work.credit_type} · ${work.term_code || "Term not recorded"}`),
+                node("p", {}, work.owner ? `Belongs to ${pursuitLabel(work.owner)}` : "Pursuit not recorded. Review source evidence before assigning it."));
+            if (!work.owner) {
+                card.append(button("Attribute this work", () => scopeTarget(base, work, "attribute", restore)));
+            } else {
+                card.append(button("Correct attribution", () => scopeTarget(base, work, "correct_attribution", restore)));
+                if (work.owner.id !== receiving) {
+                    const reused = work.reuse_assignment_ids.includes(receiving);
+                    card.append(button(reused ? "Revoke reuse for this pursuit" : "Approve reuse for this pursuit",
+                        () => scopeReason(base, work, reused ? "revoke_reuse" : "approve_reuse", receiving, restore)));
+                } else card.append(node("p", { class: "form-text" }, "This work belongs to the pursuit you opened."));
+            }
+            body.append(card);
+        }
+        pager(body, data, after, stack, (a, st) => workPursuits(student, receiving, back, a, st), "next_after");
+        body.append(button("Back to requirements", back));
+    }
+    async function scopeTarget(base, work, action, back, after = null, stack = []) {
+        const data = await post(`${base}pursuits/`, after ? { after } : {});
+        const body = screen(action === "attribute" ? "Choose the original pursuit" : "Correct the original pursuit", "WORK ATTRIBUTION");
+        body.append(node("p", {}, `${work.course_code} · ${work.course_title}`),
+            node("p", {}, "Use the student's academic evidence to choose the pursuit this record belongs to. Closed and completed pursuits remain available. Today's primary program is not evidence of earlier ownership."));
+        for (const p of data.items.filter((p) => p.id !== work.owner?.id)) {
+            body.append(node("section", { class: "record-section" }, node("h2", {}, pursuitLabel(p)),
+                button("Choose this pursuit", () => scopeReason(base, work, action, p.id, back))));
+        }
+        pager(body, data, after, stack, (a, st) => scopeTarget(base, work, action, back, a, st), "next_after");
+        body.append(button("Back to work attribution", back));
+    }
+    async function scopeReason(base, work, action, assignment, back, savedReason = "") {
+        const labels = { attribute: "Attribute work", correct_attribution: "Correct attribution",
+            approve_reuse: "Approve reuse", revoke_reuse: "Revoke reuse" };
+        const body = screen(labels[action], "REASONED ACADEMIC DECISION");
+        const reason = node("textarea", { id: "work-pursuit-reason", class: "form-control", required: true, maxlength: "1000", rows: "4" });
+        reason.value = savedReason;
+        const form = node("form", {}, node("p", {}, `${work.course_code} · ${work.course_title}`),
+            node("label", { for: "work-pursuit-reason", class: "form-label" }, "Reason and supporting evidence"), reason);
+        const submit = node("button", { type: "submit", class: "btn btn-primary mt-3" }, "Review decision");
+        form.append(submit);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                try {
+                    if (!form.reportValidity()) return;
+                    const review = await post(`${base}${work.id}/review/`, { action, assignment_id: assignment, reason: reason.value });
+                    const entered = reason.value;
+                    const reviewBody = screen("Review academic-work decision", "CONFIRM PURSUIT APPLICABILITY");
+                    reviewBody.append(node("h2", {}, `${review.course_code} · ${review.course_title}`),
+                        node("p", {}, `${labels[action]}: ${pursuitLabel(review.target)}`),
+                        node("p", {}, entered),
+                        node("p", { class: "form-text" }, "This records a new decision and retains earlier facts. Reuse affects future prerequisite checks and audits; it does not register, charge, or award the course again."),
+                        actions(button("Confirm reviewed decision", async () => {
+                            await post(`${base}${work.id}/commit/`, { review_token: review.review_token });
+                            await back();
+                        }, "btn-primary"), button("Change review", () => scopeReason(base, work, action, assignment, back, entered)),
+                        button("Cancel", back)));
+                } catch (error) { fail(error); }
+            }, submit);
+        });
+        body.append(form, button("Back to work attribution", back));
+    }
     async function studentRequirements(studentId, assignmentId, back) {
         const base = `/sis/students/${studentId}/programs/${assignmentId}/degree-requirements/`;
         const data = await request(base),
@@ -2606,6 +2678,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     ? button("Combined curriculum progress", () => combinedProgress(base, restore))
                     : null,
                 button("Academic work", () => academicWork(base, restore)),
+                ui.can?.("sis:academic-work:scope") && ui.can?.("sis:student:read")
+                    ? button("Work attribution & reuse", () => workPursuits(studentId, assignmentId, restore))
+                    : null,
                 button("Credits & GPA", () => academicCalculations(base, restore)),
                 button("Review course placement", () => groupAllocation(base, restore)),
                 button("Assignment history", () => studentHistory(base, restore)),

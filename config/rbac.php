@@ -19,6 +19,8 @@ return [
             "description" => "Approve reasoned admissions outcome corrections before matriculation.",
         ],
         "sis:gradebook:amend" => ["description" => "Approve reasoned final-grade corrections."],
+        'sis:academic-work:scope' => ['description' =>
+            'Attribute academic work to pursuits and approve or revoke cross-pursuit reuse.'],
         "sis:degree-audit:adjust" => [
             "description" => "Approve and revoke student-program course waivers and minimum exceptions.",
         ],

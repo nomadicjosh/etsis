@@ -408,6 +408,7 @@ final class OfferingPublicationTest extends TestCase
             $enrollment,
             $f->registration->course($section->courseId),
             $f->access->actor,
+            $f->workPursuits()->activePursuit($student->id),
         );
         $before = $this->digest("sis_history_events");
         try {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\AcademicRecord\Service;
 
+use DateMalformedStringException;
 use DateTimeImmutable;
 use DateTimeZone;
 use Domain\AcademicRecord\AcademicCredit;
@@ -34,6 +35,7 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
+use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 final readonly class InstitutionalCreditLedger
@@ -48,6 +50,7 @@ final readonly class InstitutionalCreditLedger
         private MessageCipher $cipher,
         private Clock $clock,
         private \Domain\Registration\Repository\SectionVersionRepository $versions,
+        private WorkPursuitLedger $pursuits,
     ) {
     }
 
@@ -56,9 +59,10 @@ final readonly class InstitutionalCreditLedger
         Enrollment $enrollment,
         Course $course,
         EntityId $actor,
+        EntityId $assignment,
         ?EntityId $sectionVersion = null,
     ): void {
-        $this->transactions->run(function () use ($enrollment, $course, $actor, $sectionVersion): void {
+        $this->transactions->run(function () use ($enrollment, $course, $actor, $assignment, $sectionVersion): void {
             $this->actor($actor);
             $id = EntityId::generate();
             $facts = new CreditSnapshot([
@@ -117,6 +121,7 @@ final readonly class InstitutionalCreditLedger
                 $enrollment->sectionId,
                 null,
             );
+            $this->pursuits->attributeNew($facts->facts, $assignment, $actor);
         });
     }
     /** Authorized teaching/office choice read; no baseline event is created.
@@ -486,11 +491,12 @@ final readonly class InstitutionalCreditLedger
         }
         return null;
     }
-    /** Internal audit input, after the caller authorizes and locks the student.
+    /**
+     * Internal audit input, after the caller authorizes and locks the student.
      * Deleted early-drop projections are deliberately unavailable here.
      * @return array<string,mixed>
      */
-    public function auditFacts(EntityId $credit, EntityId $student): array
+    public function auditFacts(EntityId $credit, EntityId $student, ?HistoryReadBudget $budget = null): array
     {
         $facts =
         $this->records->projection($credit) ??
@@ -498,7 +504,7 @@ final readonly class InstitutionalCreditLedger
         if ($facts["student_id"] !== $student->value || $facts["credit_type"] !== "institutional") {
             throw new AccessDeniedException("The academic record belongs to another scope.");
         }
-        $root = $this->load($credit);
+        $root = $this->load($credit, $budget);
         return [
             "credit" => $root->credit() ?? $facts,
             "grade" => $root->grade(),
@@ -537,7 +543,8 @@ final readonly class InstitutionalCreditLedger
             "retained_term_code" => null,
         ];
     }
-    /** Caller authorizes owner/assigned faculty/academic reader before requesting curated history.
+    /**
+     * Caller authorizes owner/assigned faculty/academic reader before requesting curated history.
      * @return array<string,mixed>
      */
     public function history(
@@ -607,7 +614,8 @@ final readonly class InstitutionalCreditLedger
         throw new RecordNotFoundException("Current academic record not found."));
         return [$id, $root, $facts];
     }
-    /** Internal command context. Caller must authorize and hold student/section locks.
+    /**
+     * Internal command context. Caller must authorize and hold student/section locks.
      * @return array{EntityId,AcademicCredit,array<string,mixed>}
      */
     public function decisionRecord(
@@ -619,6 +627,9 @@ final readonly class InstitutionalCreditLedger
         return $this->source($enrollment, $student, $section, new HistoryReadBudget(), $allowRemoved);
     }
 
+    /**
+     * @throws TypeException
+     */
     private function load(EntityId $id, ?HistoryReadBudget $budget = null): AcademicCredit
     {
         $budget ??= new HistoryReadBudget();
@@ -659,7 +670,8 @@ final readonly class InstitutionalCreditLedger
         }
         return $root;
     }
-    /** @param array<string,mixed> $facts
+    /**
+     * @param array<string,mixed> $facts
      * @return list<array<string,mixed>>
      */
     private function gradeChoices(
@@ -675,8 +687,11 @@ final readonly class InstitutionalCreditLedger
             $assignment,
         );
     }
-    /** @param array<string,mixed> $facts
+
+    /**
+     * @param array<string,mixed> $facts
      * @param array<string,mixed>|null $grade
+     * @throws TypeException
      */
     private function baseline(
         EntityId $id,
@@ -756,6 +771,9 @@ final readonly class InstitutionalCreditLedger
             throw new AccessDeniedException("The academic command actor changed.");
         }
     }
+    /**
+     * @throws DateMalformedStringException
+     */
     private function effective(EntityId $enrollment, ?string $date): DateTimeImmutable
     {
         $now = $this->clock->now();

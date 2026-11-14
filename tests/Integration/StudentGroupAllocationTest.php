@@ -69,13 +69,16 @@ final class StudentGroupAllocationTest extends TestCase
         $students = new SqlStudentRecordRepository($s->sql);
         return new StudentGroupAllocationService(
             new AcademicInputService(
-                $repository ?? new SqlAcademicInputRepository($s->sql),
-                $s->academicCredits(),
-                $s->transferCredits(),
-                $s->enrollmentLedger(),
+                new \Domain\DegreeAudit\Service\AcademicInputVerifier(
+                    $repository ?? new SqlAcademicInputRepository($s->sql),
+                    $s->academicCredits(),
+                    $s->transferCredits(),
+                    $s->enrollmentLedger(),
+                ),
                 $students,
                 $f->service,
                 $s->transactions,
+                $s->workPursuits(),
             ),
             $f->service,
             $this->adjustments($f),

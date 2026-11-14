@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after adding an explicit approved-exception mode to temporary audit testing. Exact assigned degree/specialization publications reuse canonical progress calculations, scoped approvals, course routing and retained program sharing. Baseline and draft comparisons remain separate; all trial results stay transient. Broader historical equivalence, retained final evaluations and graduation remain separate milestones.
+Last reviewed: **2026-11-14**, after adding pursuit-specific academic-work attribution, reviewed cross-pursuit reuse, shared verified prerequisites and atomic registrar program changes. Existing publications, original work and institutional student activity remain separate facts. Final evaluations, broader prerequisite expressions and graduation remain subsequent milestones.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -75,6 +75,8 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 ## 2. Registrar and registration completeness
 
 - [ ] Add reasoned replacements for closed institutional credits and transfer course/posting-term/completion identities. Retain the original and replacement lineage, and require fresh transcript preparation when results change.
+- [x] Confine prerequisite and degree-audit inputs to the selected pursuit, with explicit registrar attribution/correction/reuse/revocation. New work records its current pursuit; unknown older attribution requires review. [Workflow and limits](academic-input-verification.md#which-pursuit-can-use-the-work).
+- [x] Process a registrar program change on one screen: add/select the new pursuit and close the former pursuit atomically, preserving student activity, original work and retry results. [Workflow](student-program-assignments.md#change-program).
 - [ ] Complete versioned prerequisite/co-requisite expressions, schedule-conflict checks and retained eligibility-policy inputs.
 - [ ] Add waitlists with an explicit institutional ordering/allocation policy, accepted server ordering and atomic seat/billing decisions. Browser click time is not a fairness guarantee.
 - [ ] Extend reviewed enrollment actions to report-selected populations, multi-section schedules and explicit re-enrollment after closure; preserve distinct attempt and billing identities.

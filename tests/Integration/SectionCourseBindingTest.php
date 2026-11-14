@@ -186,8 +186,8 @@ final class SectionCourseBindingTest extends TestCase
         self::assertSame("Advanced Algebra", $rows[$unbound->id->value]["title"]);
         self::assertNull($rows[$unbound->id->value]["course_version_id"]);
         self::assertSame("Algebra", $portal->enrollments($student->id)[0]["title"]);
-        self::assertFalse($this->f->registration->prerequisitesMet($student->id, $this->course));
-        self::assertTrue($this->f->registration->prerequisitesMet($student->id, $this->course, []));
+        self::assertFalse($this->f->prerequisitesMet($student->id, $this->course));
+        self::assertTrue($this->f->prerequisitesMet($student->id, $this->course, []));
     }
 
     public function testPinnedPrerequisiteRemainsRequiredAfterRemovalFromCurrentCatalog(): void
@@ -198,7 +198,7 @@ final class SectionCourseBindingTest extends TestCase
         $this->bind($this->publish());
         $this->f->registration->removePrerequisite($this->course, $required);
         $student = $this->f->student();
-        self::assertTrue($this->f->registration->prerequisitesMet($student->id, $this->course));
+        self::assertTrue($this->f->prerequisitesMet($student->id, $this->course));
         $this->expectException(DomainException::class);
         $this->f->service->register($student->id, $this->section->id);
     }
@@ -386,6 +386,7 @@ final class SectionCourseBindingTest extends TestCase
             $this->f->audit,
             $this->f->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql),
+            $this->f->workPursuits(),
         );
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $this->section->id,

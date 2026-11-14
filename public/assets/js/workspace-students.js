@@ -354,7 +354,9 @@ window.createWorkspaceStudents = function (ui) {
                           row.status,
                           row.effective_at,
                           row.recorded_at,
-                          row.kind === "assignment"
+                          row.kind === "program_change"
+                              ? "Program change"
+                              : row.kind === "assignment"
                               ? "Program assigned"
                               : row.kind === "observation"
                                 ? "Observed current assignment"
@@ -575,9 +577,9 @@ window.createWorkspaceStudents = function (ui) {
         body.append(controls);
     }
 
-    async function assignProgram(record, back, preset = {}) {
+    async function assignProgram(record, back, preset = {}, changing = false) {
         const body = openDrawer(
-            "Assign an additional program",
+            changing ? "Change program" : "Assign an additional program",
             "REGISTRAR DECISION",
         );
         body.append(
@@ -585,13 +587,15 @@ window.createWorkspaceStudents = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "Choose the program and its entry term. The cohort follows the academic year linked to that term. The student's original institutional entry term and primary program stay unchanged.",
+                changing
+                    ? "Choose the new program and its entry term. Confirmation adds the new pursuit, makes it current and closes the old pursuit together. Student activity at the institution stays unchanged."
+                    : "Choose the program and its entry term. The cohort follows the academic year linked to that term. The student's original institutional entry term and primary program stay unchanged.",
             ),
         );
         const descriptors = [
             ["program_id", "Academic program", "lookup", "programs"],
             ["entry_term_id", "Program entry term", "lookup", "terms"],
-            ["reason", "Reason for this assignment", "textarea"],
+            ["reason", changing ? "Reason for this program change" : "Reason for this assignment", "textarea"],
         ];
         const form = await ui.buildForm(descriptors, preset);
         form.elements.reason.required = true;
@@ -599,7 +603,7 @@ window.createWorkspaceStudents = function (ui) {
         const review = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
-            "Review program assignment",
+            changing ? "Review program change" : "Review program assignment",
         );
         form.append(review);
         form.addEventListener("submit", (event) => {
@@ -608,7 +612,7 @@ window.createWorkspaceStudents = function (ui) {
                 if (!form.reportValidity()) return;
                 const data = ui.formData(form, descriptors);
                 const preview = await request(
-                    `/sis/students/${record.id}/programs/assign/review/`,
+                    `/sis/students/${record.id}/programs/${changing ? "change" : "assign"}/review/`,
                     "POST",
                     {
                         ...data,
@@ -618,12 +622,12 @@ window.createWorkspaceStudents = function (ui) {
                 const source = preview.source;
                 const cohort = source.cohort;
                 const confirmation = openDrawer(
-                    "Confirm program assignment",
+                    changing ? "Confirm program change" : "Confirm program assignment",
                     "REVIEWED DECISION",
                 );
                 confirmation.append(
-                    button("Revise assignment", () =>
-                        assignProgram(record, back, data),
+                    button(changing ? "Revise program change" : "Revise assignment", () =>
+                        assignProgram(record, back, data, changing),
                     ),
                     node(
                         "h3",
@@ -655,7 +659,9 @@ window.createWorkspaceStudents = function (ui) {
                     node(
                         "p",
                         {},
-                        `The additional assignment becomes active when confirmed on ${preview.effective_on}.`,
+                        changing
+                            ? `Changes from ${preview.before.program_code} · ${preview.before.program_title} to this program on ${preview.effective_on}. The old pursuit closes and the new pursuit becomes current in the same confirmation.`
+                            : `The additional assignment becomes active when confirmed on ${preview.effective_on}.`,
                     ),
                 );
                 if (!cohort)
@@ -670,13 +676,15 @@ window.createWorkspaceStudents = function (ui) {
                     node(
                         "p",
                         { class: "form-text" },
-                        "This preserves the student's existing programs, earned credits, charges and original entry term. Choose Make primary separately if needed. Degree requirements are selected through their own review.",
+                        changing
+                            ? "This is a program change, not institutional withdrawal or graduation. Existing enrollments, grades, charges, institutional entry term and earlier curriculum stay recorded under their original pursuit. Reusing earlier coursework requires a separate registrar approval. Degree requirements for the new pursuit are selected through their own review."
+                            : "This preserves the student's existing programs, earned credits, charges and original entry term. Choose Make primary separately if needed. Degree requirements are selected through their own review.",
                     ),
                     button(
-                        "Confirm program assignment",
+                        changing ? "Confirm program change" : "Confirm program assignment",
                         async () => {
                             await request(
-                                `/sis/students/${record.id}/programs/assign/commit/`,
+                                `/sis/students/${record.id}/programs/${changing ? "change" : "assign"}/commit/`,
                                 "POST",
                                 {
                                     review_token: preview.review_token,
@@ -870,6 +878,7 @@ window.createWorkspaceStudents = function (ui) {
         );
         if (can("sis:registration:manage"))
             programs.append(
+                button("Change program", () => assignProgram(record, back, {}, true), "btn-primary"),
                 button("Assign an additional program", () =>
                     assignProgram(record, back),
                 ),

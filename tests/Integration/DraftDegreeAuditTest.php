@@ -48,13 +48,16 @@ final class DraftDegreeAuditTest extends TestCase
             $f->f->gradingScales(),
             $f->service,
             new AcademicInputService(
-                $repository ?? new SqlAcademicInputRepository($s->sql),
-                $s->academicCredits(),
-                $s->transferCredits(),
-                $s->enrollmentLedger(),
+                new \Domain\DegreeAudit\Service\AcademicInputVerifier(
+                    $repository ?? new SqlAcademicInputRepository($s->sql),
+                    $s->academicCredits(),
+                    $s->transferCredits(),
+                    $s->enrollmentLedger(),
+                ),
                 $students,
                 $f->service,
                 $s->transactions,
+                $s->workPursuits(),
             ),
             $evaluator = new DegreeProgressEvaluator(
                 new AcademicPolicyEvaluator(),

@@ -241,34 +241,6 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         return $ids;
     }
 
-    public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool
-    {
-        $credits = $this->sql->rows("sis_academic_credits", ["student_id" => $student->value]);
-        $requirements =
-        $required === null
-        ? $this->sql->rows("sis_prerequisites", ["course_id" => $course->value])
-        : array_map(static fn(string $id): array => ["required_course_id" => $id], $required);
-        foreach ($requirements as $required) {
-            $met = false;
-            foreach ($credits as $credit) {
-                if (
-                    $credit["course_id"] === $required["required_course_id"] &&
-                    $credit["grade_id"] !== null &&
-                    (bool) $this->sql->one("sis_grades", ["id" => $credit["grade_id"]])["passes"] &&
-                    in_array($credit["status"], ["A", "N"], true)
-                ) {
-                    $met = true;
-                    break;
-                }
-            }
-            if (!$met) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public function blockingRestriction(EntityId $person, DateTimeImmutable $on, bool $byStaff): ?Restriction
     {
         $q = $this->sql->quote(...);

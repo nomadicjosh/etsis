@@ -268,3 +268,9 @@ The existing degree/specialization placement exception now optionally retains a 
 ### Approved exceptions in temporary audit tests
 
 The runtime audit screen now offers an explicit default-off option to include approvals only for exact assigned degree/specialization publications. It delegates to the canonical progress reader, with one academic inventory collection and shared bounded replay/search. Combined testing requires the full assigned component set and uses retained program sharing and course routes; draft or different-curriculum tests keep their baseline interpretation. Source metadata and rendering share the existing trial flow. No approval, assignment, academic/financial fact, retained result or migration is added. See [the connected testing workflow](degree-audit-builder.md#test-with-current-approved-exceptions).
+
+## Pursuit-specific work and program changes
+
+The [academic-work review](academic-input-verification.md#which-pursuit-can-use-the-work) now shares one raw verifier across pursuit-filtered prerequisite and audit paths. New registration/transfer work retains its actual pursuit, older unknown attribution requires explicit review, and cross-pursuit reuse requires independent registrar approval. `20261114000001_CreateSisAcademicWorkPursuits` adds only the reconstructible applicability projection and permission; all new facts use the existing protected journal. [Program change](student-program-assignments.md#change-program) creates/selects the new pursuit and closes the former one atomically without withdrawal or implicit reuse.
+
+The configured development database received this additive migration. All 20 existing journal rows were verified byte-for-byte unchanged, and no existing academic-credit records required attribution conversion.

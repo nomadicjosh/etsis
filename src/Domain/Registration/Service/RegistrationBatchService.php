@@ -19,6 +19,7 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use DomainException;
+use JsonException;
 
 final readonly class RegistrationBatchService
 {
@@ -32,6 +33,7 @@ final readonly class RegistrationBatchService
         private AuditTrail $audit,
         private Clock $clock,
         private SectionVersionRepository $versions,
+        private \Domain\AcademicRecord\Service\WorkPursuitService $pursuits,
     ) {
     }
 
@@ -47,7 +49,10 @@ final readonly class RegistrationBatchService
         });
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     * @throws JsonException
+     */
     public function commit(EntityId $operation, RegistrationBatchSelection $selection, string $revision): array
     {
         $actor = $this->access->requirePermission('sis:registration:manage');
@@ -75,9 +80,15 @@ final readonly class RegistrationBatchService
             }
             $items = [];
             $created = 0;
+            $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
             foreach ($context['students'] as $row) {
                 try {
-                    $enrollment = $this->registration->register(new EntityId($row['id']), $selection->section, true);
+                    $enrollment = $this->registration->register(
+                        new EntityId($row['id']),
+                        $selection->section,
+                        true,
+                        budget: $budget
+                    );
                 } catch (DomainException) {
                     throw new ValidationException([['field' => 'students', 'message' => $row['institutional_id']
                         . ': Registration could not be completed. Check activity, holds, prerequisites, course limits '
@@ -169,6 +180,7 @@ final readonly class RegistrationBatchService
             $enrollment = $this->repository->enrollment($id, $section->id);
             $students[] = ['id' => $id->value, 'given_name' => $person->givenName, 'family_name' => $person->familyName,
                 'institutional_id' => $person->institutionalId->value, 'active' => $student->active,
+                'assignment_id' => $enrollment === null ? $this->pursuits->activePursuit($id)->value : null,
                 'enrollment_id' => $enrollment?->id->value, 'enrollment_status' => $enrollment?->status->value];
         }
         return ['section' => ['id' => $section->id->value, 'code' => $section->code,
@@ -183,7 +195,10 @@ final readonly class RegistrationBatchService
             'students' => $students];
     }
 
-    /** @param array<string, mixed> $context */
+    /**
+     * @param array<string, mixed> $context
+     * @throws JsonException
+     */
     private function revision(array $context): string
     {
         return hash('sha256', json_encode($context, JSON_THROW_ON_ERROR));

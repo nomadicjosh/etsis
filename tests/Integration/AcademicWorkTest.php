@@ -34,6 +34,7 @@ final class AcademicWorkTest extends TestCase
             $f->transferCredits(),
             $f->access,
             $f->transactions,
+            $f->workPursuits(),
         );
     }
 
@@ -111,6 +112,12 @@ final class AcademicWorkTest extends TestCase
     ): EntityId {
         $id = EntityId::generate();
         $source = EntityId::generate();
+        $section = new \Domain\Registration\Section(EntityId::generate(), $course, $term ?? $f->term,
+            null, 'OLD.' . $id->value, 20, true, true, new \Domain\Finance\ValueObject\Money(0, 'USD'));
+        $f->registration->addSection($section);
+        $f->sql->insert('sis_enrollments', ['id' => $source->value, 'student_id' => $student->value,
+            'section_id' => $section->id->value, 'term_id' => ($term ?? $f->term)->value, 'status' => 'A',
+            'registered_at' => '2026-08-01 12:00:00', 'status_at' => '2026-08-01 12:00:00', 'version' => 0]);
         $f->sql->insert("sis_academic_credits", [
             "id" => $id->value,
             "student_id" => $student->value,
@@ -139,6 +146,7 @@ final class AcademicWorkTest extends TestCase
         $grade = EntityId::generate();
         $f->legacyGrade(new \Domain\Gradebook\GradeDefinition($grade, "B", 3000, true, true));
         $f->sql->update("sis_academic_credits", ["grade_id" => $grade->value], ["id" => $credit->value]);
+        $f->attributeWork($student, $credit, $this->assignment($f, $student));
         $events = $f->sql->rows("sis_history_events");
         $item = $this->service($f)->page($student, $this->assignment($f, $student))["items"][0];
         self::assertTrue($item["grade_recorded"]);
@@ -180,13 +188,16 @@ final class AcademicWorkTest extends TestCase
         $f = $t->sis;
         $service = $this->service($f);
         $assignment = $this->assignment($f, $t->student);
+        $f->attributeWork($t->student, $t->credit, $assignment);
         $item = $service->page($t->student, $assignment)["items"][0];
         self::assertNull($item["grade"]);
         self::assertTrue($item["earlier_history_unknown"]);
         self::assertFalse($item["history_recorded"]);
+        $replacement = $this->oldCredit($f, $t->student, $t->course);
+        $f->attributeWork($t->student, $replacement, $assignment);
         $f->sql->update(
             "sis_transfer_awards",
-            ["credit_id" => $this->oldCredit($f, $t->student, $t->course)->value],
+            ["credit_id" => $replacement->value],
             ["id" => $t->award->value],
         );
         $this->expectException(CorruptHistoryException::class);
@@ -212,6 +223,9 @@ final class AcademicWorkTest extends TestCase
         }
         $service = $this->service($f);
         $assignment = $this->assignment($f, $student);
+        foreach ($ids as $creditId) {
+            $f->attributeWork($student, new EntityId($creditId), $assignment);
+        }
         $first = $service->page($student, $assignment);
         self::assertCount(20, $first["items"]);
         $second = $service->page($student, $assignment, new EntityId($first["next_after"]));

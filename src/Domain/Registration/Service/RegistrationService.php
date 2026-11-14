@@ -33,11 +33,18 @@ final readonly class RegistrationService
         private EnrollmentLedger $enrollments,
         private \Domain\Student\Service\StudentActivityLedger $activity,
         private \Domain\Student\Service\StudentPrimaryProgramLedger $primaryPrograms,
+        private \Domain\AcademicRecord\Service\WorkPursuitService $pursuits,
+        private PrerequisiteService $prerequisites,
     ) {
     }
 
-    public function register(EntityId $studentId, EntityId $sectionId, bool $byStaff = false): Enrollment
-    {
+    public function register(
+        EntityId $studentId,
+        EntityId $sectionId,
+        bool $byStaff = false,
+        ?EntityId $assignment = null,
+        ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
+    ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
         $owner = $this->admissions->person($initialStudent->personId)->ownerUserId;
@@ -52,6 +59,8 @@ final readonly class RegistrationService
             $byStaff,
             $actor,
             $initialStudent,
+            $assignment,
+            $budget,
         ): Enrollment {
             // Acquire all eligibility locks before consistent reads: student, person holds, then section seats.
             $this->repository->lockStudent($studentId);
@@ -92,15 +101,12 @@ final readonly class RegistrationService
             ) {
                 throw new DomainException("The section is inactive or full.");
             }
+            $assignment = $this->pursuits->activePursuit($studentId, $assignment);
             $now = $this->clock->now();
             $blocking = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
             $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
             $coursesBefore = $this->repository->enrolledCount($studentId, $section->termId);
-            $prerequisitesMet = $this->repository->prerequisitesMet(
-                $studentId,
-                $section->courseId,
-                $required,
-            );
+            $prerequisitesMet = $this->prerequisites->met($studentId, $assignment, $required, $budget);
             new RegistrationPolicy()->assertEligible(
                 $student,
                 $blocking === null ? [] : [$blocking],
@@ -142,7 +148,7 @@ final readonly class RegistrationService
                 ],
                 $actor,
             );
-            $this->credits->open($enrollment, $course, $actor, $section->publicationVersionId);
+            $this->credits->open($enrollment, $course, $actor, $assignment, $section->publicationVersionId);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
             $this->audit->record($actor, "registration.created", $enrollment->id);
 

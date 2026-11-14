@@ -22,6 +22,8 @@ The first [course-publication slice](course-publication.md) retains reviewed def
 
 [Program publication](program-publication.md) now retains reviewed program text and department/academic-level/award snapshots per academic year. Publication creates a new catalog reference for future assignments, while earlier student references remain intact. Entry commands verify the selected year’s publication chain; ordinary program/student/report lists remain indexed reads. New [degree-requirement publications](degree-program-publication-link.md) now retain the reviewed program definition; new student selections must match its cohort reference. Requirement reviews now expire after 20 minutes, recheck permission after waiting/replay and record confirmation time; earlier accepted events and retry results remain intact.
 
+[Academic-work pursuit attribution and reuse](academic-input-verification.md#which-pursuit-can-use-the-work) now have their own per-credit applicability stream in the same protected journal, with a small reconstructible projection. New registrations and transfer awards capture actual ownership; older unknown attribution is explicitly reviewed. Prerequisites and degree-audit inputs share this boundary. [Registrar program changes](student-program-assignments.md#change-program) reuse assignment/cohort initialization and primary selection, with a distinct former-pursuit replacement event. These operations preserve earlier credit facts and institutional student activity; they do not add another authoritative event table.
+
 ## Persistence boundaries
 
 | Context | Target source of truth | Read/edit boundary |

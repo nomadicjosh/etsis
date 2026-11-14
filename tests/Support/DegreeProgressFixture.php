@@ -52,13 +52,16 @@ final class DegreeProgressFixture
         $adjustments = self::adjustments($s, $history, $requirements, $cipher, $specializations);
         $students = new SqlStudentRecordRepository($s->sql);
         $inputs = new AcademicInputService(
-            $repository ?? new SqlAcademicInputRepository($s->sql),
-            $s->academicCredits(),
-            $s->transferCredits(),
-            $s->enrollmentLedger(),
+            new \Domain\DegreeAudit\Service\AcademicInputVerifier(
+                $repository ?? new SqlAcademicInputRepository($s->sql),
+                $s->academicCredits(),
+                $s->transferCredits(),
+                $s->enrollmentLedger(),
+            ),
             $students,
             $requirements,
             $s->transactions,
+            $s->workPursuits(),
         );
         $evaluator = new \Domain\DegreeAudit\Service\DegreeProgressEvaluator(
                 new AcademicPolicyEvaluator(),

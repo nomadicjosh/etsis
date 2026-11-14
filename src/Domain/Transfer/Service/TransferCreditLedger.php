@@ -27,6 +27,7 @@ use Domain\Transfer\TransferEquivalency;
 use Domain\Transfer\ValueObject\AwardChange;
 use Domain\Transfer\ValueObject\TransferCreditId;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
+use Qubus\Exception\Data\TypeException;
 
 /** Internal academic ledger. Entry-point services authorize and own student/catalog locks. */
 final readonly class TransferCreditLedger
@@ -39,6 +40,11 @@ final readonly class TransferCreditLedger
         private UnitOfWork $transactions,
         private Clock $clock,
         private PublishedCourseReader $courses,
+        private \Domain\AcademicRecord\Service\WorkPursuitLedger $pursuits,
+        private \Domain\Student\Repository\StudentRecordRepository $students,
+        private \Domain\Student\Service\StudentPrimaryProgramLedger $primary,
+        private \Domain\Admissions\Repository\AdmissionsRepository $admissions,
+        private \Domain\Student\Service\StudentProgramStatusLedger $statuses,
     ) {
     }
     /** @param array<string,mixed> $reviewed */
@@ -51,6 +57,7 @@ final readonly class TransferCreditLedger
         #[\SensitiveParameter] array $reviewed,
         EntityId $actor,
         EntityId $courseVersion,
+        ?EntityId $assignment = null,
     ): EntityId {
         return $this->transactions->run(function () use (
             $student,
@@ -61,6 +68,7 @@ final readonly class TransferCreditLedger
             $reviewed,
             $actor,
             $courseVersion,
+            $assignment,
         ): EntityId {
             $this->actor($actor);
             $existing = $this->records->existing($student, $rule->id, $completed->format("Y-m-d"));
@@ -89,6 +97,15 @@ final readonly class TransferCreditLedger
                     );
                 }
                 return new EntityId($credit["id"]);
+            }
+            // Resolve only genuine new awards; an accepted retry preserves its original pursuit.
+            $selection = $this->primary->current($this->admissions->student($student));
+            $assignment ??= new EntityId($selection["assignment_id"]);
+            $pursuit = $this->students->assignment($assignment);
+            $this->statuses->verify($pursuit);
+            if ($pursuit->studentId->value !== $student->value || $pursuit->status !== "active") {
+                throw new \Domain\Shared\Exception\ValidationException([["field" => "assignment_id",
+                    "message" => "Choose an active program pursuit belonging to this student."]]);
             }
             $id = EntityId::generate();
             $creditId = EntityId::generate();
@@ -180,6 +197,7 @@ final readonly class TransferCreditLedger
                 $root->credit() ?? throw new CorruptHistoryException(),
                 $publication,
             );
+            $this->pursuits->attributeNew($credit->facts, $assignment, $actor);
             return $creditId;
         });
     }
@@ -256,9 +274,12 @@ final readonly class TransferCreditLedger
             "retained_term_code" => $root->source()["term_code"] ?? null,
         ];
     }
-    /** Called inside the authorized correction's unit of work, after its review revision is checked.
+    /**
+     * Called inside the authorized correction's unit of work, after its review revision is checked.
      * @param array<string,mixed> $record
-     * @param array<string,mixed>|null $grade */
+     * @param array<string,mixed>|null $grade
+     * @throws TypeException
+     */
     public function change(
         #[\SensitiveParameter] array $record,
         #[\SensitiveParameter] AwardChange $change,
@@ -299,8 +320,10 @@ final readonly class TransferCreditLedger
         $this->records->project($facts, $before["version"]);
         $this->records->track($root->source() ?? throw new CorruptHistoryException(), $facts);
     }
-    /** Internal: caller authorizes, locks and verifies the reviewed current record before observing it.
+    /**
+     * Internal: caller authorizes, locks and verifies the reviewed current record before observing it.
      * @param array<string,mixed> $record
+     * @throws TypeException
      */
     public function observe(#[\SensitiveParameter] array $record, EntityId $actor, EntityId $operation): TransferCredit
     {
@@ -361,9 +384,12 @@ final readonly class TransferCreditLedger
         }
         return $root;
     }
-    /** Reconstruct only the requested receipt decisions in one bounded replay.
+    /**
+     * Reconstruct only the requested receipt decisions in one bounded replay.
      * @param list<string> $operations
-     * @return array<string,array<string,mixed>> */
+     * @return array<string,array<string,mixed>>
+     * @throws TypeException
+     */
     public function details(EntityId $award, array $operations): array
     {
         if (count($operations) > 50) {
@@ -416,6 +442,9 @@ final readonly class TransferCreditLedger
         }
         return [$root, $credit];
     }
+    /**
+     * @throws TypeException
+     */
     private function load(EntityId $award, ?HistoryReadBudget $budget = null): TransferCredit
     {
         $root = TransferCredit::root(new TransferCreditId($award->value));
@@ -466,7 +495,8 @@ final readonly class TransferCreditLedger
             throw new CorruptHistoryException();
         }
     }
-    /** @param array<string,mixed> $a
+    /**
+     * @param array<string,mixed> $a
      * @param array<string,mixed> $b */
     private function same(array $a, array $b): bool
     {
@@ -486,13 +516,17 @@ final readonly class TransferCreditLedger
             throw new \Domain\Shared\Exception\AccessDeniedException("The transfer decision actor changed.");
         }
     }
-    /** Internal curated choices; the calling transfer workflow authorizes its staff scope.
+    /**
+     * Internal curated choices; the calling transfer workflow authorizes its staff scope.
      * @return array<string,mixed>
      */
     public function courseChoices(EntityId $course, ?string $cursor = null): array
     {
         return $this->courses->page($course, $cursor);
     }
+    /**
+     * @throws TypeException
+     */
     private function stream(EntityId $id): StreamReference
     {
         return new StreamReference(new TransferCreditId($id->value), "transfer_credit");

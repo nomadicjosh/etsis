@@ -74,7 +74,7 @@ final class TransferAwardCorrectionTest extends TestCase
         $f = $t->sis;
         $follow = $f->section(20, 0);
         $f->registration->addPrerequisite($follow->courseId, $t->course);
-        self::assertTrue($f->registration->prerequisitesMet($t->student, $follow->courseId));
+        self::assertTrue($f->prerequisitesMet($t->student, $follow->courseId));
         $enrollment = $f->service->register($t->student, $follow->id);
         $this->post($t, new AwardChange("void", null, null, "Fictional duplicate evaluation"));
         $voided = $t->service()->view($t->student, $t->award)["credit"];
@@ -83,7 +83,7 @@ final class TransferAwardCorrectionTest extends TestCase
         self::assertSame(0, $voided["completed_milli"]);
         self::assertSame(0, $voided["grade_points_milli"]);
         self::assertNull($voided["grade_id"]);
-        self::assertFalse($f->registration->prerequisitesMet($t->student, $follow->courseId));
+        self::assertFalse($f->prerequisitesMet($t->student, $follow->courseId));
         try {
             $reviewed = new \Infrastructure\Persistence\Repository\SqlTransferCatalogRepository(
                 $f->sql,
@@ -112,7 +112,7 @@ final class TransferAwardCorrectionTest extends TestCase
             ],
         );
         $this->post($t, new AwardChange("reinstate", 3000, "TR", "Fictional reinstatement approved"));
-        self::assertTrue($f->registration->prerequisitesMet($t->student, $follow->courseId));
+        self::assertTrue($f->prerequisitesMet($t->student, $follow->courseId));
         self::assertSame(
             $enrollment->id->value,
             $f->registration->enrollment($t->student, $follow->id)->id->value,

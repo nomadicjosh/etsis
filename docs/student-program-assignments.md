@@ -1,6 +1,18 @@
-# Additional student-program assignments
+# Student-program assignments and changes
 
-Implemented 2026-11-09. Additional programs now start their history when staff create the assignment. [Closing/reopening](student-program-status-history.md) continues in the same stream, and [primary-program selection](student-primary-program-history.md) remains a separate reviewed action. [Initial matriculation](student-matriculation.md) now starts the first assignment in this same status stream; neither path invents creation events for older rows.
+Use **Change program** for the usual registrar change from the current pursuit to a new one. The additional-assignment tools remain available for exceptional cases. Assignments begin their history at actual creation; initial matriculation, later status decisions and program-change closure use the same assignment-status stream. Older untracked assignments remain explicit observations rather than invented creation events.
+
+## Change program
+
+Use **Students → the student → Student programs → Change program** for the usual change from one program to another. Choose the new program and its entry term, record the reason, review both programs and the derived new cohort, then confirm once. Revising the review preserves the entered form values.
+
+Confirmation creates the new pursuit/cohort, makes it the current primary pursuit, and closes the former pursuit in one transaction. It records a distinct `StudentProgramWasReplaced` decision in the existing program-status stream, linked to the new pursuit, alongside the assignment and primary-selection decisions in the same protected journal. The status history labels it **Program change**. It does not record institutional withdrawal or graduation, deactivate the student, drop existing enrollments, alter bills, rewrite the original institutional entry term or move earlier coursework/requirements.
+
+Earlier work remains owned by the former pursuit. Authorized registrars use [Work attribution & reuse](academic-input-verification.md#registrar-review) to approve specific records for the new pursuit. The change itself grants no automatic cross-pursuit reuse. Choose the new pursuit's published degree requirements through the existing requirements review; a current program or cohort change does not silently replace retained curriculum selections.
+
+The review is staff-bound, expires after 20 minutes, and checks the original pursuit/status, primary-selection version and reviewed new-program context again on confirmation. Required assignment initialization, all decisions/projections and the audit either commit together or roll back together. A repeated accepted confirmation returns its original result after later program changes without reopening the former pursuit or changing the current selection.
+
+A combined dual-degree program, majors/minors and specializations can be organized within one pursuit; an additional independent pursuit is not required merely to describe those components. The existing additional-assignment and status tools remain available for exceptional administrative cases. This change does not implement unbuilt minor or combined-degree curriculum features.
 
 ## Staff workflow
 

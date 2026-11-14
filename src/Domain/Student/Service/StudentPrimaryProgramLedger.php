@@ -37,7 +37,10 @@ final readonly class StudentPrimaryProgramLedger
     ) {
     }
 
-    /** Called after the first genuine assignment is recorded, under the matriculation transaction. */
+    /**
+     * Called after the first genuine assignment is recorded, under the matriculation transaction.
+     * @throws TypeException
+     */
     public function initialize(
         Student $student,
         EntityId $application,
@@ -131,6 +134,7 @@ final readonly class StudentPrimaryProgramLedger
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $correlation = null,
     ): array {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException("The primary selection actor changed.");
@@ -170,7 +174,7 @@ final readonly class StudentPrimaryProgramLedger
                 new EventContext(
                     $actor,
                     $at,
-                    $operation,
+                    $correlation ?? $operation,
                     reason: "Current primary pursuit observed before a reviewed selection; " .
                         "earlier primary history is unknown.",
                 ),
@@ -193,7 +197,7 @@ final readonly class StudentPrimaryProgramLedger
             $this->stream($student->id),
             $operation,
             $version,
-            new EventContext($actor, $at, $operation, $previous, $reason),
+            new EventContext($actor, $at, $correlation ?? $operation, $previous, $reason),
             [$e],
         );
         $this->records->project($root, $student, $expected);
@@ -238,11 +242,12 @@ final readonly class StudentPrimaryProgramLedger
      */
     private function load(Student $student, ?EntityId $operation = null, ?EntityId $actor = null): array
     {
+        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
         $root = StudentPrimaryProgram::root(new StudentPrimaryProgramId($student->id->value));
         $cursor = null;
         $receipt = null;
         do {
-            $page = $this->history->page($this->stream($student->id), $cursor, 20);
+            $page = $budget->page($this->history, $this->stream($student->id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 if (

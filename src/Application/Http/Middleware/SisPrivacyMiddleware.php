@@ -83,6 +83,13 @@ final class SisPrivacyMiddleware implements MiddlewareInterface
                 409,
                 'This record needs a separate history review. Contact your records office before trying again.'
             );
+        } catch (\Domain\AcademicRecord\Exception\WorkPursuitRequiredException) {
+            $response = PrivateErrorResponse::make(
+                $request,
+                409,
+                "Some academic work has no verified program pursuit. " .
+                    "Ask the records office to review its attribution before continuing."
+            );
         } catch (DomainException) {
             $response = PrivateErrorResponse::make($request, 409, 'The requested transition is not permitted.');
         } catch (Throwable) {

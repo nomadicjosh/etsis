@@ -24,6 +24,7 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\AcademicRecord\Event\AcademicWorkPursuitWasRecorded::class,
             \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class,
             \Domain\Student\Event\StudentSpecializationsWereSelected::class,
             \Domain\Catalog\Event\ProgramDefinitionWasPublished::class,
@@ -42,6 +43,7 @@ final class EventClassMap
             \Domain\Student\Event\PrimaryProgramWasObserved::class,
             \Domain\Student\Event\PrimaryProgramWasSelected::class,
             \Domain\Student\Event\StudentProgramWasObserved::class,
+            \Domain\Student\Event\StudentProgramWasReplaced::class,
             \Domain\Student\Event\StudentProgramStatusWasChanged::class,
             \Domain\Student\Event\StudentActivityWasObserved::class,
             \Domain\Student\Event\StudentActivityWasDecided::class,

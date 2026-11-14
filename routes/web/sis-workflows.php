@@ -1043,6 +1043,23 @@ return static function (Psr7Router $router): void {
             $router->map([$method], $adjustmentsPath . $suffix, [SisRequirementAdjustmentController::class, $action]);
         }
     }
+    $router->post(
+        '/sis/students/{id}/programs/change/review/',
+        [\Application\Http\Controller\SisStudentProgramAssignmentController::class, 'reviewChange']
+    );
+    $router->post(
+        '/sis/students/{id}/programs/change/commit/',
+        [\Application\Http\Controller\SisStudentProgramAssignmentController::class, 'changeProgram']
+    );
+    foreach (
+        [['', 'page'], ['pursuits/', 'pursuits'],
+        ['{credit}/review/', 'review'], ['{credit}/commit/', 'commit']] as [$suffix, $action]
+    ) {
+        $router->post(
+            '/sis/students/{student}/academic-work-pursuits/' . $suffix,
+            [\Application\Http\Controller\SisWorkPursuitController::class, $action]
+        );
+    }
     $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/progress/", [
         \Application\Http\Controller\SisAcademicWorkController::class,
         "progress",

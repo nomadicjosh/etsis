@@ -155,6 +155,10 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Student\StudentProgramStatus::class,
                 "fields" => ["decision_id", "assignment"],
             ],
+            \Domain\Student\Event\StudentProgramWasReplaced::class => [
+                'type' => 'student_program_status', 'root' => \Domain\Student\StudentProgramStatus::class,
+                'fields' => ['decision_id', 'previous_decision_id', 'status', 'replacement_assignment_id'],
+            ],
             \Domain\Student\Event\StudentProgramStatusWasChanged::class => [
                 "type" => "student_program_status",
                 "root" => \Domain\Student\StudentProgramStatus::class,
@@ -177,6 +181,11 @@ final readonly class HistoricalSchemaRegistry
                     "source",
                     "reference_id",
                 ],
+            ],
+            \Domain\AcademicRecord\Event\AcademicWorkPursuitWasRecorded::class => [
+                'type' => 'work_pursuit', 'root' => \Domain\AcademicRecord\WorkPursuit::class,
+                'fields' => ['decision_id', 'previous_decision_id', 'action', 'source', 'assignment_id',
+                    'academic_version', 'work_hash'],
             ],
             \Domain\Registration\Event\EnrollmentWasEstablished::class => [
                 "type" => "enrollment",
@@ -491,6 +500,12 @@ final readonly class HistoricalSchemaRegistry
             if ($stream->type === "student_activity") {
                 \Domain\Student\ValueObject\StudentActivitySchema::validate($class, $payload);
                 if ($payload["student_id"] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            if ($stream->type === 'work_pursuit') {
+                \Domain\AcademicRecord\ValueObject\WorkPursuitSchema::validate($payload);
+                if ($payload['source']['credit_id'] !== (string) $stream->aggregateId) {
                     throw new CorruptHistoryException();
                 }
             }
