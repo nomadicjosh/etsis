@@ -224,6 +224,10 @@ final readonly class HistoricalSchemaRegistry
                 'fields' => ['decision_id', 'previous_decision_id', 'previous_course_version_id', 'course_version_id',
                     'course_code', 'course_title'],
             ],
+            \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => ['decision_id', 'previous_decision_id', 'previous_academic_on', 'academic_on'],
+            ],
             \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class => [
                 "type" => "academic_credit",
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,

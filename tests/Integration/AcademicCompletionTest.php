@@ -56,7 +56,7 @@ final class AcademicCompletionTest extends TestCase
         $facts = $f->sql->one("sis_academic_credits", ["id" => $credit->value]);
         $events = $f->sql->rows("sis_history_events");
         $finance = $f->financialEvents();
-        $service = $f->academicCompletions();
+        $service = $f->academicDates();
         $review = $service->review(
             $student,
             $section,
@@ -91,7 +91,7 @@ final class AcademicCompletionTest extends TestCase
     public function testOriginalRetryDoesNotUndoACorrectionOrClearEvenAfterExpiry(): void
     {
         [$f, $student, $section, $enrollment, $credit] = $this->fixture();
-        $s = $f->academicCompletions();
+        $s = $f->academicDates();
         $first = $s->review($student, $section, $enrollment, "2026-08-01", 1, "Fictional first date.");
         $receipt = $s->commit($student, $section, $first["review_token"]);
         $next = $s->review($student, $section, $enrollment, "2026-08-02", 2, "Fictional corrected source.");
@@ -108,7 +108,7 @@ final class AcademicCompletionTest extends TestCase
     public function testGradeCorrectionKeepsActualCompletionDateAndStalesAnEarlierDateReview(): void
     {
         [$f, $student, $section, $enrollment, $credit, $choices] = $this->fixture();
-        $s = $f->academicCompletions();
+        $s = $f->academicDates();
         $initial = $s->review($student, $section, $enrollment, "2026-08-01", 1, "Fictional completion.");
         $s->commit($student, $section, $initial["review_token"]);
         $pending = $s->review(
@@ -156,7 +156,7 @@ final class AcademicCompletionTest extends TestCase
             as [$date, $reason]
         ) {
             try {
-                $f->academicCompletions()->review($student, $section, $enrollment, $date, 1, $reason);
+                $f->academicDates()->review($student, $section, $enrollment, $date, 1, $reason);
                 self::fail("Invalid completion input accepted.");
             } catch (ValidationException) {
                 self::assertSame($events, $f->sql->rows("sis_history_events"));
@@ -167,7 +167,7 @@ final class AcademicCompletionTest extends TestCase
     public function testUnconfirmedExpiredReviewRollsBackItsEventReceiptAndProjection(): void
     {
         [$f, $student, $section, $enrollment, $credit] = $this->fixture();
-        $s = $f->academicCompletions();
+        $s = $f->academicDates();
         $r = $s->review($student, $section, $enrollment, "2026-08-01", 1, "Fictional expired review.");
         $events = $f->sql->rows("sis_history_events");
         $receipts = $f->sql->rows("sis_history_operations");
@@ -186,7 +186,7 @@ final class AcademicCompletionTest extends TestCase
     {
         [$f, $student, $section, $enrollment] = $this->fixture(false);
         $this->expectException(ValidationException::class);
-        $f->academicCompletions()->review(
+        $f->academicDates()->review(
             $student,
             $section,
             $enrollment,
@@ -199,7 +199,7 @@ final class AcademicCompletionTest extends TestCase
     public function testPermissionScopeAndActorAreRequiredAgainAtConfirmation(): void
     {
         [$f, $student, $section, $enrollment] = $this->fixture();
-        $s = $f->academicCompletions();
+        $s = $f->academicDates();
         $r = $s->review($student, $section, $enrollment, "2026-08-01", 1, "Fictional scoped date.");
         $f->access->staff = false;
         $f->access->grants = ["sis:gradebook:manage", "sis:student:read"];
@@ -233,7 +233,7 @@ final class AcademicCompletionTest extends TestCase
                     return [];
                 }
             };
-            $s = $f->academicCompletions($audit);
+            $s = $f->academicDates($audit);
             $r = $s->review($student, $section, $enrollment, "2026-08-01", 1, "Fictional atomic correction.");
             $events = $f->sql->rows("sis_history_events");
             $receipts = $f->sql->rows("sis_history_operations");
@@ -277,7 +277,7 @@ final class AcademicCompletionTest extends TestCase
             $f->sql->update("sis_enrollments", [$field => $replacement->value], ["id" => $enrollment->value]);
             $events = $f->sql->rows("sis_history_events");
             try {
-                $f->academicCompletions()->review(
+                $f->academicDates()->review(
                     $student,
                     $section,
                     $enrollment,
@@ -291,4 +291,182 @@ final class AcademicCompletionTest extends TestCase
             }
         }
     }
+    public function testSourcePeriodUsesTheSharedDateWorkflowWithoutChangingCompletionGradeOrMoney(): void
+    {
+        [$f, $student, $section, $enrollment, $credit] = $this->fixture();
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        $service = $f->academicDates();
+        $c = $service->review($student, $section, $enrollment, "2026-08-02", 1, "Fictional completion.");
+        $service->commit($student, $section, $c["review_token"]);
+        $before = $f->sql->one("sis_academic_credits", ["id" => $credit->value]);
+        $events = $f->sql->rows("sis_history_events");
+        $money = $f->financialEvents();
+        $r = $service->review(
+            $student,
+            $section,
+            $enrollment,
+            "2026-01-12",
+            2,
+            "Fictional private source period.",
+            kind: $kind,
+        );
+        self::assertNull($r["previous_academic_on"]);
+        self::assertSame($events, $f->sql->rows("sis_history_events"));
+        $receipt = $service->commit($student, $section, $r["review_token"], kind: $kind);
+        $facts = $f->academicCredits()->auditFacts($credit, $student);
+        self::assertSame("2026-01-12", $facts["academic_on"]);
+        self::assertSame("2026-08-02", $facts["completed_on"]);
+        self::assertSame(
+            "2026-01-12",
+            $f->academicCredits()->evaluationFacts($credit, $student, new HistoryReadBudget())["academic_on"],
+        );
+        self::assertEquals(
+            array_replace($before, ["version" => 3]),
+            $f->sql->one("sis_academic_credits", ["id" => $credit->value]),
+        );
+        self::assertSame($money, $f->financialEvents());
+        foreach ($events as $event) {
+            self::assertSame($event, $f->sql->one("sis_history_events", ["id" => $event["id"]]));
+        }
+        $history = $f->academicCredits()->history($student, $section, $enrollment);
+        self::assertSame("period_recorded", end($history["items"])["action"]);
+        self::assertSame("2026-01-12", end($history["items"])["academic_on"]);
+        self::assertStringNotContainsString(
+            "Fictional private source period.",
+            json_encode($history, JSON_THROW_ON_ERROR),
+        );
+        self::assertSame($receipt, $service->commit($student, $section, $r["review_token"], kind: $kind));
+    }
+    public function testPeriodCorrectionsAndExplicitClearsPreserveTheOriginalRetryAfterLaterDecisions(): void
+    {
+        [$f, $student, $section, $enrollment, $credit] = $this->fixture();
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        $service = $f->academicDates();
+        $one = $service->review(
+            $student,
+            $section,
+            $enrollment,
+            "2026-01-12",
+            1,
+            "Fictional source date.",
+            kind: $kind,
+        );
+        $receipt = $service->commit($student, $section, $one["review_token"], kind: $kind);
+        $two = $service->review(
+            $student,
+            $section,
+            $enrollment,
+            "2026-02-02",
+            2,
+            "Fictional corrected source date.",
+            kind: $kind,
+        );
+        $service->commit($student, $section, $two["review_token"], kind: $kind);
+        $clear = $service->review(
+            $student,
+            $section,
+            $enrollment,
+            null,
+            3,
+            "Fictional source evidence withdrawn.",
+            kind: $kind,
+        );
+        $service->commit($student, $section, $clear["review_token"], kind: $kind);
+        $f->clock->time = $f->clock->time->modify("+1 day");
+        self::assertSame($receipt, $service->commit($student, $section, $one["review_token"], kind: $kind));
+        self::assertNull($f->academicCredits()->auditFacts($credit, $student)["academic_on"]);
+        self::assertSame(4, $f->sql->one("sis_academic_credits", ["id" => $credit->value])["version"]);
+    }
+    public function testDateKindsCannotReuseEachOthersTokensOrContradictRecordedChronology(): void
+    {
+        [$f, $student, $section, $enrollment] = $this->fixture();
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        $service = $f->academicDates();
+        $p = $service->review($student, $section, $enrollment, "2026-07-01", 1, "Fictional source date.", kind: $kind);
+        $events = $f->sql->rows("sis_history_events");
+        try {
+            $service->commit($student, $section, $p["review_token"]);
+            self::fail("Period token used as a completion token.");
+        } catch (ValidationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+        $service->commit($student, $section, $p["review_token"], kind: $kind);
+        try {
+            $service->review(
+                $student,
+                $section,
+                $enrollment,
+                "2026-06-30",
+                2,
+                "Invalid completion before source period.",
+            );
+            self::fail("Contradictory completion accepted.");
+        } catch (ValidationException) {
+            self::assertTrue(true);
+        }
+        $c = $service->review($student, $section, $enrollment, "2026-08-01", 2, "Fictional completion.");
+        $service->commit($student, $section, $c["review_token"]);
+        try {
+            $service->review(
+                $student,
+                $section,
+                $enrollment,
+                "2026-08-02",
+                3,
+                "Invalid source start after completion.",
+                kind: $kind,
+            );
+            self::fail("Contradictory period accepted.");
+        } catch (ValidationException) {
+            self::assertTrue(true);
+        }
+        try {
+            $service->commit($student, $section, $c["review_token"], kind: $kind);
+            self::fail("Completion token used as a period token.");
+        } catch (ValidationException) {
+            self::assertTrue(true);
+        }
+    }
+    public function testPendingRecordsExpiredReviewsAndRevokedAuthorityCannotRecordSourceChronology(): void
+    {
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        [$f, $student, $section, $enrollment] = $this->fixture(false);
+        try {
+            $f->academicDates()->review(
+                $student,
+                $section,
+                $enrollment,
+                "2026-01-01",
+                0,
+                "Fictional source date.",
+                kind: $kind,
+            );
+            self::fail("Ungraded attempt accepted a source date.");
+        } catch (ValidationException) {
+            self::assertTrue(true);
+        }
+        [$f, $student, $section, $enrollment] = $this->fixture();
+        $service = $f->academicDates();
+        $r = $service->review($student, $section, $enrollment, "2026-01-01", 1, "Fictional source date.", kind: $kind);
+        $f->clock->time = $f->clock->time->modify("+21 minutes");
+        $events = $f->sql->rows("sis_history_events");
+        $receipts = $f->sql->rows("sis_history_operations");
+        try {
+            $service->commit($student, $section, $r["review_token"], kind: $kind);
+            self::fail("Expired period review accepted.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+            self::assertSame($receipts, $f->sql->rows("sis_history_operations"));
+        }
+        $f->access->staff = false;
+        $f->access->grants = ["sis:student:read"];
+        try {
+            $service->commit($student, $section, $r["review_token"], kind: $kind);
+            self::fail("Lost authority accepted.");
+        } catch (AccessDeniedException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+    }
+
+
 }

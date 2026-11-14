@@ -6,6 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\Gradebook\Assignment;
+use Domain\AcademicRecord\ValueObject\AcademicDateKind;
 use Domain\Gradebook\Service\GradebookService;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -16,7 +17,7 @@ final readonly class SisGradebookController
 {
     public function __construct(
         private GradebookService $service,
-        private \Domain\AcademicRecord\Service\AcademicCompletionService $completion,
+        private \Domain\AcademicRecord\Service\AcademicDateService $dates,
         private \Domain\AcademicRecord\Service\AcademicCourseService $courses,
     ) {
     }
@@ -138,34 +139,56 @@ final readonly class SisGradebookController
     }
     public function reviewCompletion(ServerRequest $request, string $id, string $student): ResponseInterface
     {
+        return $this->reviewDate($request, $id, $student, AcademicDateKind::Completion);
+    }
+    public function reviewAcademicPeriod(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        return $this->reviewDate($request, $id, $student, AcademicDateKind::Period);
+    }
+    private function reviewDate(
+        ServerRequest $request,
+        string $id,
+        string $student,
+        AcademicDateKind $kind,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $body = $request->getParsedBody();
-        if (!is_array($body) || !array_key_exists("completed_on", $body)) {
+        if (!is_array($body) || !array_key_exists($kind->value, $body)) {
             throw new \Domain\Shared\Exception\ValidationException([
-                [
-                    "field" => "completed_on",
-                    "message" => "Enter an actual completion date or explicitly clear the date.",
-                ],
+                ["field" => $kind->value, "message" => "Enter the " . $kind->label() . ", or explicitly clear it."],
             ]);
         }
         return new JsonResponse(
-            $this->completion->review(
+            $this->dates->review(
                 new EntityId($student),
                 new EntityId($id),
                 $f->id("enrollment_id"),
-                $f->optionalText("completed_on", 10),
+                $f->optionalText($kind->value, 10),
                 $f->integer("version", 0),
                 $f->bodyText("reason"),
+                kind: $kind,
             ),
         );
     }
     public function commitCompletion(ServerRequest $request, string $id, string $student): ResponseInterface
     {
         return new JsonResponse(
-            $this->completion->commit(
+            $this->dates->commit(
                 new EntityId($student),
                 new EntityId($id),
                 FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+
+    public function commitAcademicPeriod(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->dates->commit(
+                new EntityId($student),
+                new EntityId($id),
+                FormInput::from($request)->text("review_token", 16384),
+                kind: AcademicDateKind::Period,
             ),
         );
     }

@@ -8,6 +8,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished;
 use Domain\AcademicRecord\Event\FinalGradeWasDecided;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
+use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
@@ -34,6 +35,12 @@ final class AcademicEventSchema
                 "course_version_id",
                 "course_code",
                 "course_title",
+            ],
+            InstitutionalAcademicPeriodWasRecorded::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_academic_on",
+                "academic_on",
             ],
             AcademicCompletionWasRecorded::class => [
                 "decision_id",
@@ -117,8 +124,15 @@ final class AcademicEventSchema
                         self::invalid();
                     }
                 }
-            } elseif ($class === AcademicCompletionWasRecorded::class) {
-                foreach (["previous_completed_on", "completed_on"] as $key) {
+            } elseif (
+                in_array(
+                    $class,
+                    [AcademicCompletionWasRecorded::class, InstitutionalAcademicPeriodWasRecorded::class],
+                    true,
+                )
+            ) {
+                $field = $class === AcademicCompletionWasRecorded::class ? "completed_on" : "academic_on";
+                foreach (["previous_" . $field, $field] as $key) {
                     $date = $payload[$key];
                     if ($date === null) {
                         continue;
@@ -131,7 +145,7 @@ final class AcademicEventSchema
                         self::invalid();
                     }
                 }
-                if ($payload["completed_on"] === $payload["previous_completed_on"]) {
+                if ($payload[$field] === $payload["previous_" . $field]) {
                     self::invalid();
                 }
             } elseif ($class === FinalGradeWasDecided::class) {

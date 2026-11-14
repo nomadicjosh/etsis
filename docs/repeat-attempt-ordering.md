@@ -34,3 +34,6 @@ The composition's existing JSON policy object now accepts `repeat_attempt_order`
 A bounded, read-only inventory of the configured application database found one composition draft without this field and no degree-publication streams/events before this extension. No stored row or event was changed. The existing JSON columns and registered event format support the additive policy field; no table migration, numbered model wrapper or parallel event store was introduced.
 
 Full degree constraints, retained evaluation results and accepted-course publication/equivalence capture remain later stages. Sending-institution period starts now have a separate reviewed workflow. Institutional completion dates now have a separate reviewed workflow. This ordering integration changes current-work review, not standing, issued transcripts or graduation decisions.
+
+
+Older institutional attempts without a published offering can now retain a reasoned [source academic-period start](academic-completion-dates.md#source-academic-period-start). It enters the same verified ordering path, with no current-term inference or additional history scan. Published offering starts stay protected. Completion-date ordering remains independent, and clearing required period evidence returns an unknown comparison rather than guessing a latest attempt.

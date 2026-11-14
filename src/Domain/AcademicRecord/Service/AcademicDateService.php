@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Domain\AcademicRecord\Service;
 
 use DateTimeImmutable;
-use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
+use Domain\AcademicRecord\AcademicCredit;
+use Domain\AcademicRecord\ValueObject\AcademicDateKind;
 use Domain\AcademicRecord\Repository\AcademicCreditRepository;
 use Domain\AcademicRecord\ValueObject\AcademicCreditId;
 use Domain\Audit\Repository\AuditTrail;
@@ -23,7 +24,7 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Throwable;
 
-final readonly class AcademicCompletionService
+final readonly class AcademicDateService
 {
     public function __construct(
         private InstitutionalCreditLedger $credits,
@@ -44,33 +45,35 @@ final readonly class AcademicCompletionService
         EntityId $student,
         EntityId $section,
         EntityId $enrollment,
-        #[\SensitiveParameter] ?string $completedOn,
+        #[\SensitiveParameter] ?string $dateValue,
         int $version,
         #[\SensitiveParameter] string $reason,
+        AcademicDateKind $kind = AcademicDateKind::Completion,
     ): array {
         $actor = $this->authorize();
-        $this->date($completedOn);
+        $this->date($dateValue, $kind);
         return $this->transactions->run(function () use (
             $student,
             $section,
             $enrollment,
-            $completedOn,
+            $dateValue,
             $version,
             $reason,
             $actor,
+            $kind,
         ): array {
             $this->lock($student, $section, $actor);
             [$id, $root, $facts] = $this->credits->decisionRecord($student, $section, $enrollment);
             if ($facts["version"] !== $version) {
                 throw new ConcurrentModificationException(
-                    "Reload the academic record before reviewing its completion date.",
+                    "Reload the academic record before reviewing its " . $kind->label() . ".",
                 );
             }
-            $this->posted($enrollment, $section, $facts, $root->playhead(), $root->grade() !== null);
-            if ($root->completedOn() === $completedOn) {
+            $this->posted($enrollment, $section, $facts, $root, $kind, $dateValue);
+            if ($kind->current($root) === $dateValue) {
                 self::invalid(
-                    "completed_on",
-                    "Choose a different actual completion date, or clear a known date.",
+                    $kind->value,
+                    "Choose a different " . $kind->label() . ", or explicitly clear a known date.",
                 );
             }
             $reason = trim($reason);
@@ -85,11 +88,10 @@ final readonly class AcademicCompletionService
             $operation = EntityId::generate();
             $now = $this->clock->now();
             // This is the effective completion fact; accepted/recorded time remains the journal's clock.
-            $effective =
-                $completedOn === null ? $now : new DateTimeImmutable($completedOn, $now->getTimezone());
+            $effective = $dateValue === null ? $now : new DateTimeImmutable($dateValue, $now->getTimezone());
             new EventContext($actor, $effective, $operation, reason: $reason);
             $data = [
-                "kind" => "academic-completion-review",
+                "kind" => $kind->tokenKind(),
                 "student_id" => $student->value,
                 "section_id" => $section->value,
                 "enrollment_id" => $enrollment->value,
@@ -99,8 +101,8 @@ final readonly class AcademicCompletionService
                 "expected_version" => $root->playhead(),
                 "credit_version" => $version,
                 "previous_decision_id" => $root->decision(),
-                "previous_completed_on" => $root->completedOn(),
-                "completed_on" => $completedOn,
+                "previous_" . $kind->value => $kind->current($root),
+                $kind->value => $dateValue,
                 "effective_at" => $effective->format(DATE_ATOM),
                 "reason" => $reason,
                 "expires_at" => $now->getTimestamp() + 1200,
@@ -111,8 +113,12 @@ final readonly class AcademicCompletionService
     }
 
     /** @return array{operation_id:string,first_version:int,last_version:int,event_ids:list<string>} */
-    public function commit(EntityId $student, EntityId $section, #[\SensitiveParameter] string $token): array
-    {
+    public function commit(
+        EntityId $student,
+        EntityId $section,
+        #[\SensitiveParameter] string $token,
+        AcademicDateKind $kind = AcademicDateKind::Completion,
+    ): array {
         $actor = $this->authorize();
         try {
             if (strlen($token) > 16384) {
@@ -121,7 +127,7 @@ final readonly class AcademicCompletionService
             $d = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($d) ||
-                ($d["kind"] ?? null) !== "academic-completion-review" ||
+                ($d["kind"] ?? null) !== $kind->tokenKind() ||
                 ($d["student_id"] ?? null) !== $student->value ||
                 ($d["section_id"] ?? null) !== $section->value ||
                 !is_int($d["expires_at"] ?? null) ||
@@ -131,12 +137,12 @@ final readonly class AcademicCompletionService
                 throw new \InvalidArgumentException();
             }
         } catch (Throwable) {
-            self::invalid("review_token", "Review the actual completion date again.");
+            self::invalid("review_token", "Review the " . $kind->label() . " again.");
         }
         if ($d["actor_id"] !== $actor->value) {
-            throw new AccessDeniedException("This completion-date review belongs to another staff member.");
+            throw new AccessDeniedException("This academic-date review belongs to another staff member.");
         }
-        return $this->transactions->run(function () use ($student, $section, $actor, $d): array {
+        return $this->transactions->run(function () use ($student, $section, $actor, $d, $kind): array {
             $this->lock($student, $section, $actor);
             $enrollment = new EntityId($d["enrollment_id"]);
             [$id, $root, $facts] = $this->credits->decisionRecord($student, $section, $enrollment);
@@ -144,16 +150,19 @@ final readonly class AcademicCompletionService
                 throw new CorruptHistoryException();
             }
             $operation = new EntityId($d["operation_id"]);
-            $event = AcademicCompletionWasRecorded::occur(
-                new AcademicCreditId($id->value),
-                [
-                    "decision_id" => $operation->value,
-                    "previous_decision_id" => $d["previous_decision_id"],
-                    "previous_completed_on" => $d["previous_completed_on"],
-                    "completed_on" => $d["completed_on"],
-                ],
-                ["__aggregate_type" => "academic_credit"],
-            )->withPlayhead($d["expected_version"] + 1);
+            $event = $kind
+                ->eventClass()
+                ::occur(
+                    new AcademicCreditId($id->value),
+                    [
+                        "decision_id" => $operation->value,
+                        "previous_decision_id" => $d["previous_decision_id"],
+                        "previous_" . $kind->value => $d["previous_" . $kind->value],
+                        $kind->value => $d[$kind->value],
+                    ],
+                    ["__aggregate_type" => "academic_credit"],
+                )
+                ->withPlayhead($d["expected_version"] + 1);
             // Append verifies an original retry before new-command expiry/state checks. Any failed new
             // decision rolls back its event and receipt with the projection in this same transaction.
             $receipt = $this->history->append(
@@ -175,52 +184,54 @@ final readonly class AcademicCompletionService
                     $facts["version"] !== $d["credit_version"]
                 ) {
                     throw new ConcurrentModificationException(
-                        "The record or review changed. Review the completion date again.",
+                        "The record or review changed. Review the " . $kind->label() . " again.",
                     );
                 }
-                $this->posted($enrollment, $section, $facts, $root->playhead(), $root->grade() !== null);
-                $this->date($d["completed_on"]);
+                $this->posted($enrollment, $section, $facts, $root, $kind, $d[$kind->value]);
+                $this->date($d[$kind->value], $kind);
                 $root->acceptHistorical($event);
                 $this->records->project(
                     $root->credit() ?? throw new CorruptHistoryException(),
                     $section,
                     $facts["version"],
                 );
-                $this->audit->record($actor, "academic.completion_recorded", $id);
+                $this->audit->record($actor, $kind->action(), $id);
             }
             $this->sameActor($actor);
             return $receipt;
         });
     }
 
-    private function date(#[\SensitiveParameter] ?string $date): void
+    private function date(#[\SensitiveParameter] ?string $date, AcademicDateKind $kind): void
     {
         if ($date === null) {
             return;
         }
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) !== 1) {
-            self::invalid("completed_on", "Enter a real actual completion date no later than today.");
+            self::invalid($kind->value, "Enter a real " . $kind->label() . " no later than today.");
         }
         $parsed = DateTimeImmutable::createFromFormat("!Y-m-d", $date);
-        if (
-            $parsed === false ||
-            $parsed->format("Y-m-d") !== $date ||
-            $date > $this->clock->now()->format("Y-m-d")
-        ) {
-            self::invalid("completed_on", "Enter a real actual completion date no later than today.");
+        if ($parsed === false || $parsed->format("Y-m-d") !== $date || $date > $this->clock->now()->format("Y-m-d")) {
+            self::invalid($kind->value, "Enter a real " . $kind->label() . " no later than today.");
         }
     }
 
     /** @param array<string,mixed> $facts */
-    private function posted(EntityId $enrollment, EntityId $section, array $facts, int $head, bool $gradeKnown): void
-    {
+    private function posted(
+        EntityId $enrollment,
+        EntityId $section,
+        array $facts,
+        AcademicCredit $root,
+        AcademicDateKind $kind,
+        ?string $dateValue,
+    ): void {
         $row = $this->records->enrollment($enrollment);
         if ($row !== null && ($row["student_id"] !== $facts["student_id"] || $row["section_id"] !== $section->value)) {
             throw new CorruptHistoryException();
         }
         if (
-            $head < 1 ||
-            !$gradeKnown ||
+            $root->playhead() < 1 ||
+            $root->grade() === null ||
             $facts["grade_id"] === null ||
             !in_array($facts["status"], ["A", "N"], true) ||
             $row === null ||
@@ -228,8 +239,22 @@ final readonly class AcademicCompletionService
             $row["term_id"] !== $facts["term_id"]
         ) {
             self::invalid(
-                "completed_on",
+                $kind->value,
                 "A verified posted grade and active academic record are required. Review the grade history first.",
+            );
+        }
+        if ($kind === AcademicDateKind::Period && $root->sectionVersion() !== null) {
+            self::invalid(
+                "academic_on",
+                "The published offering already retains the academic period. Its dates cannot be replaced here.",
+            );
+        }
+        $start = $kind === AcademicDateKind::Period ? $dateValue : $root->academicOn();
+        $end = $kind === AcademicDateKind::Completion ? $dateValue : $root->completedOn();
+        if ($start !== null && $end !== null && $start > $end) {
+            self::invalid(
+                $kind->value,
+                "The source academic-period start cannot be after the actual completion date. Review both facts.",
             );
         }
     }

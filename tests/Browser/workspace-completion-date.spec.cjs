@@ -8,6 +8,8 @@ async function fixture(page, options = {}) {
         enrollment = id(5);
     const calls = [],
         errors = [];
+    let academicOn = options.knownPeriod ? "2026-01-12" : null;
+    let periodReview;
     let date = options.known ? "2026-08-01" : null,
         version = 3,
         reviewed;
@@ -63,6 +65,8 @@ async function fixture(page, options = {}) {
                 current_grade_code: "A",
                 posted: true,
                 can_amend: !options.readOnly,
+                can_record_academic_period: !!options.period && !options.readOnly && !options.knownOffering,
+                academic_on: academicOn,
                 can_accept_course: !!options.courseAcceptance && !options.readOnly,
                 current_version: version,
                 completed_on: date,
@@ -71,6 +75,12 @@ async function fixture(page, options = {}) {
                 needs_assignment: false,
                 pursuits: [],
             };
+        else if (path.endsWith("/academic-period/review/")) {
+            if(options.rejectPeriod) return route.fulfill({status:409,json:{error:"The record changed. Reload before reviewing."}});
+            periodReview=data.academic_on;
+            result={previous_academic_on:academicOn,academic_on:periodReview,reason:data.reason,review_token:"fictional-period-review"};
+        }
+        else if(path.endsWith("/academic-period/commit/")) {academicOn=periodReview;version++;}
         else if (path.endsWith("/course-publication/choices/")) result = {
             items:[{version_id:id(data.cursor?7:6),version:data.cursor?2:1,code:"CS.101",transcript_title:data.cursor?"Revised <b>fictional</b> title":"Retained course title"}],
             next_cursor:data.cursor?null:"fictional-next",current_version:version,effective_on_default:"2026-08-11",
@@ -278,3 +288,74 @@ test("a known registration-time publication is explained without offering a repl
     expect(f.calls.some((c) => c.path.includes("/course-publication/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });
+
+
+test("registrar reviews a missing institutional source period separately from completion with preserved evidence", async ({
+    page,
+}) => {
+    const f = await fixture(page, { period: true });
+    await page.getByRole("button", { name: "Review academic period", exact: true }).click();
+    const drawer = page.locator("#drawer-body");
+    await expect(drawer).toContainText("Do not substitute today's term dates");
+    await page.getByLabel("Source academic-period start (blank marks unknown)", { exact: true }).fill("2026-01-12");
+    await page
+        .getByRole("textbox", { name: "Reason for recording or correcting this date", exact: true })
+        .fill("Fictional <b>records</b> evidence.");
+    await page.getByRole("button", { name: "Review academic period", exact: true }).click();
+    await expect(drawer).toContainText("Unknown → 2026-01-12");
+    expect(f.calls.some((c) => c.path.endsWith("/academic-period/commit/"))).toBe(false);
+    await expect(drawer.locator("b")).toHaveCount(0);
+    await page.getByRole("button", { name: "Revise academic period", exact: true }).click();
+    await expect(
+        page.getByRole("textbox", { name: "Reason for recording or correcting this date", exact: true }),
+    ).toHaveValue("Fictional <b>records</b> evidence.");
+    await page.getByRole("button", { name: "Review academic period", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const audit = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(audit.violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Confirm academic period", exact: true }).click();
+    await expect(drawer).toContainText("Registrar-recorded academic period start: 2026-01-12");
+    expect(f.calls.find((c) => c.path.endsWith("/academic-period/review/"))).toMatchObject({
+        csrf: "fictional-test-token",
+        data: { enrollment_id: f.enrollment, version: 3, academic_on: "2026-01-12" },
+    });
+    expect(f.calls.find((c) => c.path.endsWith("/academic-period/commit/"))).toMatchObject({
+        csrf: "fictional-test-token",
+        data: { review_token: "fictional-period-review" },
+    });
+    expect(f.calls.some((c) => c.path.includes("/completion-date/") || c.path.includes("/final-grades/"))).toBe(false);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("clearing a source period explicitly records unknown rather than substituting another date", async ({ page }) => {
+    const f = await fixture(page, { period: true, knownPeriod: true });
+    await page.getByRole("button", { name: "Review academic period", exact: true }).click();
+    await page.getByLabel("Source academic-period start (blank marks unknown)", { exact: true }).fill("");
+    await page
+        .getByRole("textbox", { name: "Reason for recording or correcting this date", exact: true })
+        .fill("Fictional source evidence withdrawn.");
+    await page.getByRole("button", { name: "Review academic period", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
+    await page.getByRole("button", { name: "Confirm academic period", exact: true }).click();
+    expect(f.calls.find((c) => c.path.endsWith("/academic-period/review/"))?.data.academic_on).toBeNull();
+    await expect(page.locator("#drawer-body")).toContainText("Registrar-recorded academic period start: Unknown");
+    expect(f.errors).toEqual([]);
+});
+
+for (const options of [
+    { period: true, knownOffering: true },
+    { period: true, readOnly: true },
+])
+    test(`source-period correction is unavailable for ${options.knownOffering ? "a published offering" : "ordinary faculty"}`, async ({
+        page,
+    }) => {
+        const f = await fixture(page, options);
+        await expect(page.getByRole("button", { name: "Review academic period", exact: true })).toHaveCount(0);
+        expect(f.calls.some((c) => c.path.includes("/academic-period/"))).toBe(false);
+        expect(f.errors).toEqual([]);
+    });

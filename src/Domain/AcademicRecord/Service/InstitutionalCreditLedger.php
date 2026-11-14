@@ -159,12 +159,15 @@ final readonly class InstitutionalCreditLedger
             "current_version" => $facts["version"],
             "enrollment_id" => $enrollment->value,
             "completed_on" => $root->completedOn(),
+            "academic_on" => $root->academicOn(),
             "can_amend" => $this->canAmend(),
             "can_accept_course" => $this->canAmend() && $root->canAcceptCourse() &&
                 ($root->playhead() > 0 || $facts['course_version_id'] === null),
             "course_version_id" => $facts['course_version_id'],
             "history_recorded" => $root->playhead() > 0,
             "posted" => new CreditSnapshot($facts)->posted(),
+            'can_record_academic_period' => $this->canAmend() && $root->sectionVersion() === null &&
+                $root->playhead() > 0 && $root->grade() !== null && $facts['grade_id'] !== null,
             "current_grade_code" =>
                 $facts["grade_id"] === null
                     ? null
@@ -492,6 +495,7 @@ final readonly class InstitutionalCreditLedger
             "history_version" => $root->playhead(),
             "section_version_id" => $root->sectionVersion(),
             "completed_on" => $root->completedOn(),
+            "academic_on" => $root->academicOn(),
             "retained_term_code" => null,
         ];
     }
@@ -516,6 +520,7 @@ final readonly class InstitutionalCreditLedger
             "history_version" => $root->playhead(),
             "section_version_id" => $root->sectionVersion(),
             "completed_on" => $root->completedOn(),
+            "academic_on" => $root->academicOn(),
             "retained_term_code" => null,
         ];
     }
@@ -539,16 +544,18 @@ final readonly class InstitutionalCreditLedger
             $p = $e->payload();
             $items[] = [
                 "version" => $e->playhead(),
-                "action" =>
-                    $e instanceof InstitutionalCreditWasEstablished
-                        ? $p["provenance"]
-                        : ($e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded
-                            ? "completion_recorded"
-                            : ($e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted
-                                ? "course_accepted"
-                                : ($e instanceof FinalGradeWasDecided
-                                ? "grade_decided"
-                                : "dropped"))),
+                'action' => match (true) {
+                    $e instanceof InstitutionalCreditWasEstablished => $p['provenance'],
+                    $e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded => 'completion_recorded',
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded =>
+                        'period_recorded',
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted => 'course_accepted',
+                    $e instanceof FinalGradeWasDecided => 'grade_decided',
+                    $e instanceof InstitutionalCreditWasDropped => 'dropped',
+                    default => throw new CorruptHistoryException(),
+                },
+                'academic_on' => $p['academic_on'] ?? null,
+                'previous_academic_on' => $p['previous_academic_on'] ?? null,
                 "course_code" => $p['course_code'] ?? null,
                 "course_title" => $p['course_title'] ?? null,
                 "completed_on" => $p["completed_on"] ?? null,

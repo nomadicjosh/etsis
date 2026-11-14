@@ -251,3 +251,8 @@ The existing audit test workspace now combines a degree editor snapshot or exact
 ### Institutional course-publication acceptance
 
 Active institutional credits with an originally unknown course/offering reference now have a reasoned registrar review, confirmation and curated history through the existing academic-credit journal. Exact same-course publications are verified and indexed without changing grades, completion dates, enrollment or money. Untracked older rows start with an explicit current observation; known registration-time references cannot be replaced. Actor/version/expiry checks, original retries after later decisions or early removal, atomic rollback and subsequent degree-audit matching are covered by fictional tests. See [the staff workflow](academic-credit-history.md#resolve-an-unknown-course-publication). No migration or live data conversion is needed.
+
+
+### Institutional source periods and shared date decisions
+
+Completion and source academic-period dates now share the current `AcademicDateService`, typed date kind, controller parser and browser editor. Verified older graded records without published offerings can receive a reasoned period start/correction/clear in the same academic-credit stream, while known offering dates stay protected. Date kinds have separate events/token scopes; cross-date checks prevent an academic start after actual completion. The existing retained repeat evaluator consumes verified dates without inferring current calendar facts or changing grades/charges. See [the source-period workflow](academic-completion-dates.md#source-academic-period-start). No table, migration or live-data conversion is added.

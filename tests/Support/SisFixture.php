@@ -301,9 +301,9 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
-    public function academicCompletions(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicCompletionService
+    public function academicDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicDateService
     {
-        return new \Domain\AcademicRecord\Service\AcademicCompletionService(
+        return new \Domain\AcademicRecord\Service\AcademicDateService(
             $this->academicCredits(),
             new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(

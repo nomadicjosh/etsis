@@ -236,7 +236,7 @@ final class AcademicCalculationTest extends TestCase
             [[$first, $firstEnrollment, '2026-01-01'], [$second, $secondEnrollment, '2026-02-01']]
             as [$section, $enrollment, $date]
         ) {
-            $completion = $s->academicCompletions();
+            $completion = $s->academicDates();
             $review = $completion->review(
                 $f->student,
                 $section->id,
@@ -581,7 +581,7 @@ final class AcademicCalculationTest extends TestCase
         [, $newEnrollment] = $this->work($f, "B", $second);
         $s = $f->f->sis;
         $s->clock->time = new \DateTimeImmutable("2027-01-10T10:00:00-07:00");
-        $completion = $s->academicCompletions();
+        $completion = $s->academicDates();
         foreach ([[$first, $oldEnrollment, "2026-11-20"], [$second, $newEnrollment, "2026-12-20"]] as [$section, $enrollment, $date]) {
             $review = $completion->review($f->student, $section->id, $enrollment, $date, 1, "Fictional confirmed actual completion.");
             $completion->commit($f->student, $section->id, $review["review_token"]);
@@ -660,4 +660,140 @@ final class AcademicCalculationTest extends TestCase
         $old = new PublishedRequirementsReader($f->f->history)->version($f->f->degree, $f->version);
         self::assertArrayNotHasKey("repeat_attempt_order", $old["definition"]["policies"]);
     }
+    public function testExplicitInstitutionalSourcePeriodsResolveLatestGpaWithoutUsingCompletionOrCurrentTerms(): void
+    {
+        $f = $this->institution("latest_eligible", "academic_period");
+        $s = $f->f->sis;
+        [$first, $one] = $this->work($f, "A");
+        $second = new \Domain\Registration\Section(
+            EntityId::generate(),
+            $first->courseId,
+            $first->termId,
+            $s->access->actor,
+            "FICTIONAL.PERIOD.REPEAT",
+            20,
+            true,
+            true,
+            new \Domain\Finance\ValueObject\Money(0, "USD"),
+        );
+        $s->registration->addSection($second);
+        [, $two] = $this->work($f, "B", $second);
+        $reader = $this->service($f);
+        $unknown = $reader->preview($f->student, $f->assignment);
+        self::assertFalse($unknown["totals"]["gpa_ready"]);
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        $dates = $s->academicDates();
+        foreach ([[$first, $one, "2026-01-12"], [$second, $two, "2026-07-01"]] as [$section, $enrollment, $date]) {
+            $r = $dates->review(
+                $f->student,
+                $section->id,
+                $enrollment,
+                $date,
+                1,
+                "Fictional institutional source evidence.",
+                kind: $kind,
+            );
+            $dates->commit($f->student, $section->id, $r["review_token"], kind: $kind);
+        }
+        $known = $reader->preview($f->student, $f->assignment);
+        self::assertSame(3000, $known["totals"]["gpa_milli"]);
+        self::assertContains("2026-07-01", array_column($known["records"], "ordering_on"));
+        $money = $s->financialEvents();
+        $r = $dates->review(
+            $f->student,
+            $first->id,
+            $one,
+            "2026-07-15",
+            2,
+            "Fictional correction of the older source period.",
+            kind: $kind,
+        );
+        $dates->commit($f->student, $first->id, $r["review_token"], kind: $kind);
+        self::assertSame(4000, $reader->preview($f->student, $f->assignment)["totals"]["gpa_milli"]);
+        self::assertSame(3000, $known["totals"]["gpa_milli"]);
+        $clear = $dates->review(
+            $f->student,
+            $first->id,
+            $one,
+            null,
+            3,
+            "Fictional source evidence withdrawn.",
+            kind: $kind,
+        );
+        $dates->commit($f->student, $first->id, $clear["review_token"], kind: $kind);
+        self::assertFalse($reader->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
+        self::assertSame($money, $s->financialEvents());
+    }
+    public function testPublishedOfferingPeriodCannotBeOverriddenAndCompletionOrderingStaysIndependent(): void
+    {
+        $f = $this->institution("latest_eligible", "completion_date");
+        $s = $f->f->sis;
+        [$section] = $this->datedOffering($f, "2026-01-12", "2026-05-20");
+        [, $enrollment] = $this->work($f, "A", $section);
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        $events = $s->sql->rows("sis_history_events");
+        try {
+            $s->academicDates()->review(
+                $f->student,
+                $section->id,
+                $enrollment,
+                "2026-02-01",
+                1,
+                "Invalid override of retained source dates.",
+                kind: $kind,
+            );
+            self::fail("Known offering date replaced.");
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            self::assertSame($events, $s->sql->rows("sis_history_events"));
+        }
+        self::assertFalse(
+            $s->academicCredits()->choices($f->student, $section->id, $enrollment)["can_record_academic_period"],
+        );
+    }
+
+    public function testRecordedSourcePeriodsDoNotReplaceTheRetainedCompletionDateOrderingPolicy(): void
+    {
+        $f = $this->institution("latest_eligible", "completion_date");
+        $s = $f->f->sis;
+        [$first, $one] = $this->work($f, "A");
+        $second = new \Domain\Registration\Section(
+            EntityId::generate(),
+            $first->courseId,
+            $first->termId,
+            $s->access->actor,
+            "FICTIONAL.OTHER.ORDER",
+            20,
+            true,
+            true,
+            new \Domain\Finance\ValueObject\Money(0, "USD"),
+        );
+        $s->registration->addSection($second);
+        [, $two] = $this->work($f, "B", $second);
+        $kind = \Domain\AcademicRecord\ValueObject\AcademicDateKind::Period;
+        $dates = $s->academicDates();
+        foreach ([[$first, $one, "2026-02-01"], [$second, $two, "2026-01-01"]] as [$section, $enrollment, $period]) {
+            $r = $dates->review(
+                $f->student,
+                $section->id,
+                $enrollment,
+                $period,
+                1,
+                "Fictional source period.",
+                kind: $kind,
+            );
+            $dates->commit($f->student, $section->id, $r["review_token"], kind: $kind);
+        }
+        $reader = $this->service($f);
+        self::assertFalse($reader->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
+        foreach (
+            [[$first, $one, "2026-07-01"], [$second, $two, "2026-08-01"]]
+            as [$section, $enrollment, $completion]
+        ) {
+            $r = $dates->review($f->student, $section->id, $enrollment, $completion, 2, "Fictional actual completion.");
+            $dates->commit($f->student, $section->id, $r["review_token"]);
+        }
+        self::assertSame(3000, $reader->preview($f->student, $f->assignment)["totals"]["gpa_milli"]);
+    }
+
+
 }

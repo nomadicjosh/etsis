@@ -120,9 +120,9 @@ final class AcademicCourseTest extends TestCase
         $r = $ledger->review($student, $section->id, $enrollment, new EntityId($grade), 0);
         $ledger->commit($student, $section->id, $r["review_token"]);
         $completion = $f
-            ->academicCompletions()
+            ->academicDates()
             ->review($student, $section->id, $enrollment, "2026-08-02", 1, "Fictional completion.");
-        $f->academicCompletions()->commit($student, $section->id, $completion["review_token"]);
+        $f->academicDates()->commit($student, $section->id, $completion["review_token"]);
         $before = new SqlAcademicCreditRepository($f->sql)->projection($credit);
         $events = $f->sql->rows("sis_history_events");
         $finance = $f->financialEvents();

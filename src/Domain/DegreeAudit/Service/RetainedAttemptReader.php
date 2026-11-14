@@ -29,7 +29,13 @@ final readonly class RetainedAttemptReader
         AuditCalculationPolicy $policy,
         HistoryReadBudget $budget,
     ): array {
-        $attempts = array_map(PolicyAttempt::fromAcademicWork(...), $inputs->items);
+        $attempts = array_map(static function (array $work): PolicyAttempt {
+            $date = $work['credit_type'] === 'institutional' ? ($work['academic_on'] ?? null) : null;
+            if ($date !== null && ($work['section_version_id'] ?? null) !== null) {
+                throw new CorruptHistoryException();
+            }
+            return PolicyAttempt::fromAcademicWork($work, $date);
+        }, $inputs->items);
         if (
             $policy->gpa !== RepeatGpaPolicy::LatestEligible ||
             $policy->attemptOrder !== RepeatAttemptOrder::AcademicPeriod
