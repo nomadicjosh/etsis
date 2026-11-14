@@ -24,6 +24,22 @@ use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
 
 final class DegreeProgressFixture
 {
+    public static function adjustments(
+        \SisFixture $s,
+        \Domain\Shared\EventSourcing\HistoricalEventStore $history,
+        \Domain\DegreeAudit\Service\StudentRequirementsService $requirements,
+        \Domain\Communications\Service\MessageCipher $cipher,
+        ?\Domain\Student\Service\StudentSpecializationService $specializations = null,
+    ): RequirementAdjustmentService {
+        return new RequirementAdjustmentService(
+            new SqlRequirementAdjustmentRepository($s->sql), $requirements,
+            new SqlStudentRecordRepository($s->sql), $history, $s->access, $s->transactions, $s->audit,
+            $cipher, $s->clock, new PublishedRequirementsReader($history), new SqlReplacementCourseRepository($s->sql),
+            new \Domain\DegreeAudit\Service\StudentCurriculumContext($requirements, $specializations ?? $s->specializations($history)),
+            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($history)),
+            $s->academicInputs($requirements),
+        );
+    }
     public static function service(
         \SisFixture $s,
         \Domain\Shared\EventSourcing\HistoricalEventStore $history,
@@ -33,14 +49,7 @@ final class DegreeProgressFixture
         int $steps = 100000,
         ?\Domain\Student\Service\StudentSpecializationService $specializations = null,
     ): \Domain\DegreeAudit\Service\DegreeProgressService {
-        $adjustments = new RequirementAdjustmentService(
-            new SqlRequirementAdjustmentRepository($s->sql), $requirements,
-            new SqlStudentRecordRepository($s->sql), $history, $s->access, $s->transactions, $s->audit,
-            $cipher, $s->clock, new PublishedRequirementsReader($history), new SqlReplacementCourseRepository($s->sql),
-            new \Domain\DegreeAudit\Service\StudentCurriculumContext($requirements, $specializations ?? $s->specializations($history)),
-            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($history)),
-            $s->academicInputs($requirements),
-        );
+        $adjustments = self::adjustments($s, $history, $requirements, $cipher, $specializations);
         $students = new SqlStudentRecordRepository($s->sql);
         $inputs = new AcademicInputService(
             $repository ?? new SqlAcademicInputRepository($s->sql),

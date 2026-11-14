@@ -132,14 +132,33 @@ foreach ([['definition' => $f->f->definition], ['use_group_drafts' => true], ['u
         throw new RuntimeException('A published runtime test accepted a draft override.');
     }
 }
+if ($send($path, $body + ['include_exceptions' => true])->getStatusCode() !== 422) {
+    throw new RuntimeException('An approved-exception test accepted a working draft.');
+}
+if ($before !== $digest()) {
+    throw new RuntimeException('Baseline runtime tests changed retained records.');
+}
+$approvedBody = $publishedBody + ['include_exceptions' => true];
+if ($send($path, $approvedBody, false)->getStatusCode() !== 403) {
+    throw new RuntimeException('Approved-exception testing bypassed CSRF.');
+}
+$approvedBefore = $digest();
+$response = $send($path, $approvedBody);
+$result = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($response->getStatusCode() !== 200 || ($result['exceptions_applied'] ?? true) !== false ||
+    ($result['status'] ?? null) !== 'needs_selection' ||
+    ($result['exception_mode'] ?? null) !== 'assigned_publications' || $approvedBefore !== $digest()) {
+    throw new RuntimeException('Assigned-publication testing lost its read-only provider contract.');
+}
 $sis->access->staff = false;
 foreach ([['sis:catalog:manage'], ['sis:student:read']] as $grants) {
     $sis->access->grants = $grants;
-    if ($send($path, $body)->getStatusCode() !== 403 || $send($path, $publishedBody)->getStatusCode() !== 403) {
+    if ($send($path, $body)->getStatusCode() !== 403 || $send($path, $publishedBody)->getStatusCode() !== 403 ||
+        $send($path, $approvedBody)->getStatusCode() !== 403) {
         throw new RuntimeException('Runtime audit lost its dual office permission boundary.');
     }
 }
-if ($before !== $digest()) {
+if ($approvedBefore !== $digest()) {
     throw new RuntimeException('Runtime audit changed a draft, student selection or event history.');
 }
 
@@ -280,6 +299,20 @@ if ($combinedResponse->getStatusCode() !== 200 || ($combinedResult['status'] ?? 
     ($combinedResult['mode'] ?? null) !== 'combined_curriculum' || count($combinedResult['components'] ?? []) !== 2 ||
     $progressBefore !== $digest()) {
     throw new RuntimeException('Combined curriculum review lost scope, provider wiring or read-only behavior.');
+}
+$sis->access->staff = true;
+$assignedTrial = $send($path, [
+    'source' => 'publication', 'version_id' => $f->version->value,
+    'student_id' => $f->student->value, 'assignment_id' => $f->assignment->value, 'include_exceptions' => true,
+    'companions' => [['template_id' => $opened['id'], 'source' => 'publication',
+        'version_id' => $confirmed['operation_id']]],
+]);
+$sis->access->staff = false;
+$assignedResult = json_decode((string) $assignedTrial->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($assignedTrial->getStatusCode() !== 200 || ($assignedResult['exceptions_applied'] ?? false) !== true ||
+    ($assignedResult['mode'] ?? null) !== 'runtime_combined_test' ||
+    ($assignedResult['sharing_source'] ?? null) !== 'published_program' || $progressBefore !== $digest()) {
+    throw new RuntimeException('Assigned-publication trials lost canonical sharing or changed records.');
 }
 if ($send($assignmentPath . 'progress/', [], false)->getStatusCode() !== 403) {
     throw new RuntimeException('Specialization progress bypassed browser CSRF.');

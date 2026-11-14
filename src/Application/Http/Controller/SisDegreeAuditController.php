@@ -9,6 +9,7 @@ use Domain\DegreeAudit\Service\RequirementsService;
 use Domain\DegreeAudit\Service\DegreeAuditTrialService;
 use Domain\DegreeAudit\ValueObject\AuditRequirementsV3;
 use Domain\Shared\ValueObject\EntityId;
+use JsonException;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
@@ -56,6 +57,9 @@ final readonly class SisDegreeAuditController
     {
         return new JsonResponse($this->service->view(new EntityId($id)));
     }
+    /**
+     * @throws JsonException
+     */
     public function save(ServerRequest $request, string $id): ResponseInterface
     {
         $body = $request->getParsedBody();
@@ -71,6 +75,9 @@ final readonly class SisDegreeAuditController
             ),
         );
     }
+    /**
+     * @throws JsonException
+     */
     public function test(ServerRequest $request, string $id): ResponseInterface
     {
         $body = $request->getParsedBody();
@@ -79,6 +86,13 @@ final readonly class SisDegreeAuditController
         }
         $input = FormInput::from($request);
         $source = $input->text("source", 20);
+        $includeExceptions = $input->boolean('include_exceptions');
+        if ($includeExceptions && $source !== 'publication') {
+            throw new \Domain\Shared\Exception\ValidationException([
+                ['field' => 'include_exceptions',
+                    'message' => 'Choose an exact assigned publication to include approved exceptions.'],
+            ]);
+        }
         $companions = $body["companions"] ?? [];
         if (!is_array($companions) || !array_is_list($companions)) {
             throw new \InvalidArgumentException("Provide a list of specialization test sources.");
@@ -100,6 +114,7 @@ final readonly class SisDegreeAuditController
                     $input->id("assignment_id"),
                     companions: $companions,
                     sharing: $sharing,
+                    includeExceptions: $includeExceptions,
                 ),
             );
         }
@@ -118,7 +133,6 @@ final readonly class SisDegreeAuditController
             ),
         );
     }
-
     public function clone(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);

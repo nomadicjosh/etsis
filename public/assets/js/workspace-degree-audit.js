@@ -1631,6 +1631,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const snapshot = definition === null ? null : structuredClone(definition);
         const model = state || { student: null, pursuit: null, drafts: false, source: "draft", publication: null };
         const published = model.source === "publication" ? model.publication : null;
+        if (!published) model.includeExceptions = false;
         model.companions ||= [];
         model.sharing ||= "one_component";
         let choiceRequest = 0,
@@ -1646,7 +1647,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 { class: "alert alert-info" },
-                "This temporary test does not save an audit, publish definitions, or change the student's assigned requirements. Approved student-specific exceptions are not applied to this comparison. Results disappear when you close the workspace.",
+                model.includeExceptions
+                    ? "This temporary test includes approved exceptions only for the student's exact assigned publications. It saves no result or academic change. Single-component comparisons remain independent; include every assigned specialization to test course routing and published component sharing."
+                    : "This temporary test does not save an audit, publish definitions, or change the student's assigned requirements. Approved student-specific exceptions are not applied to this comparison. Results disappear when you close the workspace.",
             ),
             node("h2", { class: "h5" }, published ? published.definition.name : snapshot.name),
             node(
@@ -1709,7 +1712,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
             );
         } else {
+            const include = checkbox("Include approved exceptions for exact assigned publications", (on) => {
+                model.includeExceptions = on;
+                restore();
+            });
+            include.querySelector('input').checked = !!model.includeExceptions;
             sourceChoices.append(
+                include,
                 node(
                     "p",
                     { class: "form-text" },
@@ -1726,7 +1735,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     {},
-                    "Optionally combine saved specialization drafts or exact publications from this program and academic year. This hypothetical combination does not approve specialization selection limits, select specializations for the student or apply individual exceptions.",
+                    model.includeExceptions
+                        ? "Choose every specialization publication currently assigned within this pursuit. The test includes applicable exceptions, course routing and the published program sharing policy. It cannot change assignments or override that policy."
+                        : "Optionally combine saved specialization drafts or exact publications from this program and academic year. This hypothetical combination does not approve specialization selection limits, select specializations for the student or apply individual exceptions.",
                 ),
             );
             const selectedSources = node("div", { class: "audit-library-grid" }),
@@ -1738,13 +1749,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 },
             );
             sharing.querySelector("input").checked = model.sharing === "multiple_components";
+            sharing.querySelector("input").disabled = !!model.includeExceptions;
+            sharing.hidden = !!model.includeExceptions;
             panel.append(
                 selectedSources,
                 sharing,
                 node(
                     "p",
                     { class: "form-text" },
-                    "Unchecked means one component. This is an explicit test assumption, not a change to institutional or published program policy. Each plan keeps its own within-group sharing policy.",
+                    model.includeExceptions
+                        ? "Sharing comes from the student's retained program publication when approved exceptions are included. No test override is sent."
+                        : "Unchecked means one component. This is an explicit test assumption, not a change to institutional or published program policy. Each plan keeps its own within-group sharing policy.",
                 ),
                 search("Find specializations by code or name", "", (query) => findSpecializations(query)),
                 button("Browse specialization audits", () => findSpecializations("")),
@@ -1977,7 +1992,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 drafts = model.drafts,
                 source = model.source,
                 version = model.publication?.version_id,
-                combinedState = JSON.stringify([model.companions, model.sharing]);
+                includeExceptions = !!model.includeExceptions,
+                combinedState = JSON.stringify([model.companions, model.sharing, includeExceptions]);
+            if (includeExceptions && model.companions.some((item) => item.source !== "publication"))
+                throw new Error("Choose exact assigned specialization publications, or turn off approved exceptions to test drafts.");
             const data = await post(`/sis/degree-audits/${saved.id}/test/`, {
                 source,
                 ...(source === "publication"
@@ -1985,6 +2003,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     : { definition: snapshot, use_group_drafts: drafts }),
                 student_id: student.id,
                 assignment_id: pursuit.id,
+                ...(includeExceptions ? { include_exceptions: true } : {}),
                 ...(model.companions.length
                     ? {
                           companions: model.companions.map(({ template_id, source, use_group_drafts, version_id }) => ({
@@ -1992,7 +2011,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                               source,
                               ...(source === "draft" ? { use_group_drafts } : { version_id }),
                           })),
-                          sharing: model.sharing,
+                          ...(includeExceptions ? {} : { sharing: model.sharing }),
                       }
                     : {}),
             });
@@ -2003,7 +2022,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 model.drafts !== drafts ||
                 model.source !== source ||
                 model.publication?.version_id !== version ||
-                JSON.stringify([model.companions, model.sharing]) !== combinedState
+                JSON.stringify([model.companions, model.sharing, !!model.includeExceptions]) !== combinedState
             )
                 return;
             const trial = {
@@ -2646,7 +2665,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "p",
                 {},
                 trial
-                    ? "Temporary test of the chosen degree and specialization sources. Component sharing is an explicit test assumption. No student-specific exceptions or course routes apply. No result, publication, specialization selection or assignment is saved; this is not a graduation decision."
+                    ? data.exception_mode === "assigned_publications"
+                        ? "Temporary test of the student's exact assigned publications, including approved exceptions and course routes under the retained program sharing policy. No result or academic change is saved; this is not a graduation decision."
+                        : "Temporary test of the chosen degree and specialization sources. Component sharing is an explicit test assumption. No student-specific exceptions or course routes apply. No result, publication, specialization selection or assignment is saved; this is not a graduation decision."
                     : "Review the selected degree and specializations together using their retained requirements and program sharing policy. This checks current work; it saves no academic result or graduation decision.",
             ),
             actions(
@@ -2705,8 +2726,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 "p",
                 {},
                 data.sharing === "multiple_components"
-                    ? `${trial ? "Test assumption" : "Published sharing policy"}: a completed course may satisfy more than one component.`
-                    : `${trial ? "Test assumption" : "Published sharing policy"}: a completed course may apply to one component.`,
+                    ? `${trial && data.sharing_source !== "published_program" ? "Test assumption" : "Published sharing policy"}: a completed course may satisfy more than one component.`
+                    : `${trial && data.sharing_source !== "published_program" ? "Test assumption" : "Published sharing policy"}: a completed course may apply to one component.`,
             ),
             node(
                 "p",
@@ -2813,7 +2834,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "p",
                     { class: "alert alert-info" },
                     combined
-                        ? `Specialization ${data.context.specialization.code} — ${data.context.specialization.title}. These placements come from the joint search and ${data.context.test_source ? "explicit test sharing assumption" : "published component-sharing policy"}.`
+                        ? `Specialization ${data.context.specialization.code} — ${data.context.specialization.title}. These placements come from the joint search and ${data.context.test_source && !data.context.exceptions_applied ? "explicit test sharing assumption" : "published component-sharing policy"}.`
                         : `Specialization only · ${data.context.specialization.code} — ${data.context.specialization.title}. ${component ? "This review uses the assigned publication." : "This test evaluates this component independently."} Combined degree/specialization sharing and exclusions are not applied.`,
                 ),
             );
@@ -2848,12 +2869,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 {},
                 combined
                     ? data.context?.test_source
-                        ? "Temporary comparison using this component's chosen draft or exact publication. Group placements belong to the single combined test plan. Figures are not added to other components, no individual exceptions apply, and no result or academic change is saved."
+                        ? data.context?.exceptions_applied
+                            ? "Temporary comparison of this exact assigned publication with approved exceptions. Placements belong to the joint test under the published program sharing policy. Figures are not added to other components; no result or academic change is saved."
+                            : "Temporary comparison using this component's chosen draft or exact publication. Group placements belong to the single combined test plan. Figures are not added to other components, no individual exceptions apply, and no result or academic change is saved."
                         : "Minimum checks use this component's retained policies. Group placements are its part of the single combined plan. Figures are not added to another component's totals. No result or academic change is saved."
                     : component
                       ? "Compare verified current work with the exact assigned specialization requirements. Approved exceptions for this assignment and pursuit-wide waivers are included. Cross-component routing is evaluated in combined curriculum progress. Credits and GPA are calculated once within this review, not added to the degree's totals. No result or academic change is saved; this does not establish combined completion or graduation eligibility."
                       : trial
-                        ? "Temporary test of the selected audit requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
+                        ? data.exceptions_applied
+                            ? "Temporary test of this exact assigned publication with approved exceptions. It remains an independent component comparison; combined testing evaluates course routing. No result, publication or academic change is saved, and this does not establish graduation eligibility."
+                            : "Temporary test of the selected audit requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
                         : "Review current work against the selected degree's general minimums and course groups, including approved exceptions. All checks use one verified read. This is not a completed degree audit or graduation decision, and it saves no academic changes.",
             ),
         );
@@ -3410,7 +3435,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     : component
                       ? "Independent placement against the assigned specialization requirements. Approved exceptions for this assignment are included. Use combined curriculum progress to review cross-component sharing and routing. This is a current comparison, not a retained result or a graduation decision."
                       : data.context?.mode === "runtime_test"
-                        ? "Temporary placement against the tested audit requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
+                        ? data.context?.exceptions_applied
+                            ? "Temporary placement against this exact assigned publication with approved exceptions. No result or academic change is saved, and this is not a graduation decision."
+                            : "Temporary placement against the tested audit requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
                         : "Review a proposed placement of current work against course-group quantities and required courses, including approved exceptions. Overall GPA, residency, specialization rules and graduation eligibility are not evaluated here. This review saves no academic changes or audit result.",
             ),
         );

@@ -409,7 +409,8 @@ async function fixture(page, options = {}) {
             }
             if (options.ruleBacked) response.rule_eligibility=Array.from({length:options.rulePlacement ? 1:21},(_,i)=>({work_id:id(100+i),group_id:group,group_name:"General education",requirement_id:id(10),course_code:`MATH.${201+i}`,course_title:"Retained course <b>fictional</b>",rule_code:"DA.MATH.UPPER",rule_title:"Upper-level math",rule_revision:1,outcome:i===20 ? "unknown":"matches"}));
             if (body.companions?.length) {
-                const outcome = body.sharing === "one_component" ? "infeasible" : "feasible";
+                const sharing = body.include_exceptions ? "multiple_components" : body.sharing;
+                const outcome = sharing === "one_component" ? "infeasible" : "feasible";
                 const components = [null,...body.companions].map((choice,index)=>{
                     const progress=structuredClone(response);
                     progress.mode="combined_component";
@@ -425,9 +426,17 @@ async function fixture(page, options = {}) {
                     }
                     return {kind:index?"specialization":"degree",progress};
                 });
-                response={status:"review",mode:"runtime_combined_test",outcome,sharing:body.sharing,input_status:"verified",
+                response={status:"review",mode:"runtime_combined_test",outcome,sharing,input_status:"verified",
                     current_record_count:1,exceptions_applied:false,components,competition:{conflicts:[],more_conflicts:false}};
                 if(options.combinedStatus) response={status:options.combinedStatus,mode:"runtime_combined_test"};
+            }
+            if (body.include_exceptions) {
+                response.exceptions_applied = response.status === 'review';
+                response.exception_mode = 'assigned_publications';
+                if (response.components) {
+                    response.sharing_source = 'published_program';
+                    for (const component of response.components) component.progress.context.exceptions_applied = true;
+                } else if (response.context) response.context.exceptions_applied = true;
             }
 
         }
@@ -1871,3 +1880,87 @@ for (const status of ["limited", "inconsistent"])
         ).toBeVisible();
         expect(f.errors).toEqual([]);
     });
+
+test("assigned-publication trials include exceptions deliberately and keep published sharing separate from test overrides", async ({ page }) => {
+    const f = await fixture(page, { existing: true, published: true, combinedTrials: true });
+    await openDegree(page, true);
+    await page.getByRole('button', { name: 'Test with a student', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Include approved exceptions for exact assigned publications', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Choose published audit version', exact: true }).click();
+    await page.getByRole('button', { name: /Test published version 1/ }).click();
+    const include = page.getByRole('checkbox', { name: 'Include approved exceptions for exact assigned publications', exact: true });
+    await expect(include).not.toBeChecked();
+    await include.check();
+    await expect(include).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Allow a completed course in more than one component for this temporary test', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toContainText("Sharing comes from the student's retained program publication");
+    await page.getByRole('button', { name: 'Browse specialization audits', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose specialization DATA', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose publication · DATA', exact: true }).click();
+    await page.getByRole('button', { name: 'Use DATA publication 2', exact: true }).click();
+    await page.getByLabel('Find a student by name or assigned ID', { exact: true }).fill('Example');
+    await page.getByLabel('Find a student by name or assigned ID', { exact: true }).press('Enter');
+    await page.getByRole('button', { name: 'Fictional Learner <b>example</b> · S-EXAMPLE', exact: true }).click();
+    await page.getByRole('button', { name: 'Computing · 27/FA · active', exact: true }).click();
+    await page.getByRole('button', { name: 'Run temporary audit', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('including approved exceptions and course routes');
+    await expect(dialog).toContainText('Published sharing policy');
+    await expect(dialog).not.toContainText('Test assumption:');
+    const call = f.calls.find(c => c.path.endsWith('/test/'));
+    expect(call.body).toMatchObject({ source: 'publication', include_exceptions: true,
+        companions: [{ template_id: id(210), source: 'publication', version_id: id(211) }] });
+    expect(call.body).not.toHaveProperty('sharing');
+    expect(call.body).not.toHaveProperty('definition');
+    expect(call.csrf).toBe('fictional-test-token');
+    await dialog.getByRole('button', { name: 'Inspect specialization data component', exact: true }).click();
+    await expect(dialog).toContainText('published component-sharing policy');
+    await expect(dialog).toContainText('with approved exceptions');
+    await expect(dialog).not.toContainText('no individual exceptions apply');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await expect(dialog.locator('b,script')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await dialog.getByRole('button', { name: 'Back to combined progress', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Back to test setup', exact: true }).click();
+    await expect(include).toBeChecked();
+    await page.getByRole('button', { name: 'Use working degree draft', exact: true }).click();
+    await expect(include).toHaveCount(0);
+    expect(f.calls.some(c => /\/(save|publish|assign|commit|review)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("changing exception mode discards a pending baseline and labels the fresh independent placement correctly", async ({ page }) => {
+    let release, notice, reads = 0;
+    const gate = new Promise(resolve => release = resolve), seen = new Promise(resolve => notice = resolve);
+    const f = await fixture(page, { existing: true, published: true, trialGate: async () => {
+        if (++reads === 1) { notice(); await gate; }
+    } });
+    await openDegree(page, true);
+    await page.getByRole('button', { name: 'Test with a student', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose published audit version', exact: true }).click();
+    await page.getByRole('button', { name: /Test published version 1/ }).click();
+    await page.getByLabel('Find a student by name or assigned ID', { exact: true }).fill('Example');
+    await page.getByLabel('Find a student by name or assigned ID', { exact: true }).press('Enter');
+    await page.getByRole('button', { name: 'Fictional Learner <b>example</b> · S-EXAMPLE', exact: true }).click();
+    await page.getByRole('button', { name: 'Computing · 27/FA · active', exact: true }).click();
+    await page.getByRole('button', { name: 'Run temporary audit', exact: true }).click();
+    await seen;
+    await page.getByRole('checkbox', { name: 'Include approved exceptions for exact assigned publications', exact: true }).check();
+    const finished = page.waitForResponse(r => r.url().endsWith('/test/'));
+    release();
+    await finished;
+    await expect(page.getByRole('heading', { name: 'Temporary degree audit result', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Run temporary audit', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Temporary test of this exact assigned publication with approved exceptions.');
+    await page.getByRole('button', { name: 'Inspect course-group placement', exact: true }).click();
+    await expect(dialog).toContainText('Temporary placement against this exact assigned publication with approved exceptions.');
+    await expect(dialog).not.toContainText('exceptions are not applied');
+    expect(f.calls.filter(c => c.path.endsWith('/test/'))[0].body).not.toHaveProperty('include_exceptions');
+    expect(f.calls.filter(c => c.path.endsWith('/test/'))[1].body.include_exceptions).toBe(true);
+    expect(f.calls.some(c => /\/(save|publish|assign|commit|review)\/$/.test(c.path))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});

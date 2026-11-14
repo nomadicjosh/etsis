@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/Support/StudentRequirementsFixture.php';
+require_once dirname(__DIR__) . '/Support/DegreeProgressFixture.php';
 
 use Domain\Catalog\Service\PublishedCourseReader;
 use Domain\DegreeAudit\Service\AcademicInputService;
@@ -80,6 +81,7 @@ final class DraftDegreeAuditTest extends TestCase
                 $evaluator, new CourseAllocationPlanner(), new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
                 new AllocationGapAnalyzer(),
             ),
+            DegreeProgressFixture::service($s, $f->f->history, $f->service, $f->f->catalog->fixture->cipher, $repository),
         );
     }
 
@@ -89,7 +91,8 @@ final class DraftDegreeAuditTest extends TestCase
         foreach ([
             'sis_history_events', 'sis_history_streams', 'sis_history_operations',
             'sis_degree_audit_templates', 'sis_specialization_audit_templates', 'sis_course_groups', 'sis_student_requirements', 'sis_course_rules',
-            'sis_academic_credits', 'sis_student_programs', 'sis_audit',
+            'sis_academic_credits', 'sis_student_programs', 'sis_audit', 'sis_requirement_adjustments',
+            'sis_student_specializations', 'sis_student_specialization_requirements',
         ] as $table) {
             $rows[$table] = $f->f->sis->sql->rows($table);
         }
@@ -171,6 +174,136 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($named, $again['allocation']['groups'][0]['course_review'][0]);
         self::assertSame($before, $this->digest($f));
         self::assertNull($f->service->view($f->student, $f->assignment)['selection']);
+    }
+
+    public function testApprovedExceptionsRequireAnExplicitExactAssignedPublicationAndRemainRuntimeOnly(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $f->assign();
+        $s = $f->f->sis;
+        $adjustments = DegreeProgressFixture::adjustments($s, $f->f->history, $f->service, $f->f->catalog->fixture->cipher);
+        $review = $adjustments->reviewGrant($f->student, $f->assignment,
+            ['kind' => 'minimum', 'group_id' => null, 'minimum' => 'min_credits_milli', 'required_milli' => 90000],
+            'Fictional protected minimum reduction.');
+        $adjustments->commit($f->student, $f->assignment, $review['review_token']);
+        $before = $this->digest($f);
+        $trials = $this->service($f);
+        $baseline = $trials->testPublication($f->f->degree, $f->version, $f->student, $f->assignment);
+        $adjusted = $trials->testPublication($f->f->degree, $f->version, $f->student, $f->assignment,
+            includeExceptions: true);
+        self::assertFalse($baseline['exceptions_applied']);
+        self::assertSame(120000, $baseline['minimums'][0]['required_milli']);
+        self::assertTrue($adjusted['exceptions_applied']);
+        self::assertSame('assigned_publications', $adjusted['exception_mode']);
+        self::assertSame('runtime_test', $adjusted['mode']);
+        self::assertSame(90000, $adjusted['minimums'][0]['required_milli']);
+        self::assertTrue($adjusted['minimums'][0]['adjusted']);
+        self::assertSame($f->version->value, $adjusted['context']['requirements_version_id']);
+        self::assertSame('publication', $adjusted['sources'][0]['source']);
+        self::assertStringNotContainsString('Fictional protected minimum', json_encode($adjusted, JSON_THROW_ON_ERROR));
+        self::assertSame($before, $this->digest($f));
+    }
+
+    public function testAssignedExceptionTrialsRejectAnotherPublicationAndSharingOverrides(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $f->assign();
+        $version = new EntityId($f->f->publishDegree()['operation_id']);
+        $trials = $this->service($f);
+        $before = $this->digest($f);
+        foreach ([
+            fn () => $trials->testPublication($f->f->degree, $version, $f->student, $f->assignment, includeExceptions: true),
+            fn () => $trials->testPublication($f->f->degree, $f->version, $f->student, $f->assignment,
+                sharing: \Domain\Catalog\ValueObject\ComponentCourseSharing::MultipleComponents, includeExceptions: true),
+        ] as $invalid) {
+            try {
+                $invalid();
+                self::fail('An exception test silently changed its assigned context.');
+            } catch (\Domain\Shared\Exception\ValidationException $e) {
+                self::assertSame('include_exceptions', $e->errors[0]['field']);
+                self::assertSame($before, $this->digest($f));
+            }
+        }
+        self::assertSame('review', $trials->testPublication($f->f->degree, $version, $f->student, $f->assignment)['status']);
+        $limited = $trials->testPublication($f->f->degree, $f->version, $f->student, $f->assignment,
+            new HistoryReadBudget(1, 1), includeExceptions: true);
+        self::assertSame(['status' => 'limited', 'mode' => 'runtime_test', 'exceptions_applied' => false,
+            'exception_mode' => 'assigned_publications'], $limited);
+        self::assertSame($before, $this->digest($f));
+    }
+
+    public function testCombinedAssignedTrialsReuseOneInventoryAndThePublishedSharingPolicy(): void
+    {
+        require_once dirname(__DIR__) . '/Support/StudentSpecializationRequirementsFixture.php';
+        $f = new StudentRequirementsFixture();
+        $specializations = new StudentSpecializationRequirementsFixture($f->f, 'multiple_components');
+        $f->student = $specializations->student;
+        $f->assignment = $specializations->assignment;
+        $f->version = new EntityId($f->f->publishDegree()['operation_id']);
+        $f->assign();
+        $specializations->assign();
+        $s = $f->f->sis;
+        $adjustments = DegreeProgressFixture::adjustments($s, $f->f->history, $f->service,
+            $f->f->catalog->fixture->cipher, $specializations->service);
+        $review = $adjustments->reviewGrant($f->student, $f->assignment,
+            ['kind' => 'minimum', 'group_id' => null, 'minimum' => 'min_credits_milli', 'required_milli' => 90000],
+            'Fictional specialization minimum.', new EntityId($specializations->choices['DATA']['id']));
+        $adjustments->commit($f->student, $f->assignment, $review['review_token'],
+            new EntityId($specializations->choices['DATA']['id']));
+        $this->work($f);
+        $course = $f->f->groupDefinition['courses'][0];
+        $route = $adjustments->reviewGrant($f->student, $f->assignment,
+            ['kind' => 'component_route', 'course_id' => $course['course_id'], 'course_version_id' => $course['version_id'],
+                'target_version_id' => $specializations->versions['DATA']], 'Fictional routing to the specialization.');
+        $adjustments->commit($f->student, $f->assignment, $route['review_token']);
+        $inventory = new class ($s) implements \Domain\DegreeAudit\Repository\AcademicInputRepository {
+            public int $reads = 0;
+            public function __construct(private SisFixture $sis) {}
+            public function inventory(EntityId $student): \Domain\DegreeAudit\ValueObject\AcademicInputInventory
+            {
+                $this->reads++;
+                return new SqlAcademicInputRepository($this->sis->sql)->inventory($student);
+            }
+        };
+        $companions = [['template_id' => $specializations->plans['DATA']['id'], 'source' => 'publication',
+            'version_id' => $specializations->versions['DATA']]];
+        $before = $this->digest($f);
+        $result = $this->service($f, $inventory)->testPublication($f->f->degree, $f->version, $f->student, $f->assignment,
+            companions: $companions, includeExceptions: true);
+        self::assertSame(1, $inventory->reads);
+        self::assertSame('runtime_combined_test', $result['mode']);
+        self::assertSame('published_program', $result['sharing_source']);
+        self::assertSame('multiple_components', $result['sharing']);
+        self::assertTrue($result['exceptions_applied']);
+        self::assertCount(2, $result['components']);
+        self::assertSame(120000, $result['components'][0]['progress']['minimums'][0]['required_milli']);
+        self::assertSame(90000, $result['components'][1]['progress']['minimums'][0]['required_milli']);
+        self::assertContains('component_excluded', $result['components'][0]['progress']['allocation']['records'][0]['statuses']);
+        self::assertNotContains('component_excluded', $result['components'][1]['progress']['allocation']['records'][0]['statuses']);
+        foreach ($result['components'] as $component) {
+            self::assertTrue($component['progress']['context']['exceptions_applied']);
+            self::assertSame('publication', $component['progress']['sources'][0]['source']);
+        }
+        self::assertSame($before, $this->digest($f));
+        foreach ([
+            [['template_id' => $specializations->plans['DATA']['id'], 'source' => 'draft']],
+            [...$companions, ['template_id' => $specializations->plans['ART']['id'], 'source' => 'publication',
+                'version_id' => $specializations->versions['ART']]],
+        ] as $invalid) {
+            try {
+                $this->service($f)->testPublication($f->f->degree, $f->version, $f->student, $f->assignment,
+                    companions: $invalid, includeExceptions: true);
+                self::fail('A combined approved-exception trial accepted unassigned or draft components.');
+            } catch (\Domain\Shared\Exception\ValidationException) {
+                self::assertSame($before, $this->digest($f));
+            }
+        }
+        $single = $this->service($f)->testPublication(new EntityId($specializations->plans['DATA']['id']),
+            new EntityId($specializations->versions['DATA']), $f->student, $f->assignment, includeExceptions: true);
+        self::assertSame('runtime_test', $single['mode']);
+        self::assertTrue($single['exceptions_applied']);
+        self::assertSame(90000, $single['minimums'][0]['required_milli']);
+        self::assertSame($before, $this->digest($f));
     }
 
     public function testPinnedPublicationAndExplicitWorkingDraftChoiceRemainDifferent(): void

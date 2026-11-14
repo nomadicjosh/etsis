@@ -23,6 +23,7 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use InvalidArgumentException;
+use JsonException;
 
 /** Runtime-only curriculum trial. No publication, assignment, approval or result persistence. */
 final readonly class DegreeAuditTrialService
@@ -40,6 +41,7 @@ final readonly class DegreeAuditTrialService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private CombinedAllocationEvaluator $combined,
+        private DegreeProgressService $assignedProgress,
     ) {
     }
 
@@ -84,7 +86,11 @@ final readonly class DegreeAuditTrialService
         ?HistoryReadBudget $budget = null,
         array $companions = [],
         ?ComponentCourseSharing $sharing = null,
+        bool $includeExceptions = false,
     ): array {
+        if ($includeExceptions) {
+            return $this->assignedReview($template, $version, $student, $assignment, $budget, $companions, $sharing);
+        }
         return $this->run(
             $student,
             $assignment,
@@ -93,6 +99,133 @@ final readonly class DegreeAuditTrialService
             $companions,
             $sharing,
         );
+    }
+
+    /**
+     * Reuse the canonical assigned-pursuit reader; never transplant approvals into hypothetical inputs.
+     * @param array<array-key,mixed> $companions
+     * @return array<string,mixed>
+     */
+    private function assignedReview(
+        EntityId $template,
+        EntityId $version,
+        EntityId $student,
+        EntityId $assignment,
+        ?HistoryReadBudget $budget,
+        array $companions,
+        ?ComponentCourseSharing $sharing,
+    ): array {
+        $actor = $this->authorize($student, $assignment);
+        $mode = $companions === [] ? 'runtime_test' : 'runtime_combined_test';
+        try {
+            return $this->transactions->run(function () use (
+                $template,
+                $version,
+                $student,
+                $assignment,
+                $budget,
+                $companions,
+                $sharing,
+                $actor,
+                $mode,
+            ): array {
+                $this->students->lock($student);
+                $this->authorize($student, $assignment, $actor);
+                $budget ??= new HistoryReadBudget();
+                if (!array_is_list($companions) || count($companions) > 24 || $sharing !== null) {
+                    self::exceptionScope('Use exact assigned publications without a sharing-policy override.');
+                }
+                foreach ($companions as $choice) {
+                    if (!is_array($choice) || ($choice['source'] ?? null) !== 'publication') {
+                        self::exceptionScope('Approved exceptions cannot be applied to specialization drafts.');
+                    }
+                }
+                $source = $this->publicationSource($template, $version, $budget);
+                $sources = $companions === [] ? [$source]
+                    : [$source, ...$this->companionSources($source, $companions, $budget)];
+                $combined = $companions !== [];
+                $result = $combined
+                    ? $this->assignedProgress->combined($student, $assignment, $budget)
+                    : ($source['specialization'] === null
+                        ? $this->assignedProgress->preview($student, $assignment, $budget)
+                        : $this->assignedProgress->specialization(
+                            $student,
+                            $assignment,
+                            new EntityId($source['specialization']['id']),
+                            $budget,
+                        ));
+                if ($result['status'] !== 'review') {
+                    $this->authorize($student, $assignment, $actor);
+                    return array_replace($result, [
+                        'mode' => $mode, 'exceptions_applied' => false, 'exception_mode' => 'assigned_publications',
+                    ]);
+                }
+                $requested = array_column($sources, null, 'version_id');
+                $parts = $combined ? $result['components'] : [['progress' => $result]];
+                if (count($parts) !== count($requested)) {
+                    self::exceptionScope('Choose every assigned specialization publication for this combined test.');
+                }
+                foreach ($parts as $part) {
+                    $context = $part['progress']['context'];
+                    if (!isset($requested[$context['requirements_version_id']]) || $context['cohort_changed']) {
+                        self::exceptionScope(
+                            'Choose the exact publication assigned to this student pursuit. ' .
+                                'Review changed cohorts first.',
+                        );
+                    }
+                }
+                if ($combined) {
+                    foreach ($result['components'] as &$component) {
+                        $source = $requested[$component['progress']['context']['requirements_version_id']];
+                        $component['progress']['context']['test_source'] = 'publication';
+                        $component['progress'] = self::sourceReview($component['progress'], $source, true);
+                    }
+                    unset($component);
+                    $result['sharing_source'] = 'published_program';
+                } else {
+                    $result['context'] = array_replace($result['context'], [
+                        'mode' => 'runtime_test', 'source' => 'publication', 'exceptions_applied' => true,
+                        'program_code' => $source['program_code'], 'program_title' => $source['program_title'],
+                    ]);
+                    $result = self::sourceReview($result, $source, true);
+                }
+                $this->authorize($student, $assignment, $actor);
+                return array_replace($result, [
+                    'mode' => $mode, 'exceptions_applied' => true, 'exception_mode' => 'assigned_publications',
+                ]);
+            });
+        } catch (HistoryReadLimitException | AllocationBudgetExhaustedException) {
+            $status = 'limited';
+        } catch (CorruptHistoryException | RecordNotFoundException) {
+            $status = 'inconsistent';
+        }
+        $this->authorize($student, $assignment, $actor);
+        return ['status' => $status, 'mode' => $mode, 'exceptions_applied' => false,
+            'exception_mode' => 'assigned_publications'];
+    }
+
+    private static function exceptionScope(string $message): never
+    {
+        throw new \Domain\Shared\Exception\ValidationException([
+            ['field' => 'include_exceptions', 'message' => $message],
+        ]);
+    }
+
+    /**
+     * Shared captured-source annotation for baseline and assigned-publication tests.
+     * @param array<string,mixed> $progress
+     * @param array<string,mixed> $source
+     * @return array<string,mixed>
+     * @throws JsonException
+     */
+    private static function sourceReview(array $progress, array $source, bool $exceptions = false): array
+    {
+        $progress['sources'] = $source['sources'];
+        $progress['definition_hash'] = hash('sha256', json_encode($source['requirements'], JSON_THROW_ON_ERROR));
+        if ($exceptions) {
+            $progress['context']['exceptions_applied'] = true;
+        }
+        return $progress;
     }
 
     /** @return array<string,mixed> */
@@ -163,7 +296,8 @@ final readonly class DegreeAuditTrialService
         ];
     }
 
-    /** Caller-supplied source resolution is internal; HTTP clients cannot supply academic inputs.
+    /**
+     * Caller-supplied source resolution is internal; HTTP clients cannot supply academic inputs.
      * @param callable(HistoryReadBudget):array<string,mixed> $resolve
      * @param array<array-key,mixed> $companions Requested sources, validated after authorization.
      * @return array<string,mixed>
@@ -251,9 +385,11 @@ final readonly class DegreeAuditTrialService
         return ["status" => $status, "mode" => $companions === [] ? "runtime_test" : "runtime_combined_test"];
     }
 
-    /** @param array<string,mixed> $degree
+    /**
+     * @param array<string,mixed> $degree
      * @param list<mixed> $choices
      * @return list<array<string,mixed>>
+     * @throws JsonException
      */
     private function companionSources(array $degree, array $choices, HistoryReadBudget $budget): array
     {
@@ -312,9 +448,11 @@ final readonly class DegreeAuditTrialService
         return $sources;
     }
 
-    /** Hypothetical sources retain their real template identities; no publication identity is fabricated.
+    /**
+     * Hypothetical sources retain their real template identities; no publication identity is fabricated.
      * @param list<array<string,mixed>> $sources
      * @return array<string,mixed>
+     * @throws JsonException
      */
     private function combinedReview(
         #[\SensitiveParameter] \Domain\DegreeAudit\ValueObject\AcademicInputSet $inputs,
@@ -342,11 +480,7 @@ final readonly class DegreeAuditTrialService
             foreach ($result["components"] as $index => &$component) {
                 $source = $sources[$index];
                 $component["progress"]["context"]["test_source"] = $source["source"];
-                $component["progress"]["sources"] = $source["sources"];
-                $component["progress"]["definition_hash"] = hash(
-                    "sha256",
-                    json_encode($source["requirements"], JSON_THROW_ON_ERROR),
-                );
+                $component['progress'] = self::sourceReview($component['progress'], $source);
             }
             unset($component);
         }
@@ -357,7 +491,10 @@ final readonly class DegreeAuditTrialService
         ];
     }
 
-    /** @return array{array<string,array<string,mixed>>,list<array<string,mixed>>} */
+    /**
+     * @return array{array<string,array<string,mixed>>,list<array<string,mixed>>}
+     * @throws JsonException
+     */
     private function groupInputs(AuditRequirementsV3 $definition, bool $drafts, HistoryReadBudget $budget): array
     {
         $references = [];
