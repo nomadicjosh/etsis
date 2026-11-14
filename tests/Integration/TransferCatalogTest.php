@@ -365,7 +365,7 @@ final class TransferCatalogTest extends TestCase
                 ),
             );
         $workspace = new WorkspaceService(
-            new SqlWorkspaceRepository($f->sql, $f->gradeCatalog()),
+            new SqlWorkspaceRepository($f->sql, $f->gradeCatalog(), $f->clock),
             $f->access,
             $permissions,
             new AdmissionsService(

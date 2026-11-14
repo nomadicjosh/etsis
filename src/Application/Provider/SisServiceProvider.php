@@ -168,6 +168,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlRelationalReportRepository::class,
             \Domain\Reporting\Repository\RelationalReportSource::class =>
                 \Infrastructure\Reporting\SqlRelationalReportSource::class,
+            \Domain\Reporting\Repository\ReportLifecycleRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlReportLifecycleRepository::class,
+            \Domain\Reporting\Repository\ReportCaptureSource::class =>
+                \Infrastructure\Reporting\SqlReportCaptureSource::class,
             \Domain\Catalog\Service\CatalogEnrollment::class =>
                 \Domain\Catalog\Service\InitialCatalogEnrollment::class,
             \Domain\Catalog\Repository\CatalogYearRepository::class =>

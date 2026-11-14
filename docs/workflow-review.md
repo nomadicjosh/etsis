@@ -78,14 +78,64 @@ Posted final grades, earned credits and grade points are protected. Reviewed rea
 
 ## Report requests and specialist handoff
 
-The approved faculty-to-registrar example now has a connected case. A requester describes the question, its purpose and an optional date needed; a report specialist takes responsibility, asks for clarification if needed, builds a report in the existing studio and reviews the selected report/requester before sharing. The requested date is a planning hint, not a delivery guarantee. There is no automatic email, attachment, scheduled execution or frozen export.
+The approved faculty-to-registrar example now has a connected case. A requester describes the question, its purpose and an optional date needed; a report specialist takes responsibility, asks for clarification if needed, builds a report in the existing studio and reviews the selected report/requester before sharing. The requested date is a planning hint, not a delivery guarantee. There is no automatic email, attachment or scheduled execution. A shared report can use live results or a fixed capture, as described below.
 
 Request creation and private own-case reads use the existing report execution grant (`sis:reporting:run`); report specialists use `sis:reporting:manage`. Faculty already have execution access by default. Institutions can grant that capability to other staff without making them report authors. Only authorized report specialists see the team queue; requesters cannot see one another's questions or messages.
 
 Questions, titles, purpose, conversation and action receipts are encrypted. Assignment, clarification, requester reply, completion, cancellation/reopening and messages compare case versions and append immutable history. Taking over another specialist's work requires a reason. Sharing, delivered status, operation receipt and metadata audit commit together. A changed report definition requires another handoff review. Replaying an earlier handoff does not grant sharing again after a deliberate revocation.
 
-Report sharing preserves existing source-data checks and never adds role/direct data permissions. A recipient may need an administrator to grant the required data access. The handoff records that a live report was shared; it does not prove that the requester can currently execute it, nor preserve historical results. Reopening/cancelling a case does not silently revoke prior shares; report owners manage those explicitly. Messages are visible to the requester and the authorized report team; separate private specialist notes and departmental queue delegation remain future work.
+Report sharing preserves existing source-data checks and never adds role/direct data permissions. A recipient may need an administrator to grant the required data access. The handoff records the shared report and reviewed definition revision; it does not prove that the requester can currently read it. Dynamic reports return current results, while static reports retain their captured results. Either can expire. Reopening/cancelling a case does not silently revoke prior shares; report owners manage those explicitly. Messages are visible to the requester and the authorized report team; separate private specialist notes and departmental queue delegation remain future work.
 
+
+### Saved report results and automatic removal
+
+Open a saved report and choose **Report settings**. The owner, or an administrator with report administration and management permissions, makes two independent choices:
+
+| Choice | Behavior |
+| --- | --- |
+| **Dynamic report** | The saved definition reads current authorized data each time it runs. Existing reports default to this behavior. |
+| **Static one-time report** | Capture the complete matching results once. Later source changes leave those results unchanged. |
+| **Temporary / one-off** | Optionally remove either kind after a chosen number of days (1–3,650). Leave this off to retain it. |
+
+For example, a weekly advising list can stay dynamic and be retained, a census extract can stay static and be retained, and a temporary investigation can use either result type with automatic removal after seven days. Saving settings starts the chosen removal period from the accepted save time. Changing it requires a new save; retrying an already accepted operation returns its original result without resetting the period.
+
+Static capture uses one consistent database read transaction, then stores encrypted result pages and a bound, encrypted manifest atomically with the settings revision, operation receipt and metadata audit. It captures **all results**, up to **5,000 rows and 8 MiB**, rather than silently freezing only the first result page. A larger result is rejected without a partial saved capture. A between-query work budget stops unusually long captures; individual query timeouts remain a database/deployment concern. Large background exports remain future work. The saved capture time indicates completion, not an assertion that independently maintained source projections were all refreshed simultaneously.
+
+A static report keeps both its definition and captured results fixed. Its expiry can still be changed. **Create a new report from this definition** opens a separate editable draft when different results are needed. Shared recipients still need current report-run and source-field permissions; a fixed result never bypasses revoked sharing or removed data permissions. Static pages and CSV page exports read the encrypted capture without rerunning live student queries. Snapshot encryption uses the existing application message cipher/key management; preserve that key according to the deployment's backup policy.
+
+Earlier simple student reports also expose **Report settings**. Explicitly saving those settings converts the existing program, institutional-entry-term and active-student filters to the current typed Students source under the same report ID and owner. It then opens in Report Studio; there is no separate snapshot implementation for simple reports. Merely opening a report does not convert it.
+
+At expiry, the report immediately disappears from report directories and cannot be read, exported, shared or edited. The hourly cleanup removes its definition, retained result pages, encrypted change receipts and shares. A minimal parent marker remains so linked office request records and their recorded case history stay intact; those cases have their own retention needs. Cleanup does not delete student, registration, financial or authoritative event history. Existing downloads and backups require the institution's separate retention controls.
+
+Apply migration `20261114000002_CreateSisReportLifecycles` before using these settings. The normal scheduler runs a bounded batch of up to 50 expired reports hourly. Ensure the existing scheduler is invoked every minute from the project directory, using the deployment's PHP 8.4+ interpreter:
+
+```sh
+php codex schedule:run
+```
+
+To inspect or run a bounded cleanup manually:
+
+```sh
+# Preview only; no content is removed.
+php codex sis:reports:prune --limit=50
+# Explicitly remove eligible content.
+php codex sis:reports:prune --apply --limit=50
+```
+
+The maximum batch is 100 reports. Commands print aggregate counts only. If a larger backlog exists, successive hourly batches continue removal; access is blocked from the expiry instant regardless of cleanup timing. The migration uses portable schema definitions compiled against the framework's five supported dialects. Runtime capture and cleanup have been exercised on SQLite; the configured MariaDB connection also passed a bounded, read-only capture check. PostgreSQL, SQL Server and Oracle require deployment integration acceptance before claiming runtime certification.
+
+### Register students selected from a saved report
+
+Open a saved **dynamic Report Studio** report based on **Students & current primary program**, **Student programs & catalog cohorts** or **Academic credits & final grades**, then choose **Choose students for registration**. The action is available for detail reports with no summarized columns or post-summary conditions. Section reports and summaries remain report results; etSIS does not guess which individual students a headcount represents. Static captures and unsaved drafts do not provide this live handoff. Earlier simple reports can join this workflow by explicitly saving their report settings first.
+
+1. Review the distinct matching students, with institutional IDs, names and activity. Pages contain at most 50 students; repeated program or credit rows identify a student only once. This is the report's live population, rather than only its current visible result page.
+2. Select up to 25 students across pages. The visible shortlist supports individual removal. Refreshing or paging preserves it while the saved definition is unchanged; a changed definition clears the old shortlist with an explanation.
+3. Choose **Review selected students for registration**. The server checks the saved definition revision, live membership and current report/source/registration authority again. A missing member or changed definition requires a new review. No seat, credit, charge or academic decision is created by selecting students.
+4. The existing **Register a group** screen opens with those students selected. Choose the course section and review the current students, prerequisites, seats and fees before explicitly confirming. **Back to report selection** returns to the preserved shortlist. The group remains editable, so adding another student uses ordinary manual registration authority. Registration uses each student's current primary pursuit; a report over an earlier pursuit does not change it.
+
+Population derivation reuses the typed query compiler, preserving original filters, relationship choices and related-row conditions. A separately bound student restriction preserves the report's full 40-condition/four-level allowance. The saved definition, original result columns and export are unchanged. No raw SQL, journal payloads or automatic full-report enrollment is exposed.
+
+Every population page and selection requires `sis:reporting:run`, `sis:student:read`, `sis:registration:manage`, access to the saved report and all original/derived source-field permissions. Sharing a report grants none of those additional duties. Current actor/authority are rechecked after the metadata-only access audit; failure rolls back that audit and returns no population. The existing registration command independently enforces eligibility, locks, history, atomic charges and original retries. The new POST endpoints retain CSRF, private/no-store responses and debug suppression. Choices remain only in workspace memory; denied access clears displayed/cached population choices. Population selection adds no stored population snapshot, event format or parallel registration implementation. The separate report-lifecycle migration supports optional fixed results and expiry. Billing and messaging actions remain separate future work.
 
 ## Reusable offering templates
 

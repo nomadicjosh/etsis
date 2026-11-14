@@ -41,6 +41,15 @@ final class ConsoleBootstrapTest extends TestCase
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
 
+    public function testReportRetentionIsRegisteredPreviewOnlyByDefaultAndBounded(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-report-retention']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testSessionRetentionIsRegisteredPreviewOnlyByDefaultAndBounded(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

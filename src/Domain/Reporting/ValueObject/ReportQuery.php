@@ -5,16 +5,31 @@ declare(strict_types=1);
 namespace Domain\Reporting\ValueObject;
 
 use Domain\Shared\Exception\ValidationException;
+use Domain\Shared\ValueObject\EntityId;
 
 final readonly class ReportQuery
 {
     /** @param array<string, mixed> $definition
      * @param array<string, mixed> $schema
+     * @param list<string>|null $populationStudents Internal bound restriction, never part of a saved definition.
      */
-    public function __construct(public array $definition, public array $schema)
-    {
+    public function __construct(
+        public array $definition,
+        public array $schema,
+        public ?array $populationStudents = null,
+    ) {
         if (($definition["dataset"] ?? null) !== $schema["id"]) {
             self::invalid("Choose a report dataset.");
+        }
+        if (
+            $populationStudents !== null &&
+            (self::studentIds($populationStudents) !== $populationStudents ||
+                ($schema['student_population'] ?? false) !== true ||
+                ($definition['columns'][0]['field'] ?? null) !== 'student_id' ||
+                ($definition['distinct'] ?? false) !== true ||
+                array_any($definition['columns'], static fn(array $c): bool => $c['aggregate'] !== 'none'))
+        ) {
+            self::invalid('Use a distinct student population for a bounded selection.');
         }
         $columns = $definition["columns"] ?? null;
         if (!is_array($columns) || !array_is_list($columns) || count($columns) < 1 || count($columns) > 16) {
@@ -203,6 +218,68 @@ final readonly class ReportQuery
                 }
             }
         }
+    }
+
+    /** Distinct underlying students, preserving the original row restrictions and relationship choices.
+     * @param array<mixed>|null $students An explicit bounded shortlist, or null for a population page.
+     */
+    public function studentPopulation(?array $students = null): self
+    {
+        if (
+            ($this->schema['student_population'] ?? false) !== true ||
+            array_any(
+                $this->definition['columns'],
+                static fn(array $column): bool => $column['aggregate'] !== 'none'
+            ) ||
+            ($this->definition['having']['rules'] ?? []) !== []
+        ) {
+            self::invalid('Use an unsummarized student, student-program or academic-credit report to choose students.');
+        }
+        $definition = $this->definition;
+        // Output fields can introduce joins too. Keep them even when replacing the visible columns.
+        foreach ($definition['columns'] as $column) {
+            foreach ([$column['field'], $column['calculation']['field'] ?? null] as $field) {
+                if ($field === null) {
+                    continue;
+                }
+                $relation = $this->schema['fields'][$field]['relation'];
+                if ($relation !== $this->schema['root']) {
+                    $definition['joins'][$relation] ??= 'left';
+                }
+            }
+        }
+        $definition['columns'] = array_map(
+            static fn(string $field): array =>
+            ['field' => $field, 'label' => $field, 'aggregate' => 'none'],
+            ['student_id', 'institutional_id', 'full_name', 'active']
+        );
+        $definition['distinct'] = true;
+        // A missing student relationship cannot identify a person for an office action.
+        if ($this->schema['root'] !== 'student') {
+            $definition['joins']['student'] = 'inner';
+        }
+        $definition['having'] = null;
+        $definition['sort'] = [['column' => 0, 'direction' => 'asc']];
+        return new self($definition, $this->schema, $students === null ? null : self::studentIds($students));
+    }
+
+    /** @param array<mixed> $students
+     * @return list<string>
+     */
+    private static function studentIds(array $students): array
+    {
+        if (!array_is_list($students) || count($students) < 1 || count($students) > 25) {
+            self::invalid('Choose between one and twenty-five distinct students.');
+        }
+        $ids = [];
+        foreach ($students as $id) {
+            if (!is_string($id) || isset($ids[$id])) {
+                self::invalid('Choose distinct students from this report.');
+            }
+            $ids[$id] = new EntityId($id);
+        }
+        ksort($ids, SORT_STRING);
+        return array_keys($ids);
     }
 
     public function outputType(int $index): string

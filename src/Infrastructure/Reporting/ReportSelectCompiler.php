@@ -148,6 +148,13 @@ final readonly class ReportSelectCompiler
             $parameters,
             $outputFields,
         );
+        if ($query->populationStudents !== null) {
+            // Keep the report's complete typed filter allowance; selection is a separate bound restriction.
+            $restriction = $q('result') . '.' . $q('c0') . ' IN ('
+            . implode(', ', array_fill(0, count($query->populationStudents), '?')) . ')';
+            $having = $having === '' ? $restriction : '(' . $having . ') AND ' . $restriction;
+            array_push($parameters, ...$query->populationStudents);
+        }
         $sorts = [];
         foreach ($d["sort"] ?? [] as $sort) {
             $sorts["c" . $sort["column"]] = strtoupper($sort["direction"]);

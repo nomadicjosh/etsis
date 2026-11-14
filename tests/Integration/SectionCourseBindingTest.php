@@ -330,7 +330,9 @@ final class SectionCourseBindingTest extends TestCase
         $this->bind($version);
         $revision = $this->editor->view("courses", $this->course)["revision"];
         $this->editor->course(new Course($this->course, "MATH.201", "Advanced Algebra", 4000), $revision);
-        $workspace = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($this->f->sql, $this->f->gradeCatalog());
+        $workspace = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository(
+            $this->f->sql, $this->f->gradeCatalog(), $this->f->clock
+        );
         $rows = $workspace->records("sections", null, "Algebra", null)["items"];
         self::assertSame("Algebra", $rows[0]["course_title"]);
         self::assertSame("MATH.101", $rows[0]["course_code"]);

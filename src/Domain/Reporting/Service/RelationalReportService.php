@@ -32,6 +32,7 @@ final readonly class RelationalReportService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private ReportLifecycleService $lifecycles,
     ) {
     }
 
@@ -147,6 +148,7 @@ final readonly class RelationalReportService
             if ($version === -1) {
                 $this->reports->add(new StudentReport($id, $actor, $name));
             } else {
+                $this->lifecycles->assertEditable($id);
                 $current =
                     $this->definitions->get($id) ?? throw new RecordNotFoundException("Relational report not found.");
                 if ((int) $current["version"] !== $version) {
@@ -198,7 +200,95 @@ final readonly class RelationalReportService
             "version" => (int) $record["version"],
             "definition" => $data,
             "can_manage" => $manage,
+            "can_select_students" => !$this->lifecycles->isStatic($id) && $this->canSelectStudents($data),
+            "lifecycle" => $this->lifecycles->describe($id),
         ];
+    }
+
+    /** @param array<string,mixed> $definition */
+    private function canSelectStudents(array $definition): bool
+    {
+        try {
+            $this->populationActor();
+            $query = $this->query($definition)->studentPopulation();
+            $this->grants($query->permissions());
+            return true;
+        } catch (AccessDeniedException | ValidationException) {
+            return false;
+        }
+    }
+
+    private function populationActor(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->access->requirePermission('sis:reporting:run');
+        foreach (['sis:registration:manage', 'sis:student:read'] as $permission) {
+            if ($this->access->requirePermission($permission)->value !== $actor->value) {
+                throw new AccessDeniedException('The report reviewer changed.');
+            }
+        }
+        if ($expected !== null && $actor->value !== $expected->value) {
+            throw new AccessDeniedException('The report reviewer changed.');
+        }
+        return $actor;
+    }
+
+    /** @return array<string,mixed> */
+    public function population(EntityId $id, int $offset): array
+    {
+        return $this->populationResults($id, $offset, null, null);
+    }
+
+    /** @param array<mixed> $students
+     * @return array<string,mixed>
+     */
+    public function selectStudents(EntityId $id, array $students, int $version): array
+    {
+        return $this->populationResults($id, 0, $students, $version);
+    }
+
+    /** @param array<mixed>|null $students
+     * @return array<string,mixed>
+     */
+    private function populationResults(EntityId $id, int $offset, ?array $students, ?int $version): array
+    {
+        $actor = $this->populationActor();
+        return $this->transactions->run(function () use ($id, $offset, $students, $version, $actor): array {
+            $this->reports->lock($id);
+            $this->populationActor($actor);
+            $this->canRun($id, $actor);
+            $this->lifecycles->assertEditable($id);
+            $record = $this->definitions->get($id) ?? throw new RecordNotFoundException('Saved report not found.');
+            if ($version !== null && $version !== (int) $record['version']) {
+                throw new ConcurrentModificationException('This report changed. Start a new student selection.');
+            }
+            $original = $this->query(json_decode(
+                $this->cipher->open($record['encrypted_content']),
+                true,
+                32,
+                JSON_THROW_ON_ERROR
+            ));
+            $query = $original->studentPopulation($students);
+            $this->grants($query->permissions());
+            $result = $this->results($query, $offset);
+            if ($students !== null && count($result['items']) !== count($students)) {
+                throw new ConcurrentModificationException(
+                    'Some selected students no longer match this report. Review the population again.'
+                );
+            }
+            $this->audit->record(
+                $actor,
+                $students === null ? 'report.population_read' : 'report.population_selected',
+                $id
+            );
+            $this->canRun($id, $actor);
+            $this->grants($original->permissions());
+            $this->grants($query->permissions());
+            $this->populationActor($actor);
+            return ['items' => array_map(static fn(array $row): array => [
+                'id' => $row['c0'], 'institutional_id' => $row['c1'], 'name' => $row['c2'], 'active' => $row['c3'],
+            ], $result['items']), 'offset' => $result['offset'], 'next_offset' => $result['next_offset'],
+                'limit' => 50, 'report_version' => (int) $record['version']];
+        });
     }
 
     /** @return array<string, mixed> */
@@ -208,6 +298,9 @@ final readonly class RelationalReportService
         return $this->transactions->run(function () use ($id, $offset, $actor): array {
             $this->reports->lock($id);
             $this->canRun($id, $actor);
+            if ($this->lifecycles->isStatic($id)) {
+                return $this->lifecycles->frozenPage($id, $offset);
+            }
             $row = $this->definitions->get($id) ?? throw new RecordNotFoundException("Relational report not found.");
             $query = $this->query(
                 json_decode($this->cipher->open($row["encrypted_content"]), true, 32, JSON_THROW_ON_ERROR),
@@ -225,6 +318,17 @@ final readonly class RelationalReportService
         if ($report->ownerUserId->value !== $actor->value && !$this->reports->isSharedWith($id, $actor)) {
             $this->access->requirePermission("sis:reporting:admin");
         }
+    }
+
+    /** @return array<string,mixed> */
+    public function reportSettings(EntityId $id): array
+    {
+        return $this->lifecycles->view($id);
+    }
+    /** @return array<string,mixed> */
+    public function configureReport(EntityId $id, EntityId $operation, int $version, string $mode, ?int $days): array
+    {
+        return $this->lifecycles->configure($id, $operation, $version, $mode, $days);
     }
 
     /** @param array<string, mixed> $data */

@@ -20,7 +20,7 @@ final class ReportWorkspaceTest extends TestCase
     private function service(SisFixture $f, ?AuditTrail $audit = null, ?ReportRepository $repository = null): ReportService
     {
         return new ReportService(
-            $repository ?? new SqlReportRepository($f->sql),
+            $repository ?? new SqlReportRepository($f->sql, $f->clock),
             $f->access,
             $f->transactions,
             $audit ?? $f->audit
@@ -158,7 +158,7 @@ final class ReportWorkspaceTest extends TestCase
     {
         $f = new SisFixture();
         $service = $this->service($f);
-        $repository = new SqlReportRepository($f->sql);
+        $repository = new SqlReportRepository($f->sql, $f->clock);
         $report = $service->create('Lock check', null, null, null);
         $recipient = $f->user();
         $service->share($report->id, $recipient);

@@ -7,11 +7,13 @@ namespace Infrastructure\Persistence\Repository;
 use Domain\Reporting\Repository\ReportRepository;
 use Domain\Reporting\StudentReport;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Shared\Service\Clock;
+use Domain\Shared\Exception\RecordNotFoundException;
 use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlReportRepository implements ReportRepository
 {
-    public function __construct(private SqlRecords $sql)
+    public function __construct(private SqlRecords $sql, private Clock $clock)
     {
     }
 
@@ -30,6 +32,13 @@ final readonly class SqlReportRepository implements ReportRepository
     public function get(EntityId $id): StudentReport
     {
         $r = $this->sql->one('sis_reports', ['id' => $id->value]);
+        $state = $this->sql->rows('sis_report_lifecycles', ['id' => $id->value], 1)[0] ?? null;
+        if (
+            $state !== null && ($state['removed_at'] !== null || ($state['expires_at'] !== null &&
+            $state['expires_at'] <= $this->clock->now()->setTimezone(new \DateTimeZone('UTC'))->format(DATE_ATOM)))
+        ) {
+            throw new RecordNotFoundException('This report has expired or was removed.');
+        }
 
         return new StudentReport(
             $id,

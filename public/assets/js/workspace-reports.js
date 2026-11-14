@@ -251,7 +251,10 @@ window.createWorkspaceReports = function (ui) {
                     "Running this report requires the report execution permission.",
                 ),
             );
-        if (report.can_manage) await enhance("reports", { id }, body);
+        if (report.can_manage) {
+            body.append(button("Report settings", () => ui.builder().settings(id)));
+            await enhance("reports", { id }, body);
+        }
     }
     return { create, record };
 };

@@ -906,6 +906,22 @@ final class SisFixture
         return $this->legacyStudent($application->id);
     }
 
+    public function reportLifecycles(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Reporting\Repository\ReportCaptureSource $capture = null,
+        ?\Domain\Communications\Service\MessageCipher $cipher = null,
+    ): \Domain\Reporting\Service\ReportLifecycleService {
+        $source = new \Infrastructure\Reporting\SqlRelationalReportSource($this->sql);
+        return new \Domain\Reporting\Service\ReportLifecycleService(
+            new \Infrastructure\Persistence\Repository\SqlReportRepository($this->sql, $this->clock),
+            new \Infrastructure\Persistence\Repository\SqlRelationalReportRepository($this->sql),
+            $source,
+            $capture ?? new \Infrastructure\Reporting\SqlReportCaptureSource($this->connection->queryBuilder(), $source),
+            new \Infrastructure\Persistence\Repository\SqlReportLifecycleRepository($this->sql),
+            $this->access, $this->transactions, $audit ?? $this->audit, $cipher ?? $this->dropCipher, $this->clock
+        );
+    }
+
     public function section(int $capacity = 20, int $fee = 10000, ?EntityId $faculty = null): Section
     {
         $course = new Course(EntityId::generate(), "CS-" . bin2hex(random_bytes(3)), "Computing", 3000);

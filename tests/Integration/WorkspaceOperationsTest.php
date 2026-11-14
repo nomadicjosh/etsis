@@ -132,7 +132,7 @@ final class WorkspaceOperationsTest extends TestCase
         $f = new SisFixture();
         $mine = $f->section(10, 0, $f->access->actor);
         $f->section(10, 0, $f->user());
-        $repo = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog());
+        $repo = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog(), $f->clock);
         self::assertSame([$mine->id->value], array_column($repo->records('teaching', $f->access->actor, '', null)['items'], 'id'));
         foreach (['grades', 'billing', 'ledger', 'institutions', 'external', 'equivalencies', 'faculty'] as $dataset) {
             self::assertArrayHasKey($dataset, WorkspaceService::DATASETS);
@@ -217,7 +217,7 @@ final class WorkspaceOperationsTest extends TestCase
     public function testSharedReportDirectoryIncludesOnlyOwnedOrExplicitlySharedReports(): void
     {
         $f = new SisFixture();
-        $reports = new \Infrastructure\Persistence\Repository\SqlReportRepository($f->sql);
+        $reports = new \Infrastructure\Persistence\Repository\SqlReportRepository($f->sql, $f->clock);
         $mine = new \Domain\Reporting\StudentReport(EntityId::generate(), $f->access->actor, 'My report');
         $shared = new \Domain\Reporting\StudentReport(EntityId::generate(), $f->user(), 'Shared report');
         $private = new \Domain\Reporting\StudentReport(EntityId::generate(), $f->user(), 'Private report');
@@ -225,7 +225,7 @@ final class WorkspaceOperationsTest extends TestCase
             $reports->add($report);
         }
         $reports->share($shared->id, $f->access->actor);
-        $page = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog())->records('sharedreports', $f->access->actor, '', null);
+        $page = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog(), $f->clock)->records('sharedreports', $f->access->actor, '', null);
         self::assertEqualsCanonicalizing([$mine->id->value, $shared->id->value], array_column($page['items'], 'id'));
     }
 
@@ -298,7 +298,7 @@ final class WorkspaceOperationsTest extends TestCase
         $owner = $f->access->actor;
         $recipient = $f->user();
         $reports = new \Domain\Reporting\Service\ReportService(
-            new \Infrastructure\Persistence\Repository\SqlReportRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlReportRepository($f->sql, $f->clock),
             $f->access,
             $f->transactions,
             $f->audit

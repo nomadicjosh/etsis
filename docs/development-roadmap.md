@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after tightening the shared registration command's completion checks. Final authority, actor/account links, registration deadlines and dated holds now protect atomic seat/credit/charge acceptance, including reviewed groups. Accepted retries keep their original result while requiring current access. Full prerequisite/co-requisite policy expressions, final evaluations and graduation remain subsequent milestones.
+Last reviewed: **2026-11-14**, after connecting saved dynamic student reports to reviewed group registration and adding static captures plus optional expiry for either report mode. Distinct populations, a bounded shortlist and live membership/version checks preserve independent report/source and registration authority. Encrypted static results stay fixed; expiry cleanup preserves linked case and academic history. Larger export jobs, broader population actions, prerequisite/co-requisite policies, final evaluations and graduation remain subsequent milestones.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -83,7 +83,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [x] [Recheck registration at completion](registration-history.md#registration-completion-checks): preserve trusted actor/account and staff authority, use the clock after prerequisite verification, recheck deadlines/dated holds after writes, roll back all coupled facts on failure and preserve authorized original retries. Use the shared policy and command for student, staff and reviewed-group registration; add no schema or UI workflow.
 - [ ] Complete versioned prerequisite/co-requisite expressions, schedule-conflict checks and retained eligibility-policy inputs.
 - [ ] Add waitlists with an explicit institutional ordering/allocation policy, accepted server ordering and atomic seat/billing decisions. Browser click time is not a fairness guarantee.
-- [ ] Extend reviewed enrollment actions to report-selected populations, multi-section schedules and explicit re-enrollment after closure; preserve distinct attempt and billing identities.
+- [ ] Extend reviewed enrollment actions to multi-section schedules and explicit re-enrollment after closure; preserve distinct attempt and billing identities. The saved-report population handoff is implemented below.
 - [ ] Add dated academic standing, load/classification determinations, advisor relationships and registrar review workflows. Advising appointments/check-ins remain distinct from degree audits.
 - [ ] Complete optional grade-change approval chains, closed-record corrections and weighted gradebook aggregation.
 - [ ] Complete institution-specific transcript release rules, template selection and electronic delivery/signature integrations where selected.
@@ -172,8 +172,10 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 - [ ] Cover the remaining [legacy SELECT acceptance cases](legacy-reporting-review.md): financial aggregates at a declared grain, latest-row/anti-join patterns, repeated relationship aliases and richer typed expression trees.
 - [ ] Extend authorized datasets for finance, contact/admissions, scheduling and other completed domains. Prevent one-to-many joins from inflating headcounts, credits or balances; keep mixed currencies separate.
-- [ ] Add reviewed report-to-population handoffs. Selecting students must not grant authority to register, bill or message them.
-- [ ] Add bounded full-result export jobs, cancellation, protected output retention/archival and frozen result snapshots where needed. Distinguish a shared live report from a retained historical extract.
+- [x] [Hand off selected students from saved dynamic Report Studio student detail reports to reviewed group registration](workflow-review.md#register-students-selected-from-a-saved-report), with distinct 50-student pages, a cross-page shortlist of up to 25, current membership/definition checks, full source permission checks and the existing atomic registration command. Summaries and non-student sources cannot be reinterpreted as populations; selection grants no new authority.
+- [ ] Extend reviewed population handoffs to further sources and independently authorized billing/messaging actions. Retain explicit selection semantics and bounded work rather than automatically acting on an entire live report.
+- [x] [Saved report modes and expiry](workflow-review.md#saved-report-results-and-automatic-removal): dynamic live results, encrypted immutable complete static captures (up to 5,000 rows/8 MiB), optional automatic removal for either mode, immediate expiry enforcement and bounded scheduled cleanup preserving linked case/academic history.
+- [ ] Add larger bounded background full-result export jobs, cancellation and protected output archival. Static capture currently rejects oversized results without saving a partial extract.
 - [ ] Expand mapped imports beyond courses: identity/dependency reconciliation, useful row errors, explicit conflict review and safe restartable batches.
 - [ ] Build and exercise legacy-data conversion/reconciliation, preserving verified recorded history and explicitly identifying unknown earlier facts.
 

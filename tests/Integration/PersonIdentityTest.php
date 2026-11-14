@@ -101,7 +101,7 @@ final class PersonIdentityTest extends TestCase
         self::assertSame('00009001', $account->person->institutionalId->value);
         self::assertSame('00009001', new SqlTransferRepository($f->sql, $f->gradeCatalog())->transcript($student->id)[0]['institutional_id']);
         $report = new \Domain\Reporting\StudentReport(EntityId::generate(), $f->access->actor, 'Students');
-        self::assertSame('00009001', new SqlReportRepository($f->sql)->run($report, null, 50)[0]['institutional_id']);
+        self::assertSame('00009001', new SqlReportRepository($f->sql, $f->clock)->run($report, null, 50)[0]['institutional_id']);
         self::assertSame($student->personId->value, $person->id->value);
         self::assertSame($enrollment, $f->sql->rows('sis_enrollments'));
         self::assertSame($events, $f->sql->rows('sis_history_events'));

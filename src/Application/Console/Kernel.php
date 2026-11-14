@@ -6,6 +6,7 @@ namespace Application\Console;
 
 use Codefy\Framework\Console\ConsoleKernel;
 use Codefy\Framework\Scheduler\Schedule;
+use Qubus\Exception\Data\TypeException;
 use Symfony\Component\Console\Command\SignalableCommandInterface;
 
 final class Kernel extends ConsoleKernel
@@ -22,9 +23,11 @@ final class Kernel extends ConsoleKernel
      *
      * @param Schedule $schedule
      * @return void
+     * @throws TypeException
      */
     protected function schedule(Schedule $schedule): void
     {
+        $schedule->command('sis:reports:prune --apply --limit=50')->hourly()->onlyOneInstance();
         // Register existing scripts using absolute paths and explicit arguments.
         // onlyOneInstance() runs in the foreground and holds the lock until completion.
         // $schedule->command('queue:run')->everyMinute()->onlyOneInstance();

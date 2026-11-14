@@ -40,7 +40,7 @@ final class CatalogCourseTest extends TestCase
         self::assertSame('MATH-101', $stored['code']);
         self::assertSame('College Algebra', $stored['title']);
         self::assertSame(3000, (int) $stored['credits_milli']);
-        $directory = new SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog())->records('courses', null, 'MATH-101', null);
+        $directory = new SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog(), $fixture->clock)->records('courses', null, 'MATH-101', null);
         self::assertCount(1, $directory['items']);
         self::assertSame('MATH-101', $directory['items'][0]['code']);
     }

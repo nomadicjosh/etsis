@@ -360,7 +360,7 @@ final class RegistrationBatchTest extends TestCase
         $permissions->method('allows')->willReturnCallback(static fn (string $actor, string $permission): bool =>
             in_array($permission, $f->access->grants, true));
         $workspace = new \Domain\Workspace\Service\WorkspaceService(
-            new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($f->sql, $f->gradeCatalog()),
+            new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($f->sql, $f->gradeCatalog(), $f->clock),
             $f->access,
             $permissions,
             new \Domain\Admissions\Service\AdmissionsService(

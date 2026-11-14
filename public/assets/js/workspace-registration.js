@@ -61,8 +61,10 @@ window.createWorkspaceRegistration = function (ui) {
             form,
         );
     }
-    async function start(presetSection = "") {
-        const chosen = new Map();
+    async function start(presetSection = "", presetStudents = [], back = null) {
+        if (presetStudents.length > 25) throw new Error("Select no more than 25 students.");
+        const chosen = new Map(presetStudents.map(student => [student.id,
+            `${student.institutional_id || "ID not assigned"} · ${student.name}`]));
         let sectionId = presetSection;
         async function selection() {
             const body = openDrawer("Register a group", "BATCH REGISTRATION");
@@ -74,6 +76,7 @@ window.createWorkspaceRegistration = function (ui) {
                 ),
                 button("Find a completed batch", findReceipt),
             );
+            if (back) body.append(button("Back to report selection", back));
             const form = await buildForm(
                 [
                     ["section_id", "Course section", "lookup", "sections"],

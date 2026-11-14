@@ -14,6 +14,7 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
     public function __construct(
         private SqlRecords $sql,
         private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
+        private \Domain\Shared\Service\Clock $clock,
     ) {
     }
 
@@ -57,6 +58,12 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
         } elseif ($owner !== null) {
             $conditions[] = "r." . $q($dataset === "teaching" ? "faculty_user_id" : "owner_user_id") . " = ?";
             $parameters[] = $owner->value;
+        }
+        if (in_array($dataset, ['reports', 'sharedreports'], true)) {
+            $conditions[] = 'NOT EXISTS (SELECT 1 FROM ' . $q('sis_report_lifecycles') . ' rl WHERE rl.'
+            . $q('id') . ' = r.' . $q('id') . ' AND (rl.' . $q('removed_at') . ' IS NOT NULL OR rl.'
+            . $q('expires_at') . ' <= ?))';
+            $parameters[] = $this->clock->now()->setTimezone(new \DateTimeZone('UTC'))->format(DATE_ATOM);
         }
         if ($search !== "") {
             $or = [];

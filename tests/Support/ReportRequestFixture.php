@@ -25,7 +25,7 @@ final class ReportRequestFixture
         $this->requester = $f->access->actor;
         $f->student(); // A fictional requester with a canonical person record.
         $this->specialist = $f->user();
-        $this->reports = new SqlReportRepository($f->sql);
+        $this->reports = new SqlReportRepository($f->sql, $f->clock);
         $this->repository = new SqlReportRequestRepository($f->sql);
         $this->sharing = new ReportService($this->reports, $f->access, $f->transactions, $f->audit);
     }

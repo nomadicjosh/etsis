@@ -191,7 +191,7 @@ final class WorkspaceWorkflowTest extends TestCase
             $fixture->submissionService(),
         );
         $service = new \Domain\Workspace\Service\WorkspaceService(
-            new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog()),
+            new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog(), $fixture->clock),
             $fixture->access,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($fixture->sql),
             $admissions
@@ -219,7 +219,7 @@ final class WorkspaceWorkflowTest extends TestCase
         for ($index = 0; $index < 52; ++$index) {
             $admissions->createPerson(null, 'Example', 'Person ' . $index);
         }
-        $repository = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog());
+        $repository = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog(), $fixture->clock);
         $first = $repository->records('people', null, '', null);
         $second = $repository->records('people', null, '', new EntityId($first['next_after']));
         self::assertCount(50, $first['items']);

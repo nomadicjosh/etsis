@@ -10,7 +10,10 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
 use Laminas\Diactoros\Response\TextResponse;
+use League\Csv\CannotInsertRecord;
 use League\Csv\EscapeFormula;
+use League\Csv\Exception;
+use League\Csv\InvalidArgument;
 use League\Csv\Writer;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
@@ -50,6 +53,50 @@ final readonly class SisRelationalReportController
     {
         return new JsonResponse($this->service->run(new EntityId($id), FormInput::from($request)->integer("offset")));
     }
+    public function population(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->population(
+            new EntityId($id),
+            FormInput::from($request)->integer('offset')
+        ));
+    }
+    public function settings(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->reportSettings(new EntityId($id)));
+    }
+    public function configure(ServerRequest $request, string $id): ResponseInterface
+    {
+        $form = FormInput::from($request);
+        $days = $form->optionalText('expires_after_days', 4);
+        if ($days !== null && preg_match('/^[1-9][0-9]{0,3}$/D', $days) !== 1) {
+            throw new ValidationException([['field' => 'expires_after_days',
+                'message' => 'Enter whole days or leave blank.']]);
+        }
+        return new JsonResponse($this->service->configureReport(
+            new EntityId($id),
+            $form->id('operation_id'),
+            $form->integer('version', -1),
+            $form->text('mode', 12),
+            $days === null ? null : (int) $days
+        ));
+    }
+    public function selectStudents(ServerRequest $request, string $id): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !is_array($body['student_ids'] ?? null)) {
+            throw new ValidationException([['field' => 'students', 'message' => 'Choose students from this report.']]);
+        }
+        return new JsonResponse($this->service->selectStudents(
+            new EntityId($id),
+            $body['student_ids'],
+            FormInput::from($request)->integer('report_version')
+        ));
+    }
+    /**
+     * @throws InvalidArgument
+     * @throws CannotInsertRecord
+     * @throws Exception
+     */
     public function export(ServerRequest $request, string $id): ResponseInterface
     {
         $page = $this->service->run(new EntityId($id), FormInput::from($request)->integer("offset"));

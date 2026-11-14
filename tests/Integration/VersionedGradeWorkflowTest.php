@@ -63,7 +63,7 @@ final class VersionedGradeWorkflowTest extends TestCase
         }
         $student = $f->student();
         self::assertSame(5000, $f->gradeCatalog()->byCode("A+", $student->id)["points_milli"]);
-        $directory = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog())->records(
+        $directory = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog(), $f->clock)->records(
             "grades",
             null,
             "A+",

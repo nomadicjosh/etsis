@@ -358,7 +358,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 .map((r) => r.parent)
                 .find((id) => !dataset.relationships[id]) || Object.values(dataset.fields)[0]?.relation;
         const rootLabel =
-            { assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
+            { student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
         const fieldsFor = (id) => Object.entries(dataset.fields).filter(([, f]) => f.relation === id);
@@ -1429,10 +1429,12 @@ window.createWorkspaceReportStudio = function (ui) {
             node(
                 "p",
                 { role: "status" },
-                `${result.items.length} rows on this page${result.next_offset !== null ? "; more are available" : ""}. Live results · page ${result.offset / 50 + 1}.`,
+                `${result.items.length} rows on this page${result.next_offset !== null ? "; more are available" : ""}. ${result.lifecycle?.mode === "static" ? "Saved static results" : "Live results"} · page ${result.offset / 50 + 1}.`,
             ),
         );
-        if (!result.items.length) panel.append(node("p", {}, "No records match yet. Try refining your conditions."));
+        if (!result.items.length) panel.append(node("p", {}, result.lifecycle?.mode === "static"
+            ? "This static report captured no matching records."
+            : "No records match yet. Try refining your conditions."));
         else
             panel.append(
                 grid(
@@ -1486,9 +1488,187 @@ window.createWorkspaceReportStudio = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "Records may change as staff update them. The preview and CSV export include only the current page.",
+                result.lifecycle?.mode === "static"
+                    ? "These captured results do not change. The preview and CSV export include one saved page."
+                    : "Records may change as staff update them. The preview and CSV export include only the current page.",
             ),
         );
+    }
+    async function population(id, state = null) {
+        state ||= { selected: new Map(), version: null, offset: 0 };
+        const body = openSpace("Choose students for registration", "SAVED REPORT · STUDENT POPULATION");
+        body.append(node("p", {}, "Choose up to 25 distinct students across this report's live population pages. Repeated program or credit rows count as one student. The selection is checked against the saved report again before opening the existing registration review."),
+            node("p", { class: "form-text" }, "Report access does not grant registration authority. No enrollment or charge is created here. Registration uses each student's current primary pursuit. The group remains editable and checks current eligibility, seats and fees before confirmation."));
+        const selected = node("section", { class: "record-section", "aria-label": "Selected report students" });
+        const status = node("p", { role: "status", "aria-live": "polite" });
+        const results = node("div"), navigation = node("div", { class: "inline-actions" });
+        let loading = false, requestNumber = 0, checks = new Map(), next = null;
+        const forget = () => {
+            state.selected.clear();
+            checks.clear();
+            results.replaceChildren();
+            next = null;
+            renderSelected();
+        };
+        const continueButton = button("Review selected students for registration", async () => {
+            if (loading) return;
+            loading = true;
+            renderSelected();
+            const attempt = ++requestNumber;
+            try {
+                const result = await request(`/sis/report-studio/${id}/population/select/`, "POST", {
+                    student_ids: [...state.selected.keys()], report_version: state.version,
+                });
+                if (!body.isConnected || attempt !== requestNumber) return;
+                await ui.registerPopulation(result.items, () => population(id, state));
+            } catch (error) {
+                if (!body.isConnected || attempt !== requestNumber) return;
+                if ([403, 404].includes(error.status)) forget();
+                throw error;
+            } finally {
+                loading = false;
+                if (body.isConnected) renderSelected();
+            }
+        }, "btn-primary");
+        function renderSelected() {
+            selected.replaceChildren(node("h2", { class: "h5" }, `${state.selected.size} of 25 students selected`),
+                ...[...state.selected.values()].map(student => node("p", {},
+                    `${student.institutional_id || "ID not assigned"} · ${student.name} `,
+                    button(`Remove ${student.institutional_id || student.name} from selection`, async () => {
+                        if (loading) return;
+                        state.selected.delete(student.id);
+                        if (checks.has(student.id)) checks.get(student.id).checked = false;
+                        renderSelected();
+                        selected.tabIndex = -1;
+                        selected.focus();
+                    }, "btn-outline-primary"))));
+            selected.querySelectorAll("button").forEach(control => { control.disabled = loading; });
+            for (const control of checks.values()) control.disabled = loading;
+            navigation.querySelectorAll("button").forEach(control => { control.disabled = loading; });
+            continueButton.disabled = loading || !state.selected.size;
+        }
+        async function load(offset) {
+            if (loading) return;
+            loading = true;
+            const attempt = ++requestNumber;
+            renderSelected();
+            navigation.replaceChildren();
+            status.textContent = "Loading matching students…";
+            try {
+                const page = await request(`/sis/report-studio/${id}/population/`, "POST", { offset });
+                if (!body.isConnected || attempt !== requestNumber) return;
+                const changed = state.version !== null && state.version !== page.report_version;
+                if (changed) state.selected.clear();
+                state.version = page.report_version;
+                state.offset = offset;
+                next = page.next_offset;
+                checks = new Map();
+                const rows = page.items.map(student => {
+                    const check = node("input", { type: "checkbox", class: "form-check-input",
+                        id: `population-${student.id}` });
+                    check.checked = state.selected.has(student.id);
+                    check.addEventListener("change", () => {
+                        if (loading) { check.checked = state.selected.has(student.id); return; }
+                        if (check.checked && !state.selected.has(student.id) && state.selected.size >= 25) {
+                            check.checked = false;
+                            status.textContent = "Choose at most 25 students for one registration group.";
+                            return;
+                        }
+                        if (check.checked) state.selected.set(student.id, student);
+                        else state.selected.delete(student.id);
+                        renderSelected();
+                    });
+                    checks.set(student.id, check);
+                    return [node("div", { class: "form-check" }, check,
+                        node("label", { for: check.id, class: "form-check-label" },
+                            `Select ${student.institutional_id || "student"} · ${student.name}`)),
+                        student.active ? "Active" : "Inactive"];
+                });
+                results.replaceChildren(rows.length ? node("div", { class: "table-responsive", tabindex: "0",
+                    role: "region", "aria-label": "Matching report students" },
+                    table(["Student", "Activity"], rows, "Distinct students matching the saved report"))
+                    : node("p", {}, "No students currently match this report."));
+                status.textContent = `${changed ? "The report definition changed; the previous selection was cleared. " : ""}Page ${offset / 50 + 1} · ${page.items.length} students. ${next === null ? "End of population." : "More students are available."}`;
+                if (offset) navigation.append(button("Previous population page", () => load(offset - 50)));
+                if (next !== null) navigation.append(button("Next population page", () => load(next)));
+            } catch (error) {
+                if (!body.isConnected || attempt !== requestNumber) return;
+                if ([403, 404].includes(error.status)) forget();
+                status.textContent = "The student population could not be loaded. Review access or refresh it.";
+                throw error;
+            } finally {
+                loading = false;
+                if (body.isConnected) renderSelected();
+            }
+        }
+        body.append(selected, continueButton,
+            button("Refresh student population", () => load(0)), status, results, navigation,
+            button("Back to saved report", () => record(id)));
+        renderSelected();
+        await load(state.offset);
+    }
+    async function settings(id) {
+        const saved = await request(`/sis/report-studio/${id}/settings/`);
+        const body = openSpace(`${saved.name} · Report settings`, "RESULTS & AUTOMATIC EXPIRY");
+        const lifecycle = saved.lifecycle || { mode: "dynamic", expires_at: null };
+        const form = node("form"), modes = node("fieldset", { class: "record-section" }, node("legend", { class: "h5" }, "How should results behave?"));
+        for (const [value, label, description] of [
+            ["dynamic", "Dynamic report", "Refresh results from current data each time the report runs."],
+            ["static", "Static one-time report", "Capture the complete results once. Later record changes do not change the saved results."],
+        ]) {
+            const input = node("input", { type: "radio", name: "report_mode", id: `report-mode-${value}`,
+                value, class: "form-check-input", checked: lifecycle.mode === value,
+                disabled: lifecycle.mode === "static" && value === "dynamic" });
+            modes.append(node("div", { class: "form-check mb-3" }, input,
+                node("label", { for: input.id, class: "form-check-label" }, label),
+                node("p", { class: "form-text" }, description)));
+        }
+        const temporary = node("input", { type: "checkbox", id: "report-temporary", class: "form-check-input",
+            checked: !!lifecycle.expires_at });
+        const days = node("input", { type: "number", id: "report-expiry-days", class: "form-control",
+            min: "1", max: "3650", step: "1", value: lifecycle.expires_at ?
+                Math.max(1, Math.ceil((Date.parse(lifecycle.expires_at) - Date.now()) / 86400000)) : 30 });
+        const expiry = node("div", { class: "mb-3" },
+            node("label", { for: days.id, class: "form-label" }, "Remove after this many days"), days,
+            node("p", { class: "form-text" }, "Saving starts this removal period from now. Leave temporary reporting off to keep the report. Academic records and linked office cases are preserved."));
+        const updateExpiry = () => { expiry.hidden = !temporary.checked; days.required = temporary.checked; };
+        temporary.addEventListener("change", updateExpiry);
+        updateExpiry();
+        form.append(modes, node("div", { class: "form-check mb-3" }, temporary,
+            node("label", { for: temporary.id, class: "form-check-label" }, "This is a temporary / one-off report; remove it automatically")), expiry);
+        if (lifecycle.expires_at) form.append(node("p", {}, `Current removal time: ${lifecycle.expires_at}.`));
+        body.append(node("p", {}, "Result type and automatic removal are separate choices. Either a static or dynamic report can be temporary."),
+            node("p", { class: "form-text" }, "Static capture currently supports complete reports up to 5,000 rows and 8 MiB. Larger captures stop with no partial report saved. A captured report stays static; create a new report from its definition to change it."), form);
+        const status = node("p", { role: "status", "aria-live": "polite" });
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save report settings");
+        form.append(save, status);
+        let pending = null;
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                try {
+                    if (!form.reportValidity()) return;
+                    if (!pending) pending = { operation_id: (await request("/sis/ui/operation-id/")).id,
+                        version: saved.version, mode: form.querySelector('[name="report_mode"]:checked').value,
+                        expires_after_days: temporary.checked ? days.value : "" };
+                    for (const control of form.querySelectorAll("input")) control.disabled = true;
+                    status.textContent = pending.mode === "static" ? "Preparing and protecting the complete static report…" : "Saving report settings…";
+                    await request(`/sis/report-studio/${id}/settings/`, "POST", pending);
+                    if (body.isConnected) await record(id);
+                } catch (error) {
+                    if (!body.isConnected) return;
+                    status.textContent = "No completed change was confirmed. Retry this save safely, or reload settings after a conflict.";
+                    if ([400, 403, 404, 409, 422].includes(error.status)) {
+                        pending = null;
+                        for (const control of form.querySelectorAll("input")) control.disabled = false;
+                        const dynamic = form.querySelector('#report-mode-dynamic');
+                        if (lifecycle.mode === "static") dynamic.disabled = true;
+                    }
+                    localError(error);
+                }
+            }, save);
+        });
+        body.append(button("Reload report settings", () => settings(id)), button("Back to report", () => record(id)));
     }
     async function record(id) {
         const saved = await request(`/sis/report-studio/${id}/`);
@@ -1501,7 +1681,13 @@ window.createWorkspaceReportStudio = function (ui) {
                 `Definition revision ${saved.version + 1}. Source access is checked each time this report runs.`,
             ),
         );
-        if (saved.can_manage)
+        const frozen = saved.lifecycle?.mode === "static";
+        body.append(node("p", { role: "status" }, frozen
+            ? `Static report · ${saved.lifecycle.row_count} captured rows · ${saved.lifecycle.captured_at}. Results do not refresh from current data.`
+            : "Dynamic report · results reflect current data."));
+        if (saved.lifecycle?.expires_at) body.append(node("p", {}, `Automatic removal: ${saved.lifecycle.expires_at}.`));
+        if (saved.can_manage) body.append(button("Report settings", () => settings(id)));
+        if (saved.can_manage && !frozen)
             body.append(
                 button("Edit report in Studio", async () => {
                     const catalog = await request("/sis/report-studio/catalog/"),
@@ -1510,8 +1696,16 @@ window.createWorkspaceReportStudio = function (ui) {
                     await edit(dataset, saved.definition, saved);
                 }),
             );
+        if (saved.can_manage && frozen) body.append(button("Create a new report from this definition", async () => {
+            const catalog = await request("/sis/report-studio/catalog/");
+            const dataset = catalog.datasets.find(item => item.id === saved.definition.dataset);
+            if (!dataset) throw new Error("This source is no longer available to your account.");
+            await edit(dataset, saved.definition);
+        }));
         if (can("sis:reporting:manage") && saved.can_manage)
             body.append(button("Manage report sharing", () => ui.sharing(id)));
+        if (saved.can_select_students && can("sis:registration:manage") && can("sis:student:read") && can("sis:reporting:run"))
+            body.append(button("Choose students for registration", () => population(id)));
         const panel = node("section", {
             class: "record-section report-saved-results",
             "aria-label": "Saved report results",
@@ -1537,7 +1731,8 @@ window.createWorkspaceReportStudio = function (ui) {
             if (!panel.isConnected || attempt !== resultGeneration) return;
             renderResults(panel, result, load, async (cursor) => {
                 try {
-                    await requestFile(`/sis/report-studio/${id}/export/`, { offset: cursor }, "report-studio-page.csv");
+                    await requestFile(`/sis/report-studio/${id}/export/`, { offset: cursor }, "report-studio-page.csv",
+                        { maximum: frozen ? 10 * 1024 * 1024 : 262144 });
                 } catch (error) {
                     if (!panel.isConnected) return;
                     if ([403, 404].includes(error.status)) {
@@ -1551,10 +1746,10 @@ window.createWorkspaceReportStudio = function (ui) {
             });
         };
         body.insertBefore(
-            button("Refresh results", () => load(0)),
+            button(frozen ? "Read saved results" : "Refresh results", () => load(0)),
             panel,
         );
         await load(0);
     }
-    return { start, record, cleanup, isOpen: () => !!dialog };
+    return { start, record, settings, cleanup, isOpen: () => !!dialog };
 };

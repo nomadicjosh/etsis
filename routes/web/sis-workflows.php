@@ -314,8 +314,18 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/report-studio/{id}/run/", [SisRelationalReportController::class, "run"])
         ->name("sis.report.studio.run");
     $router
+        ->map(["POST"], "/sis/report-studio/{id}/population/", [SisRelationalReportController::class, "population"])
+        ->name("sis.report.studio.population");
+    $router
+        ->map(["POST"], "/sis/report-studio/{id}/population/select/", [
+            SisRelationalReportController::class, "selectStudents",
+        ])
+        ->name("sis.report.studio.population.select");
+    $router
         ->map(["POST"], "/sis/report-studio/{id}/export/", [SisRelationalReportController::class, "export"])
         ->name("sis.report.studio.export");
+    $router->get('/sis/report-studio/{id}/settings/', [SisRelationalReportController::class, 'settings']);
+    $router->post('/sis/report-studio/{id}/settings/', [SisRelationalReportController::class, 'configure']);
 
     $router
         ->map(["POST"], "/sis/term-types/", [

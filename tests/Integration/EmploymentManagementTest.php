@@ -214,7 +214,7 @@ final class EmploymentManagementTest extends TestCase
         $service = $this->service($f);
         $id = $this->employee($f, $service);
         $entry = $service->submit($id, $this->work());
-        $records = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog())->records('timesheets', null, 'Alex', null);
+        $records = new SqlWorkspaceRepository($f->sql, $f->gradeCatalog(), $f->clock)->records('timesheets', null, 'Alex', null);
         self::assertCount(1, $records['items']);
         self::assertSame($entry->id->value, $records['items'][0]['id']);
         self::assertSame('Alex', $records['items'][0]['given_name']);

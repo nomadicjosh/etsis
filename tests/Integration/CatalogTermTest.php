@@ -89,7 +89,7 @@ final class CatalogTermTest extends TestCase
         self::assertSame(201, $response->getStatusCode());
         $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertSame('26/FA', $fixture->sql->one('sis_terms', ['id' => $body['id']])['code']);
-        $directory = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog());
+        $directory = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog(), $fixture->clock);
         $matches = $directory->records('terms', null, '26/FA', null);
         self::assertCount(1, $matches['items']);
         self::assertSame('26/FA', $matches['items'][0]['code']);

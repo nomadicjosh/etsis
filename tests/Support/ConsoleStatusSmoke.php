@@ -104,6 +104,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-course-rules') {
             require __DIR__.'/CourseRuleBootChecks.php';
             $status=0;
+        } elseif (($argv[1] ?? '') === 'check-report-retention') {
+            require __DIR__.'/ReportRetentionBootChecks.php';
+            $status=0;
         } elseif (($argv[1] ?? '') === 'check-session-retention') {
             require __DIR__.'/SessionRetentionBootChecks.php';
             $status=0;

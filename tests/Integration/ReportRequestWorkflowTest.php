@@ -327,7 +327,8 @@ final class ReportRequestWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->dropCipher,
-            $f->clock
+            $f->clock,
+            $f->reportLifecycles()
         );
         $report = EntityId::generate();
         $relational->save($report, EntityId::generate(), -1, 'Fictional advanced program report', [

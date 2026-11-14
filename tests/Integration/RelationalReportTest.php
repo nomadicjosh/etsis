@@ -21,7 +21,7 @@ final class RelationalReportTest extends TestCase
     {
         $f = $h->sis;
         return new RelationalReportService(
-            new SqlReportRepository($f->sql),
+            new SqlReportRepository($f->sql, $f->clock),
             new SqlRelationalReportRepository($f->sql),
             new SqlRelationalReportSource($f->sql),
             $f->access,
@@ -29,6 +29,7 @@ final class RelationalReportTest extends TestCase
             $audit ?? $f->audit,
             $h->cipher,
             $f->clock,
+            $f->reportLifecycles(cipher: $h->cipher),
         );
     }
     private function query(string $dataset = "credits"): array
@@ -121,7 +122,7 @@ final class RelationalReportTest extends TestCase
         $service->save($id, EntityId::generate(), 0, "Updated report", $q);
         self::assertSame(1, $service->view($id)["version"]);
         $recipient = $f->user();
-        new SqlReportRepository($f->sql)->share($id, $recipient);
+        new SqlReportRepository($f->sql, $f->clock)->share($id, $recipient);
         $f->access->actor = $recipient;
         $f->access->staff = false;
         $f->access->grants = ["sis:reporting:run"];
@@ -233,7 +234,7 @@ final class RelationalReportTest extends TestCase
             self::assertSame("Updated advanced report", $service->view($id)["name"]);
         }
         $legacy = new \Domain\Reporting\Service\ReportService(
-            new SqlReportRepository($f->sql),
+            new SqlReportRepository($f->sql, $f->clock),
             $f->access,
             $f->transactions,
             $f->audit,

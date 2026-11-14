@@ -112,7 +112,7 @@ final class AdministrationWorkflowTest extends TestCase
     {
         $f = new SisFixture();
         $f->student();
-        $service = new ReportService(new SqlReportRepository($f->sql), $f->access, $f->transactions, $f->audit);
+        $service = new ReportService(new SqlReportRepository($f->sql, $f->clock), $f->access, $f->transactions, $f->audit);
         $report = $service->create('Active students', $f->program, null, true);
         $owner = $f->access->actor;
         $other = $f->user();

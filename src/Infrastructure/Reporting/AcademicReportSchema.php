@@ -91,7 +91,32 @@ final class AcademicReportSchema
             "family_name" => $field("Family name", "string", "person", "family_name"),
             "active" => $field("Active student", "boolean", "student", "active"),
         ];
+        $students = [
+            'student_population' => true,
+            'table' => 'sis_students',
+            'root' => 'student',
+            'label' => 'Students & current primary program',
+            'description' => 'One row per student, with the current primary program and institutional entry term.',
+            'permissions' => $studentRead,
+            'relationships' => $personJoins + [
+                'program' => $join('sis_programs', 'student', 'primary_program_id', 'id'),
+                'term' => $join('sis_terms', 'student', 'entry_term_id', 'id'),
+            ],
+            'fields' => $personFields + [
+                'primary_program_id' => $field('Primary program reference', 'string', 'student', 'primary_program_id'),
+                'institutional_entry_term_id' => $field(
+                    'Institutional entry term reference',
+                    'string',
+                    'student',
+                    'entry_term_id'
+                ),
+                'program_code' => $field('Primary program code', 'string', 'program', 'code'),
+                'program_title' => $field('Primary program title', 'string', 'program', 'title'),
+                'entry_term' => $field('Institutional entry term', 'string', 'term', 'code'),
+            ],
+        ];
         $program = [
+            "student_population" => true,
             "table" => "sis_student_programs",
             "root" => "assignment",
             "label" => "Student programs & catalog cohorts",
@@ -178,6 +203,7 @@ final class AcademicReportSchema
             ],
         ];
         $credits = [
+            "student_population" => true,
             "table" => "sis_academic_credits",
             "root" => "credit",
             "label" => "Academic credits & final grades",
@@ -355,6 +381,7 @@ final class AcademicReportSchema
             ],
         ];
         return [
+            'students' => ['id' => 'students'] + $students,
             "programs" => ["id" => "programs"] + $program,
             "credits" => ["id" => "credits"] + $credits,
             "sections" => ["id" => "sections"] + $sections,

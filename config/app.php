@@ -172,6 +172,7 @@ return [
     "commands" => [
         \Application\Console\Commands\VerifyHistoryCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
+        \Application\Console\Commands\PruneReportsCommand::class,
         \Application\Console\Commands\BootstrapAccessCommand::class,
         \Application\Console\Commands\MoodleCheckCommand::class,
         \Application\Console\Commands\MoodleInspectCommand::class,
