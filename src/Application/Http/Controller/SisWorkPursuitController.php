@@ -21,7 +21,8 @@ final readonly class SisWorkPursuitController
     {
         return new JsonResponse($this->service->page(
             new EntityId($student),
-            FormInput::from($request)->optionalId('after')
+            FormInput::from($request)->optionalId('after'),
+            FormInput::from($request)->optionalId('assignment_id')
         ));
     }
 
@@ -51,6 +52,30 @@ final readonly class SisWorkPursuitController
             new EntityId($student),
             new EntityId($credit),
             FormInput::from($request)->text('review_token', 16384)
+        ));
+    }
+    public function reviewReuse(ServerRequest $request, string $student): ResponseInterface
+    {
+        $form = FormInput::from($request);
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !is_array($body['credit_ids'] ?? null)) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                ['field' => 'credit_ids', 'message' => 'Choose academic records to review for reuse.']
+            ]);
+        }
+        return new JsonResponse($this->service->reviewReuse(
+            new EntityId($student),
+            $form->id('assignment_id'),
+            $body['credit_ids'],
+            $form->bodyText('reason')
+        ));
+    }
+
+    public function commitReuse(ServerRequest $request, string $student): ResponseInterface
+    {
+        return new JsonResponse($this->service->commitReuse(
+            new EntityId($student),
+            FormInput::from($request)->text('review_token', 65536)
         ));
     }
 }

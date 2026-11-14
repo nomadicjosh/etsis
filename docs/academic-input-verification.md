@@ -14,16 +14,18 @@ Older work with no recorded pursuit stops a complete audit or prerequisite check
 
 ### Registrar review
 
-Open **Students → the student → Student programs → Degree requirements → Work attribution & reuse**. This office-only workbench lists current work across the student's pursuits, including unknown attribution. It does not expose restricted early-drop records.
+Open **Students → the student → Student programs → Degree requirements → Work attribution & reuse**, or choose **Review earlier coursework** immediately after confirming a program change. The latter opens the new pursuit directly, even before degree requirements are published or assigned. This office-only workbench identifies the receiving pursuit and lists current work across the student's pursuits, including unknown attribution. It does not expose restricted early-drop records.
 
 1. For **Pursuit not recorded**, choose **Attribute this work**, select the original pursuit using institutional evidence, explain the decision, review and confirm. Earlier closed pursuits remain selectable; there is no automatic original-pursuit selection.
 2. Use **Correct attribution** only when evidence shows the original pursuit was recorded incorrectly. The previous attribution remains in history; correcting it does not automatically approve reuse by the former owner.
-3. Open the receiving pursuit's requirements and choose **Approve reuse for this pursuit** for a record owned elsewhere. A new approval requires an active receiving pursuit. It affects future prerequisite checks and audits without awarding, charging or registering the course again.
+3. Select records owned by earlier pursuits, then choose **Review selected coursework**. Select up to 20 institutional or transfer records across pages; the visible selection and entered reason survive paging and review revisions. Enter one reason, review the receiving pursuit and every selected record's original pursuit, then **Confirm selected reuse approvals** once. The individual **Approve reuse for this pursuit** remains available. New approvals require an active receiving pursuit and affect future prerequisite checks and audits without awarding, charging or registering a course again. Published curriculum and grading rules still determine what can count.
 4. **Revoke reuse for this pursuit** removes that future applicability while preserving the original work and approval history. A retry of an earlier accepted confirmation returns its original receipt without restoring revoked reuse.
 
 Each command requires both `sis:academic-work:scope` and `sis:student:read`. The new scope permission is protected and independent: ordinary registration, faculty, student-read or broad `sis` access does not imply it. A super administrator can grant it to an appropriate registrar role or individual. Student-facing reads expose neither these approval controls nor the protected reasons/actors.
 
-Reviews expire after 20 minutes and are bound to their staff member, student, academic record, exact academic evidence and expected attribution version. Confirmation checks them again under the student lock. Events, projection, receipt and required audit commit together. Reads never create attribution or approve reuse.
+Reviews expire after 20 minutes and are bound to their staff member, student, selected academic records, exact academic evidence and expected attribution versions. Confirmation checks them again under the student lock. A changed record, expired review, lost permission or failed audit rolls back the entire selection: none of its new approvals remain. Events, projections, existing per-record receipts and required audits commit together in the single protected journal. The grouped command shares the individual command's validation and receipt handling; it collects academic evidence once per review and once per first confirmation, with one shared replay budget. It adds no batch table or separate event store.
+
+If a confirmation is interrupted, retrying that same accepted review returns its original results without reapplying approvals. This remains true after a later revocation, pursuit closure or review expiry. A new selection requires a fresh review. Selections and reasons live only in the open workspace's memory, not browser storage. Reads never create attribution or approve reuse.
 
 ## Understanding the result
 

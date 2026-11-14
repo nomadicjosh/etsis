@@ -17,7 +17,7 @@ test('registrars attribute unknown work and approve or revoke reuse in an access
         let result;
         if (path === base) result = { items: [{ id: credit, course_code: 'ENG.101',
             course_title: 'Fictional <b>writing</b>', term_code: '22/FA', credit_type: 'institutional',
-            owner, reuse_assignment_ids: reused ? [receiving] : [] }], next_after: null };
+            owner, reuse_assignment_ids: reused ? [receiving] : [] }], receiving: current, next_after: null };
         else if (path === `${base}pursuits/`) result = { items: [previous, current], next_after: null };
         else if (path.endsWith('/review/')) {
             reviewed = body;
@@ -74,4 +74,99 @@ test('academic readers cannot see registrar attribution controls', async ({ page
     const f = await fixture(page, { readOnly: true });
     await expect(page.getByRole('button', { name: 'Work attribution & reuse', exact: true })).toHaveCount(0);
     expect(f.calls.some(c => c.path.includes('academic-work-pursuits'))).toBe(false);
+});
+
+test('selected earlier coursework survives paging and revision, then confirms together with a retry', async ({ page }) => {
+    const f = await fixture(page);
+    const student = id(1), receiving = id(2), old = id(120), first = id(121), second = id(122);
+    const base = `/sis/students/${student}/academic-work-pursuits/`;
+    const previous = { id: old, program_code: 'BA.OLD', program_title: 'Earlier program', entry_term_code: '22/FA', status: 'closed' };
+    const current = { id: receiving, program_code: 'BS.CS', program_title: 'Computing', entry_term_code: '26/FA', status: 'active' };
+    const work = (credit, code, owner = previous, reuse = []) => ({ id: credit, course_code: code,
+        course_title: 'Fictional <b>retained title</b>', term_code: '22/FA', credit_type: 'institutional', owner,
+        reuse_assignment_ids: reuse });
+    const records = [work(first, 'ENG.101'), work(second, 'HIST.101')];
+    const calls = [];
+    let attempts = 0, approved = false;
+    await page.route(`**${base}**`, async route => {
+        const path = new URL(route.request().url()).pathname;
+        const body = JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json'));
+        calls.push({ path, body, csrf: route.request().headers()['x-csrf-token'] });
+        let result;
+        if (path === base) result = { receiving: current,
+            items: (body.after ? [records[1], work(id(123), 'UNKNOWN', null), work(id(124), 'CURRENT', current),
+                work(id(125), 'REUSED', previous, [receiving])] : [records[0]])
+                .map(row => approved && [first, second].includes(row.id) ? { ...row, reuse_assignment_ids: [receiving] } : row),
+            next_after: body.after ? null : first };
+        else if (path === `${base}reuse/review/`) result = { review_token: 'fictional-selection', target: current,
+            items: records.map(row => ({ ...row, owner: previous })) };
+        else if (path === `${base}reuse/commit/`) {
+            if (++attempts === 1) return route.fulfill({ status: 503, json: { message: 'Fictional temporary interruption.' } });
+            approved = true;
+            result = { operation_id: id(126), assignment_id: receiving, approved: 2 };
+        }
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.getByRole('button', { name: 'Work attribution & reuse', exact: true }).click();
+    const studio = page.locator('dialog.degree-audit-studio');
+    await expect(studio.getByRole('button', { name: 'Review selected coursework', exact: true })).toBeDisabled();
+    await studio.getByRole('checkbox', { name: /^Select ENG.101/ }).check();
+    await studio.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(studio.getByRole('checkbox')).toHaveCount(1);
+    await studio.getByRole('checkbox', { name: /^Select HIST.101/ }).check();
+    await expect(studio.getByRole('region', { name: 'Selected earlier coursework' })).toContainText('2 of 20');
+    await studio.getByRole('button', { name: 'Previous page', exact: true }).click();
+    await expect(studio.getByRole('checkbox', { name: /^Select ENG.101/ })).toBeChecked();
+    await studio.getByRole('button', { name: 'Review selected coursework', exact: true }).click();
+    const reason = 'Fictional registrar evidence supports both earlier courses.';
+    await studio.getByLabel('Reason and evidence for the selected coursework').fill(reason);
+    await studio.getByRole('button', { name: 'Back to work selection', exact: true }).click();
+    await expect(studio.getByRole('checkbox', { name: /^Select ENG.101/ })).toBeChecked();
+    await studio.getByRole('button', { name: 'Review selected coursework', exact: true }).click();
+    await expect(studio.getByLabel('Reason and evidence for the selected coursework')).toHaveValue(reason);
+    await studio.getByRole('button', { name: 'Review reuse approvals', exact: true }).click();
+    await expect(studio).toContainText('Original pursuit: BA.OLD');
+    await expect(studio.locator('b')).toHaveCount(0);
+    await studio.getByRole('button', { name: 'Revise reason', exact: true }).click();
+    await expect(studio.getByLabel('Reason and evidence for the selected coursework')).toHaveValue(reason);
+    await studio.getByRole('button', { name: 'Review reuse approvals', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(attempts).toBe(0);
+    await studio.getByRole('button', { name: 'Confirm selected reuse approvals', exact: true }).click();
+    await expect(studio.getByRole('alert')).toContainText('The request could not be completed.');
+    await studio.getByRole('button', { name: 'Confirm selected reuse approvals', exact: true }).click();
+    await expect(studio).toContainText('2 reuse approvals recorded.');
+    await expect(studio.getByRole('region', { name: 'Selected earlier coursework' })).toContainText('0 of 20');
+    await accessible(page);
+    expect(calls.filter(c => c.path.endsWith('reuse/review/')).map(c => c.body)).toEqual([
+        { assignment_id: receiving, credit_ids: [first, second], reason },
+        { assignment_id: receiving, credit_ids: [first, second], reason },
+    ]);
+    expect(calls.filter(c => c.path.endsWith('reuse/commit/')).map(c => c.body)).toEqual([
+        { review_token: 'fictional-selection' }, { review_token: 'fictional-selection' },
+    ]);
+    expect(calls.filter(c => c.path === base).every(c => c.body.assignment_id === receiving)).toBe(true);
+    expect(calls.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('a closed receiving pursuit keeps earlier decisions visible without offering new reuse', async ({ page }) => {
+    const f = await fixture(page);
+    await page.route(`**/sis/students/${id(1)}/academic-work-pursuits/**`, route => route.fulfill({ json: {
+        receiving: { id: id(2), program_code: 'BS.CS', program_title: 'Computing', entry_term_code: '26/FA', status: 'closed' },
+        items: [{ id: id(121), course_code: 'ENG.101', course_title: 'Fictional English', credit_type: 'institutional',
+            owner: { id: id(120), program_code: 'BA.OLD', program_title: 'Earlier degree', entry_term_code: '22/FA', status: 'closed' },
+            reuse_assignment_ids: [id(2)] }], next_after: null,
+    } }));
+    await page.getByRole('button', { name: 'Work attribution & reuse', exact: true }).click();
+    const studio = page.locator('dialog.degree-audit-studio');
+    await expect(studio).toContainText('This receiving pursuit is closed.');
+    await expect(studio.getByRole('checkbox')).toHaveCount(0);
+    await expect(studio.getByRole('button', { name: 'Approve reuse for this pursuit', exact: true })).toHaveCount(0);
+    await expect(studio.getByRole('button', { name: 'Review selected coursework', exact: true })).toBeDisabled();
+    await expect(studio.getByRole('button', { name: 'Revoke reuse for this pursuit', exact: true })).toBeVisible();
+    expect(f.errors).toEqual([]);
 });

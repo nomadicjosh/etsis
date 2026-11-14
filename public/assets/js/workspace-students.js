@@ -683,14 +683,22 @@ window.createWorkspaceStudents = function (ui) {
                     button(
                         changing ? "Confirm program change" : "Confirm program assignment",
                         async () => {
-                            await request(
+                            const result = await request(
                                 `/sis/students/${record.id}/programs/${changing ? "change" : "assign"}/commit/`,
                                 "POST",
                                 {
                                     review_token: preview.review_token,
                                 },
                             );
-                            await back();
+                            if (changing && can("sis:academic-work:scope") && can("sis:student:read")) {
+                                const completed = openDrawer("Program changed", "REGISTRAR DECISION RECORDED");
+                                completed.append(node("h3", {}, `${source.program_code} · ${source.program_title}`),
+                                    node("p", { role: "status" }, "The new pursuit is current and the former pursuit is closed. Student activity and existing academic and financial records remain intact."),
+                                    node("p", {}, "Review earlier coursework to choose records that may support the new pursuit. Each selected record requires an explicit reuse approval."),
+                                    button("Review earlier coursework", () => ui.degreeAudit().reviewEarlierWork(
+                                        record.id, result.assignment_id, back), "btn-primary"),
+                                    button("Back to student", back));
+                            } else await back();
                         },
                         "btn-primary",
                     ),

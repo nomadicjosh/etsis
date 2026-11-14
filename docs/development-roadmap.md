@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after retaining exact prerequisite evidence in accepted registration decisions and adding pursuit-aware readiness to group review. Pending reviews detect changed grade/reuse evidence; completed receipts and earlier academic facts remain intact. Full prerequisite/co-requisite policy expressions, final evaluations and graduation remain subsequent milestones.
+Last reviewed: **2026-11-14**, after connecting program changes directly to grouped earlier-coursework review. Registrars can select up to 20 records across pages and approve them atomically using existing pursuit decisions and receipts. Pending reviews detect changed evidence; accepted retries preserve original results and later decisions. Full prerequisite/co-requisite policy expressions, final evaluations and graduation remain subsequent milestones.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -77,6 +77,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [ ] Add reasoned replacements for closed institutional credits and transfer course/posting-term/completion identities. Retain the original and replacement lineage, and require fresh transcript preparation when results change.
 - [x] Confine prerequisite and degree-audit inputs to the selected pursuit, with explicit registrar attribution/correction/reuse/revocation. New work records its current pursuit; unknown older attribution requires review. [Workflow and limits](academic-input-verification.md#which-pursuit-can-use-the-work).
 - [x] Process a registrar program change on one screen: add/select the new pursuit and close the former pursuit atomically, preserving student activity, original work and retry results. [Workflow](student-program-assignments.md#change-program).
+- [x] Connect the completed program change to [grouped earlier-work reuse](academic-input-verification.md#registrar-review), with cross-page selection, one reason/review/confirmation, atomic approval, shared evidence collection and original retries. No new schema or parallel recovery workflow.
 - [x] [Retain exact verified prerequisite support in accepted registrations](registration-history.md#retained-prerequisite-evidence), show group readiness before confirmation, invalidate pending reviews on changed grade/reuse support, preserve original receipts and keep earlier unrecorded evidence unknown. No new migration or journal.
 - [ ] Complete versioned prerequisite/co-requisite expressions, schedule-conflict checks and retained eligibility-policy inputs.
 - [ ] Add waitlists with an explicit institutional ordering/allocation policy, accepted server ordering and atomic seat/billing decisions. Browser click time is not a fairness guarantee.

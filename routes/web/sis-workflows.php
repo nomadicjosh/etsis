@@ -1053,6 +1053,7 @@ return static function (Psr7Router $router): void {
     );
     foreach (
         [['', 'page'], ['pursuits/', 'pursuits'],
+        ['reuse/review/', 'reviewReuse'], ['reuse/commit/', 'commitReuse'],
         ['{credit}/review/', 'review'], ['{credit}/commit/', 'commit']] as [$suffix, $action]
     ) {
         $router->post(

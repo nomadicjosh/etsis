@@ -2558,13 +2558,40 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(button("Back", back));
     }
     const pursuitLabel = (p) => `${p.program_code} · ${p.program_title} · Entry ${p.entry_term_code} · ${p.status}`;
-    async function workPursuits(student, receiving, back, after = null, stack = []) {
+    async function workPursuits(student, receiving, back, after = null, stack = [], state = null) {
+        state ||= { selected: new Map(), reason: "", backLabel: "Back to requirements" };
         const base = `/sis/students/${student}/academic-work-pursuits/`;
-        const data = await post(base, after ? { after } : {});
+        const data = await post(base, { assignment_id: receiving, ...(after ? { after } : {}) });
         const body = screen("Work attribution & reuse", "REGISTRAR REVIEW");
         body.append(node("p", {}, "Each academic record belongs to one program pursuit. Earlier coursework can support another pursuit only after a separate reuse approval. Attribution and reuse do not change grades, earned credits, bills or the original record."));
+        const canApprove = data.receiving?.status === "active";
+        if (data.receiving) body.append(node("h2", {}, `Receiving pursuit: ${pursuitLabel(data.receiving)}`));
+        if (!canApprove) body.append(node("p", { class: "alert alert-info", role: "status" },
+            "This receiving pursuit is closed. Existing decisions remain available; new reuse approvals require an active pursuit."));
+        const restore = () => workPursuits(student, receiving, back, after, stack, state);
+        const selection = node("section", { class: "record-section", "aria-label": "Selected earlier coursework" });
+        const selectionStatus = node("p", { role: "status", "aria-live": "polite" });
+        const selectedRows = node("div");
+        const reviewSelected = button("Review selected coursework", () => reuseReason(base, receiving, state, restore), "btn-primary");
+        const controls = new Map();
+        function renderSelection() {
+            selectionStatus.textContent = `${state.selected.size} of 20 records selected for reuse.`;
+            reviewSelected.disabled = !canApprove || !state.selected.size;
+            selectedRows.replaceChildren(...[...state.selected.values()].map(work =>
+                node("p", {}, `${work.course_code} · ${work.course_title} `,
+                    button(`Remove ${work.course_code} from selection`, async () => {
+                        state.selected.delete(work.id);
+                        if (controls.has(work.id)) controls.get(work.id).checked = false;
+                        renderSelection();
+                        selectionStatus.tabIndex = -1;
+                        selectionStatus.focus();
+                    }, "btn-link"))));
+        }
+        selection.append(node("h2", {}, "Review several records together"),
+            node("p", { class: "form-text" }, "Select up to 20 records across pages. One reason and confirmation approves the selected records together. Records without an original pursuit need attribution first."),
+            selectionStatus, selectedRows, reviewSelected);
+        body.append(selection);
         if (!data.items.length) body.append(node("p", {}, "No current academic work on this page."));
-        const restore = () => workPursuits(student, receiving, back, after, stack);
         for (const work of data.items) {
             const card = node("section", { class: "record-section" },
                 node("h2", {}, `${work.course_code} · ${work.course_title}`),
@@ -2576,14 +2603,76 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 card.append(button("Correct attribution", () => scopeTarget(base, work, "correct_attribution", restore)));
                 if (work.owner.id !== receiving) {
                     const reused = work.reuse_assignment_ids.includes(receiving);
-                    card.append(button(reused ? "Revoke reuse for this pursuit" : "Approve reuse for this pursuit",
+                    if (!reused && canApprove) {
+                        const check = node("input", { type: "checkbox", class: "form-check-input", id: `reuse-${work.id}` });
+                        check.checked = state.selected.has(work.id);
+                        check.addEventListener("change", () => {
+                            if (check.checked && !state.selected.has(work.id) && state.selected.size >= 20) {
+                                check.checked = false;
+                                fail(new Error("Choose at most 20 records for one review."));
+                                return;
+                            }
+                            if (check.checked) state.selected.set(work.id, work);
+                            else state.selected.delete(work.id);
+                            renderSelection();
+                        });
+                        controls.set(work.id, check);
+                        card.append(node("div", { class: "form-check mb-3" }, check,
+                            node("label", { class: "form-check-label", for: check.id }, `Select ${work.course_code} · ${work.course_title} for reuse`)));
+                    }
+                    if (reused || canApprove) card.append(button(reused ? "Revoke reuse for this pursuit" : "Approve reuse for this pursuit",
                         () => scopeReason(base, work, reused ? "revoke_reuse" : "approve_reuse", receiving, restore)));
                 } else card.append(node("p", { class: "form-text" }, "This work belongs to the pursuit you opened."));
             }
             body.append(card);
         }
-        pager(body, data, after, stack, (a, st) => workPursuits(student, receiving, back, a, st), "next_after");
-        body.append(button("Back to requirements", back));
+        renderSelection();
+        pager(body, data, after, stack, (a, st) => workPursuits(student, receiving, back, a, st, state), "next_after");
+        body.append(button(state.backLabel, back));
+    }
+
+    async function reuseReason(base, receiving, state, back) {
+        const body = screen("Review selected coursework", "REGISTRAR REUSE APPROVAL");
+        const reason = node("textarea", { id: "reuse-selection-reason", class: "form-control", required: true, maxlength: "1000", rows: "4" });
+        reason.value = state.reason;
+        reason.addEventListener("input", () => { state.reason = reason.value; });
+        const form = node("form", {},
+            node("p", {}, `${state.selected.size} selected records. These approvals allow the records to be considered for this pursuit. Published requirements and grade rules still determine what counts.`),
+            ...[...state.selected.values()].map(work => node("p", {}, `${work.course_code} · ${work.course_title}`)),
+            node("label", { for: reason.id, class: "form-label" }, "Reason and evidence for the selected coursework"), reason);
+        const submit = node("button", { type: "submit", class: "btn btn-primary mt-3" }, "Review reuse approvals");
+        form.append(submit);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                try {
+                    if (!form.reportValidity()) return;
+                    state.reason = reason.value;
+                    const reviewed = await post(`${base}reuse/review/`, { assignment_id: receiving,
+                        credit_ids: [...state.selected.keys()], reason: reason.value });
+                    const reviewBody = screen("Confirm selected coursework", "REVIEWED REUSE APPROVALS");
+                    reviewBody.append(node("h2", {}, `Receiving pursuit: ${pursuitLabel(reviewed.target)}`),
+                        node("p", {}, state.reason),
+                        node("p", { class: "form-text" }, "Confirmation records all selected approvals together. The original pursuits, grades, credits and charges remain intact. If any reviewed record changed, the whole selection needs another review."));
+                    for (const item of reviewed.items) reviewBody.append(node("section", { class: "record-section" },
+                        node("h3", {}, `${item.course_code} · ${item.course_title}`),
+                        node("p", {}, `${item.credit_type} · ${item.term_code || "Term not recorded"}`),
+                        node("p", {}, `Original pursuit: ${pursuitLabel(item.owner)}`)));
+                    reviewBody.append(actions(
+                        button("Confirm selected reuse approvals", async () => {
+                            const result = await post(`${base}reuse/commit/`, { review_token: reviewed.review_token });
+                            state.selected.clear();
+                            state.reason = "";
+                            await back();
+                            dialog?.querySelector(".report-workbench-body")?.prepend(
+                                node("p", { class: "alert alert-success", role: "status" }, `${result.approved} reuse approvals recorded.`));
+                        }, "btn-primary"),
+                        button("Revise reason", () => reuseReason(base, receiving, state, back)),
+                        button("Change work selection", back)));
+                } catch (error) { fail(error); }
+            }, submit);
+        });
+        body.append(form, button("Back to work selection", back));
     }
     async function scopeTarget(base, work, action, back, after = null, stack = []) {
         const data = await post(`${base}pursuits/`, after ? { after } : {});
@@ -5989,6 +6078,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         launch,
         library,
         studentRequirements,
+        reviewEarlierWork: (student, assignment, back) => workPursuits(student, assignment, () => {
+            close();
+            return back();
+        }, null, [], { selected: new Map(), reason: "", backLabel: "Back to student" }),
         gradingScale,
         specializationExceptions: (base, back) =>
             studentExceptions(
