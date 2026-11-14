@@ -57,6 +57,7 @@ final class StudentGroupAllocationTest extends TestCase
             new SqlReplacementCourseRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
             new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
+            $s->academicInputs($f->service),
         );
     }
     private function service(
@@ -589,7 +590,7 @@ final class StudentGroupAllocationTest extends TestCase
         $f->assign();
         return $f;
     }
-    private function work(StudentRequirementsFixture $f, int $index, bool $graded = true): array
+    private function work(StudentRequirementsFixture $f, int $index, bool $graded = true, ?string $code = null): array
     {
         $s = $f->f->sis;
         $course = $f->f->groupDefinition["courses"][$index];
@@ -598,7 +599,7 @@ final class StudentGroupAllocationTest extends TestCase
             new EntityId($course["course_id"]),
             $s->term,
             $s->access->actor,
-            "FICTIONAL." . $index,
+            $code ?? "FICTIONAL." . $index,
             20,
             true,
             true,
@@ -630,6 +631,92 @@ final class StudentGroupAllocationTest extends TestCase
         $s = $this->adjustments($f);
         $r = $s->reviewGrant($f->student, $f->assignment, $definition, "Fictional registrar exception.");
         return $s->commit($f->student, $f->assignment, $r["review_token"]);
+    }
+    public function testReviewedSupportingAttemptFeedsTheSharedPlacementAndCanBeClearedOrRevokedWithoutAcademicWrites(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        [, , $first] = $this->work($f, 0);
+        [, , $second] = $this->work($f, 0, code: 'FICTIONAL.RETAKE');
+        foreach ([1, 2, 4] as $index) {
+            $this->work($f, $index);
+        }
+        $course = $f->f->groupDefinition['courses'][0]['course_id'];
+        $service = $this->adjustments($f);
+        $academics = $s->sql->rows('sis_academic_credits');
+        $finance = $s->financialEvents();
+        $events = $s->sql->rows('sis_history_events');
+        $choices = $service->placementWork($f->student, $f->assignment, new EntityId($course));
+        self::assertSame([$first->value, $second->value], array_column($choices['items'], 'id'));
+        $definition = ['kind' => 'placement', 'course_id' => $course, 'group_id' => $f->f->group->value];
+        $review = $service->reviewGrant($f->student, $f->assignment, $definition + ['work_id' => $second->value],
+            'Fictional registrar selection of supporting evidence.');
+        self::assertSame($events, $s->sql->rows('sis_history_events'));
+        self::assertSame(2, $review['adjustment']['definition']['work_version']);
+        self::assertSame($choices['items'][1]['label'], $review['adjustment']['definition']['work_label']);
+        $receipt = $service->commit($f->student, $f->assignment, $review['review_token']);
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame('feasible', $result['outcome']);
+        $placement = array_values(array_filter($result['groups'][0]['placements'],
+            static fn(array $p): bool => $p['course_id'] === $course))[0];
+        self::assertSame([[$second->value]], $placement['work_options']);
+        self::assertStringContainsString($choices['items'][1]['label'],
+            $service->history($f->student, $f->assignment)['items'][0]['subject_label']);
+        // A normal group preference deliberately removes only the individual evidence restriction.
+        $clear = $service->reviewGrant($f->student, $f->assignment, $definition, 'Fictional return to any eligible attempt.');
+        $service->commit($f->student, $f->assignment, $clear['review_token']);
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        $placement = array_values(array_filter($result['groups'][0]['placements'],
+            static fn(array $p): bool => $p['course_id'] === $course))[0];
+        self::assertEqualsCanonicalizing([[$first->value], [$second->value]], $placement['work_options']);
+        $revoke = $service->reviewRevoke($f->student, $f->assignment,
+            new EntityId($clear['adjustment']['adjustment_id']), 'Fictional removal of group preference.');
+        $service->commit($f->student, $f->assignment, $revoke['review_token']);
+        $events = $s->sql->rows('sis_history_events');
+        $s->clock->time = $s->clock->time->modify('+2 days');
+        self::assertSame($receipt, $service->commit($f->student, $f->assignment, $review['review_token']));
+        self::assertSame([], $service->view($f->student, $f->assignment)['effective_minimums']['placements']);
+        self::assertSame($events, $s->sql->rows('sis_history_events'));
+        self::assertSame($academics, $s->sql->rows('sis_academic_credits'));
+        self::assertSame($finance, $s->financialEvents());
+    }
+
+    public function testAttemptReviewRejectsUnverifiedForeignOrChangedWorkAndRollsBackItsReceipt(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        [$section, $enrollment, $credit] = $this->work($f, 0, false);
+        $service = $this->adjustments($f);
+        $definition = ['kind' => 'placement', 'course_id' => $section->courseId->value,
+            'group_id' => $f->f->group->value];
+        self::assertSame(['items' => []], $service->placementWork($f->student, $f->assignment, $section->courseId));
+        foreach ([$credit->value, EntityId::generate()->value] as $invalid) {
+            try {
+                $service->reviewGrant($f->student, $f->assignment, $definition + ['work_id' => $invalid], 'Fictional reason.');
+                self::fail('Unavailable coursework was approved.');
+            } catch (\InvalidArgumentException) {
+                self::assertSame([], $s->sql->rows('sis_requirement_adjustments'));
+            }
+        }
+        $ledger = $s->academicCredits();
+        $grade = new EntityId($ledger->choices($f->student, $section->id, $enrollment)['items'][0]['id']);
+        $posted = $ledger->review($f->student, $section->id, $enrollment, $grade, 0);
+        $ledger->commit($f->student, $section->id, $posted['review_token']);
+        $review = $service->reviewGrant($f->student, $f->assignment,
+            $definition + ['work_id' => $credit->value], 'Fictional approved selection.');
+        $date = $s->academicDates()->review($f->student, $section->id, $enrollment,
+            '2026-08-09', 1, 'Fictional completion evidence.');
+        $s->academicDates()->commit($f->student, $section->id, $date['review_token']);
+        $events = $s->sql->rows('sis_history_events');
+        $receipts = $s->sql->rows('sis_history_operations');
+        try {
+            $service->commit($f->student, $f->assignment, $review['review_token']);
+            self::fail('Changed supporting evidence committed.');
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($events, $s->sql->rows('sis_history_events'));
+            self::assertSame($receipts, $s->sql->rows('sis_history_operations'));
+            self::assertSame([], $s->sql->rows('sis_requirement_adjustments'));
+        }
     }
     public function testRetainedRequirementsAndVerifiedWorkProduceAReadOnlyCompleteGroupPlacement(): void
     {

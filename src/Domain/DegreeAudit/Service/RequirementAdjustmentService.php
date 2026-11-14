@@ -48,6 +48,7 @@ final readonly class RequirementAdjustmentService
         private \Domain\DegreeAudit\Repository\ReplacementCourseRepository $replacementCourses,
         private StudentCurriculumContext $curriculum,
         private SavedCourseRulePreview $rules,
+        private AcademicInputService $inputs,
     ) {
     }
     /** @return array<string, mixed> */
@@ -62,8 +63,10 @@ final readonly class RequirementAdjustmentService
     {
         return $this->read($student, $assignment, true, $specialization);
     }
-    /** Internal allocation input; the caller holds the student lock and shared read budget.
+    /**
+     * Internal allocation input; the caller holds the student lock and shared read budget.
      * @return array<string,mixed>
+     * @throws TypeException
      */
     public function allocationContext(
         EntityId $student,
@@ -91,6 +94,7 @@ final readonly class RequirementAdjustmentService
      * Caller holds the student lock. No academic inventory or allocation is loaded here.
      * @return array<string,mixed>
      * @throws JsonException
+     * @throws TypeException
      */
     public function curriculumContext(EntityId $student, EntityId $assignment, HistoryReadBudget $budget): array
     {
@@ -141,7 +145,8 @@ final readonly class RequirementAdjustmentService
         return $all + ["components" => $components, "routes" => $routes, "routing_changed" => $stale];
     }
 
-    /** Curated staff routing workspace, using the same exceptions and reviewed confirmation endpoint.
+    /**
+     * Curated staff routing workspace, using the same exceptions and reviewed confirmation endpoint.
      * @return array<string,mixed>
      */
     public function routing(EntityId $student, EntityId $assignment): array
@@ -316,9 +321,18 @@ final readonly class RequirementAdjustmentService
             $specialization,
         ): array {
             $this->students->lock($student);
-            $parent = $this->curriculum->resolve($student, $assignment, new HistoryReadBudget(), $specialization);
+            $budget = new HistoryReadBudget();
+            $parent = $this->curriculum->resolve($student, $assignment, $budget, $specialization);
             $this->writable($parent);
-            $state = $this->state($assignment, $parent);
+            $state = $this->state($assignment, $parent, $budget);
+            $requestedWork = $request['work_id'] ?? null;
+            if (array_key_exists('work_id', $request)) {
+                if (($request['kind'] ?? null) !== 'placement' || !is_string($requestedWork)) {
+                    throw new InvalidArgumentException('Choose verified supporting coursework for a placement.');
+                }
+                new EntityId($requestedWork);
+                unset($request['work_id']);
+            }
             if (array_key_exists("component", $request)) {
                 throw new InvalidArgumentException("Component references are supplied by the server.");
             }
@@ -329,6 +343,19 @@ final readonly class RequirementAdjustmentService
                 $definition = $this->routeProposal($student, $assignment, $request);
             } else {
                 $definition = $this->proposal($parent, $request, $state->active());
+                if ($requestedWork !== null) {
+                    $work = $this->workRecord(
+                        $student,
+                        $assignment,
+                        new EntityId($request['course_id']),
+                        new EntityId($requestedWork),
+                        $budget,
+                    );
+                    $definition = new Definition($definition->definition + [
+                        'work_id' => $work['id'], 'work_version' => $work['history_version'],
+                        'work_label' => $work['label'],
+                    ]);
+                }
                 if ($specialization !== null) {
                     $definition = new Definition(
                         $definition->definition + [
@@ -489,8 +516,9 @@ final readonly class RequirementAdjustmentService
         return $this->transactions->run(function () use ($student, $assignment, $actor, $d): array {
             $this->students->lock($student);
             $specialization = isset($d["specialization_id"]) ? new EntityId($d["specialization_id"]) : null;
-            $parent = $this->curriculum->resolve($student, $assignment, new HistoryReadBudget(), $specialization);
-            $state = $this->state($assignment, $parent);
+            $budget = new HistoryReadBudget();
+            $parent = $this->curriculum->resolve($student, $assignment, $budget, $specialization);
+            $state = $this->state($assignment, $parent, $budget);
             $this->assertActor($actor);
             $p = $d["payload"];
             $op = new EntityId($d["action"] === "grant" ? $p["adjustment_id"] : $p["decision_id"]);
@@ -563,6 +591,23 @@ final readonly class RequirementAdjustmentService
                         );
                     }
                 }
+                if ($d['action'] === 'grant' && isset($p['definition']['work_id'])) {
+                    $work = $this->workRecord(
+                        $student,
+                        $assignment,
+                        new EntityId($p['definition']['course_id']),
+                        new EntityId($p['definition']['work_id']),
+                        $budget,
+                    );
+                    if (
+                        $work['history_version'] !== $p['definition']['work_version'] ||
+                        $work['label'] !== $p['definition']['work_label']
+                    ) {
+                        throw new ConcurrentModificationException(
+                            'The coursework changed. Review the preference again.',
+                        );
+                    }
+                }
                 $state->acceptHistorical($event);
                 $effective = $this->effective($parent, $state->active());
                 if ($d["action"] === "grant") {
@@ -579,7 +624,10 @@ final readonly class RequirementAdjustmentService
             return $receipt;
         });
     }
-    /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     * @throws TypeException
+     */
     public function history(EntityId $student, EntityId $assignment, ?string $cursor = null): array
     {
         $parent = $this->requirements->view($student, $assignment);
@@ -644,7 +692,8 @@ final readonly class RequirementAdjustmentService
         $this->writable($this->curriculum->resolve($student, $assignment, new HistoryReadBudget(), $specialization));
         return $this->published->coursePage($course, $cursor);
     }
-    /** The selected curriculum and course publication supply every matching rule reference.
+    /**
+     * The selected curriculum and course publication supply every matching rule reference.
      * @return array<string,mixed>
      */
     public function placementGroups(
@@ -681,6 +730,88 @@ final readonly class RequirementAdjustmentService
                 "requirements_name" => $parent["requirements"]["definition"]["name"],
             ];
         });
+    }
+
+    /**
+     * On-demand office choices; no academic inventory is loaded by the ordinary exception editor.
+     * @return array{items:list<array<string,mixed>>}
+     */
+    public function placementWork(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $course,
+        ?EntityId $specialization = null,
+    ): array {
+        $actor = $this->authorize();
+        return $this->transactions->run(function () use (
+            $student,
+            $assignment,
+            $course,
+            $specialization,
+            $actor,
+        ): array {
+            $this->students->lock($student);
+            $budget = new HistoryReadBudget();
+            $parent = $this->curriculum->resolve($student, $assignment, $budget, $specialization);
+            $this->writable($parent);
+            $items = $this->workChoices($student, $assignment, $course, $budget);
+            $this->assertActor($actor);
+            return ['items' => array_map(
+                static fn(array $item): array => ['id' => $item['id'], 'label' => $item['label']],
+                $items,
+            )];
+        });
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function workChoices(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $course,
+        HistoryReadBudget $budget,
+    ): array {
+        $inputs = $this->inputs->collect($student, $assignment, $budget);
+        if ($inputs->status === \Domain\DegreeAudit\ValueObject\AcademicInputStatus::Limited) {
+            throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
+        }
+        if ($inputs->status === \Domain\DegreeAudit\ValueObject\AcademicInputStatus::Inconsistent) {
+            throw new CorruptHistoryException();
+        }
+        $items = [];
+        foreach ($inputs->items as $work) {
+            if (
+                $work['course_id'] !== $course->value || !$work['history_recorded'] || $work['grade'] === null ||
+                !$work['grade']['passes'] || !in_array($work['status'], ['A', 'N'], true)
+            ) {
+                continue;
+            }
+            $term = $work['term_label_retained'] ? ($work['term_code'] ?? 'Term unknown') : 'Term unknown';
+            $label = ucfirst($work['credit_type']) . ' · ' . $term . ' · ' . $work['grade']['code'] . ' · ' .
+            ($work['completed_milli'] / 1000) . ' credits · ' . ($work['completed_on'] ?? 'Completion date unknown') .
+            ' · record ' . substr($work['id'], -6);
+            $items[] = [
+                'id' => $work['id'], 'history_version' => $work['history_version'],
+                'label' => mb_substr($label, 0, 191),
+            ];
+        }
+        usort($items, static fn(array $a, array $b): int => strcmp($a['id'], $b['id']));
+        return $items;
+    }
+
+    /** @return array<string,mixed> */
+    private function workRecord(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $course,
+        EntityId $work,
+        HistoryReadBudget $budget,
+    ): array {
+        foreach ($this->workChoices($student, $assignment, $course, $budget) as $item) {
+            if ($item['id'] === $work->value) {
+                return $item;
+            }
+        }
+        throw new InvalidArgumentException('Choose current verified passing coursework for this student and course.');
     }
 
     /**
@@ -807,6 +938,12 @@ final readonly class RequirementAdjustmentService
             }
             if ($definition["kind"] === "placement") {
                 $labels["scope_label"] = $source["group_details"][$definition["group_id"]]["definition"]["name"];
+                if (isset($definition["work_label"])) {
+                    if (!isset($labels['subject_label'])) {
+                        throw new CorruptHistoryException();
+                    }
+                    $labels["subject_label"] .= " · " . $definition["work_label"];
+                }
             }
             if (in_array($definition["kind"], ["substitution", "course_version"], true)) {
                 $isVersion = $definition["kind"] === "course_version";
@@ -1250,7 +1387,7 @@ final readonly class RequirementAdjustmentService
                     "group_id" => $d["group_id"],
                     "group_version_id" => $d["group_version_id"],
                     "course_version_id" => $d["course_version_id"],
-                ];
+                ] + (isset($d['work_id']) ? ['work_id' => $d['work_id']] : []);
                 continue;
             }
             if ($d["kind"] === "substitution") {
@@ -1379,7 +1516,8 @@ final readonly class RequirementAdjustmentService
             "review_token" => $this->cipher->seal(json_encode($d, JSON_THROW_ON_ERROR)),
         ];
     }
-    /** @param array<string,mixed> $parent
+    /**
+     * @param array<string,mixed> $parent
      * @return array<string,string>
      */
     private function groupLabels(array $parent): array

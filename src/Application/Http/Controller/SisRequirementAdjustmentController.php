@@ -91,6 +91,19 @@ final readonly class SisRequirementAdjustmentController
             ),
         );
     }
+    public function placementWork(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+        ?string $specialization = null,
+    ): ResponseInterface {
+        return new JsonResponse($this->service->placementWork(
+            new EntityId($student),
+            new EntityId($assignment),
+            FormInput::from($request)->id('course_id'),
+            $specialization === null ? null : new EntityId($specialization),
+        ));
+    }
     public function review(
         ServerRequest $request,
         string $student,

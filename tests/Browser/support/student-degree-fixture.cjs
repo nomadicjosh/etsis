@@ -1087,6 +1087,11 @@ async function fixture(page, options = {}) {
                 placement_groups: options.rulePlacementNoMatch ? [] : [{ id: group, version_id: id(8),
                     name: "General education", course_code: replacement.code, course_title: replacement.title,
                     rules: [{ id: id(99), code: "SCI.UPPER", title: "Retained <b>science</b> eligibility", revision: 2 }] }] };
+        else if (path === `${adjustmentBase}placement-work/`)
+            response = { items: options.supportingWork ? Array.from({ length: 12 }, (_, i) => ({
+                id: id(500 + i), history_version: 2,
+                label: `Institutional · 26/FA · A · 3 credits · Fictional <b>attempt ${i + 1}</b>`,
+            })) : [] };
         else if (path === `${adjustmentBase}replacement-courses/`)
             response = {
                 items: [{ id: replacement.course_id, code: "SCI.202", title: "Current catalog label" }],
@@ -1125,6 +1130,10 @@ async function fixture(page, options = {}) {
                             ).original_milli,
                             group_version_id: d.group_id ? id(8) : null,
                         };
+            if (d.work_id) {
+                enriched.work_version = 2;
+                enriched.work_label = `Institutional · 26/FA · A · 3 credits · Fictional <b>attempt ${Number(d.work_id) - 499}</b>`;
+            }
             const p = {
                 adjustment_id: id(nextAdjustment++),
                 supersedes_adjustment_id: previous?.adjustment_id || null,

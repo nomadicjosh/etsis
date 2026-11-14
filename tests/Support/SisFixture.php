@@ -301,6 +301,16 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
+    public function academicInputs(
+        \Domain\DegreeAudit\Service\StudentRequirementsService $requirements,
+    ): \Domain\DegreeAudit\Service\AcademicInputService {
+        return new \Domain\DegreeAudit\Service\AcademicInputService(
+            new \Infrastructure\Persistence\Repository\SqlAcademicInputRepository($this->sql),
+            $this->academicCredits(), $this->transferCredits(), $this->enrollmentLedger(),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $requirements, $this->transactions,
+        );
+    }
     public function academicDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicDateService
     {
         return new \Domain\AcademicRecord\Service\AcademicDateService(

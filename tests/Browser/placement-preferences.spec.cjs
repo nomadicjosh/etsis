@@ -1,6 +1,48 @@
 const { test, expect } = require("@playwright/test");
 const { fixture, accessible, id } = require("./support/student-degree-fixture.cjs");
 
+test("supporting attempts load on demand, page locally, preserve selection and allow returning to any eligible work", async ({ page }) => {
+    const f = await fixture(page, { assigned: true, supportingWork: true });
+    await page.getByRole('button', { name: 'Student exceptions', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve an exception', exact: true }).click();
+    await page.getByRole('button', { name: 'Course placement', exact: true }).click();
+    await page.getByRole('button', { name: 'MATH.101 · Algebra', exact: true }).click();
+    await page.getByRole('button', { name: 'Use in General education', exact: true }).click();
+    expect(f.calls.some(c => c.path.endsWith('/placement-work/'))).toBe(false);
+    await page.getByRole('button', { name: 'Choose supporting coursework', exact: true }).click();
+    const studio = page.locator('dialog.degree-audit-studio');
+    await expect(studio.getByRole('button', { name: /^Include Institutional/ })).toHaveCount(10);
+    await page.getByRole('button', { name: 'More attempts', exact: true }).click();
+    await expect(studio.getByRole('button', { name: /^Include Institutional/ })).toHaveCount(2);
+    const chosen = 'Include Institutional · 26/FA · A · 3 credits · Fictional <b>attempt 11</b>';
+    await page.getByRole('button', { name: chosen, exact: true }).click();
+    await page.getByLabel('Reason for student exception', { exact: true }).fill('Fictional evidence selection.');
+    await page.getByRole('button', { name: 'Review exception', exact: true }).click();
+    await expect(studio).toContainText('Supporting coursework: Institutional · 26/FA');
+    expect(f.calls.filter(c => c.path === f.adjustmentBase + 'review/').at(-1).body.definition).toEqual({
+        kind: 'placement', course_id: id(7), group_id: id(6), work_id: id(510),
+    });
+    await page.getByRole('button', { name: 'Change review', exact: true }).click();
+    await expect(page.getByRole('button', { name: chosen, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByLabel('Reason for student exception', { exact: true })).toHaveValue('Fictional evidence selection.');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await expect(studio.locator('b,script')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Use any eligible coursework', exact: true }).click();
+    await expect(studio).toContainText('Any policy-eligible coursework.');
+    await page.getByRole('button', { name: 'Review exception', exact: true }).click();
+    expect(f.calls.filter(c => c.path === f.adjustmentBase + 'review/').at(-1).body.definition).toEqual({
+        kind: 'placement', course_id: id(7), group_id: id(6),
+    });
+    const request = f.calls.filter(c => c.path === f.adjustmentBase + 'placement-work/');
+    expect(request).toHaveLength(1);
+    expect(request[0].body).toEqual({ course_id: id(7) });
+    expect(request[0].csrf).toBe('fictional-test-token');
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
 test("registrar explicitly chooses and reviews a retained group, revises without losing fields, then revokes the preference", async ({
     page,
 }) => {

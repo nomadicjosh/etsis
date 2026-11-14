@@ -261,6 +261,7 @@ window.degreeProgressCalculationReasons = Object.freeze({
     grading_policy_unknown: "The retained grading publication is unknown",
     grading_policy_differs: "The grade uses a different publication; compatibility has not been established",
     repeat_not_selected: "Another eligible repeat supplies the contribution",
+    placement_work_not_selected: "A reviewed placement selects different supporting coursework",
     equivalent_credit_alternative: "Tied earned-credit alternative; counted once for this course",
     equivalent_gpa_alternative: "Equivalent repeat alternative; one GPA contribution",
     undetermined: "The complete total cannot be established",

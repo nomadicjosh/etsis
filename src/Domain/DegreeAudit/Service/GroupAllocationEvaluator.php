@@ -46,11 +46,13 @@ final readonly class GroupAllocationEvaluator
         return $this->prepare($work, $requirements, $effective, $eligibility)->review();
     }
 
-    /** Build normalized choices once, without searching or exposing partial placements.
+    /**
+     * Build normalized choices once, without searching or exposing partial placements.
      * @param list<array<string,mixed>> $work
      * @param array<string,mixed> $requirements
      * @param array<string,mixed> $effective
      * @param list<array<string,mixed>> $eligibility
+     * @throws JsonException
      */
     public function prepare(
         #[\SensitiveParameter] array $work,
@@ -212,10 +214,12 @@ final readonly class GroupAllocationEvaluator
         $evidence = [];
         $evidenceCount = 0;
         $contributionCount = 0;
+        $satisfiedPreferences = [];
         foreach ($candidates as $key => $attempts) {
             $pair = $pairs[$key];
             $memberships = $candidateMemberships[$key] ?? null;
             $selected = [];
+            $policyEvidence = [];
             foreach ($this->pools($attempts, $policy, $memberships) as $pool) {
                 $options = $pool['options'];
                 $evidenceCount += array_sum(array_map(count(...), $options));
@@ -224,6 +228,22 @@ final readonly class GroupAllocationEvaluator
                     throw new AllocationBudgetExhaustedException();
                 }
                 $course = $pair['actual_course_id'];
+                $preferredWork = $effective['placements'][$course]['work_id'] ?? null;
+                if ($preferredWork !== null) {
+                    foreach ($options as $option) {
+                        $policyEvidence += array_fill_keys($option, true);
+                    }
+                    // Restrict already policy-ranked alternatives. Filtering attempts before repeat
+                    // ranking could incorrectly promote a smaller award or drop all-eligible credit.
+                    $options = array_values(array_filter(
+                        $options,
+                        static fn(array $ids): bool => in_array($preferredWork, $ids, true),
+                    ));
+                    if ($options === []) {
+                        continue;
+                    }
+                    $satisfiedPreferences[$course] = true;
+                }
                 $choice = [
                     'group_id' => $pair['group_id'],
                     'target_course_id' => $pair['required_course_id'],
@@ -245,9 +265,17 @@ final readonly class GroupAllocationEvaluator
             foreach ($attempts as $attempt) {
                 if (!in_array($attempt->id->value, $selected, true)) {
                     $record = $records[$attempt->id->value] ?? throw new CorruptHistoryException();
-                    $record['statuses']['repeat_not_selected'] = true;
+                    $status = isset($policyEvidence[$attempt->id->value]) &&
+                    isset($effective['placements'][$pair['actual_course_id']]['work_id'])
+                    ? 'placement_work_not_selected' : 'repeat_not_selected';
+                    $record['statuses'][$status] = true;
                     $records[$attempt->id->value] = $record;
                 }
+            }
+        }
+        foreach ($effective['placements'] ?? [] as $course => $preference) {
+            if (isset($preference['work_id']) && !isset($satisfiedPreferences[$course])) {
+                $issues['preferred_work_unavailable'] = true;
             }
         }
         $problem = $issues === [] ? new AllocationProblem(

@@ -369,9 +369,21 @@ foreach ([$degreeAdjustmentPath, $adjustmentsPath] as $base) {
     if ($response->getStatusCode() !== 200 || !array_key_exists('placement_groups', $result) || $before !== $digest()) {
         throw new RuntimeException('Rule placement lookup lost private read-only provider resolution.');
     }
+    if ($send($base . 'placement-work/', ['course_id' => $course['course_id']], false)->getStatusCode() !== 403) {
+        throw new RuntimeException('Supporting coursework lookup bypassed browser CSRF.');
+    }
+    $response = $send($base . 'placement-work/', ['course_id' => $course['course_id']]);
+    $work = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if ($response->getStatusCode() !== 200 || !array_key_exists('items', $work) || $before !== $digest() ||
+        !str_contains($response->getHeaderLine('Cache-Control'), 'no-store')) {
+        throw new RuntimeException('Supporting coursework lookup lost bounded private read-only provider resolution.');
+    }
 }
 $sis->access->staff = false;
 $sis->access->grants = ['sis:student:read'];
 if ($send($degreeAdjustmentPath . 'placement-groups/', $lookup)->getStatusCode() !== 403) {
     throw new RuntimeException('Student-read authority granted placement approval discovery.');
+}
+if ($send($degreeAdjustmentPath . 'placement-work/', ['course_id' => $course['course_id']])->getStatusCode() !== 403) {
+    throw new RuntimeException('Student-read authority granted supporting coursework approval discovery.');
 }

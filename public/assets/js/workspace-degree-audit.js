@@ -3364,6 +3364,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
         approval_conflict: "Resolve conflicting course waivers or substitutions in Student exceptions.",
         placement_restricted:
             "An approved placement preference reserves this course for another group in this pursuit.",
+        preferred_work_unavailable:
+            "The specifically selected coursework is unavailable or cannot contribute under the retained eligibility and repeat policies. Review its placement exception; no other attempt was substituted.",
         group_average_gpa_unsupported:
             "An earlier group uses an average-GPA rule. This placement review cannot yet evaluate that constraint.",
     };
@@ -3377,6 +3379,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         dropped: "Dropped work cannot satisfy completed-course requirements",
         voided: "Voided award",
         repeat_not_selected: "Another eligible repeat supplies the credit contribution",
+        placement_work_not_selected: "The placement exception selects different supporting coursework",
     };
     async function groupAllocation(base, back) {
         const data = await post(`${base}academic-work/allocation/`, {});
@@ -4821,6 +4824,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             page = 0,
             replacement = null,
             placementGroup = null,
+            supportingWork = null,
+            workSerial = 0,
             replacementSerial = 0,
             ruleSelectionSerial = 0;
         const restore = () => {
@@ -4865,10 +4870,48 @@ window.createWorkspaceDegreeAudit = function (ui) {
             });
         const placementPanel = panel(
                 "Choose the preferred group",
-                "This reserves eligible work for this course identity to one group in this selected degree publication. It does not choose a retake, grant credit or bypass eligibility.",
+                "This reserves eligible work for this course identity to one group. You can optionally include a particular completed attempt; retained repeat, grade and publication rules still apply.",
             ),
             placementChoices = node("div", { class: "audit-version-list" });
         placementPanel.append(placementChoices);
+        const workStatus = node("p", { role: "status", class: "audit-status" }, "Any policy-eligible coursework."),
+            workChoices = node("div", { class: "audit-version-list" }),
+            workPanel = panel("Supporting coursework (optional)", "A selected attempt must remain eligible. Under all-eligible repeats, other eligible awards still contribute. Overall earned credit and GPA are unchanged.");
+        workPanel.append(
+            workStatus,
+            button("Choose supporting coursework", async () => {
+                if (!selected) throw new Error("Choose a course first.");
+                const course = selected.course_id,
+                    serial = ++workSerial,
+                    result = await post(`${base}placement-work/`, { course_id: course });
+                if (serial !== workSerial || selected?.course_id !== course || !workPanel.isConnected) return;
+                showWork(result.items);
+            }),
+            button("Use any eligible coursework", () => resetWork()),
+            workChoices,
+        );
+        placementPanel.append(workPanel);
+        function resetWork() {
+            workSerial++;
+            supportingWork = null;
+            workStatus.textContent = "Any policy-eligible coursework.";
+            workChoices.replaceChildren();
+        }
+        function showWork(items, offset = 0) {
+            workChoices.replaceChildren();
+            if (!items.length) workChoices.append(node("p", {}, "No current verified passing attempts are available for this course. You can keep the preference open to future eligible work."));
+            for (const item of items.slice(offset, offset + 10)) {
+                const choose = button(`Include ${item.label}`, () => {
+                    supportingWork = item;
+                    workStatus.textContent = `Selected: ${item.label}`;
+                    showWork(items, offset);
+                });
+                choose.setAttribute("aria-pressed", String(supportingWork?.id === item.id));
+                workChoices.append(node("article", { class: "audit-source-card" }, choose));
+            }
+            if (offset) workChoices.append(button("Previous attempts", () => showWork(items, offset - 10)));
+            if (offset + 10 < items.length) workChoices.append(button("More attempts", () => showWork(items, offset + 10)));
+        }
         placementPanel.hidden = true;
         const placementButton = button("Course placement", () => {
             kind = "placement";
@@ -4887,6 +4930,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         });
         function renderPlacementGroups() {
             placementChoices.replaceChildren();
+            workPanel.hidden = !selected;
             if (!selected) {
                 placementChoices.append(
                     node(
@@ -5053,6 +5097,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                                 minimum: selected.minimum,
                                                 required_milli: milli(value),
                                             };
+                        if (["placement", "rule_placement"].includes(kind) && supportingWork)
+                            definition.work_id = supportingWork.id;
                         const reviewed = await post(`${base}review/`, { definition, reason });
                         exceptionConfirmation(base, reviewed, data, back, restore);
                     },
@@ -5063,6 +5109,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         function render() {
             ruleSelectionSerial++;
+            if (!selected) resetWork();
             const ruleMode = kind === "rule_placement";
             targetSearch.hidden = ruleMode;
             list.hidden = ruleMode;
@@ -5118,6 +5165,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         { class: "audit-source-card" },
                         button(label, () => {
                             selected = t;
+                            resetWork();
                             if (kind === "course_version") {
                                 replacement = null;
                                 replacementStatus.textContent = "No course publication selected.";
@@ -5265,6 +5313,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                         !replacementPanel.isConnected
                                     )
                                         return;
+                                    resetWork();
                                     selected = result;
                                     description.textContent = `${courseLabel(result)} · Publication ${version.version}. Reviewed against ${result.requirements_name}. ${result.placement_groups.length ? "Choose a matching group below." : "No retained saved-rule group matches this publication. Choose another course or publication."}`;
                                     renderPlacementGroups();
@@ -5357,6 +5406,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `This course publication matched ${p.definition.rule_ids.length} retained rule card${p.definition.rule_ids.length === 1 ? "" : "s"} in the chosen group. This preference grants no publication acceptance or course substitution. Each actual attempt still needs to match the group's rules and grade requirements.`,
                 ),
             );
+        if (p.definition.kind === "placement" && p.definition.work_label)
+            body.append(node("p", {}, `Supporting coursework: ${p.definition.work_label}. This restricts policy-eligible evidence and cannot change earned totals or GPA. If that attempt becomes unavailable, another attempt is not substituted automatically.`));
         if (p.definition.kind === "placement" && p.definition.substitution_adjustment_id)
             body.append(
                 node(

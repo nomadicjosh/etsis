@@ -70,6 +70,18 @@ final readonly class RequirementAdjustmentDefinitionV2
         }
         if (($definition["kind"] ?? null) === "placement") {
             $keys = ["kind", "course_id", "course_version_id", "group_id", "group_version_id"];
+            if (array_key_exists("work_id", $definition)) {
+                $keys = [...$keys, "work_id", "work_version", "work_label"];
+                $label = $definition['work_label'] ?? null;
+                if (
+                    !is_int($definition["work_version"] ?? null) || $definition["work_version"] < 1 ||
+                    $definition['work_version'] > 2147483646 || !is_string($label) || trim($label) === '' ||
+                    !mb_check_encoding($label, 'UTF-8') || mb_strlen($label) > 191 ||
+                    preg_match('/[\x00-\x1F\x7F]/', $label)
+                ) {
+                    throw new InvalidArgumentException("Retain the verified coursework revision reviewed.");
+                }
+            }
             if (array_key_exists("substitution_adjustment_id", $definition)) {
                 $keys = [...$keys, "substitution_adjustment_id", "required_course_id"];
             }
@@ -101,7 +113,7 @@ final readonly class RequirementAdjustmentDefinitionV2
                 }
             }
             self::keys($definition, $keys);
-            foreach (array_diff($keys, ["kind", "rule_ids"]) as $key) {
+            foreach (array_diff($keys, ["kind", "rule_ids", "work_version", "work_label"]) as $key) {
                 if (!is_string($definition[$key])) {
                     throw new InvalidArgumentException("Choose a retained course and group publication.");
                 }

@@ -173,6 +173,65 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertSame([self::id(1)], $result["groups"][0]["rules"][0]["course_ids"]);
     }
 
+    public function testSpecificSupportingAttemptRestrictsTiedEvidenceWithoutChangingOverallInputs(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->group(1)]);
+        $effective = $this->effective($r);
+        $effective['placements'][self::id(1)] = ['group_id' => self::id(1), 'work_id' => self::id(11)];
+        $work = [$this->work(10), $this->work(11)];
+        $original = $work;
+        $result = $this->evaluator()->evaluate($work, $r, $effective);
+        self::assertSame('feasible', $result['outcome']);
+        self::assertSame([[self::id(11)]], $result['groups'][0]['placements'][0]['work_options']);
+        self::assertContains('placement_work_not_selected', $result['records'][0]['statuses']);
+        self::assertSame($original, $work);
+    }
+
+    public function testSpecificAttemptCannotPromoteSmallerAwardAndMissingEvidenceProducesNoPartialPlan(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->group(1)]);
+        foreach ([10, 99] as $preferred) {
+            $effective = $this->effective($r);
+            $effective['placements'][self::id(1)] = ['group_id' => self::id(1), 'work_id' => self::id($preferred)];
+            $result = $this->evaluator()->evaluate([$this->work(10), $this->work(11, credits: 6000)], $r, $effective);
+            self::assertSame('needs_review', $result['outcome']);
+            self::assertContains('preferred_work_unavailable', $result['issues']);
+            self::assertSame([], $result['groups'][0]['placements']);
+            self::assertNull($result['groups'][0]['gaps']);
+        }
+    }
+
+    public function testSpecificAttemptKeepsAllEligibleRepeatAwardsAndTheirCardAmounts(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 6000)]);
+        $r['definition']['policies']['repeat_credit'] = 'all_eligible';
+        $effective = $this->effective($r);
+        $effective['placements'][self::id(1)] = ['group_id' => self::id(1), 'work_id' => self::id(11)];
+        $work = [$this->work(10), $this->work(11)];
+        $result = $this->evaluator()->evaluate($work, $r, $effective, $this->decisions($work, $r));
+        self::assertSame('feasible', $result['outcome']);
+        $p = $result['groups'][0]['placements'][0];
+        self::assertSame(6000, $p['credits_milli']);
+        self::assertSame([[self::id(10), self::id(11)]], $p['work_options']);
+        self::assertSame([self::id(301) => 6000], $p['rule_credits_milli']);
+    }
+
+    public function testSpecificAttemptCannotBorrowSavedRuleMembershipOrBypassAGroupGradeFloor(): void
+    {
+        foreach ([false, true] as $floor) {
+            $group = $floor ? $this->group(1, floor: 3000) : $this->ruleGroup(1);
+            $r = $this->requirements([self::id(1) => $group]);
+            $effective = $this->effective($r);
+            $effective['placements'][self::id(1)] = ['group_id' => self::id(1), 'work_id' => self::id(11)];
+            $work = [$this->work(10), $this->work(11, points: 2000)];
+            $decisions = $floor ? [] : $this->decisions($work, $r, ['matches', 'does_not_match']);
+            $result = $this->evaluator()->evaluate($work, $r, $effective, $decisions);
+            self::assertSame('needs_review', $result['outcome']);
+            self::assertContains('preferred_work_unavailable', $result['issues']);
+            self::assertSame([], $result['groups'][0]['placements']);
+        }
+    }
+
     public function testRuleExclusionsAndGradeFloorsApplyBeforeHighestEligibleRepeatSelection(): void
     {
         $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 6000)]);

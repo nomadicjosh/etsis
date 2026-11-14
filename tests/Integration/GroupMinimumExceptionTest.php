@@ -62,6 +62,7 @@ final class GroupMinimumExceptionTest extends TestCase
             new SqlReplacementCourseRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
             new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
+            $s->academicInputs($f->service),
         );
     }
 

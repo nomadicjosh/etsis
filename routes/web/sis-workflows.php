@@ -1033,6 +1033,7 @@ return static function (Psr7Router $router): void {
             [
             ['POST', 'replacement-courses/', 'replacementCourses'],
             ['POST', 'placement-groups/', 'placementGroups'],
+            ['POST', 'placement-work/', 'placementWork'],
             ['POST', 'replacement-courses/{course}/versions/', 'replacementVersions'],
             ['GET', 'preview/', 'preview'], ['GET', '', 'view'],
             ['POST', 'review/', 'review'], ['POST', 'revoke-review/', 'revokeReview'],

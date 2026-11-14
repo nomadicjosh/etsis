@@ -230,6 +230,7 @@ final class CombinedDegreeProgressTest extends TestCase
             new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->requirements(), $f->service),
             new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->r->history)),
+            $s->academicInputs($f->requirements()),
         );
     }
     private function useGroup(StudentSpecializationRequirementsFixture $f, EntityId $template, EntityId $groupVersion): EntityId
