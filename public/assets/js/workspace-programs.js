@@ -455,6 +455,7 @@ window.createWorkspacePrograms = function (ui) {
                 `${review.academic_year_code} · Catalog revision ${review.catalog_revision}`,
             ),
             details(review.definition),
+            specializationPublication(review.specializations),
             node("p", { class: "course-description-text" }, review.reason),
             node(
                 "p",
@@ -477,6 +478,7 @@ window.createWorkspacePrograms = function (ui) {
                             `${review.academic_year_code} · Catalog revision ${review.catalog_revision} published.`,
                         ),
                         details(review.definition),
+                        specializationPublication(review.specializations),
                         button("Published program details", () => history(id, () => open(id))),
                         button("Back to program details", () => open(id)),
                     );
@@ -502,6 +504,7 @@ window.createWorkspacePrograms = function (ui) {
                 "div",
                 { class: "d-flex flex-wrap gap-2 mb-3" },
                 button("Add a specialization", () => editSpecialization(program, null, restore)),
+                button("Specialization selection policy", () => specializationPolicy(program, restore)),
                 button("Back to program details", back),
             ),
         );
@@ -638,6 +641,254 @@ window.createWorkspacePrograms = function (ui) {
         });
         body.append(form);
     }
+    async function specializationPolicy(program, back, notice = "") {
+        const path = `/sis/programs/${program}/specializations/policy/`;
+        const data = await request(path);
+        const body = openDrawer(
+            "Specialization selection policy",
+            "INSTITUTION BOUNDARIES → PROGRAM REQUIREMENTS",
+        );
+        body.append(
+            node("h3", { class: "h5" }, `${data.program.code} — ${data.program.title}`),
+            node(
+                "p",
+                {},
+                "Set how many specializations a student may pursue within this program. Offered choices and student selections are separate. Publish the program for an academic year to retain these rules; saving here changes no existing student selection.",
+            ),
+            button("Back to specializations", back),
+        );
+        if (notice) body.append(node("p", { role: "status", class: "alert alert-success" }, notice));
+        if (data.errors.length)
+            body.append(
+                node(
+                    "p",
+                    { role: "alert", class: "alert alert-warning" },
+                    "These draft settings conflict with the institutional policy. Correct them before program publication.",
+                ),
+            );
+        const field = (name, label, value, minimum, maximum) => {
+            const input = node("input", {
+                id: `specialization-policy-${name}`,
+                name,
+                type: "number",
+                min: String(minimum),
+                max: String(maximum),
+                step: "1",
+                required: true,
+                value: value == null ? "" : String(value),
+                class: "form-control",
+            });
+            return {
+                input,
+                group: node(
+                    "div",
+                    { class: "mb-3" },
+                    node("label", { for: input.id, class: "form-label" }, label),
+                    input,
+                ),
+            };
+        };
+        const minimum = field(
+            "minimum",
+            "Required specializations (zero means optional)",
+            data.settings.minimum,
+            0,
+            100,
+        );
+        const maximum = field(
+            "maximum",
+            "Program maximum specializations",
+            data.settings.maximum ?? data.institution.default_maximum,
+            0,
+            data.institution.maximum,
+        );
+        const inherit = node("input", {
+            id: "specialization-policy-inherit",
+            type: "checkbox",
+            class: "form-check-input",
+            checked: data.settings.maximum === null,
+        });
+        const status = node("p", { role: "status" });
+        function refresh() {
+            maximum.input.disabled = inherit.checked;
+            if (inherit.checked) maximum.input.value = data.institution.default_maximum;
+            status.textContent = `Institutional ceiling: ${data.institution.maximum}. Institutional default maximum: ${data.institution.default_maximum}. Program maximum: ${inherit.checked ? data.institution.default_maximum : maximum.input.value || "not entered"}.`;
+        }
+        const form = node(
+            "form",
+            { class: "surface p-3 my-3" },
+            node("h3", { class: "h5" }, "Program limits"),
+            minimum.group,
+            node(
+                "div",
+                { class: "form-check mb-3" },
+                inherit,
+                node(
+                    "label",
+                    { for: inherit.id, class: "form-check-label" },
+                    "Use institutional default maximum",
+                ),
+            ),
+            maximum.group,
+            node(
+                "p",
+                {},
+                "A maximum of zero disables specialization selection for this program. A required number above zero needs enough active offered choices before publication.",
+            ),
+            status,
+        );
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save program specialization policy",
+        );
+        form.append(save);
+        form.addEventListener("input", refresh);
+        refresh();
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request(path, "POST", {
+                    revision: data.settings.revision,
+                    minimum: Number(minimum.input.value),
+                    maximum: inherit.checked ? null : Number(maximum.input.value),
+                });
+                if (body.isConnected)
+                    await specializationPolicy(
+                        program,
+                        back,
+                        "Program specialization policy saved. Publish the program to retain it for an academic year.",
+                    );
+            }, save);
+        });
+        body.append(form);
+        if (data.can_manage_institution) {
+            const panel = node(
+                "details",
+                { class: "surface p-3 my-3" },
+                node("summary", { class: "h5" }, "Institution-wide boundaries"),
+            );
+            const ceiling = field(
+                "institution_maximum",
+                "Institution-wide maximum specializations",
+                data.institution.maximum,
+                1,
+                100,
+            );
+            const defaultMaximum = field(
+                "institution_default",
+                "Default maximum for programs",
+                data.institution.default_maximum,
+                1,
+                100,
+            );
+            const globalForm = node(
+                "form",
+                {},
+                node(
+                    "p",
+                    {},
+                    "These boundaries govern future publication reviews across programs. A lower ceiling or default can require changes to program drafts. Earlier publications keep their recorded policy.",
+                ),
+                ceiling.group,
+                defaultMaximum.group,
+            );
+            const commit = node(
+                "button",
+                { type: "submit", class: "btn btn-outline-primary" },
+                "Save institutional specialization boundaries",
+            );
+            globalForm.append(commit);
+            globalForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                task(async () => {
+                    if (!globalForm.reportValidity()) return;
+                    await request("/sis/catalog/specialization-policy/", "POST", {
+                        revision: data.institution.revision,
+                        maximum: Number(ceiling.input.value),
+                        default_maximum: Number(defaultMaximum.input.value),
+                    });
+                    if (body.isConnected)
+                        await specializationPolicy(
+                            program,
+                            back,
+                            "Institutional specialization boundaries saved. Earlier publications are unchanged.",
+                        );
+                }, commit);
+            });
+            panel.append(globalForm);
+            body.append(panel);
+        }
+    }
+
+    function specializationPublication(snapshot) {
+        if (!snapshot) return node("p", {}, "Specialization policy was not recorded.");
+        const section = node(
+            "section",
+            { class: "surface p-3 mb-3", "aria-label": "Published specialization choices and policy" },
+            node("h3", { class: "h5" }, "Specialization choices & policy"),
+            node(
+                "p",
+                {},
+                `Required: ${snapshot.effective.minimum} · Maximum per pursuit: ${snapshot.effective.maximum} · Institutional ceiling: ${snapshot.institution.maximum}. ${snapshot.program.maximum == null ? "Uses the recorded institutional default." : "Uses the recorded program maximum."}`,
+            ),
+        );
+        if (!snapshot.offered.length) {
+            section.append(node("p", {}, "No specialization choices offered in this publication."));
+            return section;
+        }
+        const detail = node(
+            "details",
+            {},
+            node(
+                "summary",
+                {},
+                `${snapshot.offered.length} offered specialization${snapshot.offered.length === 1 ? "" : "s"}`,
+            ),
+        );
+        let loaded = false;
+        detail.addEventListener("toggle", () => {
+            if (!detail.open || loaded) return;
+            loaded = true;
+            const content = node("div");
+            detail.append(content);
+            function show(offset = 0, focus = false) {
+                const heading = node(
+                    "p",
+                    { tabindex: "-1", role: "status" },
+                    `Offered specializations ${offset + 1}–${Math.min(offset + 20, snapshot.offered.length)} of ${snapshot.offered.length}`,
+                );
+                content.replaceChildren(heading);
+                snapshot.offered
+                    .slice(offset, offset + 20)
+                    .forEach((choice) =>
+                        content.append(
+                            node(
+                                "article",
+                                { class: "border-top py-2" },
+                                node("h4", { class: "h6" }, `${choice.code} — ${choice.title}`),
+                                node(
+                                    "p",
+                                    { class: "course-description-text" },
+                                    choice.description || "No description specified.",
+                                ),
+                            ),
+                        ),
+                    );
+                const controls = node("div", { class: "d-flex flex-wrap gap-2" });
+                if (offset > 0)
+                    controls.append(button("Previous offered specializations", () => show(offset - 20, true)));
+                if (offset + 20 < snapshot.offered.length)
+                    controls.append(button("More offered specializations", () => show(offset + 20, true)));
+                content.append(controls);
+                if (focus) heading.focus();
+            }
+            show();
+        });
+        section.append(detail);
+        return section;
+    }
     async function history(id, back, cursor = null, stack = []) {
         const data = await request(`/sis/programs/${id}/publication/page/`, "POST", cursor ? { cursor } : {});
         const body = openDrawer("Published program details", "RETAINED ACADEMIC DEFINITIONS");
@@ -662,6 +913,7 @@ window.createWorkspacePrograms = function (ui) {
             );
             card.append(
                 details(item.definition),
+                specializationPublication(item.specializations),
                 node("p", {}, `Published ${new Date(item.effective_at).toLocaleString()}`),
             );
             body.append(card);

@@ -17,6 +17,7 @@ final class ProgramPublicationSchema
         "catalog_revision",
         "previous_catalog_id",
         "definition",
+        'specializations',
     ];
 
     /** @param array<mixed> $payload */
@@ -55,5 +56,15 @@ final class ProgramPublicationSchema
             throw new InvalidArgumentException("Use a valid academic year, revision and predecessor.");
         }
         ProgramDefinition::fromArray($payload["definition"]);
+        if (!is_array($payload['specializations'])) {
+            throw new InvalidArgumentException('Provide the specialization publication.');
+        }
+        new ProgramSpecializationSnapshot($payload['specializations']);
+        if (strlen(json_encode($payload, JSON_THROW_ON_ERROR)) > 49152) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                ['field' => 'specializations',
+                    'message' => 'Shorten program or specialization descriptions to fit one publication.'],
+            ]);
+        }
     }
 }

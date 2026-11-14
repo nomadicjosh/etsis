@@ -92,4 +92,24 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             ]);
         }
     }
+
+    public function offered(EntityId $program): array
+    {
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch(
+            'SELECT * FROM ' . $q('sis_program_specializations') . ' WHERE ' . $q('program_id') .
+                ' = ? AND ' . $q('active') . ' = ? ORDER BY ' . $q('id'),
+            [$program->value, 1],
+            101,
+        );
+        if (count($rows) > 100) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                ['field' => 'specializations', 'message' => 'Publish at most 100 active choices for one program.'],
+            ]);
+        }
+        return array_map(static fn(array $row): array => [
+            'id' => $row['id'], 'code' => $row['code'], 'title' => $row['title'],
+            'description' => $row['description'], 'revision' => (int) $row['revision'],
+        ], $rows);
+    }
 }

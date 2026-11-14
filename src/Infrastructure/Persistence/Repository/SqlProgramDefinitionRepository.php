@@ -7,6 +7,7 @@ namespace Infrastructure\Persistence\Repository;
 use Domain\Catalog\Enum\ClassificationKind;
 use Domain\Catalog\Repository\ProgramDefinitionRepository;
 use Domain\Catalog\ValueObject\ProgramDefinition;
+use Domain\Catalog\ValueObject\ProgramSpecializationSnapshot;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\EventSourcing\ProtectedEventCodec;
@@ -97,6 +98,21 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             ) {
                 throw new CorruptHistoryException();
             }
+            $specialization = $this->sql->one('sis_program_specialization_contexts', ['id' => $version->value]);
+            $snapshot = new ProgramSpecializationSnapshot(
+                json_decode($specialization['snapshot_json'], true, 16, JSON_THROW_ON_ERROR),
+            );
+            if (
+                $specialization['program_id'] !== $row['program_id'] ||
+                filter_var($specialization['stream_version'], FILTER_VALIDATE_INT) !== $position ||
+                $snapshot->data['program_id'] !== $row['program_id'] ||
+                !hash_equals(
+                    $specialization['snapshot_hash'],
+                    hash('sha256', ProtectedEventCodec::canonical($snapshot->data)),
+                )
+            ) {
+                throw new CorruptHistoryException();
+            }
             return [
                 "program_id" => $row["program_id"],
                 "academic_year_id" => $catalog["year_id"],
@@ -104,6 +120,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
                 "catalog_revision" => $revision,
                 "stream_version" => $position,
                 "definition" => $definition->describe(),
+                'specializations' => $snapshot->data,
             ];
         } catch (Throwable) {
             throw new CorruptHistoryException();
@@ -116,6 +133,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
         string $yearCode,
         int $position,
         ProgramDefinition $definition,
+        ProgramSpecializationSnapshot $specializations,
     ): void {
         $row = [
             "id" => $version->value,
@@ -133,7 +151,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
         if (
             $catalog["program_id"] !== $program->value ||
             $catalog["program_code"] !== $definition->code ||
-            $catalog["program_title"] !== $definition->title
+            $catalog["program_title"] !== $definition->title || $specializations->data['program_id'] !== $program->value
         ) {
             throw new CorruptHistoryException();
         }
@@ -143,6 +161,18 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
         } else {
             $old["stream_version"] = (int) $old["stream_version"];
             if (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($row)) {
+                throw new CorruptHistoryException();
+            }
+        }
+        $context = ['id' => $version->value, 'program_id' => $program->value, 'stream_version' => $position,
+            'snapshot_json' => ProtectedEventCodec::canonical($specializations->data),
+            'snapshot_hash' => hash('sha256', ProtectedEventCodec::canonical($specializations->data))];
+        $previous = $this->sql->rows('sis_program_specialization_contexts', ['id' => $version->value], 1)[0] ?? null;
+        if ($previous === null) {
+            $this->sql->insert('sis_program_specialization_contexts', $context);
+        } else {
+            $previous['stream_version'] = filter_var($previous['stream_version'], FILTER_VALIDATE_INT);
+            if ($previous !== $context) {
                 throw new CorruptHistoryException();
             }
         }

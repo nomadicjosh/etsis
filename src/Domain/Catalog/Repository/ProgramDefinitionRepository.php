@@ -24,5 +24,6 @@ interface ProgramDefinitionRepository
         string $yearCode,
         int $position,
         ProgramDefinition $definition,
+        \Domain\Catalog\ValueObject\ProgramSpecializationSnapshot $specializations,
     ): void;
 }

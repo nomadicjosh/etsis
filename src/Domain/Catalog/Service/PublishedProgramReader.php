@@ -65,6 +65,7 @@ final readonly class PublishedProgramReader
             "catalog_revision" => $payload["catalog_revision"],
             "stream_version" => $latest->event->playhead(),
             "definition" => $definition->describe(),
+            'specializations' => $payload['specializations'],
         ];
         if ($retained !== $expected) {
             throw new CorruptHistoryException();

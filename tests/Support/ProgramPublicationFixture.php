@@ -52,6 +52,12 @@ final class ProgramPublicationFixture
             $f->audit,
             $f->dropCipher,
             $f->clock,
+            new \Domain\Catalog\Service\SpecializationPolicyService(
+                new \Infrastructure\Persistence\Repository\SqlSpecializationPolicyRepository($f->sql),
+                new \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository($f->sql),
+                new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($f->sql),
+                $f->access, $f->transactions, $f->audit,
+            ),
         );
     }
 }

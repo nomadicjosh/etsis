@@ -13,6 +13,9 @@ async function fixture(page, options = {}) {
     let reviews = 0, accepted = null;
     const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true})) : [];
     let specializationFailure = !!options.specializationFailure;
+    let institution = {revision:0,minimum:0,maximum:1,default_maximum:1};
+    let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null};
+    const specializationSnapshot = () => ({program_id:id(1),institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision})=>({id,code,title,description,revision}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -36,6 +39,18 @@ async function fixture(page, options = {}) {
             const previous=data.id?specializations.find(row=>row.id===data.id):null;
             result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1};
             if(previous) Object.assign(previous,result);else specializations.push(result);
+        } else if (path === `/sis/programs/${id(1)}/specializations/policy/`) {
+            if(data){
+                if((data.maximum??institution.default_maximum)>institution.maximum || data.minimum>(data.maximum??institution.default_maximum)) {
+                    await route.fulfill({status:422,json:{error:'Please correct the highlighted fields.',errors:[{field:'minimum',message:'The required number must fit within the program maximum.'}]}});return;
+                }
+                programPolicy={...programPolicy,...data,revision:programPolicy.revision+1};result={status:'saved'};
+            }else{
+                const invalid=(programPolicy.maximum??institution.default_maximum)>institution.maximum||programPolicy.minimum>(programPolicy.maximum??institution.default_maximum);
+                result={program:{id:id(1),code:definition.code,title:definition.title},institution,settings:programPolicy,effective:invalid?null:specializationSnapshot().effective,errors:invalid?[{field:'maximum',message:'Outside institutional policy.'}]:[],can_manage_institution:!options.catalogOnly};
+            }
+        } else if(path==='/sis/catalog/specialization-policy/') {
+            institution={...institution,...data,revision:institution.revision+1};result={status:'saved'};
         } else if (path.startsWith(`/sis/programs/${id(1)}/specializations/`)) {
             result=specializations.find(row=>row.id===path.split('/').at(-2));
         } else if (path === `/sis/programs/${id(1)}/assistance/`) {
@@ -52,7 +67,7 @@ async function fixture(page, options = {}) {
         } else if (path === '/sis/academic-years/') result = { items: [{ id: id(2), code: '2024-2025' }].filter(year => year.code.includes(data.search)), next_after: null };
         else if (path.endsWith('/publication/review/')) {
             accepted = { academic_year_id: data.academic_year_id, academic_year_code: '2024-2025', catalog_revision: publications.length + 1,
-                definition: JSON.parse(JSON.stringify(definition)), reason: data.reason, review_token: `fictional-program-proof-${++reviews}` };
+                definition: JSON.parse(JSON.stringify(definition)), specializations: JSON.parse(JSON.stringify(specializationSnapshot())), reason: data.reason, review_token: `fictional-program-proof-${++reviews}` };
             result = accepted;
         } else if (path.endsWith('/publication/commit/')) {
             publications.push({ ...accepted, version_id: id(6), version: publications.length + 1, effective_at: '2026-11-10T12:00:00Z' });
@@ -278,5 +293,67 @@ test("specialization lists page and search within their program and rejected edi
     expect(
         f.calls.filter((c) => c.path.endsWith("/specializations/save/")).map((c) => c.data.revision),
     ).toEqual([1, 1]);
+    expect(f.errors).toEqual([]);
+});
+
+test('institutional ceilings and program specialization limits are reviewed with the exact publication choices',async({page})=>{
+    const f=await fixture(page,{specializations:true});
+    await page.getByRole('button',{name:'Program specializations',exact:true}).click();
+    await page.getByRole('button',{name:'Specialization selection policy',exact:true}).click();
+    await expect(page.getByRole('spinbutton',{name:'Program maximum specializations',exact:true})).toBeDisabled();
+    await expect(page.getByText(/Institutional ceiling: 1\./)).toBeVisible();
+    await page.locator('summary').filter({hasText:'Institution-wide boundaries'}).click();
+    await page.getByRole('spinbutton',{name:'Institution-wide maximum specializations',exact:true}).fill('3');
+    await page.getByRole('button',{name:'Save institutional specialization boundaries',exact:true}).click();
+    await expect(page.getByText('Institutional specialization boundaries saved. Earlier publications are unchanged.',{exact:true})).toBeVisible();
+    await page.getByRole('spinbutton',{name:'Required specializations (zero means optional)',exact:true}).fill('1');
+    await page.getByRole('checkbox',{name:'Use institutional default maximum',exact:true}).uncheck();
+    await page.getByRole('spinbutton',{name:'Program maximum specializations',exact:true}).fill('2');
+    await page.getByRole('button',{name:'Save program specialization policy',exact:true}).click();
+    await expect(page.getByRole('spinbutton',{name:'Program maximum specializations',exact:true})).toHaveValue('2');
+    await page.getByRole('button',{name:'Back to specializations',exact:true}).click();
+    await page.getByRole('button',{name:'Back to program details',exact:true}).click();
+    await page.getByRole('button',{name:'Publish for an academic year',exact:true}).click();
+    await page.getByLabel('Reason for program publication',{exact:true}).fill('Fictional reviewed specialization policy.');
+    await page.getByRole('button',{name:'Choose academic year',exact:true}).click();
+    await page.getByRole('button',{name:'Use academic year 2024-2025',exact:true}).click();
+    await page.getByRole('button',{name:'Review program publication',exact:true}).click();
+    const context=page.getByRole('region',{name:'Published specialization choices and policy',exact:true});
+    await expect(context).toContainText('Required: 1 · Maximum per pursuit: 2 · Institutional ceiling: 3.');
+    await expect(context.getByRole('article')).toHaveCount(0);
+    await context.locator('summary').filter({hasText:'23 offered specializations'}).click();
+    await expect(context.getByRole('article')).toHaveCount(20);
+    await page.setViewportSize({width:375,height:812});await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await context.getByRole('button',{name:'More offered specializations',exact:true}).click();
+    await expect(context.getByText('Offered specializations 21–23 of 23',{exact:true})).toBeFocused();
+    await expect(context).toContainText('FOCUS.22');
+    expect(await context.locator('b,script').count()).toBe(0);
+    await page.getByRole('button',{name:'Confirm program publication',exact:true}).click();
+    await page.getByRole('button',{name:'Published program details',exact:true}).click();
+    await page.locator('summary').filter({hasText:'2024-2025 · Revision 1'}).click();
+    await expect(page.getByRole('region',{name:'Published specialization choices and policy',exact:true})).toContainText('Maximum per pursuit: 2');
+    expect(f.calls.find(c=>c.path==='/sis/catalog/specialization-policy/').data).toEqual({revision:0,maximum:3,default_maximum:1});
+    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2});
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});
+
+test('catalog staff see institutional boundaries and retain rejected program policy edits without an institutional grant',async({page})=>{
+    const f=await fixture(page,{catalogOnly:true});
+    await page.getByRole('button',{name:'Program specializations',exact:true}).click();
+    await page.getByRole('button',{name:'Specialization selection policy',exact:true}).click();
+    await expect(page.getByText('Institution-wide boundaries',{exact:true})).toHaveCount(0);
+    const required=page.getByRole('spinbutton',{name:'Required specializations (zero means optional)',exact:true});
+    await required.fill('2');
+    await page.getByRole('button',{name:'Save program specialization policy',exact:true}).click();
+    await expect(page.getByText(/The required number must fit within the program maximum\./)).toBeVisible();
+    await expect(required).toHaveValue('2');
+    await required.fill('0');
+    await page.getByRole('button',{name:'Save program specialization policy',exact:true}).click();
+    await expect(page.getByRole('checkbox',{name:'Use institutional default maximum',exact:true})).toBeChecked();
+    await page.setViewportSize({width:375,height:812});await accessible(page);
+    expect(f.calls.some(c=>c.path==='/sis/catalog/specialization-policy/')).toBe(false);
+    expect(f.calls.filter(c=>c.path.endsWith('/specializations/policy/')).map(c=>c.data.revision)).toEqual([0,0]);
     expect(f.errors).toEqual([]);
 });

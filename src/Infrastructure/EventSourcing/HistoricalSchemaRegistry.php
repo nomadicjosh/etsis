@@ -384,6 +384,9 @@ final readonly class HistoricalSchemaRegistry
             $definition = $this->definition($class);
             if ($class === \Domain\Catalog\Event\ProgramDefinitionWasPublished::class) {
                 \Domain\Catalog\ValueObject\ProgramPublicationSchema::validate($payload);
+                if ($payload['specializations']['program_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
             }
             if ($class === \Domain\DegreeAudit\Event\RequirementsWerePublished::class && $version === 4) {
                 $definition["fields"][] = "grade_scale";

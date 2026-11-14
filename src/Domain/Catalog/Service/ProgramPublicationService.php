@@ -47,6 +47,7 @@ final readonly class ProgramPublicationService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private SpecializationPolicyService $specializations,
     ) {
     }
 
@@ -131,6 +132,7 @@ final readonly class ProgramPublicationService
             throw new InvalidArgumentException("Use a publication reason up to 1000 characters.");
         }
         return $this->transactions->run(function () use ($program, $year, $reason, $actor): array {
+            $this->specializations->lockInstitution();
             $this->catalog->lock("programs", $program);
             $this->details->lockYear($year);
             $this->lockChoices($program);
@@ -154,9 +156,11 @@ final readonly class ProgramPublicationService
                 "catalog_revision" => $this->cohorts->nextRevision($program, $year),
                 "previous_catalog_id" => $this->details->current($program, $year)["id"] ?? null,
                 "definition" => $definition,
+                'specializations' => $this->specializations->snapshot($program)->data,
                 "reason" => $reason,
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
+            ProgramPublicationSchema::validate($this->payload($review));
             return $review + [
                 "review_token" => $this->cipher->seal(json_encode($review, JSON_THROW_ON_ERROR)),
             ];
@@ -204,6 +208,7 @@ final readonly class ProgramPublicationService
             $review,
             $actor,
         ): array {
+            $this->specializations->lockInstitution();
             $this->catalog->lock("programs", $program);
             $this->details->lockYear($year);
             $this->authorize($actor);
@@ -232,6 +237,8 @@ final readonly class ProgramPublicationService
                 $root->playhead() !== $review["expected_version"] ||
                 $root->versionId() !== $payload["previous_version_id"] ||
                 $this->definition($program)->describe() !== $payload["definition"] ||
+                $this->hash($this->specializations->snapshot($program)->data) !==
+                    $this->hash($payload['specializations']) ||
                 $this->year($year)["code"] !== $payload["academic_year_code"] ||
                 $this->cohorts->nextRevision($program, $year) !== $payload["catalog_revision"] ||
                 ($this->details->current($program, $year)["id"] ?? null) !== $payload["previous_catalog_id"]
@@ -268,6 +275,7 @@ final readonly class ProgramPublicationService
                 $payload["academic_year_code"],
                 $receipt["last_version"],
                 $definition,
+                new \Domain\Catalog\ValueObject\ProgramSpecializationSnapshot($payload['specializations']),
             );
             $this->cohorts->publishRelease($operation, $program);
             $this->audit->record($actor, "program.definition_published", $program);
@@ -350,6 +358,7 @@ final readonly class ProgramPublicationService
             "catalog_revision" => $payload["catalog_revision"],
             "stream_version" => $latest->event->playhead(),
             "definition" => $payload["definition"],
+            'specializations' => $payload['specializations'],
         ];
         if (
             $retained === null ||
@@ -420,6 +429,7 @@ final readonly class ProgramPublicationService
             "catalog_revision",
             "previous_catalog_id",
             "definition",
+            'specializations',
         ];
         foreach ($fields as $field) {
             if (!array_key_exists($field, $review)) {
@@ -434,6 +444,7 @@ final readonly class ProgramPublicationService
             "catalog_revision" => $review["catalog_revision"],
             "previous_catalog_id" => $review["previous_catalog_id"],
             "definition" => $review["definition"],
+            'specializations' => $review['specializations'],
         ];
     }
 

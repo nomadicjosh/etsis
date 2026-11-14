@@ -126,6 +126,7 @@ final readonly class PublishedRequirementsReader
             "catalog_revision" => $payload["catalog_revision"],
             "academic_year_code" => $payload["academic_year_code"],
             "definition" => ProgramDefinition::fromArray($payload["definition"])->describe(),
+            'specializations' => $payload['specializations'],
         ];
     }
 

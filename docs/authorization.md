@@ -35,8 +35,11 @@ Registrar is an institutional job function, not an automatic grant to every staf
 | Maintain sending institutions, external courses, equivalencies and award credit | `sis:transfer:manage` |
 | Read student academic records and transcripts for evaluation | `sis:student:read` |
 | Edit academic programs, terms, courses, sections and grade definitions | `sis:catalog:manage` |
+| Configure institutional specialization ceilings/defaults | `sis:catalog:policy` (independent of catalog management) |
 | Process official transcript requests and record fulfillment | `sis:transcript:manage` |
 | Change student activity/program assignments or staff registration | `sis:registration:manage` |
+
+Specialization program settings and publication use `sis:catalog:manage`. The institutional boundary editor additionally checks the protected standalone `sis:catalog:policy` permission. No default role or user grant is added, and `sis`/`sis:catalog:manage` do not imply it. Super administrators have universal authority and can explicitly delegate this permission through a custom role or direct grant. Changing a policy affects future publication reviews; existing student/publication facts stay retained.
 
 A recommended transfer evaluator role combines `sis:transfer:manage` and `sis:student:read`. This enables review of the student's current program, activity, and existing academic credits inside the award form. Student-read currently authorizes campus-wide academic reads; it does not implement advisor/cohort-based row restrictions. It does not grant financial accounts, employment, account administration, program mutation, or transcript-request processing. Academic standing and advisor policies are still future work.
 

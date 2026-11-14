@@ -39,6 +39,7 @@ final readonly class RequirementProgramContext
                 "catalog_revision" => $retained["catalog_revision"],
                 "academic_year_code" => $retained["academic_year_code"],
                 "definition" => $definition->describe(),
+                'specializations' => $retained['specializations'],
             ];
     }
 }

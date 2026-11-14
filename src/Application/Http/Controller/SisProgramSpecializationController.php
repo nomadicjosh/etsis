@@ -14,8 +14,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisProgramSpecializationController
 {
-    public function __construct(private ProgramSpecializationService $service)
-    {
+    public function __construct(
+        private ProgramSpecializationService $service,
+        private \Domain\Catalog\Service\SpecializationPolicyService $policies,
+    ) {
     }
 
     public function page(ServerRequest $request, string $id): ResponseInterface
@@ -29,6 +31,38 @@ final readonly class SisProgramSpecializationController
     public function show(string $id, string $specialization): ResponseInterface
     {
         return new JsonResponse($this->service->get(new EntityId($id), new EntityId($specialization)));
+    }
+
+    public function policy(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->policies->settings(new EntityId($id)));
+    }
+
+    public function savePolicy(ServerRequest $request, string $id): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !array_key_exists('maximum', $body)) {
+            throw new InvalidArgumentException('Provide the explicit maximum or null to inherit.');
+        }
+        $input = FormInput::from($request);
+        $this->policies->saveProgram(
+            new EntityId($id),
+            $input->integer('revision'),
+            $input->integer('minimum', 0, 100),
+            $input->optionalInteger('maximum'),
+        );
+        return new JsonResponse(['status' => 'saved']);
+    }
+
+    public function saveInstitutionPolicy(ServerRequest $request): ResponseInterface
+    {
+        $input = FormInput::from($request);
+        $this->policies->saveInstitution(
+            $input->integer('revision'),
+            $input->integer('maximum', 1, 100),
+            $input->integer('default_maximum', 1, 100),
+        );
+        return new JsonResponse(['status' => 'saved']);
     }
 
     public function save(ServerRequest $request, string $id): ResponseInterface
