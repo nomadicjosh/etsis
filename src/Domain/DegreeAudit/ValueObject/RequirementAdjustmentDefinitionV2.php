@@ -73,8 +73,35 @@ final readonly class RequirementAdjustmentDefinitionV2
             if (array_key_exists("substitution_adjustment_id", $definition)) {
                 $keys = [...$keys, "substitution_adjustment_id", "required_course_id"];
             }
+            if (array_key_exists("rule_ids", $definition)) {
+                if (isset($definition["substitution_adjustment_id"])) {
+                    throw new InvalidArgumentException("Choose either a saved-rule course or an approved substitute.");
+                }
+                $keys[] = "rule_ids";
+                $ids = $definition["rule_ids"];
+                if (
+                    !is_array($ids) ||
+                    !array_is_list($ids) ||
+                    $ids === [] ||
+                    count($ids) > 200 ||
+                    count(array_unique($ids, SORT_REGULAR)) !== count($ids)
+                ) {
+                    throw new InvalidArgumentException("Retain distinct matching requirement cards.");
+                }
+                foreach ($ids as $id) {
+                    if (!is_string($id)) {
+                        throw new InvalidArgumentException("Retain published requirement-card identities.");
+                    }
+                    new EntityId($id);
+                }
+                $ordered = $ids;
+                sort($ordered, SORT_STRING);
+                if ($ids !== $ordered) {
+                    throw new InvalidArgumentException("Retain matching requirement cards in canonical order.");
+                }
+            }
             self::keys($definition, $keys);
-            foreach (array_diff($keys, ["kind"]) as $key) {
+            foreach (array_diff($keys, ["kind", "rule_ids"]) as $key) {
                 if (!is_string($definition[$key])) {
                     throw new InvalidArgumentException("Choose a retained course and group publication.");
                 }

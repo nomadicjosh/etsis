@@ -70,6 +70,14 @@ final readonly class RuleAllocationCompiler
             $targets = [];
             foreach ($work as $item) {
                 $courseId = $item['course_id'];
+                $captured = [];
+                foreach ($dynamic as $rule) {
+                    if (++$checks > 5000) {
+                        throw new AllocationBudgetExhaustedException();
+                    }
+                    $key = $groupId . ':' . $rule['id'] . ':' . $item['id'];
+                    $captured[$rule['id']] = $decisions[$key] ?? throw new CorruptHistoryException();
+                }
                 if (in_array($courseId, $effective['excluded_course_ids'] ?? [], true)) {
                     $requirements['rule_memberships'][$groupId][$item['id']] = [];
                     continue;
@@ -96,11 +104,7 @@ final readonly class RuleAllocationCompiler
                 ], true);
                 $membership = [];
                 foreach ($dynamic as $rule) {
-                    if (++$checks > 5000) {
-                        throw new AllocationBudgetExhaustedException();
-                    }
-                    $key = $groupId . ':' . $rule['id'] . ':' . $item['id'];
-                    $decision = $decisions[$key] ?? throw new CorruptHistoryException();
+                    $decision = $captured[$rule['id']];
                     if ($decision === 'unknown' && $possible) {
                         $issues['rule_facts_unknown'] = true;
                     }

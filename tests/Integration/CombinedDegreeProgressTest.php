@@ -218,6 +218,7 @@ final class CombinedDegreeProgressTest extends TestCase
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->r->history),
             new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->requirements(), $f->service),
+            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->r->history)),
         );
     }
     private function useGroup(StudentSpecializationRequirementsFixture $f, EntityId $template, EntityId $groupVersion): EntityId
@@ -697,6 +698,88 @@ final class CombinedDegreeProgressTest extends TestCase
         self::assertSame(2000, $old["minimums"][1]["required_milli"]);
         self::assertSame(["cohort_changed"], $this->preview($f)["issues"]);
         self::assertSame($before, $this->snapshot($f));
+    }
+
+    public function testSavedRulePlacementApprovalsUseTheSameSpecializationScopeAndCombinedSearch(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $this->work($f, 0);
+        $s = $f->r->sis;
+        $course = $f->r->groupDefinition["courses"][0];
+        $rules = new \Domain\Rules\Service\CourseRuleService(
+            new \Infrastructure\Persistence\Repository\SqlCourseRuleRepository($s->sql),
+            new \Domain\Catalog\Service\PublishedCourseReader($f->r->history),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $s->clock,
+        );
+        $saved = $rules->save(null, null, "DA.SPECIALIZATION", "Fictional specialization rule", [
+            "condition" => "AND",
+            "rules" => [["id" => "course_id", "operator" => "equal", "value" => $course["course_id"]]],
+        ]);
+        $group = EntityId::generate();
+        $d = CourseGroupDefinitionV2::blank("Fictional rule specialization")->definition;
+        $d["min_credits_milli"] = 3000;
+        $d["rules"] = [
+            [
+                "id" => EntityId::generate()->value,
+                "mode" => "credits",
+                "minimum_courses" => 0,
+                "minimum_credits_milli" => 3000,
+                "course_ids" => [],
+                "eligibility" => $saved,
+            ],
+        ];
+        $f->r->groups->create($group, new CourseGroupDefinitionV2($d));
+        $review = $f->r->groups->review($group, "Fictional retained rule group.");
+        $groupVersion = new EntityId($f->r->groups->publish($group, $review["review_token"])["operation_id"]);
+        $plan = new EntityId($f->plans["DATA"]["id"]);
+        $row = $f->r->degrees->view($plan);
+        $definition = $row["definition"];
+        $definition["groups"] = [["group_id" => $group->value, "version_id" => $groupVersion->value]];
+        $f->r->degrees->save(
+            $plan,
+            $row["revision"],
+            new \Domain\DegreeAudit\ValueObject\AuditRequirementsV3($definition),
+        );
+        $review = $f->r->degrees->review($plan, "Fictional rule specialization publication.");
+        $requirements = $f->r->degrees->publish($plan, $review["review_token"])["operation_id"];
+        $f->assign("DATA", $requirements);
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $a = $this->adjustments($f);
+        self::assertSame(
+            [],
+            $a->placementGroups(
+                $f->student,
+                $f->assignment,
+                new EntityId($course["course_id"]),
+                new EntityId($course["version_id"]),
+            )["placement_groups"],
+        );
+        $choices = $a->placementGroups(
+            $f->student,
+            $f->assignment,
+            new EntityId($course["course_id"]),
+            new EntityId($course["version_id"]),
+            $id,
+        );
+        self::assertSame($group->value, $choices["placement_groups"][0]["id"]);
+        $this->grant(
+            $f,
+            [
+                "kind" => "placement",
+                "course_id" => $course["course_id"],
+                "rule_course_version_id" => $course["version_id"],
+                "group_id" => $group->value,
+            ],
+            $id,
+        );
+        self::assertSame([], $a->view($f->student, $f->assignment)["effective_minimums"]["placements"]);
+        self::assertSame("feasible", $this->preview($f)["outcome"]);
+        $degree = $f->requirements()->view($f->student, $f->assignment)["requirements"]["version_id"];
+        $this->grant($f, $this->route($f, 0, $degree));
+        self::assertSame("infeasible", $this->preview($f)["outcome"]);
     }
 
 }

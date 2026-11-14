@@ -14,7 +14,7 @@ A proposed placement shows the actual course, the required-course target, any ap
 
 **How current work was considered** explains eligible work, insufficient grades, in-progress work, drops, voids, unknown publications and repeat/sharing effects. Work and placement pages use the same captured result without another request. **Refresh course placement** performs a fresh bounded review; **Back to previous screen** returns to the degree or work screen.
 
-Approved substitute courses can now have their own [reviewed group preference](student-degree-exceptions.md#course-placement-preferences), selected through the existing substitution approval. The restriction follows the actual course identity across named and saved-rule matches. It does not approve a substitute or restore a revoked approval; passing-grade, publication and repeat gates remain independent. Revocation of the substitution preserves the separate placement decision and its retained labels.
+Named courses and courses matched by retained saved rules can use the same reviewed group preference. The [rule-course picker](student-degree-exceptions.md#prefer-a-group-for-a-course-found-by-saved-rules) lets staff choose a matching group without adding a named curriculum course. Approved substitute courses can also have their own [reviewed group preference](student-degree-exceptions.md#course-placement-preferences), selected through the existing substitution approval. The restriction follows the actual course identity across named and saved-rule matches. It does not approve a substitute or restore a revoked approval; passing-grade, publication and repeat gates remain independent. Revocation of the substitution preserves the separate placement decision and its retained labels.
 
 ## Supporting coursework
 
@@ -114,3 +114,5 @@ Only 20 current work records, requirement cards or placements are displayed per 
 Private endpoint: `/sis/students/{student}/programs/{assignment}/degree-requirements/academic-work/allocation/`.
 
 This slice requires no migration or stored event/schema conversion. The [structural engine](degree-audit-allocation.md) and [repeat-credit/GPA engine](degree-audit-calculations.md) retain their separate responsibilities. Next are remaining historical transfer/equivalence inputs, complete degree minimum/constraint integration and reproducible retained evaluations with controlled graduation decisions.
+
+When component routing excludes a course from a saved-rule group, the captured rule decisions are still verified before the work is excluded. A known excluded course can therefore produce an explained shortfall rather than a false history-integrity error. Missing, duplicate or foreign captured rule decisions remain integrity failures even for excluded work.

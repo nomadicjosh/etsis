@@ -928,4 +928,31 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertContains("grade_unknown", $result["issues"]);
     }
 
+    public function testExcludedRuleCoursesStillRequireCompleteCapturedEvidenceWithoutBecomingEligible(): void
+    {
+        $requirements = $this->requirements([self::id(1) => $this->ruleGroup(1)]);
+        $work = [$this->work(10)];
+        $effective = $this->effective($requirements);
+        $effective["excluded_course_ids"] = [self::id(1)];
+        foreach (["matches", "does_not_match", "unknown"] as $outcome) {
+            $decisions = $this->decisions($work, $requirements, [$outcome]);
+            $result = $this->evaluator()->evaluate($work, $requirements, $effective, $decisions);
+            self::assertSame("infeasible", $result["outcome"]);
+            self::assertSame([], $result["issues"]);
+            self::assertSame([], $result["groups"][0]["placements"]);
+            self::assertContains("component_excluded", $result["records"][0]["statuses"]);
+        }
+        $rows = $this->decisions($work, $requirements);
+        $foreign = $rows;
+        $foreign[0]["work_id"] = self::id(99);
+        foreach ([[], [...$rows, ...$rows], $foreign] as $invalid) {
+            try {
+                $this->evaluator()->evaluate($work, $requirements, $effective, $invalid);
+                self::fail("An exclusion bypassed captured-rule evidence verification.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
 }

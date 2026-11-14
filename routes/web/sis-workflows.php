@@ -1017,6 +1017,7 @@ return static function (Psr7Router $router): void {
         foreach (
             [
             ['POST', 'replacement-courses/', 'replacementCourses'],
+            ['POST', 'placement-groups/', 'placementGroups'],
             ['POST', 'replacement-courses/{course}/versions/', 'replacementVersions'],
             ['GET', 'preview/', 'preview'], ['GET', '', 'view'],
             ['POST', 'review/', 'review'], ['POST', 'revoke-review/', 'revokeReview'],

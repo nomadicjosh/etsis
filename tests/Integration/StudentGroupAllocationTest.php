@@ -56,6 +56,7 @@ final class StudentGroupAllocationTest extends TestCase
             new PublishedRequirementsReader($f->f->history),
             new SqlReplacementCourseRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
+            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
         );
     }
     private function service(
@@ -890,6 +891,313 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame($replacement["course_id"], $alternative[0]["course_id"]);
         self::assertSame($required["course_id"], $alternative[0]["target_course_id"]);
         self::assertSame($before, $f->f->sis->sql->rows("sis_history_events"));
+    }
+
+    private function rulePlacementFixture(bool $unknown = false): array
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        $rules = new CourseRuleService(
+            new SqlCourseRuleRepository($s->sql),
+            new PublishedCourseReader($f->f->history),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $s->clock,
+        );
+        $ids = array_column(array_slice($f->f->groupDefinition["courses"], 0, 2), "course_id");
+        $snapshot = $rules->save(null, null, "DA.PLACEMENT", "Fictional placement eligibility", [
+            "condition" => "AND",
+            "rules" => [
+                $unknown
+                    ? ["id" => "course_level_number", "operator" => "greater", "value" => 200]
+                    : ["id" => "course_id", "operator" => "in", "value" => $ids],
+            ],
+        ]);
+        $groups = [];
+        foreach (["Rule electives", "Rule breadth"] as $name) {
+            $id = EntityId::generate();
+            $d = CourseGroupDefinitionV2::blank($name)->definition;
+            $d["min_credits_milli"] = 3000;
+            $d["rules"] = [
+                [
+                    "id" => EntityId::generate()->value,
+                    "mode" => "credits",
+                    "minimum_courses" => 0,
+                    "minimum_credits_milli" => 3000,
+                    "course_ids" => [],
+                    "eligibility" => $snapshot,
+                ],
+            ];
+            $f->f->groups->create($id, new CourseGroupDefinitionV2($d));
+            $review = $f->f->groups->review($id, "Fictional rule placement curriculum.");
+            $version = $f->f->groups->publish($id, $review["review_token"])["operation_id"];
+            $groups[] = ["group_id" => $id->value, "version_id" => $version, "rule_id" => $d["rules"][0]["id"]];
+        }
+        $row = $f->f->degrees->view($f->f->degree);
+        $d = $row["definition"];
+        $d["groups"] = array_map(
+            static fn(array $g): array => array_intersect_key($g, array_flip(["group_id", "version_id"])),
+            $groups,
+        );
+        $d["policies"]["group_reuse"] = "multiple_groups";
+        $f->f->definition = $d;
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($d));
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        return [$f, $groups, $snapshot, $rules];
+    }
+    private function rulePlacementRequest(StudentRequirementsFixture $f, array $group, int $index = 0): array
+    {
+        $course = $f->f->groupDefinition["courses"][$index];
+        return [
+            "kind" => "placement",
+            "course_id" => $course["course_id"],
+            "rule_course_version_id" => $course["version_id"],
+            "group_id" => $group["group_id"],
+        ];
+    }
+    private function placementSnapshot(StudentRequirementsFixture $f): array
+    {
+        $rows = [];
+        foreach (
+            [
+                "sis_history_events",
+                "sis_history_streams",
+                "sis_history_operations",
+                "sis_requirement_adjustments",
+                "sis_academic_credits",
+                "sis_student_accounts",
+                "sis_audit",
+            ]
+            as $table
+        ) {
+            $rows[$table] = $f->f->sis->sql->rows($table);
+        }
+        return $rows;
+    }
+    public function testRuleOnlyCourseFinderAndApprovalRetainExactOriginalRuleAndCoursePublications(): void
+    {
+        [$f, $groups, $snapshot, $rules] = $this->rulePlacementFixture();
+        $a = $this->adjustments($f);
+        $course = $f->f->groupDefinition["courses"][0];
+        $before = $this->placementSnapshot($f);
+        $choices = $a->placementGroups(
+            $f->student,
+            $f->assignment,
+            new EntityId($course["course_id"]),
+            new EntityId($course["version_id"]),
+        );
+        self::assertCount(2, $choices["placement_groups"]);
+        self::assertSame("DA.PLACEMENT", $choices["placement_groups"][0]["rules"][0]["code"]);
+        self::assertSame([], $a->view($f->student, $f->assignment)["placement_courses"]);
+        $review = $a->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $this->rulePlacementRequest($f, $groups[0]),
+            "Fictional rule-course placement.",
+        );
+        self::assertSame([$groups[0]["rule_id"]], $review["adjustment"]["definition"]["rule_ids"]);
+        self::assertSame($groups[0]["version_id"], $review["adjustment"]["definition"]["group_version_id"]);
+        self::assertSame($before, $this->placementSnapshot($f));
+        $receipt = $a->commit($f->student, $f->assignment, $review["review_token"]);
+        $rules->save(new EntityId($snapshot["rule_id"]), 1, $snapshot["code"], "Changed current authoring rule", [
+            "condition" => "AND",
+            "rules" => [["id" => "course_id", "operator" => "not_in", "value" => [$course["course_id"]]]],
+        ]);
+        $choices = $a->placementGroups(
+            $f->student,
+            $f->assignment,
+            new EntityId($course["course_id"]),
+            new EntityId($course["version_id"]),
+        );
+        self::assertCount(2, $choices["placement_groups"]);
+        self::assertSame(1, $choices["placement_groups"][0]["rules"][0]["revision"]);
+        $view = $a->view($f->student, $f->assignment);
+        self::assertSame(
+            $groups[0]["group_id"],
+            $view["effective_minimums"]["placements"][$course["course_id"]]["group_id"],
+        );
+        self::assertStringContainsString(
+            "MATH.101",
+            $a->history($f->student, $f->assignment)["items"][0]["subject_label"],
+        );
+        $revoke = $a->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]),
+            "Fictional rule preference revocation.",
+        );
+        $a->commit($f->student, $f->assignment, $revoke["review_token"]);
+        $before = $this->placementSnapshot($f);
+        self::assertSame($receipt, $a->commit($f->student, $f->assignment, $review["review_token"]));
+        self::assertSame([], $a->view($f->student, $f->assignment)["effective_minimums"]["placements"]);
+        self::assertSame($before, $this->placementSnapshot($f));
+    }
+    public function testRuleCoursePreferenceRestrictsGroupChoicesWithoutCreatingEarnedWorkOrBypassingGrades(): void
+    {
+        [$f, $groups] = $this->rulePlacementFixture();
+        $this->work($f, 0);
+        self::assertSame("feasible", $this->service($f)->preview($f->student, $f->assignment)["outcome"]);
+        $credits = $f->f->sis->sql->rows("sis_academic_credits");
+        $finance = $f->f->sis->financialEvents();
+        $this->grant($f, $this->rulePlacementRequest($f, $groups[0]));
+        self::assertSame($credits, $f->f->sis->sql->rows("sis_academic_credits"));
+        self::assertSame($finance, $f->f->sis->financialEvents());
+        self::assertSame("infeasible", $this->service($f)->preview($f->student, $f->assignment)["outcome"]);
+        [$section, $enrollment] = $this->work($f, 1, false);
+        self::assertSame("infeasible", $this->service($f)->preview($f->student, $f->assignment)["outcome"]);
+        $ledger = $f->f->sis->academicCredits();
+        $grade = new EntityId($ledger->choices($f->student, $section->id, $enrollment)["items"][0]["id"]);
+        $review = $ledger->review($f->student, $section->id, $enrollment, $grade, 0);
+        $ledger->commit($f->student, $section->id, $review["review_token"]);
+        $before = $this->placementSnapshot($f);
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $result["outcome"]);
+        foreach ($result["groups"] as $group) {
+            foreach ($group["placements"] as $placed) {
+                if ($placed["course_id"] === $f->f->groupDefinition["courses"][0]["course_id"]) {
+                    self::assertSame($groups[0]["group_id"], $group["id"]);
+                }
+            }
+        }
+        self::assertSame($before, $this->placementSnapshot($f));
+    }
+    public function testUnknownClassificationsAndNonmatchingRuleCoursesAreNotPlacementChoices(): void
+    {
+        foreach ([true, false] as $unknown) {
+            [$f, $groups] = $this->rulePlacementFixture($unknown);
+            $a = $this->adjustments($f);
+            $index = $unknown ? 0 : 4;
+            $course = $f->f->groupDefinition["courses"][$index];
+            $before = $this->placementSnapshot($f);
+            self::assertSame(
+                [],
+                $a->placementGroups(
+                    $f->student,
+                    $f->assignment,
+                    new EntityId($course["course_id"]),
+                    new EntityId($course["version_id"]),
+                )["placement_groups"],
+            );
+            try {
+                $a->reviewGrant(
+                    $f->student,
+                    $f->assignment,
+                    $this->rulePlacementRequest($f, $groups[0], $index),
+                    "Fictional unmatched request.",
+                );
+                self::fail("Unmatched rule-course preference accepted.");
+            } catch (\InvalidArgumentException) {
+                self::assertSame($before, $this->placementSnapshot($f));
+            }
+        }
+    }
+    public function testRulePlacementReferencesCannotBeInjectedAndPendingReviewsExpireOrBecomeStale(): void
+    {
+        [$f, $groups] = $this->rulePlacementFixture();
+        $a = $this->adjustments($f);
+        $request = $this->rulePlacementRequest($f, $groups[0]);
+        foreach (
+            [
+                $request + ["rule_ids" => [$groups[0]["rule_id"]]],
+                $request + ["group_version_id" => $groups[0]["version_id"]],
+                array_replace($request, ["group_id" => EntityId::generate()->value]),
+                array_replace($request, ["rule_course_version_id" => EntityId::generate()->value]),
+            ]
+            as $invalid
+        ) {
+            $before = $this->placementSnapshot($f);
+            try {
+                $a->reviewGrant($f->student, $f->assignment, $invalid, "Fictional invalid placement.");
+                self::fail("Injected placement reference accepted.");
+            } catch (\InvalidArgumentException | RecordNotFoundException) {
+                self::assertSame($before, $this->placementSnapshot($f));
+            }
+        }
+        $pending = $a->reviewGrant($f->student, $f->assignment, $request, "Fictional expiring placement.");
+        $f->f->sis->clock->time = $f->f->sis->clock->time->modify("+21 minutes");
+        $before = $this->placementSnapshot($f);
+        try {
+            $a->commit($f->student, $f->assignment, $pending["review_token"]);
+            self::fail("Expired preference accepted.");
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($before, $this->placementSnapshot($f));
+        }
+        $pending = $a->reviewGrant($f->student, $f->assignment, $request, "Fictional stale degree placement.");
+        $f->f->definition["name"] = "Fictional later degree requirements";
+        $row = $f->f->degrees->view($f->f->degree);
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($f->f->definition));
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        $before = $this->placementSnapshot($f);
+        try {
+            $a->commit($f->student, $f->assignment, $pending["review_token"]);
+            self::fail("Changed degree accepted a pending preference.");
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($before, $this->placementSnapshot($f));
+        }
+    }
+
+    public function testReplayedRulePlacementMustProveItsDeclaredMatchingCards(): void
+    {
+        [$f, $groups] = $this->rulePlacementFixture();
+        $a = $this->adjustments($f);
+        $review = $a->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $this->rulePlacementRequest($f, $groups[0]),
+            "Fictional source proof.",
+        );
+        $payload = $review["adjustment"];
+        $payload["definition"]["rule_ids"] = [EntityId::generate()->value];
+        $operation = new EntityId($payload["adjustment_id"]);
+        $stream = new \Domain\Shared\EventSourcing\StreamReference(
+            new \Domain\DegreeAudit\ValueObject\RequirementAdjustmentsId($f->assignment->value),
+            "student_requirement_adjustments",
+        );
+        $event = \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::occur($stream->aggregateId, $payload, [
+            "__aggregate_type" => "student_requirement_adjustments",
+            "schema_version" => 2,
+        ])->withPlayhead(1);
+        $f->f->sis->transactions->run(function () use ($f, $payload, $operation, $stream, $event): void {
+            $f->f->history->append(
+                $stream,
+                $operation,
+                0,
+                new \Domain\Shared\EventSourcing\EventContext(
+                    $f->f->sis->access->actor,
+                    $f->f->sis->clock->now(),
+                    $operation,
+                    reason: "Fictional invalid journal evidence for corruption check.",
+                ),
+                [$event],
+            );
+            new SqlRequirementAdjustmentRepository($f->f->sis->sql)->grant($f->assignment, $payload);
+        });
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        $a->view($f->student, $f->assignment);
+    }
+    public function testRulePlacementFinderKeepsIndependentApprovalAuthority(): void
+    {
+        [$f] = $this->rulePlacementFixture();
+        $s = $f->f->sis;
+        $course = $f->f->groupDefinition["courses"][0];
+        $s->access->staff = false;
+        foreach ([["sis:student:read"], ["sis:degree-audit:adjust"]] as $grants) {
+            $s->access->grants = $grants;
+            try {
+                $this->adjustments($f)->placementGroups(
+                    $f->student,
+                    $f->assignment,
+                    new EntityId($course["course_id"]),
+                    new EntityId($course["version_id"]),
+                );
+                self::fail("Incomplete authority opened a placement approval picker.");
+            } catch (AccessDeniedException) {
+                self::assertTrue(true);
+            }
+        }
     }
 
 }

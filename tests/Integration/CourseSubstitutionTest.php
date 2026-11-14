@@ -36,6 +36,7 @@ final class CourseSubstitutionTest extends TestCase
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->f->history),
             new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
+            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
         );
     }
     private function definition(int $required = 0, int $replacement = 1): array

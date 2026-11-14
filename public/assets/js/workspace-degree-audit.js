@@ -4655,7 +4655,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             page = 0,
             replacement = null,
             placementGroup = null,
-            replacementSerial = 0;
+            replacementSerial = 0,
+            ruleSelectionSerial = 0;
         const restore = () => {
             const old = body;
             body = screen("Review a student exception", "REGISTRAR APPROVAL");
@@ -4710,6 +4711,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
             page = 0;
             render();
         });
+        const rulePlacementButton = button("Find a rule-matched course", async () => {
+            kind = "rule_placement";
+            selected = null;
+            replacement = null;
+            placementGroup = null;
+            render();
+            await replacementCourses();
+        });
         function renderPlacementGroups() {
             placementChoices.replaceChildren();
             if (!selected) {
@@ -4739,6 +4748,20 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                       "p",
                                       {},
                                       `Approved substitute version ${selected.version} for ${group.required_course_code} · ${group.required_course_title}.`,
+                                  ),
+                              ]
+                            : []),
+                        ...(group.rules
+                            ? [
+                                  node(
+                                      "p",
+                                      {},
+                                      `Matches: ${group.rules
+                                          .slice(0, 5)
+                                          .map((r) => `${r.code} · ${r.title} (revision ${r.revision})`)
+                                          .join(
+                                              "; ",
+                                          )}${group.rules.length > 5 ? `; ${group.rules.length - 5} more retained rule cards` : ""}`,
                                   ),
                               ]
                             : []),
@@ -4775,15 +4798,25 @@ window.createWorkspaceDegreeAudit = function (ui) {
             render();
             replacementList.replaceChildren(node("p", {}, "Choose a curriculum course, then browse its publications."));
         });
+        const targetSearch = search("Search exception targets", "", (q) => {
+            query = q;
+            page = 0;
+            render();
+        });
         source.append(
             ...(data.routing_components
                 ? []
-                : [actions(waiverButton, substitutionButton, versionButton, placementButton, minimumButton)]),
-            search("Search exception targets", "", (q) => {
-                query = q;
-                page = 0;
-                render();
-            }),
+                : [
+                      actions(
+                          waiverButton,
+                          substitutionButton,
+                          versionButton,
+                          placementButton,
+                          rulePlacementButton,
+                          minimumButton,
+                      ),
+                  ]),
+            targetSearch,
             list,
         );
         inspector.append(
@@ -4803,7 +4836,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     async () => {
                         if (!selected || !reason.trim())
                             throw new Error("Choose an exception target and enter its approval reason.");
-                        if (kind === "placement" && !placementGroup)
+                        if (["placement", "rule_placement"].includes(kind) && !placementGroup)
                             throw new Error("Choose the group that should receive this course's eligible work.");
                         if (["substitution", "course_version", "component_route"].includes(kind) && !replacement)
                             throw new Error(
@@ -4814,39 +4847,46 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         if (kind === "minimum" && selected.minimum === "min_courses" && !/^\d{1,3}$/.test(value))
                             throw new Error("Use a whole number of courses for this minimum.");
                         const definition =
-                            kind === "component_route"
+                            kind === "rule_placement"
                                 ? {
-                                      kind,
-                                      course_id: replacement.course_id,
-                                      course_version_id: replacement.version_id,
-                                      target_version_id: selected.version_id,
+                                      kind: "placement",
+                                      course_id: selected.course_id,
+                                      group_id: placementGroup,
+                                      rule_course_version_id: replacement.version_id,
                                   }
-                                : kind === "waiver"
-                                  ? { kind, course_id: selected.course_id }
-                                  : kind === "course_version"
-                                    ? { kind, course_id: selected.course_id, version_id: replacement.version_id }
-                                    : kind === "placement"
-                                      ? {
-                                            kind,
-                                            course_id: selected.course_id,
-                                            group_id: placementGroup,
-                                            ...(selected.substitution_adjustment_id
-                                                ? { substitution_adjustment_id: selected.substitution_adjustment_id }
-                                                : {}),
-                                        }
-                                      : kind === "substitution"
+                                : kind === "component_route"
+                                  ? {
+                                        kind,
+                                        course_id: replacement.course_id,
+                                        course_version_id: replacement.version_id,
+                                        target_version_id: selected.version_id,
+                                    }
+                                  : kind === "waiver"
+                                    ? { kind, course_id: selected.course_id }
+                                    : kind === "course_version"
+                                      ? { kind, course_id: selected.course_id, version_id: replacement.version_id }
+                                      : kind === "placement"
                                         ? {
                                               kind,
                                               course_id: selected.course_id,
-                                              replacement_course_id: replacement.course_id,
-                                              replacement_version_id: replacement.version_id,
+                                              group_id: placementGroup,
+                                              ...(selected.substitution_adjustment_id
+                                                  ? { substitution_adjustment_id: selected.substitution_adjustment_id }
+                                                  : {}),
                                           }
-                                        : {
-                                              kind,
-                                              group_id: selected.group_id,
-                                              minimum: selected.minimum,
-                                              required_milli: milli(value),
-                                          };
+                                        : kind === "substitution"
+                                          ? {
+                                                kind,
+                                                course_id: selected.course_id,
+                                                replacement_course_id: replacement.course_id,
+                                                replacement_version_id: replacement.version_id,
+                                            }
+                                          : {
+                                                kind,
+                                                group_id: selected.group_id,
+                                                minimum: selected.minimum,
+                                                required_milli: milli(value),
+                                            };
                         const reviewed = await post(`${base}review/`, { definition, reason });
                         exceptionConfirmation(base, reviewed, data, back, restore);
                     },
@@ -4856,9 +4896,18 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
         function render() {
-            replacementPanel.hidden = !["substitution", "course_version", "component_route"].includes(kind);
+            ruleSelectionSerial++;
+            const ruleMode = kind === "rule_placement";
+            targetSearch.hidden = ruleMode;
+            list.hidden = ruleMode;
+            if (ruleMode) source.append(replacementPanel);
+            else inspector.insertBefore(replacementPanel, placementPanel);
+            replacementPanel.hidden = !["substitution", "course_version", "component_route", "rule_placement"].includes(
+                kind,
+            );
+            rulePlacementButton.setAttribute("aria-pressed", String(ruleMode));
             versionButton.setAttribute("aria-pressed", String(kind === "course_version"));
-            placementPanel.hidden = kind !== "placement";
+            placementPanel.hidden = !["placement", "rule_placement"].includes(kind);
             placementButton.setAttribute("aria-pressed", String(kind === "placement"));
             renderPlacementGroups();
             substitutionButton.setAttribute("aria-pressed", String(kind === "substitution"));
@@ -4866,9 +4915,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
             minimumButton.setAttribute("aria-pressed", String(kind === "minimum"));
             if (!selected) {
                 valueField.hidden = true;
-                description.textContent = "Choose a course or minimum to begin.";
+                description.textContent = ruleMode
+                    ? "Find a published course on the left, then choose a matching group. This checks retained course classifications, not grades or earned work. No group is selected automatically."
+                    : "Choose a course or minimum to begin.";
             }
             list.replaceChildren();
+            if (ruleMode) return;
             const sourceChoices =
                 kind === "component_route"
                     ? data.routing_components
@@ -4964,7 +5016,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ...(after ? { after } : {}),
             });
             if (serial !== replacementSerial || !replacementPanel.isConnected) return;
-            replacementList.replaceChildren(search("Replacement course search", query, (q) => replacementCourses(q)));
+            replacementList.replaceChildren(
+                search(kind === "rule_placement" ? "Rule course search" : "Replacement course search", query, (q) =>
+                    replacementCourses(q),
+                ),
+            );
             replacementStatus.textContent = replacement
                 ? `Chosen version ${replacement.version} · ${courseLabel(replacement)} · ${text(replacement.credits_milli)} credits`
                 : "No replacement publication selected.";
@@ -5014,9 +5070,39 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         { class: "audit-version-card" },
                         node("p", {}, `${courseLabel(version)} · ${text(version.credits_milli)} credits`),
                         button(
-                            `${kind === "course_version" ? "Accept publication" : kind === "component_route" ? "Select course" : "Select replacement"} version ${version.version}`,
-                            () => {
+                            `${kind === "course_version" ? "Accept publication" : ["component_route", "rule_placement"].includes(kind) ? "Select course" : "Select replacement"} version ${version.version}`,
+                            async () => {
                                 replacement = version;
+                                if (kind === "rule_placement") {
+                                    selected = null;
+                                    placementGroup = null;
+                                    renderPlacementGroups();
+                                    const generation = ++ruleSelectionSerial;
+                                    let result;
+                                    try {
+                                        result = await post(`${base}placement-groups/`, {
+                                            course_id: version.course_id,
+                                            course_version_id: version.version_id,
+                                        });
+                                    } catch (error) {
+                                        if (
+                                            generation === ruleSelectionSerial &&
+                                            kind === "rule_placement" &&
+                                            replacementPanel.isConnected
+                                        )
+                                            throw error;
+                                        return;
+                                    }
+                                    if (
+                                        generation !== ruleSelectionSerial ||
+                                        kind !== "rule_placement" ||
+                                        !replacementPanel.isConnected
+                                    )
+                                        return;
+                                    selected = result;
+                                    description.textContent = `${courseLabel(result)} · Publication ${version.version}. Reviewed against ${result.requirements_name}. ${result.placement_groups.length ? "Choose a matching group below." : "No retained saved-rule group matches this publication. Choose another course or publication."}`;
+                                    renderPlacementGroups();
+                                }
                                 replacementStatus.textContent = `Chosen version ${version.version} · ${courseLabel(version)} · ${text(version.credits_milli)} credits`;
                             },
                         ),
@@ -5095,6 +5181,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     reviewed.action === "revoke"
                         ? "Revoking this preference restores normal eligible group choices under the retained sharing policy. No course is applied automatically."
                         : "Eligible work for this course will be considered only in the chosen group for this selected degree publication. Other courses retain their normal sharing rules. This does not guarantee a complete placement, override a grade/publication requirement, or change earned credits, GPA or charges. The same rule applies to eligible retake evidence; it does not select a particular attempt.",
+                ),
+            );
+        if (p.definition.kind === "placement" && p.definition.rule_ids)
+            body.append(
+                node(
+                    "p",
+                    {},
+                    `This course publication matched ${p.definition.rule_ids.length} retained rule card${p.definition.rule_ids.length === 1 ? "" : "s"} in the chosen group. This preference grants no publication acceptance or course substitution. Each actual attempt still needs to match the group's rules and grade requirements.`,
                 ),
             );
         if (p.definition.kind === "placement" && p.definition.substitution_adjustment_id)

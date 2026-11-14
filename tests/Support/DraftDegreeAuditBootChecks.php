@@ -357,3 +357,21 @@ if ($portalResponse->getStatusCode() !== 200 || ($portalProgress['mode'] ?? null
     str_contains((string) $portalResponse->getBody(), 'context_hash')) {
     throw new RuntimeException('Owned portal specialization progress lost its curated shared calculation.');
 }
+$sis->access->staff = true;
+$lookup = ['course_id' => $course['course_id'], 'course_version_id' => $course['version_id']];
+foreach ([$degreeAdjustmentPath, $adjustmentsPath] as $base) {
+    $before = $digest();
+    if ($send($base . 'placement-groups/', $lookup, false)->getStatusCode() !== 403) {
+        throw new RuntimeException('Rule placement lookup bypassed browser CSRF.');
+    }
+    $response = $send($base . 'placement-groups/', $lookup);
+    $result = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if ($response->getStatusCode() !== 200 || !array_key_exists('placement_groups', $result) || $before !== $digest()) {
+        throw new RuntimeException('Rule placement lookup lost private read-only provider resolution.');
+    }
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read'];
+if ($send($degreeAdjustmentPath . 'placement-groups/', $lookup)->getStatusCode() !== 403) {
+    throw new RuntimeException('Student-read authority granted placement approval discovery.');
+}
