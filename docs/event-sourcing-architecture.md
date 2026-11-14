@@ -4,7 +4,7 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
-The [single protected journal](event-history-foundation.md) now backs both the domain-owned port and Codefy’s framework port. The migration copies and verifies existing User/financial events before removing the old event table; original context gaps are explicit. 48 reviewed event types, with one current course format, degree-requirement schemas v1/v2/v3/v4 and independent course-group schemas v1/v2, authenticated encryption, version checks, atomic receipts and bounded replay are implemented. Academic SQL writers and full command-context attribution still require conversion. External integrity anchors, operational retention and complete projection rebuild tooling remain outstanding.
+The [single protected journal](event-history-foundation.md) now backs both the domain-owned port and Codefy’s framework port. The migration copies and verifies existing User/financial events before removing the old event table; original context gaps are explicit. 52 reviewed event types, with one current course format, degree-requirement schemas v1/v2/v3/v4 and independent course-group schemas v1/v2, authenticated encryption, version checks, atomic receipts and bounded replay are implemented. Academic SQL writers and full command-context attribution still require conversion. External integrity anchors, operational retention and complete projection rebuild tooling remain outstanding.
 
 Explicit [course subjects](course-subjects.md) now retain normalized subject identity/code/name through course publications and bound portal/report read models. Earlier subjects remain unknown.
 
@@ -70,6 +70,8 @@ Initially retain the existing single-database unit of work: event append, academ
 Read models may duplicate data for query performance, but have no independent authority to amend historical facts. Projectors are deterministic and versioned; replay performs no external calls, messages, billing or access grants. Background side effects require a durable outbox and idempotent consumers when introduced; jobs carry protected references rather than student payloads. Projections must not join mutable catalog/grade definitions to reinterpret past awards.
 
 Provide paged/bounded stream processing, projection checkpoints, failure recovery and reconciliation. Rebuild into isolated output, verify counts/balances/academic totals, then deliberately switch readers; never clear live academic/financial tables and hope a replay completes. Persist published policy inputs needed for deterministic decisions, while student degree evaluation and allocation still need their specified implementation.
+
+Student specialization choices and exact requirements assignments now share one per-pursuit aggregate and stream. Assignment retains the requirements publication and source choice decision, with a small verified current-binding projection. Later publications do not move students. Removing a choice or reviewing a changed cohort removes only its current binding, preserving the original events. Choice and assignment confirmations use the same expected-version chain, actor-bound expiring reviews and atomic audit/receipt transaction; accepted retries return the original outcome after later decisions. [The staff workflow](student-program-assignments.md#assign-published-specialization-requirements) distinguishes this retained curriculum selection from the still-pending combined degree/specialization allocator.
 
 ## Security and retention
 

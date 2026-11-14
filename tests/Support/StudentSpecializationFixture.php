@@ -61,6 +61,8 @@ final class StudentSpecializationFixture
             new \Domain\Catalog\Service\PublishedProgramReader($history, new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql)),
             new \Infrastructure\Persistence\Repository\SqlStudentSpecializationRepository($f->sql),
             $history, $access ?? $f->access, $f->transactions, $audit ?? $f->audit, $f->dropCipher, $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($f->sql),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
         );
     }
     public function policies(): \Domain\Catalog\Service\SpecializationPolicyService

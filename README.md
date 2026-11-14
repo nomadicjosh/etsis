@@ -10,7 +10,7 @@ The application is in active alpha. Breaking changes and necessary database migr
 
 Developers are welcome to try etSIS and help improve it. Use a separate local installation with fictional data: alpha code and schemas can change between updates. The walkthrough below uses the included DDEV configuration, which provides PHP 8.4, MariaDB and Node.js 24. Install Git, DDEV and a supported container provider before starting.
 
->> You will need to follow this along with the [CodefyPHP docs](https://codefyphp.com/docs/getting-started/installation/) as well for an installation with or without DDEV.
+>   You will need to follow this along with the [CodefyPHP docs](https://codefyphp.com/docs/getting-started/installation/) as well for an installation with or without DDEV.
 
 ### 1. Get the project and install dependencies
 
@@ -116,7 +116,7 @@ The staff workspace brings campus metrics, student intake, admissions, and revie
 [Course subjects](docs/course-subjects.md) explains explicit subject setup, draft assignment and historical publication references.
 [Departments and levels](docs/course-classifications.md) explains their searchable setup, combined course assignment and retained publication/report labels.
 
-[Published program details](docs/program-publication.md) explains combined program/award setup, academic-year publication and retained student cohort labels. Program publications also retain offered specializations and selection limits: institutional ceilings/defaults, program-specific restrictions and optional or required selection. Staff can [review specialization choices within a student’s pursuit](docs/student-program-assignments.md#specialization-choices-within-a-pursuit) against that retained publication. The [specialization requirements builder](docs/degree-audit-builder.md#specialization-requirements) now reuses the group composer, retained publication/cloning and independent runtime student tests. Student requirement-version assignment and combined degree/specialization evaluation remain in development.
+[Published program details](docs/program-publication.md) explains combined program/award setup, academic-year publication and retained student cohort labels. Program publications also retain offered specializations and selection limits: institutional ceilings/defaults, program-specific restrictions and optional or required selection. Staff can [review specialization choices within a student’s pursuit](docs/student-program-assignments.md#specialization-choices-within-a-pursuit) against that retained publication. The [specialization requirements builder](docs/degree-audit-builder.md#specialization-requirements) now reuses the group composer, retained publication/cloning and independent runtime student tests. Staff can [assign exact specialization requirement publications](docs/student-program-assignments.md#assign-published-specialization-requirements) from the student pursuit with reviewed history and retained version inspection. Combined degree/specialization evaluation remains in development.
 
 ## Development priorities
 

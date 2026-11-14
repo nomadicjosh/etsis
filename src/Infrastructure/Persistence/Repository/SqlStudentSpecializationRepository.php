@@ -8,6 +8,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentSpecializationRepository;
 use Domain\Student\ValueObject\StudentSpecializationSchema;
+use Domain\Student\ValueObject\StudentSpecializationRequirementsSchema;
 use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlStudentSpecializationRepository implements StudentSpecializationRepository
@@ -51,6 +52,72 @@ final readonly class SqlStudentSpecializationRepository implements StudentSpecia
             $this->sql->insert('sis_student_specializations', ['id' => $assignment->value] + $row);
         } else {
             $this->sql->update('sis_student_specializations', $row, ['id' => $assignment->value]);
+        }
+    }
+    public function requirements(EntityId $assignment): array
+    {
+        try {
+            $rows = $this->sql->rows(
+                'sis_student_specialization_requirements',
+                ['assignment_id' => $assignment->value],
+                101,
+            );
+            if (count($rows) > 100) {
+                throw new CorruptHistoryException();
+            }
+            $out = [];
+            foreach ($rows as $row) {
+                $p = StudentSpecializationRequirementsSchema::read(
+                    json_decode($row['reference_json'], true, 4, JSON_THROW_ON_ERROR),
+                );
+                if (
+                    $p['assignment_id'] !== $assignment->value || $p['decision_id'] !== $row['id'] ||
+                    $p['specialization_id'] !== $row['specialization_id'] || isset($out[$p['specialization_id']])
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $out[$p['specialization_id']] = $p;
+            }
+            ksort($out, SORT_STRING);
+            return $out;
+        } catch (\Throwable) {
+            throw new CorruptHistoryException();
+        }
+    }
+    public function projectRequirements(EntityId $assignment, array $requirements): void
+    {
+        if (count($requirements) > 100) {
+            throw new CorruptHistoryException();
+        }
+        foreach ($requirements as $specialization => $payload) {
+            $p = StudentSpecializationRequirementsSchema::read($payload);
+            if ($p['assignment_id'] !== $assignment->value || $p['specialization_id'] !== $specialization) {
+                throw new CorruptHistoryException();
+            }
+            $requirements[$specialization] = $p;
+        }
+        $before = $this->requirements($assignment);
+        foreach ($before as $specialization => $p) {
+            if (!isset($requirements[$specialization])) {
+                $this->sql->execute(
+                    'DELETE FROM sis_student_specialization_requirements WHERE id = ? AND assignment_id = ?',
+                    [$p['decision_id'], $assignment->value],
+                );
+            }
+        }
+        foreach ($requirements as $specialization => $p) {
+            if (($before[$specialization] ?? null) === $p) {
+                continue;
+            }
+            $row = ['id' => $p['decision_id'], 'assignment_id' => $assignment->value,
+                'specialization_id' => $specialization, 'reference_json' => json_encode($p, JSON_THROW_ON_ERROR)];
+            if (isset($before[$specialization])) {
+                $this->sql->update('sis_student_specialization_requirements', $row, [
+                    'assignment_id' => $assignment->value, 'specialization_id' => $specialization,
+                ]);
+            } else {
+                $this->sql->insert('sis_student_specialization_requirements', $row);
+            }
         }
     }
 }

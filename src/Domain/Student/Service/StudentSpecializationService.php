@@ -9,6 +9,8 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogYearRepository;
 use Domain\Catalog\Service\PublishedProgramReader;
 use Domain\Communications\Service\MessageCipher;
+use Domain\DegreeAudit\Repository\RequirementsRepository;
+use Domain\DegreeAudit\Service\PublishedRequirementsReader;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
@@ -23,10 +25,12 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Event\StudentSpecializationsWereSelected;
+use Domain\Student\Event\StudentSpecializationRequirementsWereAssigned;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Repository\StudentSpecializationRepository;
 use Domain\Student\StudentSpecializations;
 use Domain\Student\ValueObject\StudentSpecializationSchema;
+use Domain\Student\ValueObject\StudentSpecializationRequirementsSchema;
 use Domain\Student\ValueObject\StudentSpecializationsId;
 
 final readonly class StudentSpecializationService
@@ -44,6 +48,8 @@ final readonly class StudentSpecializationService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private RequirementsRepository $templates,
+        private PublishedRequirementsReader $requirements,
     ) {
     }
 
@@ -66,6 +72,7 @@ final readonly class StudentSpecializationService
                 'revision' => $this->revision($scope, $root, $program),
                 'program' => $program,
                 'selection' => $previous,
+                'requirements' => array_values($root->requirements()),
                 'cohort_changed' => $old !== null && !$this->sameCohort($scope, $old),
                 'can_manage' => $this->canManage($actor) && $scope['status'] === 'active' && $program !== null,
             ];
@@ -122,7 +129,7 @@ final readonly class StudentSpecializationService
             }
             $payload = StudentSpecializationSchema::read([
                 'decision_id' => EntityId::generate()->value,
-                'previous_decision_id' => $old['decision_id'] ?? null,
+                'previous_decision_id' => $root->decisionId(),
                 'student_id' => $student->value,
                 'assignment_id' => $assignment->value,
                 'program_id' => $scope['program_id'],
@@ -219,6 +226,7 @@ final readonly class StudentSpecializationService
                 [$event],
             );
             $this->selections->project($assignment, $p, $root->playhead());
+            $this->selections->projectRequirements($assignment, $root->requirements());
             $this->audit->record($actor, 'student.specializations_selected', $assignment);
             return $receipt;
         });
@@ -237,10 +245,27 @@ final readonly class StudentSpecializationService
             $page = $this->history->page($this->stream($assignment), $cursor, 10);
             $items = $publications = [];
             foreach ($page->events as $stored) {
+                if ($stored->event instanceof StudentSpecializationRequirementsWereAssigned) {
+                    $p = StudentSpecializationRequirementsSchema::read($stored->event->payload());
+                    $key = $p['program_version_id'];
+                    $publications[$key] ??= $this->publication($p, $budget) ?? throw new CorruptHistoryException();
+                    $choices = array_column($publications[$key]['specializations']['offered'], null, 'id');
+                    $choice = $choices[$p['specialization_id']] ?? throw new CorruptHistoryException();
+                    $items[] = [
+                        'kind' => 'requirements', 'specialization' => $choice,
+                        'requirements_name' => $p['requirements_name'],
+                        'requirements_version' => $p['requirements_version'],
+                        'version' => $stored->event->playhead(),
+                        'effective_at' => $stored->context->effectiveAt?->format(DATE_ATOM),
+                        'recorded_at' => $stored->recordedAt->format(DATE_ATOM),
+                    ];
+                    continue;
+                }
                 $p = StudentSpecializationSchema::read($stored->event->payload());
                 $key = $p['program_version_id'];
                 $publications[$key] ??= $this->publication($p, $budget) ?? throw new CorruptHistoryException();
                 $items[] = [
+                    'kind' => 'choices',
                     'selection' => $this->summary($p, $publications[$key]),
                     'version' => $stored->event->playhead(),
                     'effective_at' => $stored->context->effectiveAt?->format(DATE_ATOM),
@@ -251,6 +276,299 @@ final readonly class StudentSpecializationService
             $this->audit->record($actor, 'student.specializations_history_read', $assignment);
             return ['items' => $items, 'next_cursor' => $page->nextCursor];
         });
+    }
+
+    /** Paged metadata only; assignment review resolves the complete, protected publication.
+     * @return array<string,mixed> */
+    public function requirementChoices(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $specialization,
+        ?string $cursor = null,
+    ): array {
+        $actor = $this->authorize(write: true);
+        return $this->transactions->run(function () use (
+            $student,
+            $assignment,
+            $specialization,
+            $cursor,
+            $actor,
+        ): array {
+            $this->records->lock($student);
+            $budget = new HistoryReadBudget();
+            $scope = $this->scope($student, $assignment, $actor, $budget);
+            $root = $this->load($assignment, $scope, $budget)['root'];
+            $this->assertRequirementTarget($scope, $root, $specialization);
+            $program = $this->publication($scope, $budget) ?? throw new CorruptHistoryException();
+            $template = $this->templates->find(
+                new EntityId($scope['program_id']),
+                new EntityId($scope['academic_year_id']),
+                $specialization,
+            );
+            $page = $template === null ? ['items' => [], 'next_cursor' => null] :
+                $this->requirements->page(new EntityId($template['id']), $cursor);
+            foreach ($page['items'] as &$item) {
+                if ($item['specialization_id'] !== $specialization->value) {
+                    throw new CorruptHistoryException();
+                }
+                $item['assignable'] = $item['program_version_id'] === $scope['program_version_id'];
+                $item['assignment_note'] = $item['assignable']
+                    ? 'Matches this pursuit’s retained program revision.'
+                    : 'This publication belongs to a different program revision.';
+            }
+            unset($item);
+            $this->authorize($actor, true);
+            return $page + [
+                'revision' => $this->revision($scope, $root, $program),
+                'template_id' => $template['id'] ?? null,
+                'current' => $root->requirements()[$specialization->value] ?? null,
+                'specialization' => array_column(
+                    $program['specializations']['offered'],
+                    null,
+                    'id',
+                )[$specialization->value] ?? throw new CorruptHistoryException(),
+            ];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function assignedRequirements(EntityId $student, EntityId $assignment, EntityId $specialization): array
+    {
+        $actor = $this->authorize();
+        return $this->transactions->run(function () use ($student, $assignment, $specialization, $actor): array {
+            $this->records->lock($student);
+            $budget = new HistoryReadBudget();
+            $scope = $this->scope($student, $assignment, $actor, $budget);
+            $root = $this->load($assignment, $scope, $budget)['root'];
+            $selected = $root->requirements()[$specialization->value] ?? null;
+            $requirements = $selected === null ? null : $this->bindingPublication($selected, $budget);
+            $this->authorize($actor);
+            return [
+                'selection' => $selected, 'requirements' => $requirements,
+                'cohort_changed' => $selected !== null && !$this->sameCohort($scope, $selected),
+                'can_manage' => $this->canManage($actor) && $scope['status'] === 'active' &&
+                    $root->selection() !== null && $this->sameCohort($scope, $root->selection()) &&
+                    in_array($specialization->value, $root->selection()['specialization_ids'], true),
+            ];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function reviewRequirements(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $specialization,
+        string $revision,
+        EntityId $template,
+        EntityId $version,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        $actor = $this->authorize(write: true);
+        $reason = trim($reason);
+        if (
+            $reason === '' || mb_strlen($reason) > 1000 || !mb_check_encoding($reason, 'UTF-8') ||
+            preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $reason)
+        ) {
+            throw new ValidationException([
+                ['field' => 'reason', 'message' => 'Enter a reason up to 1,000 characters.'],
+            ]);
+        }
+        return $this->transactions->run(function () use (
+            $student,
+            $assignment,
+            $specialization,
+            $revision,
+            $template,
+            $version,
+            $reason,
+            $actor,
+        ): array {
+            $this->records->lock($student);
+            $budget = new HistoryReadBudget();
+            $scope = $this->scope($student, $assignment, $actor, $budget);
+            $root = $this->load($assignment, $scope, $budget)['root'];
+            $this->assertRequirementTarget($scope, $root, $specialization);
+            $program = $this->publication($scope, $budget) ?? throw new CorruptHistoryException();
+            if (!hash_equals($this->revision($scope, $root, $program), $revision)) {
+                throw new ConcurrentModificationException('Reload the specialization before reviewing requirements.');
+            }
+            $requirements = $this->requirements->version($template, $version, $budget);
+            $this->assertRequirementPublication($scope, $specialization, $requirements);
+            $before = $root->requirements()[$specialization->value] ?? null;
+            if (
+                $before !== null && $before['template_id'] === $template->value &&
+                $before['requirements_version_id'] === $version->value
+            ) {
+                throw new ValidationException([
+                    ['field' => 'requirements_version_id', 'message' => 'This publication is already assigned.'],
+                ]);
+            }
+            $p = StudentSpecializationRequirementsSchema::read([
+                'decision_id' => EntityId::generate()->value,
+                'previous_decision_id' => $root->decisionId(),
+                'student_id' => $student->value, 'assignment_id' => $assignment->value,
+                'program_id' => $scope['program_id'], 'academic_year_id' => $scope['academic_year_id'],
+                'program_version_id' => $scope['program_version_id'],
+                'cohort_binding_revision' => $scope['cohort_binding_revision'],
+                'specialization_id' => $specialization->value,
+                'selection_decision_id' => ($root->selection() ?? throw new CorruptHistoryException())['decision_id'],
+                'template_id' => $template->value, 'requirements_version_id' => $version->value,
+                'requirements_version' => $requirements['version'],
+                'requirements_name' => $requirements['definition']['name'],
+            ]);
+            $data = ['purpose' => 'student-specialization-requirements', 'actor_id' => $actor->value,
+                'revision' => $revision, 'expected_version' => $root->playhead(), 'payload' => $p,
+                'reason' => $reason, 'expires_at' => $this->clock->now()->getTimestamp() + 1200];
+            $this->authorize($actor, true);
+            return ['before' => $before, 'requirements' => $requirements, 'reason' => $reason,
+                'review_token' => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function assignRequirements(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $specialization,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        $actor = $this->authorize(write: true);
+        try {
+            if (strlen($token) > 32768) {
+                throw new \InvalidArgumentException();
+            }
+            $data = json_decode($this->cipher->open($token), true, 12, JSON_THROW_ON_ERROR);
+            if (
+                !is_array($data) || count($data) !== 7 ||
+                ($data['purpose'] ?? null) !== 'student-specialization-requirements' ||
+                ($data['actor_id'] ?? null) !== $actor->value || !is_string($data['revision'] ?? null) ||
+                !is_int($data['expected_version'] ?? null) || $data['expected_version'] < 1 ||
+                !is_string($data['reason'] ?? null) || !is_int($data['expires_at'] ?? null) ||
+                !is_array($data['payload'] ?? null)
+            ) {
+                throw new \InvalidArgumentException();
+            }
+            $p = StudentSpecializationRequirementsSchema::read($data['payload']);
+            if (
+                $p['student_id'] !== $student->value || $p['assignment_id'] !== $assignment->value ||
+                $p['specialization_id'] !== $specialization->value
+            ) {
+                throw new \InvalidArgumentException();
+            }
+        } catch (\Throwable) {
+            throw new ValidationException([
+                ['field' => 'review_token', 'message' => 'Review the requirements assignment again.'],
+            ]);
+        }
+        return $this->transactions->run(function () use (
+            $student,
+            $assignment,
+            $specialization,
+            $actor,
+            $data,
+            $p,
+        ): array {
+            $this->records->lock($student);
+            $budget = new HistoryReadBudget();
+            $scope = $this->scope($student, $assignment, $actor, $budget);
+            $loaded = $this->load($assignment, $scope, $budget, $data);
+            if ($loaded['receipt'] !== null) {
+                $this->authorize($actor, true);
+                return $loaded['receipt'];
+            }
+            $root = $loaded['root'];
+            $this->assertRequirementTarget($scope, $root, $specialization);
+            $program = $this->publication($scope, $budget) ?? throw new CorruptHistoryException();
+            if (
+                $data['expires_at'] <= $this->clock->now()->getTimestamp() ||
+                $root->playhead() !== $data['expected_version'] ||
+                !hash_equals($data['revision'], $this->revision($scope, $root, $program))
+            ) {
+                throw new ConcurrentModificationException('The requirements review expired or changed. Review again.');
+            }
+            $requirements = $this->bindingPublication($p, $budget);
+            $this->assertRequirementPublication($scope, $specialization, $requirements);
+            $event = StudentSpecializationRequirementsWereAssigned::occur($this->stream($assignment)->aggregateId, $p, [
+                '__aggregate_type' => 'student_specializations',
+            ])->withPlayhead($root->playhead() + 1);
+            $root->acceptHistorical($event);
+            $this->authorize($actor, true);
+            if ($data['expires_at'] <= $this->clock->now()->getTimestamp()) {
+                throw new ConcurrentModificationException('The requirements review expired. Review again.');
+            }
+            $operation = new EntityId($p['decision_id']);
+            $receipt = $this->history->append(
+                $this->stream($assignment),
+                $operation,
+                $data['expected_version'],
+                new EventContext(
+                    $actor,
+                    $this->clock->now(),
+                    $operation,
+                    new EntityId($p['previous_decision_id']),
+                    $data['reason'],
+                ),
+                [$event]
+            );
+            $this->selections->project(
+                $assignment,
+                $root->selection() ?? throw new CorruptHistoryException(),
+                $root->playhead(),
+            );
+            $this->selections->projectRequirements($assignment, $root->requirements());
+            $this->audit->record($actor, 'student.specialization_requirements_assigned', $assignment);
+            return $receipt;
+        });
+    }
+
+    /** @param array<string,mixed> $scope */
+    private function assertRequirementTarget(array $scope, StudentSpecializations $root, EntityId $specialization): void
+    {
+        $selection = $root->selection();
+        if (
+            $scope['status'] !== 'active' || $selection === null || !$this->sameCohort($scope, $selection) ||
+            !in_array($specialization->value, $selection['specialization_ids'], true)
+        ) {
+            throw new ValidationException([['field' => 'specialization_id', 'message' =>
+                'Use an active pursuit and review its selected specializations against the current cohort first.']]);
+        }
+    }
+    /** @param array<string,mixed> $scope
+     * @param array<string,mixed> $requirements */
+    private function assertRequirementPublication(array $scope, EntityId $specialization, array $requirements): void
+    {
+        if (
+            $requirements['program_id'] !== $scope['program_id'] ||
+            $requirements['academic_year_id'] !== $scope['academic_year_id'] ||
+            $requirements['program_version_id'] !== $scope['program_version_id'] ||
+            ($requirements['specialization_id'] ?? null) !== $specialization->value ||
+            $requirements['schema_version'] !== 4
+        ) {
+            throw new ValidationException([['field' => 'requirements_version_id', 'message' =>
+                'Choose published requirements for this specialization and this pursuit’s retained program revision.',
+            ]]);
+        }
+    }
+    /** @param array<string,mixed> $p
+     * @return array<string,mixed> */
+    private function bindingPublication(array $p, HistoryReadBudget $budget): array
+    {
+        $requirements = $this->requirements->version(
+            new EntityId($p['template_id']),
+            new EntityId($p['requirements_version_id']),
+            $budget,
+        );
+        if (
+            $requirements['program_id'] !== $p['program_id'] ||
+            $requirements['academic_year_id'] !== $p['academic_year_id'] ||
+            $requirements['program_version_id'] !== $p['program_version_id'] ||
+            ($requirements['specialization_id'] ?? null) !== $p['specialization_id'] ||
+            $requirements['version'] !== $p['requirements_version'] ||
+            $requirements['definition']['name'] !== $p['requirements_name']
+        ) {
+            throw new CorruptHistoryException();
+        }
+        return $requirements;
     }
 
     private function authorize(?EntityId $actor = null, bool $write = false): EntityId
@@ -399,13 +717,17 @@ final readonly class StudentSpecializationService
             $page = $budget->page($this->history, $this->stream($assignment), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
-                $p = $root->selection() ?? throw new CorruptHistoryException();
+                $p = $stored->event instanceof StudentSpecializationRequirementsWereAssigned
+                ? StudentSpecializationRequirementsSchema::read($stored->event->payload())
+                : StudentSpecializationSchema::read($stored->event->payload());
                 if ($p['student_id'] !== $scope['student_id'] || $p['program_id'] !== $scope['program_id']) {
                     throw new CorruptHistoryException();
                 }
                 if ($review !== null && $p['decision_id'] === $review['payload']['decision_id']) {
                     if (
-                        $p !== StudentSpecializationSchema::read($review['payload']) ||
+                        $p !== ($stored->event instanceof StudentSpecializationRequirementsWereAssigned
+                            ? StudentSpecializationRequirementsSchema::read($review['payload'])
+                            : StudentSpecializationSchema::read($review['payload'])) ||
                         $stored->context->actor?->value !== $review['actor_id'] ||
                         $stored->context->reason !== $review['reason'] ||
                         $stored->event->playhead() !== $review['expected_version'] + 1
@@ -421,7 +743,10 @@ final readonly class StudentSpecializationService
         $expected = $root->selection() === null ? null : [
             'payload' => $root->selection(), 'position' => $root->playhead(),
         ];
-        if ($this->selections->get($assignment) !== $expected) {
+        if (
+            $this->selections->get($assignment) !== $expected ||
+            $this->selections->requirements($assignment) !== $root->requirements()
+        ) {
             throw new CorruptHistoryException();
         }
         return ['root' => $root, 'receipt' => $receipt];

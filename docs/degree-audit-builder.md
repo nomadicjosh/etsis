@@ -29,7 +29,7 @@ All authoring, publication and cloning require `sis:catalog:manage`. Student tes
 
 The configured database was inspected before the additive migration. It contained one degree draft and no requirement-publication streams. The migration was applied with before/after checks confirming that the draft, academic history, student selections, program setup and access grants were unchanged. The new table compiles for the framework's five database dialects; SQLite fixtures and the local MariaDB migration were executed. Live acceptance on the remaining engines is still required.
 
-Reviewed selection of an exact specialization requirement publication for a student, combined degree/specialization allocation, cross-component sharing/exclusions and specialization-scoped exception effects remain subsequent work. This authoring milestone must not be presented as complete integrated degree evaluation.
+Staff can now [assign an exact published specialization requirements version](student-program-assignments.md#assign-published-specialization-requirements) from the student pursuit, with student-read and degree-assignment authority. The selected publication must match that pursuit’s retained program revision, specialization and academic year; later publications leave it unchanged. This uses the existing specialization history and a reconstructible binding projection. Combined degree/specialization allocation, cross-component sharing/exclusions and specialization-scoped exception effects remain subsequent work. Independent runtime trials and retained assignments do not yet constitute complete integrated degree evaluation.
 
 ## Course group builder
 

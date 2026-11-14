@@ -50,6 +50,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class => [
+                'type' => 'student_specializations', 'root' => \Domain\Student\StudentSpecializations::class,
+                'fields' => \Domain\Student\ValueObject\StudentSpecializationRequirementsSchema::FIELDS,
+            ],
             \Domain\Student\Event\StudentSpecializationsWereSelected::class => [
                 'type' => 'student_specializations', 'root' => \Domain\Student\StudentSpecializations::class,
                 'fields' => \Domain\Student\ValueObject\StudentSpecializationSchema::FIELDS,
@@ -450,7 +454,11 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             if ($stream->type === 'student_specializations') {
-                \Domain\Student\ValueObject\StudentSpecializationSchema::read($payload);
+                if ($class === \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class) {
+                    \Domain\Student\ValueObject\StudentSpecializationRequirementsSchema::read($payload);
+                } else {
+                    \Domain\Student\ValueObject\StudentSpecializationSchema::read($payload);
+                }
                 if ($payload['assignment_id'] !== (string) $stream->aggregateId) {
                     throw new CorruptHistoryException();
                 }

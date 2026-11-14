@@ -9,6 +9,8 @@ async function fixture(
         cohortChanged = false,
         unknown = false,
         reject = false,
+        rejectRequirements = false,
+        assigned = false,
     } = {},
 ) {
     const calls = [],
@@ -42,6 +44,35 @@ async function fixture(
     });
     let selected = summary([offered[0].id]),
         prepared = null;
+    const requirementsPath = `${base}${offered[0].id}/requirements/`;
+    const requirements = {
+        version_id: id(70),
+        version: 1,
+        specialization: offered[0],
+        program_publication: {
+            ...program,
+            definition: {
+                ...program.definition,
+                classifications: {
+                    department: null,
+                    academic_level: null,
+                    award: null,
+                },
+            },
+        },
+        definition: {
+            name: "Fictional <b>Art</b> requirements",
+            min_credits_milli: 6000,
+            min_resident_milli: 3000,
+            groups: [],
+            policies: { group_reuse: "one_group" },
+        },
+    };
+    const reference = {
+        requirements_name: requirements.definition.name,
+        requirements_version: 1,
+    };
+    let binding = assigned ? reference : null;
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route("**/sis/**", async (route) => {
         const path = new URL(route.request().url()).pathname;
@@ -104,7 +135,59 @@ async function fixture(
                 ],
                 next_after: null,
             };
-        else if (path === base)
+        else if (path === requirementsPath)
+            result = {
+                selection: binding,
+                requirements: binding ? requirements : null,
+                cohort_changed: cohortChanged,
+                can_manage: !readOnly && !cohortChanged,
+            };
+        else if (path === requirementsPath + "choices/")
+            result = {
+                specialization: offered[0],
+                template_id: id(60),
+                revision: "requirements-revision",
+                current: binding,
+                next_cursor: data.cursor ? null : "requirements-page-2",
+                items: data.cursor
+                    ? []
+                    : [
+                          {
+                              name: requirements.definition.name,
+                              version: 1,
+                              version_id: id(70),
+                              assignable: true,
+                              assignment_note:
+                                  "Matches this pursuit’s retained program revision.",
+                          },
+                          {
+                              name: "Different program revision",
+                              version: 2,
+                              version_id: id(71),
+                              assignable: false,
+                              assignment_note:
+                                  "This publication belongs to a different program revision.",
+                          },
+                      ],
+            };
+        else if (path === requirementsPath + "review/") {
+            if (rejectRequirements)
+                return route.fulfill({
+                    status: 409,
+                    json: {
+                        error: "The requirements changed. Review again.",
+                    },
+                });
+            result = {
+                before: binding,
+                requirements,
+                reason: data.reason,
+                review_token: "fictional-requirements-review",
+            };
+        } else if (path === requirementsPath + "commit/") {
+            binding = reference;
+            result = { operation_id: id(90) };
+        } else if (path === base)
             result = {
                 assignment_id: assignment,
                 scope: { status: readOnly ? "closed" : "active" },
@@ -166,7 +249,7 @@ async function fixture(
     await page
         .getByRole("button", { name: "Specializations", exact: true })
         .click();
-    return { calls, errors, offered, base };
+    return { calls, errors, offered, base, requirementsPath };
 }
 
 test("specialization selection preserves checked choices through search, pages and accessible review", async ({
@@ -199,7 +282,12 @@ test("specialization selection preserves checked choices through search, pages a
     const scan = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
         .analyze();
-    expect(scan.violations.map((item) => item.id)).toEqual([]);
+    expect(
+        scan.violations.map((item) => ({
+            id: item.id,
+            targets: item.nodes.map((n) => n.target),
+        })),
+    ).toEqual([]);
     expect(
         await page.evaluate(
             () => document.documentElement.scrollWidth <= innerWidth,
@@ -313,4 +401,207 @@ test("rejected selection keeps the draft and closed or unknown pursuits explain 
         }),
     ).toBeVisible();
     await expect(page.getByRole("checkbox")).toHaveCount(0);
+});
+
+test("requirements assignment retains the reviewed version through inspection, pagination and keyboard confirmation", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await page
+        .getByRole("button", { name: "Requirements for CHOICE.1", exact: true })
+        .click();
+    await expect(
+        page
+            .getByRole("status")
+            .filter({ hasText: "No requirements publication" }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", {
+            name: "Choose a requirements publication",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page.getByRole("button", { name: "Review publication 2", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByText(
+            "This publication belongs to a different program revision.",
+            { exact: true },
+        ),
+    ).toBeVisible();
+    await page
+        .getByRole("button", { name: "Review publication 1", exact: true })
+        .click();
+    expect(
+        f.calls.filter((call) => call.path === f.requirementsPath + "review/"),
+    ).toHaveLength(0);
+    const reason = page.getByLabel("Reason for assigning these requirements", {
+        exact: true,
+    });
+    await reason.fill("Fictional registrar assignment.");
+    await page
+        .getByRole("button", { name: "Next requirements page", exact: true })
+        .click();
+    await expect(reason).toHaveValue("Fictional registrar assignment.");
+    await page
+        .getByRole("button", {
+            name: "Previous requirements page",
+            exact: true,
+        })
+        .click();
+    await expect(reason).toHaveValue("Fictional registrar assignment.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const scan = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(scan.violations.map((item) => item.id)).toEqual([]);
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+    ).toBe(true);
+    await page
+        .getByRole("button", { name: "Review publication 1", exact: true })
+        .click();
+    await expect(page.locator(":focus")).toHaveText(
+        "Fictional <b>Art</b> requirements",
+    );
+    await page
+        .getByRole("button", {
+            name: "Inspect reviewed requirements",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page
+            .getByRole("dialog", { name: "Requirements preview", exact: true })
+            .getByRole("heading", {
+                name: "Fictional <b>Art</b> requirements",
+                exact: true,
+            }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("dialog", { name: "Requirements preview", exact: true }),
+    ).toHaveClass(/audit-studio/);
+    await page
+        .getByRole("button", { name: "Back to builder", exact: true })
+        .click();
+    await expect(
+        page.getByRole("dialog", { name: "Requirements preview", exact: true }),
+    ).toHaveCount(0);
+    await page
+        .getByRole("button", {
+            name: "Confirm requirements assignment",
+            exact: true,
+        })
+        .focus();
+    await page.keyboard.press("Enter");
+    await expect(
+        page
+            .getByRole("status")
+            .filter({ hasText: "Requirements assignment recorded." }),
+    ).toBeVisible();
+    await expect(
+        page.getByText(
+            "Fictional <b>Art</b> requirements · Assigned publication 1",
+            { exact: true },
+        ),
+    ).toBeVisible();
+    await page
+        .getByRole("button", {
+            name: "Inspect assigned requirements",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page
+            .getByRole("dialog", { name: "Requirements preview", exact: true })
+            .getByRole("heading", {
+                name: "Fictional <b>Art</b> requirements",
+                exact: true,
+            }),
+    ).toBeVisible();
+    expect(
+        f.calls.filter((call) => call.path === f.requirementsPath + "review/"),
+    ).toHaveLength(1);
+    expect(
+        f.calls.find((call) => call.path === f.requirementsPath + "commit/")
+            .data,
+    ).toEqual({ review_token: "fictional-requirements-review" });
+    expect(f.calls.every((call) => call.csrf === "fictional-test-token")).toBe(
+        true,
+    );
+    expect(
+        await page.evaluate(() => [localStorage.length, sessionStorage.length]),
+    ).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("requirements review failures preserve the reason and earlier cohort assignments remain readable", async ({
+    page,
+}) => {
+    const f = await fixture(page, { rejectRequirements: true });
+    await page
+        .getByRole("button", { name: "Requirements for CHOICE.1", exact: true })
+        .click();
+    await page
+        .getByRole("button", {
+            name: "Choose a requirements publication",
+            exact: true,
+        })
+        .click();
+    await page
+        .getByLabel("Reason for assigning these requirements", { exact: true })
+        .fill("Keep the assignment reason.");
+    await page
+        .getByRole("button", { name: "Review publication 1", exact: true })
+        .click();
+    await expect(
+        page
+            .getByRole("alert")
+            .filter({ hasText: "The requirements changed." }),
+    ).toBeVisible();
+    await expect(
+        page.getByLabel("Reason for assigning these requirements", {
+            exact: true,
+        }),
+    ).toHaveValue("Keep the assignment reason.");
+    expect(
+        f.calls.some((call) => call.path === f.requirementsPath + "commit/"),
+    ).toBe(false);
+    expect(f.errors).toEqual([]);
+    await page.unroute("**/sis/**");
+    const readOnly = await fixture(page, {
+        readOnly: true,
+        cohortChanged: true,
+        assigned: true,
+    });
+    await page
+        .getByRole("button", { name: "Requirements for CHOICE.1", exact: true })
+        .click();
+    await expect(
+        page.getByRole("alert").filter({ hasText: "The cohort changed" }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("button", {
+            name: "Choose a requirements publication",
+            exact: true,
+        }),
+    ).toHaveCount(0);
+    await page
+        .getByRole("button", {
+            name: "Inspect assigned requirements",
+            exact: true,
+        })
+        .click();
+    await expect(
+        page
+            .getByRole("dialog", { name: "Requirements preview", exact: true })
+            .getByRole("heading", {
+                name: "Fictional <b>Art</b> requirements",
+                exact: true,
+            }),
+    ).toBeVisible();
+    expect(readOnly.errors).toEqual([]);
 });

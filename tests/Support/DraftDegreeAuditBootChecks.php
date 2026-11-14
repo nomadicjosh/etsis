@@ -166,7 +166,7 @@ if ($send($specializationPath . 'save/', ['revision' => 0, 'definition' => $f->f
 }
 $programs = $app->make(\Domain\Catalog\Service\ProgramPublicationService::class);
 $programReview = $programs->review($sis->program, $f->f->year, 'Fictional offered program approval.');
-$programs->publish($sis->program, $programReview['review_token']);
+$programReceipt = $programs->publish($sis->program, $programReview['review_token']);
 $reviewResponse = $send($specializationPath . 'review/', ['reason' => 'Fictional protected specialization publication.']);
 $specializationReview = json_decode((string) $reviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if ($reviewResponse->getStatusCode() !== 200 || ($specializationReview['specialization']['code'] ?? null) !== 'DATA') {
@@ -198,6 +198,68 @@ if ($send($specializationBase . 'page/')->getStatusCode() !== 403 ||
     $send($specializationBase . 'open/', $openData)->getStatusCode() !== 403 ||
     $send($specializationPath, [], method: 'GET')->getStatusCode() !== 403) {
     throw new RuntimeException('Student-read authority exposed specialization authoring.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+
+// Bind the fictional pursuit explicitly before assigning a specialization from this retained program.
+$catalogs = new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($sis->sql);
+$sis->transactions->run(static function () use ($sis, $f, $catalogs, $programReceipt): void {
+    $sis->sql->lock('sis_students', $f->student->value, 'id');
+    $catalogs->bind($f->assignment, new \Domain\Shared\ValueObject\EntityId($programReceipt['operation_id']),
+        $catalogs->binding($f->assignment)['version']);
+});
+$choicePath = '/sis/students/' . $f->student->value . '/programs/' . $f->assignment->value . '/specializations/';
+$view = json_decode((string) $send($choicePath, [], method: 'GET')->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$choiceReview = json_decode((string) $send($choicePath . 'review/', [
+    'revision' => $view['revision'], 'specialization_ids' => [$specialization['id']], 'reason' => 'Fictional student choice.',
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($send($choicePath . 'commit/', ['review_token' => $choiceReview['review_token']])->getStatusCode() !== 200) {
+    throw new RuntimeException('Student specialization selection did not resolve through the actual providers.');
+}
+$assignmentPath = $choicePath . $specialization['id'] . '/requirements/';
+if ($send($assignmentPath . 'choices/', [], false)->getStatusCode() !== 403) {
+    throw new RuntimeException('The requirements chooser bypassed browser CSRF.');
+}
+$chooserResponse = $send($assignmentPath . 'choices/');
+$chooser = json_decode((string) $chooserResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($chooserResponse->getStatusCode() !== 200 || ($chooser['items'][0]['assignable'] ?? false) !== true) {
+    throw new RuntimeException('The requirements chooser did not resolve a matching retained publication.');
+}
+$requirementData = ['revision' => $chooser['revision'], 'template_id' => $opened['id'],
+    'requirements_version_id' => $confirmed['operation_id'], 'reason' => 'Fictional protected requirements assignment.'];
+if ($send($assignmentPath . 'review/', $requirementData, false)->getStatusCode() !== 403) {
+    throw new RuntimeException('Requirements review bypassed browser CSRF.');
+}
+$assignmentReviewResponse = $send($assignmentPath . 'review/', $requirementData);
+$assignmentReview = json_decode((string) $assignmentReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($assignmentReviewResponse->getStatusCode() !== 200 || !isset($assignmentReview['review_token'])) {
+    throw new RuntimeException('Requirements review did not resolve through the actual providers.');
+}
+$commitData = ['review_token' => $assignmentReview['review_token']];
+if ($send($assignmentPath . 'commit/', $commitData, false)->getStatusCode() !== 403) {
+    throw new RuntimeException('Requirements confirmation bypassed browser CSRF.');
+}
+$accepted = $send($assignmentPath . 'commit/', $commitData);
+if ($accepted->getStatusCode() !== 200 || (string) $send($assignmentPath . 'commit/', $commitData)->getBody() !== (string) $accepted->getBody()) {
+    throw new RuntimeException('Requirements confirmation lost its original retry result.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read'];
+$read = $send($assignmentPath, [], method: 'GET');
+$assigned = json_decode((string) $read->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($read->getStatusCode() !== 200 || ($assigned['requirements']['version_id'] ?? null) !== $confirmed['operation_id'] ||
+    ($assigned['can_manage'] ?? true) !== false) {
+    throw new RuntimeException('Read-only student staff could not inspect the exact assigned requirements.');
+}
+foreach (['choices/' => [], 'review/' => $requirementData, 'commit/' => $commitData] as $suffix => $data) {
+    if ($send($assignmentPath . $suffix, $data)->getStatusCode() !== 403) {
+        throw new RuntimeException('Read-only student staff assigned specialization requirements.');
+    }
+}
+$sis->access->grants = ['sis:catalog:manage', 'sis:degree-audit:assign'];
+if ($send($assignmentPath, [], method: 'GET')->getStatusCode() !== 403) {
+    throw new RuntimeException('Catalog/assignment authority bypassed private student-read permissions.');
 }
 $sis->access->staff = true;
 $sis->access->grants = [];

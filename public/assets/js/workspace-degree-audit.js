@@ -5289,5 +5289,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         render();
     }
-    return { launch, library, studentRequirements, gradingScale };
+    return {
+        launch,
+        library,
+        studentRequirements,
+        gradingScale,
+        inspectRequirements: (item, back) =>
+            preview(item, "degree", () => {
+                close();
+                return back();
+            }),
+    };
 };

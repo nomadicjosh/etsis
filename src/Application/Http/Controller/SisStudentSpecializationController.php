@@ -60,4 +60,55 @@ final readonly class SisStudentSpecializationController
             FormInput::from($request)->optionalText('cursor', 16384),
         ));
     }
+    public function requirements(string $student, string $assignment, string $specialization): ResponseInterface
+    {
+        return new JsonResponse($this->service->assignedRequirements(
+            new EntityId($student),
+            new EntityId($assignment),
+            new EntityId($specialization),
+        ));
+    }
+    public function requirementChoices(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+        string $specialization,
+    ): ResponseInterface {
+        return new JsonResponse($this->service->requirementChoices(
+            new EntityId($student),
+            new EntityId($assignment),
+            new EntityId($specialization),
+            FormInput::from($request)->optionalText('cursor', 16384),
+        ));
+    }
+    public function requirementReview(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+        string $specialization,
+    ): ResponseInterface {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reviewRequirements(
+            new EntityId($student),
+            new EntityId($assignment),
+            new EntityId($specialization),
+            $f->text('revision', 64),
+            $f->id('template_id'),
+            $f->id('requirements_version_id'),
+            $f->bodyText('reason'),
+        ));
+    }
+    public function requirementCommit(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+        string $specialization,
+    ): ResponseInterface {
+        return new JsonResponse($this->service->assignRequirements(
+            new EntityId($student),
+            new EntityId($assignment),
+            new EntityId($specialization),
+            FormInput::from($request)->text('review_token', 32768),
+        ));
+    }
 }

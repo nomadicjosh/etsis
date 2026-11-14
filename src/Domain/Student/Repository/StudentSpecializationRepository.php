@@ -13,4 +13,9 @@ interface StudentSpecializationRepository
     /** Caller holds the student lock in the event/audit transaction.
      * @param array<string,mixed> $payload */
     public function project(EntityId $assignment, array $payload, int $position): void;
+    /** @return array<string,array<string,mixed>> */
+    public function requirements(EntityId $assignment): array;
+    /** Caller owns the same student lock and journal transaction as project().
+     * @param array<string,array<string,mixed>> $requirements */
+    public function projectRequirements(EntityId $assignment, array $requirements): void;
 }

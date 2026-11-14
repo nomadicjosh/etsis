@@ -993,7 +993,7 @@ window.createWorkspaceStudents = function (ui) {
                 active: record.active,
             });
     }
-    function specializationSummary(selection, title) {
+    function specializationSummary(selection, title, action = null) {
         const section = node(
             "section",
             { class: "surface p-3 my-3", "aria-label": title },
@@ -1022,6 +1022,10 @@ window.createWorkspaceStudents = function (ui) {
                     `${choice.code} — ${choice.title}`,
                 ),
             );
+            if (action)
+                section.append(
+                    node("div", { class: "inline-actions" }, action(choice)),
+                );
             if (choice.description)
                 section.append(
                     node(
@@ -1067,7 +1071,14 @@ window.createWorkspaceStudents = function (ui) {
                 {},
                 "Choose from this pursuit’s retained program publication. Later catalog edits preserve these choices. Degree requirements, credits and charges remain separate.",
             ),
-            specializationSummary(data.selection, "Recorded selection"),
+            specializationSummary(
+                data.selection,
+                "Recorded selection",
+                (choice) =>
+                    button(`Requirements for ${choice.code}`, () =>
+                        specializationRequirements(path, choice, reopen),
+                    ),
+            ),
             button("Specialization history", () =>
                 specializationHistory(path, reopen),
             ),
@@ -1336,10 +1347,28 @@ window.createWorkspaceStudents = function (ui) {
             );
         for (const item of data.items) {
             body.append(
-                specializationSummary(
-                    item.selection,
-                    `Decision ${item.version}`,
-                ),
+                item.kind === "requirements"
+                    ? node(
+                          "section",
+                          {
+                              class: "surface p-3 my-3",
+                              "aria-label": `Decision ${item.version}`,
+                          },
+                          node(
+                              "h3",
+                              { class: "h5" },
+                              `Requirements assigned · ${item.specialization.code} — ${item.specialization.title}`,
+                          ),
+                          node(
+                              "p",
+                              {},
+                              `${item.requirements_name} · Publication ${item.requirements_version}`,
+                          ),
+                      )
+                    : specializationSummary(
+                          item.selection,
+                          `Decision ${item.version}`,
+                      ),
                 node(
                     "p",
                     {},
@@ -1366,6 +1395,257 @@ window.createWorkspaceStudents = function (ui) {
                         ...previous,
                         cursor,
                     ]),
+                ),
+            );
+        body.append(navigation);
+    }
+    async function specializationRequirements(base, choice, back, notice = "") {
+        const path = `${base}${choice.id}/requirements/`;
+        const data = await request(path);
+        const body = openDrawer(
+            "Specialization requirements",
+            "RETAINED STUDENT REQUIREMENTS",
+        );
+        const reopen = (message = "") =>
+            specializationRequirements(base, choice, back, message);
+        body.append(
+            node("h3", { class: "h5" }, `${choice.code} — ${choice.title}`),
+            button("Back to specialization choices", back),
+            node(
+                "p",
+                {},
+                "Assign an exact published requirements version. Later publications do not replace it. Degree requirements, earned work and financial records stay connected to their existing decisions.",
+            ),
+        );
+        if (notice)
+            body.append(
+                node(
+                    "p",
+                    { role: "status", class: "alert alert-success" },
+                    notice,
+                ),
+            );
+        if (data.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { role: "alert", class: "alert alert-warning" },
+                    "The cohort changed after this assignment. Earlier requirements remain retained. Review the specialization choices against the current cohort before assigning new requirements.",
+                ),
+            );
+        if (data.selection)
+            body.append(
+                node(
+                    "p",
+                    { class: "fw-semibold" },
+                    `${data.selection.requirements_name} · Assigned publication ${data.selection.requirements_version}`,
+                ),
+                button("Inspect assigned requirements", () =>
+                    ui
+                        .degreeAudit()
+                        .inspectRequirements(data.requirements, reopen),
+                ),
+            );
+        else
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    "No requirements publication has been assigned to this specialization.",
+                ),
+            );
+        if (data.can_manage)
+            body.append(
+                button(
+                    "Choose a requirements publication",
+                    () => requirementVersions(path, reopen),
+                    "btn-primary",
+                ),
+            );
+        else
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "A new assignment needs an active pursuit, current cohort selection and degree-assignment permission.",
+                ),
+            );
+    }
+    async function requirementVersions(
+        path,
+        back,
+        cursor = null,
+        previous = [],
+        reason = "",
+    ) {
+        const data = await request(path + "choices/", "POST", { cursor });
+        const body = openDrawer(
+            "Choose specialization requirements",
+            "EXACT PUBLISHED VERSION",
+        );
+        body.append(
+            node(
+                "h3",
+                { class: "h5" },
+                `${data.specialization.code} — ${data.specialization.title}`,
+            ),
+            button("Back to assigned requirements", back),
+        );
+        const input = node("textarea", {
+            id: "specialization-requirement-reason",
+            class: "form-control",
+            maxlength: "1000",
+            rows: "3",
+            required: true,
+        });
+        input.value = reason;
+        body.append(
+            node(
+                "label",
+                { for: input.id, class: "form-label" },
+                "Reason for assigning these requirements",
+            ),
+            input,
+        );
+        if (!data.items.length)
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    "No requirements are published for this specialization and academic year. A catalog author can build and publish them from Program specializations.",
+                ),
+            );
+        for (const version of data.items) {
+            const card = node(
+                "section",
+                { class: "surface p-3 my-3" },
+                node(
+                    "h3",
+                    { class: "h5" },
+                    `${version.name} · Publication ${version.version}`,
+                ),
+                node("p", {}, version.assignment_note),
+            );
+            if (version.assignable)
+                card.append(
+                    button(
+                        `Review publication ${version.version}`,
+                        async () => {
+                            if (!input.reportValidity()) return;
+                            const note = input.value;
+                            const reviewed = await request(
+                                path + "review/",
+                                "POST",
+                                {
+                                    revision: data.revision,
+                                    template_id: data.template_id,
+                                    requirements_version_id: version.version_id,
+                                    reason: note,
+                                },
+                            );
+                            if (!body.isConnected) return;
+                            const restore = () =>
+                                requirementVersions(
+                                    path,
+                                    back,
+                                    cursor,
+                                    previous,
+                                    note,
+                                );
+                            function showReview() {
+                                const confirm = openDrawer(
+                                    "Confirm specialization requirements",
+                                    "REVIEW BEFORE RECORDING",
+                                );
+                                confirm.append(
+                                    node(
+                                        "h3",
+                                        { class: "h5" },
+                                        reviewed.requirements.definition.name,
+                                    ),
+                                    node(
+                                        "p",
+                                        {},
+                                        `${data.specialization.code} — ${data.specialization.title} · Publication ${reviewed.requirements.version}`,
+                                    ),
+                                    node(
+                                        "p",
+                                        {},
+                                        reviewed.before
+                                            ? `Previously assigned: ${reviewed.before.requirements_name} · Publication ${reviewed.before.requirements_version}`
+                                            : "No earlier requirements publication is assigned.",
+                                    ),
+                                    node("p", {}, reviewed.reason),
+                                    node(
+                                        "p",
+                                        {},
+                                        "Confirm within 20 minutes. This records the selected requirements; combined degree and specialization allocation remains in development.",
+                                    ),
+                                    button(
+                                        "Inspect reviewed requirements",
+                                        () =>
+                                            ui
+                                                .degreeAudit()
+                                                .inspectRequirements(
+                                                    reviewed.requirements,
+                                                    showReview,
+                                                ),
+                                    ),
+                                    button(
+                                        "Revise requirements assignment",
+                                        restore,
+                                    ),
+                                    button(
+                                        "Confirm requirements assignment",
+                                        async () => {
+                                            await request(
+                                                path + "commit/",
+                                                "POST",
+                                                {
+                                                    review_token:
+                                                        reviewed.review_token,
+                                                },
+                                            );
+                                            if (confirm.isConnected)
+                                                await back(
+                                                    "Requirements assignment recorded.",
+                                                );
+                                        },
+                                        "btn-primary",
+                                    ),
+                                );
+                                confirm.querySelector("h3").tabIndex = -1;
+                                confirm.querySelector("h3").focus();
+                            }
+                            showReview();
+                        },
+                    ),
+                );
+            body.append(card);
+        }
+        const navigation = node("div", { class: "inline-actions" });
+        if (previous.length)
+            navigation.append(
+                button("Previous requirements page", () =>
+                    requirementVersions(
+                        path,
+                        back,
+                        previous.at(-1),
+                        previous.slice(0, -1),
+                        input.value,
+                    ),
+                ),
+            );
+        if (data.next_cursor)
+            navigation.append(
+                button("Next requirements page", () =>
+                    requirementVersions(
+                        path,
+                        back,
+                        data.next_cursor,
+                        [...previous, cursor],
+                        input.value,
+                    ),
                 ),
             );
         body.append(navigation);
