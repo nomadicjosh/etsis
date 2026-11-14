@@ -12,6 +12,26 @@ In **Students → Student record → Registration history**, authorized registra
 
 Early add/drop still deletes current enrollment/academic-credit projections and reverses the original course charge. Restricted enrollment and academic events remain. Late drop retains attempted credit, the institution's selected grade/GPA rules and the charge while releasing the seat. Hiatus closures delegate to the same drop service. Previously saved drop/hiatus receipts remain unchanged; their earlier contents are evidence, not a second canonical registration stream. Previously issued transcript documents remain independent retained evidence.
 
+## Retained prerequisite evidence
+
+New registrations retain the current pursuit and exact supporting academic-record, award/enrollment and pursuit-applicability versions as protected `prerequisite_evidence` metadata on the existing acceptance event. The evidence contains only the required course identities and one verified passing record per course. It does not duplicate grade bodies, student profiles, reasons or raw historical events. Institutional and transfer work keep their different stream identities; an earlier untracked enrollment version remains explicitly zero. A recorded passing zero-credit course can satisfy a course prerequisite.
+
+The command evaluates available verified work under its student lock, filters it to the current pursuit or explicitly approved reuse, then accepts the seat, credit, charge, evidence and required audit atomically. If several eligible records satisfy one prerequisite, it consistently selects the lowest credit ULID; source iteration order does not change the witness. This is a deterministic evidence choice, not a repeat-credit/GPA policy. Courses without prerequisites skip academic collection while retaining the actual empty requirement set and pursuit.
+
+**Registration history** shows **Prerequisites at acceptance**, with required-course and supporting-record counts. It reads the retained acceptance decision, so a later grade correction, reuse revocation or program change does not rewrite why the student was registered. An accepted retry keeps its original result. Older acceptance events and observed earlier enrollments show **Supporting prerequisite references were not recorded**; the system never manufactures earlier evidence. These references are protected historical facts; ordinary browser/report responses expose only the curated status/counts.
+
+### Group registration review
+
+**Register a group → Review selected group** now shows a **Prerequisites** column: verified for this pursuit, missing prerequisites, no course prerequisites, or an existing registration whose earlier eligibility is kept. Missing prerequisites disable confirmation in the browser and are also refused by the backend. **Change selection** preserves the selected students.
+
+The reviewed context includes a fingerprint of each new registration's selected evidence. Grade or reuse decisions that change that support require a fresh review before confirming; a still-passing grade amendment changes its academic version and therefore also invalidates that pending review. Already-completed batch retries return their original receipt before checking current prerequisites. Review creates no academic decisions, charges or audit-result records.
+
+All new students' preview checks share the existing 400-page/2,000-event academic replay allowance. Confirmation uses one allowance across its context verification and registration rechecks; it does not cache earlier request results or reset the allowance for each student. An oversized or inconsistent history stops the operation with a private records-office notice, without a partial batch. Current actor/permission are checked after the history reads and before returning or committing. Restricted registration-history pages also share a bounded replay allowance across their twenty entries.
+
+This extends the existing acceptance event with explicitly optional historical evidence: earlier events remain valid with unknown references. It adds no event type, schema migration, parallel journal, permission or inferred attribution. The shared journal's operator verifier now resolves both directions of the `work_pursuit` stream mapping, including its protected receipts; the isolated debugger run confirmed the missing `WorkPursuit` aggregate mapping before the repair.
+
+Full versioned prerequisite/co-requisite expressions, minimum-grade prerequisite policies and complete eligibility-policy publication remain separate roadmap work. The current prerequisite contract requires all listed courses.
+
 ## Accepted server decision order
 
 A section's locked allocation boundary assigns a monotonically increasing **section decision sequence** to each accepted allocation/release. The event retains that sequence, previous accepted decision reference and used-seat count before/after the decision. The unique section/sequence projection index guards duplicate ordinals. A failed registration, interrupted rolled-back batch, repeated active registration or exact completed-drop retry does not consume another committed sequence.

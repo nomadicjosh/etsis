@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 
-async function fixture(page, completedInitially = false) {
+async function fixture(page, completedInitially = false, missingPrerequisites = false) {
     const id = suffix => `01K000000000000000000000${suffix}`;
     const section = id('81'), first = id('82'), second = id('83'), operation = id('84');
     let commits = 0, completed = completedInitially;
@@ -32,7 +32,9 @@ async function fixture(page, completedInitially = false) {
                 credits_milli: 3000, seats_remaining: 1, fee_minor: 1250, currency: 'USD', active: true },
             students: data.student_ids.map(student => ({ id: student, given_name: student === first ? 'Alex' : 'Jamie',
                 family_name: 'Example', institutional_id: student === first ? 'S-EXAMPLE-1' : 'S-EXAMPLE-2', active: true,
-                enrollment_id: student === first ? id('85') : null, enrollment_status: student === first ? 'N' : null })),
+                enrollment_id: student === first ? id('85') : null, enrollment_status: student === first ? 'N' : null,
+                prerequisites: { status: student === first ? 'not_rechecked' : (missingPrerequisites ? 'missing' : 'met'),
+                    missing_count: missingPrerequisites && student === second ? 1 : 0 } })),
         };
         else if (path.endsWith('/registration-batches/commit/')) {
             ++commits; completed = true;
@@ -118,5 +120,20 @@ test('staff can find an earlier receipt by reference without reselecting or chan
     await expect(page.locator('#drawer-body')).toContainText(f.operation);
     await expect(page.locator('#drawer-body')).toContainText('1 registration created. 1 existing registration kept.');
     expect(f.sent.some(item => item.path.endsWith('/review/') || item.path.endsWith('/commit/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('missing prerequisites are visible before confirmation and cannot submit a partial group', async ({ page }) => {
+    const f = await fixture(page, false, true);
+    await review(page, f);
+    await expect(page.getByRole('region', { name: 'Reviewed registration group', exact: true })).toContainText('Missing 1 prerequisite');
+    await expect(page.getByRole('button', { name: 'Confirm group registration', exact: true })).toBeDisabled();
+    await expect(page.getByRole('status').filter({ hasText: 'Some selected students' })).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.sent.some(item => item.path.endsWith('/commit/'))).toBe(false);
+    await page.getByRole('button', { name: 'Change selection', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Selected students', exact: true })).toContainText('2 selected students');
     expect(f.errors).toEqual([]);
 });

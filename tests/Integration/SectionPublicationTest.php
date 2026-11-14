@@ -992,6 +992,7 @@ final class SectionPublicationTest extends TestCase
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
             $f->workPursuits(),
+            $f->prerequisites(),
         );
         $before = $batch->review($selection);
         $this->service->select($this->section->id, $review['review_token']);
@@ -1350,6 +1351,7 @@ final class SectionPublicationTest extends TestCase
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
             $f->workPursuits(),
+            $f->prerequisites(),
         );
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $this->section->id,

@@ -48,6 +48,9 @@ async function fixture(page, limited = false) {
                         status: data.after ? "W" : "D",
                         current_records_removed: !data.after,
                         earlier_history_unknown: !!data.after,
+                        prerequisites: data.after ? { status: 'not_recorded', required_course_count: null,
+                            supporting_record_count: null } : { status: 'verified', required_course_count: 2,
+                            supporting_record_count: 2 },
                         items: [
                             {
                                 action: data.after ? "observed_existing" : "registered",
@@ -80,6 +83,7 @@ test("registrars read paged enrollment decisions and restricted early drops with
 }) => {
     const f = await fixture(page);
     await page.getByRole("button", { name: "Registration history", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("2 required courses matched to 2 verified academic records");
     await expect(page.locator("#drawer-body")).toContainText("Current records removed during add/drop");
     await expect(page.locator("#drawer-body")).toContainText("MATH.101 <img src=x onerror=alert(1)>");
     await expect(page.locator("#drawer-body img")).toHaveCount(0);

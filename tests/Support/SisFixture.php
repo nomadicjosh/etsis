@@ -331,6 +331,10 @@ final class SisFixture
         $review = $service->review($student, $credit, $assignment, 'attribute', 'Fictional source evidence identifies this pursuit.');
         $service->commit($student, $credit, $review['review_token']);
     }
+    public function prerequisites(): \Domain\Registration\Service\PrerequisiteService
+    {
+        return new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits());
+    }
     /** Authorized fixture command boundary for the single verified prerequisite implementation. */
     public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool
     {
@@ -338,7 +342,7 @@ final class SisFixture
             $this->registration->lockStudent($student);
             $assignment = $this->workPursuits()->activePursuit($student);
             return new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits())
-                ->met($student, $assignment, $required ?? $this->registration->requiredCourses($course));
+                ->evaluate($student, $assignment, $required ?? $this->registration->requiredCourses($course))->isMet();
         });
     }
     public function inputVerifier(): \Domain\DegreeAudit\Service\AcademicInputVerifier

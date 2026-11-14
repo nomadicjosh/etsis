@@ -42,8 +42,9 @@ final readonly class EnrollmentHistoryService
             }
             $rows = $this->records->forStudent($student, $after, 21);
             $items = [];
+            $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
             foreach (array_slice($rows, 0, 20) as $r) {
-                $items[] = $this->ledger->summary(new EntityId($r["id"]));
+                $items[] = $this->ledger->summary(new EntityId($r["id"]), $budget);
             }
             $this->audit->record($actor, "registration.history_read", $student);
             return ["items" => $items, "next_after" => count($rows) > 20 ? $rows[19]["id"] : null];

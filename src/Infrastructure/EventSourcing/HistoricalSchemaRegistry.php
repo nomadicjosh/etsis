@@ -15,6 +15,7 @@ use DateTimeZone;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\StreamReference;
 use Infrastructure\Persistence\EventClassMap;
+use Qubus\Exception\Data\TypeException;
 
 /** Explicit schema allowlist; unsupported event/version combinations fail closed. */
 final readonly class HistoricalSchemaRegistry
@@ -719,6 +720,19 @@ final readonly class HistoricalSchemaRegistry
                 if ($name === "schema_version" && $value === $version) {
                     continue;
                 }
+                if ($name === 'prerequisite_evidence') {
+                    if (
+                        $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class ||
+                        $payload['provenance'] !== 'registered' || !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $decision = \Domain\Registration\ValueObject\PrerequisiteDecision::fromRetained($value);
+                    if ($decision->required !== $payload['eligibility']['required_course_ids']) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'specialization_id') {
                     if (
                         $class !== \Domain\DegreeAudit\Event\RequirementsWerePublished::class || $version !== 4 ||
@@ -868,6 +882,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\AcademicRecord\WorkPursuit::class => 'work_pursuit',
             \Domain\Student\StudentSpecializations::class => 'student_specializations',
             \Domain\Gradebook\GradingScale::class => "grading_scale",
             \Domain\Catalog\ProgramPublication::class => "program_publication",
@@ -896,9 +911,13 @@ final readonly class HistoricalSchemaRegistry
         return new StreamReference($id, $type);
     }
 
+    /**
+     * @throws TypeException
+     */
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'work_pursuit' => new \Domain\AcademicRecord\ValueObject\WorkPursuitId($id),
             'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),
             "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),
             "section_offering_binding" => new \Domain\Registration\ValueObject\SectionOfferingBindingId($id),

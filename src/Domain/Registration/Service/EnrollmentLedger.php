@@ -14,6 +14,7 @@ use Domain\Registration\Repository\EnrollmentHistoryRepository;
 use Domain\Registration\Section;
 use Domain\Registration\ValueObject\EnrollmentFacts;
 use Domain\Registration\ValueObject\EnrollmentHistoryId;
+use Domain\Registration\ValueObject\PrerequisiteDecision;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
@@ -41,6 +42,7 @@ final readonly class EnrollmentLedger
         Course $course,
         #[\SensitiveParameter] array $eligibility,
         EntityId $actor,
+        PrerequisiteDecision $prerequisites,
     ): void {
         $this->actor($actor);
         if (
@@ -57,7 +59,7 @@ final readonly class EnrollmentLedger
         if ($selected !== null && !$selected->matchesOffering($section, $course)) {
             throw new \DomainException('This offering changed after version selection. Registrar review is required.');
         }
-        $metadata = ['__aggregate_type' => 'enrollment'];
+        $metadata = ['__aggregate_type' => 'enrollment', 'prerequisite_evidence' => $prerequisites->retained()];
         if ($selected !== null) {
             $metadata['section_version_id'] = $selected->publication->value;
         }
@@ -177,12 +179,13 @@ final readonly class EnrollmentLedger
     }
     /** Restricted curated read, after caller authorizes and locks the student/section.
      * @return array<string,mixed> */
-    public function summary(EntityId $id): array
+    public function summary(EntityId $id, ?HistoryReadBudget $budget = null): array
     {
-        $root = $this->load($id);
+        $budget ??= new HistoryReadBudget();
+        $root = $this->load($id, $budget);
         $f = $root->facts() ?? throw new CorruptHistoryException();
         $s = $root->source() ?? throw new CorruptHistoryException();
-        $page = $this->history->page($this->stream($id), null, 3);
+        $page = $budget->page($this->history, $this->stream($id));
         $items = [];
         foreach ($page->events as $stored) {
             $e = $stored->event;
@@ -202,6 +205,7 @@ final readonly class EnrollmentLedger
         return [
             "enrollment_id" => $id->value,
             "section_version_id" => $root->sectionVersion(),
+            "prerequisites" => $root->prerequisiteSummary(),
             "student_id" => $f["student_id"],
             "section_id" => $f["section_id"],
             "section_code" => $s["section_code"],
@@ -232,12 +236,11 @@ final readonly class EnrollmentLedger
     }
     private function load(EntityId $id, ?HistoryReadBudget $budget = null): EnrollmentHistory
     {
+        $budget ??= new HistoryReadBudget();
         $root = EnrollmentHistory::root(new EnrollmentHistoryId($id->value));
         $cursor = null;
         do {
-            $page = $budget === null
-            ? $this->history->page($this->stream($id), $cursor, 20)
-            : $budget->page($this->history, $this->stream($id), $cursor);
+            $page = $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
             }

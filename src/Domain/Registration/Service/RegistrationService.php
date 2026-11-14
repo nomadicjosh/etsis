@@ -106,7 +106,8 @@ final readonly class RegistrationService
             $blocking = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
             $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
             $coursesBefore = $this->repository->enrolledCount($studentId, $section->termId);
-            $prerequisitesMet = $this->prerequisites->met($studentId, $assignment, $required, $budget);
+            $prerequisites = $this->prerequisites->evaluate($studentId, $assignment, $required, $budget);
+            $prerequisitesMet = $prerequisites->isMet();
             new RegistrationPolicy()->assertEligible(
                 $student,
                 $blocking === null ? [] : [$blocking],
@@ -138,7 +139,7 @@ final readonly class RegistrationService
                     "courses_before" => $coursesBefore,
                     "course_limit" => $window->courseLimit,
                     "prerequisites_met" => $prerequisitesMet,
-                    "required_course_ids" => $required,
+                    "required_course_ids" => $prerequisites->required,
                     "opens_at" => \Domain\Registration\ValueObject\EnrollmentFacts::utc(
                         $window->dates->start,
                     ),
@@ -147,6 +148,7 @@ final readonly class RegistrationService
                     ),
                 ],
                 $actor,
+                $prerequisites,
             );
             $this->credits->open($enrollment, $course, $actor, $assignment, $section->publicationVersionId);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);

@@ -154,7 +154,7 @@ final class AcademicWorkPursuitTest extends TestCase
         self::assertTrue($result->items[0]['earlier_history_unknown']);
         self::assertSame(1, $s->workPursuitLedger()->load($old->credit)->playhead());
         self::assertFalse(new \Domain\Registration\Service\PrerequisiteService($s->inputVerifier(), $s->workPursuits())
-            ->met($f->student, $f->assignment, [$old->course->value]));
+            ->evaluate($f->student, $f->assignment, [$old->course->value])->isMet());
     }
 
     public function testApprovedReuseIsRequiredForRegistrationPrerequisitesAndCannotChangeGradesOrBills(): void
@@ -362,7 +362,7 @@ final class AcademicWorkPursuitTest extends TestCase
         $verifier = new \Domain\DegreeAudit\Service\AcademicInputVerifier($repo,
             $s->academicCredits(), $s->transferCredits(), $s->enrollmentLedger());
         $service = new \Domain\Registration\Service\PrerequisiteService($verifier, $s->workPursuits());
-        self::assertTrue($service->met($student, $assignment, []));
+        self::assertTrue($service->evaluate($student, $assignment, [])->isMet());
         $course = new \Domain\Catalog\Course(EntityId::generate(), 'ZERO.101', 'Fictional orientation', 0);
         $s->registration->addCourse($course);
         $section = new \Domain\Registration\Section(EntityId::generate(), $course->id, $s->term,
@@ -374,7 +374,7 @@ final class AcademicWorkPursuitTest extends TestCase
         $review = $s->academicCredits()->review($student, $section->id, $enrollment->id, new EntityId($grade['id']), 0);
         $s->academicCredits()->commit($student, $section->id, $review['review_token']);
         self::assertTrue(new \Domain\Registration\Service\PrerequisiteService($s->inputVerifier(), $s->workPursuits())
-            ->met($student, $assignment, [$course->id->value]));
+            ->evaluate($student, $assignment, [$course->id->value])->isMet());
     }
 
     public function testOwnerRegistrationUsesTheCurrentPursuitWithoutGrantingOfficeApprovalAccess(): void

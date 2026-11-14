@@ -25,6 +25,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     private ?string $decision = null;
     private ?string $provenance = null;
     private ?string $sectionVersion = null;
+    private ?\Domain\Registration\ValueObject\PrerequisiteDecision $prerequisites = null;
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (
@@ -49,6 +50,17 @@ final class EnrollmentHistory extends EventSourcedAggregate
             if ($p['provenance'] !== 'registered') {
                 throw new CorruptHistoryException();
             }
+        }
+        $evidence = $event->metaParam('prerequisite_evidence', null);
+        if (array_key_exists('prerequisite_evidence', $event->metadata())) {
+            if (!is_array($evidence) || $p['provenance'] !== 'registered') {
+                throw new CorruptHistoryException();
+            }
+            $decision = \Domain\Registration\ValueObject\PrerequisiteDecision::fromRetained($evidence);
+            if ($decision->required !== $p['eligibility']['required_course_ids']) {
+                throw new CorruptHistoryException();
+            }
+            $this->prerequisites = $decision;
         }
         $this->facts = $p["enrollment"];
         $this->source = $p["source"];
@@ -120,6 +132,15 @@ final class EnrollmentHistory extends EventSourcedAggregate
     {
         return $this->provenance;
     }
+    /** @return array{status:string,required_course_count:?int,supporting_record_count:?int} */
+    public function prerequisiteSummary(): array
+    {
+        return ['status' => $this->prerequisites === null ? 'not_recorded' :
+                ($this->prerequisites->required === [] ? 'not_required' : 'verified'),
+            'required_course_count' => $this->prerequisites === null ? null : count($this->prerequisites->required),
+            'supporting_record_count' => $this->prerequisites === null ? null : count($this->prerequisites->support)];
+    }
+
     public function sectionVersion(): ?string
     {
         return $this->sectionVersion;

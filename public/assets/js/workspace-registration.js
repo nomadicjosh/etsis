@@ -167,11 +167,17 @@ window.createWorkspaceRegistration = function (ui) {
                           "This section or course is inactive. New registrations cannot be added.",
                       ),
                 grid(
-                    ["Student", "Institutional ID", "Activity", "Registration"],
+                    ["Student", "Institutional ID", "Activity", "Prerequisites", "Registration"],
                     reviewed.students.map((student) => [
                         `${student.given_name} ${student.family_name}`,
                         student.institutional_id,
                         student.active ? "Active" : "Inactive",
+                        student.prerequisites?.status === "missing"
+                            ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
+                            : ({ met: "Verified for this pursuit", not_required: "No course prerequisites",
+                                not_rechecked: ["A", "N"].includes(student.enrollment_status)
+                                    ? "Existing registration — unchanged" : "Not checked — closed enrollment" }[student.prerequisites?.status]
+                                || "Checked on confirmation"),
                         ["A", "N"].includes(student.enrollment_status)
                             ? "Already enrolled — keep"
                             : student.enrollment_id
@@ -200,6 +206,11 @@ window.createWorkspaceRegistration = function (ui) {
                 },
                 "btn-primary",
             );
+            if (reviewed.students.some(student => student.prerequisites?.status === "missing")) {
+                submit.disabled = true;
+                body.append(node("p", { class: "alert alert-warning", role: "status" },
+                    "Some selected students do not meet the prerequisites. Change the selection or review their academic records before confirming."));
+            }
             body.append(
                 node(
                     "div",
@@ -257,6 +268,13 @@ window.createWorkspaceRegistration = function (ui) {
                         "Earlier enrollment decisions are unknown; existing facts were observed at the recorded action.",
                     ),
                 );
+            const prerequisites = record.prerequisites;
+            panel.append(node("p", { class: "form-text" },
+                prerequisites?.status === "verified"
+                    ? `Prerequisites at acceptance: ${prerequisites.required_course_count} required ${prerequisites.required_course_count === 1 ? "course" : "courses"} matched to ${prerequisites.supporting_record_count} verified academic ${prerequisites.supporting_record_count === 1 ? "record" : "records"}.`
+                    : prerequisites?.status === "not_required"
+                        ? "No course prerequisites were required at acceptance."
+                        : "Supporting prerequisite references were not recorded for this earlier decision."));
             panel.append(
                 grid(
                     ["Decision", "Section order", "Effective", "Recorded"],
