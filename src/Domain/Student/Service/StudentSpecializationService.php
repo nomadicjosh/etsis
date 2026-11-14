@@ -32,6 +32,8 @@ use Domain\Student\StudentSpecializations;
 use Domain\Student\ValueObject\StudentSpecializationSchema;
 use Domain\Student\ValueObject\StudentSpecializationRequirementsSchema;
 use Domain\Student\ValueObject\StudentSpecializationsId;
+use JsonException;
+use Qubus\Exception\Data\TypeException;
 
 final readonly class StudentSpecializationService
 {
@@ -64,6 +66,24 @@ final readonly class StudentSpecializationService
         return $actor;
     }
 
+    /** Internal progress scope; staff management endpoints retain their separate permission checks. */
+    public function authorizeProgressRead(EntityId $student, EntityId $assignment, ?EntityId $actor = null): EntityId
+    {
+        $current = $this->access->authenticatedUserId();
+        $record = $this->admissions->student($student);
+        $this->access->requireOwnerOrPermission(
+            $this->admissions->person($record->personId)->ownerUserId,
+            'sis:student:read',
+        );
+        if ($actor !== null && $actor->value !== $current->value) {
+            throw new AccessDeniedException('The progress reader changed.');
+        }
+        if ($this->records->assignment($assignment)->studentId->value !== $student->value) {
+            throw new RecordNotFoundException('Student program not found.');
+        }
+        return $current;
+    }
+
     /** @return array<string,mixed> */
     public function view(EntityId $student, EntityId $assignment): array
     {
@@ -90,7 +110,8 @@ final readonly class StudentSpecializationService
         });
     }
 
-    /** Replace the complete set within this pursuit; an empty set is a deliberate removal, never a deletion.
+    /**
+     * Replace the complete set within this pursuit; an empty set is a deliberate removal, never a deletion.
      * @param list<string> $ids
      * @return array<string,mixed> */
     public function review(
@@ -243,7 +264,8 @@ final readonly class StudentSpecializationService
         });
     }
 
-    /** Curated, frozen pages; no raw envelopes, actors or protected reasons.
+    /**
+     * Curated, frozen pages; no raw envelopes, actors or protected reasons.
      * @return array<string,mixed> */
     public function history(EntityId $student, EntityId $assignment, ?string $cursor = null): array
     {
@@ -359,44 +381,52 @@ final readonly class StudentSpecializationService
         ): array {
             $this->records->lock($student);
             $budget ??= new HistoryReadBudget();
-            $scope = $this->scope($student, $assignment, $actor, $budget);
-            $root = $this->load($assignment, $scope, $budget)['root'];
-            $selected = $root->requirements()[$specialization->value] ?? null;
-            $requirements = $selected === null ? null : $this->bindingPublication($selected, $budget);
+            $all = $this->evaluationContext($student, $assignment, $budget, retainEarlier: true, only: $specialization);
+            $scope = $all['scope'];
+            $selected = $all['bindings'][$specialization->value] ?? null;
+            $requirements = $all['requirements'][$specialization->value] ?? null;
             $this->authorize($actor);
             return [
                 'selection' => $selected, 'requirements' => $requirements,
                 'cohort_changed' => $selected !== null && !$this->sameCohort($scope, $selected),
                 'can_manage' => $this->canManage($actor) && $scope['status'] === 'active' &&
-                    $root->selection() !== null && $this->sameCohort($scope, $root->selection()) &&
-                    in_array($specialization->value, $root->selection()['specialization_ids'], true),
+                    $all['selection'] !== null && $this->sameCohort($scope, $all['selection']) &&
+                    in_array($specialization->value, $all['selection']['specialization_ids'], true),
             ];
         });
     }
 
-    /** Internal combined-review inputs; caller holds the student lock and shared replay allowance.
+    /**
+     * Internal combined-review inputs; caller holds the student lock and shared replay allowance.
      * @return array<string,mixed>
      */
-    public function evaluationContext(EntityId $student, EntityId $assignment, HistoryReadBudget $budget): array
-    {
-        $actor = $this->authorizeRead($student, $assignment);
-        $scope = $this->scope($student, $assignment, $actor, $budget);
+    public function evaluationContext(
+        EntityId $student,
+        EntityId $assignment,
+        HistoryReadBudget $budget,
+        bool $retainEarlier = false,
+        ?EntityId $only = null,
+    ): array {
+        $actor = $this->authorizeProgressRead($student, $assignment);
+        $scope = $this->scope($student, $assignment, $actor, $budget, progress: true);
         $root = $this->load($assignment, $scope, $budget)['root'];
         $program = $this->publication($scope, $budget);
         $selection = $root->selection();
         $changed = $selection !== null && !$this->sameCohort($scope, $selection);
         $requirements = [];
-        if (!$changed && $program !== null) {
-            if ($selection !== null) {
+        if ($retainEarlier || !$changed && $program !== null) {
+            if (!$changed && $program !== null && $selection !== null) {
                 $this->summary($selection, $program);
             }
             foreach ($root->requirements() as $id => $binding) {
-                $requirements[$id] = $this->bindingPublication($binding, $budget);
+                if ($only === null || $only->value === $id) {
+                    $requirements[$id] = $this->bindingPublication($binding, $budget);
+                }
             }
         }
-        $this->authorize($actor);
+        $this->authorizeProgressRead($student, $assignment, $actor);
         return ['scope' => $scope, 'program' => $program, 'selection' => $selection,
-            'requirements' => $requirements, 'cohort_changed' => $changed];
+            'requirements' => $requirements, 'bindings' => $root->requirements(), 'cohort_changed' => $changed];
     }
 
     /** @return array<string,mixed> */
@@ -579,7 +609,8 @@ final readonly class StudentSpecializationService
                 'Use an active pursuit and review its selected specializations against the current cohort first.']]);
         }
     }
-    /** @param array<string,mixed> $scope
+    /**
+     * @param array<string,mixed> $scope
      * @param array<string,mixed> $requirements */
     private function assertRequirementPublication(array $scope, EntityId $specialization, array $requirements): void
     {
@@ -595,7 +626,8 @@ final readonly class StudentSpecializationService
             ]]);
         }
     }
-    /** @param array<string,mixed> $p
+    /**
+     * @param array<string,mixed> $p
      * @return array<string,mixed> */
     private function bindingPublication(array $p, HistoryReadBudget $budget): array
     {
@@ -639,9 +671,18 @@ final readonly class StudentSpecializationService
         }
     }
     /** @return array<string,mixed> */
-    private function scope(EntityId $student, EntityId $assignment, EntityId $actor, HistoryReadBudget $budget): array
-    {
-        $this->authorize($actor);
+    private function scope(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $actor,
+        HistoryReadBudget $budget,
+        bool $progress = false,
+    ): array {
+        if ($progress) {
+            $this->authorizeProgressRead($student, $assignment, $actor);
+        } else {
+            $this->authorize($actor);
+        }
         $record = $this->admissions->student($student);
         $p = $this->records->assignment($assignment);
         if ($p->studentId->value !== $record->id->value) {
@@ -665,7 +706,8 @@ final readonly class StudentSpecializationService
             'cohort_binding_revision' => $binding['version'] ?? null,
         ];
     }
-    /** @param array<string,mixed> $scope
+    /**
+     * @param array<string,mixed> $scope
      * @return array<string,mixed>|null */
     private function publication(array $scope, HistoryReadBudget $budget): ?array
     {
@@ -679,7 +721,8 @@ final readonly class StudentSpecializationService
             $budget,
         );
     }
-    /** @param array<string,mixed> $scope
+    /**
+     * @param array<string,mixed> $scope
      * @param array<string,mixed>|null $program
      * @param list<string> $ids */
     private function assertSelectable(array $scope, ?array $program, array $ids): void
@@ -702,7 +745,8 @@ final readonly class StudentSpecializationService
             ]);
         }
     }
-    /** @param array<string,mixed> $p
+    /**
+     * @param array<string,mixed> $p
      * @param array<string,mixed> $program
      * @return array<string,mixed> */
     private function summary(array $p, array $program): array
@@ -729,7 +773,8 @@ final readonly class StudentSpecializationService
             'specializations' => array_values(array_intersect_key($offered, array_fill_keys($ids, true))),
         ];
     }
-    /** @param array<string,mixed> $p
+    /**
+     * @param array<string,mixed> $p
      * @param array<string,mixed>|null $current
      * @param array<string,mixed> $scope
      * @return array<string,mixed> */
@@ -746,15 +791,21 @@ final readonly class StudentSpecializationService
         return $scope['program_version_id'] === $p['program_version_id'] &&
         $scope['cohort_binding_revision'] === $p['cohort_binding_revision'];
     }
-    /** @param array<string,mixed> $scope
-     * @param array<string,mixed>|null $program */
+    /**
+     * @param array<string,mixed> $scope
+     * @param array<string,mixed>|null $program
+     * @throws JsonException
+     */
     private function revision(array $scope, StudentSpecializations $root, ?array $program): string
     {
         return hash('sha256', json_encode([$scope, $root->playhead(), $program], JSON_THROW_ON_ERROR));
     }
-    /** @param array<string,mixed> $scope
+    /**
+     * @param array<string,mixed> $scope
      * @param array<string,mixed>|null $review
-     * @return array{root:StudentSpecializations,receipt:?array<string,mixed>} */
+     * @return array{root:StudentSpecializations,receipt:?array<string,mixed>}
+     * @throws TypeException
+     */
     private function load(EntityId $assignment, array $scope, HistoryReadBudget $budget, ?array $review = null): array
     {
         $root = StudentSpecializations::root(new StudentSpecializationsId($assignment->value));
@@ -797,6 +848,9 @@ final readonly class StudentSpecializationService
         }
         return ['root' => $root, 'receipt' => $receipt];
     }
+    /**
+     * @throws TypeException
+     */
     private function stream(EntityId $assignment): StreamReference
     {
         return new StreamReference(new StudentSpecializationsId($assignment->value), 'student_specializations');

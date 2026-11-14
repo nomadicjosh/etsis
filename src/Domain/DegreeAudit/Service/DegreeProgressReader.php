@@ -16,4 +16,8 @@ interface DegreeProgressReader
         EntityId $assignment,
         ?HistoryReadBudget $budget = null,
     ): array;
+    /** Owner/staff curriculum review; degree-only pursuits keep their ordinary result shape.
+     * @return array<string,mixed>
+     */
+    public function student(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array;
 }

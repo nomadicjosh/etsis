@@ -812,13 +812,34 @@ return static function (Psr7Router $router): void {
     $router->get("/sis/moodle/installation/", [SisMoodleBindingController::class, "status"]);
     $router->get('/sis/people/{person}/moodle/', [SisMoodlePersonLinkController::class, 'status']);
     $router->get('/sis/people/{person}/moodle/account-request/', [SisMoodleAccountRequestController::class, 'status']);
-    $router->post('/sis/people/{person}/moodle/account-request/review/', [SisMoodleAccountRequestController::class, 'review']);
-    $router->post('/sis/people/{person}/moodle/account-request/confirm/', [SisMoodleAccountRequestController::class, 'confirm']);
-    $router->post('/sis/people/{person}/moodle/account-request/resolution/review/', [SisMoodleAccountRequestController::class, 'reviewResolution']);
-    $router->post('/sis/people/{person}/moodle/account-request/resolution/confirm/', [SisMoodleAccountRequestController::class, 'confirmResolution']);
-    $router->post('/sis/people/{person}/moodle/account-request/receipt/', [SisMoodleAccountRequestController::class, 'inspectReceipt']);
-    $router->post('/sis/people/{person}/moodle/account-request/recovery/review/', [SisMoodleAccountRequestController::class, 'reviewRecovery']);
-    $router->post('/sis/people/{person}/moodle/account-request/recovery/confirm/', [SisMoodleAccountRequestController::class, 'confirmRecovery']);
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/review/',
+        [SisMoodleAccountRequestController::class, 'review'],
+    );
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/confirm/',
+        [SisMoodleAccountRequestController::class, 'confirm'],
+    );
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/resolution/review/',
+        [SisMoodleAccountRequestController::class, 'reviewResolution'],
+    );
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/resolution/confirm/',
+        [SisMoodleAccountRequestController::class, 'confirmResolution'],
+    );
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/receipt/',
+        [SisMoodleAccountRequestController::class, 'inspectReceipt'],
+    );
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/recovery/review/',
+        [SisMoodleAccountRequestController::class, 'reviewRecovery'],
+    );
+    $router->post(
+        '/sis/people/{person}/moodle/account-request/recovery/confirm/',
+        [SisMoodleAccountRequestController::class, 'confirmRecovery'],
+    );
     $router->post('/sis/people/{person}/moodle/review/', [SisMoodlePersonLinkController::class, 'review']);
     $router->post('/sis/people/{person}/moodle/confirm/', [SisMoodlePersonLinkController::class, 'confirm']);
     $router->post("/sis/moodle/installation/review/", [SisMoodleBindingController::class, "review"]);
@@ -984,38 +1005,27 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["GET"], "/sis/employees/{id}/", [SisTimesheetController::class, "employeeProfile"])
         ->name("sis.timesheet.employee_profile");
-    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/replacement-courses/", [
-        SisRequirementAdjustmentController::class,
-        "replacementCourses",
+    $router->get('/sis/students/{student}/programs/{assignment}/degree-adjustments/routing/', [
+        SisRequirementAdjustmentController::class, 'routing',
     ]);
-    $router->post(
-        "/sis/students/{student}/programs/{assignment}/degree-adjustments/replacement-courses/{course}/versions/",
-        [SisRequirementAdjustmentController::class, "replacementVersions"],
-    );
-    $router->get("/sis/students/{student}/programs/{assignment}/degree-adjustments/preview/", [
-        SisRequirementAdjustmentController::class,
-        "preview",
-    ]);
-    $router->get("/sis/students/{student}/programs/{assignment}/degree-adjustments/", [
-        SisRequirementAdjustmentController::class,
-        "view",
-    ]);
-    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/review/", [
-        SisRequirementAdjustmentController::class,
-        "review",
-    ]);
-    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/revoke-review/", [
-        SisRequirementAdjustmentController::class,
-        "revokeReview",
-    ]);
-    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/commit/", [
-        SisRequirementAdjustmentController::class,
-        "commit",
-    ]);
-    $router->post("/sis/students/{student}/programs/{assignment}/degree-adjustments/history/", [
-        SisRequirementAdjustmentController::class,
-        "history",
-    ]);
+    foreach (
+        [
+        '/sis/students/{student}/programs/{assignment}/degree-adjustments/',
+        '/sis/students/{student}/programs/{assignment}/specializations/{specialization}/adjustments/',
+        ] as $adjustmentsPath
+    ) {
+        foreach (
+            [
+            ['POST', 'replacement-courses/', 'replacementCourses'],
+            ['POST', 'replacement-courses/{course}/versions/', 'replacementVersions'],
+            ['GET', 'preview/', 'preview'], ['GET', '', 'view'],
+            ['POST', 'review/', 'review'], ['POST', 'revoke-review/', 'revokeReview'],
+            ['POST', 'commit/', 'commit'], ['POST', 'history/', 'history'],
+            ] as [$method, $suffix, $action]
+        ) {
+            $router->map([$method], $adjustmentsPath . $suffix, [SisRequirementAdjustmentController::class, $action]);
+        }
+    }
     $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/progress/", [
         \Application\Http\Controller\SisAcademicWorkController::class,
         "progress",

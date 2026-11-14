@@ -16,18 +16,35 @@ final readonly class SisRequirementAdjustmentController
     public function __construct(private RequirementAdjustmentService $service)
     {
     }
-    public function view(string $student, string $assignment): ResponseInterface
+    public function view(string $student, string $assignment, ?string $specialization = null): ResponseInterface
     {
-        return new JsonResponse($this->service->view(new EntityId($student), new EntityId($assignment)));
+        return new JsonResponse(
+            $this->service->view(
+                new EntityId($student),
+                new EntityId($assignment),
+                $specialization === null ? null : new EntityId($specialization),
+            ),
+        );
     }
-    public function preview(string $student, string $assignment): ResponseInterface
+    public function routing(string $student, string $assignment): ResponseInterface
     {
-        return new JsonResponse($this->service->preview(new EntityId($student), new EntityId($assignment)));
+        return new JsonResponse($this->service->routing(new EntityId($student), new EntityId($assignment)));
+    }
+    public function preview(string $student, string $assignment, ?string $specialization = null): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->service->preview(
+                new EntityId($student),
+                new EntityId($assignment),
+                $specialization === null ? null : new EntityId($specialization),
+            ),
+        );
     }
     public function replacementCourses(
         ServerRequest $request,
         string $student,
         string $assignment,
+        ?string $specialization = null,
     ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
@@ -36,6 +53,7 @@ final readonly class SisRequirementAdjustmentController
                 new EntityId($assignment),
                 $f->search("search", 80),
                 $f->optionalId("after"),
+                $specialization === null ? null : new EntityId($specialization),
             ),
         );
     }
@@ -44,6 +62,7 @@ final readonly class SisRequirementAdjustmentController
         string $student,
         string $assignment,
         string $course,
+        ?string $specialization = null,
     ): ResponseInterface {
         return new JsonResponse(
             $this->service->replacementVersions(
@@ -51,11 +70,16 @@ final readonly class SisRequirementAdjustmentController
                 new EntityId($assignment),
                 new EntityId($course),
                 FormInput::from($request)->optionalText("cursor", 16384),
+                $specialization === null ? null : new EntityId($specialization),
             ),
         );
     }
-    public function review(ServerRequest $request, string $student, string $assignment): ResponseInterface
-    {
+    public function review(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+        ?string $specialization = null,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $body = $request->getParsedBody();
         $d = is_array($body) ? $body["definition"] ?? null : null;
@@ -68,6 +92,7 @@ final readonly class SisRequirementAdjustmentController
                 new EntityId($assignment),
                 $d,
                 $f->bodyText("reason"),
+                $specialization === null ? null : new EntityId($specialization),
             ),
         );
     }
@@ -75,6 +100,7 @@ final readonly class SisRequirementAdjustmentController
         ServerRequest $request,
         string $student,
         string $assignment,
+        ?string $specialization = null,
     ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
@@ -83,16 +109,22 @@ final readonly class SisRequirementAdjustmentController
                 new EntityId($assignment),
                 $f->id("adjustment_id"),
                 $f->bodyText("reason"),
+                $specialization === null ? null : new EntityId($specialization),
             ),
         );
     }
-    public function commit(ServerRequest $request, string $student, string $assignment): ResponseInterface
-    {
+    public function commit(
+        ServerRequest $request,
+        string $student,
+        string $assignment,
+        ?string $specialization = null,
+    ): ResponseInterface {
         return new JsonResponse(
             $this->service->commit(
                 new EntityId($student),
                 new EntityId($assignment),
                 FormInput::from($request)->text("review_token", 32768),
+                $specialization === null ? null : new EntityId($specialization),
             ),
         );
     }

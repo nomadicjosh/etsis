@@ -73,6 +73,14 @@ async function fixture(page,options={}) {
             data.records[2].retained_grade={code:'D',points_milli:1000,grading_publication_retained:true};
         }
         if (path.includes(`/programs/${id(44)}/`) && data.context) data.context.name = 'Second selected program';
+        if (options.combined && data.status === "review") {
+            const degree = structuredClone(data), specialization = structuredClone(data);
+            specialization.context.name = "Data <b>fictional</b> requirements";
+            specialization.context.kind = "specialization";
+            data = { status: "review", mode: "combined_curriculum", outcome: "feasible", sharing: "multiple_components", current_record_count: 21,
+                components: [{ kind: "degree", label: "Degree", progress: degree },
+                    { kind: "specialization", label: "Specialization DATA", progress: specialization }] };
+        }
         await route.fulfill({json:data,headers:{'Cache-Control':'private, no-store'}});
     });
     await page.goto('/portal/student/progress/');
@@ -294,4 +302,30 @@ test("portal named-course review explains unmet work without a partial placement
     expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
+});
+
+test("student combined progress keeps component drilldowns in the captured joint review", async ({
+    page,
+}) => {
+    const f = await fixture(page, { combined: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    await expect(
+        page.getByRole("heading", { name: "Your degree and specializations", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Review Specialization DATA", exact: true }).click();
+    await expect(page.getByRole("heading", { name: /Data <b>fictional<\/b> requirements/ })).toBeVisible();
+    await expect(
+        page.getByRole("heading", { name: "General specialization minimums", exact: true }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 812 });
+    const scan = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(scan.violations.map((v) => v.id)).toEqual([]);
+    await page.getByRole("button", { name: "Back to degree and specializations", exact: true }).click();
+    expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    await page.getByRole("button", { name: "Refresh progress", exact: true }).click();
+    await expect.poll(() => f.calls.filter((c) => c.path.endsWith("/degree-progress/")).length).toBe(2);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
 });

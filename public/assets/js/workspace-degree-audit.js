@@ -48,12 +48,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         dialog?.close();
         dialog?.remove();
         dialog = null;
-        [
-            opener,
-            ...document.querySelectorAll(
-                "#directory-results button, #directory-tabs a, #directory-tabs button",
-            ),
-        ]
+        [opener, ...document.querySelectorAll("#directory-results button, #directory-tabs a, #directory-tabs button")]
             .find((el) => el?.isConnected && !el.disabled && el.getClientRects().length)
             ?.focus({ preventScroll: true });
     }
@@ -182,23 +177,23 @@ window.createWorkspaceDegreeAudit = function (ui) {
             rule_count: definition.rules.length,
             warnings: [],
         };
-        const raw =
-            definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
+        const raw = definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
         let required = raw;
         if (editing) {
             const pattern = definition.requirement_type === "courses" ? /^\d{1,3}$/ : /^\d{1,7}(\.\d{1,3})?$/;
             if (!pattern.test(String(raw))) required = null;
             else required = definition.requirement_type === "courses" ? Number(raw) : milli(String(raw));
         }
-        if (definition.rules.some(r=>r.eligibility)) summary.warnings.push("Listed totals exclude saved-rule matches. Run a student test to evaluate matching work.");
+        if (definition.rules.some((r) => r.eligibility))
+            summary.warnings.push(
+                "Listed totals exclude saved-rule matches. Run a student test to evaluate matching work.",
+            );
         else if (!ids.length) summary.warnings.push("Add published courses to plan this group.");
         else if (required == null)
             summary.warnings.push("Enter a valid required total to compare it with the listed courses.");
         else if (definition.requirement_type === "courses") {
             if (required > ids.length)
-                summary.warnings.push(
-                    "The required course count exceeds the number of distinct listed courses.",
-                );
+                summary.warnings.push("The required course count exceeds the number of distinct listed courses.");
         } else if (required > credits)
             summary.warnings.push(
                 "The required credits exceed the catalog credits of the listed courses. Review this total.",
@@ -208,12 +203,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     function planningPanel(liveUpdates = false) {
         const counts = node("p", { class: "mb-2" }),
             warnings = node("div"),
-            live = node(
-                "div",
-                liveUpdates ? { role: "status", "aria-atomic": "true" } : {},
-                counts,
-                warnings,
-            ),
+            live = node("div", liveUpdates ? { role: "status", "aria-atomic": "true" } : {}, counts, warnings),
             element = node(
                 "section",
                 { class: "audit-tree-section", role: "group", "aria-label": "Group planning summary" },
@@ -230,9 +220,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             update(summary) {
                 counts.textContent = `${summary.course_count} distinct ${summary.course_count === 1 ? "course" : "courses"} · ${summary.catalog_credits_milli == null ? "Catalog credits unavailable" : `${text(summary.catalog_credits_milli)} catalog credits`} · ${summary.rule_count} requirement ${summary.rule_count === 1 ? "card" : "cards"}`;
                 warnings.replaceChildren(
-                    ...summary.warnings.map((message) =>
-                        node("p", { class: "alert alert-warning py-2" }, message),
-                    ),
+                    ...summary.warnings.map((message) => node("p", { class: "alert alert-warning py-2" }, message)),
                 );
             },
         };
@@ -350,10 +338,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             return node(
                                 "li",
                                 {},
-                                node(waived ? "s" : "span", {}, details[id] ? courseLabel(details[id]) : "Selected course"),
+                                node(
+                                    waived ? "s" : "span",
+                                    {},
+                                    details[id] ? courseLabel(details[id]) : "Selected course",
+                                ),
                                 " ",
                                 details[id] ? badge(`${text(details[id].credits_milli)} credits`) : null,
-                                ...(details[id]?.accepted_versions?.length ? [acceptedPublicationList(details[id])] : []),
+                                ...(details[id]?.accepted_versions?.length
+                                    ? [acceptedPublicationList(details[id])]
+                                    : []),
                                 ...(item.course_approvals?.publications?.[id] || []).map((v) =>
                                     node(
                                         "p",
@@ -411,9 +405,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         transfer_overall_gpa: "Transfer awards in overall GPA",
     };
     function degreeTree(item, approvals = null) {
-        const d = approvals
-                ? { ...item.definition, ...approvals.effective_minimums.degree }
-                : item.definition,
+        const d = approvals ? { ...item.definition, ...approvals.effective_minimums.degree } : item.definition,
             tree = node(
                 "section",
                 { class: "audit-preview" },
@@ -424,8 +416,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `${text(d.min_credits_milli)} total credits · ${text(d.min_resident_milli)} resident credits`,
                 ),
             );
-        if (item.specialization) tree.append(node("p", { class: "alert alert-info" },
-            `Specialization requirements · ${item.specialization.code} — ${item.specialization.title}`));
+        if (item.specialization)
+            tree.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    `Specialization requirements · ${item.specialization.code} — ${item.specialization.title}`,
+                ),
+            );
         if (item.program_publication) {
             const program = item.program_publication;
             const definition = program.definition;
@@ -434,11 +432,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 { class: "audit-tree-section" },
                 node("summary", {}, `Retained program · ${definition.code} — ${definition.title}`),
                 node("p", {}, `${program.academic_year_code} · Catalog revision ${program.catalog_revision}`),
-                node(
-                    "p",
-                    { class: "course-description-text" },
-                    definition.description || "No description specified.",
-                ),
+                node("p", { class: "course-description-text" }, definition.description || "No description specified."),
             );
             for (const [kind, label] of Object.entries({
                 department: "Department",
@@ -446,9 +440,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 award: "Award",
             })) {
                 const value = definition.classifications[kind];
-                facts.append(
-                    node("p", {}, `${label}: ${value ? `${value.code} — ${value.title}` : "Not specified"}`),
-                );
+                facts.append(node("p", {}, `${label}: ${value ? `${value.code} — ${value.title}` : "Not specified"}`));
             }
             tree.append(facts);
         }
@@ -474,11 +466,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             tree.append(scaleDetails);
         } else
             tree.append(
-                node(
-                    "p",
-                    { class: "form-text" },
-                    "Grading scale was not recorded with this earlier definition.",
-                ),
+                node("p", { class: "form-text" }, "Grading scale was not recorded with this earlier definition."),
             );
         const courseApprovals = approvals ? previewCourseApprovals(approvals) : null;
         for (const g of d.groups) {
@@ -522,8 +510,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function pager(target, data, after, stack, run, cursorKey = "next_after") {
         if (stack.length) target.append(button("Previous page", () => run(stack.at(-1), stack.slice(0, -1))));
-        if (data[cursorKey])
-            target.append(button("Next page", () => run(data[cursorKey], [...stack, after])));
+        if (data[cursorKey]) target.append(button("Next page", () => run(data[cursorKey], [...stack, after])));
     }
     async function library(query = "", after = null, stack = [], back = null) {
         const result = await post("/sis/course-groups/page/", {
@@ -570,8 +557,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     ),
                 ),
             );
-        if (!result.items.length)
-            cards.append(node("p", {}, "No groups yet. Create a reusable block to get started."));
+        if (!result.items.length) cards.append(node("p", {}, "No groups yet. Create a reusable block to get started."));
         body.append(cards);
         pager(body, result, after, stack, (a, s) => library(query, a, s, back));
     }
@@ -747,9 +733,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             e.dataTransfer.setData("application/x-etsis-requirement", JSON.stringify(payload));
             e.dataTransfer.effectAllowed = "copyMove";
         });
-        element.append(
-            node("span", { class: "audit-drag-hint", "aria-hidden": "true" }, "⠿ Drag or use the buttons"),
-        );
+        element.append(node("span", { class: "audit-drag-hint", "aria-hidden": "true" }, "⠿ Drag or use the buttons"));
     }
     function dropzone(element, accept) {
         element.addEventListener("dragover", (e) => {
@@ -859,10 +843,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
                 button(`Suggest saved ${kind} checks`, async () => {
                     if (!consent.reportValidity()) return;
-                    if (
-                        JSON.stringify(normalize()) !== baseline ||
-                        current().revision !== preview.saved_revision
-                    ) {
+                    if (JSON.stringify(normalize()) !== baseline || current().revision !== preview.saved_revision) {
                         throw new Error("The saved draft changed. Save it and inspect a fresh preview.");
                     }
                     controls.disabled = true;
@@ -879,10 +860,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             },
                         );
                         if (!results.isConnected) return;
-                        if (
-                            JSON.stringify(normalize()) !== baseline ||
-                            current().revision !== preview.saved_revision
-                        ) {
+                        if (JSON.stringify(normalize()) !== baseline || current().revision !== preview.saved_revision) {
                             progress.textContent =
                                 "Your draft changed. Suggestions were discarded; review a fresh saved preview.";
                             return;
@@ -899,8 +877,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     } finally {
                         controls.disabled = false;
                         if (!results.childNodes.length && !progress.textContent.includes("discarded"))
-                            progress.textContent =
-                                "No suggestion was applied. Another request requires fresh consent.";
+                            progress.textContent = "No suggestion was applied. Another request requires fresh consent.";
                     }
                 }),
             );
@@ -1185,7 +1162,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     );
                 if (history.length)
                     body.append(
-                        button("Newer saved-rule revisions", () => revisions(item, history.at(-1), history.slice(0, -1))),
+                        button("Newer saved-rule revisions", () =>
+                            revisions(item, history.at(-1), history.slice(0, -1)),
+                        ),
                     );
                 if (page.next_before)
                     body.append(
@@ -1254,14 +1233,19 @@ window.createWorkspaceDegreeAudit = function (ui) {
             }
             for (const pick of picks) {
                 const existing = model.courses.find((c) => c.course_id === pick.course_id);
-                const accepted = (existing?.accepted_version_ids || []).filter(v=>v!==pick.version_id);
-                const acceptedDetails = (details[pick.course_id]?.accepted_versions || []).filter(v=>accepted.includes(v.version_id));
+                const accepted = (existing?.accepted_version_ids || []).filter((v) => v !== pick.version_id);
+                const acceptedDetails = (details[pick.course_id]?.accepted_versions || []).filter((v) =>
+                    accepted.includes(v.version_id),
+                );
                 if (existing) {
                     existing.version_id = pick.version_id;
                     if (accepted.length) existing.accepted_version_ids = accepted;
                     else delete existing.accepted_version_ids;
                 } else model.courses.push({ course_id: pick.course_id, version_id: pick.version_id });
-                details[pick.course_id] = {...pick.detail, ...(acceptedDetails.length ? {accepted_versions:acceptedDetails} : {})};
+                details[pick.course_id] = {
+                    ...pick.detail,
+                    ...(acceptedDetails.length ? { accepted_versions: acceptedDetails } : {}),
+                };
                 if (!r.course_ids.includes(pick.course_id)) r.course_ids.push(pick.course_id);
             }
             render();
@@ -1319,30 +1303,37 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             }),
                     ),
                 );
-                card.append(...[
-                    r.eligibility
-                        ? courseRuleTree(r.eligibility)
-                        : node("p", { class: "form-text" }, "Source: selected published courses"),
-                    ui.can("sis:rules:manage")
-                        ? button(`Choose saved rule for requirement ${i + 1}`, () => pickRule(r))
-                        : null,
-                    r.eligibility
-                        ? button(`Use listed courses for requirement ${i + 1}`, () => {
-                              delete r.eligibility;
-                              r.mode = "all";
-                              r.minimum_courses = 0;
-                              delete r.minimum_credits_milli;
-                              render();
-                          })
-                        : null,
-                ].filter(Boolean));
+                card.append(
+                    ...[
+                        r.eligibility
+                            ? courseRuleTree(r.eligibility)
+                            : node("p", { class: "form-text" }, "Source: selected published courses"),
+                        ui.can("sis:rules:manage")
+                            ? button(`Choose saved rule for requirement ${i + 1}`, () => pickRule(r))
+                            : null,
+                        r.eligibility
+                            ? button(`Use listed courses for requirement ${i + 1}`, () => {
+                                  delete r.eligibility;
+                                  r.mode = "all";
+                                  r.minimum_courses = 0;
+                                  delete r.minimum_credits_milli;
+                                  render();
+                              })
+                            : null,
+                    ].filter(Boolean),
+                );
                 if (r.mode === "choose")
                     card.append(
-                        field(`Requirement ${i + 1} number of courses`, r.minimum_courses, (v) => (r.minimum_courses = v), {
-                            type: "number",
-                            min: 1,
-                            max: r.eligibility ? 200 : 50,
-                        }),
+                        field(
+                            `Requirement ${i + 1} number of courses`,
+                            r.minimum_courses,
+                            (v) => (r.minimum_courses = v),
+                            {
+                                type: "number",
+                                min: 1,
+                                max: r.eligibility ? 200 : 50,
+                            },
+                        ),
                     );
                 if (r.mode === "credits")
                     card.append(
@@ -1365,7 +1356,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             "li",
                             {},
                             node("span", {}, details[id] ? courseLabel(details[id]) : "Selected course"),
-                            button(`Manage accepted publications for ${details[id]?.code || "course"}`, () => acceptedVersions(id)),
+                            button(`Manage accepted publications for ${details[id]?.code || "course"}`, () =>
+                                acceptedVersions(id),
+                            ),
                             ...(details[id]?.accepted_versions?.length ? [acceptedPublicationList(details[id])] : []),
                             button(
                                 `Remove ${details[id]?.code || "course"} from requirement ${i + 1}`,
@@ -1453,7 +1446,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
             const previous = dialog;
             const data = await post(`/sis/courses/${id}/publication/page/`, cursor ? { cursor } : {});
             if (dialog !== previous) return;
-            const body = screen(`Accepted publications · ${details[id]?.code || "Course"}`, "EXPLICIT CURRICULUM ALLOWANCES");
+            const body = screen(
+                `Accepted publications · ${details[id]?.code || "Course"}`,
+                "EXPLICIT CURRICULUM ALLOWANCES",
+            );
             body.append(
                 node(
                     "p",
@@ -1539,7 +1535,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 versions.append(control);
             }
             selectedList();
-            body.append(selected, limitNotice, versions, actions(apply, button("Keep current accepted publications", restore)));
+            body.append(
+                selected,
+                limitNotice,
+                versions,
+                actions(apply, button("Keep current accepted publications", restore)),
+            );
             pager(body, data, cursor, stack, (c, h) => acceptedVersions(id, c, h, choices), "next_cursor");
         }
         async function courseSource(query = "", after = null, stack = []) {
@@ -1579,7 +1580,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
             }
             if (!data.items.length)
                 source.append(
-                    node("p", {}, "No matching courses. Publish a course in the Academic catalog before using it here."),
+                    node(
+                        "p",
+                        {},
+                        "No matching courses. Publish a course in the Academic catalog before using it here.",
+                    ),
                 );
             pager(source, data, after, stack, (a, s) => courseSource(query, a, s));
         }
@@ -1628,7 +1633,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const published = model.source === "publication" ? model.publication : null;
         let choiceRequest = 0,
             sourceRequest = 0;
-        const body = screen(saved.specialization_id ? "Test a specialization audit" : "Test a degree audit", "RUNTIME ONLY · NO SAVED RESULTS");
+        const body = screen(
+            saved.specialization_id ? "Test a specialization audit" : "Test a degree audit",
+            "RUNTIME ONLY · NO SAVED RESULTS",
+        );
         const restore = () => auditTrial(saved, snapshot, back, model);
         restore.returnLabel = "Back to test setup";
         body.append(
@@ -1646,9 +1654,18 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     : `${saved.context.program_title} · ${saved.context.academic_year_code} · Current editor snapshot, including unsaved degree edits.`,
             ),
             actions(
-                button(snapshot === null ? "Return to audit versions" : saved.specialization_id ? "Return to specialization builder" : "Return to degree builder", back),
-                button(saved.specialization_id ? "Choose another specialization audit" : "Choose another degree audit",
-                    () => launch(saved.program_id, null, [], saved.specialization_id || null)),
+                button(
+                    snapshot === null
+                        ? "Return to audit versions"
+                        : saved.specialization_id
+                          ? "Return to specialization builder"
+                          : "Return to degree builder",
+                    back,
+                ),
+                button(
+                    saved.specialization_id ? "Choose another specialization audit" : "Choose another degree audit",
+                    () => launch(saved.program_id, null, [], saved.specialization_id || null),
+                ),
             ),
         );
         const sourceChoices = node("section", { class: "audit-panel", "aria-label": "Audit source" });
@@ -1784,7 +1801,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     }),
                 );
             if (!matches.length)
-                choices.append(node("p", {}, "No pursuits on this page. Choose another student or check the next page."));
+                choices.append(
+                    node("p", {}, "No pursuits on this page. Choose another student or check the next page."),
+                );
             pager(choices, data, after, stack, (a, s) => pursuits(student, a, s));
         }
         async function run() {
@@ -1843,11 +1862,20 @@ window.createWorkspaceDegreeAudit = function (ui) {
             model.length_months = model.length_months == null ? "" : String(model.length_months);
         }
         const restore = () => degreeEditor(saved, { model, details }, directory),
-            body = screen(specialization ? "Specialization audit builder" : "Degree audit builder", `${saved.context.academic_year_code} · ${saved.context.program_title}`),
+            body = screen(
+                specialization ? "Specialization audit builder" : "Degree audit builder",
+                `${saved.context.academic_year_code} · ${saved.context.program_title}`,
+            ),
             status = node("p", { role: "status", class: "audit-status" });
         restore.returnLabel = specialization ? "Return to specialization draft" : "Return to degree draft";
-        if (specialization) body.append(node("p", { class: "alert alert-info" },
-            `Specialization: ${saved.specialization.code} — ${saved.specialization.title}. Publish the program’s offered choice for this academic year before publishing these requirements. Runtime tests evaluate this component independently.`));
+        if (specialization)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    `Specialization: ${saved.specialization.code} — ${saved.specialization.title}. Publish the program’s offered choice for this academic year before publishing these requirements. Runtime tests evaluate this component independently.`,
+                ),
+            );
         body.append(
             actions(
                 button("Back to requirement drafts", directory),
@@ -1857,7 +1885,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         {
                             definition: normalDegree(model),
                             group_details: details,
-                            grade_scale: saved.grade_scale, specialization: saved.specialization,
+                            grade_scale: saved.grade_scale,
+                            specialization: saved.specialization,
                         },
                         "degree",
                         restore,
@@ -1930,7 +1959,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 model.min_cumulative_gpa_milli,
                 (v) => (model.min_cumulative_gpa_milli = v),
             ),
-            field("Minimum overall GPA (optional)", model.min_overall_gpa_milli, (v) => (model.min_overall_gpa_milli = v)),
+            field(
+                "Minimum overall GPA (optional)",
+                model.min_overall_gpa_milli,
+                (v) => (model.min_overall_gpa_milli = v),
+            ),
             field("Expected length in months (optional)", model.length_months, (v) => (model.length_months = v), {
                 type: "number",
                 min: 1,
@@ -1945,7 +1978,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         let orderingPolicy = null;
         for (const [key, choices] of Object.entries(policyChoices)) {
-            const group = node("fieldset", { class: "audit-policy" }, node("legend", { class: "h6" }, policyLabels[key]));
+            const group = node(
+                "fieldset",
+                { class: "audit-policy" },
+                node("legend", { class: "h6" }, policyLabels[key]),
+            );
             if (key === "repeat_attempt_order") {
                 orderingPolicy = group;
                 group.hidden = model.policies.repeat_gpa !== "latest_eligible";
@@ -2200,7 +2237,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function reasonScreen(kind, saved, back, directory) {
         const body = screen(
-            kind === "group" ? "Review course group publication" : saved.specialization_id ? "Review specialization publication" : "Review degree publication",
+            kind === "group"
+                ? "Review course group publication"
+                : saved.specialization_id
+                  ? "Review specialization publication"
+                  : "Review degree publication",
         );
         let reason = "";
         body.append(
@@ -2304,7 +2345,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             : null,
                         kind === "degree"
                             ? button(`Clone version ${row.version} to another academic year`, () =>
-                                  years(program, { id, version: row.version_id, specialization_id: row.specialization_id }),
+                                  years(program, {
+                                      id,
+                                      version: row.version_id,
+                                      specialization_id: row.specialization_id,
+                                  }),
                               )
                             : null,
                     ),
@@ -2379,14 +2424,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 data.selection
                     ? button("Student exceptions", () => studentExceptions(studentId, assignmentId, restore))
                     : null,
-                ui.can?.("sis:degree-audit:assign") &&
-                    ui.can?.("sis:student:read") &&
-                    data.scope.status === "active"
-                    ? button(
-                          "Assign published requirements",
-                          () => studentChoices(base, data, restore),
-                          "btn-primary",
-                      )
+                ui.can?.("sis:degree-audit:assign") && ui.can?.("sis:student:read") && data.scope.status === "active"
+                    ? button("Assign published requirements", () => studentChoices(base, data, restore), "btn-primary")
                     : null,
                 button("Back to student", async () => {
                     close();
@@ -2437,6 +2476,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "Course sharing was not recorded in this earlier program publication. Ask the registrar to review the retained curriculum; today's setting cannot replace it.",
                 specialization_requirements_missing:
                     "Each selected specialization needs an assigned requirements publication before a combined review.",
+                component_routing_changed:
+                    "Curriculum assignments changed after a course routing approval. Review or revoke that approval in Course routing before running the combined review.",
                 component_inputs_need_review:
                     "At least one component has unsupported or unresolved requirement inputs. No combined placement or partial component results are shown.",
             };
@@ -2479,7 +2520,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 {},
-                "Each component keeps its own group, grading and repeat policies. Overall credit and GPA figures are not added across components. Degree-specific approvals stay with the degree; pursuit-wide course waivers also apply to specializations. Specialization-specific exceptions and component exclusions are not included yet.",
+                "Each component keeps its own group, grading and repeat policies. Overall credit and GPA figures are not added across components. Degree-specific approvals stay with the degree; pursuit-wide course waivers also apply to specializations. Specialization-specific approvals and reviewed course routes apply to their retained assignments.",
             ),
             node(
                 "p",
@@ -2591,7 +2632,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 combined
                     ? "Minimum checks use this component's retained policies. Group placements are its part of the single combined plan. Figures are not added to another component's totals. No result or academic change is saved."
                     : component
-                      ? "Compare verified current work with the exact assigned specialization requirements. Student-specific exceptions are not applied in this independent comparison. Credits and GPA are calculated once within this review, not added to the degree's totals. No result or academic change is saved; this does not establish combined completion or graduation eligibility."
+                      ? "Compare verified current work with the exact assigned specialization requirements. Approved exceptions for this assignment and pursuit-wide waivers are included. Cross-component routing is evaluated in combined curriculum progress. Credits and GPA are calculated once within this review, not added to the degree's totals. No result or academic change is saved; this does not establish combined completion or graduation eligibility."
                       : trial
                         ? "Temporary test of the selected audit requirements against verified student work. No result is saved. No definition is published and no student assignment changes. Student-specific exceptions approved for published requirements are not applied. This does not establish graduation eligibility."
                         : "Review current work against the selected degree's general minimums and course groups, including approved exceptions. All checks use one verified read. This is not a completed degree audit or graduation decision, and it saves no academic changes.",
@@ -2940,7 +2981,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function degreeProgressContributions(data, back, offset = 0, filter = "all", term = "all") {
         const body = screen(
-            data.mode === "combined_component" ? "Component progress contributions" : data.mode === "assigned_specialization" ? "Specialization progress contributions" : "Degree progress contributions",
+            data.mode === "combined_component"
+                ? "Component progress contributions"
+                : data.mode === "assigned_specialization"
+                  ? "Specialization progress contributions"
+                  : "Degree progress contributions",
             "SAME VERIFIED CURRENT WORK",
         );
         body.append(
@@ -2954,10 +2999,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const termRecords = data.records.filter((r) => term === "all" || r.term_id === term);
         const filters = {
             all: ["All work", () => true],
-            unused: [
-                "Unused completed",
-                (r) => r.academic_state === "completed" && r.placement === "not_used",
-            ],
+            unused: ["Unused completed", (r) => r.academic_state === "completed" && r.placement === "not_used"],
             pending: ["Awaiting grades", (r) => r.academic_state === "awaiting_grade"],
             placed: ["Placed or alternatives", (r) => ["proposed", "alternative"].includes(r.placement)],
             other: ["Other outcomes", (r) => !["completed", "awaiting_grade"].includes(r.academic_state)],
@@ -2977,8 +3019,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
             control.setAttribute("data-work-filter", key);
             control.setAttribute("aria-pressed", String(key === filter));
-            if (["unused", "placed"].includes(key) && !data.work_summary.placement_established)
-                control.disabled = true;
+            if (["unused", "placed"].includes(key) && !data.work_summary.placement_established) control.disabled = true;
             controls.append(control);
         }
         body.append(controls);
@@ -3035,7 +3076,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node("h2", {}, `${record.course_code} · ${record.course_title}`),
                     node("p", {}, degreeWorkStates[record.academic_state]),
                     node("p", {}, window.degreeProgressGradeText(record, text)),
-                    ...(record.recorded_earned_milli == null ? [] : [node("p", {}, `${text(record.recorded_earned_milli)} recorded earned credits before overall repeat-policy treatment.`)]),
+                    ...(record.recorded_earned_milli == null
+                        ? []
+                        : [
+                              node(
+                                  "p",
+                                  {},
+                                  `${text(record.recorded_earned_milli)} recorded earned credits before overall repeat-policy treatment.`,
+                              ),
+                          ]),
                     node(
                         "p",
                         {},
@@ -3055,11 +3104,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         {},
                         `Cumulative GPA: ${record.cumulative_gpa === "transfer_excluded" ? "Transfer attempts are outside cumulative GPA" : calculationReasons[record.cumulative_gpa] || "Needs review"}.`,
                     ),
-                    node(
-                        "p",
-                        {},
-                        `Overall GPA: ${calculationReasons[record.overall_gpa] || "Needs review"}.`,
-                    ),
+                    node("p", {}, `Overall GPA: ${calculationReasons[record.overall_gpa] || "Needs review"}.`),
                 ),
             );
         }
@@ -3091,8 +3136,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     const placementIssues = {
         policy_unknown: "A required sharing or repeat-credit policy was not recorded.",
         grade_unknown: "A relevant retained grade definition is unknown.",
-        course_version_unknown:
-            "Relevant earned work has no retained course publication. Review its equivalence.",
+        course_version_unknown: "Relevant earned work has no retained course publication. Review its equivalence.",
         course_version_differs:
             "Relevant work uses a different course publication. Review its equivalence before placement.",
         scale_unknown: "A required retained grading publication is unknown.",
@@ -3105,6 +3149,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             "An earlier group uses an average-GPA rule. This placement review cannot yet evaluate that constraint.",
     };
     const placementStatuses = {
+        component_excluded: "Reserved for another curriculum component by an approved course route",
         candidate: "Eligible after course-publication and group-grade checks",
         in_progress: "No final grade recorded",
         insufficient_grade: "Below a group's minimum course grade points",
@@ -3141,7 +3186,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 combined
                     ? "These are this component's placements from the joint curriculum search. Sharing follows the retained program policy and each component's group policy. No independent refresh or partial plan is substituted here."
                     : component
-                      ? "Independent placement against the assigned specialization requirements. Student-specific exceptions and cross-component sharing/exclusions are not applied. This is a current comparison, not a retained result or a graduation decision."
+                      ? "Independent placement against the assigned specialization requirements. Approved exceptions for this assignment are included. Use combined curriculum progress to review cross-component sharing and routing. This is a current comparison, not a retained result or a graduation decision."
                       : data.context?.mode === "runtime_test"
                         ? "Temporary placement against the tested audit requirements. Approved student-specific exceptions are not applied. No result or academic change is saved, and this is not a graduation decision."
                         : "Review a proposed placement of current work against course-group quantities and required courses, including approved exceptions. Overall GPA, residency, specialization rules and graduation eligibility are not evaluated here. This review saves no academic changes or audit result.",
@@ -3479,11 +3524,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `Group quantity met in this proposed plan: ${text(group.coverage.applied_credits_milli)} applied credits · ${group.coverage.applied_courses} distinct course${group.coverage.applied_courses === 1 ? "" : "s"}. These group contributions do not add to overall earned credit or GPA.`,
                 ),
             );
-        const namedRecords = new Map(data.records.map(record => [record.id, record]));
+        const namedRecords = new Map(data.records.map((record) => [record.id, record]));
         body.append(
-            window.createDegreeNamedCourseReview(
-                { node, button, milli: text }, group.course_review,
-                attempt => namedRecords.get(attempt.work_id),
+            window.createDegreeNamedCourseReview({ node, button, milli: text }, group.course_review, (attempt) =>
+                namedRecords.get(attempt.work_id),
             ),
             groupGapDetails(group, data.outcome),
             node("h2", {}, "Retained course requirements"),
@@ -3503,9 +3547,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
             );
             if (coverage) {
-                detail.querySelector("summary").append(
-                    node("span", { class: "d-block audit-status" }, ruleCoverageSummary(coverage)),
-                );
+                detail
+                    .querySelector("summary")
+                    .append(node("span", { class: "d-block audit-status" }, ruleCoverageSummary(coverage)));
                 detail.append(
                     node(
                         "p",
@@ -3546,7 +3590,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                 (rule.eligibility ? p.course_id : p.target_course_id) === id &&
                                 (!p.rule_credits_milli || Object.hasOwn(p.rule_credits_milli, rule.id)),
                         );
-                    const eligible = (rule.eligibility ? gap?.eligible_course_ids : gap?.eligible_target_ids)?.includes(id);
+                    const eligible = (rule.eligibility ? gap?.eligible_course_ids : gap?.eligible_target_ids)?.includes(
+                        id,
+                    );
                     list.append(
                         node(
                             "li",
@@ -3568,11 +3614,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         if (ruleOffset + 20 < group.rules.length)
             rulePages.append(
-                button("Next requirement cards", () => groupPlacementDetails(data, group, back, offset, ruleOffset + 20)),
+                button("Next requirement cards", () =>
+                    groupPlacementDetails(data, group, back, offset, ruleOffset + 20),
+                ),
             );
         body.append(rulePages, node("h2", {}, "Proposed placements"));
         const cards = node("div", { class: "audit-library-grid" });
-        const records = new Map(data.records.map(record => [record.id, record]));
+        const records = new Map(data.records.map((record) => [record.id, record]));
         for (const p of group.placements.slice(offset, offset + 20)) {
             const article = node(
                 "article",
@@ -3592,9 +3640,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         : `${p.work_options[0].length} eligible award${p.work_options[0].length === 1 ? "" : "s"} support this placement.`,
                 ),
             );
-            article.append(window.createDegreeProgressEvidence(
-                { node, button, milli: text }, p.work_options, id => records.get(id),
-            ));
+            article.append(
+                window.createDegreeProgressEvidence({ node, button, milli: text }, p.work_options, (id) =>
+                    records.get(id),
+                ),
+            );
             if (p.rule_credits_milli) {
                 const contributions = node("details", {}, node("summary", {}, "Requirement contributions"));
                 let loaded = false;
@@ -3608,7 +3658,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         const label = rule.eligibility
                             ? `${rule.eligibility.code} · Revision ${rule.eligibility.revision}`
                             : `${rule.mode === "all" ? "All listed courses" : rule.mode === "choose" ? `Choose ${rule.minimum_courses} listed courses` : rule.mode === "credits" ? `Take ${text(rule.minimum_credits_milli)} listed credits` : "Eligible listed course pool"} · ${p.target_code}`;
-                        list.append(node("li", {}, `${label}: ${text(credits)} eligible credits · One distinct course`));
+                        list.append(
+                            node("li", {}, `${label}: ${text(credits)} eligible credits · One distinct course`),
+                        );
                     }
                     contributions.append(list);
                 });
@@ -3736,11 +3788,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h2", {}, "Earned credits"),
-                    node(
-                        "p",
-                        { class: "h3" },
-                        totals.credit_ready ? text(totals.earned_milli) : "Undetermined",
-                    ),
+                    node("p", { class: "h3" }, totals.credit_ready ? text(totals.earned_milli) : "Undetermined"),
                     node(
                         "p",
                         {},
@@ -3838,7 +3886,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
                     node("p", {}, `GPA: ${calculationReasons[record.gpa] || "Needs review"}.`),
                     record.grading_republication_verified
-                        ? node("p", {}, "The recorded grading publication was verified as identical to this degree's scale. Its original reference is preserved.")
+                        ? node(
+                              "p",
+                              {},
+                              "The recorded grading publication was verified as identical to this degree's scale. Its original reference is preserved.",
+                          )
                         : null,
                 ),
             );
@@ -3855,13 +3907,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
         const pages = actions();
         if (offset > 0)
-            pages.append(
-                button("Previous contributions", () => renderCalculations(base, back, data, offset - 20)),
-            );
+            pages.append(button("Previous contributions", () => renderCalculations(base, back, data, offset - 20)));
         if (offset + 20 < data.records.length)
-            pages.append(
-                button("Next contributions", () => renderCalculations(base, back, data, offset + 20)),
-            );
+            pages.append(button("Next contributions", () => renderCalculations(base, back, data, offset + 20)));
         body.append(pages);
     }
     async function verifyAcademicInputs(base, back) {
@@ -4003,11 +4051,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h2", {}, `${item.course_code} · ${item.course_title}`),
-                    node(
-                        "p",
-                        {},
-                        `${item.credit_type === "transfer" ? "Transfer" : "Institutional"} · ${status}`,
-                    ),
+                    node("p", {}, `${item.credit_type === "transfer" ? "Transfer" : "Institutional"} · ${status}`),
                     node(
                         "p",
                         {},
@@ -4151,9 +4195,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "Review requirement assignment",
                     async () => {
                         if (!selected || !started || !reason.trim())
-                            throw new Error(
-                                "Choose a published version, the actual pursuit start date, and a reason.",
-                            );
+                            throw new Error("Choose a published version, the actual pursuit start date, and a reason.");
                         const review = await post(`${base}review/`, {
                             template_id: template,
                             requirements_version_id: selected,
@@ -4264,22 +4306,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         {},
                         `Pursuit began ${item.pursuit_started_on}. Effective ${item.effective_at}. Recorded ${item.recorded_at}.`,
                     ),
-                    node(
-                        "p",
-                        { class: "form-text" },
-                        `Requirement reference: ${item.requirements_version_id}`,
-                    ),
+                    node("p", { class: "form-text" }, `Requirement reference: ${item.requirements_version_id}`),
                 ),
             );
         if (!data.items.length) body.append(node("p", {}, "No requirement assignment decisions yet."));
-        pager(
-            body,
-            data,
-            cursor,
-            stack,
-            (next, previous) => studentHistory(base, back, next, previous),
-            "next_cursor",
-        );
+        pager(body, data, cursor, stack, (next, previous) => studentHistory(base, back, next, previous), "next_cursor");
         body.append(button("Back to selected requirements", back));
     }
 
@@ -4317,8 +4348,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     (key === "min_credits_milli" && group.requirement_type === "courses")
                 )
                     continue;
-                const amount =
-                    value == null ? "No minimum" : key === "min_courses" ? String(value) : text(value);
+                const amount = value == null ? "No minimum" : key === "min_courses" ? String(value) : text(value);
                 detail.append(
                     node(
                         "p",
@@ -4333,13 +4363,16 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function adjustmentLabel(p, data) {
         const d = p.definition;
+        if (d.kind === "component_route") {
+            const course = data?.substitution_details?.[p.adjustment_id];
+            const target = data?.routing_components?.find((c) => c.version_id === d.target_version_id);
+            return `${p.subject_label || `Course routing · ${course ? courseLabel(course) : "Retained course"}`} → ${p.scope_label || (target ? `${target.specialization ? `Specialization ${target.specialization.code}` : "Degree"} · ${target.name}` : "Retained curriculum component")}`;
+        }
         if (d.kind === "placement") {
             if (p.subject_label) return `${p.subject_label} → ${p.scope_label}`;
-            if (p.applicable === false)
-                return "Course placement · retained approval for an earlier degree publication";
+            if (p.applicable === false) return "Course placement · retained approval for an earlier degree publication";
             const course = (data?.placement_courses || data?.courses)?.find(
-                (c) => c.course_id === d.course_id &&
-                    c.substitution_adjustment_id === d.substitution_adjustment_id,
+                (c) => c.course_id === d.course_id && c.substitution_adjustment_id === d.substitution_adjustment_id,
             );
             const retained = data?.substitution_details?.[p.adjustment_id];
             const group = course?.placement_groups?.find((g) => g.id === d.group_id);
@@ -4348,8 +4381,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             return `Course placement · ${group ? `${group.course_code} · ${group.course_title}` : "Retained course"} → ${group?.name || data?.group_labels?.[d.group_id] || "Retained group"}`;
         }
         if (d.kind === "course_version") {
-            const version=data?.substitution_details?.[p.adjustment_id];
-            const required=data?.courses?.find(c=>c.course_id===d.course_id);
+            const version = data?.substitution_details?.[p.adjustment_id];
+            const required = data?.courses?.find((c) => c.course_id === d.course_id);
             return `${p.subject_label || `Course publication acceptance · ${required ? courseLabel(required) : "Retained course"}`} → ${p.replacement_label || (version ? `Version ${version.version} · ${courseLabel(version)}` : "Selected retained publication")}`;
         }
         if (d.kind === "substitution") {
@@ -4363,31 +4396,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
             return `Course waiver · ${c ? courseLabel(c) : "Retained course reference"}`;
         }
         const t = data?.targets?.find((t) => t.group_id === d.group_id && t.minimum === d.minimum);
-        return `${t?.label || p.scope_label || (d.group_id ? "Course group" : "Degree")} · ${minimumLabels[d.minimum]}: ${text(d.original_milli)} → ${text(d.required_milli)}`;
+        return `${p.scope_label || t?.label || (d.group_id ? "Course group" : "Degree")} · ${minimumLabels[d.minimum]}: ${text(d.original_milli)} → ${text(d.required_milli)}`;
     }
     function previewCourseApprovals(data) {
-        const replacements = {}, publications={};
+        const replacements = {},
+            publications = {};
         for (const item of data.items) {
             const d = item.definition;
-            if (item.applicable && d.kind==="course_version" && data.effective_minimums.accepted_course_versions?.[d.course_id]?.[d.version_id]) {
+            if (
+                item.applicable &&
+                d.kind === "course_version" &&
+                data.effective_minimums.accepted_course_versions?.[d.course_id]?.[d.version_id]
+            ) {
                 (publications[d.course_id] ||= []).push(data.substitution_details[item.adjustment_id]);
             }
             if (!item.applicable || d.kind !== "substitution") continue;
             const effective = data.effective_minimums.substitutions[d.course_id];
-            if (
-                effective?.course_id === d.replacement_course_id &&
-                effective?.version_id === d.replacement_version_id
-            )
+            if (effective?.course_id === d.replacement_course_id && effective?.version_id === d.replacement_version_id)
                 replacements[d.course_id] = data.substitution_details[item.adjustment_id];
         }
         return { waived_course_ids: data.effective_minimums.waived_course_ids, replacements, publications };
     }
-    async function adjustedRequirements(
-        base,
-        back,
-        withApprovals = true,
-        backLabel = "Back to student exceptions",
-    ) {
+    async function adjustedRequirements(base, back, withApprovals = true, backLabel = "Back to student exceptions") {
         const data = await request(`${base}preview/`),
             body = screen("Requirements with approvals", "ONE STUDENT · ONE PROGRAM PURSUIT");
         body.append(
@@ -4422,11 +4452,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 .map(([kind, label]) => `${kinds(kind)} ${label}${kinds(kind) === 1 ? "" : "s"}`)
                 .join(" · ");
         body.append(
-            node(
-                "p",
-                { class: "form-text" },
-                `Selected publication ${data.requirements.version} · ${summary}.`,
-            ),
+            node("p", { class: "form-text" }, `Selected publication ${data.requirements.version} · ${summary}.`),
             node(
                 "p",
                 { class: "form-text" },
@@ -4476,20 +4502,28 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     { role: "status", class: "audit-status" },
-                    value
-                        ? "Viewing requirements with approved exceptions."
-                        : "Viewing the published baseline.",
+                    value ? "Viewing requirements with approved exceptions." : "Viewing the published baseline.",
                 ),
                 degreeTree(data.requirements, value ? data : null),
             );
         }
         show(withApprovals);
     }
-    async function studentExceptions(studentId, assignmentId, back) {
-        const base = `/sis/students/${studentId}/programs/${assignmentId}/degree-adjustments/`,
-            data = await request(base);
-        const restore = () => studentExceptions(studentId, assignmentId, back),
-            body = screen("Student exceptions", "ONE STUDENT · ONE PROGRAM PURSUIT");
+    async function studentExceptions(studentId, assignmentId, back, componentBase = null, routing = false) {
+        const base = componentBase || `/sis/students/${studentId}/programs/${assignmentId}/degree-adjustments/`,
+            data = await request(routing ? `${base}routing/` : base);
+        const restore = () => studentExceptions(studentId, assignmentId, back, componentBase, routing),
+            body = screen(routing ? "Course routing" : "Student exceptions", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        if (data.component)
+            body.append(node("h2", { class: "h4" }, `Specialization ${data.component.code} · ${data.component.title}`));
+        if (routing)
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "Choose the degree or specialization that may use a course. Other components exclude that course identity, even when the program permits sharing. Grades, repeat rules and earned totals still apply. Changed curriculum assignments require a fresh routing approval or revocation.",
+                ),
+            );
         body.append(
             node(
                 "p",
@@ -4499,20 +4533,26 @@ window.createWorkspaceDegreeAudit = function (ui) {
             actions(
                 ui.can?.("sis:degree-audit:adjust") && ui.can?.("sis:student:read") && data.selection
                     ? button(
-                          "Approve an exception",
+                          routing ? "Route a course" : "Approve an exception",
                           () => exceptionEditor(base, data, restore),
                           "btn-primary",
                       )
                     : null,
-                ...(data.selection
-                    ? [
-                          button("Preview requirements with approvals", () =>
-                              adjustedRequirements(base, restore),
-                          ),
-                      ]
+                ...(data.selection && !routing
+                    ? [button("Preview requirements with approvals", () => adjustedRequirements(base, restore))]
+                    : []),
+                ...(!componentBase && !routing && ui.can?.("sis:student:read")
+                    ? [button("Course routing", () => studentExceptions(studentId, assignmentId, restore, null, true))]
                     : []),
                 button("Exception history", () => exceptionHistory(base, restore)),
-                button("Back to degree requirements", back),
+                button(
+                    componentBase
+                        ? "Back to assigned requirements"
+                        : routing
+                          ? "Back to student exceptions"
+                          : "Back to degree requirements",
+                    back,
+                ),
             ),
         );
         const degree = data.effective_minimums.degree;
@@ -4556,14 +4596,19 @@ window.createWorkspaceDegreeAudit = function (ui) {
             const card = node(
                 "article",
                 { class: "audit-library-card" },
-                badge(
-                    p.applicable
-                        ? "Applies to this pursuit"
-                        : "Retained approval · outside current requirements",
-                ),
+                badge(p.applicable ? "Applies to this pursuit" : "Retained approval · outside current requirements"),
                 node("h2", { class: "h5 mt-3" }, adjustmentLabel(p, data)),
             );
-            if (p.definition.kind === "waiver")
+            if (p.component_label) card.append(node("p", { class: "fw-semibold" }, p.component_label));
+            if (p.definition.kind === "component_route")
+                card.append(
+                    node(
+                        "p",
+                        {},
+                        "This route reserves the course for its reviewed component. If the assignments changed, review a replacement or revoke this retained approval before combined progress can allocate work.",
+                    ),
+                );
+            else if (p.definition.kind === "waiver")
                 card.append(
                     node(
                         "p",
@@ -4573,7 +4618,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 );
             else if (p.definition.kind === "placement")
                 card.append(
-                    node("p", {}, "Eligible work for this course is reserved for the chosen group. Its grade, publication, substitution and repeat requirements still apply."),
+                    node(
+                        "p",
+                        {},
+                        "Eligible work for this course is reserved for the chosen group. Its grade, publication, substitution and repeat requirements still apply.",
+                    ),
                 );
             else if (["substitution", "course_version"].includes(p.definition.kind))
                 card.append(
@@ -4585,7 +4634,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 );
             else
                 card.append(
-                    node("p", {}, "This minimum exception applies to its exact published degree version."),
+                    node(
+                        "p",
+                        {},
+                        "This minimum exception applies to its reviewed curriculum component and publication.",
+                    ),
                 );
             if (ui.can?.("sis:degree-audit:adjust") && ui.can?.("sis:student:read"))
                 card.append(button("Review revocation", () => exceptionRevoke(base, p, data, restore)));
@@ -4594,7 +4647,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function exceptionEditor(base, data, back) {
         let body = screen("Review a student exception", "REGISTRAR APPROVAL"),
-            kind = "waiver",
+            kind = data.routing_components ? "component_route" : "waiver",
             selected = null,
             value = "",
             reason = "",
@@ -4612,13 +4665,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "p",
                 {},
-                "Choose the course or minimum, explain the approval, and review its exact effect before confirming. Waivers and substitutions target a course; minimum exceptions can target a degree or one group. Substitutions use an explicit published replacement.",
+                data.routing_components
+                    ? "Choose a receiving component, select a published course, and review the restriction before approving. A route can be prepared before the student takes the course. It does not make ineligible work eligible."
+                    : "Choose the course or minimum, explain the approval, and review its exact effect before confirming. Waivers target the whole pursuit; other exceptions apply to the selected degree or specialization and its groups. Substitutions use an explicit published replacement.",
             ),
         );
         const [source, inspector] = workbench(body, [
             [
                 "1 · Choose an exception",
-                "Search this program’s published requirements. A waiver targets the course itself.",
+                data.routing_components
+                    ? "Choose which assigned curriculum component may use the course."
+                    : "Search the assigned published requirements. A waiver targets the course throughout the pursuit.",
             ],
             ["2 · Explain and review", "The approval applies only to this student-program pursuit."],
         ]);
@@ -4657,7 +4714,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
             placementChoices.replaceChildren();
             if (!selected) {
                 placementChoices.append(
-                    node("p", {}, "Choose a curriculum course or approved substitute first. No group is selected automatically."),
+                    node(
+                        "p",
+                        {},
+                        "Choose a curriculum course or approved substitute first. No group is selected automatically.",
+                    ),
                 );
                 return;
             }
@@ -4673,7 +4734,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         { class: "audit-source-card" },
                         node("p", {}, `${group.course_code} · ${group.course_title}`),
                         ...(selected.substitution_adjustment_id
-                            ? [node("p", {}, `Approved substitute version ${selected.version} for ${group.required_course_code} · ${group.required_course_title}.`)]
+                            ? [
+                                  node(
+                                      "p",
+                                      {},
+                                      `Approved substitute version ${selected.version} for ${group.required_course_code} · ${group.required_course_title}.`,
+                                  ),
+                              ]
                             : []),
                         choose,
                     ),
@@ -4709,7 +4776,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             replacementList.replaceChildren(node("p", {}, "Choose a curriculum course, then browse its publications."));
         });
         source.append(
-            actions(waiverButton, substitutionButton, versionButton, placementButton, minimumButton),
+            ...(data.routing_components
+                ? []
+                : [actions(waiverButton, substitutionButton, versionButton, placementButton, minimumButton)]),
             search("Search exception targets", "", (q) => {
                 query = q;
                 page = 0;
@@ -4736,7 +4805,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             throw new Error("Choose an exception target and enter its approval reason.");
                         if (kind === "placement" && !placementGroup)
                             throw new Error("Choose the group that should receive this course's eligible work.");
-                        if (["substitution", "course_version"].includes(kind) && !replacement)
+                        if (["substitution", "course_version", "component_route"].includes(kind) && !replacement)
                             throw new Error(
                                 kind === "course_version"
                                     ? "Choose an explicit published version of this course."
@@ -4745,32 +4814,39 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         if (kind === "minimum" && selected.minimum === "min_courses" && !/^\d{1,3}$/.test(value))
                             throw new Error("Use a whole number of courses for this minimum.");
                         const definition =
-                            kind === "waiver"
-                                ? { kind, course_id: selected.course_id }
-                                : kind === "course_version"
-                                  ? { kind, course_id: selected.course_id, version_id: replacement.version_id }
-                                  : kind === "placement"
-                                    ? {
-                                          kind,
-                                          course_id: selected.course_id,
-                                          group_id: placementGroup,
-                                          ...(selected.substitution_adjustment_id
-                                              ? { substitution_adjustment_id: selected.substitution_adjustment_id }
-                                              : {}),
-                                      }
-                                    : kind === "substitution"
+                            kind === "component_route"
+                                ? {
+                                      kind,
+                                      course_id: replacement.course_id,
+                                      course_version_id: replacement.version_id,
+                                      target_version_id: selected.version_id,
+                                  }
+                                : kind === "waiver"
+                                  ? { kind, course_id: selected.course_id }
+                                  : kind === "course_version"
+                                    ? { kind, course_id: selected.course_id, version_id: replacement.version_id }
+                                    : kind === "placement"
                                       ? {
                                             kind,
                                             course_id: selected.course_id,
-                                            replacement_course_id: replacement.course_id,
-                                            replacement_version_id: replacement.version_id,
+                                            group_id: placementGroup,
+                                            ...(selected.substitution_adjustment_id
+                                                ? { substitution_adjustment_id: selected.substitution_adjustment_id }
+                                                : {}),
                                         }
-                                      : {
-                                            kind,
-                                            group_id: selected.group_id,
-                                            minimum: selected.minimum,
-                                            required_milli: milli(value),
-                                        };
+                                      : kind === "substitution"
+                                        ? {
+                                              kind,
+                                              course_id: selected.course_id,
+                                              replacement_course_id: replacement.course_id,
+                                              replacement_version_id: replacement.version_id,
+                                          }
+                                        : {
+                                              kind,
+                                              group_id: selected.group_id,
+                                              minimum: selected.minimum,
+                                              required_milli: milli(value),
+                                          };
                         const reviewed = await post(`${base}review/`, { definition, reason });
                         exceptionConfirmation(base, reviewed, data, back, restore);
                     },
@@ -4780,7 +4856,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
         );
         function render() {
-            replacementPanel.hidden = !["substitution", "course_version"].includes(kind);
+            replacementPanel.hidden = !["substitution", "course_version", "component_route"].includes(kind);
             versionButton.setAttribute("aria-pressed", String(kind === "course_version"));
             placementPanel.hidden = kind !== "placement";
             placementButton.setAttribute("aria-pressed", String(kind === "placement"));
@@ -4793,19 +4869,31 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 description.textContent = "Choose a course or minimum to begin.";
             }
             list.replaceChildren();
-            const sourceChoices = kind === "placement"
-                ? (data.placement_courses || data.courses)
-                : kind !== "minimum" ? data.courses : data.targets;
+            const sourceChoices =
+                kind === "component_route"
+                    ? data.routing_components
+                    : kind === "placement"
+                      ? data.placement_courses || data.courses
+                      : kind !== "minimum"
+                        ? data.courses
+                        : data.targets;
             const all = sourceChoices.filter((t) =>
-                (kind !== "minimum" ? `${t.code} ${t.title}` : `${t.label} ${minimumLabels[t.minimum]}`)
+                (kind === "component_route"
+                    ? `${t.name} ${t.specialization?.code || "Degree"}`
+                    : kind !== "minimum"
+                      ? `${t.code} ${t.title}`
+                      : `${t.label} ${minimumLabels[t.minimum]}`
+                )
                     .toLowerCase()
                     .includes(query.toLowerCase()),
             );
             for (const t of all.slice(page * 30, (page + 1) * 30)) {
                 const label =
-                    kind !== "minimum"
-                        ? `${courseLabel(t)}${t.substitution_adjustment_id ? ` · Approved substitute version ${t.version} for ${t.required_course_code}` : ""}`
-                        : `${t.label} · ${minimumLabels[t.minimum]} · ${text(t.original_milli)}`;
+                    kind === "component_route"
+                        ? `${t.specialization ? `Specialization ${t.specialization.code}` : "Degree"} · ${t.name}`
+                        : kind !== "minimum"
+                          ? `${courseLabel(t)}${t.substitution_adjustment_id ? ` · Approved substitute version ${t.version} for ${t.required_course_code}` : ""}`
+                          : `${t.label} · ${minimumLabels[t.minimum]} · ${text(t.original_milli)}`;
                 list.append(
                     node(
                         "article",
@@ -4820,15 +4908,17 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             placementGroup = null;
                             renderPlacementGroups();
                             description.textContent =
-                                kind === "waiver"
-                                    ? `Waive ${courseLabel(t)} for this program. Appears in: ${t.groups.join(", ")}.`
-                                    : kind === "placement"
-                                      ? `Choose which retained group may use eligible ${courseLabel(t)} work. Other groups will not use this course identity while the preference is active.`
-                                      : kind === "course_version"
-                                        ? `Accept an additional publication of ${courseLabel(t)} for this student's selected degree. The course record and earlier publications remain unchanged.`
-                                        : kind === "substitution"
-                                          ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
-                                          : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
+                                kind === "component_route"
+                                    ? `Route eligible course work only to ${t.name}. This does not change earned credits, GPA or course eligibility.`
+                                    : kind === "waiver"
+                                      ? `Waive ${courseLabel(t)} for this program. Appears in: ${t.groups.join(", ")}.`
+                                      : kind === "placement"
+                                        ? `Choose which retained group may use eligible ${courseLabel(t)} work. Other groups will not use this course identity while the preference is active.`
+                                        : kind === "course_version"
+                                          ? `Accept an additional publication of ${courseLabel(t)} for this student's selected degree. The course record and earlier publications remain unchanged.`
+                                          : kind === "substitution"
+                                            ? `Replace required ${courseLabel(t)}. Appears in: ${t.groups.join(", ")}.`
+                                            : `${t.label} · ${minimumLabels[t.minimum]}. Published minimum: ${text(t.original_milli)}.`;
                             valueField.hidden = kind !== "minimum";
                             if (kind === "minimum") {
                                 value = text(t.original_milli);
@@ -4903,7 +4993,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 replacementList.append(card);
             }
             if (!result.items.length)
-                replacementList.append(node("p", {}, "No matching catalog entries. Try a different course code or title."));
+                replacementList.append(
+                    node("p", {}, "No matching catalog entries. Try a different course code or title."),
+                );
             pager(replacementList, result, after, stack, (next, previous) => replacementCourses(query, next, previous));
         }
         async function replacementVersions(course, target, cursor = null, stack = []) {
@@ -4922,7 +5014,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         { class: "audit-version-card" },
                         node("p", {}, `${courseLabel(version)} · ${text(version.credits_milli)} credits`),
                         button(
-                            `${kind === "course_version" ? "Accept publication" : "Select replacement"} version ${version.version}`,
+                            `${kind === "course_version" ? "Accept publication" : kind === "component_route" ? "Select course" : "Select replacement"} version ${version.version}`,
                             () => {
                                 replacement = version;
                                 replacementStatus.textContent = `Chosen version ${version.version} · ${courseLabel(version)} · ${text(version.credits_milli)} credits`;
@@ -4948,6 +5040,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         }
         render();
+        if (data.routing_components) task(() => replacementCourses(), replacementPanel);
     }
     function exceptionConfirmation(base, reviewed, data, back, change) {
         const body = screen(
@@ -4965,12 +5058,23 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ),
             node("p", {}, `Reason: ${reviewed.reason}`),
         );
+        if (p.component_label) body.append(node("p", { class: "fw-semibold" }, p.component_label));
         if (reviewed.previous && reviewed.action === "grant")
             body.append(
                 node(
                     "p",
                     { class: "alert alert-info" },
                     "This replaces the earlier active approval for this target. Its decision history is retained.",
+                ),
+            );
+        if (p.definition.kind === "component_route")
+            body.append(
+                node(
+                    "p",
+                    {},
+                    reviewed.action === "revoke"
+                        ? "Revoking this route restores normal component choices under the retained sharing policy. Earned totals are preserved."
+                        : "Only the chosen curriculum component may use eligible work for this course. This restricts all publications and retakes of that course identity, without granting eligibility, credit or GPA points. A changed set of assigned requirements needs another review.",
                 ),
             );
         if (p.definition.kind === "waiver")
@@ -4995,21 +5099,26 @@ window.createWorkspaceDegreeAudit = function (ui) {
             );
         if (p.definition.kind === "placement" && p.definition.substitution_adjustment_id)
             body.append(
-                node("p", {}, "This placement was reviewed against an existing substitution approval. Course eligibility still requires a current approval; this separate group restriction remains until replaced or revoked. It never approves a substitute by itself."),
+                node(
+                    "p",
+                    {},
+                    "This placement was reviewed against an existing substitution approval. Course eligibility still requires a current approval; this separate group restriction remains until replaced or revoked. It never approves a substitute by itself.",
+                ),
             );
-        if (["substitution","course_version"].includes(p.definition.kind)) {
+        if (["substitution", "course_version"].includes(p.definition.kind)) {
             const selected =
-                reviewed.substitution_details?.[p.adjustment_id] ||
-                data.substitution_details?.[p.adjustment_id];
+                reviewed.substitution_details?.[p.adjustment_id] || data.substitution_details?.[p.adjustment_id];
             body.append(
                 node(
                     "p",
                     {},
                     p.definition.kind === "course_version"
-                        ? (reviewed.action === "revoke" ? "This decision removes only this student's additional publication allowance. It preserves the accepted course record and earlier approval." : "This publication may satisfy the same course's named requirements in this selected degree. Other publication approvals remain separate. Course awards, credits, grades and transcript labels are preserved.")
-                    : reviewed.action === "revoke"
-                        ? "Revoking this substitution restores the original course requirement. Earned coursework and grades are preserved."
-                        : "This replacement may satisfy the original course requirement in the reviewed program. Earned credit and grades come from actual coursework; this approval creates neither.",
+                        ? reviewed.action === "revoke"
+                            ? "This decision removes only this student's additional publication allowance. It preserves the accepted course record and earlier approval."
+                            : "This publication may satisfy the same course's named requirements in this selected degree. Other publication approvals remain separate. Course awards, credits, grades and transcript labels are preserved."
+                        : reviewed.action === "revoke"
+                          ? "Revoking this substitution restores the original course requirement. Earned coursework and grades are preserved."
+                          : "This replacement may satisfy the original course requirement in the reviewed program. Earned credit and grades come from actual coursework; this approval creates neither.",
                 ),
             );
             if (selected)
@@ -5025,7 +5134,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node(
                 "section",
                 { class: "audit-tree" },
-                node("h2", { class: "h5" }, "Degree minimums after this decision"),
+                node(
+                    "h2",
+                    { class: "h5" },
+                    data.component
+                        ? "Specialization minimums after this decision"
+                        : "Degree minimums after this decision",
+                ),
                 ...Object.entries(reviewed.effective_minimums.degree).map(([k, v]) =>
                     node("p", {}, `${minimumLabels[k]}: ${v === null ? "No minimum" : text(v)}`),
                 ),
@@ -5184,11 +5299,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     input.setAttribute("aria-invalid", "true");
                     descriptions.push(errorId);
                     input.parentElement.append(
-                        node(
-                            "p",
-                            { id: errorId, class: "invalid-feedback d-block audit-field-error" },
-                            error.message,
-                        ),
+                        node("p", { id: errorId, class: "invalid-feedback d-block audit-field-error" }, error.message),
                     );
                 }
                 if (descriptions.length) input.setAttribute("aria-describedby", descriptions.join(" "));
@@ -5429,9 +5540,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             ),
                         );
                         if (!reviewed.definition)
-                            confirmation.append(
-                                node("p", {}, "Restore this program’s use of the global scale."),
-                            );
+                            confirmation.append(node("p", {}, "Restore this program’s use of the global scale."));
                         else
                             for (const g of reviewed.definition.grades)
                                 confirmation.append(
@@ -5468,10 +5577,21 @@ window.createWorkspaceDegreeAudit = function (ui) {
         library,
         studentRequirements,
         gradingScale,
-        specializationProgress: (base, back) => degreeProgress(base, () => {
-            close();
-            return back();
-        }),
+        specializationExceptions: (base, back) =>
+            studentExceptions(
+                null,
+                null,
+                () => {
+                    close();
+                    return back();
+                },
+                base.replace(/requirements\/$/, "adjustments/"),
+            ),
+        specializationProgress: (base, back) =>
+            degreeProgress(base, () => {
+                close();
+                return back();
+            }),
         inspectRequirements: (item, back) =>
             preview(item, "degree", () => {
                 close();

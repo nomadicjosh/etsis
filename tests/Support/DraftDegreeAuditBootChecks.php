@@ -304,3 +304,56 @@ if ($send($assignmentPath, [], method: 'GET')->getStatusCode() !== 403 ||
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+$adjustmentsPath = $choicePath . $specialization['id'] . '/adjustments/';
+$scoped = json_decode((string) $send($adjustmentsPath, [], method: 'GET')->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$target = $scoped['targets'][0];
+$exceptionData = ['definition' => ['kind' => 'minimum', 'group_id' => $target['group_id'],
+    'minimum' => $target['minimum'], 'required_milli' => $target['original_milli'] - ($target['minimum'] === 'min_courses' ? 1000 : 1)],
+    'reason' => 'Fictional scoped exception through actual providers.'];
+$before = $digest();
+if ($send($adjustmentsPath . 'review/', $exceptionData, false)->getStatusCode() !== 403 || $digest() !== $before) {
+    throw new RuntimeException('Scoped exception review bypassed CSRF or changed records.');
+}
+$scopedReviewResponse = $send($adjustmentsPath . 'review/', $exceptionData);
+$scopedReview = json_decode((string) $scopedReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($scopedReviewResponse->getStatusCode() !== 200 || !isset($scopedReview['review_token'])) {
+    throw new RuntimeException('Scoped exception review failed through actual providers.');
+}
+$scopedCommit = ['review_token' => $scopedReview['review_token']];
+if ($send($adjustmentsPath . 'commit/', $scopedCommit, false)->getStatusCode() !== 403 ||
+    $send($adjustmentsPath . 'commit/', $scopedCommit)->getStatusCode() !== 200) {
+    throw new RuntimeException('Scoped confirmation lost its CSRF or component binding.');
+}
+$degreeAdjustmentPath = '/sis/students/' . $f->student->value . '/programs/' . $f->assignment->value . '/degree-adjustments/';
+if ($send($degreeAdjustmentPath . 'commit/', $scopedCommit)->getStatusCode() !== 422) {
+    throw new RuntimeException('Scoped approval token was accepted through another component.');
+}
+$course = $f->f->groupDefinition['courses'][0];
+$routingData = ['definition' => ['kind' => 'component_route', 'course_id' => $course['course_id'],
+    'course_version_id' => $course['version_id'], 'target_version_id' => $confirmed['operation_id']],
+    'reason' => 'Fictional combined course route.'];
+$routeReview = json_decode((string) $send($degreeAdjustmentPath . 'review/', $routingData)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($send($degreeAdjustmentPath . 'commit/', ['review_token' => $routeReview['review_token']])->getStatusCode() !== 200 ||
+    $send($degreeAdjustmentPath . 'routing/', [], method: 'GET')->getStatusCode() !== 200) {
+    throw new RuntimeException('Combined course routing did not resolve through actual providers.');
+}
+$revoke = json_decode((string) $send($adjustmentsPath . 'revoke-review/', [
+    'adjustment_id' => $scopedReview['adjustment']['adjustment_id'], 'reason' => 'Fictional scoped revocation.',
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($send($adjustmentsPath . 'commit/', ['review_token' => $revoke['review_token']])->getStatusCode() !== 200) {
+    throw new RuntimeException('Scoped revocation did not resolve through actual providers.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read'];
+if ($send($adjustmentsPath . 'review/', $exceptionData)->getStatusCode() !== 403) {
+    throw new RuntimeException('Student-read authority granted exception approval authority.');
+}
+$sis->access->grants = [];
+$sis->access->actor = $sis->admissions->person($sis->admissions->student($f->student)->personId)->ownerUserId;
+$portalPath = '/portal/api/students/' . $f->student->value . '/programs/' . $f->assignment->value . '/degree-progress/';
+$portalResponse = $send($portalPath);
+$portalProgress = json_decode((string) $portalResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($portalResponse->getStatusCode() !== 200 || ($portalProgress['mode'] ?? null) !== 'combined_curriculum' ||
+    str_contains((string) $portalResponse->getBody(), 'context_hash')) {
+    throw new RuntimeException('Owned portal specialization progress lost its curated shared calculation.');
+}

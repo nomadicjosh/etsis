@@ -41,8 +41,11 @@ final readonly class DegreeProgressService implements DegreeProgressReader
             $student,
             $assignment,
             fn() => $this->requirements->authorizeRead($student, $assignment),
-            fn(HistoryReadBudget $budget): array =>
-                $this->adjustments->allocationContext($student, $assignment, $budget),
+            fn(HistoryReadBudget $budget): array => $this->adjustments->allocationContext(
+                $student,
+                $assignment,
+                $budget,
+            ),
             $budget,
         );
     }
@@ -62,26 +65,23 @@ final readonly class DegreeProgressService implements DegreeProgressReader
             $assignment,
             fn() => $this->specializations->authorizeRead($student, $assignment, $actor),
             function (HistoryReadBudget $budget) use ($student, $assignment, $specialization): array {
-                $context = $this->specializations->assignedRequirements(
-                    $student,
-                    $assignment,
-                    $specialization,
-                    $budget,
-                );
-                $requirements = $context['requirements'];
+                $context = $this->adjustments->allocationContext($student, $assignment, $budget, $specialization);
+                $requirements = $context["requirements"];
                 return $context + [
-                    'effective_minimums' => $requirements === null
-                        ? [] : DegreeProgressEvaluator::unadjusted($requirements),
-                    'context_fields' => $requirements === null ? [] : [
-                        'mode' => 'assigned_specialization',
-                        'specialization' => $requirements['specialization'],
-                        'program_code' => $requirements['context']['program_code'],
-                        'program_title' => $requirements['context']['program_title'],
-                    ],
+                    "effective_minimums" => $context["effective_minimums"],
+                    "context_fields" =>
+                        $requirements === null
+                            ? []
+                            : [
+                                "mode" => "assigned_specialization",
+                                "specialization" => $requirements["specialization"],
+                                "program_code" => $requirements["context"]["program_code"],
+                                "program_title" => $requirements["context"]["program_title"],
+                            ],
                 ];
             },
             $budget,
-        ) + ['mode' => 'assigned_specialization'];
+        ) + ["mode" => "assigned_specialization"];
     }
 
     /** Staff combined review of exact assigned components; no graduation or retained-result decision.
@@ -89,56 +89,97 @@ final readonly class DegreeProgressService implements DegreeProgressReader
      */
     public function combined(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array
     {
-        $actor = $this->specializations->authorizeRead($student, $assignment);
+        return $this->curriculumProgress($student, $assignment, true, $budget);
+    }
+
+    /** @return array<string,mixed> */
+    public function student(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array
+    {
+        return $this->curriculumProgress($student, $assignment, false, $budget);
+    }
+
+    /** @return array<string,mixed> */
+    private function curriculumProgress(
+        EntityId $student,
+        EntityId $assignment,
+        bool $staff,
+        ?HistoryReadBudget $budget,
+    ): array {
+        $actor = $staff
+        ? $this->specializations->authorizeRead($student, $assignment)
+        : $this->specializations->authorizeProgressRead($student, $assignment);
+        $authorize = fn() => $staff
+            ? $this->specializations->authorizeRead($student, $assignment, $actor)
+            : $this->specializations->authorizeProgressRead($student, $assignment, $actor);
         try {
-            $result = $this->transactions->run(function () use ($student, $assignment, $budget, $actor): array {
+            $result = $this->transactions->run(function () use (
+                $student,
+                $assignment,
+                $budget,
+                $staff,
+                $authorize,
+            ): array {
                 $this->students->lock($student);
-                $this->specializations->authorizeRead($student, $assignment, $actor);
+                $authorize();
                 $budget ??= new HistoryReadBudget();
-                $degree = $this->adjustments->allocationContext($student, $assignment, $budget);
-                if ($degree['requirements'] === null) {
-                    return ['status' => 'needs_selection'];
+                $all = $this->adjustments->curriculumContext($student, $assignment, $budget);
+                $degree = $all["degree"];
+                if ($degree["requirements"] === null) {
+                    return ["status" => "needs_selection"];
                 }
-                $specializations = $this->specializations->evaluationContext($student, $assignment, $budget);
-                if ($degree['cohort_changed'] || $specializations['cohort_changed']) {
-                    return ['status' => 'needs_review', 'issues' => ['cohort_changed']];
-                }
-                $r = $degree['requirements'];
-                $program = $specializations['program'];
+                $specializations = $all["specializations"];
+                $selected = $specializations["selection"]["specialization_ids"] ?? [];
                 if (
-                    $program === null || $r['program_version_id'] === null ||
-                    $r['program_version_id'] !== $specializations['scope']['program_version_id']
+                    !$staff &&
+                    $selected === [] &&
+                    $all["routes"] === [] &&
+                    ($specializations["program"]["specializations"]["effective"]["minimum"] ?? 0) === 0
                 ) {
-                    return ['status' => 'needs_review', 'issues' => ['program_publication_unknown']];
-                }
-                $sharing = ComponentCourseSharing::tryFrom($program['specializations']['component_sharing'] ?? '');
-                if ($sharing === null) {
-                    return ['status' => 'needs_review', 'issues' => ['sharing_policy_unknown']];
-                }
-                $selected = $specializations['selection']['specialization_ids'] ?? [];
-                if (
-                    count($selected) < $program['specializations']['effective']['minimum'] ||
-                    array_diff($selected, array_keys($specializations['requirements'])) !== []
-                ) {
-                    return ['status' => 'needs_review', 'issues' => ['specialization_requirements_missing']];
-                }
-                $components = [[
-                    'kind' => 'degree', 'requirements' => $r, 'effective' => $degree['effective_minimums'],
-                ]];
-                foreach ($selected as $id) {
-                    $requirements = $specializations['requirements'][$id];
-                    if (
-                        $requirements['program_version_id'] !== $r['program_version_id'] ||
-                        $requirements['academic_year_id'] !== $r['academic_year_id']
-                    ) {
+                    $inputs = $this->inputs->collect($student, $assignment, $budget);
+                    if ($inputs->status === AcademicInputStatus::Limited) {
+                        throw new HistoryReadLimitException();
+                    }
+                    if ($inputs->status === AcademicInputStatus::Inconsistent) {
                         throw new CorruptHistoryException();
                     }
-                    $effective = DegreeProgressEvaluator::unadjusted($requirements);
-                    $effective['waived_course_ids'] = $degree['pursuit_waived_course_ids'];
-                    $components[] = [
-                        'kind' => 'specialization', 'requirements' => $requirements, 'effective' => $effective,
+                    $r = $degree["requirements"];
+                    return $this->evaluator->evaluate($inputs, $r, $all["components"][0]["effective"], $budget) + [
+                        "context" => [
+                            "name" => $r["definition"]["name"],
+                            "version" => $r["version"],
+                            "academic_year_code" => $r["context"]["academic_year_code"],
+                            "cohort_changed" => $degree["cohort_changed"],
+                            "group_reuse" => $r["definition"]["policies"]["group_reuse"] ?? null,
+                        ],
                     ];
                 }
+                if ($degree["cohort_changed"] || $specializations["cohort_changed"]) {
+                    return ["status" => "needs_review", "issues" => ["cohort_changed"]];
+                }
+                $r = $degree["requirements"];
+                $program = $specializations["program"];
+                if (
+                    $program === null ||
+                    $r["program_version_id"] === null ||
+                    $r["program_version_id"] !== $specializations["scope"]["program_version_id"]
+                ) {
+                    return ["status" => "needs_review", "issues" => ["program_publication_unknown"]];
+                }
+                $sharing = ComponentCourseSharing::tryFrom($program["specializations"]["component_sharing"] ?? "");
+                if ($sharing === null) {
+                    return ["status" => "needs_review", "issues" => ["sharing_policy_unknown"]];
+                }
+                $selected = $specializations["selection"]["specialization_ids"] ?? [];
+                if (
+                    count($selected) < $program["specializations"]["effective"]["minimum"] ||
+                    array_diff($selected, array_keys($specializations["requirements"])) !== []
+                ) {
+                    return ["status" => "needs_review", "issues" => ["specialization_requirements_missing"]];
+                }
+                if ($all["routing_changed"]) {
+                    return ["status" => "needs_review", "issues" => ["component_routing_changed"]];
+                }
+                $components = $all["components"];
                 $inputs = $this->inputs->collect($student, $assignment, $budget);
                 if ($inputs->status === AcademicInputStatus::Limited) {
                     throw new HistoryReadLimitException();
@@ -149,12 +190,12 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 return $this->combined->evaluate($inputs, $components, $sharing, $budget);
             });
         } catch (HistoryReadLimitException | AllocationBudgetExhaustedException) {
-            $result = ['status' => 'limited'];
+            $result = ["status" => "limited"];
         } catch (CorruptHistoryException | RecordNotFoundException | InvalidArgumentException) {
-            $result = ['status' => 'inconsistent'];
+            $result = ["status" => "inconsistent"];
         }
-        $this->specializations->authorizeRead($student, $assignment, $actor);
-        return $result + ['mode' => 'combined_curriculum'];
+        $authorize();
+        return $result + ["mode" => isset($result["components"]) || $staff ? "combined_curriculum" : "degree"];
     }
 
     /** @param \Closure():mixed $authorize
@@ -196,7 +237,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 $result = $this->evaluator->evaluate($inputs, $requirements, $context["effective_minimums"], $budget);
                 $authorize();
                 return $result + [
-                    "context" => ($context['context_fields'] ?? []) + [
+                    "context" => ($context["context_fields"] ?? []) + [
                         "requirements_version_id" => $requirements["version_id"],
                         "version" => $requirements["version"],
                         "name" => $requirements["definition"]["name"],

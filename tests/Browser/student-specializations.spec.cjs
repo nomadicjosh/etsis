@@ -6,6 +6,7 @@ async function fixture(
     page,
     {
         readOnly = false,
+        adjustments = false,
         cohortChanged = false,
         unknown = false,
         reject = false,
@@ -295,7 +296,7 @@ async function fixture(
     await page.goto(
         readOnly
             ? "/admin/student-read-fixture/"
-            : "/admin/specialization-fixture/",
+            : adjustments ? "/admin/" : "/admin/specialization-fixture/",
     );
     await page
         .locator('.workspace-nav-link[data-workspace="students"]')
@@ -691,7 +692,7 @@ test("assigned specialization progress is an independent read with captured dril
         review.getByText("General specialization minimums", { exact: true }),
     ).toBeVisible();
     await expect(
-        review.getByText("Student-specific exceptions are not applied", {
+        review.getByText("Approved exceptions for this assignment and pursuit-wide waivers are included", {
             exact: false,
         }),
     ).toBeVisible();
@@ -858,5 +859,94 @@ test("specialization progress explains a removed assignment and bounded review w
             exact: true,
         }),
     ).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("specialization exceptions reuse the reviewed editor and send no client-selected scope references", async ({
+    page,
+}) => {
+    const f = await fixture(page, { assigned: true, adjustments: true });
+    const base = f.requirementsPath.replace(/requirements\/$/, "adjustments/");
+    let approved = false;
+    const requests = [];
+    const definition = {
+        kind: "minimum",
+        group_id: null,
+        group_version_id: null,
+        minimum: "min_credits_milli",
+        original_milli: 12000,
+        required_milli: 9000,
+    };
+    await page.route(`**${base}**`, async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        const raw = route.request().postData();
+        const body = raw ? JSON.parse(new URLSearchParams(raw).get("_workspace_json")) : null;
+        if (body) requests.push({ path, body, csrf: route.request().headers()["x-csrf-token"] });
+        const minima = { degree: { min_credits_milli: approved ? 9000 : 12000 }, groups: {} };
+        let result = {
+            items: approved ? [{ adjustment_id: id(93), definition, applicable: true }] : [],
+            component: f.offered[0],
+            targets: [
+                {
+                    group_id: null,
+                    minimum: "min_credits_milli",
+                    original_milli: 12000,
+                    label: "Specialization",
+                },
+            ],
+            courses: [],
+            placement_courses: [],
+            effective_minimums: minima,
+            selection: { requirements_version_id: id(70) },
+            scope: { status: "active" },
+            group_labels: {},
+            substitution_details: {},
+        };
+        if (path === base + "review/")
+            result = {
+                action: "grant",
+                adjustment: { adjustment_id: id(93), definition },
+                reason: body.reason,
+                review_token: "fictional-scoped-review",
+                group_labels: {},
+                effective_minimums: { degree: { min_credits_milli: 9000 }, groups: {} },
+                affected_groups: [],
+            };
+        if (path === base + "commit/") {
+            approved = true;
+            result = { operation_id: id(93) };
+        }
+        await route.fulfill({ json: result });
+    });
+    await page.getByRole("button", { name: "Requirements for CHOICE.1", exact: true }).click();
+    await page.getByRole("button", { name: "Specialization exceptions", exact: true }).click();
+    await expect(page.locator("dialog.degree-audit-studio")).toContainText(
+        "Specialization CHOICE.1",
+    );
+    await page.getByRole("button", { name: "Approve an exception", exact: true }).click();
+    await page.getByRole("button", { name: "Requirement minimum", exact: true }).click();
+    await page
+        .getByRole("button", { name: "Specialization · Required credits · 12", exact: true })
+        .click();
+    await page.getByLabel("New required minimum", { exact: true }).fill("9");
+    await page
+        .getByLabel("Reason for student exception", { exact: true })
+        .fill("Fictional specialization minimum exception.");
+    await page.getByRole("button", { name: "Review exception", exact: true }).click();
+    await expect(page.locator("dialog.degree-audit-studio")).toContainText(
+        "Specialization minimums after this decision",
+    );
+    await page.getByRole("button", { name: "Approve reviewed exception", exact: true }).click();
+    expect(requests[0].body.definition).toEqual({
+        kind: "minimum",
+        group_id: null,
+        minimum: "min_credits_milli",
+        required_milli: 9000,
+    });
+    expect(requests.every((r) => r.csrf === "fictional-test-token")).toBe(true);
+    await page.getByRole("button", { name: "Back to assigned requirements", exact: true }).click();
+    await expect(
+        page.getByRole("button", { name: "Review specialization progress", exact: true }),
+    ).toBeVisible();
     expect(f.errors).toEqual([]);
 });

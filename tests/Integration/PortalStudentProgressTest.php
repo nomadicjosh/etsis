@@ -33,7 +33,7 @@ final class PortalStudentProgressTest extends TestCase
     }
     public function testProgramChoicesAreOwnedBoundedAndDoNotReplayProgress(): void
     {
-        $this->progress->expects(self::never())->method("preview");
+        $this->progress->expects(self::never())->method("student");
         $s = $this->f->f->sis;
         $repo = new SqlStudentRecordRepository($s->sql);
         $first = $repo->assignment($this->f->assignment);
@@ -75,7 +75,7 @@ final class PortalStudentProgressTest extends TestCase
     {
         $this->progress
             ->expects(self::once())
-            ->method("preview")
+            ->method("student")
             ->with($this->f->student, $this->f->assignment)
             ->willReturn(["status" => "needs_selection"]);
         $controller = new \Application\Http\Controller\PortalStudentProgressController($this->service);
@@ -84,7 +84,7 @@ final class PortalStudentProgressTest extends TestCase
     }
     public function testStaffAuthorityCannotBypassPortalOwnership(): void
     {
-        $this->progress->expects(self::never())->method("preview");
+        $this->progress->expects(self::never())->method("student");
         $s = $this->f->f->sis;
         $other = $s->user();
         $s->admissionsService()->createPerson($other, "Other", "Owner");
@@ -94,7 +94,7 @@ final class PortalStudentProgressTest extends TestCase
     }
     public function testForeignPursuitIsRejectedBeforeReadingAnyAcademicWork(): void
     {
-        $this->progress->expects(self::never())->method("preview");
+        $this->progress->expects(self::never())->method("student");
         $s = $this->f->f->sis;
         $repo = new SqlStudentRecordRepository($s->sql);
         $original = $repo->assignment($this->f->assignment);
@@ -114,7 +114,7 @@ final class PortalStudentProgressTest extends TestCase
     {
         $this->progress
             ->expects(self::once())
-            ->method("preview")
+            ->method("student")
             ->willReturnCallback(function (): array {
                 $this->f->f->sis->access->actor = EntityId::generate();
                 return ["status" => "limited"];
@@ -126,7 +126,7 @@ final class PortalStudentProgressTest extends TestCase
     {
         $this->progress
             ->expects(self::once())
-            ->method("preview")
+            ->method("student")
             ->willReturnCallback(function (): array {
                 $s = $this->f->f->sis;
                 $student = $s->admissions->student($this->f->student);

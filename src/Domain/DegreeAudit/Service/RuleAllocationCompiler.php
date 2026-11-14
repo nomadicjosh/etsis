@@ -70,6 +70,10 @@ final readonly class RuleAllocationCompiler
             $targets = [];
             foreach ($work as $item) {
                 $courseId = $item['course_id'];
+                if (in_array($courseId, $effective['excluded_course_ids'] ?? [], true)) {
+                    $requirements['rule_memberships'][$groupId][$item['id']] = [];
+                    continue;
+                }
                 $candidate = [
                     'group_id' => $groupId,
                     'approval_conflict' => isset($effective['substitution_conflicts'][$courseId]),
@@ -180,7 +184,8 @@ final readonly class RuleAllocationCompiler
         ksort($issues, SORT_STRING);
         return ['requirements' => $requirements, 'issues' => array_keys($issues)];
     }
-    /** @template TKey of array-key
+    /**
+     * @template TKey of array-key
      * @param array<TKey,mixed> $values
      * @return array<TKey,mixed>
      */

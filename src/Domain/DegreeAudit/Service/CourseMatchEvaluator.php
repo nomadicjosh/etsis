@@ -37,6 +37,9 @@ final readonly class CourseMatchEvaluator
                     $effective["placements"][$item["course_id"]]["group_id"] ?? null,
                     $requirements['identical_grading_publications'] ?? [],
                 );
+                if (in_array($item['course_id'], $effective['excluded_course_ids'] ?? [], true)) {
+                    $status = Status::ComponentExcluded;
+                }
                 if (isset($candidate['exception_version_ids'][$item['course_version_id'] ?? ''])) {
                     $candidate['via_substitution'] = true;
                 }
@@ -86,6 +89,9 @@ final readonly class CourseMatchEvaluator
                     $effective["placements"][$item["course_id"]]["group_id"] ?? null,
                     $requirements['identical_grading_publications'] ?? [],
                 );
+                if (in_array($item['course_id'], $effective['excluded_course_ids'] ?? [], true)) {
+                    $status = Status::ComponentExcluded;
+                }
                 if (isset($candidate['exception_version_ids'][$item['course_version_id'] ?? ''])) {
                     $candidate['via_substitution'] = true;
                 }

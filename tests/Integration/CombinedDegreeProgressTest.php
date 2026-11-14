@@ -99,7 +99,7 @@ final class CombinedDegreeProgressTest extends TestCase
         $out = [];
         foreach (
             ['sis_history_events','sis_history_streams','sis_history_operations','sis_audit','sis_student_requirements',
-            'sis_student_specializations','sis_student_specialization_requirements','sis_academic_credits','sis_student_accounts','sis_enrollments'] as $table
+            'sis_student_specializations','sis_student_specialization_requirements','sis_requirement_adjustments','sis_academic_credits','sis_student_accounts','sis_enrollments'] as $table
         ) {
             $out[$table] = $f->r->sis->sql->rows($table);
         }
@@ -217,6 +217,7 @@ final class CombinedDegreeProgressTest extends TestCase
             $s->clock,
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->r->history),
             new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
+            new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->requirements(), $f->service),
         );
     }
     private function useGroup(StudentSpecializationRequirementsFixture $f, EntityId $template, EntityId $groupVersion): EntityId
@@ -345,4 +346,357 @@ final class CombinedDegreeProgressTest extends TestCase
         $this->expectException(AccessDeniedException::class);
         $this->service($f, repository:$repository)->combined($f->student, $f->assignment);
     }
+    private function grant(
+        StudentSpecializationRequirementsFixture $f,
+        array $definition,
+        ?EntityId $specialization = null,
+    ): array {
+        $a = $this->adjustments($f);
+        $review = $a->reviewGrant(
+            $f->student,
+            $f->assignment,
+            $definition,
+            "Fictional curriculum exception.",
+            $specialization,
+        );
+        $a->commit($f->student, $f->assignment, $review["review_token"], $specialization);
+        return $review;
+    }
+    private function route(StudentSpecializationRequirementsFixture $f, int $course, string $target): array
+    {
+        $c = $f->r->groupDefinition["courses"][$course];
+        return [
+            "kind" => "component_route",
+            "course_id" => $c["course_id"],
+            "course_version_id" => $c["version_id"],
+            "target_version_id" => $target,
+        ];
+    }
+    public function testRoutingRestrictsSharedCoursesAndRevocationRestoresThePublishedPolicy(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $this->work($f, 0);
+        self::assertSame("feasible", $this->preview($f)["outcome"]);
+        $review = $this->grant($f, $this->route($f, 0, $f->versions["DATA"]));
+        $result = $this->preview($f);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertContains(
+            "component_excluded",
+            $result["components"][0]["progress"]["allocation"]["records"][0]["statuses"],
+        );
+        foreach ($result["components"] as $p) {
+            self::assertSame(3000, $p["progress"]["gpa"]["overall"]["credits_milli"]);
+        }
+        $this->work($f, 1);
+        $result = $this->preview($f);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(
+            $f->r->groupDefinition["courses"][1]["course_id"],
+            $result["components"][0]["progress"]["allocation"]["groups"][0]["placements"][0]["course_id"],
+        );
+        self::assertSame(
+            $f->r->groupDefinition["courses"][0]["course_id"],
+            $result["components"][1]["progress"]["allocation"]["groups"][0]["placements"][0]["course_id"],
+        );
+        $a = $this->adjustments($f);
+        self::assertTrue($a->routing($f->student, $f->assignment)["items"][0]["applicable"]);
+        $revoke = $a->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["adjustment"]["adjustment_id"]),
+            "Fictional route revocation.",
+        );
+        $a->commit($f->student, $f->assignment, $revoke["review_token"]);
+        self::assertSame([], $a->routing($f->student, $f->assignment)["items"]);
+        $history = $a->history($f->student, $f->assignment);
+        self::assertCount(2, $history["items"]);
+    }
+    public function testSpecializationMinimumsUseTheExistingApprovalStreamWithoutChangingDegreeMinimums(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $a = $this->adjustments($f);
+        $view = $a->view($f->student, $f->assignment, $id);
+        self::assertSame("DATA", $view["component"]["code"]);
+        $before = $a->view($f->student, $f->assignment)["effective_minimums"];
+        $r = $this->grant(
+            $f,
+            ["kind" => "minimum", "group_id" => null, "minimum" => "min_resident_milli", "required_milli" => 2000],
+            $id,
+        );
+        self::assertSame(
+            2000,
+            $a->view($f->student, $f->assignment, $id)["effective_minimums"]["degree"]["min_resident_milli"],
+        );
+        self::assertSame($before, $a->view($f->student, $f->assignment)["effective_minimums"]);
+        $combined = $this->preview($f);
+        self::assertSame(2000, $combined["components"][1]["progress"]["minimums"][1]["required_milli"]);
+        $independent = $this->service($f)->specialization($f->student, $f->assignment, $id);
+        self::assertSame(2000, $independent["minimums"][1]["required_milli"]);
+        $version = $f->publish();
+        $f->assign("DATA", $version);
+        self::assertSame(
+            3000,
+            $a->view($f->student, $f->assignment, $id)["effective_minimums"]["degree"]["min_resident_milli"],
+        );
+        $before = $this->snapshot($f);
+        $a->commit($f->student, $f->assignment, $r["review_token"], $id);
+        self::assertSame($before, $this->snapshot($f));
+    }
+    public function testSpecializationWaiverAppliesAcrossThePursuitButSubstitutionsStayInTheirComponent(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $a = $this->adjustments($f);
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $courses = $f->r->groupDefinition["courses"];
+        $this->grant(
+            $f,
+            [
+                "kind" => "substitution",
+                "course_id" => $courses[0]["course_id"],
+                "replacement_course_id" => $courses[1]["course_id"],
+                "replacement_version_id" => $courses[1]["version_id"],
+            ],
+            $id,
+        );
+        self::assertSame([], $a->view($f->student, $f->assignment)["effective_minimums"]["substitutions"]);
+        self::assertCount(1, $a->view($f->student, $f->assignment, $id)["effective_minimums"]["substitutions"]);
+        $revoke = $a->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($a->view($f->student, $f->assignment, $id)["items"][0]["adjustment_id"]),
+            "Fictional replacement revocation.",
+            $id,
+        );
+        $a->commit($f->student, $f->assignment, $revoke["review_token"], $id);
+        $this->grant($f, ["kind" => "waiver", "course_id" => $courses[0]["course_id"]], $id);
+        self::assertSame(
+            [$courses[0]["course_id"]],
+            $a->view($f->student, $f->assignment)["effective_minimums"]["waived_course_ids"],
+        );
+        self::assertSame(
+            [$courses[0]["course_id"]],
+            $a->view($f->student, $f->assignment, $id)["effective_minimums"]["waived_course_ids"],
+        );
+    }
+    public function testRoutingAndPendingSpecializationApprovalsNoticeAssignmentChangesAndKeepAcceptedRetries(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $a = $this->adjustments($f);
+        $route = $this->grant($f, $this->route($f, 0, $f->versions["DATA"]));
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $pending = $a->reviewGrant(
+            $f->student,
+            $f->assignment,
+            ["kind" => "minimum", "group_id" => null, "minimum" => "min_resident_milli", "required_milli" => 2000],
+            "Fictional pending approval.",
+            $id,
+        );
+        $f->select([]);
+        self::assertSame(["component_routing_changed"], $this->preview($f)["issues"]);
+        $before = $this->snapshot($f);
+        $a->commit($f->student, $f->assignment, $route["review_token"]);
+        self::assertSame($before, $this->snapshot($f));
+        try {
+            $a->commit($f->student, $f->assignment, $pending["review_token"], $id);
+            self::fail("Removed assignment must reject pending approval.");
+        } catch (\InvalidArgumentException | \Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($before, $this->snapshot($f));
+        }
+        $f->select(["DATA"]);
+        $f->assign();
+        self::assertSame(["component_routing_changed"], $this->preview($f)["issues"]);
+        $route2 = $this->grant($f, $this->route($f, 0, $f->versions["DATA"]));
+        self::assertSame($route["adjustment"]["adjustment_id"], $route2["previous"]["adjustment_id"]);
+        self::assertSame("review", $this->preview($f)["status"]);
+    }
+
+    public function testOwnerPortalUsesTheJointPlanAndWithholdsApprovalAndInternalReferences(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $this->work($f, 0);
+        $this->grant($f, $this->route($f, 0, $f->versions["DATA"]));
+        $s = $f->r->sis;
+        $owner = $s->admissions->person($s->admissions->student($f->student)->personId)->ownerUserId;
+        self::assertNotNull($owner);
+        $s->access->staff = false;
+        $s->access->actor = $owner;
+        $portal = new \Domain\Portal\Service\StudentProgressService(
+            new \Infrastructure\Persistence\Repository\SqlCampusRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($s->sql),
+            $this->service($f),
+            $s->access,
+        );
+        $before = $this->snapshot($f);
+        $result = $portal->review($f->student, $f->assignment);
+        self::assertSame("combined_curriculum", $result["mode"]);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertCount(2, $result["components"]);
+        self::assertSame("specialization", $result["components"][1]["progress"]["context"]["kind"]);
+        self::assertStringContainsString("Specialization DATA", $result["components"][1]["label"]);
+        $json = json_encode($result, JSON_THROW_ON_ERROR);
+        foreach (
+            [
+                $f->student->value,
+                $f->assignment->value,
+                $f->versions["DATA"],
+                "context_hash",
+                "reason",
+                "adjustment_id",
+                "requirement_decision_id",
+            ]
+            as $secret
+        ) {
+            self::assertStringNotContainsString($secret, $json);
+        }
+        self::assertSame($before, $this->snapshot($f));
+        try {
+            $this->service($f)->combined($f->student, $f->assignment);
+            self::fail("Staff route must remain staff-only.");
+        } catch (AccessDeniedException) {
+            self::assertTrue(true);
+        }
+        $s->access->actor = $s->user();
+        $this->expectException(RecordNotFoundException::class);
+        $portal->review($f->student, $f->assignment);
+    }
+    public function testRoutingReviewsExpireAndRejectForeignTargetsOrClientSuppliedScopeWithoutWrites(): void
+    {
+        $f = $this->fixture();
+        $a = $this->adjustments($f);
+        $d = $this->route($f, 0, $f->versions["DATA"]);
+        $pending = $a->reviewGrant($f->student, $f->assignment, $d, "Fictional pending routing.");
+        $before = $this->snapshot($f);
+        $f->r->sis->clock->time = $f->r->sis->clock->time->modify("+21 minutes");
+        try {
+            $a->commit($f->student, $f->assignment, $pending["review_token"]);
+            self::fail("Expired routing review accepted.");
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($before, $this->snapshot($f));
+        }
+        foreach (
+            [array_replace($d, ["target_version_id" => EntityId::generate()->value]), $d + ["component" => []]]
+            as $invalid
+        ) {
+            try {
+                $a->reviewGrant($f->student, $f->assignment, $invalid, "Fictional invalid routing.");
+                self::fail("Invalid routing accepted.");
+            } catch (\InvalidArgumentException) {
+                self::assertSame($before, $this->snapshot($f));
+            }
+        }
+    }
+    public function testSpecializationPlacementPublicationAndGroupMinimumApprovalsShareTheirRetainedScope(): void
+    {
+        $f = $this->fixture("multiple_components");
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $course = $f->r->groupDefinition["courses"][0];
+        $this->grant(
+            $f,
+            ["kind" => "placement", "course_id" => $course["course_id"], "group_id" => $f->r->group->value],
+            $id,
+        );
+        $this->grant(
+            $f,
+            [
+                "kind" => "minimum",
+                "group_id" => $f->r->group->value,
+                "minimum" => "min_credits_milli",
+                "required_milli" => 2000,
+            ],
+            $id,
+        );
+        $publications = $f->r->catalog->publications();
+        $review = $publications->review(new EntityId($course["course_id"]), "Fictional new publication.");
+        $version = $publications->publish(new EntityId($course["course_id"]), $review["review_token"])["operation_id"];
+        $this->grant(
+            $f,
+            ["kind" => "course_version", "course_id" => $course["course_id"], "version_id" => $version],
+            $id,
+        );
+        $a = $this->adjustments($f);
+        $scoped = $a->view($f->student, $f->assignment, $id)["effective_minimums"];
+        self::assertSame(2000, $scoped["groups"][$f->r->group->value]["min_credits_milli"]);
+        self::assertSame($f->r->group->value, $scoped["placements"][$course["course_id"]]["group_id"]);
+        self::assertTrue($scoped["accepted_course_versions"][$course["course_id"]][$version]);
+        $degree = $a->view($f->student, $f->assignment)["effective_minimums"];
+        self::assertSame([], $degree["placements"]);
+        self::assertSame([], $degree["accepted_course_versions"]);
+        self::assertSame(3000, $degree["groups"][$f->r->group->value]["min_credits_milli"]);
+        self::assertCount(3, $a->history($f->student, $f->assignment)["items"]);
+        $f->select([]);
+        $former = $a->view($f->student, $f->assignment)["items"];
+        self::assertCount(3, $former);
+        self::assertFalse($former[0]["applicable"]);
+        $revoke = $a->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($former[0]["adjustment_id"]),
+            "Fictional obsolete specialization approval revocation.",
+        );
+        $a->commit($f->student, $f->assignment, $revoke["review_token"]);
+        self::assertCount(2, $a->view($f->student, $f->assignment)["items"]);
+    }
+
+    public function testReassigningTheSamePublicationNeedsAFreshPlacementApprovalAndAllowsObsoleteCleanup(): void
+    {
+        $f = new StudentSpecializationRequirementsFixture();
+        $f->assign();
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $d = [
+            "kind" => "placement",
+            "course_id" => $f->r->groupDefinition["courses"][0]["course_id"],
+            "group_id" => $f->r->group->value,
+        ];
+        $first = $this->grant($f, $d, $id);
+        $f->select([]);
+        $f->select(["DATA"]);
+        $f->assign();
+        $next = $this->grant($f, $d, $id);
+        self::assertSame($first["adjustment"]["adjustment_id"], $next["previous"]["adjustment_id"]);
+        $a = $this->adjustments($f);
+        self::assertTrue($a->view($f->student, $f->assignment, $id)["items"][0]["applicable"]);
+        $f->select([]);
+        $view = $a->view($f->student, $f->assignment);
+        self::assertNull($view["selection"]);
+        self::assertCount(1, $view["items"]);
+        $revoke = $a->reviewRevoke(
+            $f->student,
+            $f->assignment,
+            new EntityId($next["adjustment"]["adjustment_id"]),
+            "Fictional obsolete approval cleanup before degree assignment.",
+        );
+        $a->commit($f->student, $f->assignment, $revoke["review_token"]);
+        self::assertSame([], $a->view($f->student, $f->assignment)["items"]);
+    }
+
+    public function testEarlierSpecializationComparisonKeepsItsOriginalApprovalAfterACohortCorrection(): void
+    {
+        $f = $this->fixture();
+        $id = new EntityId($f->choices["DATA"]["id"]);
+        $this->grant(
+            $f,
+            ["kind" => "minimum", "group_id" => null, "minimum" => "min_resident_milli", "required_milli" => 2000],
+            $id,
+        );
+        $s = $f->r->sis;
+        $r = $f->program->service->review($s->program, $f->r->year, "Fictional later program cohort.");
+        $next = $f->program->service->publish($s->program, $r["review_token"]);
+        $s->transactions->run(function () use ($s, $f, $next): void {
+            $s->sql->lock("sis_students", $f->student->value, "id");
+            $catalogs = new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($s->sql);
+            $catalogs->bind(
+                $f->assignment,
+                new EntityId($next["operation_id"]),
+                $catalogs->binding($f->assignment)["version"],
+            );
+        });
+        $before = $this->snapshot($f);
+        $old = $this->service($f)->specialization($f->student, $f->assignment, $id);
+        self::assertTrue($old["context"]["cohort_changed"]);
+        self::assertSame(2000, $old["minimums"][1]["required_milli"]);
+        self::assertSame(["cohort_changed"], $this->preview($f)["issues"]);
+        self::assertSame($before, $this->snapshot($f));
+    }
+
 }

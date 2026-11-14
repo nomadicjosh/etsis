@@ -55,6 +55,7 @@ final class StudentGroupAllocationTest extends TestCase
             $s->clock,
             new PublishedRequirementsReader($f->f->history),
             new SqlReplacementCourseRepository($s->sql),
+            new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
         );
     }
     private function service(

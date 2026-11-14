@@ -19,10 +19,29 @@ final readonly class StudentDegreeProgress
             $this->data = ["status" => $review["status"]];
             return;
         }
+        if (isset($review['components'])) {
+            if (count($review['components']) > 25 || $review['components'] === []) {
+                throw new CorruptHistoryException();
+            }
+            $components = [];
+            foreach ($review['components'] as $component) {
+                $progress = new self($component['progress'])->describe();
+                $specialization = $component['progress']['context']['specialization'] ?? null;
+                $components[] = ['kind' => $component['kind'],
+                    'label' => $specialization === null ? 'Degree'
+                        : 'Specialization ' . $specialization['code'] . ' · ' . $specialization['title'],
+                    'progress' => $progress];
+            }
+            $this->data = ['status' => 'review', 'mode' => 'combined_curriculum', 'sharing' => $review['sharing'],
+                'outcome' => $review['outcome'], 'current_record_count' => $review['current_record_count'],
+                'components' => $components];
+            return;
+        }
         $pick = static fn(array $value, array $keys): array => array_intersect_key($value, array_flip($keys));
         $data = $pick($review, ["status", "input_status", "current_record_count"]);
         $data["context"] = $pick($review["context"], [
             "name",
+            "kind",
             "academic_year_code",
             "version",
             "cohort_changed",
@@ -125,7 +144,8 @@ final readonly class StudentDegreeProgress
         $this->data = $data;
     }
 
-    /** Named-course evidence uses only this response's work positions, including incomplete plans.
+    /**
+     * Named-course evidence uses only this response's work positions, including incomplete plans.
      * @param list<array<string,mixed>>|null $rows
      * @param array<string,int> $indices
      * @return list<array<string,mixed>>|null */
@@ -190,7 +210,8 @@ final readonly class StudentDegreeProgress
         }
         return $out;
     }
-    /** Review-local array positions are descriptive links, never database identities or command inputs.
+    /**
+     * Review-local array positions are descriptive links, never database identities or command inputs.
      * @param list<list<string>> $options
      * @param array<string,int> $indices
      * @return list<list<int>> */

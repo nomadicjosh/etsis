@@ -35,6 +35,7 @@ final class RequirementAdjustmentTest extends TestCase
             $s->clock,
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->f->history),
             new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
+            new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
         );
     }
     private function review(array $d): array

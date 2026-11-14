@@ -252,6 +252,7 @@ async function fixture(page, options = {}) {
                     course_id: d.replacement_course_id,
                     version_id: d.replacement_version_id,
                 };
+            else if (d.kind === "component_route") continue;
             else if (d.group_id === null) out.degree[d.minimum] = d.required_milli;
             else
                 out.groups[d.group_id][d.minimum] =
@@ -1039,6 +1040,13 @@ async function fixture(page, options = {}) {
                     : [],
                 next_cursor: null,
             };
+        else if (path === `${adjustmentBase}routing/`)
+            response = { routing_components: [
+                { kind: "degree", version_id: version, name: "B.S. Computing" },
+                { kind: "specialization", version_id: id(71), name: "Data <b>fictional</b> requirements", specialization: { code: "DATA" } },
+            ], items: activeAdjustments.filter(p => p.definition.kind === "component_route"),
+                substitution_details: Object.fromEntries(activeAdjustments.filter(p => p.definition.kind === "component_route").map(p => [p.adjustment_id, replacement])),
+                selection, scope: { status: "active" }, effective_minimums: effective(), courses: [], targets: [] };
         else if (path === adjustmentBase || path === `${adjustmentBase}preview/`)
             response = {
                 ...(path.endsWith("preview/") ? { requirements: selection ? requirements : null } : {}),
@@ -1088,7 +1096,7 @@ async function fixture(page, options = {}) {
                             : p.definition.group_id === d.group_id && p.definition.minimum === d.minimum),
                 );
             const enriched =
-                d.kind === "placement"
+                d.kind === "component_route" ? { ...d, target_template_id: template, context_hash: "a".repeat(64) } : d.kind === "placement"
                     ? {
                           ...d,
                           course_version_id: d.substitution_adjustment_id ? replacement.version_id : id(14),
@@ -1118,7 +1126,7 @@ async function fixture(page, options = {}) {
                 affected_groups: d.kind !== "minimum" || d.group_id ? ["General education"] : [],
                 group_labels: { [group]: "General education" },
                 grade_scale: requirements.grade_scale || null,
-                substitution_details: (["substitution","course_version"].includes(d.kind) || (d.kind === "placement" && d.substitution_adjustment_id)) ? { [p.adjustment_id]: d.kind==="course_version" ? acceptedPublication : replacement } : {},
+                substitution_details: (["substitution","course_version","component_route"].includes(d.kind) || (d.kind === "placement" && d.substitution_adjustment_id)) ? { [p.adjustment_id]: d.kind==="course_version" ? acceptedPublication : replacement } : {},
                 effective_minimums: effective([...activeAdjustments.filter((x) => x !== previous), p]),
                 review_token: `fictional-exception-${p.adjustment_id}`,
             };

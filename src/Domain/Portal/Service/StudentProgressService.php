@@ -23,7 +23,8 @@ final readonly class StudentProgressService
         private StudentAccess $access,
     ) {
     }
-    /** Indexed pursuit choices, without degree or academic-history replay.
+    /**
+     * Indexed pursuit choices, without degree or academic-history replay.
      * @return array<string,mixed>
      */
     public function programs(EntityId $student, ?EntityId $after = null): array
@@ -48,13 +49,14 @@ final readonly class StudentProgressService
         $this->owner($student, $actor);
         return ["items" => $items, "next_after" => count($rows) > 20 ? $rows[19]["id"] : null];
     }
-    /** One owner-selected pursuit, using the existing bounded canonical progress calculation.
+    /**
+     * One owner-selected pursuit, using the existing bounded canonical progress calculation.
      * @return array<string,mixed>
      */
     public function review(EntityId $student, EntityId $assignment): array
     {
         $actor = $this->scope($student, $assignment);
-        $result = new StudentDegreeProgress($this->progress->preview($student, $assignment));
+        $result = new StudentDegreeProgress($this->progress->student($student, $assignment));
         $this->scope($student, $assignment, $actor);
         return $result->describe();
     }

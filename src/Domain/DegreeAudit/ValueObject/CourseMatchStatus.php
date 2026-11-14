@@ -7,6 +7,7 @@ namespace Domain\DegreeAudit\ValueObject;
 /** Per-record candidacy only; never an allocation or completion decision. */
 enum CourseMatchStatus: string
 {
+    case ComponentExcluded = "component_excluded";
     case Candidate = "candidate";
     case PlacementRestricted = "placement_restricted";
     case Waived = "waived";
@@ -26,6 +27,8 @@ enum CourseMatchStatus: string
     public function explanation(): string
     {
         return match ($this) {
+            self::ComponentExcluded
+            => "An approved course route reserves this course for another curriculum component.",
             self::PlacementRestricted
             => "An approved placement preference reserves this course for another group in this pursuit.",
             self::Candidate => "Candidate for allocation; this work has not been applied to the requirement.",

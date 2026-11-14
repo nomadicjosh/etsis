@@ -168,7 +168,8 @@ final readonly class GroupAllocationEvaluator
                 "attempted_milli" => $item['attempted_milli'],
                 "grading_republication_verified" =>
                     isset($requirements['identical_grading_publications'][$item['grade']['scale_version_id'] ?? '']),
-                "statuses" => [],
+                "statuses" => in_array($item['course_id'], $effective['excluded_course_ids'] ?? [], true)
+                    ? ['component_excluded' => true] : [],
                 "uses" => [],
                 "preferred_group_id" => $effective["placements"][$item["course_id"]]["group_id"] ?? null,
             ];

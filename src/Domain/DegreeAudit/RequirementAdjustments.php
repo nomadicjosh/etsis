@@ -93,7 +93,8 @@ final class RequirementAdjustments extends EventSourcedAggregate
     /** @param array<string, mixed> $p */
     public static function key(array $p): string
     {
-        return ($p["definition"]["kind"] === "waiver" ? "" : $p["requirements_version_id"] . ":") .
+        $pursuitWide = in_array($p['definition']['kind'], ['waiver', 'component_route'], true);
+        return ($pursuitWide ? '' : $p['requirements_version_id'] . ':') .
         new RequirementAdjustmentDefinition($p["definition"])->key();
     }
     public function assertScope(string $student, string $program): void

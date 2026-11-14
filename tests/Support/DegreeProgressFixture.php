@@ -37,6 +37,7 @@ final class DegreeProgressFixture
             new SqlRequirementAdjustmentRepository($s->sql), $requirements,
             new SqlStudentRecordRepository($s->sql), $history, $s->access, $s->transactions, $s->audit,
             $cipher, $s->clock, new PublishedRequirementsReader($history), new SqlReplacementCourseRepository($s->sql),
+            new \Domain\DegreeAudit\Service\StudentCurriculumContext($requirements, $specializations ?? $s->specializations($history)),
         );
         $students = new SqlStudentRecordRepository($s->sql);
         $inputs = new AcademicInputService(

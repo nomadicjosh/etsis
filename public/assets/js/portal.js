@@ -1089,6 +1089,46 @@
     }
 
     function renderPortalProgress(container, data, refresh) {
+        if (data.mode === "combined_curriculum" && data.status === "review") {
+            const title = el("h2", { tabindex: "-1" }, "Your degree and specializations"),
+                cards = el("div", { class: "row g-3" });
+            container.replaceChildren(
+                title,
+                el(
+                    "p",
+                    {},
+                    data.outcome === "feasible"
+                        ? "A combined course placement was found. Review each component's minimums and remaining requirements; this is not a graduation decision."
+                        : "The available work does not satisfy every component together. Partial placements are not shown as completed requirements.",
+                ),
+                el(
+                    "p",
+                    {},
+                    "Each component uses its assigned requirements and approved exceptions. Course routing and the published sharing policy are included. Earned credits and GPA are not added across components.",
+                ),
+                cards,
+            );
+            for (const component of data.components) {
+                const card = el(
+                    "article",
+                    { class: "col-12 col-md-6" },
+                    el("h3", {}, component.label),
+                    el("p", {}, component.progress.context.name),
+                    button(`Review ${component.label}`, () => {
+                        renderPortalProgress(container, component.progress, refresh);
+                        container.prepend(
+                            button("Back to degree and specializations", () =>
+                                renderPortalProgress(container, data, refresh),
+                            ),
+                        );
+                    }),
+                );
+                cards.append(card);
+            }
+            container.append(button("Refresh progress", refresh));
+            title.focus();
+            return;
+        }
         const heading = el(
             "h2",
             { tabindex: "-1" },
@@ -1118,7 +1158,7 @@
         const minimumHeading = el(
             "h3",
             { tabindex: "-1", "data-progress-minimums": "" },
-            "General degree minimums",
+            data.context?.kind === "specialization" ? "General specialization minimums" : "General degree minimums",
         );
         const actions = (...children) => el("div", { class: "d-flex flex-wrap gap-2 mb-3" }, ...children);
         const guide = window.createDegreeProgressGuide(
@@ -1148,6 +1188,8 @@
                     { class: "alert alert-info", role: "status" },
                     data.status === "needs_selection"
                         ? "The registrar needs to select published degree requirements for this program. Contact your registrar or advisor."
+                        : data.status === "needs_review"
+                          ? "Your assigned curriculum or an approved course route needs registrar review. No partial placements are shown. Contact your registrar or advisor."
                         : data.status === "inconsistent"
                           ? "Your recorded inputs could not be verified. Contact the registrar for a record review."
                           : "The review reached its work limit. No partial totals or placements are shown. Ask the registrar to arrange a controlled review.",
