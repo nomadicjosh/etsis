@@ -188,7 +188,6 @@ final readonly class AcademicPolicyEvaluator
         unset($d);
         return new AcademicPolicyResult(
             policy: $policy,
-            gpaScope: $scope,
             creditPools: $creditKnown ? $creditPools : [],
             gpaGroups: $gpaKnown ? $gpaGroups : [],
             dispositions: array_values($dispositions),
@@ -197,6 +196,7 @@ final readonly class AcademicPolicyEvaluator
             residentMinimumMilli: $creditKnown ? $residentMin : null,
             residentMaximumMilli: $creditKnown ? $residentMax : null,
             gpa: $gpaKnown ? new GpaTotals($quality, $gpaCredits) : null,
+            gpaScope: $scope,
         );
     }
 
