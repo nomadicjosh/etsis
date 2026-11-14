@@ -147,6 +147,8 @@ final readonly class GroupAllocationEvaluator
                 "term_code" => ($item['term_label_retained'] ?? false) ? ($item['term_code'] ?? null) : null,
                 "term_label_retained" => $item['term_label_retained'] ?? false,
                 "attempted_milli" => $item['attempted_milli'],
+                "grading_republication_verified" =>
+                    isset($requirements['identical_grading_publications'][$item['grade']['scale_version_id'] ?? '']),
                 "statuses" => [],
                 "uses" => [],
                 "preferred_group_id" => $effective["placements"][$item["course_id"]]["group_id"] ?? null,

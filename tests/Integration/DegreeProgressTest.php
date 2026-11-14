@@ -92,6 +92,9 @@ final class DegreeProgressTest extends TestCase
                 ),
                 new DegreeWorkReview(),
                 new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
+                new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
+                    new \Domain\Gradebook\Service\RetainedGradingReader($f->f->history),
+                ),
             ),
             $students,
             $s->transactions,

@@ -654,6 +654,32 @@ final class GroupAllocationEvaluatorTest extends TestCase
         self::assertFalse($result['groups'][0]['placements'][0]['via_substitution']);
     }
 
+    public function testVerifiedUnchangedGradingPublicationAlsoSupportsSavedRuleGradeFloors(): void
+    {
+        $g = $this->ruleGroup(10);
+        $g['definition']['min_course_grade_points_milli'] = 2000;
+        $r = $this->requirements([self::id(10) => $g]);
+        $work = [$this->work(1001)];
+        $work[0]['grade']['scale_version_id'] = self::id(901);
+        $checks = $this->decisions($work, $r);
+        self::assertSame(
+            'needs_review',
+            $this->evaluator()->evaluate($work, $r, $this->effective($r), $checks)['outcome'],
+        );
+        $r['identical_grading_publications'] = [self::id(901) => true];
+        $captured = serialize($work);
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r), $checks);
+        self::assertSame('feasible', $result['outcome']);
+        self::assertTrue($result['records'][0]['grading_republication_verified']);
+        self::assertSame($captured, serialize($work));
+        $work[0]['grade']['scale_version_id'] = null;
+        $work[0]['grade']['scale_id'] = null;
+        self::assertSame(
+            'needs_review',
+            $this->evaluator()->evaluate($work, $r, $this->effective($r), $checks)['outcome'],
+        );
+    }
+
     private function evaluator(int $steps = 100000): GroupAllocationEvaluator
     {
         return new GroupAllocationEvaluator(

@@ -435,3 +435,20 @@ test("contribution records distinguish captured grades, pending work and unavail
     expect(f.calls.filter((c) => c.path === `${f.base}progress/`)).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });
+
+test("staff contributions explain unchanged grading and preserve recorded grade values", async ({ page }) => {
+    const f = await fixture(page, {
+        assigned: true,
+        readOnly: true,
+        allocationEvidence: "ties",
+        identicalGrading: true,
+    });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    await page.getByRole("button", { name: "Inspect credit and GPA contributions", exact: true }).click();
+    const card = minimumCard(page, "MATH.0 · Retained work <b>fictional</b>");
+    await expect(card).toContainText(
+        "Recorded grade: A · 4 grade points · Unchanged grading re-publication verified",
+    );
+    expect(f.calls.filter((c) => c.path === `${f.base}progress/`)).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});

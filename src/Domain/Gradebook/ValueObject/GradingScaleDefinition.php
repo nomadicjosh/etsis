@@ -122,6 +122,21 @@ final readonly class GradingScaleDefinition
         $points = array_column($this->definition["grades"], "points_milli");
         return $points === [] ? 4000 : max($points);
     }
+
+    /** Form ordering does not change a scale; every academic field and its type must match. */
+    public function samePolicy(self $other): bool
+    {
+        $canonical = static function (array $grades): array {
+            $rows = [];
+            foreach ($grades as $grade) {
+                ksort($grade, SORT_STRING);
+                $rows[$grade['code']] = $grade;
+            }
+            ksort($rows, SORT_STRING);
+            return $rows;
+        };
+        return $canonical($this->definition['grades']) === $canonical($other->definition['grades']);
+    }
     private static function score(int $milli): string
     {
         $fraction = rtrim(str_pad((string) ($milli % 1000), 3, "0", STR_PAD_LEFT), "0");

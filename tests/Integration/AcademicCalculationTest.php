@@ -51,6 +51,9 @@ final class AcademicCalculationTest extends TestCase
             ),
             $students,
             $s->transactions,
+            new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
+                new \Domain\Gradebook\Service\RetainedGradingReader($f->f->history),
+            ),
         );
     }
     private function grades(): array
@@ -209,11 +212,67 @@ final class AcademicCalculationTest extends TestCase
         self::assertSame(3000, $failed["totals"]["gpa_credits_milli"]);
         self::assertSame(0, $failed["totals"]["earned_milli"]);
     }
+    public function testIdenticalRepublicationKeepsRecordedGradesAndSupportsLatestAttemptChronology(): void
+    {
+        $f = $this->institution('latest_eligible', 'completion_date');
+        $s = $f->f->sis;
+        [$first, $firstEnrollment] = $this->work($f, 'B');
+        $primary = $f->f->gradingScales()->resolve()['version_id'];
+        $s->gradeScale(array_reverse($this->grades()));
+        $section = new \Domain\Registration\Section(
+            EntityId::generate(),
+            $first->courseId,
+            $first->termId,
+            $s->access->actor,
+            'FICTIONAL.REPUBLICATION',
+            20,
+            true,
+            true,
+            new \Domain\Finance\ValueObject\Money(0, 'USD'),
+        );
+        $s->registration->addSection($section);
+        [$second, $secondEnrollment] = $this->work($f, 'A', $section);
+        foreach (
+            [[$first, $firstEnrollment, '2026-01-01'], [$second, $secondEnrollment, '2026-02-01']]
+            as [$section, $enrollment, $date]
+        ) {
+            $completion = $s->academicCompletions();
+            $review = $completion->review(
+                $f->student,
+                $section->id,
+                $enrollment,
+                $date,
+                1,
+                'Fictional confirmed completion.',
+            );
+            $completion->commit($f->student, $section->id, $review['review_token']);
+        }
+        $before = [];
+        foreach (['sis_history_events', 'sis_history_operations', 'sis_academic_credits'] as $table) {
+            $before[$table] = $f->f->digest($table);
+        }
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertTrue($result['totals']['gpa_ready']);
+        self::assertSame(4000, $result['totals']['gpa_milli']);
+        self::assertSame(3000, $result['totals']['gpa_credits_milli']);
+        self::assertSame(
+            1,
+            count(array_filter($result['records'], fn($r) => $r['grading_republication_verified'])),
+        );
+        $rows = $s->sql->rows('sis_grades', ['scale_version_id' => $primary]);
+        self::assertNotEmpty($rows);
+        foreach ($before as $table => $digest) {
+            self::assertSame($digest, $f->f->digest($table));
+        }
+    }
+
     public function testDifferentGradingPublicationBlocksTheGpaButNotKnownCredits(): void
     {
         $f = $this->institution();
         $s = $f->f->sis;
-        $s->gradeScale($this->grades());
+        $grades = $this->grades();
+        $grades[1]['points_milli'] = 2700;
+        $s->gradeScale($grades);
         $this->work($f);
         $result = $this->service($f)->preview($f->student, $f->assignment);
         self::assertSame(3000, $result["totals"]["earned_milli"]);

@@ -34,6 +34,7 @@ async function fixture(page,options={}) {
         if (options.evidence && data.allocation) {
             data.records.forEach((record,i)=>Object.assign(record,{
                 credit_type:i===1?'transfer':'institutional',grade_state:'retained',recorded_earned_milli:3000,
+                grading_republication_verified:!!options.identicalGrading && i===0,
                 retained_grade:{code:i===1?'B <b>fictional</b>':'A',points_milli:i===1?3000:4000,grading_publication_retained:i!==1},
                 completed_on:i===0?'2026-12-15':null,academic_state:'completed',
                 term_code:i===1?'CURRENT.UNRETAINED':'26/FA',term_label_retained:i!==1,
@@ -225,3 +226,24 @@ for (const mode of ["ties", "pool"])
         expect(f.errors).toEqual([]);
         expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     });
+
+test("portal explains verified unchanged grading without relabeling its accepted evidence", async ({
+    page,
+}) => {
+    const f = await fixture(page, { evidence: "ties", identicalGrading: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    await page.locator("summary").filter({ hasText: "Course-group details" }).click();
+    await page.locator("summary").filter({ hasText: "Supporting coursework" }).click();
+    const table = page.getByRole("table", {
+        name: "Retained course records supporting this proposed placement",
+        exact: true,
+    });
+    await expect(table).toContainText(
+        "Recorded grade: A · 4 grade points · Unchanged grading re-publication verified",
+    );
+    await page.getByRole("button", { name: "Next evidence alternative", exact: true }).click();
+    await expect(table).toContainText("Recorded grade: B <b>fictional</b> · 3 grade points");
+    await expect(table).not.toContainText("Unchanged grading re-publication verified");
+    expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});

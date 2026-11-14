@@ -83,6 +83,7 @@ final readonly class RuleAllocationCompiler
                     $candidate,
                     $requirements['grade_scale'] ?? null,
                     $effective['placements'][$courseId]['group_id'] ?? null,
+                    $requirements['identical_grading_publications'] ?? [],
                 );
                 $possible = in_array($status, [
                     CourseMatchStatus::Candidate, CourseMatchStatus::GradeUnknown,

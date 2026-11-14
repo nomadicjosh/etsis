@@ -271,7 +271,7 @@ window.degreeProgressCalculationReasons = Object.freeze({
 window.degreeProgressGradeText = function (record, milli) {
     if (record?.grade_state === "retained" && record.retained_grade) {
         const grade = record.retained_grade;
-        return `Recorded grade: ${grade.code} · ${milli(grade.points_milli)} grade points${grade.grading_publication_retained ? "" : " · Grading publication not retained"}`;
+        return `Recorded grade: ${grade.code} · ${milli(grade.points_milli)} grade points${grade.grading_publication_retained ? "" : " · Grading publication not retained"}${record.grading_republication_verified ? " · Unchanged grading re-publication verified" : ""}`;
     }
     return record?.grade_state === "awaiting_grade" ? "Awaiting a final grade" : "Grade evidence unavailable";
 };

@@ -63,6 +63,9 @@ final class AcademicWorkMatchTest extends TestCase
             new CourseMatchEvaluator(),
             $f->service,
             $s->transactions,
+            new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
+                new \Domain\Gradebook\Service\RetainedGradingReader($f->f->history),
+            ),
         );
     }
 

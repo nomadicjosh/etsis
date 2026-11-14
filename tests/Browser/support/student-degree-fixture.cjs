@@ -486,6 +486,7 @@ async function fixture(page, options = {}) {
         if (options.allocationEvidence) {
             result.records.forEach((record, i) => Object.assign(record, {
                 grade_state: 'retained', credit_type: i === 1 ? 'transfer' : 'institutional',
+                grading_republication_verified: !!options.identicalGrading && i===0,
                 retained_grade: {code: i === 1 ? 'B <b>fictional</b>' : 'A', points_milli:i === 1 ? 3000 : 4000, grading_publication_retained:i !== 1},
                 recorded_earned_milli: 3000, completed_on: i === 0 ? '2026-12-15' : null,
                 term_code:i === 1 ? 'CURRENT.UNRETAINED' : '26/FA', term_label_retained:i !== 1,
@@ -672,6 +673,7 @@ async function fixture(page, options = {}) {
                         ...(options.allocationEvidence ? {
                             grade_state: options.progressWorkMix && index===18 ? 'unknown' : options.progressWorkMix && index===19 ? 'awaiting_grade' : r.grade_state,
                             retained_grade: options.progressWorkMix && [18,19].includes(index) ? null : r.retained_grade,
+                            grading_republication_verified:r.grading_republication_verified,
                             credit_type:r.credit_type,recorded_earned_milli:options.progressWorkMix && [18,19].includes(index)?0:r.recorded_earned_milli,
                             completed_on:r.completed_on,
                         } : {}),

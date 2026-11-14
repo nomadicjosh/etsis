@@ -19,6 +19,7 @@ final readonly class DegreeProgressEvaluator
         private GroupAllocationEvaluator $groups,
         private DegreeWorkReview $workReview,
         private SavedCourseRulePreview $rulePreview,
+        private GradingRepublicationVerifier $grading,
     ) {
     }
 
@@ -35,6 +36,12 @@ final readonly class DegreeProgressEvaluator
         HistoryReadBudget $budget,
     ): array {
         $ruleEligibility = $this->rulePreview->preview($inputs->items, $requirements, $budget);
+        $requirements = $this->grading->prepare(
+            $inputs->items,
+            $requirements,
+            $budget,
+            groupMinimums: $effective['groups'],
+        );
         $policy = AuditCalculationPolicy::fromRequirements($requirements);
         $attempts = $this->attempts->forPolicy($inputs, $policy, $budget);
         $overall = $this->policies->evaluate($attempts, $policy);
@@ -69,6 +76,8 @@ final readonly class DegreeProgressEvaluator
                 "id" => $d["id"],
                 "course_code" => $work["course_code"],
                 "course_title" => $work["course_title"],
+                "grading_republication_verified" =>
+                    isset($policy->identicalGradeScaleVersions[$work['grade']['scale_version_id'] ?? '']),
                 "credit" => $d["credit"],
                 "overall_gpa" => $d["gpa"],
                 "cumulative_gpa" => $cumulative[$d["id"]]["gpa"],

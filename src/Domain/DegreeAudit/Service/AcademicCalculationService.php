@@ -26,6 +26,7 @@ final readonly class AcademicCalculationService
         private RetainedAttemptReader $attempts,
         private StudentRecordRepository $students,
         private UnitOfWork $transactions,
+        private GradingRepublicationVerifier $grading,
     ) {
     }
 
@@ -52,6 +53,7 @@ final readonly class AcademicCalculationService
                     throw new CorruptHistoryException();
                 }
                 $requirements = $context["requirements"];
+                $requirements = $this->grading->prepare($inputs->items, $requirements, $budget);
                 $policy = AuditCalculationPolicy::fromRequirements($requirements);
                 $attempts = $this->attempts->forPolicy($inputs, $policy, $budget);
                 $result = $this->evaluator->evaluate($attempts, $policy);
@@ -71,6 +73,8 @@ final readonly class AcademicCalculationService
                         "course_code" => $work["course_code"],
                         "course_title" => $work["course_title"],
                         "credit_type" => $work["credit_type"],
+                        "grading_republication_verified" =>
+                    isset($policy->identicalGradeScaleVersions[$work['grade']['scale_version_id'] ?? '']),
                         "ordering_on" => $ordering[$disposition["id"]],
                     ];
                 }

@@ -87,4 +87,30 @@ final class GradingScaleValidationTest extends TestCase
         self::assertSame("F", $scale->gradeForScore(65000)["code"]);
         self::assertSame("D", $scale->gradeForScore(65001)["code"]);
     }
+    public function testSamePolicyIgnoresFormOrderingButChecksEveryAcademicFieldAndType(): void
+    {
+        $definition = $this->enteredScale();
+        $definition['grades'][11]['max_score_milli'] = 64999;
+        $original = new GradingScaleDefinition($definition);
+        $reordered = $definition;
+        $reordered['grades'] = array_reverse(
+            array_map(fn($g) => array_reverse($g, true), $definition['grades']),
+        );
+        self::assertTrue($original->samePolicy(new GradingScaleDefinition($reordered)));
+        $changes = [
+            ['code' => 'AA'],
+            ['min_score_milli' => 97001],
+            ['max_score_milli' => 99999],
+            ['points_milli' => 4300],
+            ['passes' => false],
+            ['counts_gpa' => false],
+        ];
+        foreach ($changes as $change) {
+            $d = $definition;
+            $d['grades'][0] = array_replace($d['grades'][0], $change);
+            self::assertFalse($original->samePolicy(new GradingScaleDefinition($d)));
+        }
+        self::assertFalse($original->samePolicy(new GradingScaleDefinition(['grades' => []])));
+    }
+
 }

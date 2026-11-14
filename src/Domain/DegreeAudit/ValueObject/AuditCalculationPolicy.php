@@ -10,13 +10,39 @@ use InvalidArgumentException;
 /** Retained calculation choices. Null means not recorded, never a current-setting default. */
 final readonly class AuditCalculationPolicy
 {
+    /** @var array<string,true> Request-local verified definitions only. */
+    public array $identicalGradeScaleVersions;
+
+    /** @param array<array-key,mixed> $identicalGradeScaleVersions */
     public function __construct(
         public ?RepeatCreditPolicy $credit = null,
         public ?RepeatGpaPolicy $gpa = null,
         public ?TransferGpaPolicy $transferGpa = null,
         public ?EntityId $gradeScaleVersion = null,
         public ?RepeatAttemptOrder $attemptOrder = null,
+        array $identicalGradeScaleVersions = [],
     ) {
+        if (
+            count($identicalGradeScaleVersions) > 200 ||
+            ($gradeScaleVersion === null && $identicalGradeScaleVersions !== [])
+        ) {
+            throw new InvalidArgumentException('Use bounded, verified grading-publication matches.');
+        }
+        $verified = [];
+        foreach ($identicalGradeScaleVersions as $id => $matches) {
+            if (!is_string($id) || $matches !== true || $id === $gradeScaleVersion->value) {
+                throw new InvalidArgumentException('Use distinct verified grading-publication matches.');
+            }
+            new EntityId($id);
+            $verified[$id] = true;
+        }
+        $this->identicalGradeScaleVersions = $verified;
+    }
+
+    public function acceptsGradingPublication(?string $version): bool
+    {
+        return $version !== null && $this->gradeScaleVersion !== null &&
+        ($this->gradeScaleVersion->value === $version || isset($this->identicalGradeScaleVersions[$version]));
     }
 
     /** Defaults apply only when making a new institutional selection, never when reading earlier history. */
@@ -43,12 +69,13 @@ final readonly class AuditCalculationPolicy
         $transfer = $settings["transfer_overall_gpa"] ?? null;
         $order = $settings["repeat_attempt_order"] ?? null;
         $version = $requirements["grade_scale"]["version_id"] ?? null;
+        $identical = $requirements['identical_grading_publications'] ?? [];
         if (
             ($credit !== null && !is_string($credit)) ||
             ($gpa !== null && !is_string($gpa)) ||
             ($transfer !== null && !is_string($transfer)) ||
             ($order !== null && !is_string($order)) ||
-            ($version !== null && !is_string($version))
+            ($version !== null && !is_string($version)) || !is_array($identical)
         ) {
             throw new InvalidArgumentException("Use retained audit policy choices.");
         }
@@ -70,6 +97,7 @@ final readonly class AuditCalculationPolicy
                 ? null
                 : RepeatAttemptOrder::tryFrom($order) ??
                     throw new InvalidArgumentException("Unknown repeat-attempt ordering policy."),
+            $identical,
         );
     }
 }

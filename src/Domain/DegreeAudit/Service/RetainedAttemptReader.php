@@ -44,7 +44,7 @@ final readonly class RetainedAttemptReader
                 $a->attemptedMilli > 0 &&
                 !in_array($a->status, ["D", "V"], true) &&
                 $policy->gradeScaleVersion !== null &&
-                $a->grade->facts["scale_version_id"] === $policy->gradeScaleVersion->value &&
+                $policy->acceptsGradingPublication($a->grade->facts["scale_version_id"]) &&
                 !($a->origin === "transfer" && $policy->transferGpa !== TransferGpaPolicy::IncludeEligible)
             ) {
                 $competing[$a->courseId->value][] = $a;

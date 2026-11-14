@@ -16,6 +16,7 @@ final readonly class AcademicWorkMatchService
         private CourseMatchEvaluator $evaluator,
         private StudentRequirementsService $requirements,
         private UnitOfWork $transactions,
+        private GradingRepublicationVerifier $grading,
     ) {
     }
 
@@ -30,6 +31,13 @@ final readonly class AcademicWorkMatchService
             $requirements = $preview["requirements"];
             $context = null;
             if ($requirements !== null) {
+                $requirements = $this->grading->prepare(
+                    $page['items'],
+                    $requirements,
+                    new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+                    groupMinimums: $preview['effective_minimums']['groups'],
+                    gpaChecks: false,
+                );
                 $page["items"] = $this->evaluator->page(
                     $page["items"],
                     $requirements,

@@ -87,6 +87,9 @@ final class StudentGroupAllocationTest extends TestCase
             $students,
             $s->transactions,
             new SavedCourseRulePreview(new PublishedCourseReader($f->f->history)),
+            new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
+                new \Domain\Gradebook\Service\RetainedGradingReader($f->f->history),
+            ),
         );
     }
     public function testSelectedRuleBackedRequirementsUseTheSameCapturedEligibilityAndWriteNothing(): void
@@ -523,6 +526,47 @@ final class StudentGroupAllocationTest extends TestCase
         } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
             self::assertSame($before, $f->f->digest("sis_history_events"));
         }
+    }
+
+    public function testUnchangedGradingRepublicationSupportsAGroupFloorWithoutChangingAwards(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        $firstScale = $f->f->gradingScales()->resolve();
+        $id = EntityId::generate();
+        $course = $f->f->groupDefinition['courses'][0];
+        $d = CourseGroupDefinitionV2::blank('Fictional retained grade floor')->definition;
+        $d['min_credits_milli'] = 3000;
+        $d['min_course_grade_points_milli'] = 2000;
+        $d['courses'] = [$course];
+        $d['rules'] = [
+            [
+                'id' => EntityId::generate()->value,
+                'mode' => 'all',
+                'minimum_courses' => 1,
+                'course_ids' => [$course['course_id']],
+            ],
+        ];
+        $f->f->groups->create($id, new CourseGroupDefinitionV2($d));
+        $review = $f->f->groups->review($id, 'Fictional grade floor.');
+        $version = $f->f->groups->publish($id, $review['review_token'])['operation_id'];
+        $row = $f->f->degrees->view($f->f->degree);
+        $definition = $row['definition'];
+        $definition['groups'] = [['group_id' => $id->value, 'version_id' => $version]];
+        $f->f->degrees->save($f->f->degree, $row['revision'], new AuditRequirementsV3($definition));
+        $f->version = new EntityId($f->f->publishDegree()['operation_id']);
+        $f->assign();
+        $s->gradeScale($firstScale['definition']['grades']);
+        $this->work($f, 0);
+        $events = $f->f->digest('sis_history_events');
+        $credits = $f->f->digest('sis_academic_credits');
+        $result = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame('feasible', $result['outcome']);
+        self::assertSame(3000, $result['groups'][0]['placements'][0]['credits_milli']);
+        self::assertTrue($result['records'][0]['grading_republication_verified']);
+        self::assertSame('A', $result['records'][0]['retained_grade']['code']);
+        self::assertSame($events, $f->f->digest('sis_history_events'));
+        self::assertSame($credits, $f->f->digest('sis_academic_credits'));
     }
 
     private function institution(): StudentRequirementsFixture

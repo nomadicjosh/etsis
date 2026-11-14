@@ -74,7 +74,7 @@ final readonly class StudentDegreeProgress
             $record = $pick($value, [
                 'course_code', 'course_title', 'term_code', 'term_label_retained', 'academic_state',
                 'placement', 'attempted_milli', 'credit', 'overall_gpa', 'cumulative_gpa',
-                'credit_type', 'recorded_earned_milli', 'completed_on', 'grade_state',
+                'credit_type', 'recorded_earned_milli', 'completed_on', 'grade_state', 'grading_republication_verified',
             ]);
             $record['retained_grade'] = ($value['retained_grade'] ?? null) === null
             ? null : $pick($value['retained_grade'], ['code', 'points_milli', 'grading_publication_retained']);

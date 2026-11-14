@@ -33,7 +33,8 @@ final readonly class CourseMatchEvaluator
                     $item,
                     $candidate,
                     $requirements["grade_scale"] ?? null,
-                    $effective["placements"][$item["course_id"]]["group_id"] ?? null
+                    $effective["placements"][$item["course_id"]]["group_id"] ?? null,
+                    $requirements['identical_grading_publications'] ?? [],
                 );
                 if (isset($candidate['exception_version_ids'][$item['course_version_id'] ?? ''])) {
                     $candidate['via_substitution'] = true;
@@ -81,7 +82,8 @@ final readonly class CourseMatchEvaluator
                     $item,
                     $candidate,
                     $requirements["grade_scale"] ?? null,
-                    $effective["placements"][$item["course_id"]]["group_id"] ?? null
+                    $effective["placements"][$item["course_id"]]["group_id"] ?? null,
+                    $requirements['identical_grading_publications'] ?? [],
                 );
                 if (isset($candidate['exception_version_ids'][$item['course_version_id'] ?? ''])) {
                     $candidate['via_substitution'] = true;
@@ -96,14 +98,22 @@ final readonly class CourseMatchEvaluator
     /** @param array<string,mixed> $work
      * @param array<string,mixed> $candidate
      * @param array<string,mixed>|null $scale
+     * @param array<string,true> $identicalGradingPublications
      */
     public function allocationStatus(
         #[\SensitiveParameter] array $work,
         #[\SensitiveParameter] array $candidate,
         ?array $scale,
         ?string $preferredGroup = null,
+        array $identicalGradingPublications = [],
     ): Status {
-        $status = $this->status($work, array_replace($candidate, ['waived' => false]), $scale, $preferredGroup);
+        $status = $this->status(
+            $work,
+            array_replace($candidate, ['waived' => false]),
+            $scale,
+            $preferredGroup,
+            $identicalGradingPublications,
+        );
         return $status === Status::InProgress && $work['quality_points_milli'] !== 0
         ? Status::GradeUnknown : $status;
     }
@@ -200,9 +210,15 @@ final readonly class CourseMatchEvaluator
      * @param array<string,mixed> $work
      * @param array<string,mixed> $candidate
      * @param array<string,mixed>|null $scale
+     * @param array<string,true> $identicalGradingPublications
      */
-    private function status(array $work, array $candidate, ?array $scale, ?string $preferredGroup = null): Status
-    {
+    private function status(
+        array $work,
+        array $candidate,
+        ?array $scale,
+        ?string $preferredGroup = null,
+        array $identicalGradingPublications = [],
+    ): Status {
         if ($candidate["approval_conflict"]) {
             return Status::ApprovalConflict;
         }
@@ -246,7 +262,10 @@ final readonly class CourseMatchEvaluator
             if (($scale["version_id"] ?? null) === null || $grade["scale_version_id"] === null) {
                 return Status::ScaleUnknown;
             }
-            if ($scale["version_id"] !== $grade["scale_version_id"]) {
+            if (
+                $scale["version_id"] !== $grade["scale_version_id"] &&
+                !isset($identicalGradingPublications[$grade['scale_version_id']])
+            ) {
                 return Status::ScaleDiffers;
             }
             if ($grade["points_milli"] < $minimum) {

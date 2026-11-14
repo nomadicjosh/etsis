@@ -3622,6 +3622,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         : null,
                     node("p", {}, `Earned credit: ${calculationReasons[record.credit] || "Needs review"}.`),
                     node("p", {}, `GPA: ${calculationReasons[record.gpa] || "Needs review"}.`),
+                    record.grading_republication_verified
+                        ? node("p", {}, "The recorded grading publication was verified as identical to this degree's scale. Its original reference is preserved.")
+                        : null,
                 ),
             );
         body.append(cards);

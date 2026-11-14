@@ -26,6 +26,7 @@ final readonly class StudentGroupAllocationService
         private StudentRecordRepository $students,
         private UnitOfWork $transactions,
         private SavedCourseRulePreview $rulePreview,
+        private GradingRepublicationVerifier $grading,
     ) {
     }
 
@@ -50,6 +51,13 @@ final readonly class StudentGroupAllocationService
                 if ($inputs->status === AcademicInputStatus::Inconsistent) {
                     throw new CorruptHistoryException();
                 }
+                $requirements = $this->grading->prepare(
+                    $inputs->items,
+                    $requirements,
+                    $budget,
+                    groupMinimums: $context['effective_minimums']['groups'],
+                    gpaChecks: false,
+                );
                 $result = $this->evaluator->evaluate(
                     $inputs->items,
                     $requirements,

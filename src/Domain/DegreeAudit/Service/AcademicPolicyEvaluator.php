@@ -110,7 +110,7 @@ final readonly class AcademicPolicyEvaluator
                 ) {
                     $d["gpa"] = "grading_policy_unknown";
                     $issues[] = self::issue("gpa", "grading_policy_unknown", $id, [$a->id->value]);
-                } elseif ($a->grade->facts["scale_version_id"] !== $policy->gradeScaleVersion->value) {
+                } elseif (!$policy->acceptsGradingPublication($a->grade->facts["scale_version_id"])) {
                     $d["gpa"] = "grading_policy_differs";
                     $issues[] = self::issue("gpa", "grading_policy_differs", $id, [$a->id->value]);
                 } else {
