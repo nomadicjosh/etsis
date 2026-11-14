@@ -339,4 +339,123 @@ final class StudentDegreeProgressTest extends TestCase
         }
     }
 
+    private function groupSupport(string $outcome = "infeasible"): array
+    {
+        $r = $this->review($outcome);
+        $group = &$r["allocation"]["groups"][0];
+        $group["required_credits_milli"] = 6000;
+        $group["required_courses"] = 2;
+        $group["rules"] = [];
+        $group["gaps"] = [
+            "has_shortfall" => true,
+            "credit_upper_bound_milli" => 1500,
+            "credit_shortfall_milli" => 4500,
+            "course_upper_bound" => 1,
+            "course_shortfall" => 1,
+            "eligible_target_ids" => ["fictional-staff-only-detail"],
+            "rules" => [],
+        ];
+        foreach (["all", "choose", "credits", "pool"] as $i => $mode) {
+            $id = str_pad((string) ($i + 10), 26, "0", STR_PAD_LEFT);
+            $rule = ["id" => $id, "mode" => $mode, "course_ids" => ["fictional-staff-only-detail"]];
+            if ($mode === "credits") {
+                $rule["eligibility"] = ["predicate" => "fictional-staff-only-detail"];
+            }
+            $group["rules"][] = $rule;
+            $required = $mode === "all" ? 2 : ($mode === "choose" ? 3 : 0);
+            $gap = [
+                "id" => $id,
+                "required_courses" => $required,
+                "course_upper_bound" => 1,
+                "shortfall_courses" => max(0, $required - 1),
+                "eligible_target_count" => 3,
+                "eligible_course_ids" => ["fictional-staff-only-detail", "another-private-identity"],
+            ];
+            if ($mode === "credits") {
+                $gap += [
+                    "required_credits_milli" => 6000,
+                    "credit_upper_bound_milli" => 1500,
+                    "credit_shortfall_milli" => 4500,
+                ];
+            }
+            $group["gaps"]["rules"][] = $gap;
+        }
+        return $r;
+    }
+    public function testGroupSupportReturnsNumericBoundsInRetainedOrderWithoutPrivateRuleInputs(): void
+    {
+        $r = $this->groupSupport();
+        $r["allocation"]["groups"][0]["gaps"]["rules"] = array_reverse($r["allocation"]["groups"][0]["gaps"]["rules"]);
+        $result = new StudentDegreeProgress($r)->describe();
+        $gaps = $result["allocation"]["groups"][0]["gaps"];
+        self::assertTrue($gaps["has_shortfall"]);
+        self::assertSame(4500, $gaps["credit_shortfall_milli"]);
+        self::assertSame(1, $gaps["course_shortfall"]);
+        self::assertSame(["all", "choose", "credits", "pool"], array_column($gaps["rules"], "mode"));
+        self::assertSame([3, 3, 2, 3], array_column($gaps["rules"], "eligible_count"));
+        self::assertSame(4500, $gaps["rules"][2]["credit_shortfall_milli"]);
+        self::assertSame([], $result["allocation"]["groups"][0]["placements"]);
+        $encoded = json_encode($result, JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString("fictional-staff-only-detail", $encoded);
+        self::assertStringNotContainsString("another-private-identity", $encoded);
+        self::assertStringNotContainsString($r["allocation"]["groups"][0]["rules"][0]["id"], $encoded);
+        self::assertArrayNotHasKey("course_ids", $gaps["rules"][0]);
+        self::assertArrayNotHasKey("eligibility", $gaps["rules"][2]);
+    }
+    public function testUnavailableGroupInputsRemainUnknownRatherThanBecomingZeroShortages(): void
+    {
+        foreach (["needs_review", "unsupported", "undetermined"] as $outcome) {
+            $result = new StudentDegreeProgress($this->groupSupport($outcome))->describe();
+            self::assertNull($result["allocation"]["groups"][0]["gaps"]);
+        }
+        $r = $this->groupSupport();
+        $r["allocation"]["groups"][0]["gaps"] = null;
+        self::assertNull(new StudentDegreeProgress($r)->describe()["allocation"]["groups"][0]["gaps"]);
+    }
+    public function testGroupSupportRejectsMismatchedCardsAndInconsistentShortages(): void
+    {
+        foreach (range(0, 9) as $case) {
+            $r = $this->groupSupport();
+            $gap = &$r["allocation"]["groups"][0]["gaps"];
+            if ($case === 0) {
+                $gap["credit_shortfall_milli"] = 0;
+            }
+            if ($case === 1) {
+                $gap["course_upper_bound"] = "1";
+            }
+            if ($case === 2) {
+                $gap["rules"][0]["id"] = "foreign-private-rule";
+            }
+            if ($case === 3) {
+                $gap["rules"][1]["id"] = $gap["rules"][0]["id"];
+            }
+            if ($case === 4) {
+                $gap["rules"][2]["credit_shortfall_milli"] = -1;
+            }
+            if ($case === 5) {
+                $gap["rules"][1]["shortfall_courses"] = 0;
+            }
+            if ($case === 6) {
+                $gap["has_shortfall"] = false;
+            }
+            if ($case === 7) {
+                array_pop($gap["rules"]);
+            }
+            if ($case === 8) {
+                $gap["rules"][0]["eligible_target_count"] = 0;
+            }
+            if ($case === 9) {
+                $r["allocation"]["outcome"] = "feasible";
+            }
+            try {
+                new StudentDegreeProgress($r);
+                self::fail("Inconsistent shortage data was exposed.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+            unset($gap);
+        }
+    }
+
+
 }

@@ -1383,6 +1383,9 @@
                                   `Minimum recorded grade points for each course: ${milli(group.minimum_grade_points_milli)}`,
                               ),
                           ]),
+                    window.createDegreeGroupSupport({ node: el, button, milli }, group, data.allocation.outcome, {
+                        heading: "h5",
+                    }),
                     groupCoverage(group),
                     window.createDegreeNamedCourseReview(
                         { node: el, button, milli },

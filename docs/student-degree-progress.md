@@ -178,3 +178,8 @@ No migration, event append, receipt, stored result or projection change is intro
 When a joint review has a supported shared-course shortage, the same explanation offers **Inspect …** buttons that open and focus the affected course-group details. These links use positions within the captured response and perform no extra academic request.
 
 The portal verifies the signed-in owner before and after the read; staff permissions do not select another person's student record through this service. Each component passes through the existing student response projection, withholding internal requirement/work/course/approval identities, routing fingerprints, protected reasons and raw rule grammar. Course labels, explanations and response-local evidence links remain accessible. Credits/GPA figures are never added across component cards. Pursuits without selected/required specializations retain the familiar degree-only screen. A required missing specialization or unresolved routing/curriculum context prompts a registrar review instead of presenting partial completion.
+
+
+### Individual group shortages in the portal
+
+Within **Course-group details**, **What current work can support** explains known group credit/course shortages using the captured review. Open **Requirement availability** for a locally paged comparison of each retained card. The [availability guide](student-course-placement.md#student-group-and-requirement-availability) explains the counts, credit bounds, waiver treatment and limits. These views also work within a selected specialization; they do not repeat academic reads or save an audit. Unavailable inputs remain unknown, and feasible plans use their applied checklist for card completion.

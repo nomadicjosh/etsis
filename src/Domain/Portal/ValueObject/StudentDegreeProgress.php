@@ -109,6 +109,7 @@ final readonly class StudentDegreeProgress
                 "required_courses",
                 "minimum_grade_points_milli",
             ]);
+            $group['gaps'] = self::groupGaps($value, $review['allocation']['outcome']);
             $group['coverage'] = null;
             $group['course_review'] = self::courseReview(
                 $value['course_review'] ?? null,
@@ -142,6 +143,105 @@ final readonly class StudentDegreeProgress
             $data["allocation"]["groups"][] = $group;
         }
         $this->data = $data;
+    }
+
+    /** Numeric requirement bounds in retained card order, without identities or rule grammar.
+     * @param array<string,mixed> $group
+     * @return array<string,mixed>|null
+     */
+    private static function groupGaps(array $group, string $outcome): ?array
+    {
+        $source = $group["gaps"] ?? null;
+        if ($source === null || !in_array($outcome, ["feasible", "infeasible"], true)) {
+            return null;
+        }
+        if (
+            !is_array($source) ||
+            !is_bool($source["has_shortfall"] ?? null) ||
+            !is_array($source["rules"] ?? null) ||
+            !array_is_list($source["rules"]) ||
+            !is_array($group["rules"] ?? null) ||
+            count($group["rules"]) > 100 ||
+            count($source["rules"]) !== count($group["rules"])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $quantity = static function (mixed $value, int $maximum): int {
+            if (!is_int($value) || $value < 0 || $value > $maximum) {
+                throw new CorruptHistoryException();
+            }
+            return $value;
+        };
+        $credits = $quantity($group["required_credits_milli"] ?? null, 9999999);
+        $courses = $quantity($group["required_courses"] ?? null, 200);
+        $row = ["has_shortfall" => $source["has_shortfall"]];
+        foreach (
+            ["credit_upper_bound_milli", "credit_shortfall_milli", "course_upper_bound", "course_shortfall"] as $field
+        ) {
+            $row[$field] = $quantity($source[$field] ?? null, str_contains($field, "milli") ? 9999999 : 200);
+        }
+        if (
+            $row["credit_upper_bound_milli"] > $credits ||
+            $row["credit_shortfall_milli"] !== $credits - $row["credit_upper_bound_milli"] ||
+            $row["course_shortfall"] !== max(0, $courses - $row["course_upper_bound"])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $shortfall = $row["credit_shortfall_milli"] > 0 || $row["course_shortfall"] > 0;
+        $byId = [];
+        foreach ($source["rules"] as $gap) {
+            if (!is_array($gap) || !is_string($gap["id"] ?? null) || isset($byId[$gap["id"]])) {
+                throw new CorruptHistoryException();
+            }
+            $byId[$gap["id"]] = $gap;
+        }
+        $row["rules"] = [];
+        foreach ($group["rules"] as $rule) {
+            if (!is_array($rule) || !is_string($rule["id"] ?? null) || !is_string($rule["mode"] ?? null)) {
+                throw new CorruptHistoryException();
+            }
+            $gap = $byId[$rule["id"]] ?? throw new CorruptHistoryException();
+            unset($byId[$rule["id"]]);
+            if (!in_array($rule["mode"], ["all", "choose", "credits", "pool"], true)) {
+                throw new CorruptHistoryException();
+            }
+            $card = ["mode" => $rule["mode"]];
+            foreach (["required_courses", "course_upper_bound", "shortfall_courses"] as $field) {
+                $card[$field] = $quantity($gap[$field] ?? null, 200);
+            }
+            $eligible = $gap["eligible_course_ids"] ?? null;
+            if (!is_array($eligible) || count($eligible) > 200) {
+                throw new CorruptHistoryException();
+            }
+            $card["eligible_count"] = isset($rule["eligibility"])
+            ? count($eligible)
+            : $quantity($gap["eligible_target_count"] ?? null, 200);
+            if (
+                $card["course_upper_bound"] > $card["eligible_count"] ||
+                $card["shortfall_courses"] !== max(0, $card["required_courses"] - $card["course_upper_bound"])
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if ($rule["mode"] === "credits") {
+                foreach (["required_credits_milli", "credit_upper_bound_milli", "credit_shortfall_milli"] as $field) {
+                    $card[$field] = $quantity($gap[$field] ?? null, 9999999);
+                }
+                if (
+                    $card["credit_upper_bound_milli"] > $card["required_credits_milli"] ||
+                    $card["credit_shortfall_milli"] !==
+                        $card["required_credits_milli"] - $card["credit_upper_bound_milli"]
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $shortfall = $shortfall || $card["credit_shortfall_milli"] > 0;
+            }
+            $shortfall = $shortfall || $card["shortfall_courses"] > 0;
+            $row["rules"][] = $card;
+        }
+        if ($byId !== [] || $source["has_shortfall"] !== $shortfall || ($outcome === "feasible" && $shortfall)) {
+            throw new CorruptHistoryException();
+        }
+        return $row;
     }
 
     /** Curated response-local links and numeric bounds only; no raw search aliases or evidence identities.

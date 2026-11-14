@@ -238,3 +238,6 @@ Staff can now choose an exact catalog course publication and reserve eligible wo
 ### Combined progress shortages
 
 Combined degree/specialization progress now includes [shared-course shortage explanations](student-course-placement.md#degree-and-specialization-shortages). The existing analyzer respects both sharing between components and sharing within them; its optimistic contribution bounds explain supported conflicts without another search or history read. Staff and owner-only portal reviews reuse one presentation and captured group links. Requirement uses are distinct from earned credits/GPA, and no partial placement, evaluation result, journal entry or schema change is introduced.
+
+
+Individual group and requirement-card shortages now reach the owner-only portal through validated numeric projections. Student degree/specialization detail and staff/runtime screens share their support-summary and card presentation; long availability lists load 20 cards at a time from the captured review. Unknown/limited inputs remain distinct from known shortages, and actual feasible placements keep their existing applied checklist. See [student availability](student-course-placement.md#student-group-and-requirement-availability). No academic write or migration is introduced.

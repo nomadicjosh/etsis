@@ -73,6 +73,27 @@ async function fixture(page,options={}) {
             data.records[2].retained_grade={code:'D',points_milli:1000,grading_publication_retained:true};
         }
         if (path.includes(`/programs/${id(44)}/`) && data.context) data.context.name = 'Second selected program';
+        if (options.groupSupport && data.allocation) {
+            const group = data.allocation.groups[0];
+            const unknown = options.groupSupport === "unknown", count = options.groupSupport === "count";
+            data.allocation.outcome = unknown ? "needs_review" : "infeasible";
+            group.placements = [];
+            group.coverage = null;
+            group.requirement_type = count ? "courses" : "credits";
+            group.required_courses = count ? 4 : 0;
+            group.required_credits_milli = count ? 0 : 6000;
+            group.gaps = unknown ? null : {
+                has_shortfall: true, credit_upper_bound_milli: count ? 0 : 1500,
+                credit_shortfall_milli: count ? 0 : 4500, course_upper_bound: 1, course_shortfall: count ? 3 : 0,
+                rules: Array.from({length:21}, (_,i)=>({
+                    mode: ["all", "choose", "credits", "pool"][i % 4], required_courses: i%4 < 2 ? 2 : 0,
+                    course_upper_bound: 1, eligible_count: 1, shortfall_courses: i%4 < 2 ? 1 : 0,
+                    ...(i%4 === 2 ? {required_credits_milli:6000,credit_upper_bound_milli:1500,credit_shortfall_milli:4500}:{}),
+                })),
+            };
+            data.work_summary.placement_established = false;
+            data.work_summary.unused_completed_count = null;
+        }
         if (options.combined && data.status === "review") {
             const degree = structuredClone(data), specialization = structuredClone(data);
             specialization.context.name = "Data <b>fictional</b> requirements";
@@ -377,3 +398,58 @@ test("student shared-course shortages open captured group detail without a secon
     expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
     expect(f.errors).toEqual([]);
 });
+
+
+test("student specialization shortages show captured card bounds with lazy paging and no added private request", async ({
+    page,
+}) => {
+    const f = await fixture(page, { combined: true, groupSupport: "credits", combinedShortage: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    await page.getByRole("button", { name: "Review Specialization DATA", exact: true }).click();
+    await page.getByText("Course-group details", { exact: true }).click();
+    const support = page.locator("[data-group-support]");
+    await expect(support).toContainText("At most 1.5 credits toward the 6-credit minimum");
+    await expect(support).toContainText("At least 4.5 more eligible credits are needed");
+    await expect(support.locator("article")).toHaveCount(0);
+    await support.getByText("Requirement availability", { exact: true }).click();
+    await expect(support.locator("article")).toHaveCount(20);
+    await expect(support).toContainText("At most 1.5 eligible credits toward this list's 6-credit minimum");
+    await expect(support).toContainText("Course waivers remove named obligations only");
+    await expect(support).toContainText("Eligible pool · No separate minimum");
+    await support.getByRole("button", { name: "More availability requirements", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(support.getByText("Requirements 21–21 of 21", { exact: true })).toBeFocused();
+    await expect(support.locator("article")).toHaveCount(1);
+    await support.getByRole("button", { name: "Previous availability requirements", exact: true }).click();
+    await expect(support.getByText("Requirements 1–20 of 21", { exact: true })).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await accessible(page);
+    await expect(support.locator("b, script")).toHaveCount(0);
+    expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+for (const kind of ["count", "unknown"])
+    test(`student group support keeps ${kind} separate from applied work`, async ({ page }) => {
+        const f = await fixture(page, { groupSupport: kind });
+        await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+        await page.getByText("Course-group details", { exact: true }).click();
+        const support = page.locator("[data-group-support]");
+        if (kind === "count") {
+            await expect(support).toContainText("At most 1 distinct course contributions toward the 4-course minimum");
+            await expect(support).toContainText("At least 3 more eligible course contributions are needed");
+            await expect(support).not.toContainText("credits toward the");
+            await support.getByText("Requirement availability", { exact: true }).click();
+            await expect(support).toContainText("Required courses with eligible evidence: 1");
+            await expect(support).toContainText("Listed options with eligible evidence: 1");
+        } else {
+            await expect(support).toContainText("Shortfalls cannot be assessed");
+            await expect(support).not.toContainText("At most");
+            await expect(support.getByText("Requirement availability", { exact: true })).toHaveCount(0);
+        }
+        await page.setViewportSize({ width: 390, height: 844 });
+        await accessible(page);
+        expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+        expect(f.errors).toEqual([]);
+    });

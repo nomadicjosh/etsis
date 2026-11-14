@@ -693,3 +693,118 @@ window.createCurriculumCompetition = function (ui, data, inspect) {
     );
     return section;
 };
+
+
+/* Display captured bounds only; never calculate an assignment or future earned credit. */
+window.createDegreeRuleSupport = function (ui, mode, gap) {
+    if (!gap || mode === "pool") return null;
+    const { node, milli } = ui;
+    const text =
+        mode === "credits"
+            ? `At most ${milli(gap.credit_upper_bound_milli)} eligible credits toward this list's ${milli(gap.required_credits_milli)}-credit minimum.${gap.credit_shortfall_milli > 0 ? ` At least ${milli(gap.credit_shortfall_milli)} more eligible credits from this list are needed.` : " This bound does not establish completion; courses may compete for other requirements."}`
+            : `Required course contributions: ${gap.required_courses} · ${mode === "all" ? "Required courses" : "Listed options"} with eligible evidence: ${gap.eligible_count}. At most ${gap.course_upper_bound} distinct eligible course contributions can be used.${gap.shortfall_courses > 0 ? ` At least ${gap.shortfall_courses} more distinct eligible course contribution${gap.shortfall_courses === 1 ? " is" : "s are"} needed.` : " Eligible choices may still compete for the same actual course or another group."}`;
+    return node("p", {}, text);
+};
+
+window.degreeGroupSupportSummary = function (group, outcome) {
+    const gaps = ["feasible", "infeasible"].includes(outcome) ? group.gaps : null;
+    return !gaps
+        ? "Shortfalls cannot be assessed until the retained inputs and rules are verified."
+        : gaps.has_shortfall
+          ? "Current eligible work falls short of this group's requirements."
+          : outcome === "feasible"
+            ? "The proposed placement meets this group's supported requirements."
+            : "No simple shortage found. Courses must still fit together in a complete placement.";
+};
+
+window.createDegreeGroupSupport = function (ui, group, outcome, options = {}) {
+    const { node, button, milli } = ui;
+    const heading = options.heading || "h2";
+    const gaps = ["feasible", "infeasible"].includes(outcome) ? group.gaps : null;
+    const summary = window.degreeGroupSupportSummary(group, outcome);
+    const section = node(
+        "section",
+        { class: "border rounded-3 p-3 mb-3", "data-group-support": "" },
+        node(heading, {}, "What current work can support"),
+        node("p", {}, summary),
+    );
+    if (!gaps) return section;
+    section.append(
+        node(
+            "p",
+            {},
+            "These are optimistic bounds on eligible completed evidence, not applied credits or a partial placement. Alternatives, target collisions and sharing can reduce what can actually be placed. In-progress, insufficient-grade, dropped and voided work supply no completed contribution.",
+        ),
+    );
+    if (group.required_credits_milli > 0)
+        section.append(
+            node(
+                "p",
+                {},
+                `At most ${milli(gaps.credit_upper_bound_milli)} credits toward the ${milli(group.required_credits_milli)}-credit minimum.${gaps.credit_shortfall_milli > 0 ? ` At least ${milli(gaps.credit_shortfall_milli)} more eligible credits are needed.` : " This bound does not establish completion."}`,
+            ),
+        );
+    if (group.required_courses > 0)
+        section.append(
+            node(
+                "p",
+                {},
+                `At most ${gaps.course_upper_bound} distinct course contributions toward the ${group.required_courses}-course minimum.${gaps.course_shortfall > 0 ? ` At least ${gaps.course_shortfall} more eligible course contributions are needed.` : " This bound does not establish completion."}`,
+            ),
+        );
+    section.append(
+        node(
+            "p",
+            {},
+            "Course waivers remove named obligations only. They create no credits, completed courses or reduction to choose counts. Approved quantity reductions are already included in the required minimums above.",
+        ),
+    );
+    if (options.cards === false || outcome === "feasible" || !gaps.rules?.length) return section;
+    const details = node("details", {}, node("summary", {}, "Requirement availability"));
+    const content = node("div");
+    details.append(content);
+    section.append(details);
+    let loaded = false;
+    details.addEventListener("toggle", () => {
+        if (!details.open || loaded) return;
+        loaded = true;
+        function show(offset = 0, focus = false) {
+            const label = node(
+                "p",
+                { role: "status", tabindex: "-1" },
+                `Requirements ${offset + 1}–${Math.min(offset + 20, gaps.rules.length)} of ${gaps.rules.length}`,
+            );
+            content.replaceChildren(label);
+            for (const [index, rule] of gaps.rules.slice(offset, offset + 20).entries()) {
+                const card = node(
+                    "article",
+                    { class: "border-top pt-2" },
+                    node(
+                        "p",
+                        { class: "fw-semibold" },
+                        `Requirement ${offset + index + 1} · ${rule.mode === "all" ? "All required courses" : rule.mode === "choose" ? "Choose courses" : rule.mode === "credits" ? "Take credits" : "Eligible course pool"}`,
+                    ),
+                );
+                const support = window.createDegreeRuleSupport(ui, rule.mode, rule);
+                card.append(
+                    support ||
+                        node(
+                            "p",
+                            {},
+                            "Eligible pool · No separate minimum on this card. Eligible courses must still fit the group's requirements.",
+                        ),
+                );
+                content.append(card);
+            }
+            const controls = node("div", { class: "d-flex flex-wrap gap-2" });
+            if (offset > 0)
+                controls.append(button("Previous availability requirements", () => show(offset - 20, true)));
+            if (offset + 20 < gaps.rules.length)
+                controls.append(button("More availability requirements", () => show(offset + 20, true)));
+            content.append(controls);
+            if (focus) label.focus();
+        }
+        show();
+    });
+    return section;
+};

@@ -472,4 +472,49 @@ final class DegreeProgressTest extends TestCase
             $this->service($f)->preview($f->student, $f->assignment),
         );
     }
+    public function testPortalExplainsActualGroupShortagesWithoutAnotherReadOrAnyWrites(): void
+    {
+        $f = $this->institution();
+        $this->work($f, 0);
+        $s = $f->f->sis;
+        $tables = [
+            "sis_history_events",
+            "sis_history_operations",
+            "sis_history_streams",
+            "sis_audit",
+            "sis_academic_credits",
+            "sis_enrollments",
+            "sis_student_accounts",
+        ];
+        $before = [];
+        foreach ($tables as $table) {
+            $before[$table] = $s->sql->rows($table);
+        }
+        $repository = new class ($s) implements AcademicInputRepository {
+            public int $reads = 0;
+            public function __construct(private \SisFixture $s) {}
+            public function inventory(EntityId $student): AcademicInputInventory
+            {
+                $this->reads++;
+                return new SqlAcademicInputRepository($this->s->sql)->inventory($student);
+            }
+        };
+        $raw = $this->service($f, $repository)->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $raw["allocation"]["outcome"]);
+        $portal = new \Domain\Portal\ValueObject\StudentDegreeProgress($raw)->describe();
+        self::assertSame(1, $repository->reads);
+        foreach ($raw["allocation"]["groups"] as $i => $group) {
+            $public = $portal["allocation"]["groups"][$i];
+            self::assertTrue($public["gaps"]["has_shortfall"]);
+            self::assertSame($group["gaps"]["credit_shortfall_milli"], $public["gaps"]["credit_shortfall_milli"]);
+            self::assertCount(count($group["rules"]), $public["gaps"]["rules"]);
+            self::assertSame([], $public["placements"]);
+            self::assertArrayNotHasKey("id", $public["gaps"]["rules"][0]);
+        }
+        foreach ($tables as $table) {
+            self::assertSame($before[$table], $s->sql->rows($table));
+        }
+    }
+
+
 }

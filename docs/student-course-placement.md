@@ -48,9 +48,17 @@ A waiver removes an **all** card's named obligation wherever applicable. It supp
 
 These are optimistic bounds, not applied credits, a best partial plan or a complete placement. Alternatives can compete for one required target; one actual course can compete for several targets or groups. No clear shortage therefore does **not** establish that a group is satisfied. The existing combined placement search remains responsible for those decisions. A shared-course conflict can produce no complete plan even when each group has no simple local shortage.
 
-Relevant unknown grades/publications, conflicting approvals and unsupported retained rules suppress these shortage comparisons. The screen asks for review rather than treating unknown evidence as zero. A search limit still shows no partial placements; independently established evidence bounds may remain visible, without changing the interrupted search into academic failure. A collection/preparation/replay limit returns no partial result.
+Relevant unknown grades/publications, conflicting approvals and unsupported retained rules suppress these shortage comparisons. The screen asks for review rather than treating unknown evidence as zero. A search limit shows no partial placements or group-support shortage quantities. Independently verified general credit/GPA comparisons remain separate; an interrupted search is not academic failure. A collection/preparation/replay limit returns no partial result.
 
 The same explanations are available through **Degree progress → Inspect course-group placement** from the captured review, without an additional request. Evidence bounds use only the planner's already prepared, bounded inputs. They add no database queries, stream replay, additional search, stored evaluation or academic write, and expose no raw events or source references.
+
+### Student group and requirement availability
+
+In **Student services → Degree progress**, open a degree or specialization component, then **Course-group details → What current work can support**. This reuses the staff explanation for group credit/course minimums. **Requirement availability** shows numbered cards in the retained requirement order: all required courses, a choice count, a credit minimum, or an eligible pool with no independent minimum. When a complete plan exists, the existing applied checklist explains the actual placements instead of duplicating a card-availability list.
+
+Availability cards load when opened, with at most 20 rendered at a time. Paging stays within the captured review, moves keyboard focus to the page announcement, and makes no additional academic request. Course-count bounds count distinct usable course contributions; repeated awards do not create extra courses. Credit-card bounds apply only to the card's eligible work. A waiver creates neither a completed contribution nor earned credits. A zero shortage means there is no simple shortage to explain, not that the requirements can be satisfied together.
+
+The portal projection validates and copies numeric bounds and card modes only, matching each report to its retained card before removing identities. Saved-rule conditions, eligible-course/target identities, approval details and raw events remain private. Missing, unsupported and interrupted inputs return no group availability bounds. Staff and student views share the group summary and card wording; no planner, replay, database access, saved result or academic/financial write is added.
 
 ## Shared-course shortages
 
