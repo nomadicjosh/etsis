@@ -116,7 +116,7 @@ The staff workspace brings campus metrics, student intake, admissions, and revie
 [Course subjects](docs/course-subjects.md) explains explicit subject setup, draft assignment and historical publication references.
 [Departments and levels](docs/course-classifications.md) explains their searchable setup, combined course assignment and retained publication/report labels.
 
-[Published program details](docs/program-publication.md) explains combined program/award setup, academic-year publication and retained student cohort labels. Program publications also retain offered specializations and selection limits: institutional ceilings/defaults, program-specific restrictions and optional or required selection. Student specialization assignments and their degree-audit requirements remain in development.
+[Published program details](docs/program-publication.md) explains combined program/award setup, academic-year publication and retained student cohort labels. Program publications also retain offered specializations and selection limits: institutional ceilings/defaults, program-specific restrictions and optional or required selection. Staff can [review specialization choices within a student’s pursuit](docs/student-program-assignments.md#specialization-choices-within-a-pursuit) against that retained publication. Specialization requirement composition and audit evaluation remain in development.
 
 ## Development priorities
 

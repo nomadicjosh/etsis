@@ -760,6 +760,12 @@ return static function (Psr7Router $router): void {
     ]);
     $subjectController = \Application\Http\Controller\SisSubjectController::class;
     $programPublications = \Application\Http\Controller\SisProgramPublicationController::class;
+    $studentSpecializations = \Application\Http\Controller\SisStudentSpecializationController::class;
+    $studentSpecializationPath = '/sis/students/{student}/programs/{assignment}/specializations/';
+    $router->get($studentSpecializationPath, [$studentSpecializations, 'view']);
+    $router->post($studentSpecializationPath . 'review/', [$studentSpecializations, 'review']);
+    $router->post($studentSpecializationPath . 'commit/', [$studentSpecializations, 'commit']);
+    $router->post($studentSpecializationPath . 'history/', [$studentSpecializations, 'history']);
     $specializations = \Application\Http\Controller\SisProgramSpecializationController::class;
     $router->post("/sis/programs/{id}/specializations/page/", [$specializations, "page"]);
     $router->post("/sis/programs/{id}/specializations/save/", [$specializations, "save"]);

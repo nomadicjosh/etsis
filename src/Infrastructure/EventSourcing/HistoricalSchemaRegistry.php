@@ -50,6 +50,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\StudentSpecializationsWereSelected::class => [
+                'type' => 'student_specializations', 'root' => \Domain\Student\StudentSpecializations::class,
+                'fields' => \Domain\Student\ValueObject\StudentSpecializationSchema::FIELDS,
+            ],
             \Domain\Catalog\Event\ProgramDefinitionWasPublished::class => [
                 "type" => "program_publication", "root" => \Domain\Catalog\ProgramPublication::class,
                 "fields" => \Domain\Catalog\ValueObject\ProgramPublicationSchema::FIELDS,
@@ -445,6 +449,12 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
+            if ($stream->type === 'student_specializations') {
+                \Domain\Student\ValueObject\StudentSpecializationSchema::read($payload);
+                if ($payload['assignment_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($stream->type === "student_program_status") {
                 \Domain\Student\ValueObject\StudentProgramStatusSchema::validate($class, $payload);
                 if (
@@ -815,6 +825,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Student\StudentSpecializations::class => 'student_specializations',
             \Domain\Gradebook\GradingScale::class => "grading_scale",
             \Domain\Catalog\ProgramPublication::class => "program_publication",
             \Domain\Registration\SectionOfferingBinding::class => "section_offering_binding",
@@ -845,6 +856,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),
             "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),
             "section_offering_binding" => new \Domain\Registration\ValueObject\SectionOfferingBindingId($id),
             "section_publication" => new \Domain\Registration\ValueObject\SectionPublicationId($id),

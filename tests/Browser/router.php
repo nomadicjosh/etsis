@@ -138,6 +138,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/admissions-only-fixture/' => ['sis:admissions:manage'],
         '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
         '/admin/student-read-fixture/' => ['sis:student:read'],
+        '/admin/specialization-fixture/' => ['sis:student:read', 'sis:degree-audit:assign'],
         '/admin/moodle-denied-fixture/' => ['sis:catalog:manage'],
         '/admin/moodle-person-denied-fixture/' => ['sis:person:manage', 'sis:moodle:manage'],
         '/admin/moodle-request-denied-fixture/' => ['sis:person:manage', 'sis:moodle:link-person', 'sis:moodle:manage'],

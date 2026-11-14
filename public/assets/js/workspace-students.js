@@ -916,6 +916,12 @@ window.createWorkspaceStudents = function (ui) {
                               });
                               if (can("sis:student:read"))
                                   controls.append(
+                                      button("Specializations", () =>
+                                          specializations(id, item.id, back),
+                                      ),
+                                  );
+                              if (can("sis:student:read"))
+                                  controls.append(
                                       button("Degree requirements", () =>
                                           ui
                                               .degreeAudit()
@@ -987,5 +993,382 @@ window.createWorkspaceStudents = function (ui) {
                 active: record.active,
             });
     }
-    return { student };
+    function specializationSummary(selection, title) {
+        const section = node(
+            "section",
+            { class: "surface p-3 my-3", "aria-label": title },
+            node("h3", { class: "h5" }, title),
+        );
+        if (!selection) {
+            section.append(
+                node("p", {}, "No specialization decision has been recorded."),
+            );
+            return section;
+        }
+        section.append(
+            node(
+                "p",
+                {},
+                `${selection.program_code} · ${selection.program_title} · ${selection.academic_year_code} · revision ${selection.catalog_revision}`,
+            ),
+        );
+        if (!selection.specializations.length)
+            section.append(node("p", {}, "No specializations selected."));
+        for (const choice of selection.specializations) {
+            section.append(
+                node(
+                    "p",
+                    { class: "mb-1" },
+                    `${choice.code} — ${choice.title}`,
+                ),
+            );
+            if (choice.description)
+                section.append(
+                    node(
+                        "details",
+                        { class: "mb-2" },
+                        node("summary", {}, `About ${choice.code}`),
+                        node(
+                            "p",
+                            { class: "course-description-text" },
+                            choice.description,
+                        ),
+                    ),
+                );
+        }
+        return section;
+    }
+    async function specializations(
+        studentId,
+        assignment,
+        back,
+        preset = null,
+        notice = "",
+    ) {
+        const path = `/sis/students/${studentId}/programs/${assignment}/specializations/`;
+        const data = await request(path);
+        const body = openDrawer(
+            "Student specializations",
+            "ONE PROGRAM PURSUIT",
+        );
+        const reopen = () => specializations(studentId, assignment, back);
+        if (notice)
+            body.append(
+                node(
+                    "p",
+                    { role: "status", class: "alert alert-success" },
+                    notice,
+                ),
+            );
+        body.append(
+            button("Back to student", back),
+            node(
+                "p",
+                {},
+                "Choose from this pursuit’s retained program publication. Later catalog edits preserve these choices. Degree requirements, credits and charges remain separate.",
+            ),
+            specializationSummary(data.selection, "Recorded selection"),
+            button("Specialization history", () =>
+                specializationHistory(path, reopen),
+            ),
+        );
+        if (data.cohort_changed)
+            body.append(
+                node(
+                    "p",
+                    { role: "alert", class: "alert alert-warning" },
+                    "The matriculation cohort changed after the recorded selection. Earlier choices remain retained. Review a new selection against this pursuit’s current cohort.",
+                ),
+            );
+        if (!data.program) {
+            body.append(
+                node(
+                    "p",
+                    { role: "status", class: "alert alert-info" },
+                    "This pursuit has no retained program publication. Review its matriculation cohort before selecting specializations. Today’s catalog is not used to invent earlier choices.",
+                ),
+            );
+            return;
+        }
+        const snapshot = data.program.specializations;
+        body.append(
+            node(
+                "h3",
+                { class: "h5 mt-3" },
+                `Program publication · ${data.program.academic_year_code} · revision ${data.program.catalog_revision}`,
+            ),
+            node(
+                "p",
+                {},
+                `Required: ${snapshot.effective.minimum} · Maximum: ${snapshot.effective.maximum}. ${snapshot.effective.minimum === 0 ? "Selection is optional." : "This program requires a selection."}`,
+            ),
+        );
+        if (!data.can_manage) {
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    data.scope.status === "active"
+                        ? "Changing selections requires degree-assignment permission and student-record access."
+                        : "This pursuit is closed. Its recorded selections and history remain available.",
+                ),
+            );
+            return;
+        }
+        const selected = new Set(
+            preset?.ids ??
+                (!data.cohort_changed
+                    ? (data.selection?.specializations || []).map(
+                          (item) => item.id,
+                      )
+                    : []),
+        );
+        const form = node("form", { class: "surface p-3 mt-3" });
+        const search = node("input", {
+            id: "student-specialization-search",
+            type: "search",
+            class: "form-control",
+            placeholder: "Search code or title",
+        });
+        const count = node("p", {
+            role: "status",
+            "aria-live": "polite",
+            class: "mt-2",
+        });
+        const choices = node(
+            "fieldset",
+            { class: "mb-3" },
+            node("legend", { class: "h6" }, "Offered specializations"),
+        );
+        const list = node("div");
+        const controls = node("div", { class: "inline-actions" });
+        choices.append(list, controls);
+        let offset = 0;
+        const updateCount = () => {
+            count.textContent = `${selected.size} selected. Required ${snapshot.effective.minimum}; maximum ${snapshot.effective.maximum}. Selections on other pages are preserved.`;
+        };
+        function show(focus = false) {
+            const term = search.value.trim().toLowerCase();
+            const matches = snapshot.offered.filter((item) =>
+                `${item.code} ${item.title}`.toLowerCase().includes(term),
+            );
+            const heading = node(
+                "p",
+                { role: "status", tabindex: "-1" },
+                matches.length
+                    ? `Choices ${offset + 1}–${Math.min(offset + 20, matches.length)} of ${matches.length}`
+                    : "No offered choices match this search.",
+            );
+            list.replaceChildren(heading);
+            for (const choice of matches.slice(offset, offset + 20)) {
+                const input = node("input", {
+                    id: `student-specialization-${choice.id}`,
+                    type: "checkbox",
+                    class: "form-check-input",
+                    checked: selected.has(choice.id),
+                });
+                input.addEventListener("change", () => {
+                    if (input.checked) selected.add(choice.id);
+                    else selected.delete(choice.id);
+                    updateCount();
+                });
+                const row = node(
+                    "div",
+                    { class: "border-top py-2" },
+                    node(
+                        "div",
+                        { class: "form-check" },
+                        input,
+                        node(
+                            "label",
+                            { for: input.id, class: "form-check-label" },
+                            `${choice.code} — ${choice.title}`,
+                        ),
+                    ),
+                );
+                if (choice.description)
+                    row.append(
+                        node(
+                            "details",
+                            {},
+                            node("summary", {}, `About ${choice.code}`),
+                            node(
+                                "p",
+                                { class: "course-description-text" },
+                                choice.description,
+                            ),
+                        ),
+                    );
+                list.append(row);
+            }
+            controls.replaceChildren();
+            if (offset)
+                controls.append(
+                    button("Previous choices", () => {
+                        offset -= 20;
+                        show(true);
+                    }),
+                );
+            if (offset + 20 < matches.length)
+                controls.append(
+                    button("More choices", () => {
+                        offset += 20;
+                        show(true);
+                    }),
+                );
+            if (focus) heading.focus();
+        }
+        search.addEventListener("input", () => {
+            offset = 0;
+            show();
+        });
+        const reason = node("textarea", {
+            id: "student-specialization-reason",
+            class: "form-control",
+            required: true,
+            maxlength: "1000",
+            rows: "3",
+        });
+        reason.value = preset?.reason || "";
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary mt-3" },
+            "Review specialization selection",
+        );
+        form.append(
+            node(
+                "label",
+                { for: search.id, class: "form-label" },
+                "Find an offered specialization",
+            ),
+            search,
+            count,
+            choices,
+            node(
+                "label",
+                { for: reason.id, class: "form-label" },
+                "Reason for this selection change",
+            ),
+            reason,
+            review,
+        );
+        updateCount();
+        show();
+        body.append(form);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const draft = {
+                    ids: [...selected].sort(),
+                    reason: reason.value,
+                };
+                const prepared = await request(path + "review/", "POST", {
+                    revision: data.revision,
+                    specialization_ids: draft.ids,
+                    reason: draft.reason,
+                });
+                if (!body.isConnected) return;
+                const confirm = openDrawer(
+                    "Confirm specialization selection",
+                    "REVIEW BEFORE RECORDING",
+                );
+                confirm.append(
+                    button("Revise selection", () =>
+                        specializations(studentId, assignment, back, draft),
+                    ),
+                    specializationSummary(prepared.before, "Before"),
+                    specializationSummary(prepared.after, "After"),
+                    node("p", {}, prepared.reason),
+                    node(
+                        "p",
+                        {},
+                        "This decision takes effect when confirmed. Earlier selections remain in restricted history. This records specialization choices; specialization requirement evaluation is still in development.",
+                    ),
+                    button(
+                        "Confirm specialization selection",
+                        async () => {
+                            await request(path + "commit/", "POST", {
+                                review_token: prepared.review_token,
+                            });
+                            if (confirm.isConnected) {
+                                await specializations(
+                                    studentId,
+                                    assignment,
+                                    back,
+                                    null,
+                                    "Specialization selection recorded.",
+                                );
+                            }
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, review);
+        });
+    }
+    async function specializationHistory(
+        path,
+        back,
+        cursor = null,
+        previous = [],
+    ) {
+        const data = await request(path + "history/", "POST", { cursor });
+        const body = openDrawer(
+            "Specialization selection history",
+            "RETAINED DECISIONS",
+        );
+        body.append(
+            button("Back to specializations", back),
+            node(
+                "p",
+                {},
+                "These choices and program labels are retained as recorded. Protected reasons and actor details are excluded.",
+            ),
+        );
+        if (!data.items.length)
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "No specialization decisions have been recorded.",
+                ),
+            );
+        for (const item of data.items) {
+            body.append(
+                specializationSummary(
+                    item.selection,
+                    `Decision ${item.version}`,
+                ),
+                node(
+                    "p",
+                    {},
+                    `Effective: ${item.effective_at} · Recorded: ${item.recorded_at}`,
+                ),
+            );
+        }
+        const navigation = node("div", { class: "inline-actions" });
+        if (previous.length)
+            navigation.append(
+                button("Previous specialization history page", () =>
+                    specializationHistory(
+                        path,
+                        back,
+                        previous[previous.length - 1],
+                        previous.slice(0, -1),
+                    ),
+                ),
+            );
+        if (data.next_cursor)
+            navigation.append(
+                button("Next specialization history page", () =>
+                    specializationHistory(path, back, data.next_cursor, [
+                        ...previous,
+                        cursor,
+                    ]),
+                ),
+            );
+        body.append(navigation);
+    }
+    return { student, specializations };
 };

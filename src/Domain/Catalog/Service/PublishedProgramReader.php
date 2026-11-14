@@ -10,6 +10,7 @@ use Domain\Catalog\ValueObject\ProgramDefinition;
 use Domain\Catalog\ValueObject\ProgramPublicationId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\ValueObject\EntityId;
 
@@ -20,6 +21,47 @@ final readonly class PublishedProgramReader
         private HistoricalEventStore $history,
         private ProgramDefinitionRepository $definitions,
     ) {
+    }
+
+    /** Exact retained revision, including earlier cohorts; never follows today's current-year pointer.
+     * Earlier references with no recorded publication remain explicitly unversioned.
+     * @return array<string,mixed>|null */
+    public function version(
+        EntityId $program,
+        EntityId $year,
+        EntityId $catalog,
+        HistoryReadBudget $budget,
+    ): ?array {
+        $stream = new StreamReference(new ProgramPublicationId($program->value), 'program_publication');
+        $root = ProgramPublication::root($stream->aggregateId);
+        $cursor = null;
+        $found = null;
+        do {
+            $page = $budget->page($this->history, $stream, $cursor);
+            foreach ($page->events as $stored) {
+                $root->acceptHistorical($stored->event);
+                $p = $stored->event->payload();
+                if ($p['version_id'] === $catalog->value) {
+                    if ($p['academic_year_id'] !== $year->value || $found !== null) {
+                        throw new CorruptHistoryException();
+                    }
+                    $found = [
+                        'program_id' => $program->value,
+                        'academic_year_id' => $year->value,
+                        'academic_year_code' => $p['academic_year_code'],
+                        'catalog_revision' => $p['catalog_revision'],
+                        'stream_version' => $stored->event->playhead(),
+                        'definition' => ProgramDefinition::fromArray($p['definition'])->describe(),
+                        'specializations' => $p['specializations'],
+                    ];
+                }
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        if ($this->definitions->retained($catalog) !== $found) {
+            throw new CorruptHistoryException();
+        }
+        return $found;
     }
 
     public function current(EntityId $program, EntityId $year, ?EntityId $catalog): ?ProgramDefinition

@@ -3587,3 +3587,81 @@ if ($teachingPost('/sis/catalog/specialization-policy/',['revision'=>0,'maximum'
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+
+// Student choices use the retained cohort publication through the actual private middleware/providers.
+$specializationProgramReview = json_decode(
+    (string) $teachingPost($programDetailsBase . 'publication/review/', [
+        'academic_year_id' => $yearPlan['id'], 'reason' => 'Fictional specialization choices publication.',
+    ])->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if ($teachingPost($programDetailsBase . 'publication/commit/', [
+    'review_token' => $specializationProgramReview['review_token'],
+])->getStatusCode() !== 200) {
+    throw new RuntimeException('Specialization publication failed before the student choice fixture.');
+}
+$specializationPerson = $sis->admissionsService()->createPerson($sis->user(), 'Fictional', 'Specialization');
+$specializationApplication = $sis->legacyApplication(
+    $specializationPerson->id,
+    $sis->program,
+    new \Domain\Shared\ValueObject\EntityId($yearPlan['terms'][0]['id']),
+);
+$sis->legacyAdmissionDecision($specializationApplication->id, true);
+$specializationStudent = $sis->matriculate($specializationApplication->id);
+$specializationAssignment = $sis->sql->rows('sis_student_programs', [
+    'student_id' => $specializationStudent->id->value,
+], 1)[0];
+$studentSpecializationBase = '/sis/students/' . $specializationStudent->id->value . '/programs/' .
+    $specializationAssignment['id'] . '/specializations/';
+$studentSpecializationRequest = $get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $studentSpecializationBase,
+));
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read'];
+$studentSpecializationView = $app->router->match($studentSpecializationRequest);
+$studentSpecializationData = json_decode((string) $studentSpecializationView->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$studentSpecializationDraft = [
+    'revision' => $studentSpecializationData['revision'],
+    'specialization_ids' => [$specializationRow['id']],
+    'reason' => 'Fictional protected specialization reason.',
+];
+if (
+    $studentSpecializationView->getStatusCode() !== 200 ||
+    !str_contains($studentSpecializationView->getHeaderLine('Cache-Control'), 'no-store') ||
+    $studentSpecializationData['can_manage'] !== false ||
+    $teachingPost($studentSpecializationBase . 'review/', $studentSpecializationDraft)->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Student specialization reads granted assignment authority or allowed caching.');
+}
+$sis->access->grants[] = 'sis:degree-audit:assign';
+$studentSpecializationReviewResponse = $teachingPost($studentSpecializationBase . 'review/', $studentSpecializationDraft);
+$studentSpecializationReview = json_decode((string) $studentSpecializationReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $studentSpecializationReviewResponse->getStatusCode() !== 200 ||
+    $teachingPost($studentSpecializationBase . 'commit/', [
+        'review_token' => $studentSpecializationReview['review_token'],
+    ])->getStatusCode() !== 200 ||
+    $teachingPost($studentSpecializationBase . 'commit/', [
+        'review_token' => $studentSpecializationReview['review_token'],
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Student specialization review, confirmation or retry failed through actual routes.');
+}
+$studentSpecializationHistory = $teachingPost($studentSpecializationBase . 'history/', []);
+if (
+    $studentSpecializationHistory->getStatusCode() !== 200 ||
+    str_contains((string) $studentSpecializationHistory->getBody(), 'Fictional protected specialization reason.') ||
+    !str_contains((string) $studentSpecializationHistory->getBody(), 'FOCUS.FICTIONAL')
+) {
+    throw new RuntimeException('Student specialization history exposed protected reasons or lost retained labels.');
+}
+$sis->access->grants = ['sis:catalog:manage'];
+if (
+    $app->router->match($studentSpecializationRequest)->getStatusCode() !== 403 ||
+    $teachingPost($studentSpecializationBase . 'history/', [])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Catalog maintenance bypassed student privacy.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];

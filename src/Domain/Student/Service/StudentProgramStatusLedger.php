@@ -8,6 +8,7 @@ use Domain\Gradebook\ValueObject\PublishedGradeId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Security\StudentAccess;
@@ -33,9 +34,9 @@ final readonly class StudentProgramStatusLedger
     ) {
     }
 
-    public function verify(StudentProgram $assignment): int
+    public function verify(StudentProgram $assignment, ?HistoryReadBudget $budget = null): int
     {
-        return $this->load($assignment)["root"]->playhead();
+        return $this->load($assignment, budget: $budget)["root"]->playhead();
     }
     /** Resolve the exact active pursuit behind the student's primary program pointer. */
     public function primaryAssignment(\Domain\Student\Student $student): StudentProgram
@@ -240,12 +241,15 @@ final readonly class StudentProgramStatusLedger
         StudentProgram $assignment,
         ?EntityId $operation = null,
         ?EntityId $actor = null,
+        ?HistoryReadBudget $budget = null,
     ): array {
         $root = StudentProgramStatus::root(new StudentProgramStatusId($assignment->id->value));
         $cursor = null;
         $receipt = null;
         do {
-            $page = $this->history->page($this->stream($assignment->id), $cursor, 20);
+            $page = $budget === null
+            ? $this->history->page($this->stream($assignment->id), $cursor, 20)
+            : $budget->page($this->history, $this->stream($assignment->id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 if (
