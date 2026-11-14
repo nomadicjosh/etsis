@@ -214,6 +214,18 @@ final class DegreeProgressTest extends TestCase
             array_column($result["minimums"], "status"),
         );
         self::assertSame("feasible", $result["allocation"]["outcome"]);
+        $named = $result['allocation']['groups'][0]['course_review'][0];
+        self::assertSame('proposed', $named['placement']);
+        self::assertTrue($named['attempts'][0]['selected']);
+        $portal = new \Domain\Portal\ValueObject\StudentDegreeProgress($result)->describe();
+        $publicNamed = $portal['allocation']['groups'][0]['course_review'][0];
+        self::assertSame($named['course_code'], $publicNamed['course_code']);
+        self::assertArrayNotHasKey('course_id', $publicNamed);
+        self::assertArrayNotHasKey('work_id', $publicNamed['attempts'][0]);
+        self::assertSame(
+            $result['records'][$publicNamed['attempts'][0]['record_index']]['id'],
+            $named['attempts'][0]['work_id'],
+        );
         self::assertSame(0, $result["work_summary"]["unused_completed_count"]);
         self::assertSame(0, $result["work_summary"]["awaiting_grade_milli"]);
         self::assertSame(4000, $result["gpa"]["cumulative"]["milli"]);
@@ -319,6 +331,9 @@ final class DegreeProgressTest extends TestCase
         self::assertSame(3000, $before["work_summary"]["awaiting_grade_milli"]);
         self::assertNull($before["work_summary"]["unused_completed_count"]);
         self::assertSame(0, $before["minimums"][0]["actual_minimum_milli"]);
+        $namedBefore = $before['allocation']['groups'][0]['course_review'][0];
+        self::assertSame('in_progress', $namedBefore['attempts'][0]['status']);
+        self::assertNull($namedBefore['attempts'][0]['selected']);
         $ledger = $f->f->sis->academicCredits();
         $review = $ledger->review($f->student, $section->id, $enrollment, new EntityId($choices["A"]), 0);
         $ledger->commit($f->student, $section->id, $review["review_token"]);
@@ -326,6 +341,11 @@ final class DegreeProgressTest extends TestCase
         self::assertSame(0, $after["work_summary"]["awaiting_grade_count"]);
         self::assertSame(0, $after["work_summary"]["awaiting_grade_milli"]);
         self::assertSame(3000, $after["minimums"][0]["actual_minimum_milli"]);
+        $namedAfter = $after['allocation']['groups'][0]['course_review'][0];
+        self::assertSame('candidate', $namedAfter['attempts'][0]['status']);
+        self::assertNull($namedAfter['attempts'][0]['selected']);
+        self::assertSame('not_established', $namedAfter['placement']);
+        self::assertSame('in_progress', $namedBefore['attempts'][0]['status']);
         $record = array_column($after["records"], null, "id")[$credit->value];
         self::assertSame("completed", $record["academic_state"]);
         self::assertSame("not_established", $record["placement"]);

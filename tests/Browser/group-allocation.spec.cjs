@@ -418,3 +418,66 @@ test("supporting repeat pools page captured awards without creating more placeme
     expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });
+
+for (const outcome of ["feasible", "needs_review"])
+    test(`named-course review explains attempts and pages locally for ${outcome}`, async ({ page }) => {
+        const f = await fixture(page, {
+            assigned: true,
+            readOnly: true,
+            namedCourseReview: true,
+            allocationEvidence: "ties",
+            allocationOutcome: outcome,
+        });
+        await page.getByRole("button", { name: "Review course placement", exact: true }).click();
+        await page
+            .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
+            .click();
+        const summary = page.locator("summary").filter({ hasText: "Named-course review" });
+        const named = summary.locator("..");
+        await expect(named.getByRole("table")).toHaveCount(0);
+        await summary.focus();
+        await page.keyboard.press("Enter");
+        const table = named.getByRole("table", {
+            name: "Named course requirements and matching recorded work",
+            exact: true,
+        });
+        await expect(table.getByRole("rowheader")).toHaveCount(20);
+        const option = table
+            .getByRole("row")
+            .filter({
+                has: page.getByRole("rowheader", {
+                    name: "REQ.1 · Retained requirement <b>fictional</b>",
+                    exact: true,
+                }),
+            });
+        await expect(option).toContainText("Course option");
+        await expect(option).toContainText("No matching current work in this review.");
+        await expect(table).toContainText("Course requirement waived. No earned credit is created");
+        await named.locator("summary").filter({ hasText: "12 matching attempts" }).click();
+        await expect(named).toContainText("Recorded grade: A · 4 grade points");
+        await expect(named).toContainText("Awaiting a final grade");
+        await expect(named).toContainText("Recorded grade: D · 1 grade points");
+        await expect(named).toContainText("Below this group's required per-course grade points.");
+        await expect(named).toContainText("The accepted course publication was not retained.");
+        if (outcome === "feasible")
+            await expect(named).toContainText(
+                "Supports this proposed placement, possibly as an alternative attempt.",
+            );
+        else await expect(named).not.toContainText("Supports this proposed placement");
+        await named.getByRole("button", { name: "More matching attempts", exact: true }).click();
+        await expect(named).toContainText("Matching attempts 11–12 of 12");
+        await expect(named.getByText("Matching attempts 11–12 of 12", { exact: true })).toBeFocused();
+        await named.getByRole("button", { name: "Previous matching attempts", exact: true }).click();
+        await page.setViewportSize({ width: 375, height: 812 });
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await named.getByRole("button", { name: "More named courses", exact: true }).click();
+        await expect(named).toContainText("REQ.20");
+        await expect(named.getByText("Named courses 21–21 of 21", { exact: true })).toBeFocused();
+        await named.getByRole("button", { name: "Previous named courses", exact: true }).click();
+        expect(await named.locator("b,script").count()).toBe(0);
+        expect(f.calls.filter((c) => c.path.endsWith("/allocation/"))).toHaveLength(1);
+        expect(f.calls.some((c) => /\/(assign|commit|review)\/$/.test(c.path))).toBe(false);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(f.errors).toEqual([]);
+    });

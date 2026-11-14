@@ -151,6 +151,11 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertFalse($result['exceptions_applied']);
         self::assertSame('draft', $result['sources'][0]['source']);
         self::assertSame('feasible', $result['allocation']['outcome']);
+        $named = $result['allocation']['groups'][0]['course_review'][0];
+        self::assertTrue($named['required']);
+        self::assertSame('proposed', $named['placement']);
+        self::assertSame('candidate', $named['attempts'][0]['status']);
+        self::assertTrue($named['attempts'][0]['selected']);
         self::assertSame(3000, $result['minimums'][0]['required_milli']);
         self::assertSame($before, $this->digest($f));
         $d = $definition->definition;
@@ -159,6 +164,7 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertNotSame($result['definition_hash'], $again['definition_hash']);
         self::assertSame(6000, $again['minimums'][0]['required_milli']);
         self::assertSame('below_minimum', $again['minimums'][0]['status']);
+        self::assertSame($named, $again['allocation']['groups'][0]['course_review'][0]);
         self::assertSame($before, $this->digest($f));
         self::assertNull($f->service->view($f->student, $f->assignment)['selection']);
     }

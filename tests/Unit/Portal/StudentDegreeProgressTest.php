@@ -188,4 +188,80 @@ final class StudentDegreeProgressTest extends TestCase
         $review["status"] = "limited";
         self::assertSame(["status" => "limited"], new StudentDegreeProgress($review)->describe());
     }
+
+    private function namedReview(string $outcome = 'feasible'): array
+    {
+        $review = $this->review($outcome);
+        $review['allocation']['groups'][0]['course_review'] = [
+            [
+                'course_id' => 'fictional-private-course',
+                'course_code' => 'MATH.101',
+                'course_title' => 'Retained requirement',
+                'required' => true,
+                'waived' => false,
+                'placement' => $outcome === 'feasible' ? 'proposed' : 'not_established',
+                'reason' => 'fictional-staff-only-detail',
+                'attempts' => [
+                    [
+                        'work_id' => 'fictional-staff-only-detail',
+                        'status' => 'candidate',
+                        'selected' => $outcome === 'feasible' ? true : null,
+                        'via_substitution' => true,
+                        'actor' => 'fictional-staff-only-detail',
+                    ],
+                ],
+            ],
+        ];
+        return $review;
+    }
+
+    public function testNamedCourseEvidenceIsResponseLocalAndSurvivesAnIncompletePlanWithoutAppliedClaims(): void
+    {
+        foreach (['feasible', 'infeasible', 'undetermined', 'needs_review'] as $outcome) {
+            $data = new StudentDegreeProgress($this->namedReview($outcome))->describe();
+            $row = $data['allocation']['groups'][0]['course_review'][0];
+            self::assertSame(0, $row['attempts'][0]['record_index']);
+            self::assertSame($outcome === 'feasible' ? true : null, $row['attempts'][0]['selected']);
+            self::assertSame($outcome === 'feasible' ? 'proposed' : 'not_established', $row['placement']);
+            self::assertTrue($row['attempts'][0]['via_substitution']);
+            $json = json_encode($data, JSON_THROW_ON_ERROR);
+            foreach (
+                ['fictional-staff-only-detail', 'fictional-private-course', 'work_id', 'course_id', 'actor']
+                as $secret
+            ) {
+                self::assertStringNotContainsString($secret, $json);
+            }
+        }
+    }
+
+    public function testNamedEvidenceRejectsForeignDuplicateAndPartialPlacementReferences(): void
+    {
+        $cases = [];
+        $base = $this->namedReview()['allocation']['groups'][0]['course_review'][0];
+        $bad = $base;
+        $bad['attempts'][0]['work_id'] = 'another-student';
+        $cases[] = [$bad];
+        $bad = $base;
+        $bad['attempts'][] = $bad['attempts'][0];
+        $cases[] = [$bad];
+        $bad = $base;
+        $bad['attempts'][0]['status'] = 'in_progress';
+        $cases[] = [$bad];
+        $cases[] = [$base, $base];
+        $cases[] = array_fill(0, 201, $base);
+        foreach ($cases as $rows) {
+            $review = $this->review();
+            $review['allocation']['groups'][0]['course_review'] = $rows;
+            try {
+                new StudentDegreeProgress($review);
+                self::fail('Invalid named evidence was exposed.');
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+        $review = $this->namedReview('infeasible');
+        $review['allocation']['groups'][0]['course_review'][0]['attempts'][0]['selected'] = true;
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new StudentDegreeProgress($review);
+    }
 }

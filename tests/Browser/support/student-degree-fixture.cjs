@@ -497,6 +497,21 @@ async function fixture(page, options = {}) {
                 g.placements = [p];
             }
         }
+        if (options.namedCourseReview) {
+            result.groups[0].course_review = courseIds.map((course, index) => ({
+                course_id: course, course_code: `REQ.${index}`, course_title: 'Retained requirement <b>fictional</b>',
+                required: index !== 1, waived: index === 2,
+                placement: outcome === 'feasible' ? (index === 0 ? 'proposed' : 'not_used') : 'not_established',
+                attempts: index !== 0 ? [] : result.records.slice(0, 12).map((record, i) => ({
+                    work_id: record.id, status: i === 1 ? 'in_progress' : i === 2 ? 'insufficient_grade' : i === 3 ? 'course_version_unknown' : 'candidate',
+                    via_substitution: i === 0, selected: outcome === 'feasible' ? i === 0 : null,
+                })),
+            }));
+            result.records[1].grade_state = 'awaiting_grade';
+            result.records[1].retained_grade = null;
+            result.records[1].recorded_earned_milli = 0;
+            result.records[2].retained_grade = { code: 'D', points_milli: 1000, grading_publication_retained: true };
+        }
         return result;
     }
     await page.route("**/sis/**", async (route) => {

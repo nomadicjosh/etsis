@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\ValueObject\CourseMatchStatus as Status;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
 use InvalidArgumentException;
 
 /** Pure, bounded candidate inspection using already-verified retained inputs. */
@@ -116,6 +117,105 @@ final readonly class CourseMatchEvaluator
         );
         return $status === Status::InProgress && $work['quality_points_milli'] !== 0
         ? Status::GradeUnknown : $status;
+    }
+
+    /** Explain named requirements from the same captured checks, without choosing another plan.
+     * @param array<string,mixed> $requirements Original requirements, before saved-rule compilation.
+     * @param list<array<string,mixed>> $items Complete captured allocation checks.
+     * @param list<array<string,mixed>> $groups The finished placement result.
+     * @param list<string> $waived
+     * @return array<string,list<array<string,mixed>>>
+     */
+    public function namedReview(
+        #[\SensitiveParameter] array $requirements,
+        #[\SensitiveParameter] array $items,
+        #[\SensitiveParameter] array $groups,
+        array $waived,
+        bool $established,
+    ): array {
+        if (count($items) > 200 || count($groups) > 25) {
+            throw new \Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException();
+        }
+        $rows = [];
+        foreach ($requirements['group_details'] as $id => $group) {
+            $required = [];
+            foreach ($group['definition']['rules'] as $rule) {
+                if (!isset($rule['eligibility']) && $rule['mode'] === 'all') {
+                    $required += array_fill_keys($rule['course_ids'], true);
+                }
+            }
+            $rows[$id] = [];
+            foreach ($group['definition']['courses'] as $reference) {
+                $course = $reference['course_id'];
+                $label = $group['course_details'][$course];
+                $rows[$id][$course] = [
+                    'course_id' => $course,
+                    'course_code' => $label['code'],
+                    'course_title' => $label['title'],
+                    'required' => isset($required[$course]),
+                    'waived' => in_array($course, $waived, true),
+                    'placement' => $established ? 'not_used' : 'not_established',
+                    'attempts' => [],
+                ];
+            }
+        }
+        $chosen = [];
+        $chosenCount = 0;
+        foreach ($groups as $group) {
+            foreach ($group['placements'] as $placement) {
+                if (!$established) {
+                    throw new CorruptHistoryException();
+                }
+                $target = $placement['target_course_id'];
+                if (!isset($rows[$group['id']][$target])) {
+                    continue; // A saved-rule-only target is not a named obligation.
+                }
+                $rows[$group['id']][$target]['placement'] = 'proposed';
+                foreach ($placement['work_options'] as $option) {
+                    foreach ($option as $work) {
+                        if (!isset($chosen[$group['id']][$target][$work])) {
+                            $chosenCount++;
+                        }
+                        $chosen[$group['id']][$target][$work] = true;
+                    }
+                }
+            }
+        }
+        $count = 0;
+        $selectedCount = 0;
+        $seen = [];
+        foreach ($items as $item) {
+            foreach ($item['requirement_matches'] as $match) {
+                $group = $match['group_id'];
+                $target = $match['required_course_id'];
+                if (!isset($rows[$group][$target])) {
+                    continue;
+                }
+                if (++$count > 5000) {
+                    throw new \Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException();
+                }
+                $status = Status::from($match['status']);
+                $selected = isset($chosen[$group][$target][$item['id']]);
+                if (
+                    isset($seen[$group][$target][$item['id']]) ||
+                    ($selected && $status !== Status::Candidate)
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $seen[$group][$target][$item['id']] = true;
+                $selectedCount += (int) $selected;
+                $rows[$group][$target]['attempts'][] = [
+                    'work_id' => $item['id'],
+                    'status' => $status->value,
+                    'via_substitution' => $match['via_substitution'],
+                    'selected' => $established ? $selected : null,
+                ];
+            }
+        }
+        if ($chosenCount !== $selectedCount) {
+            throw new CorruptHistoryException();
+        }
+        return array_map(array_values(...), $rows);
     }
     /**
      * @param array<string,mixed> $requirements

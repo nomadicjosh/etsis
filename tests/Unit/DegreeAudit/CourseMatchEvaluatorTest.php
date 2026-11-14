@@ -239,4 +239,105 @@ final class CourseMatchEvaluatorTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         new CourseMatchEvaluator()->page(array_fill(0, 21, $work), $requirements, $effective);
     }
+
+    public function testNamedReviewExplainsEveryAttemptWithoutInventingAPlacementOrMissingChoice(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $group = self::id(4);
+        $other = self::id(8);
+        $r['group_details'][$group]['definition']['courses'][] = [
+            'course_id' => $other,
+            'version_id' => self::id(9),
+        ];
+        $r['group_details'][$group]['definition']['rules'][] = ['mode' => 'choose', 'course_ids' => [$other]];
+        $r['group_details'][$group]['course_details'][$other] = [
+            'code' => 'ENG.101',
+            'title' => 'Retained English',
+        ];
+        $changes = [
+            [],
+            ['grade_recorded' => false, 'completed_milli' => 0, 'grade' => null, 'quality_points_milli' => 0],
+            ['grade' => array_replace($work['grade'], ['points_milli' => 2000])],
+            ['course_version_id' => null],
+            ['status' => 'W'],
+        ];
+        $attempts = [];
+        foreach ($changes as $i => $change) {
+            $attempts[] = array_replace($work, $change, ['id' => self::id(100 + $i)]);
+        }
+        $captured = serialize([$attempts, $r, $e]);
+        $evaluator = new CourseMatchEvaluator();
+        $items = $evaluator->allocation($attempts, $r, $e);
+        $rows = $evaluator->namedReview($r, $items, [['id' => $group, 'placements' => []]], [], false)[
+            $group
+        ];
+        self::assertSame(
+            ['candidate', 'in_progress', 'insufficient_grade', 'course_version_unknown', 'dropped'],
+            array_column($rows[0]['attempts'], 'status'),
+        );
+        self::assertSame(array_fill(0, 5, null), array_column($rows[0]['attempts'], 'selected'));
+        self::assertSame('not_established', $rows[0]['placement']);
+        self::assertTrue($rows[0]['required']);
+        self::assertFalse($rows[1]['required']);
+        self::assertSame([], $rows[1]['attempts']);
+        self::assertSame($captured, serialize([$attempts, $r, $e]));
+    }
+
+    public function testNamedReviewPreservesWaiversAndEveryTiedSubstitutionAlternative(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $group = self::id(4);
+        $target = $work['course_id'];
+        $e['substitutions'][$target] = ['course_id' => self::id(20), 'version_id' => self::id(21)];
+        $work['course_id'] = self::id(20);
+        $work['course_version_id'] = self::id(21);
+        $second = array_replace($work, ['id' => self::id(22)]);
+        $evaluator = new CourseMatchEvaluator();
+        $items = $evaluator->allocation([$work, $second], $r, $e);
+        $plan = [
+            [
+                'id' => $group,
+                'placements' => [
+                    ['target_course_id' => $target, 'work_options' => [[$work['id']], [$second['id']]]],
+                ],
+            ],
+        ];
+        $row = $evaluator->namedReview($r, $items, $plan, [], true)[$group][0];
+        self::assertSame('MATH.101', $row['course_code']);
+        self::assertSame('proposed', $row['placement']);
+        self::assertSame([true, true], array_column($row['attempts'], 'selected'));
+        self::assertSame([true, true], array_column($row['attempts'], 'via_substitution'));
+        $waived = $evaluator->namedReview($r, [], [['id' => $group, 'placements' => []]], [$target], true)[
+            $group
+        ][0];
+        self::assertTrue($waived['waived']);
+        self::assertSame('not_used', $waived['placement']);
+        self::assertSame([], $waived['attempts']);
+    }
+
+    public function testNamedReviewRejectsPartialPlansAndUnexplainedOrDuplicateEvidence(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $evaluator = new CourseMatchEvaluator();
+        $items = $evaluator->allocation([$work], $r, $e);
+        $plan = [
+            [
+                'id' => self::id(4),
+                'placements' => [
+                    ['target_course_id' => $work['course_id'], 'work_options' => [[$work['id']]]],
+                ],
+            ],
+        ];
+        $cases = [[$items, $plan, false], [[], $plan, true], [[$items[0], $items[0]], $plan, true]];
+        foreach ($cases as [$matches, $placements, $established]) {
+            try {
+                $evaluator->namedReview($r, $matches, $placements, [], $established);
+                self::fail('Unexplained placement evidence was accepted.');
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+        $this->expectException(\Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException::class);
+        $evaluator->namedReview($r, array_fill(0, 201, $items[0]), [], [], false);
+    }
 }

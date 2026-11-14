@@ -98,6 +98,7 @@ final readonly class GroupAllocationEvaluator
                 "placements" => [],
                 "gaps" => null,
                 "coverage" => null,
+                'course_review' => null,
             ];
         }
         if ($issues !== []) {
@@ -108,6 +109,7 @@ final readonly class GroupAllocationEvaluator
                 "issues" => array_keys($issues),
             ];
         }
+        $namedRequirements = $requirements;
         $compiled = $this->rules->compile($work, $requirements, $effective, $eligibility);
         $requirements = $compiled['requirements'];
         $issues = array_fill_keys($compiled['issues'], true);
@@ -303,7 +305,15 @@ final readonly class GroupAllocationEvaluator
             sort($record["statuses"], SORT_STRING);
         }
         unset($record);
-        foreach ($labels as &$label) {
+        $courseReviews = $this->matches->namedReview(
+            $namedRequirements,
+            $items,
+            array_values($labels),
+            $effective['waived_course_ids'],
+            $outcome === 'feasible',
+        );
+        foreach ($labels as $groupId => &$label) {
+            $label['course_review'] = $courseReviews[$groupId];
             $courseLabels = $label['courses'] ?? throw new CorruptHistoryException();
             ksort($courseLabels, SORT_STRING);
             $label['courses'] = $courseLabels;

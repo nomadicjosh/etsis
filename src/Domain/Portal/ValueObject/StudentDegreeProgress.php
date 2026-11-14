@@ -91,6 +91,12 @@ final readonly class StudentDegreeProgress
                 "minimum_grade_points_milli",
             ]);
             $group['coverage'] = null;
+            $group['course_review'] = self::courseReview(
+                $value['course_review'] ?? null,
+                $indices,
+                $referenceCount,
+                $review['allocation']['outcome'] === 'feasible',
+            );
             if ($review['allocation']['outcome'] === 'feasible' && ($value['coverage'] ?? null) !== null) {
                 $group['coverage'] = $pick($value['coverage'], ['applied_credits_milli', 'applied_courses']);
                 $group['coverage']['rules'] = array_values(array_map(
@@ -117,6 +123,72 @@ final readonly class StudentDegreeProgress
             $data["allocation"]["groups"][] = $group;
         }
         $this->data = $data;
+    }
+
+    /** Named-course evidence uses only this response's work positions, including incomplete plans.
+     * @param list<array<string,mixed>>|null $rows
+     * @param array<string,int> $indices
+     * @return list<array<string,mixed>>|null */
+    private static function courseReview(
+        #[\SensitiveParameter] ?array $rows,
+        #[\SensitiveParameter] array $indices,
+        int &$count,
+        bool $established,
+    ): ?array {
+        if ($rows === null) {
+            return null;
+        }
+        if (count($rows) > 200) {
+            throw new CorruptHistoryException();
+        }
+        $seen = [];
+        $out = [];
+        foreach ($rows as $row) {
+            $id = $row['course_id'];
+            $placement = $row['placement'];
+            if (
+                isset($seen[$id]) ||
+                !is_bool($row['required']) ||
+                !is_bool($row['waived']) ||
+                !in_array($placement, $established ? ['proposed', 'not_used'] : ['not_established'], true)
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $seen[$id] = true;
+            $attempts = [];
+            $workSeen = [];
+            foreach ($row['attempts'] as $attempt) {
+                $work = $attempt['work_id'];
+                if (
+                    ++$count > 20000 ||
+                    !isset($indices[$work]) ||
+                    isset($workSeen[$work]) ||
+                    \Domain\DegreeAudit\ValueObject\CourseMatchStatus::tryFrom($attempt['status']) === null ||
+                    !is_bool($attempt['via_substitution']) ||
+                    ($established ? !is_bool($attempt['selected']) : $attempt['selected'] !== null) ||
+                    ($attempt['selected'] === true &&
+                        ($placement !== 'proposed' || $attempt['status'] !== 'candidate'))
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $workSeen[$work] = true;
+                $attempts[] = [
+                    'record_index' => $indices[$work],
+                    'status' => $attempt['status'],
+                    'via_substitution' => $attempt['via_substitution'],
+                    'selected' => $attempt['selected'],
+                ];
+            }
+            $out[] = [
+                'course_code' => $row['course_code'],
+                'course_title' => $row['course_title'],
+                'required' => $row['required'],
+                'waived' => $row['waived'],
+                'placement' => $placement,
+                'attempts' => $attempts,
+            ];
+        }
+        return $out;
     }
     /** Review-local array positions are descriptive links, never database identities or command inputs.
      * @param list<list<string>> $options

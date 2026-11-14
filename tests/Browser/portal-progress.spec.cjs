@@ -59,6 +59,19 @@ async function fixture(page,options={}) {
                 })),
             };
         }
+        if (options.namedCourseReview && data.allocation) {
+            data.allocation.outcome = 'needs_review';
+            data.allocation.groups[0].placements = [];
+            data.allocation.groups[0].course_review = Array.from({length:21}, (_,i)=>({
+                course_code:`REQ.${i}`,course_title:'Retained requirement <b>fictional</b>',required:i!==1,waived:i===2,
+                placement:'not_established',attempts:i!==0?[]:Array.from({length:12},(_,n)=>({
+                    record_index:n,status:n===1?'in_progress':n===2?'insufficient_grade':n===3?'course_version_unknown':'candidate',
+                    selected:null,via_substitution:n===0,
+                })),
+            }));
+            data.records[1].grade_state='awaiting_grade';data.records[1].retained_grade=null;data.records[1].recorded_earned_milli=0;
+            data.records[2].retained_grade={code:'D',points_milli:1000,grading_publication_retained:true};
+        }
         if (path.includes(`/programs/${id(44)}/`) && data.context) data.context.name = 'Second selected program';
         await route.fulfill({json:data,headers:{'Cache-Control':'private, no-store'}});
     });
@@ -245,5 +258,40 @@ test("portal explains verified unchanged grading without relabeling its accepted
     await expect(table).toContainText("Recorded grade: B <b>fictional</b> · 3 grade points");
     await expect(table).not.toContainText("Unchanged grading re-publication verified");
     expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test("portal named-course review explains unmet work without a partial placement or another request", async ({
+    page,
+}) => {
+    const f = await fixture(page, { evidence: "ties", namedCourseReview: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    await page.locator("summary").filter({ hasText: "Course-group details" }).click();
+    const summary = page.locator("summary").filter({ hasText: "Named-course review" }),
+        named = summary.locator("..");
+    await expect(named.getByRole("table")).toHaveCount(0);
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(named.getByRole("rowheader")).toHaveCount(20);
+    await expect(named).toContainText("Course option");
+    await expect(named).toContainText("Course requirement waived. No earned credit is created");
+    await named.locator("summary").filter({ hasText: "12 matching attempts" }).click();
+    await expect(named).toContainText("Recorded grade: A · 4 grade points");
+    await expect(named).toContainText("Awaiting a final grade");
+    await expect(named).toContainText("Recorded grade: D · 1 grade points");
+    await expect(named).toContainText("The accepted course publication was not retained.");
+    await expect(named).not.toContainText("Supports this proposed placement");
+    await named.getByRole("button", { name: "More matching attempts", exact: true }).click();
+    await expect(named.getByText("Matching attempts 11–12 of 12", { exact: true })).toBeFocused();
+    await named.getByRole("button", { name: "Previous matching attempts", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await named.getByRole("button", { name: "More named courses", exact: true }).click();
+    await expect(named).toContainText("REQ.20");
+    await expect(named.getByText("Named courses 21–21 of 21", { exact: true })).toBeFocused();
+    expect(await named.locator("b,script").count()).toBe(0);
+    expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

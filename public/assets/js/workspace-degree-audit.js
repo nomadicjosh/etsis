@@ -3272,7 +3272,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     `Group quantity met in this proposed plan: ${text(group.coverage.applied_credits_milli)} applied credits · ${group.coverage.applied_courses} distinct course${group.coverage.applied_courses === 1 ? "" : "s"}. These group contributions do not add to overall earned credit or GPA.`,
                 ),
             );
-        body.append(groupGapDetails(group, data.outcome), node("h2", {}, "Retained course requirements"));
+        const namedRecords = new Map(data.records.map(record => [record.id, record]));
+        body.append(
+            window.createDegreeNamedCourseReview(
+                { node, button, milli: text }, group.course_review,
+                attempt => namedRecords.get(attempt.work_id),
+            ),
+            groupGapDetails(group, data.outcome),
+            node("h2", {}, "Retained course requirements"),
+        );
         for (const rule of group.rules.slice(ruleOffset, ruleOffset + 20)) {
             const gap = group.gaps?.rules.find((r) => r.id === rule.id);
             const coverage = data.outcome === "feasible" ? group.coverage?.rules[rule.id] : null;

@@ -564,6 +564,8 @@ final class StudentGroupAllocationTest extends TestCase
         self::assertSame('feasible', $result['outcome']);
         self::assertSame(3000, $result['groups'][0]['placements'][0]['credits_milli']);
         self::assertTrue($result['records'][0]['grading_republication_verified']);
+        self::assertSame('candidate', $result['groups'][0]['course_review'][0]['attempts'][0]['status']);
+        self::assertTrue($result['groups'][0]['course_review'][0]['attempts'][0]['selected']);
         self::assertSame('A', $result['records'][0]['retained_grade']['code']);
         self::assertSame($events, $f->f->digest('sis_history_events'));
         self::assertSame($credits, $f->f->digest('sis_academic_credits'));

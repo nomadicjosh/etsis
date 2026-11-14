@@ -400,3 +400,225 @@ window.createDegreeProgressEvidence = function (ui, options, resolve) {
     });
     return detail;
 };
+
+/* Named obligations and their captured attempts; eligibility is separate from complete placement. */
+window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
+    const { node, button, milli } = ui;
+    const detail = node(
+        "details",
+        { class: "record-section my-3" },
+        node("summary", { class: "h5" }, "Named-course review"),
+    );
+    const reasons = {
+        candidate: "Eligible after this group's course-publication and grade checks.",
+        placement_restricted: "An approved preference reserves this course for another group.",
+        approval_conflict: "Course approvals conflict; registrar review is needed.",
+        voided: "This award was voided.",
+        dropped: "Dropped work cannot meet a completed-course requirement.",
+        in_progress: "Awaiting a final grade and earned credit.",
+        grade_unknown: "The recorded grade definition is unavailable.",
+        not_passing: "The recorded grade is not passing.",
+        no_credit: "No earned credit is available to apply.",
+        course_version_unknown: "The accepted course publication was not retained.",
+        course_version_differs: "The accepted course publication needs an equivalence review.",
+        scale_unknown: "The retained grading policy needed for the grade minimum is unavailable.",
+        scale_differs: "The grading publications need review before comparing the grade minimum.",
+        insufficient_grade: "Below this group's required per-course grade points.",
+        waived: "This course requirement is waived; no credit is created.",
+    };
+    let loaded = false;
+    detail.addEventListener("toggle", () => {
+        if (!detail.open || loaded) return;
+        loaded = true;
+        detail.append(
+            node(
+                "p",
+                {},
+                "Required courses and course options use the retained group definition. Matching attempts explain eligibility; they do not establish a partial placement or predict future credits. Saved-rule requirements are inspected separately.",
+            ),
+        );
+        if (rows == null || !rows.length) {
+            detail.append(
+                node(
+                    "p",
+                    {},
+                    rows == null
+                        ? "Named-course evidence is unavailable for this review."
+                        : "This group has no named course list.",
+                ),
+            );
+            return;
+        }
+        const content = node("div");
+        detail.append(content);
+        function attempts(row) {
+            if (!row.attempts.length) return node("p", {}, "No matching current work in this review.");
+            const box = node(
+                "details",
+                {},
+                node(
+                    "summary",
+                    {},
+                    `${row.attempts.length} matching attempt${row.attempts.length === 1 ? "" : "s"}`,
+                ),
+            );
+            let ready = false;
+            box.addEventListener("toggle", () => {
+                if (!box.open || ready) return;
+                ready = true;
+                const list = node("div");
+                box.append(list);
+                function show(offset = 0, focus = false) {
+                    const heading = node(
+                        "p",
+                        { role: "status", tabindex: "-1" },
+                        `Matching attempts ${offset + 1}–${Math.min(offset + 10, row.attempts.length)} of ${row.attempts.length}`,
+                    );
+                    list.replaceChildren(heading);
+                    for (const attempt of row.attempts.slice(offset, offset + 10)) {
+                        const record = resolve(attempt);
+                        if (!record) {
+                            list.append(
+                                node("p", {}, "Matching record unavailable. Ask the registrar to review it."),
+                            );
+                            continue;
+                        }
+                        list.append(
+                            node(
+                                "div",
+                                { class: "border rounded p-2 my-2" },
+                                node(
+                                    "p",
+                                    { class: "fw-semibold mb-1" },
+                                    `${record.course_code} · ${record.course_title}`,
+                                ),
+                                node(
+                                    "p",
+                                    {},
+                                    record.term_label_retained && record.term_code
+                                        ? `Posting term: ${record.term_code}`
+                                        : "Posting term label not retained",
+                                ),
+                                node("p", {}, window.degreeProgressGradeText(record, milli)),
+                                node(
+                                    "p",
+                                    {},
+                                    record.recorded_earned_milli == null
+                                        ? "Recorded earned credits unavailable"
+                                        : `Recorded earned credits: ${milli(record.recorded_earned_milli)}`,
+                                ),
+                                node(
+                                    "p",
+                                    {},
+                                    reasons[attempt.status] || "This attempt needs registrar review.",
+                                ),
+                                attempt.via_substitution
+                                    ? node(
+                                          "p",
+                                          {},
+                                          "Reviewed course/publication approval applies to this requirement.",
+                                      )
+                                    : null,
+                                node(
+                                    "p",
+                                    {},
+                                    attempt.selected === true
+                                        ? "Supports this proposed placement, possibly as an alternative attempt. Earned credits and GPA retain their own repeat rules."
+                                        : attempt.selected === null
+                                          ? "Placement not established."
+                                          : "Not selected for this named course in the proposed plan.",
+                                ),
+                            ),
+                        );
+                    }
+                    const controls = node("div", { class: "d-flex flex-wrap gap-2" });
+                    if (offset > 0)
+                        controls.append(button("Previous matching attempts", () => show(offset - 10, true)));
+                    if (offset + 10 < row.attempts.length)
+                        controls.append(button("More matching attempts", () => show(offset + 10, true)));
+                    list.append(controls);
+                    if (focus) heading.focus();
+                }
+                show();
+            });
+            return box;
+        }
+        function show(offset = 0, focus = false) {
+            const heading = node(
+                "p",
+                { role: "status", tabindex: "-1" },
+                `Named courses ${offset + 1}–${Math.min(offset + 20, rows.length)} of ${rows.length}`,
+            );
+            content.replaceChildren(heading);
+            const table = node(
+                "table",
+                { class: "table table-striped align-middle" },
+                node("caption", {}, "Named course requirements and matching recorded work"),
+                node(
+                    "thead",
+                    {},
+                    node(
+                        "tr",
+                        {},
+                        ...["Course", "Requirement", "Matching recorded work", "Placement"].map((label) =>
+                            node("th", { scope: "col" }, label),
+                        ),
+                    ),
+                ),
+            );
+            const body = node("tbody");
+            for (const row of rows.slice(offset, offset + 20)) {
+                body.append(
+                    node(
+                        "tr",
+                        {},
+                        node("th", { scope: "row" }, `${row.course_code} · ${row.course_title}`),
+                        node(
+                            "td",
+                            {},
+                            row.required ? "Required course" : "Course option",
+                            row.waived
+                                ? node(
+                                      "p",
+                                      {},
+                                      "Course requirement waived. No earned credit is created and quantity minimums still apply.",
+                                  )
+                                : null,
+                        ),
+                        node("td", {}, attempts(row)),
+                        node(
+                            "td",
+                            {},
+                            row.placement === "proposed"
+                                ? "Evidence in proposed placement"
+                                : row.placement === "not_used"
+                                  ? "Not used in proposed placement"
+                                  : "Placement not established",
+                        ),
+                    ),
+                );
+            }
+            table.append(body);
+            content.append(
+                node(
+                    "div",
+                    {
+                        class: "table-responsive",
+                        tabindex: "0",
+                        role: "region",
+                        "aria-label": "Named-course review table",
+                    },
+                    table,
+                ),
+            );
+            const controls = node("div", { class: "d-flex flex-wrap gap-2" });
+            if (offset > 0) controls.append(button("Previous named courses", () => show(offset - 20, true)));
+            if (offset + 20 < rows.length)
+                controls.append(button("More named courses", () => show(offset + 20, true)));
+            content.append(controls);
+            if (focus) heading.focus();
+        }
+        show();
+    });
+    return detail;
+};

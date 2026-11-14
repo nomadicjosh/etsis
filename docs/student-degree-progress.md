@@ -90,6 +90,8 @@ The student portal offers the same group quantities and a **Requirement checklis
 
 **Inspect course-group placement** opens the [existing placement review](student-course-placement.md) from this same captured result. Staff can inspect group quantities, retained named-course lists, waivers, approved substitutions, grade floors, repeat/sharing treatment and equivalent evidence alternatives. Returning to degree progress does not rerun the read.
 
+Each group's [Named-course review](student-course-placement.md#named-course-review) now connects its retained named requirements to matching attempts, including pending and insufficient-grade work, while keeping course options and waivers separate. The student portal exposes the same inspection with private response-local evidence links. Matching eligibility remains distinct from a complete proposed placement.
+
 The placement review also [explains clear shortfalls](student-course-placement.md#understanding-shortfalls) in eligible credits, distinct-course quantities and named/choose evidence. These optimistic evidence bounds do not assign partial placements or declare groups complete. Missing/conflicting inputs remain needs-review outcomes.
 
 **Refresh degree progress** requests a fresh review after registration, grade or approval changes. A grade correction changes refreshed current calculations; it does not mutate a previously returned snapshot. The snapshots are not retained audit evidence and must not be reused for a later command as if the student were still locked.

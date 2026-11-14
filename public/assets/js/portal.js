@@ -1345,6 +1345,10 @@
                               ),
                           ]),
                     groupCoverage(group),
+                    window.createDegreeNamedCourseReview(
+                        { node: el, button, milli }, group.course_review,
+                        attempt => data.records[attempt.record_index],
+                    ),
                     ...(group.placements.length
                         ? [
                               el(
