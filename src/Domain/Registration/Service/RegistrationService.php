@@ -10,12 +10,17 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Registration\Enrollment;
 use Domain\Registration\Enum\RegistrationStatus;
 use Domain\Registration\RegistrationPolicy;
+use Domain\Registration\RegistrationWindow;
 use Domain\Registration\Repository\RegistrationRepository;
+use Domain\Registration\Section;
+use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Student\Student;
 use JsonException;
 
 final readonly class RegistrationService
@@ -48,10 +53,7 @@ final readonly class RegistrationService
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
         $owner = $this->admissions->person($initialStudent->personId)->ownerUserId;
-        $this->access->requireOwnerOrPermission($owner, "sis:registration:manage");
-        if ($byStaff) {
-            $this->access->requirePermission("sis:registration:manage");
-        }
+        $this->authorize($actor, $owner, $byStaff);
 
         return $this->transactions->run(function () use (
             $studentId,
@@ -67,18 +69,12 @@ final readonly class RegistrationService
             $this->repository->lockPerson($initialStudent->personId);
             $this->repository->lockSection($sectionId);
             $student = $this->admissions->student($studentId);
+            if ($student->personId->value !== $initialStudent->personId->value) {
+                throw new ConcurrentModificationException('The student identity changed. Reload before registering.');
+            }
             $person = $this->admissions->person($student->personId);
-            $currentActor = $this->access->requireOwnerOrPermission(
-                $person->ownerUserId,
-                "sis:registration:manage",
-            );
-            if ($currentActor->value !== $actor->value) {
-                throw new \Domain\Shared\Exception\AccessDeniedException("The registration actor changed.");
-            }
             $byStaff = $byStaff || $person->ownerUserId?->value !== $actor->value;
-            if ($byStaff) {
-                $this->access->requirePermission("sis:registration:manage");
-            }
+            $this->authorize($actor, $person->ownerUserId, $byStaff);
             $this->activity->verify($student);
             $this->primaryPrograms->verify($student);
             $section = $this->repository->section($sectionId);
@@ -88,6 +84,7 @@ final readonly class RegistrationService
             if ($existing !== null) {
                 if ($existing->status->isEnrolled()) {
                     $this->enrollments->verifyExisting($existing, $section);
+                    $this->verifyAccess($actor, $student, $person->ownerUserId, $byStaff);
                     return $existing;
                 }
                 throw new DomainException(
@@ -102,23 +99,13 @@ final readonly class RegistrationService
                 throw new DomainException("The section is inactive or full.");
             }
             $assignment = $this->pursuits->activePursuit($studentId, $assignment);
-            $now = $this->clock->now();
-            $blocking = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
             $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
             $coursesBefore = $this->repository->enrolledCount($studentId, $section->termId);
             $prerequisites = $this->prerequisites->evaluate($studentId, $assignment, $required, $budget);
             $prerequisitesMet = $prerequisites->isMet();
-            new RegistrationPolicy()->assertEligible(
-                $student,
-                $blocking === null ? [] : [$blocking],
-                $now,
-                $byStaff,
-                $window->isOpen($now),
-                $section->webRegistration,
-                $coursesBefore,
-                $window->courseLimit,
-                $prerequisitesMet,
-            );
+            // History verification may take time. Evaluate dates against the clock after those reads.
+            $now = $this->clock->now();
+            $this->assertEligible($student, $section, $window, $byStaff, $coursesBefore, $prerequisitesMet, $now);
             $enrollment = new Enrollment(
                 EntityId::generate(),
                 $studentId,
@@ -153,9 +140,65 @@ final readonly class RegistrationService
             $this->credits->open($enrollment, $course, $actor, $assignment, $section->publicationVersionId);
             $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
             $this->audit->record($actor, "registration.created", $enrollment->id);
-
+            // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
+            $this->assertEligible(
+                $this->admissions->student($studentId),
+                $section,
+                $window,
+                $byStaff,
+                $coursesBefore,
+                $prerequisitesMet,
+                $this->clock->now()
+            );
+            $this->verifyAccess($actor, $student, $person->ownerUserId, $byStaff);
             return $enrollment;
         });
+    }
+
+    private function authorize(EntityId $actor, ?EntityId $owner, bool $byStaff): void
+    {
+        if (
+            $this->access->requireOwnerOrPermission($owner, 'sis:registration:manage')->value !== $actor->value ||
+            ($byStaff && $this->access->requirePermission('sis:registration:manage')->value !== $actor->value)
+        ) {
+            throw new AccessDeniedException('The registration actor changed.');
+        }
+    }
+
+    private function verifyAccess(EntityId $actor, Student $student, ?EntityId $owner, bool $byStaff): void
+    {
+        $current = $this->admissions->student($student->id);
+        if ($current->personId->value !== $student->personId->value) {
+            throw new ConcurrentModificationException('The student identity changed. Reload before registering.');
+        }
+        $currentOwner = $this->admissions->person($current->personId)->ownerUserId;
+        if ($currentOwner?->value !== $owner?->value) {
+            throw new ConcurrentModificationException('The student account link changed. Reload before registering.');
+        }
+        $this->authorize($actor, $currentOwner, $byStaff);
+    }
+
+    private function assertEligible(
+        Student $student,
+        Section $section,
+        RegistrationWindow $window,
+        bool $byStaff,
+        int $coursesBefore,
+        bool $prerequisitesMet,
+        \DateTimeImmutable $on,
+    ): void {
+        $blocking = $this->repository->blockingRestriction($student->personId, $on, $byStaff);
+        new RegistrationPolicy()->assertEligible(
+            $student,
+            $blocking === null ? [] : [$blocking],
+            $on,
+            $byStaff,
+            $window->isOpen($on),
+            $section->webRegistration,
+            $coursesBefore,
+            $window->courseLimit,
+            $prerequisitesMet,
+        );
     }
 
     public function drop(EntityId $studentId, EntityId $sectionId): Enrollment

@@ -12,6 +12,16 @@ In **Students → Student record → Registration history**, authorized registra
 
 Early add/drop still deletes current enrollment/academic-credit projections and reverses the original course charge. Restricted enrollment and academic events remain. Late drop retains attempted credit, the institution's selected grade/GPA rules and the charge while releasing the seat. Hiatus closures delegate to the same drop service. Previously saved drop/hiatus receipts remain unchanged; their earlier contents are evidence, not a second canonical registration stream. Previously issued transcript documents remain independent retained evidence.
 
+## Registration completion checks
+
+The same command handles student self-service, individual staff entries and each new registration in a reviewed group. It now checks the trusted actor and required authority again after its academic, financial and audit writes, before returning success. Staff authority is required throughout a staff registration, including when staff register their own student record or enter another student without an explicit browser mode flag. A changed student/person link while waiting for locks stops the request instead of continuing with the former person's hold lock. A changed linked login account during completion also stops the original authorization.
+
+Prerequisite verification may take time, so eligibility uses the clock after that verification. Before completion, the command checks the registration window and dated holds again through the existing `RegistrationPolicy`. A self-service request is rejected when that final check falls after its deadline or within a blocking hold's active dates. The existing inclusive end instant, staff window exception and institution-selected staff-blocking hold behavior remain in effect. These final checks use indexed current reads and the already verified prerequisite result; they do not replay academic inputs again.
+
+A failed final permission, actor, identity, deadline or hold check rolls back the seat decision, academic credit and pursuit attribution, charge, receipts and required audit together. If a later student in a reviewed group fails, the outer group transaction rolls back earlier new registrations too. No partial group is accepted.
+
+An already accepted active-registration retry still returns its original enrollment without another seat or charge, even after a deadline or new hold. Its history and current access are verified before that private result is returned; a retry does not bypass current authorization or change its original admission basis. This extension adds no event format, table or migration.
+
 ## Retained prerequisite evidence
 
 New registrations retain the current pursuit and exact supporting academic-record, award/enrollment and pursuit-applicability versions as protected `prerequisite_evidence` metadata on the existing acceptance event. The evidence contains only the required course identities and one verified passing record per course. It does not duplicate grade bodies, student profiles, reasons or raw historical events. Institutional and transfer work keep their different stream identities; an earlier untracked enrollment version remains explicitly zero. A recorded passing zero-credit course can satisfy a course prerequisite.
