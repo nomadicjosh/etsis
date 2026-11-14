@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after adding chronological latest-registration reporting to the Students source, including students with no retained registration. The same builder supports live/static reports, optional expiry and reviewed registration handoffs. General latest-row editors, broader financial report sources, larger exports, prerequisite/co-requisite policies, final evaluations and graduation remain subsequent milestones.
+Last reviewed: **2026-11-14**, after adding reusable related-record conditions to Report Studio: require or exclude matching records without multiplying output rows, with student registration and empty-section starting points. Saved modes/expiry, chronological latest terms and reviewed registration handoffs remain connected to the same compiler and services. Broader financial sources, repeated aliases, richer expressions, larger exports, prerequisite/co-requisite policies, final evaluations and graduation remain subsequent milestones.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -170,7 +170,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 ## 5. Reporting, populations and conversion
 
-- [ ] Cover the remaining [legacy SELECT acceptance cases](legacy-reporting-review.md): financial aggregates at a declared grain, general latest-row/anti-join editors, repeated relationship aliases and richer typed expression trees.
+- [ ] Cover the remaining [legacy SELECT acceptance cases](legacy-reporting-review.md): financial aggregates at a declared grain, general latest-row selectors, repeated relationship aliases and richer typed expression trees.
+- [x] [Require or exclude matching related records](workflow-review.md#related-record-conditions) using visual any/none cards, scoped nested predicates, one-record matching, independently checked source/field permissions and existing save/capture/population flows. Includes students with active registrations and sections with no active registrations; selecting matching rows does not change their output grain.
 - [x] [Latest registered term reporting](workflow-review.md#latest-registration-reports): a one-term-per-student relationship, date-based chronology, optional unmatched students, explicit all-pursuit scope, indexed bounded lookup and two visual starting points. Restricted removed registration history remains excluded.
 - [ ] Extend authorized datasets for finance, contact/admissions, scheduling and other completed domains. Prevent one-to-many joins from inflating headcounts, credits or balances; keep mixed currencies separate.
 - [x] [Hand off selected students from saved dynamic Report Studio student detail reports to reviewed group registration](workflow-review.md#register-students-selected-from-a-saved-report), with distinct 50-student pages, a cross-page shortlist of up to 25, current membership/definition checks, full source permission checks and the existing atomic registration command. Summaries and non-student sources cannot be reinterpreted as populations; selection grants no new authority.

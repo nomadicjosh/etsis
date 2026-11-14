@@ -16,6 +16,9 @@ async function fixture(page, options = {}) {
         entry_term: { label: 'Institutional entry term', type: 'string', relation: 'term' },
         latest_term_code: { label: 'Latest registered term', type: 'string', relation: 'latest_registration' },
         latest_term_starts_on: { label: 'Latest registered term starts', type: 'date', relation: 'latest_registration' },
+        registration_status: { label: 'Registration status (A/N/D/W/C)', type: 'string', relation: 'registration' },
+        registration_term_code: { label: 'Registration term', type: 'string', relation: 'registration_term' },
+        registration_section_code: { label: 'Registered section code', type: 'string', relation: 'registered_section' },
     } : {
         section_code: { label: 'Section code', type: 'string', relation: 'section' },
         term_code: { label: 'Academic term', type: 'string', relation: 'term' },
@@ -33,6 +36,9 @@ async function fixture(page, options = {}) {
             program: { label: 'Academic programs', parent: 'student', many: false },
             term: { label: 'Academic terms', parent: 'student', many: false },
             latest_registration: { label: 'Latest registered term (all pursuits)', parent: 'student', many: false },
+            registration: { label: 'Registrations (all pursuits)', parent: 'student', many: true },
+            registration_term: { label: 'Registration terms', parent: 'registration', many: false },
+            registered_section: { label: 'Registered sections', parent: 'registration', many: false },
         },
     } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
@@ -170,6 +176,74 @@ test('date conditions use native date inputs and submit typed ranges and date li
     await expect(conditions.getByLabel('Row conditions: value', { exact: true }))
         .toHaveValue('2027-01-01,2028-01-01');
     await expect(studio.locator('.report-local-error')).toBeHidden();
+    expect(f.errors).toEqual([]);
+});
+
+test('related-record cards preserve same-record conditions, modes and editable saves without adding output joins', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Students with active registrations', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional matching students');
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    const panel = studio.locator('[data-report-match="registration"]');
+    await expect(panel.getByRole('button', { name: 'Has matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const matching = panel.getByRole('group', { name: 'Matching registrations (all pursuits)', exact: true });
+    await matching.getByRole('button', { name: 'Add condition', exact: true }).click();
+    await matching.getByLabel('Matching registrations (all pursuits): field', { exact: true }).nth(1)
+        .selectOption('registration_term_code');
+    await matching.getByLabel('Matching registrations (all pursuits): value', { exact: true }).nth(1).fill('26/FA');
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+    const preview = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
+    expect(preview.existence.registration).toMatchObject({ mode: 'any', filters: { condition: 'AND', rules: [
+        { id: 'registration_status', operator: 'in', value: ['A', 'N'] },
+        { id: 'registration_term_code', operator: 'equal', value: '26/FA' },
+    ] } });
+    expect(preview.joins).not.toHaveProperty('registration');
+    expect(preview.joins).not.toHaveProperty('registration_term');
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await panel.getByRole('button', { name: 'Has no matching records', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(matching.getByLabel('Matching registrations (all pursuits): value', { exact: true }).nth(1)).toHaveValue('26/FA');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await expect(studio).toContainText('Definition revision 1');
+    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.getByLabel('Related record source', { exact: true }).selectOption('latest_registration');
+    await studio.getByRole('button', { name: 'Add related-record condition', exact: true }).click();
+    const added = studio.locator('[data-report-match="latest_registration"]');
+    await expect(added.getByRole('heading', { name: 'Latest registered term (all pursuits)', exact: true })).toBeFocused();
+    await added.getByRole('button', { name: 'Remove Latest registered term (all pursuits) condition', exact: true }).click();
+    await expect(added).toHaveCount(0);
+    await expect(studio.getByLabel('Related record source', { exact: true })).toBeFocused();
+    await panel.getByRole('button', { name: 'Remove Registrations (all pursuits) condition', exact: true }).click();
+    await expect(panel).toHaveCount(0);
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
+    expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.existence).toEqual({});
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('sections with no active registrations use an absence condition rather than grouped output', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Sections with no active registrations', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    const panel = studio.locator('[data-report-match="enrollment"]');
+    await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('MATH.101.A');
+    const definition = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
+    expect(definition.existence.enrollment).toMatchObject({ mode: 'none', filters: { rules: [
+        { id: 'enrollment_status', operator: 'in', value: ['A', 'N'] },
+    ] } });
+    expect(definition.columns.every(column => column.aggregate === 'none')).toBe(true);
+    expect(definition.joins).not.toHaveProperty('enrollment');
     expect(f.errors).toEqual([]);
 });
 

@@ -137,6 +137,27 @@ Population derivation reuses the typed query compiler, preserving original filte
 
 Every population page and selection requires `sis:reporting:run`, `sis:student:read`, `sis:registration:manage`, access to the saved report and all original/derived source-field permissions. Sharing a report grants none of those additional duties. Current actor/authority are rechecked after the metadata-only access audit; failure rolls back that audit and returns no population. The existing registration command independently enforces eligibility, locks, history, atomic charges and original retries. The new POST endpoints retain CSRF, private/no-store responses and debug suppression. Choices remain only in workspace memory; denied access clears displayed/cached population choices. Population selection adds no stored population snapshot, event format or parallel registration implementation. The separate report-lifecycle migration supports optional fixed results and expiry. Billing and messaging actions remain separate future work.
 
+### Related-record conditions
+
+In Report Studio, open **Conditions → Filter by related records**, choose a **Related record source**, and select **Add related-record condition**. Choose **Has matching records** or **Has no matching records**. Leave the conditions empty to check record presence, or use the familiar condition builder to define a match. Remove the card to stop applying it.
+
+Two starting points are available on the launch screen:
+
+- **Students with active registrations** checks for a registration with status `A` or `N`. Add a registration term or section condition inside that card to narrow the matching registration.
+- **Sections with no active registrations** excludes sections with any `A`/`N` enrollment, including zero-enrollment sections without requiring a count or grouped report.
+
+Each card evaluates one related record and its linked details. For example, status `A`/`N`, term `26/FA` and section `MATH.101.A` inside the Registrations card must all describe the same registration. An active registration in another term and a withdrawn registration in `26/FA` do not jointly qualify. The card can also use nested any/all conditions. Separate cards are independent requirements, and **all cards must be met**.
+
+Matching conditions filter starting rows without adding related rows to the result. A student with five matching registrations still appears once when only student-level output relationships are selected, and an ordinary student count stays one. Selecting registration fields as output or explicitly joining a many-record relationship still deliberately changes the output grain. Those choices are independent of matching conditions.
+
+Related fields are limited to the chosen record and its descendants. Use ordinary row conditions for starting-record fields or unrelated branches. Ordinary related-row conditions remain available for relationships included in the output map; they limit joined matches, while these new cards require or exclude their existence. There may be at most six matching cards and 40 predicates across the entire report, with the existing four-level nesting limit. Repeated copies of the same relationship and OR between separate cards remain future authoring work.
+
+The generic controls do not silently choose registration statuses. The two starters explicitly select `A`/`N`; other conditions can inspect retained current `D`, `W` or `C` rows when authorized. Removed early drops stay outside current projections and these report conditions; their restricted journal history is preserved. Student registrations are explicitly labelled **all pursuits** for reporting. This does not approve reuse of earlier coursework or alter pursuit-specific prerequisites, audits or the current-pursuit registration handoff.
+
+Saving, sharing, static capture, expiry, CSV pages and population selection use the existing report services. A shared report grants no access to hidden matching fields or relationships. Dynamic membership is rechecked before a selected population enters group registration; a changed match requires a fresh selection. Matching alone creates no registration, credit, charge, message or academic event.
+
+The compiler emits parameterized correlated `EXISTS`/`NOT EXISTS` conditions against approved current projections, with indexed registration lookups. Field expressions, labels and unit conversions share the ordinary compiler implementation. There is no raw SQL entry, schema migration, parallel event history, new dependency or recovery screen. SQLite execution/query plans, five identifier dialects and a bounded MariaDB check are covered; other engines still need runtime deployment acceptance. Operational query timeouts and large-institution load qualification remain deployment work.
+
 ### Latest registration reports
 
 Report Studio now includes **Students and their latest registered term** and **Students with no retained registration** starting points. Both open the existing visual builder with editable fields, conditions and preview; they can be saved as dynamic reports or captured using the existing static report settings.

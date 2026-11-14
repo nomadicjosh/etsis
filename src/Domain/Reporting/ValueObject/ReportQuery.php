@@ -97,6 +97,19 @@ final readonly class ReportQuery
             $this->group($filter, $local, 0, $count);
         }
         $this->group($definition["filters"] ?? null, $schema["fields"], 0, $count);
+        $existence = $definition['existence'] ?? [];
+        if (!is_array($existence) || count($existence) > 6) {
+            self::invalid('Choose up to six related-record conditions.');
+        }
+        foreach ($existence as $relation => $match) {
+            if (
+                !is_string($relation) || !isset($schema['relationships'][$relation]) || !is_array($match) ||
+                !in_array($match['mode'] ?? null, ['any', 'none'], true)
+            ) {
+                self::invalid('Choose a known relationship and whether matching records must exist.');
+            }
+            $this->group($match['filters'] ?? null, $this->relatedFields($relation), 0, $count);
+        }
         $measures = [];
         foreach ($columns as $i => $column) {
             if ($column["aggregate"] !== "none") {
@@ -118,6 +131,23 @@ final readonly class ReportQuery
                 self::invalid("Choose valid output sorting.");
             }
         }
+    }
+
+    /** Fields within this related record and its descendants, never its parent or a sibling branch.
+     * @return array<string,array<string,mixed>>
+     */
+    public function relatedFields(string $relation): array
+    {
+        return array_filter($this->schema['fields'], function (array $field) use ($relation): bool {
+            $current = $field['relation'];
+            while ($current !== $this->schema['root']) {
+                if ($current === $relation) {
+                    return true;
+                }
+                $current = $this->schema['relationships'][$current]['parent'];
+            }
+            return false;
+        });
     }
 
     /** @param array<string, mixed> $fields */
@@ -315,9 +345,13 @@ final readonly class ReportQuery
         foreach ($this->definition["join_filters"] ?? [] as $group) {
             $collect($group);
         }
+        foreach ($this->definition['existence'] ?? [] as $match) {
+            $collect($match['filters'] ?? null);
+        }
         $relations = array_merge(
             array_keys($this->definition["joins"] ?? []),
             array_keys($this->definition["join_filters"] ?? []),
+            array_keys($this->definition['existence'] ?? []),
         );
         foreach ($fields as $id) {
             $permissions = array_merge($permissions, $this->schema["fields"][$id]["permissions"]);

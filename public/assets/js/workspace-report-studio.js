@@ -192,6 +192,20 @@ window.createWorkspaceReportStudio = function (ui) {
                 node("p", { class: "form-text" }, "Latest term uses academic term dates across all pursuits. Retained late drops and withdrawals count; cancellations and removed early drops do not. This is a reporting view, not an eligibility or coursework-reuse decision."),
             );
         }
+        if (students?.fields.registration_status)
+            surface.append(button("Students with active registrations", () => edit(students, {
+                ...initial(students),
+                existence: { registration: { mode: "any", filters: { condition: "AND", rules: [
+                    { id: "registration_status", operator: "in", value: ["A", "N"] },
+                ] } } },
+            })));
+        if (sections?.fields.enrollment_status)
+            surface.append(button("Sections with no active registrations", () => edit(sections, {
+                ...initial(sections),
+                existence: { enrollment: { mode: "none", filters: { condition: "AND", rules: [
+                    { id: "enrollment_status", operator: "in", value: ["A", "N"] },
+                ] } } },
+            })));
         if (sections?.fields.enrollment_id)
             surface.append(
                 button("Section headcounts, including empty sections", () =>
@@ -357,6 +371,7 @@ window.createWorkspaceReportStudio = function (ui) {
             });
         });
         const accessible = () => {
+            $(holder).find("i").attr("aria-hidden", "true");
             $(holder).find(".rule-filter-container select").attr("aria-label", `${label}: field`);
             $(holder).find(".rule-operator-container select").attr("aria-label", `${label}: comparison`);
             $(holder)
@@ -372,7 +387,9 @@ window.createWorkspaceReportStudio = function (ui) {
                 );
         };
         widget.on(
-            "afterAddRule.queryBuilder afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder afterSetRules.queryBuilder",
+            "afterAddRule.queryBuilder afterAddGroup.queryBuilder afterCreateRuleFilters.queryBuilder " +
+                "afterCreateRuleOperators.queryBuilder afterCreateRuleInput.queryBuilder " +
+                "afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder afterSetRules.queryBuilder",
             accessible,
         );
         widget.on("rulesChanged.queryBuilder", changed);
@@ -398,6 +415,7 @@ window.createWorkspaceReportStudio = function (ui) {
         const definition = structuredClone(original);
         definition.joins ||= {};
         definition.join_filters ||= {};
+        definition.existence ||= {};
         definition.sort ||= [];
         const root =
             Object.values(dataset.relationships)
@@ -408,6 +426,11 @@ window.createWorkspaceReportStudio = function (ui) {
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
         const fieldsFor = (id) => Object.entries(dataset.fields).filter(([, f]) => f.relation === id);
+        const matchingFields = (id) => Object.fromEntries(Object.entries(dataset.fields).filter(([, field]) => {
+            for (let current = field.relation; current !== root; current = dataset.relationships[current].parent)
+                if (current === id) return true;
+            return false;
+        }));
         let serial = 0,
             previewSerial = 0,
             frozen = false,
@@ -1298,6 +1321,9 @@ window.createWorkspaceReportStudio = function (ui) {
                     .map(([id, read]) => [id, read(relaxed)])
                     .filter(([, group]) => group),
             );
+            definition.existence = Object.fromEntries(Object.entries(readers.existence).map(([id, read]) => [
+                id, { mode: definition.existence[id].mode, filters: read(relaxed) },
+            ]));
         }
         function renderFilters() {
             syncFilters(true);
@@ -1345,9 +1371,60 @@ window.createWorkspaceReportStudio = function (ui) {
                 rows: conditionBuilder(rows, dataset.fields, definition.filters, "Row conditions", changed),
                 totals: conditionBuilder(totals, measures, definition.having, "Summary conditions", changed),
                 joins: {},
+                existence: {},
             };
+            const matching = node("section", { class: "report-filter-section" },
+                node("h2", {}, "Filter by related records"),
+                node("p", {}, "Require a matching related record, or exclude records that have one. Each card checks one related record and its details. All added cards must be met; they do not add rows to the report."));
+            filtersBody.append(matching);
+            const picker = node("select", { class: "form-select", "data-report-match-picker": "true" });
+            for (const [id, relation] of Object.entries(dataset.relationships))
+                if (!definition.existence[id]) picker.append(node("option", { value: id }, relation.label));
+            const mutate = (callback, focus) => {
+                if (frozen) return;
+                syncFilters(true);
+                readers = null;
+                callback();
+                dirty();
+                renderFilters();
+                focus?.();
+            };
+            const add = button("Add related-record condition", () => {
+                if (!picker.value || Object.keys(definition.existence).length >= 6) return;
+                const id = picker.value;
+                mutate(() => { definition.existence[id] = { mode: "any", filters: null }; }, () =>
+                    panels.filters.querySelector(`[data-report-match="${CSS.escape(id)}"] h3`)?.focus());
+            });
+            add.disabled = !picker.options.length || Object.keys(definition.existence).length >= 6;
+            matching.append(labeled("Related record source", picker), add);
+            for (const [id, match] of Object.entries(definition.existence)) {
+                const relation = dataset.relationships[id];
+                const panel = node("section", { class: "record-section", "data-report-match": id },
+                    node("h3", { tabindex: "-1" }, relation.label));
+                const modes = node("div", { class: "inline-actions", role: "group",
+                    "aria-label": `${relation.label} matching requirement` });
+                for (const [mode, title] of [["any", "Has matching records"], ["none", "Has no matching records"]]) {
+                    const control = button(title, () => mutate(() => {
+                        definition.existence[id].mode = mode;
+                    }, () => panels.filters.querySelector(
+                        `[data-report-match="${CSS.escape(id)}"] [data-match-mode="${mode}"]`)?.focus()),
+                    match.mode === mode ? "btn-primary" : "btn-outline-primary");
+                    control.setAttribute("aria-pressed", String(match.mode === mode));
+                    control.dataset.matchMode = mode;
+                    modes.append(control);
+                }
+                modes.append(button(`Remove ${relation.label} condition`, () => mutate(() => {
+                    delete definition.existence[id];
+                }, () => panels.filters.querySelector("[data-report-match-picker]")?.focus())));
+                panel.append(modes, node("p", { class: "form-text" },
+                    "Leave the conditions empty to check for any related record. Add conditions to define a matching record. Selected output columns and their relationships remain separate."));
+                matching.append(panel);
+                next.existence[id] = conditionBuilder(panel, matchingFields(id), match.filters,
+                    `Matching ${relation.label.toLowerCase()}`, changed);
+            }
             Object.entries(dataset.relationships).forEach(([id, relation]) => {
                 const local = Object.fromEntries(fieldsFor(id));
+                if (!enabled.has(id) && !definition.join_filters[id]) return;
                 if ((!relation.many && !definition.join_filters[id]) || !Object.keys(local).length) return;
                 const panel = node(
                     "section",

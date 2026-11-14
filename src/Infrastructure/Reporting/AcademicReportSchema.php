@@ -104,6 +104,9 @@ final class AcademicReportSchema
                 'latest_registration' => $join('sis_terms', 'student', 'id', 'id') + [
                     'source' => 'latest_registration_term',
                 ],
+                'registration' => $join('sis_enrollments', 'student', 'id', 'student_id') + ['many' => true],
+                'registered_section' => $join('sis_sections', 'registration', 'section_id', 'id'),
+                'registration_term' => $join('sis_terms', 'registration', 'term_id', 'id'),
             ],
             'fields' => $personFields + [
                 'primary_program_id' => $field('Primary program reference', 'string', 'student', 'primary_program_id'),
@@ -116,6 +119,20 @@ final class AcademicReportSchema
                 'program_code' => $field('Primary program code', 'string', 'program', 'code'),
                 'program_title' => $field('Primary program title', 'string', 'program', 'title'),
                 'entry_term' => $field('Institutional entry term', 'string', 'term', 'code'),
+                'registration_status' => $field('Registration status (A/N/D/W/C)', 'string', 'registration', 'status'),
+                'registration_section_code' => $field(
+                    'Registered section code',
+                    'string',
+                    'registered_section',
+                    'code'
+                ),
+                'registration_term_code' => $field('Registration term', 'string', 'registration_term', 'code'),
+                'registration_term_starts_on' => $field(
+                    'Registration term starts',
+                    'date',
+                    'registration_term',
+                    'starts_on'
+                ),
                 'latest_term_id' => $field('Latest registered term reference', 'string', 'latest_registration', 'id'),
                 'latest_term_code' => $field('Latest registered term', 'string', 'latest_registration', 'code'),
                 'latest_term_starts_on' => $field(
@@ -133,6 +150,9 @@ final class AcademicReportSchema
             ],
         ];
         $students['relationships']['latest_registration']['label'] = 'Latest registered term (all pursuits)';
+        $students['relationships']['registration']['label'] = 'Registrations (all pursuits)';
+        $students['relationships']['registered_section']['label'] = 'Registered sections';
+        $students['relationships']['registration_term']['label'] = 'Registration terms';
         $program = [
             "student_population" => true,
             "table" => "sis_student_programs",

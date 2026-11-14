@@ -28,27 +28,10 @@ final readonly class ReportSelectCompiler
         $selected = [];
         $groups = [];
         $keys = [];
-        $expression = function (string $id) use ($s, $q, &$used): string {
+        $expression = function (string $id) use ($s, &$used): string {
             $field = $s["fields"][$id];
             $used[$field["relation"]] = true;
-            $name = $q($field["relation"]) . "." . $q($field["column"]);
-            if (($field["expression"] ?? "") === "full_name") {
-                $given = "COALESCE(" . $q($field["relation"]) . "." . $q("given_name") . ", '')";
-                $family = "COALESCE(" . $q($field["relation"]) . "." . $q("family_name") . ", '')";
-                $name = match ($this->sql->driver()) {
-                    "mysql" => "CONCAT(" . $given . ", ' ', " . $family . ")",
-                    "sqlsrv" => $given . " + ' ' + " . $family,
-                    default => $given . " || ' ' || " . $family,
-                };
-            }
-            if (($field["expression"] ?? "") === "registration_label") {
-                $name =
-                "CASE " .
-                $name .
-                " WHEN 'A' THEN 'Registered' WHEN 'N' THEN 'Registered'"
-                . " WHEN 'D' THEN 'Dropped' WHEN 'W' THEN 'Withdrawn' WHEN 'V' THEN 'Voided' ELSE 'Other' END";
-            }
-            return isset($field["scale"]) ? "(" . $name . " / " . (int) $field["scale"] . ".0)" : $name;
+            return $this->fieldExpression($field, $field['relation']);
         };
         $aggregate = false;
         foreach ($d["columns"] as $i => $column) {
@@ -74,6 +57,10 @@ final readonly class ReportSelectCompiler
             $selected[] = $term . " AS " . $q("c" . $i);
         }
         $where = $this->condition($d["filters"] ?? null, $expression, $whereParameters, $s["fields"]);
+        foreach ($d['existence'] ?? [] as $relation => $match) {
+            $condition = $this->existence($relation, $match, $s, $whereParameters);
+            $where = $where === '' ? $condition : '(' . $where . ') AND ' . $condition;
+        }
         foreach (array_merge(array_keys($d["joins"] ?? []), array_keys($d["join_filters"] ?? [])) as $name) {
             $used[$name] = true;
         }
@@ -180,6 +167,82 @@ final readonly class ReportSelectCompiler
                 implode(", ", $order),
             "parameters" => $parameters,
         ];
+    }
+
+    /** Shared field semantics for outputs, ordinary filters and related-record conditions.
+     * @param array<string,mixed> $field
+     */
+    private function fieldExpression(array $field, string $alias): string
+    {
+        $q = $this->sql->quote(...);
+        $name = $q($alias) . '.' . $q($field['column']);
+        if (($field['expression'] ?? '') === 'full_name') {
+            $given = 'COALESCE(' . $q($alias) . '.' . $q('given_name') . ", '')";
+            $family = 'COALESCE(' . $q($alias) . '.' . $q('family_name') . ", '')";
+            $name = match ($this->sql->driver()) {
+                'mysql' => 'CONCAT(' . $given . ", ' ', " . $family . ')',
+                'sqlsrv' => $given . " + ' ' + " . $family,
+                default => $given . " || ' ' || " . $family,
+            };
+        }
+        if (($field['expression'] ?? '') === 'registration_label') {
+            $name = "CASE " . $name . " WHEN 'A' THEN 'Registered' WHEN 'N' THEN 'Registered'"
+            . " WHEN 'D' THEN 'Dropped' WHEN 'W' THEN 'Withdrawn' WHEN 'V' THEN 'Voided' ELSE 'Other' END";
+        }
+        return isset($field['scale']) ? '(' . $name . ' / ' . (int) $field['scale'] . '.0)' : $name;
+    }
+
+    /** A correlated condition filters the outer row without adding related rows to its result grain.
+     * @param array<string,mixed> $match
+     * @param array<string,mixed> $schema
+     * @param list<scalar|null> $parameters
+     */
+    private function existence(string $relation, array $match, array $schema, array &$parameters): string
+    {
+        $q = $this->sql->quote(...);
+        $root = $schema['root'];
+        $path = [];
+        for ($current = $relation; $current !== $root; $current = $schema['relationships'][$current]['parent']) {
+            array_unshift($path, $current);
+        }
+        $first = $path[0];
+        $alias = static fn(string $name): string => $name === $root ? $root : 'match_' . $name;
+        $mapped = static fn(array $r): array => array_replace($r, ['parent' => $alias($r['parent'])]);
+        $joins = [];
+        $join = function (
+            string $name,
+            bool $required = false
+        ) use (
+            &$join,
+            &$joins,
+            $schema,
+            $first,
+            $q,
+            $alias,
+            $mapped
+        ): void {
+            if ($name === $first || isset($joins[$name])) {
+                return;
+            }
+            $r = $schema['relationships'][$name];
+            $join($r['parent'], $required);
+            $joins[$name] = ($required ? ' INNER JOIN ' : ' LEFT JOIN ') . $q($r['table']) . ' ' . $q($alias($name))
+            . ' ON ' . $this->relationshipCondition($alias($name), $mapped($r));
+        };
+        foreach (array_slice($path, 1) as $name) {
+            $join($name, true);
+        }
+        $expression = function (string $id) use ($schema, $alias, $join): string {
+            $field = $schema['fields'][$id];
+            $join($field['relation']);
+            return $this->fieldExpression($field, $alias($field['relation']));
+        };
+        $filters = $this->condition($match['filters'] ?? null, $expression, $parameters, $schema['fields']);
+        $r = $schema['relationships'][$first];
+        return ($match['mode'] === 'none' ? 'NOT EXISTS' : 'EXISTS') . ' (SELECT 1 FROM '
+        . $q($r['table']) . ' ' . $q($alias($first)) . implode('', $joins) . ' WHERE '
+        . $this->relationshipCondition($alias($first), $mapped($r))
+        . ($filters === '' ? '' : ' AND (' . $filters . ')') . ')';
     }
 
     /** Repository-owned latest-row relationships never accept SQL from a saved definition or request.
