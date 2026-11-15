@@ -264,6 +264,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            applications: ["institutional_id", "full_name", "program_code", "entry_term", "status"],
             students: ["institutional_id", "full_name", "program_code", "entry_term"],
             programs: ["institutional_id", "full_name", "program_code", "catalog_year"],
             credits: ["full_name", "course_code", "course_title", "grade_code"],
@@ -411,8 +412,21 @@ window.createWorkspaceReportStudio = function (ui) {
         };
     }
     async function edit(dataset, original, saved = null) {
+        if (Object.keys(original.aliases || {}).length) {
+            const previous = dialog;
+            try {
+                dataset = (await request("/sis/report-studio/graph/", "POST", {
+                    dataset: dataset.id, aliases: original.aliases,
+                })).dataset;
+            } catch (error) {
+                if (dialog !== previous) return;
+                throw error;
+            }
+            if (dialog !== previous) return;
+        }
         const body = openSpace(saved ? "Edit report" : "Build a report", "VISUAL REPORT BUILDER");
         const definition = structuredClone(original);
+        definition.aliases ||= {};
         definition.joins ||= {};
         definition.join_filters ||= {};
         definition.existence ||= {};
@@ -422,7 +436,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 .map((r) => r.parent)
                 .find((id) => !dataset.relationships[id]) || Object.values(dataset.fields)[0]?.relation;
         const rootLabel =
-            { student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
+            { application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
         const fieldsFor = (id) => Object.entries(dataset.fields).filter(([, f]) => f.relation === id);
@@ -439,6 +453,7 @@ window.createWorkspaceReportStudio = function (ui) {
         let selectedColumn = null,
             activeTab = "design",
             readers = null;
+        let graphRevision = 0;
         const positions = new Map(),
             enabled = new Set([root]);
         const events = new AbortController();
@@ -458,6 +473,7 @@ window.createWorkspaceReportStudio = function (ui) {
         });
         Object.keys(definition.joins).forEach(connect);
         Object.keys(definition.join_filters).forEach(connect);
+        Object.keys(definition.aliases).forEach(connect);
         conditionFields(definition.filters, (id) => connect(dataset.fields[id].relation));
         const surface = node("div", { class: "report-visual-editor" });
         const status = node(
@@ -797,12 +813,49 @@ window.createWorkspaceReportStudio = function (ui) {
                         `${fields.length} fields${dataset.relationships[id]?.many ? " · may add rows" : ""}`,
                     ),
                 );
+                if (id !== root && !dataset.relationships[id].copy_group) {
+                    const copy = button(`Add another ${relationLabel(id)}`, () => copyRelation(id));
+                    copy.disabled = frozen || Object.keys(definition.aliases).length >= 3;
+                    entry.append(copy);
+                }
                 if (query) matches.forEach(([field]) => entry.append(fieldCheckbox(field)));
                 libraryRows.append(entry);
             });
             if (!libraryRows.childElementCount) libraryRows.append(node("p", {}, "No matching records or fields."));
         }
         search.addEventListener("input", renderLibrary);
+        async function copyRelation(origin) {
+            if (frozen || Object.keys(definition.aliases).length >= 3) return;
+            syncFilters(true);
+            const id = ["copy1", "copy2", "copy3"].find(key => !definition.aliases[key]);
+            const number = Object.values(definition.aliases).filter(copy => copy.relation === origin).length + 2;
+            const aliases = { ...definition.aliases, [id]: { relation: origin,
+                label: `${relationLabel(origin)} ${number}`.slice(0, 48) } };
+            const revision = graphRevision;
+            let result;
+            try {
+                result = await request("/sis/report-studio/graph/", "POST", { dataset: dataset.id, aliases });
+            } catch (error) {
+                if (!surface.isConnected || revision !== graphRevision) return;
+                throw error;
+            }
+            if (!surface.isConnected || frozen || revision !== graphRevision) return;
+            if (!result.dataset?.relationships[id]) throw new Error("This record is no longer available to your account.");
+            syncFilters(true);
+            destroyWidgets();
+            readers = null;
+            panels.filters.replaceChildren();
+            dataset = result.dataset;
+            definition.aliases = aliases;
+            graphRevision++;
+            connect(id);
+            dirty();
+            renderMap();
+            renderLibrary();
+            const card = board.querySelector(`[data-relation="${id}"]`);
+            card?.scrollIntoView({ block: "nearest", inline: "nearest" });
+            card?.querySelector("[data-copy-label]")?.focus({ preventScroll: true });
+        }
         function renderMap() {
             board.replaceChildren();
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -880,6 +933,28 @@ window.createWorkspaceReportStudio = function (ui) {
                         cardHeader.append(remove);
                     }
                     card.append(cardHeader);
+                    if (definition.aliases[id]) {
+                        const title = node("input", { class: "form-control", maxlength: 48,
+                            value: definition.aliases[id].label, "data-copy-label": "true" });
+                        title.addEventListener("input", () => {
+                            if (frozen) return;
+                            definition.aliases[id].label = title.value;
+                            for (const [key, metadata] of Object.entries(dataset.relationships)) {
+                                if (metadata.copy_group !== id) continue;
+                                metadata.label = key === id ? title.value :
+                                    `${title.value} · ${dataset.relationships[metadata.copy_of].label}`;
+                            }
+                            graphRevision++;
+                            dirty();
+                            renderLibrary();
+                            handle.replaceChildren(icon("grip-vertical"), title.value);
+                            handle.setAttribute("aria-label", `Move ${title.value} card`);
+                            card.querySelector(".report-match-options")?.setAttribute("aria-label", `${title.value} matching`);
+                            const remove = cardHeader.querySelector("button.report-icon-button");
+                            remove?.setAttribute("aria-label", `Remove ${title.value} and its fields`);
+                        });
+                        card.append(labeled("Name this record copy", title));
+                    }
                     if (id === root) card.append(node("p", { class: "report-card-origin" }, "Start here"));
                     else {
                         const relation = dataset.relationships[id];
@@ -999,16 +1074,26 @@ window.createWorkspaceReportStudio = function (ui) {
             readers = null;
             panels.filters.replaceChildren();
             const branch = new Set([id]);
+            const label = relationLabel(id);
+            const removesCopy = !!definition.aliases[id];
             function descends(candidate) {
                 return candidate === id || (candidate !== root && descends(dataset.relationships[candidate].parent));
             }
-            enabled.forEach((candidate) => {
+            (removesCopy ? Object.keys(dataset.relationships) : [...enabled]).forEach((candidate) => {
                 if (descends(candidate)) branch.add(candidate);
             });
             definition.filters = pruneConditions(
                 definition.filters,
                 (field) => !branch.has(dataset.fields[field].relation),
             );
+            if (removesCopy) {
+                delete definition.aliases[id];
+                graphRevision++;
+                for (const [name, match] of Object.entries(definition.existence)) {
+                    if (branch.has(name)) delete definition.existence[name];
+                    else match.filters = pruneConditions(match.filters, field => !branch.has(dataset.fields[field].relation));
+                }
+            }
             branch.forEach((key) => {
                 enabled.delete(key);
                 positions.delete(key);
@@ -1022,7 +1107,19 @@ window.createWorkspaceReportStudio = function (ui) {
                         (!column.calculation || !branch.has(dataset.fields[column.calculation.field].relation)),
                 ),
             );
-            status.textContent = `${relationLabel(id)} and its dependent fields and conditions were removed.`;
+            if (removesCopy) {
+                for (const [field, metadata] of Object.entries(dataset.fields))
+                    if (metadata.copy_group === id) delete dataset.fields[field];
+                for (const [key, metadata] of Object.entries(dataset.relationships))
+                    if (metadata.copy_group === id) delete dataset.relationships[key];
+                renderMap();
+                renderLibrary();
+                if (activeTab === "filters") {
+                    readers = null;
+                    renderFilters();
+                }
+            }
+            status.textContent = `${label} and its dependent fields and conditions were removed.`;
         }
         let mapLayout = () => {};
         window.addEventListener("resize", () => mapLayout(), { signal: events.signal });

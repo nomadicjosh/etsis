@@ -302,6 +302,9 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/sis/report-studio/catalog/", [SisRelationalReportController::class, "catalog"])
         ->name("sis.report.studio.catalog");
     $router
+        ->map(['POST'], '/sis/report-studio/graph/', [SisRelationalReportController::class, 'graph'])
+        ->name('sis.report.studio.graph');
+    $router
         ->map(["POST"], "/sis/report-studio/preview/", [SisRelationalReportController::class, "preview"])
         ->name("sis.report.studio.preview");
     $router

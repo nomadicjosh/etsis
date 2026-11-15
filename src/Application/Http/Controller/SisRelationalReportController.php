@@ -27,6 +27,17 @@ final readonly class SisRelationalReportController
     {
         return new JsonResponse($this->service->catalog());
     }
+    public function graph(ServerRequest $request): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !is_array($body['aliases'] ?? null)) {
+            throw new ValidationException([['field' => 'aliases', 'message' => 'Choose named record copies.']]);
+        }
+        return new JsonResponse($this->service->graph(
+            FormInput::from($request)->text('dataset', 80),
+            $body['aliases']
+        ));
+    }
     public function preview(ServerRequest $request): ResponseInterface
     {
         return new JsonResponse(

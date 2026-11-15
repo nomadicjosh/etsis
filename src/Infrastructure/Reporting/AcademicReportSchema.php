@@ -418,11 +418,80 @@ final class AcademicReportSchema
                 ),
             ],
         ];
+        $academicRelations = [
+            'academic_credit' => $join('sis_academic_credits', 'student', 'id', 'student_id', $studentRead) + [
+                'many' => true,
+            ],
+            'credit_term' => $join('sis_terms', 'academic_credit', 'term_id', 'id'),
+            'credit_grade' => $join('sis_grades', 'academic_credit', 'grade_id', 'id'),
+        ];
+        $academicRelations['academic_credit']['label'] = 'Recorded academic credits (all pursuits)';
+        $academicRelations['credit_term']['label'] = 'Recorded-credit terms';
+        $academicRelations['credit_grade']['label'] = 'Recorded grades';
+        $academicFields = [
+            'academic_credit_id' => $field('Academic credit reference', 'string', 'academic_credit', 'id'),
+            'recorded_course_code' => $field('Recorded course code', 'string', 'academic_credit', 'course_code'),
+            'recorded_course_title' => $field('Recorded course title', 'string', 'academic_credit', 'course_title'),
+            'recorded_credit_status' => $field('Recorded credit status', 'string', 'academic_credit', 'status'),
+            'recorded_attempted' => $field('Recorded attempted credits', 'double', 'academic_credit', 'attempted_milli')
+                + ['scale' => 1000],
+            'recorded_completed' => $field('Recorded earned credits', 'double', 'academic_credit', 'completed_milli')
+                + ['scale' => 1000],
+            'recorded_term_code' => $field('Recorded-credit term', 'string', 'credit_term', 'code'),
+            'recorded_grade_code' => $field('Recorded final grade', 'string', 'credit_grade', 'code'),
+        ];
+        $applications = [
+            'table' => 'sis_applications', 'root' => 'application',
+            'label' => 'Applications & admissions',
+            'description' => 'One row per application. Join current applicant, program, entry-term '
+                . 'and authorized student records.',
+            'permissions' => ['sis:admissions:manage'],
+            'relationships' => [
+                'person' => $join('sis_persons', 'application', 'person_id', 'id'),
+                'identity' => $join('sis_person_identifiers', 'person', 'id', 'person_id'),
+                'program' => $join('sis_programs', 'application', 'program_id', 'id'),
+                'term' => $join('sis_terms', 'application', 'entry_term_id', 'id'),
+                'student' => $join('sis_students', 'person', 'id', 'person_id', $studentRead),
+            ],
+            'fields' => [
+                'application_id' => $field('Application reference', 'string', 'application', 'id'),
+                'status' => $field(
+                    'Application status (submitted/accepted/rejected/matriculated)',
+                    'string',
+                    'application',
+                    'status'
+                ),
+                'institutional_id' => $field('Institutional ID', 'string', 'identity', 'institutional_id'),
+                'given_name' => $field('Given name', 'string', 'person', 'given_name'),
+                'family_name' => $field('Family name', 'string', 'person', 'family_name'),
+                'full_name' => $field('Applicant full name', 'string', 'person', 'given_name')
+                    + ['expression' => 'full_name'],
+                'program_code' => $field('Current program code', 'string', 'program', 'code'),
+                'program_title' => $field('Current program title', 'string', 'program', 'title'),
+                'entry_term' => $field('Intended entry term', 'string', 'term', 'code'),
+                'term_starts_on' => $field('Intended entry term starts', 'date', 'term', 'starts_on'),
+                'term_ends_on' => $field('Intended entry term ends', 'date', 'term', 'ends_on'),
+                'student_id' => $field('Person’s current student reference', 'string', 'student', 'id', $studentRead),
+                'active' => $field('Person’s current student activity', 'boolean', 'student', 'active', $studentRead),
+            ],
+        ];
+        $studentRelations = array_intersect_key($students['relationships'], array_flip([
+            'registration', 'registered_section', 'registration_term', 'latest_registration',
+        ])) + $academicRelations;
+        $studentFields = array_intersect_key($students['fields'], array_flip([
+            'registration_status', 'registration_section_code', 'registration_term_code', 'registration_term_starts_on',
+            'latest_term_id', 'latest_term_code', 'latest_term_starts_on', 'latest_term_ends_on',
+        ])) + $academicFields;
+        $withStudentWork = static fn(array $dataset): array => array_replace($dataset, [
+            'relationships' => $dataset['relationships'] + $studentRelations,
+            'fields' => $dataset['fields'] + $studentFields,
+        ]);
         return [
-            'students' => ['id' => 'students'] + $students,
-            "programs" => ["id" => "programs"] + $program,
-            "credits" => ["id" => "credits"] + $credits,
-            "sections" => ["id" => "sections"] + $sections,
+            'applications' => ['id' => 'applications'] + $withStudentWork($applications),
+            'students' => ['id' => 'students'] + $withStudentWork($students),
+            "programs" => ["id" => "programs"] + $withStudentWork($program),
+            "credits" => ["id" => "credits"] + $withStudentWork($credits),
+            "sections" => ["id" => "sections"] + $withStudentWork($sections),
         ];
     }
 }

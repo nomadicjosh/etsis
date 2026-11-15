@@ -39,53 +39,80 @@ final readonly class RelationalReportService
     /** @return array<string, mixed> */
     public function catalog(): array
     {
-        $this->access->requirePermission("sis:reporting:manage");
+        $this->access->requirePermission('sis:reporting:manage');
         $datasets = [];
         foreach ($this->source->datasets() as $dataset) {
             try {
-                $this->grants($dataset["permissions"]);
+                $datasets[] = $this->describeSource($dataset);
             } catch (AccessDeniedException) {
                 continue;
             }
-            $relationshipGrants = function (string $name) use ($dataset): void {
-                while ($name !== $dataset["root"]) {
-                    $relation = $dataset["relationships"][$name];
-                    $this->grants($relation["permissions"]);
-                    $name = $relation["parent"];
-                }
-            };
-            $fields = [];
-            foreach ($dataset["fields"] as $id => $field) {
-                try {
-                    $this->grants($field["permissions"]);
-                    $relationshipGrants($field["relation"]);
-                } catch (AccessDeniedException) {
-                    continue;
-                }
-                $fields[$id] = array_intersect_key($field, array_flip(["label", "type", "relation"]));
-            }
-            $relationships = [];
-            foreach ($dataset["relationships"] as $id => $relation) {
-                try {
-                    $relationshipGrants($id);
-                } catch (AccessDeniedException) {
-                    continue;
-                }
-                $relationships[$id] = [
-                    "label" => $relation["label"],
-                    "parent" => $relation["parent"],
-                    "many" => $relation["many"] ?? false,
-                ];
-            }
-            $datasets[] = [
-                "id" => $dataset["id"],
-                "label" => $dataset["label"],
-                "description" => $dataset["description"],
-                "fields" => $fields,
-                "relationships" => $relationships,
-            ];
         }
-        return ["datasets" => $datasets];
+        return ['datasets' => $datasets];
+    }
+
+    /** Metadata only: resolve named copies through the approved server registry.
+     * @param array<string,mixed> $aliases
+     * @return array<string,mixed>
+     */
+    public function graph(string $id, array $aliases): array
+    {
+        $actor = $this->access->requirePermission('sis:reporting:manage');
+        $base = $this->source->datasets()[$id] ?? throw new RecordNotFoundException('Report source not found.');
+        $schema = \Domain\Reporting\ValueObject\ReportGraph::expand($base, $aliases);
+        foreach (array_keys($aliases) as $name) {
+            $this->relationshipGrants($schema, $name);
+        }
+        $result = $this->describeSource($schema);
+        $this->grants($schema['permissions']);
+        foreach (array_keys($aliases) as $name) {
+            $this->relationshipGrants($schema, $name);
+        }
+        if ($this->access->requirePermission('sis:reporting:manage')->value !== $actor->value) {
+            throw new AccessDeniedException('The report author changed.');
+        }
+        return ['dataset' => $result];
+    }
+
+    /** @param array<string,mixed> $dataset */
+    private function relationshipGrants(array $dataset, string $name): void
+    {
+        while ($name !== $dataset['root']) {
+            $relation = $dataset['relationships'][$name];
+            $this->grants($relation['permissions']);
+            $name = $relation['parent'];
+        }
+    }
+
+    /** @param array<string,mixed> $dataset
+     * @return array<string,mixed>
+     */
+    private function describeSource(array $dataset): array
+    {
+        $this->grants($dataset['permissions']);
+        $fields = [];
+        foreach ($dataset['fields'] as $id => $field) {
+            try {
+                $this->grants($field['permissions']);
+                $this->relationshipGrants($dataset, $field['relation']);
+            } catch (AccessDeniedException) {
+                continue;
+            }
+            $fields[$id] = array_intersect_key($field, array_flip(['label', 'type', 'relation', 'copy_group']));
+        }
+        $relationships = [];
+        foreach ($dataset['relationships'] as $id => $relation) {
+            try {
+                $this->relationshipGrants($dataset, $id);
+            } catch (AccessDeniedException) {
+                continue;
+            }
+            $relationships[$id] = [
+                'label' => $relation['label'], 'parent' => $relation['parent'], 'many' => $relation['many'] ?? false,
+            ] + array_intersect_key($relation, array_flip(['copy_of', 'copy_group']));
+        }
+        return ['id' => $dataset['id'], 'label' => $dataset['label'], 'description' => $dataset['description'],
+            'fields' => $fields, 'relationships' => $relationships];
     }
 
     /** @param array<string, mixed> $definition

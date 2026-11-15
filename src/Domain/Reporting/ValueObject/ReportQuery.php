@@ -9,15 +9,21 @@ use Domain\Shared\ValueObject\EntityId;
 
 final readonly class ReportQuery
 {
+    /** @var array<string,mixed> */
+    public array $schema;
+    /** @var array<string,mixed> */
+    private array $baseSchema;
     /** @param array<string, mixed> $definition
      * @param array<string, mixed> $schema
      * @param list<string>|null $populationStudents Internal bound restriction, never part of a saved definition.
      */
     public function __construct(
         public array $definition,
-        public array $schema,
+        array $schema,
         public ?array $populationStudents = null,
     ) {
+        $this->baseSchema = $schema;
+        $this->schema = $schema = ReportGraph::expand($schema, $definition['aliases'] ?? []);
         if (($definition["dataset"] ?? null) !== $schema["id"]) {
             self::invalid("Choose a report dataset.");
         }
@@ -290,7 +296,7 @@ final readonly class ReportQuery
         }
         $definition['having'] = null;
         $definition['sort'] = [['column' => 0, 'direction' => 'asc']];
-        return new self($definition, $this->schema, $students === null ? null : self::studentIds($students));
+        return new self($definition, $this->baseSchema, $students === null ? null : self::studentIds($students));
     }
 
     /** @param array<mixed> $students
@@ -352,6 +358,7 @@ final readonly class ReportQuery
             array_keys($this->definition["joins"] ?? []),
             array_keys($this->definition["join_filters"] ?? []),
             array_keys($this->definition['existence'] ?? []),
+            array_keys($this->definition['aliases'] ?? []),
         );
         foreach ($fields as $id) {
             $permissions = array_merge($permissions, $this->schema["fields"][$id]["permissions"]);
