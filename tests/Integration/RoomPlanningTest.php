@@ -26,7 +26,8 @@ final class RoomPlanningTest extends TestCase
             new SqlBookingRepository($f->sql),
             $f->access,
             $f->transactions,
-            $audit ?? $f->audit
+            $audit ?? $f->audit,
+            $f->clock
         );
     }
 

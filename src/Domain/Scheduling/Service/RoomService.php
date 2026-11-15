@@ -8,11 +8,14 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Scheduling\Repository\BookingRepository;
 use Domain\Scheduling\Repository\RoomRepository;
 use Domain\Scheduling\Room;
+use Domain\Scheduling\RoomTimetable;
 use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
+use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 
 final readonly class RoomService
@@ -23,6 +26,7 @@ final readonly class RoomService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private Clock $clock,
     ) {
     }
 
@@ -71,6 +75,27 @@ final readonly class RoomService
         $rows = array_slice($rows, 0, 50);
 
         return ['items' => $rows, 'next_after' => $more ? (string) $rows[49]['id'] : null];
+    }
+
+    /** @return array<string,mixed> */
+    public function week(EntityId $id, ?string $date = null): array
+    {
+        $actor = $this->access->requirePermission('sis:scheduling:manage');
+        $now = $this->clock->now();
+        $room = $this->rooms->get($id);
+        $week = new RoomTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone());
+        $rows = $this->rooms->agenda($id, new TimeSlot($week->startsAt, $week->endsAt), null, 501);
+        if (count($rows) > 500) {
+            throw new ValidationException([['field' => 'week',
+                'message' => 'This week exceeds 500 occurrences. Use the paged room agenda for a narrower window.']]);
+        }
+        $result = $week->summarize($rows);
+        if ($this->access->requirePermission('sis:scheduling:manage')->value !== $actor->value) {
+            throw new AccessDeniedException('The scheduling session changed.');
+        }
+
+        return $result + ['today' => $now->format('Y-m-d'),
+            'room' => ['id' => $id->value, 'code' => $room->code, 'capacity' => $room->capacity]];
     }
 
     private function window(TimeSlot $window): void

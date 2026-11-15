@@ -91,6 +91,7 @@ window.createWorkspaceScheduling = function (ui) {
                 button("View audit history", () => showAudit("rooms", id)),
             );
         body.append(node("p", {}, `Capacity: ${record.capacity}`), note());
+        body.append(button('Weekly timetable', () => timetable(id)));
         body.append(
             button("Edit room details", async () => {
                 const form = await flow(
@@ -216,6 +217,115 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(form, status, content, pages);
         window = formData(form, dateFields);
         await load();
+    }
+    async function timetable(id, week = null, selected = null, approvedOnly = false) {
+        const body = openDrawer('Weekly room timetable', 'SPACES & SCHEDULING');
+        const fields = [['week', 'Date in week', 'date']];
+        const form = await buildForm(fields, week ? { week } : {});
+        if (!body.isConnected) return;
+        const input = form.elements.week;
+        input.min = '1000-01-06'; input.max = '9998-12-27';
+        const heading = node('h3', { class: 'h5 private-text' });
+        const status = node('p', { role: 'status', 'aria-live': 'polite' });
+        const content = node('div');
+        const filter = node('input', { type: 'checkbox', class: 'form-check-input', id: 'timetable-approved' });
+        filter.checked = approvedOnly;
+        const filterField = node('div', { class: 'form-check my-3' }, filter,
+            node('label', { class: 'form-check-label', for: filter.id }, 'Show approved bookings only'));
+        let result = null, serial = 0, page = 0;
+        const weekButton = (label, direction) => node('button', { type: 'button', class: 'btn btn-outline-primary',
+            onclick: () => task(() => result && load(result[direction])) }, label);
+        const previous = weekButton('Previous week', 'previous');
+        const next = weekButton('Next week', 'next');
+        previous.disabled = true; next.disabled = true;
+        const today = button('This week', () => { selected = null; return load(null); });
+        const controls = node('div', { class: 'inline-actions mb-3' }, previous, today, next);
+        const dateLabel = date => new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined,
+            { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+        // Keep the server's school-local clock and explicit offset, regardless of browser timezone.
+        const clockLabel = instant => `${instant.slice(11, 16)} UTC${instant.slice(19)}`;
+        function draw(focusDay = false) {
+            if (!result || !body.isConnected) return;
+            const day = result.days.find(item => item.date === selected) || result.days[0];
+            selected = day.date;
+            const rowsById = new Map(result.items.map(item => [item.id, item]));
+            const items = day.items.map(slot => ({ ...rowsById.get(slot.id), ...slot }))
+                .filter(item => !filter.checked || item.status === 'approved');
+            page = Math.min(page, Math.max(0, Math.ceil(items.length / 20) - 1));
+            const days = node('div', { class: 'row g-2 mb-4', role: 'group', 'aria-label': 'Choose a timetable day' });
+            for (const item of result.days) {
+                const dayButton = button(dateLabel(item.date), () => { selected = item.date; page = 0; draw(true); },
+                    item.date === selected ? 'btn-primary w-100 text-start' : 'btn-outline-primary w-100 text-start');
+                dayButton.setAttribute('aria-pressed', String(item.date === selected));
+                dayButton.dataset.date = item.date;
+                dayButton.append(node('span', { class: 'd-block small mt-1' },
+                    `${item.counts.approved} approved · ${item.counts.requested} requested`));
+                days.append(node('div', { class: 'col-12 col-sm-6' }, dayButton));
+            }
+            const dayHeading = node('h4', { class: 'h6', tabindex: '-1' }, dateLabel(day.date));
+            const summary = node('p', { class: 'form-text' },
+                `${result.week} through ${result.through} · ${result.timezone}. ${result.totals.approved} approved and ${result.totals.requested} requested occurrences this week. Overnight meetings appear on each day they overlap.`);
+            const listing = items.length ? grid(['Booking', 'Status', 'Starts', 'Ends'],
+                items.slice(page * 20, (page + 1) * 20).map(item => [
+                    button(item.title, () => booking(item.booking_id,
+                        () => timetable(id, result.week, selected, filter.checked))),
+                    badge(item.status),
+                    item.continues_before ? 'Continues from an earlier day' : clockLabel(item.starts_at),
+                    item.continues_after ? 'Continues into the next day' :
+                        `${item.ends_at.slice(0, 10) !== day.date ? item.ends_at.slice(0, 10) + ' ' : ''}${clockLabel(item.ends_at)}`,
+                ]), 'Daily room timetable') : node('p', {},
+                    filter.checked ? 'No approved bookings for this day.' : 'No requested or approved bookings for this day.');
+            const older = button('Previous daily page', () => { page--; draw(true); });
+            const newer = button('Next daily page', () => { page++; draw(true); });
+            older.disabled = page === 0; newer.disabled = (page + 1) * 20 >= items.length;
+            content.replaceChildren(summary, days, dayHeading, listing,
+                node('div', { class: 'inline-actions' }, older, newer));
+            status.textContent = items.length
+                ? `${dateLabel(day.date)}: meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, items.length)} of ${items.length}.`
+                : `${dateLabel(day.date)}: no matching meetings.`;
+            if (focusDay) dayHeading.focus();
+        }
+        async function load(date) {
+            const current = ++serial;
+            result = null; previous.disabled = true; next.disabled = true;
+            content.setAttribute('aria-busy', 'true');
+            heading.textContent = ''; content.replaceChildren();
+            status.textContent = 'Loading timetable…';
+            try {
+                const fresh = await request(`/sis/rooms/${id}/week/`, 'POST', date ? { week: date } : {});
+                if (!body.isConnected || current !== serial) return;
+                result = fresh; page = 0;
+                input.value = fresh.week;
+                heading.textContent = `${fresh.room.code} · Capacity: ${fresh.room.capacity}`;
+                previous.disabled = fresh.previous < input.min;
+                next.disabled = fresh.next > input.max;
+                if (!fresh.days.some(day => day.date === selected))
+                    selected = fresh.days.some(day => day.date === fresh.today) ? fresh.today : fresh.week;
+                draw();
+            } catch (error) {
+                if (!body.isConnected || current !== serial) return;
+                status.textContent = 'Timetable unavailable. Retry or use the paged room agenda.';
+                throw error;
+            } finally {
+                if (body.isConnected && current === serial) content.removeAttribute('aria-busy');
+            }
+        }
+        form.append(node('button', { type: 'submit', class: 'btn btn-primary' }, 'View week'));
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            if (form.reportValidity()) task(() => load(input.value), form.querySelector('[type="submit"]'));
+        });
+        input.addEventListener('input', () => {
+            ++serial; result = null;
+            previous.disabled = true; next.disabled = true;
+            heading.textContent = ''; content.replaceChildren(); content.removeAttribute('aria-busy');
+            status.textContent = 'Choose View week to load these dates.';
+        });
+        filter.addEventListener('change', () => { page = 0; draw(); });
+        body.append(heading, node('p', { class: 'form-text' },
+            'Times use the institution’s timezone. Requested bookings do not reserve the room. Approval checks availability again.'),
+            button('Back to room agenda', () => room(id)), controls, form, filterField, status, content);
+        await load(week);
     }
     async function requestBooking(preset = {}) {
         const body = openDrawer("Request a space", "SPACES & SCHEDULING");
@@ -386,10 +496,11 @@ window.createWorkspaceScheduling = function (ui) {
             }, reviewButton);
         });
     }
-    async function booking(id) {
+    async function booking(id, back = null) {
         const record = await request(`/sis/bookings/${id}/`);
         const place = await request(`/sis/rooms/${record.room_id}/`);
         const body = openDrawer(record.title, "SPACE REQUEST");
+        if (back) body.append(button('Back to weekly timetable', back));
         if (can("sis:audit:read"))
             body.append(
                 button("View audit history", () => showAudit("bookings", id)),
@@ -422,7 +533,7 @@ window.createWorkspaceScheduling = function (ui) {
                             () => ({ version: record.version }),
                             async () => {
                                 await ui.refreshDirectory();
-                                await booking(id);
+                                await booking(id, back);
                             },
                             {},
                             "Approval reserves every listed occurrence. Overlapping approved bookings prevent approval.",
@@ -440,7 +551,7 @@ window.createWorkspaceScheduling = function (ui) {
                         () => ({ version: record.version }),
                         async () => {
                             await ui.refreshDirectory();
-                            await booking(id);
+                            await booking(id, back);
                         },
                         {},
                         "Cancellation applies to every occurrence, releases approved times and keeps the booking history.",

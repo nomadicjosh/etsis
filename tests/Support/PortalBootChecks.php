@@ -416,6 +416,17 @@ if ($seriesCreated->getStatusCode() !== 201
     throw new RuntimeException('The recurring booking request failed through the actual provider stack.');
 }
 
+$timetableResponse = $teachingPost($roomPath . '/week/', ['week' => '2026-08-10']);
+$timetable = json_decode((string) $timetableResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($timetableResponse->getStatusCode() !== 200 || count($timetable['days'] ?? []) !== 7
+    || ($timetable['totals'] ?? []) !== ['approved' => 0, 'requested' => 2]
+    || !str_contains($timetableResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $timetableResponse->hasHeader('phpdebugbar-id')
+    || $sis->sql->rows('sis_history_events') !== $seriesEvents
+) {
+    throw new RuntimeException('The private read-only weekly room route failed.');
+}
+
 // Employment editing, historical reads and decisions also boot through the real providers.
 $employeeResponse = $teachingPost("/sis/employees/", [
     "person_id" => $teachingStudent->personId->value,

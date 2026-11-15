@@ -54,4 +54,11 @@ final readonly class SisRoomController
             $f->optionalId('after')
         ));
     }
+
+    public function week(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+
+        return new JsonResponse($this->service->week(new EntityId($id), $f->optionalText('week', 10)));
+    }
 }

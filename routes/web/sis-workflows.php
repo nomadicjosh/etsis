@@ -900,6 +900,8 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/rooms/{id}/agenda/", [SisRoomController::class, "agenda"])
         ->name("sis.room.agenda");
+    $router->map(['POST'], '/sis/rooms/{id}/week/', [SisRoomController::class, 'week'])
+        ->name('sis.room.week');
     $router
         ->map(["POST"], "/sis/bookings/", [SisBookingController::class, "request"])
         ->name("sis.booking.request");
