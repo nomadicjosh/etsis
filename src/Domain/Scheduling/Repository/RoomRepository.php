@@ -15,4 +15,6 @@ interface RoomRepository
     public function save(Room $room): void;
     /** @return list<array<string, mixed>> */
     public function agenda(EntityId $room, TimeSlot $window, ?EntityId $after, int $limit): array;
+    /** @return list<array<string, mixed>> */
+    public function calendar(TimeSlot $window, ?EntityId $building, string $search, int $limit): array;
 }

@@ -138,8 +138,7 @@ final class SisFixture
                 if (
                     !str_contains($name, "CreateEventStoreTable") &&
                     !str_contains($name, "CreateSis") &&
-                    !str_contains($name, "AddSisOfferingSelectionPosition") &&
-                    !str_contains($name, "AddSisTimesheetWorkIndex") &&
+                    !str_contains($name, "AddSis") &&
                     !str_contains($name, "CreateCampus")
                 ) {
                     continue;

@@ -9,7 +9,7 @@ use Domain\Scheduling\Repository\BookingRepository;
 use Domain\Scheduling\Repository\BuildingRepository;
 use Domain\Scheduling\Repository\RoomRepository;
 use Domain\Scheduling\Room;
-use Domain\Scheduling\RoomTimetable;
+use Domain\Scheduling\BookingTimetable;
 use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -114,7 +114,7 @@ final readonly class RoomService
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $now = $this->clock->now();
         $room = $this->rooms->get($id);
-        $week = new RoomTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone());
+        $week = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone());
         $rows = $this->rooms->agenda($id, new TimeSlot($week->startsAt, $week->endsAt), null, 501);
         if (count($rows) > 500) {
             throw new ValidationException([['field' => 'week',

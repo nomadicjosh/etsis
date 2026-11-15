@@ -64,13 +64,52 @@ final readonly class SqlRoomRepository implements RoomRepository
 
     public function agenda(EntityId $room, TimeSlot $window, ?EntityId $after, int $limit): array
     {
+        return $this->meetings($window, $room, $after, null, '', $limit);
+    }
+
+    public function calendar(TimeSlot $window, ?EntityId $building, string $search, int $limit): array
+    {
+        return $this->meetings($window, null, null, $building, $search, $limit);
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function meetings(
+        TimeSlot $window,
+        ?EntityId $room,
+        ?EntityId $after,
+        ?EntityId $building,
+        string $search,
+        int $limit
+    ): array {
         $q = $this->sql->quote(...);
         $utc = new DateTimeZone('UTC');
         $start = $window->startsAt->setTimezone($utc)->format('Y-m-d H:i:s');
         $end = $window->endsAt->setTimezone($utc)->format('Y-m-d H:i:s');
         $cursor = '';
-        $parameters = [$room->value, 'requested', 'approved', $end, $start];
+        $parameters = ['requested', 'approved', $end, $start];
+        $filters = '';
+        if ($room !== null) {
+            $filters .= ' AND s.' . $q('room_id') . ' = ?';
+            $parameters[] = $room->value;
+        }
+        if ($building !== null) {
+            $filters .= ' AND r.' . $q('building_id') . ' = ?';
+            $parameters[] = $building->value;
+        }
+        if ($search !== '') {
+            $or = [];
+            $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
+            foreach (['b.title', 'r.code', 'r.name', 'building.code', 'building.name'] as $field) {
+                [$alias, $column] = explode('.', $field);
+                $or[] = 'LOWER(' . $alias . '.' . $q($column) . ") LIKE ? ESCAPE '!'";
+                $parameters[] = $term;
+            }
+            $filters .= ' AND (' . implode(' OR ', $or) . ')';
+        }
         if ($after !== null) {
+            if ($room === null) {
+                throw new InvalidArgumentException('An agenda cursor requires its room.');
+            }
             $slot = $this->sql->one('sis_booking_slots', ['id' => $after->value, 'room_id' => $room->value]);
             if ($slot['starts_at'] >= $end || $slot['ends_at'] <= $start) {
                 throw new InvalidArgumentException('The cursor does not belong to this window.');
@@ -81,12 +120,19 @@ final readonly class SqlRoomRepository implements RoomRepository
         }
         $rows = $this->sql->fetch(
             'SELECT s.' . $q('id') . ', s.' . $q('booking_id') . ', s.' . $q('starts_at')
-            . ', s.' . $q('ends_at') . ', b.' . $q('title') . ', b.' . $q('status') . ' FROM '
+            . ', s.' . $q('ends_at') . ', b.' . $q('title') . ', b.' . $q('status')
+            . ', s.' . $q('room_id') . ', r.' . $q('code') . ' AS ' . $q('room_code')
+            . ', r.' . $q('name') . ' AS ' . $q('room_name') . ', r.' . $q('building_id')
+            . ', building.' . $q('code') . ' AS ' . $q('building_code')
+            . ', building.' . $q('name') . ' AS ' . $q('building_name') . ' FROM '
             . $q('sis_booking_slots') . ' s JOIN ' . $q('sis_bookings') . ' b ON b.' . $q('id')
             . ' = s.' . $q('booking_id')
-            . ' WHERE s.' . $q('cancelled_at') . ' IS NULL AND s.'
-            . $q('room_id') . ' = ? AND b.' . $q('status') . ' IN (?, ?) AND s.' . $q('starts_at')
-            . ' < ? AND s.' . $q('ends_at') . ' > ?' . $cursor . ' ORDER BY s.' . $q('starts_at') . ', s.' . $q('id'),
+            . ' JOIN ' . $q('sis_rooms') . ' r ON r.' . $q('id') . ' = s.' . $q('room_id')
+            . ' LEFT JOIN ' . $q('sis_buildings') . ' building ON building.' . $q('id') . ' = r.' . $q('building_id')
+            . ' WHERE s.' . $q('cancelled_at') . ' IS NULL AND b.' . $q('status')
+            . ' IN (?, ?) AND s.' . $q('starts_at')
+            . ' < ? AND s.' . $q('ends_at') . ' > ?' . $filters . $cursor
+            . ' ORDER BY s.' . $q('starts_at') . ', s.' . $q('id'),
             $parameters,
             $limit
         );

@@ -31,13 +31,17 @@ final readonly class SisWorkspaceController
     {
         $sections = ['overview', 'people', 'registration', 'students', 'applications', 'courses', 'sections',
             'programs', 'terms',
-            'rooms', 'buildings', 'bookings', 'employees', 'timesheets', 'accounts', 'journals', 'reports', 'campaigns',
+            'rooms', 'buildings', 'bookings', 'calendar', 'employees', 'timesheets', 'accounts', 'journals',
+            'reports', 'campaigns',
             'sharedreports', 'grades', 'teaching', 'billing', 'ledger', 'institutions', 'external', 'equivalencies',
             'transcripts', 'portal', 'forms', 'imports', 'rules', 'access', 'moodle', 'apply'];
         if (!in_array($section, $sections, true)) {
             throw new InvalidArgumentException('Unknown workspace.');
         }
         $permissions = $this->service->capabilities();
+        if ($section === 'calendar' && !in_array('sis:scheduling:manage', $permissions, true)) {
+            throw new AccessDeniedException('Scheduling permission is required.');
+        }
         if ($section === 'moodle' && !in_array('sis:moodle:manage', $permissions, true)) {
             throw new AccessDeniedException('Moodle administration permission is required.');
         }

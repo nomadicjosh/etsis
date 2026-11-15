@@ -104,6 +104,53 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testBookingCalendarIndexCompilesAndCanBeRemovedAcrossSupportedDialects(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000009_AddSisBookingCalendarIndex.php';
+        foreach (['mysql' => 'MySQL', 'pgsql' => 'PostgreSQL', 'sqlite' => 'SQLite',
+            'sqlsrv' => 'SQLServer', 'oci' => 'Oracle'] as $driver => $dialect) {
+            $definitions = [];
+            $rawDrop = in_array($driver, ['sqlite', 'oci'], true);
+            $schema = $this->createMock(Schema::class);
+            $schema->expects(self::exactly($rawDrop ? 1 : 2))->method('alter')->willReturnCallback(
+                static function (string $name, callable $callback) use (&$definitions): void {
+                    self::assertSame('sis_booking_slots', $name);
+                    $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                    $callback($definition);
+                    $definitions[] = $definition;
+                }
+            );
+            $pdo = $this->createStub(PDO::class);
+            $pdo->method('getAttribute')->willReturn($driver);
+            $connection = $this->createMock(Connection::class);
+            $connection->method(\PHPUnit\Framework\MockObject\Runtime\PropertyHook::get('pdo'))->willReturn($pdo);
+            $connection->method('quoteIdentifier')->willReturnCallback(
+                static fn(string $name): string => '"' . $name . '"'
+            );
+            $connection->method('getSchema')->willReturn($schema);
+            $connection->expects($rawDrop ? self::once() : self::never())->method('command')
+                ->with('DROP INDEX "sbs_calendar_window"')->willReturn(true);
+            $migration = new AddSisBookingCalendarIndex('calendar-index');
+            $migration->setObjectMap(new ArrayObject([
+                'phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration'),
+            ]));
+            $migration->up();
+            $migration->down();
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $dialect;
+            $compiler = new $class($connection);
+            $commands = json_encode($compiler->alter($definitions[0]), JSON_THROW_ON_ERROR);
+            foreach (['sbs_calendar_window', 'cancelled_at', 'ends_at', 'starts_at'] as $column) {
+                self::assertStringContainsString($column, $commands, $dialect);
+            }
+            if (!$rawDrop) {
+                self::assertStringContainsString('DROP INDEX', json_encode(
+                    $compiler->alter($definitions[1]), JSON_THROW_ON_ERROR
+                ), $dialect);
+            }
+            self::assertDoesNotMatchRegularExpression('/DELETE FROM|UPDATE |DROP TABLE/i', $commands);
+        }
+    }
+
     public function testBookingReplacementLinksCompileWithoutRewritingEarlierFacts(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000008_CreateSisBookingReplacements.php';

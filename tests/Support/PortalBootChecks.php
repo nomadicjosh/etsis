@@ -484,6 +484,21 @@ if ($moveResponse->getStatusCode() !== 201 || $moveView->getStatusCode() !== 200
     throw new RuntimeException('The private meeting reschedule lost its connected history or CSRF boundary.');
 }
 
+// The campus calendar shares week boundaries and returns complete, private filtered results.
+$calendarContextResponse = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/calendar/context/')
+));
+$calendarResponse = $teachingPost('/sis/calendar/week/', ['week' => '2026-08-10',
+    'building_id' => $buildingId, 'search' => 'Fictional']);
+$calendarPayload = json_decode((string) $calendarResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($calendarContextResponse->getStatusCode() !== 200 || $calendarResponse->getStatusCode() !== 200
+    || count($calendarPayload['days'] ?? []) !== 7 || count($calendarPayload['items'] ?? []) !== 1
+    || ($calendarPayload['building']['id'] ?? null) !== $buildingId
+    || !str_contains($calendarResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $calendarResponse->hasHeader('phpdebugbar-id') || $sis->sql->rows('sis_history_events') !== $seriesEvents) {
+    throw new RuntimeException('The private institution booking calendar lost its read-only CSRF boundary.');
+}
+
 // Employment editing, historical reads and decisions also boot through the real providers.
 $employeeResponse = $teachingPost("/sis/employees/", [
     "person_id" => $teachingStudent->personId->value,

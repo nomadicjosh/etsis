@@ -8,8 +8,8 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Shared\Exception\ValidationException;
 
-/** A bounded room calendar read; it makes no reservation or approval decision. */
-final readonly class RoomTimetable
+/** A bounded booking calendar read; it makes no reservation or approval decision. */
+final readonly class BookingTimetable
 {
     public DateTimeImmutable $startsAt;
     public DateTimeImmutable $endsAt;
