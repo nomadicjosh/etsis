@@ -5,6 +5,7 @@ const employee = id(1), person = id(2), entry = id(3);
 
 async function setup(page, self = false, rejectFirstEdit = false) {
     const calls = [], errors = [];
+    const dates = { periods: [], version: 0, reject: false };
     let active = true, title = 'Fictional librarian', status = 'pending', version = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -26,6 +27,28 @@ async function setup(page, self = false, rejectFirstEdit = false) {
             { action: 'employee.updated', recorded_at: '2026-08-11 10:00:00', actor_id: id(9) },
         ], next_after: null };
         else if (path === `/sis/employees/${employee}/`) result = profile;
+        else if (path === `/sis/employees/${employee}/employment-dates/`) result = {
+            employee_id: employee, periods: dates.periods, version: dates.version,
+            new_id: id(200 + dates.periods.length), today: '2026-11-15', earlier_dates_unknown: true,
+        };
+        else if (path === `/sis/employees/${employee}/employment-dates/review/`) result = {
+            position_revision: 'fictional-reviewed-position-revision', positions: data.through ? [
+                { id: id(300), code: 'LIB.ASST', title: '<script>Fictional librarian</script>',
+                    action: 'Close assignment', through: data.through },
+                { id: id(301), code: 'LAB', title: 'Fictional future assignment', action: 'Void assignment', through: null },
+            ] : [],
+        };
+        else if (path === `/sis/employees/${employee}/employment-dates/confirm/`) {
+            if (dates.reject) {
+                dates.reject = false;
+                return route.fulfill({ status: 409, json: { error: 'Fictional positions changed. Review again.' } });
+            }
+            const period = { id: data.period_id, from: data.from, through: data.through, voided: data.voided };
+            const index = dates.periods.findIndex(p => p.id === period.id);
+            if (index < 0) dates.periods.push(period); else dates.periods[index] = period;
+            dates.version++;
+            result = { status: 'saved' };
+        }
         else if (path === `/sis/employees/${employee}/edit/`) {
             if (rejectFirstEdit) {
                 rejectFirstEdit = false;
@@ -65,7 +88,7 @@ async function setup(page, self = false, rejectFirstEdit = false) {
     });
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="employees"]').click();
-    return { calls, errors };
+    return { calls, errors, dates };
 }
 async function accessible(page) {
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
@@ -96,7 +119,7 @@ test('staff maintain employment and review paged time entries without leaving th
     await page.getByRole('button', { name: 'Back to employment' }).click();
     await page.getByRole('button', { name: 'Edit employment' }).click();
     await page.getByLabel('Job title').fill('Fictional archivist');
-    await page.getByLabel('Active employment').uncheck();
+    await page.getByLabel('Time submissions enabled').uncheck();
     await page.getByRole('button', { name: 'Save employment' }).click();
     expect(calls.filter(call => call.path.endsWith('/edit/'))).toHaveLength(0);
     await page.getByLabel('Reason for employment change').fill('Fictional staffing decision');
@@ -104,7 +127,7 @@ test('staff maintain employment and review paged time entries without leaving th
     await page.getByRole('button', { name: 'Save employment' }).click();
     await expect(page.getByLabel('Reason for employment change')).toHaveValue('Fictional staffing decision');
     await expect(page.getByLabel('Job title')).toHaveValue('Fictional archivist');
-    await expect(page.getByLabel('Active employment')).not.toBeChecked();
+    await expect(page.getByLabel('Time submissions enabled')).not.toBeChecked();
     await expect(page.locator('#drawer-body')).toContainText('Fictional review needed.');
     await page.getByRole('button', { name: 'Save employment' }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional archivist');
@@ -234,4 +257,70 @@ test('employment change history shares frozen paging, escaped cards and retained
     expect(errors).toEqual([]);
     expect([...calls, ...reviews].every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+
+test('hire, end and rehire share a reviewed accessible screen with retained drafts and private requests', async ({ page }) => {
+    const { calls, errors, dates } = await setup(page);
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Employment dates', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No hire or end dates have been recorded.');
+    await page.getByRole('button', { name: 'Record hire or rehire', exact: true }).click();
+    await page.getByLabel(/^Hire \/ employment start/).fill('2026-01-01');
+    await page.getByLabel(/^Reason for the employment decision/).fill('Fictional hire decision');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review employment decision', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No position assignments need to change.');
+    await page.getByRole('button', { name: 'Confirm employment decision', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Recorded employment periods' })).toContainText('Current');
+    await page.getByRole('button', { name: 'End employment', exact: true }).click();
+    await page.getByLabel('Last employment day', { exact: true }).fill('2026-11-30');
+    await page.getByLabel(/^Reason for the employment decision/).fill('Fictional employment ending');
+    await page.getByRole('button', { name: 'Review employment decision', exact: true }).click();
+    const changes = page.getByRole('table', { name: 'Position changes to confirm', exact: true });
+    await expect(changes).toContainText('Close assignment');
+    await expect(changes).toContainText('Void assignment');
+    expect(await page.locator('#drawer-body script, #drawer-body img').count()).toBe(0);
+    dates.reject = true;
+    await page.getByRole('button', { name: 'Confirm employment decision', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional positions changed. Review again.');
+    await expect(changes).toBeVisible();
+    await page.getByRole('button', { name: 'Back to dates form', exact: true }).click();
+    await expect(page.getByLabel('Last employment day', { exact: true })).toHaveValue('2026-11-30');
+    await expect(page.getByLabel(/^Reason for the employment decision/)).toHaveValue('Fictional employment ending');
+    await page.getByRole('button', { name: 'Review employment decision', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Confirm employment decision', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Recorded employment periods' })).toContainText('2026-11-30');
+    await page.getByRole('button', { name: 'Record hire or rehire', exact: true }).click();
+    await page.getByLabel(/^Hire \/ employment start/).fill('2027-02-01');
+    await page.getByLabel(/^Reason for the employment decision/).fill('Fictional rehire decision');
+    await page.getByRole('button', { name: 'Review employment decision', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm employment decision', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Recorded employment periods' }).locator('tbody tr')).toHaveCount(2);
+    expect(dates.periods).toHaveLength(2);
+    expect(calls.filter(call => call.path.endsWith('/employment-dates/confirm/')).map(call => call.data.version)).toEqual([0, 1, 1, 2]);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(errors).toEqual([]);
+    expect(calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test('employment dates ignore delayed reads after leaving the record panel', async ({ page }) => {
+    const { errors } = await setup(page);
+    let release;
+    await page.route(`**/sis/employees/${employee}/employment-dates/`, async route => {
+        await new Promise(resolve => { release = resolve; });
+        await route.fulfill({ json: { periods: [], version: 0, new_id: id(200), today: '2026-11-15' } });
+    });
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Employment dates', exact: true }).click();
+    await expect.poll(() => typeof release).toBe('function');
+    await page.getByRole('button', { name: 'Back to employment', exact: true }).click();
+    release();
+    await expect(page.locator('#drawer-body')).toContainText('Recent time entries');
+    await expect(page.getByRole('table', { name: 'Recorded employment periods' })).toHaveCount(0);
+    expect(errors).toEqual([]);
 });

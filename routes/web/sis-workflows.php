@@ -910,6 +910,13 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/employees/", [SisTimesheetController::class, "employee"])
         ->name("sis.timesheet.employee");
     $positions = \Application\Http\Controller\SisPositionController::class;
+    $dates = \Application\Http\Controller\SisEmploymentDatesController::class;
+    $router->map(['GET'], '/sis/employees/{employee}/employment-dates/', [$dates, 'get'])
+        ->name('sis.employment.dates');
+    $router->map(['POST'], '/sis/employees/{employee}/employment-dates/review/', [$dates, 'review'])
+        ->name('sis.employment.dates.review');
+    $router->map(['POST'], '/sis/employees/{employee}/employment-dates/confirm/', [$dates, 'confirm'])
+        ->name('sis.employment.dates.confirm');
     $router->map(['POST'], '/sis/employees/{employee}/positions/page/', [$positions, 'page'])
         ->name('sis.position.page');
     $router->map(['POST'], '/sis/employees/{employee}/positions/assign/', [$positions, 'assign'])

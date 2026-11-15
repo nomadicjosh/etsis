@@ -51,6 +51,17 @@ final class DefinitionRules
             self::invalid($field, 'Enter a nonnegative amount within the supported range.');
         }
     }
+    public static function reason(#[\SensitiveParameter] string $value): string
+    {
+        $value = trim($value);
+        if (
+            $value === '' || !mb_check_encoding($value, 'UTF-8') || mb_strlen($value) > 1000
+            || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $value)
+        ) {
+            self::invalid('reason', 'Enter a reason within 1,000 characters.');
+        }
+        return $value;
+    }
     public static function invalid(string $field, string $message): never
     {
         throw new ValidationException([['field' => $field, 'message' => $message]]);

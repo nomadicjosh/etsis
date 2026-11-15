@@ -669,5 +669,43 @@ foreach ([$positionGet, $positionPost, $positionPage, $positionEnd, $positionVoi
         throw new RuntimeException('Employment ownership granted HR compensation authority.');
     }
 }
+// Employment dates are owner-readable, HR-managed and keep position effects in one confirmation.
+$datesBase = '/sis/employees/' . $employeeId . '/employment-dates/';
+$datesGet = $employeeGet->withUri(new \Laminas\Diactoros\Uri($datesBase));
+$datesRead = $app->router->match($datesGet);
+if ($datesRead->getStatusCode() !== 200
+    || !str_contains($datesRead->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $datesRead->getBody(), 'phpdebugbar')) {
+    throw new RuntimeException('Employment dates lost their private owner-read boundary.');
+}
+$datesPeriod = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$datesBody = ['period_id' => $datesPeriod, 'version' => 0, 'from' => '2026-01-01',
+    'through' => null, 'voided' => false, 'reason' => 'Fictional private hire decision'];
+$datesReview = $positionPost->withUri(new \Laminas\Diactoros\Uri($datesBase . 'review/'))->withParsedBody($datesBody);
+if ($app->router->match($datesReview)->getStatusCode() !== 403) {
+    throw new RuntimeException('Ownership granted employment-date maintenance.');
+}
+$sis->access->grants = ['sis:hr:manage'];
+if ($app->router->match($datesReview->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403) {
+    throw new RuntimeException('Employment-date review bypassed CSRF.');
+}
+$datesReviewed = $app->router->match($datesReview);
+$datesPreview = json_decode((string) $datesReviewed->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($datesReviewed->getStatusCode() !== 200 || !isset($datesPreview['position_revision'])
+    || $sis->sql->rows('sis_employment_dates') !== []) {
+    throw new RuntimeException('Employment-date review wrote facts or failed to resolve its dependencies.');
+}
+$datesConfirm = $datesReview->withUri(new \Laminas\Diactoros\Uri($datesBase . 'confirm/'))
+    ->withParsedBody($datesBody + ['position_revision' => $datesPreview['position_revision']]);
+if ($app->router->match($datesConfirm->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403
+    || $app->router->match($datesConfirm)->getStatusCode() !== 200) {
+    throw new RuntimeException('Employment-date confirmation failed its private CSRF-protected provider path.');
+}
+$datesSaved = $app->router->match($datesGet);
+$datesSavedData = json_decode((string) $datesSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($datesSavedData['version'] !== 1 || count($datesSavedData['periods']) !== 1
+    || str_contains((string) $datesSaved->getBody(), 'Fictional private hire decision')) {
+    throw new RuntimeException('Employment-date confirmation failed to retain curated private facts.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

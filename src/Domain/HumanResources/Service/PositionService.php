@@ -18,6 +18,7 @@ use Domain\HumanResources\Repository\HrLibraryRepository;
 use Domain\HumanResources\Repository\PositionRepository;
 use Domain\HumanResources\ValueObject\DefinitionRules;
 use Domain\HumanResources\ValueObject\EmployeePositionId;
+use Domain\HumanResources\ValueObject\EmploymentDates;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
@@ -44,6 +45,7 @@ final readonly class PositionService
         private AuditTrail $audit,
         private Clock $clock,
         private ActorDirectory $actors,
+        private EmploymentDatesLedger $employmentDates,
     ) {
     }
     /** @return array<string,mixed> */
@@ -94,7 +96,7 @@ final readonly class PositionService
         ?int $replacedVersion = null,
     ): EntityId {
         $this->access->requirePermission('sis:hr:manage');
-        $reason = $this->reason($reason);
+        $reason = DefinitionRules::reason($reason);
         EmployeePosition::date($from, 'valid_from');
         if ($through !== null) {
             EmployeePosition::date($through, 'valid_through');
@@ -164,6 +166,7 @@ final readonly class PositionService
                 DefinitionRules::precision($definition->currency),
                 replaces: $replaces
             );
+            $this->employmentDates->requireCoverage($parent->id, $from, $through, 'valid_from');
             if (($replaces === null) !== ($replacedVersion === null)) {
                 DefinitionRules::invalid('replaces_id', 'Review the assignment being replaced.');
             }
@@ -224,6 +227,116 @@ final readonly class PositionService
     ): void {
         $this->change($employee, $id, $version, null, $voided, $reason);
     }
+
+    /** Internal proposal for the HR dates workflow; current compensation values are not returned.
+     * @return array{revision:string,changes:list<array{id:string,code:string,title:string,action:string,through:?string}>}
+     */
+    public function employmentImpact(
+        EntityId $employee,
+        EmploymentDates $before,
+        EmploymentDates $after
+    ): array {
+        $actor = $this->access->requirePermission('sis:hr:manage');
+        $profile = $this->employment->employeeProfile($employee);
+        $plan = $this->dateImpact($employee, $before, $after);
+        $this->finishRead($profile->employee, $actor);
+        return $plan;
+    }
+
+    /** Called inside the dates service's employee transaction; joined writes cannot partially commit. */
+    public function applyEmploymentDates(
+        EntityId $employee,
+        EmploymentDates $before,
+        EmploymentDates $after,
+        string $reviewedRevision,
+        EntityId $operation,
+        #[\SensitiveParameter] string $reason
+    ): void {
+        $this->employment->maintainEmployee($employee, function (
+            Employee $parent,
+            EntityId $actor
+        ) use (
+            $before,
+            $after,
+            $reviewedRevision,
+            $operation,
+            $reason
+        ): void {
+            $plan = $this->dateImpact($parent->id, $before, $after);
+            if (!hash_equals($plan['revision'], $reviewedRevision)) {
+                throw new ConcurrentModificationException('Positions changed. Review the employment dates again.');
+            }
+            foreach ($plan['changes'] as $change) {
+                $id = new EntityId($change['id']);
+                $this->rows->lock($id);
+                $current = $this->rows->find($id) ?? throw new CorruptHistoryException();
+                $this->owns($current, $parent->id);
+                $root = $this->load($id)['root'];
+                $this->verify($root, $current);
+                if ($root->playhead() >= self::MAX_EVENTS) {
+                    throw new HistoryReadLimitException();
+                }
+                $next = $change['action'] === 'Close assignment' ? $current->changeEnd($change['through'])
+                    : $current->changeVoid(true);
+                $intent = EmploymentLedger::intent(['employment-dates', $operation->value, $next->facts()]);
+                $this->record(
+                    $root,
+                    $next,
+                    DerivedIdentity::from($operation, 'position:' . $id->value),
+                    $actor,
+                    $intent,
+                    $change['action'] === 'Close assignment' ? 'end_changed' : 'void_changed',
+                    $reason
+                );
+            }
+        });
+    }
+
+    /** @return array{revision:string,changes:list<array{id:string,code:string,title:string,action:string,through:?string}>} */
+    private function dateImpact(
+        EntityId $employee,
+        EmploymentDates $before,
+        EmploymentDates $after
+    ): array {
+        if ($employee->value !== $before->employee->value || $employee->value !== $after->employee->value) {
+            throw new AccessDeniedException('Another employment timeline.');
+        }
+        $cursor = null;
+        $seen = [];
+        $changes = [];
+        $versions = [];
+        $events = 0;
+        $starts = [...array_column($before->periods, 'from'), ...array_column($after->periods, 'from')];
+        $first = $starts === [] ? null : min($starts);
+        do {
+            $page = $this->rows->page($employee, $cursor);
+            foreach (array_slice($page, 0, 20) as $row) {
+                $this->owns($row, $employee);
+                if (isset($seen[$row->id->value]) || count($seen) >= 500) {
+                    throw new HistoryReadLimitException();
+                }
+                $seen[$row->id->value] = true;
+                $versions[] = [$row->id->value, $row->version];
+                // Earlier, already-ended assignments remain unknown rather than becoming new HR assertions.
+                if (
+                    $row->voided || $after->covers($row->from, $row->through)
+                    || ($row->through !== null && $first !== null && $row->through < $first)
+                ) {
+                    continue;
+                }
+                $period = $after->at($row->from);
+                $changes[] = ['id' => $row->id->value, 'code' => $row->job['code'], 'title' => $row->job['title'],
+                    'action' => $period === null ? 'Void assignment' : 'Close assignment',
+                    'through' => $period['through'] ?? null];
+                $events += $row->version;
+                if (count($changes) > 50 || $events > 5000) {
+                    throw new HistoryReadLimitException();
+                }
+            }
+            $cursor = count($page) > 20 ? $page[19]->id : null;
+        } while ($cursor !== null);
+        return ['revision' => EmploymentLedger::intent($versions), 'changes' => $changes];
+    }
     private function change(
         EntityId $employee,
         EntityId $id,
@@ -233,7 +346,7 @@ final readonly class PositionService
         #[\SensitiveParameter] string $reason
     ): void {
         $this->access->requirePermission('sis:hr:manage');
-        $reason = $this->reason($reason);
+        $reason = DefinitionRules::reason($reason);
         $action = $voided === null ? 'end_changed' : 'void_changed';
         $intent = EmploymentLedger::intent([
             $action, $employee->value, $id->value, $version, $through, $voided, $reason,
@@ -272,6 +385,9 @@ final readonly class PositionService
                 throw new HistoryReadLimitException();
             }
             $next = $voided === null ? $current->changeEnd($through) : $current->changeVoid($voided);
+            if (!$next->voided) {
+                $this->employmentDates->requireCoverage($parent->id, $next->from, $next->through, 'valid_through');
+            }
             $this->record($loaded['root'], $next, $operation, $actor, $intent, $action, $reason);
         });
     }
@@ -385,17 +501,6 @@ final readonly class PositionService
     private function operation(EntityId $id, EntityId $actor, string $intent): EntityId
     {
         return DerivedIdentity::from($id, 'employment.position:' . $actor->value . ':' . $intent);
-    }
-    private function reason(#[\SensitiveParameter] string $reason): string
-    {
-        $reason = trim($reason);
-        if (
-            $reason === '' || !mb_check_encoding($reason, 'UTF-8') || mb_strlen($reason) > 1000
-            || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $reason)
-        ) {
-            DefinitionRules::invalid('reason', 'Enter a reason of up to 1,000 characters.');
-        }
-        return $reason;
     }
     /** @return array<string,mixed> */
     private function summary(EmployeePosition $p): array

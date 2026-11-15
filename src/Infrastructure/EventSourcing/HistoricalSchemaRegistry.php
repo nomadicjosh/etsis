@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class => [
+                'type' => 'employment_lifecycle', 'root' => \Domain\HumanResources\EmploymentTimeline::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'period_id', 'facts', 'intent'],
+            ],
             \Domain\HumanResources\Event\EmployeePositionWasRecorded::class => [
                 'type' => 'employment_position', 'root' => \Domain\HumanResources\PositionHistory::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent'],
@@ -434,6 +438,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class) {
+                \Domain\HumanResources\EmploymentTimeline::validate($payload);
+                if ($payload['facts']['employee_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\HumanResources\Event\EmployeePositionWasRecorded::class) {
                 \Domain\HumanResources\PositionHistory::validate($payload);
                 if ($payload['facts']['id'] !== (string) $stream->aggregateId) {
@@ -726,6 +736,7 @@ final readonly class HistoricalSchemaRegistry
                 if (str_ends_with((string) $name, "_id")) {
                     if (
                         in_array($class, [\Domain\Person\Event\PersonProfileWasRecorded::class,
+                            \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class,
                             \Domain\HumanResources\Event\EmployeePositionWasRecorded::class,
                             \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class], true) &&
                         $name === 'previous_operation_id' && $value === null
@@ -952,6 +963,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $type = match ($id->aggregateClassName()) {
             \Domain\HumanResources\PositionHistory::class => 'employment_position',
+            \Domain\HumanResources\EmploymentTimeline::class => 'employment_lifecycle',
             \Domain\HumanResources\EmploymentHistory::class => 'employment_profile',
             \Domain\Person\ProfileHistory::class => 'person_profile',
             \Domain\AcademicRecord\WorkPursuit::class => 'work_pursuit',
@@ -990,6 +1002,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $aggregateId = match ($type) {
             'employment_position' => new \Domain\HumanResources\ValueObject\EmployeePositionId($id),
+            'employment_lifecycle' => new \Domain\HumanResources\ValueObject\EmploymentTimelineId($id),
             'person_profile' => new \Domain\Person\ValueObject\PersonProfileId($id),
             'employment_profile' => new \Domain\HumanResources\ValueObject\EmploymentProfileId($id),
             'work_pursuit' => new \Domain\AcademicRecord\ValueObject\WorkPursuitId($id),

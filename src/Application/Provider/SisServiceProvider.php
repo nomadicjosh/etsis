@@ -17,6 +17,8 @@ final class SisServiceProvider extends CodefyServiceProvider
         $bindings = [
             \Domain\HumanResources\Repository\PositionRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPositionRepository::class,
+            \Domain\HumanResources\Repository\EmploymentDatesRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlEmploymentDatesRepository::class,
             \Domain\HumanResources\Repository\HrLibraryRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlHrLibraryRepository::class,
             \Domain\Person\Repository\AddressBookRepository::class =>

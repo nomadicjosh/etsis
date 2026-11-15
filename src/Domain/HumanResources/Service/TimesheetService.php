@@ -40,6 +40,7 @@ final readonly class TimesheetService
         private ProfileLedger $peopleHistory,
         private Clock $clock,
         private ActorDirectory $actors,
+        private EmploymentDatesLedger $employmentDates,
     ) {
     }
 
@@ -140,14 +141,7 @@ final readonly class TimesheetService
         #[\SensitiveParameter] string $reason
     ): void {
         $actor = $this->access->requirePermission('sis:hr:manage');
-        $reason = trim($reason);
-        if (
-            $reason === '' || !mb_check_encoding($reason, 'UTF-8') || mb_strlen($reason) > 1000
-            || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $reason)
-        ) {
-            throw new ValidationException([['field' => 'reason',
-                'message' => 'Enter a reason within 1,000 characters.']]);
-        }
+        $reason = \Domain\HumanResources\ValueObject\DefinitionRules::reason($reason);
         $initial = $this->repository->employee($id);
         $next = new Employee($id, $initial->personId, trim($jobTitle), $active);
         $intent = EmploymentLedger::intent(['edit', EmploymentFacts::of($next),
@@ -302,6 +296,13 @@ final readonly class TimesheetService
             $person = $this->admissions->person($this->repository->employeePerson($employee));
             $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
             $this->employeeProfile($employee);
+            $zone = $this->clock->now()->getTimezone();
+            $this->employmentDates->requireCoverage(
+                $employee,
+                $entry->work->startsAt->setTimezone($zone)->format('Y-m-d'),
+                $entry->work->endsAt->modify('-1 microsecond')->setTimezone($zone)->format('Y-m-d'),
+                'starts_at'
+            );
             $this->repository->add($entry);
             $this->audit->record($actor, 'timesheet.submitted', $entry->id);
             $this->authorizeRead($this->repository->employee($employee), $actor);
@@ -321,6 +322,15 @@ final readonly class TimesheetService
                 throw new ConcurrentModificationException('Reload the time entry before deciding.');
             }
             $person = $this->employeeProfile($entry->employeeId)->person;
+            if ($approve) {
+                $zone = $this->clock->now()->getTimezone();
+                $this->employmentDates->requireCoverage(
+                    $entry->employeeId,
+                    $entry->work->startsAt->setTimezone($zone)->format('Y-m-d'),
+                    $entry->work->endsAt->modify('-1 microsecond')->setTimezone($zone)->format('Y-m-d'),
+                    'starts_at'
+                );
+            }
             $this->repository->save($entry->decide($approve, $actor, $person->ownerUserId), $entry->version);
             $this->audit->record($actor, $approve ? 'timesheet.approved' : 'timesheet.rejected', $id);
             if ($this->access->requirePermission('sis:hr:manage')->value !== $actor->value) {

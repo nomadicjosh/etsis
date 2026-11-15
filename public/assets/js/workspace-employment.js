@@ -46,6 +46,7 @@ window.createWorkspaceEmployment = function (ui) {
     async function employee(id) {
         const record = await request(`/sis/employees/${id}/`);
         const body = openDrawer(name(record), "EMPLOYMENT & TIME");
+        body.append(button('Employment dates', () => employmentDates(id)));
         if (can("sis:audit:read"))
             body.append(
                 button("View audit history", () => showAudit("employees", id)),
@@ -55,7 +56,7 @@ window.createWorkspaceEmployment = function (ui) {
         if (can("sis:hr:manage")) body.append(button("Position assignments", () => ui.positions().page(id)));
         body.append(
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
-            badge(record.active ? "Active" : "Inactive"),
+            badge(record.active ? "Time submissions enabled" : "Time submissions paused"),
         );
         body.append(
             node(
@@ -79,7 +80,7 @@ window.createWorkspaceEmployment = function (ui) {
                     "Save employment",
                     [
                         ["job_title", "Job title"],
-                        ["active", "Active employment", "checkbox"],
+                        ["active", "Time submissions enabled", "checkbox"],
                         ["reason", "Reason for employment change", "textarea"],
                     ],
                     `/sis/employees/${id}/edit/`,
@@ -101,7 +102,7 @@ window.createWorkspaceEmployment = function (ui) {
                 node(
                     "p",
                     { class: "form-text" },
-                    "Reactivate employment before submitting new time.",
+                    "Enable time submissions before entering more time. Recorded employment dates also apply.",
                 ),
             );
         body.append(
@@ -171,6 +172,74 @@ window.createWorkspaceEmployment = function (ui) {
             );
         }
         await load();
+    }
+
+    async function employmentDates(id) {
+        const body = openDrawer('Employment dates', 'HIRE, REHIRE & END DATES');
+        body.append(button('Back to employment', () => employee(id)));
+        const data = await request(`/sis/employees/${id}/employment-dates/`);
+        if (!body.isConnected) return;
+        body.append(node('p', { class: 'form-text' },
+            'Recorded periods use inclusive last employment days. Earlier dates remain unknown until HR records them. Person sign-in and student records have separate controls.'));
+        const rows = [...data.periods].sort((a, b) => b.from.localeCompare(a.from)).map(period => {
+            const status = period.voided ? 'Voided' : period.from > data.today ? 'Scheduled'
+                : period.through && period.through < data.today ? 'Ended' : 'Current';
+            const actions = node('div', { class: 'inline-actions' });
+            if (can('sis:hr:manage')) {
+                actions.append(button('Review employment dates', () => editEmploymentDates(id, data, period)));
+                if (!period.voided && !period.through && period.from <= data.today) actions.append(
+                    button('End employment', () => editEmploymentDates(id, data, { ...period, through: data.today })));
+            } else actions.append('Read only');
+            return [period.from, period.through || 'Open ended', badge(status), actions];
+        });
+        body.append(rows.length ? grid(['Hire / start', 'Last employment day', 'Status', 'Action'], rows, 'Recorded employment periods')
+            : node('p', {}, 'No hire or end dates have been recorded. The existing time-submission flag still applies.'));
+        if (can('sis:hr:manage')) body.append(button('Record hire or rehire', () => editEmploymentDates(id, data), 'btn-primary'));
+    }
+
+    async function editEmploymentDates(id, current, period = null) {
+        const body = openDrawer(period ? 'Review employment dates' : 'Record hire or rehire', 'HUMAN RESOURCES');
+        body.append(button('Back to employment dates', () => employmentDates(id)), node('p', { class: 'form-text' },
+            'Review the effect on positions before saving. Ending employment closes agreements on the last employment day; later scheduled agreements are marked void. Earlier time entries remain for HR review. Reopening dates does not restore positions automatically.'));
+        const fields = [['from', 'Hire / employment start', 'date'], ['through', 'Last employment day', 'date', '', false],
+            ...(period ? [['voided', 'Mark this employment period incorrect', 'checkbox', '', false]] : []),
+            ['reason', 'Reason for the employment decision', 'textarea']];
+        const form = await buildForm(fields, period || { from: current.today });
+        form.elements.namedItem('reason').maxLength = 1000;
+        if (!body.isConnected) return;
+        const submit = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review employment decision');
+        form.append(submit);
+        const confirmation = node('div', { hidden: true });
+        body.append(form, confirmation);
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const entered = formData(form, fields);
+                const payload = { ...entered, through: entered.through || null, voided: entered.voided ?? false,
+                    period_id: period?.id ?? current.new_id, version: current.version };
+                const review = await request(`/sis/employees/${id}/employment-dates/review/`, 'POST', payload);
+                if (!body.isConnected) return;
+                const changes = review.positions.map(position => [position.code, position.title, position.action,
+                    position.through || 'Not applicable']);
+                confirmation.replaceChildren(node('h3', { class: 'h5' }, 'Review employment decision'),
+                    node('p', {}, `${payload.from} through ${payload.through || 'open ended'}${payload.voided ? ' · Marked incorrect' : ''}`),
+                    node('p', { class: 'private-text' }, `Reason: ${payload.reason}`),
+                    changes.length ? grid(['Job', 'Title', 'Decision', 'Through'], changes, 'Position changes to confirm')
+                        : node('p', {}, 'No position assignments need to change.'),
+                    node('p', { class: 'form-text' }, 'These dates and listed position changes save together. Existing time, person, student and account records remain intact.'),
+                    button('Back to dates form', () => { confirmation.hidden = true; form.hidden = false; submit.focus(); }),
+                    button('Confirm employment decision', async () => {
+                        await request(`/sis/employees/${id}/employment-dates/confirm/`, 'POST',
+                            { ...payload, position_revision: review.position_revision });
+                        if (!body.isConnected) return;
+                        notify('Employment dates and position changes recorded.');
+                        await employmentDates(id);
+                    }, 'btn-primary'));
+                form.hidden = true; confirmation.hidden = false;
+                confirmation.querySelector('button').focus();
+            }, submit);
+        });
     }
     async function history(record) {
         const id = record.id;
