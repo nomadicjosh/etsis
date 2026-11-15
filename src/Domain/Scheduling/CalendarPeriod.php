@@ -54,6 +54,12 @@ final readonly class CalendarPeriod
         $this->days = $days;
     }
 
+    /** @return non-empty-list<TimeSlot> */
+    public function dayIntervals(): array
+    {
+        return $this->days;
+    }
+
     /**
      * @param list<array<string,mixed>> $rows
      * @param non-empty-list<string> $statuses
@@ -90,7 +96,9 @@ final readonly class CalendarPeriod
                         'continues_before' => $startAt < $day, 'continues_after' => $endAt > $end];
                 }
             }
-            $days[] = ['date' => $day->format('Y-m-d'), 'counts' => $counts, 'items' => $items];
+            $days[] = ['date' => $day->format('Y-m-d'),
+                'starts_at' => $day->format(DATE_ATOM), 'ends_at' => $end->format(DATE_ATOM),
+                'counts' => $counts, 'items' => $items];
         }
         // Navigate in UTC civil dates: local midnight shifts must not shift later dates or months.
         $first = new DateTimeImmutable($this->startsAt->format('Y-m-d'), new DateTimeZone('UTC'));

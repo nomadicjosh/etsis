@@ -284,4 +284,91 @@ final class AcademicTimetableTest extends TestCase
         $this->expectException(ValidationException::class);
         $school->service()->timetable($school->sis->term);
     }
+
+    public function testOverlapAdviceUsesOnlyOwnedPublishedClassesAndAppendsNoDecisions(): void
+    {
+        $school = new AcademicTimetableFixture();
+        $f = $school->sis;
+        $another = $school->addSection();
+        $sameClass = $school->bookings->request(
+            null,
+            'Private duplicate modality',
+            [$this->time()],
+            section: $school->section->id
+        );
+        $school->bookings->approve($sameClass->id, 0);
+        $physical = $school->bookings->request(
+            $f->room('Fictional.101', 40),
+            'Private physical purpose',
+            [$this->time()],
+            section: $school->section->id
+        );
+        $school->bookings->approve($physical->id, 0);
+        $other = $school->bookings->request(null, 'Private teaching purpose', [
+            $this->time('2026-08-10T10:30:00-07:00', '2026-08-10T11:30:00-07:00'),
+        ], section: $another->id);
+        $school->bookings->approve($other->id, 0);
+        $school->publish();
+        // Approved working requests alone cannot become an academic overlap warning.
+        self::assertSame(0, $school->service()->timetable($f->term)['overlaps']['pairs']);
+        $school->publish($another->id);
+        $events = $f->sql->rows('sis_history_events');
+        $bookings = $f->sql->rows('sis_bookings');
+        $f->access->staff = false;
+        $f->access->grants = [];
+        $result = $school->service()->timetable($f->term);
+        self::assertSame(['pairs' => 2, 'meetings' => 3, 'sections' => 2], $result['overlaps']);
+        self::assertSame([1, 1, 2], array_column($result['items'], 'overlap_count'));
+        self::assertSame($result['overlaps'], $result['days'][0]['overlaps']);
+        self::assertSame('2026-08-10T00:00:00-07:00', $result['days'][0]['starts_at']);
+        self::assertSame('2026-08-11T00:00:00-07:00', $result['days'][0]['ends_at']);
+        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        self::assertSame($bookings, $f->sql->rows('sis_bookings'));
+        self::assertStringNotContainsString('Private', json_encode($result, JSON_THROW_ON_ERROR));
+        $f->access->staff = true;
+        $school->bookings->cancel($other->id, 1);
+        self::assertSame(2, $school->service()->timetable($f->term)['overlaps']['pairs']);
+        $school->publish($another->id);
+        self::assertSame(0, $school->service()->timetable($f->term)['overlaps']['pairs']);
+    }
+
+    public function testOverlapAdviceDoesNotRevealAnotherInstructorsPublishedTimes(): void
+    {
+        $school = new AcademicTimetableFixture();
+        $another = $school->addSection();
+        foreach ([$school->section->id, $another->id] as $section) {
+            $booking = $school->bookings->request(null, 'Private fictional class', [$this->time()], section: $section);
+            $school->bookings->approve($booking->id, 0);
+            $school->publish($section);
+        }
+        $f = $school->sis;
+        $f->sql->update('sis_sections', ['faculty_user_id' => $f->user()->value], ['id' => $another->id->value]);
+        $result = $school->service()->timetable($f->term);
+        self::assertCount(1, $result['items']);
+        self::assertSame(0, $result['overlaps']['pairs']);
+        self::assertSame(0, $result['items'][0]['overlap_count']);
+        self::assertSame(1, count($result['classes']));
+    }
+
+    public function testDailyOverlapCountsExcludeAnOvernightContinuationAfterItsOverlapEnds(): void
+    {
+        $school = new AcademicTimetableFixture();
+        $another = $school->addSection();
+        $a = $school->bookings->request(null, 'Private overnight session', [
+            $this->time('2026-08-10T23:00:00-07:00', '2026-08-11T02:00:00-07:00'),
+        ], section: $school->section->id);
+        $b = $school->bookings->request(null, 'Private evening session', [
+            $this->time('2026-08-10T22:30:00-07:00', '2026-08-10T23:30:00-07:00'),
+        ], section: $another->id);
+        $school->bookings->approve($a->id, 0);
+        $school->bookings->approve($b->id, 0);
+        $school->publish();
+        $school->publish($another->id);
+        $result = $school->service()->timetable($school->sis->term);
+        self::assertSame(1, $result['overlaps']['pairs']);
+        self::assertSame(1, $result['days'][0]['overlaps']['pairs']);
+        self::assertSame(0, $result['days'][1]['overlaps']['pairs']);
+        self::assertSame(0, $result['days'][1]['items'][0]['overlap_count']);
+        self::assertTrue($result['days'][1]['items'][0]['continues_before']);
+    }
 }

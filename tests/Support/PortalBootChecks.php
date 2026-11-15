@@ -3596,6 +3596,9 @@ $timetableResponse = $teachingPost('/portal/api/timetable/view/', ['term_id' => 
 $timetableData = json_decode((string) $timetableResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 $timetableTerms = $teachingPost('/portal/api/timetable/terms/', ['search' => '']);
 if ($timetableResponse->getStatusCode() !== 200 || count($timetableData['items'] ?? []) !== 2
+    || ($timetableData['overlaps'] ?? null) !== ['pairs' => 0, 'meetings' => 0, 'sections' => 0]
+    || !isset($timetableData['days'][0]['starts_at'], $timetableData['days'][0]['ends_at'])
+    || !array_key_exists('overlap_count', $timetableData['items'][0] ?? [])
     || $timetableTerms->getStatusCode() !== 200 || $timetableResponse->hasHeader('phpdebugbar-id')
     || !str_contains($timetableResponse->getHeaderLine('Cache-Control'), 'no-store')
     || str_contains((string) $timetableResponse->getBody(), 'Fictional revised timetable')

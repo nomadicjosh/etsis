@@ -1275,6 +1275,14 @@
 .academic-timetable-weekday, .academic-timetable-spacer { display: none; }
 .academic-timetable-class { padding: .75rem 0; border-bottom: 1px solid var(--campus-line, #d8e1e9); overflow-wrap: anywhere; }
 .academic-timetable .btn[aria-pressed="true"] { background: var(--campus-primary, #154b7d); color: #fff; }
+.academic-overlap-summary, .academic-overlap-details {
+    border: 1px solid #a17c35;
+    border-radius: .75rem;
+    padding: 1rem;
+    background: #fffaf0;
+    color: #3e321e;
+}
+.academic-overlap-note { margin-top: .25rem; font-weight: 600; color: #6a4b0f; }
 @media (min-width: 576px) {
     .academic-timetable-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }

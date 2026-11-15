@@ -9,6 +9,7 @@ use Domain\Registration\Service\PublishedSectionMeetingPlanReader;
 use Domain\Registration\ValueObject\SectionMeetingPlanDefinition;
 use Domain\Scheduling\CalendarPeriod;
 use Domain\Scheduling\Repository\AcademicTimetableRepository;
+use Domain\Scheduling\TimetableOverlapReview;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -113,7 +114,19 @@ final readonly class AcademicTimetableService
                 }
             }
         }
-        // Membership, assignment and publication changes cannot turn a partially stale read into a personal timetable.
+        usort($rows, static fn(array $a, array $b): int => [$a['starts_at'], $a['id']] <=> [$b['starts_at'], $b['id']]);
+        $overlaps = new TimetableOverlapReview($period, $rows);
+        $result = $period->summarize($overlaps->items, ['published']);
+        foreach ($result['days'] as &$day) {
+            $review = $overlaps->days[$day['date']];
+            $day['overlaps'] = $review['summary'];
+            foreach ($day['items'] as &$item) {
+                $item['overlap_count'] = $review['counts'][$item['id']] ?? 0;
+            }
+            unset($item);
+        }
+        unset($day);
+        // Recheck after deriving the review, before any personal result leaves this workflow.
         if (
             $source !== $this->repository->sections($owner, $term)
             || $selected !== $this->repository->term($owner, $term)
@@ -123,8 +136,7 @@ final readonly class AcademicTimetableService
             );
         }
         $this->owner($owner);
-        usort($rows, static fn(array $a, array $b): int => [$a['starts_at'], $a['id']] <=> [$b['starts_at'], $b['id']]);
-        return $period->summarize($rows, ['published']) + ['today' => $now->format('Y-m-d'),
+        return $result + ['overlaps' => $overlaps->summary, 'today' => $now->format('Y-m-d'),
             'term' => $selected, 'classes' => $classes];
     }
 

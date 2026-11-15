@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 
-async function fixture(page, { empty = false, theme = 'campus-harbor' } = {}) {
+async function fixture(page, { empty = false, theme = 'campus-harbor', overlaps = false } = {}) {
     const state = { calls: [], errors: [], delay: false, release: null };
     const term = { id: id(1), code: '26/FA', starts_on: '2026-08-03', ends_on: '2026-12-18' };
     const other = { id: id(2), code: '27/SP', starts_on: '2027-01-04', ends_on: '2027-05-19' };
@@ -20,24 +20,35 @@ async function fixture(page, { empty = false, theme = 'campus-harbor' } = {}) {
         const items = data.term_id === term.id && ['2026-08-01', '2026-08-10'].includes(from)
             ? Array.from({ length: 21 }, (_, n) => ({ id: id(100 + n), section_id: id(4), section_code: 'MATH.101.26FA.A',
                 course_code: 'MATH.101', title: 'Fictional <img src=x onerror=alert(1)> course', status: 'published',
-                learning: true, teaching: true, starts_at: '2026-08-10T10:00:00-07:00', ends_at: '2026-08-10T11:00:00-07:00',
+                learning: true, teaching: true, starts_at: overlaps ? '2026-08-10T10:30:00-07:00' : '2026-08-10T10:00:00-07:00',
+                ends_at: overlaps ? '2026-08-10T11:30:00-07:00' : '2026-08-10T11:00:00-07:00', overlap_count: overlaps ? 1 : 0,
                 room_code: n % 2 ? 'LIB.101' : null, room_name: n % 2 ? 'Fictional lecture room' : null,
                 building_code: n % 2 ? 'LIB' : null, building_name: n % 2 ? 'Fictional library' : null })) : [];
+        if (overlaps && items.length) items.unshift({ ...items[0], id: id(999), section_id: id(8),
+            section_code: 'ENG.201.26FA.B', course_code: 'ENG.201', title: 'Fictional writing seminar',
+            teaching: false, starts_at: '2026-08-10T10:00:00-07:00', ends_at: '2026-08-10T11:00:00-07:00', overlap_count: 21 });
+        const summary = count => ({ pairs: count ? 21 : 0, meetings: count ? 22 : 0, sections: count ? 2 : 0 });
         const days = Array.from({ length }, (_, n) => {
             const date = new Date(day); date.setUTCDate(date.getUTCDate() + n);
             const code = date.toISOString().slice(0, 10);
             const daily = code === '2026-08-10' ? items : [];
-            return { date: code, counts: { published: daily.length }, items: daily.map(item => ({ id: item.id,
-                continues_before: false, continues_after: false })) };
+            const tomorrow = new Date(date); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+            return { date: code, starts_at: `${code}T00:00:00-07:00`, ends_at: `${tomorrow.toISOString().slice(0, 10)}T00:00:00-07:00`,
+                counts: { published: daily.length }, overlaps: summary(overlaps && daily.length),
+                items: daily.map(item => ({ id: item.id, overlap_count: item.overlap_count,
+                    continues_before: false, continues_after: false })) };
         });
         return { from, through: days.at(-1).date, next: next.toISOString().slice(0, 10), previous: previous.toISOString().slice(0, 10),
             view, timezone: 'America/Los_Angeles', today: '2026-08-10', term: data.term_id === other.id ? other : term,
-            items, days, totals: { published: items.length }, classes: [{ id: id(4), code: 'MATH.101.26FA.A',
+            items, days, overlaps: summary(overlaps && items.length), totals: { published: items.length },
+            classes: data.term_id === other.id ? [{ id: id(70), code: 'SP.2027.SEMINAR', title: 'Future seminar',
+                learning: true, teaching: false, schedule_status: 'unpublished' }] : [{ id: id(4), code: 'MATH.101.26FA.A',
                 course_code: 'MATH.101', title: 'Fictional course', learning: true, teaching: true, schedule_status: 'published' },
                 { id: id(5), code: 'Fictional asynchronous class', title: 'Independent research', learning: true,
                     teaching: false, schedule_status: 'unscheduled' },
                 { id: id(6), code: 'Fictional unannounced class', title: 'Seminar', learning: false,
-                    teaching: true, schedule_status: 'unpublished' }] };
+                    teaching: true, schedule_status: 'unpublished' }, ...(overlaps ? [{ id: id(8), code: 'ENG.201.26FA.B',
+                    title: 'Fictional writing seminar', learning: true, teaching: false, schedule_status: 'published' }] : [])] };
     };
     page.on('pageerror', error => state.errors.push(error.message));
     await page.route('**/portal/api/**', async route => {
@@ -71,6 +82,9 @@ test(`personal timetable pages accessible hybrid meetings in ${theme} without ov
     await expect(content).toContainText('Learning & teaching');
     await expect(content).toContainText('Published without scheduled meetings');
     await expect(content).toContainText('Meeting times have not been published yet');
+    await expect(page.getByRole('region', { name: 'Schedule overlap review', exact: true }))
+        .toContainText('No overlaps between different sections');
+    await expect(page.getByRole('button', { name: 'Review possible overlaps', exact: true })).toHaveCount(0);
     await expect(content.locator('img')).toHaveCount(0);
     await page.getByRole('button', { name: 'Next meetings', exact: true }).click();
     await expect(content.locator('tbody tr')).toHaveCount(1);
@@ -118,4 +132,60 @@ test('an account without classes sees a useful empty state in each portal theme'
         expect(state.calls.map(call => call.path)).toEqual(['/portal/api/timetable/context/']);
         expect(state.errors).toEqual([]);
     }
+});
+
+for (const theme of ['campus-harbor', 'campus-quad', 'campus-horizon']) {
+test(`owner compares overlaps inline with accessible keyboard paging in ${theme}`, async ({ page }) => {
+    const state = await fixture(page, { theme, overlaps: true });
+    const calls = state.calls.length;
+    const summary = page.getByRole('region', { name: 'Schedule overlap review', exact: true });
+    await expect(summary).toContainText('21 possible overlaps to review');
+    await expect(summary).toContainText('Other terms and unpublished class times are outside this review');
+    await page.getByRole('button', { name: 'Review possible overlaps', exact: true }).click();
+    await expect(page.getByLabel('Show overlapping meetings only', { exact: true })).toBeChecked();
+    const daily = page.getByRole('region', { name: 'Daily class meetings', exact: true });
+    await expect(daily.getByRole('heading', { level: 3 })).toBeFocused();
+    const target = page.getByRole('button', { name: 'Review 21 overlaps', exact: true });
+    await target.focus();
+    await page.keyboard.press('Enter');
+    const panel = page.getByRole('region', { name: 'Selected meeting overlap details', exact: true });
+    await expect(panel.getByRole('heading', { name: 'Overlaps for ENG.201.26FA.B', exact: true })).toBeFocused();
+    await expect(panel.locator('tbody tr')).toHaveCount(20);
+    await expect(panel).toContainText('30 minutes');
+    await expect(panel).toContainText('Online · No room');
+    await expect(panel.locator('img')).toHaveCount(0);
+    const accessibility = await new AxeBuilder({ page }).include('.campus-student-main').analyze();
+    expect(accessibility.violations).toEqual([]);
+    await page.setViewportSize({ width: 320, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await panel.getByRole('button', { name: 'Next comparisons', exact: true }).click();
+    await expect(panel.locator('tbody tr')).toHaveCount(1);
+    await expect(panel).toContainText('Comparisons 21–21 of 21');
+    await panel.getByRole('button', { name: 'Back to meetings', exact: true }).click();
+    await expect(target).toBeFocused();
+    await expect(panel).toHaveCount(0);
+    const tuesday = page.getByRole('button', { name: /Tuesday, Aug 11, 2026:/ });
+    await tuesday.focus();
+    await page.keyboard.press('Enter');
+    await expect(daily.getByRole('heading', { level: 3 })).toBeFocused();
+    await expect(daily).toContainText('No overlapping class meetings for this day');
+    expect(state.calls).toHaveLength(calls);
+    expect(state.errors).toEqual([]);
+});
+}
+
+test('a delayed period cannot restore an old overlap review after switching terms', async ({ page }) => {
+    const state = await fixture(page, { overlaps: true });
+    await page.getByRole('button', { name: 'Review 21 overlaps', exact: true }).click();
+    state.delay = true;
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect.poll(() => !!state.release).toBe(true);
+    await page.getByLabel('Academic term', { exact: true }).selectOption(id(2));
+    await expect(page.locator('#campus-service-content h2')).toContainText('27/SP');
+    state.release();
+    await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+    await expect(page.getByRole('region', { name: 'Selected meeting overlap details', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Review possible overlaps', exact: true })).toHaveCount(0);
+    await expect(page.locator('#campus-service-content')).not.toContainText('ENG.201.26FA.B');
+    expect(state.errors).toEqual([]);
 });
