@@ -141,6 +141,61 @@ window.createWorkspacePeople = function (ui) {
         });
         body.append(form);
     }
+    async function history(person) {
+        const id = personId(person);
+        const body = openDrawer("Profile history", `${person.givenName} ${person.familyName}`);
+        const panel = node("div");
+        body.append(panel);
+        panel.append(button("Back to person", () => openPerson(id), "btn-link"));
+        panel.append(node("p", { class: "form-text" },
+            "Review recorded changes, newest first. Earlier personal values, private reasons and sign-in credentials are excluded. Recorder names are current account names; original account attribution is retained."));
+        const notice = node("p", { class: "alert alert-info", hidden: true },
+            "Earlier profile history is unknown. Existing details were first observed when tracking began; this does not establish when those details originally became valid.");
+        const status = node("p", { role: "status", class: "form-text" }, "Loading recorded changes…");
+        const list = node("ul", { class: "list-unstyled", "aria-label": "Recorded profile changes" });
+        let after = 0;
+        let through = null;
+        let shown = 0;
+        let epoch = 0;
+        const time = (label, value) => node("p", { class: "small mb-1" }, `${label}: `,
+            node("time", { datetime: value }, new Date(value).toLocaleString(undefined,
+                { dateStyle: "medium", timeStyle: "long" })));
+        const load = async (older = false) => {
+            const expectedEpoch = ++epoch;
+            const data = await request(`/sis/ui/people/${id}/history/`, "POST",
+                older ? { after, through_version: through } : { after: 0 });
+            if (!panel.isConnected || epoch !== expectedEpoch) return;
+            if (!Array.isArray(data.items)) throw new Error("The history could not be loaded. Try refreshing it.");
+            if (!older) { list.replaceChildren(); shown = 0; }
+            through = data.through_version;
+            after = data.next_after;
+            notice.hidden = !data.earlier_history_unknown;
+            for (const item of data.items) {
+                const card = node("article", { class: "record-section" },
+                    node("h3", {}, `${item.category} · ${item.action}`),
+                    time("Recorded", item.recorded_at),
+                    node("p", { class: "small mb-2 private-text" }, `Recorded by: ${item.recorded_by}`));
+                if (item.earlier_details_unknown) {
+                    card.append(node("p", { class: "form-text" },
+                        "Existing details were observed here. Earlier changes and their dates are unknown."));
+                } else {
+                    card.append(node("p", {}, `Fields: ${item.fields.join(", ")}`));
+                    if (item.effective_at) card.append(time("Effective", item.effective_at));
+                }
+                list.append(node("li", {}, card));
+                shown++;
+            }
+            more.hidden = after === null;
+            status.textContent = through === 0
+                ? "No profile changes have been recorded yet. Existing details remain in the person record; earlier changes are unknown."
+                : `Showing ${shown} of ${through} recorded changes.`;
+        };
+        const refresh = button("Refresh history", () => load());
+        const more = button("Load older changes", () => load(true), "btn-outline-secondary");
+        more.hidden = true;
+        panel.append(refresh, notice, status, list, more);
+        await load();
+    }
     async function contact(person) {
         const id = personId(person);
         let record = await request(`/sis/ui/people/${id}/contact/`);
@@ -877,5 +932,5 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
-    return { editProfile, account, contact, application };
+    return { editProfile, account, contact, history, application };
 };

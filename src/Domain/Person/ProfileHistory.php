@@ -20,6 +20,17 @@ final class ProfileHistory extends EventSourcedAggregate
     private ?ContactDetails $contact = null;
     private ?EmergencyContacts $emergency = null;
     private ?string $operation = null;
+    public function acceptRecorded(\Domain\Shared\EventSourcing\StoredEvent $stored): void
+    {
+        $payload = $stored->event->payload();
+        if (
+            $stored->context->actor === null || $stored->context->effectiveAt === null
+            || $stored->context->correlation?->value !== ($payload['operation_id'] ?? null)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->acceptHistorical($stored->event);
+    }
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $e): void
     {
         if (
@@ -64,6 +75,12 @@ final class ProfileHistory extends EventSourcedAggregate
         }
         $this->person = $next;
         $this->operation = $p['operation_id'];
+    }
+    public function verifyPerson(Person $projection): void
+    {
+        if ($this->person !== null && ProfileFacts::of($this->person) !== ProfileFacts::of($projection)) {
+            throw new CorruptHistoryException();
+        }
     }
     public function person(): ?Person
     {

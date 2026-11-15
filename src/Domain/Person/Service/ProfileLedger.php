@@ -28,7 +28,7 @@ use Domain\Shared\ValueObject\EntityId;
 /** Internal: authorized entry points own person locks, projection writes, audits and the enclosing transaction. */
 final readonly class ProfileLedger
 {
-    private const int MAX_EVENTS = 2000;
+    public const int MAX_EVENTS = 2000;
 
     public function __construct(private HistoricalEventStore $history, private Clock $clock)
     {
@@ -49,9 +49,7 @@ final readonly class ProfileLedger
     public function verify(Person $person): int
     {
         $root = $this->load($person->id)['root'];
-        if ($root->person() !== null && ProfileFacts::of($root->person()) !== ProfileFacts::of($person)) {
-            throw new CorruptHistoryException();
-        }
+        $root->verifyPerson($person);
         return $root->playhead();
     }
     public function receipt(EntityId $person, EntityId $operation, EntityId $actor, string $intent): ?Person
@@ -80,10 +78,8 @@ final readonly class ProfileLedger
     }
     private function checkEmergency(ProfileHistory $root, Person $person, ?EmergencyContacts $current): void
     {
-        if (
-            ($root->person() !== null && ProfileFacts::of($root->person()) !== ProfileFacts::of($person))
-            || $root->emergency()?->facts() !== $current?->facts()
-        ) {
+        $root->verifyPerson($person);
+        if ($root->emergency()?->facts() !== $current?->facts()) {
             throw new CorruptHistoryException();
         }
     }
@@ -128,10 +124,8 @@ final readonly class ProfileLedger
     }
     private function checkContact(ProfileHistory $root, Person $person, ?ContactDetails $current): void
     {
-        if (
-            ($root->person() !== null && ProfileFacts::of($root->person()) !== ProfileFacts::of($person))
-            || ($root->contact() !== null && $root->contact()->facts() !== $current?->facts())
-        ) {
+        $root->verifyPerson($person);
+        if ($root->contact() !== null && $root->contact()->facts() !== $current?->facts()) {
             throw new CorruptHistoryException();
         }
     }
@@ -282,16 +276,10 @@ final readonly class ProfileLedger
                 if (++$count > self::MAX_EVENTS) {
                     throw new HistoryReadLimitException();
                 }
-                $root->acceptHistorical($stored->event);
+                $root->acceptRecorded($stored);
                 $p = $stored->event->payload();
-                if (
-                    $stored->context->actor === null || $stored->context->effectiveAt === null ||
-                    $stored->context->correlation?->value !== $p['operation_id']
-                ) {
-                    throw new CorruptHistoryException();
-                }
                 if ($p['operation_id'] === $operation?->value) {
-                    if ($stored->context->actor->value !== $actor?->value || $p['intent'] !== $intent) {
+                    if ($stored->context->actor?->value !== $actor?->value || $p['intent'] !== $intent) {
                         throw new AccessDeniedException('This profile operation has another actor or intent.');
                     }
                     if ($stored->event instanceof PersonContactWasRecorded) {

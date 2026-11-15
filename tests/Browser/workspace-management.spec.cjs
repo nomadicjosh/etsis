@@ -49,6 +49,7 @@ test('person managers maintain contact details without credential controls and k
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     expect(reads).toHaveLength(0);
     await expect(page.getByRole('button', { name: 'Manage sign-in account', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Profile history', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Contact information', exact: true }).click();
     await expect(page.getByLabel('Phone number', { exact: true })).toHaveValue('001234');
     await expect(page.getByLabel('Preferred name', { exact: true })).toHaveAttribute('maxlength', '80');
@@ -269,4 +270,80 @@ test('My profile matches the campus workspace and submits only owner profile fie
     await expect(page.getByRole('heading', { name: 'Fictional profile saved' })).toBeVisible();
     expect(posted[0]).toMatchObject({ first_name: 'A', last_name: 'Example', email: 'alex@example.invalid', csrf_token: 'fictional-test-token', _method: 'PUT' });
     expect(posted[0].role).toBeUndefined(); expect(posted[0].user_id).toBeUndefined();
+});
+
+test('profile history loads on demand, pages a fixed review, and never replaces a later screen', async ({ page }) => {
+    const person = id(90), user = id(91);
+    const calls = [], errors = [];
+    let head = 22, rejectOlder = true, delay = false, release = null;
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const request = route.request(), path = new URL(request.url()).pathname;
+        const data = request.postData() ? JSON.parse(new URLSearchParams(request.postData()).get('_workspace_json')) : null;
+        let result = {};
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path.startsWith('/sis/ui/data/')) result = { items: [{ id: person, owner_user_id: user,
+            given_name: 'Fictional', family_name: 'Person', institutional_id: 'S-FICTIONAL' }], next_after: null };
+        else if (path === `/sis/ui/people/${person}/`) result = {
+            person: { id: { value: person }, ownerUserId: { value: user }, givenName: 'Fictional',
+                familyName: 'Person', institutionalId: { value: 'S-FICTIONAL' } },
+            students: [], employees: [], applications: [], accounts: []
+        };
+        else if (path === `/sis/ui/people/${person}/history/`) {
+            expect(request.headers()['x-csrf-token']).toBe('fictional-test-token');
+            calls.push(data);
+            if (data.after && rejectOlder) {
+                rejectOlder = false;
+                return route.fulfill({ status: 409, json: { error: 'Fictional unavailable history. Try again.' } });
+            }
+            if (delay) await new Promise(resolve => { release = resolve; });
+            const through = data.through_version ?? head;
+            const first = through - data.after;
+            const sequences = Array.from({ length: Math.min(20, first) }, (_, index) => first - index);
+            result = { items: sequences.map(sequence => ({ sequence, category: 'Contact information',
+                action: sequence === 1 ? 'Existing details first recorded' : 'Updated',
+                fields: sequence === 1 ? [] : ['Phone number'], earlier_details_unknown: sequence === 1,
+                recorded_at: '2026-11-14T10:00:00.000000Z', effective_at: '2026-11-14T10:00:00.000000Z',
+                recorded_by: '<script>' + 'FictionalRecorder'.repeat(12) + '</script>' })), through_version: through,
+                next_after: first > 20 ? data.after + 20 : null, earlier_history_unknown: true };
+        }
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="people"]').click();
+    await page.getByLabel('Search this workspace').fill('Fictional');
+    await page.getByLabel('Search this workspace').press('Enter');
+    await page.getByRole('button', { name: 'Fictional Person', exact: true }).click();
+    expect(calls).toHaveLength(0);
+    await page.getByRole('button', { name: 'Profile history', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('list', { name: 'Recorded profile changes' }).locator('li')).toHaveCount(20);
+    await expect(page.locator('#drawer-body')).toContainText('Showing 20 of 22 recorded changes.');
+    await expect(page.locator('#drawer-body')).toContainText('Earlier profile history is unknown');
+    expect(await page.locator('#drawer-body script').count()).toBe(0);
+    await accessible(page);
+    head = 23;
+    await page.getByRole('button', { name: 'Load older changes', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional unavailable history');
+    await expect(page.getByRole('list', { name: 'Recorded profile changes' }).locator('li')).toHaveCount(20);
+    await page.getByRole('button', { name: 'Load older changes', exact: true }).click();
+    await expect(page.getByRole('list', { name: 'Recorded profile changes' }).locator('li')).toHaveCount(22);
+    expect(calls[1]).toEqual({ after: 20, through_version: 22 });
+    expect(calls[2]).toEqual(calls[1]);
+    await expect(page.getByRole('button', { name: 'Load older changes', exact: true })).toBeHidden();
+    await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Showing 20 of 23 recorded changes.');
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.locator('#drawer-body').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await accessible(page);
+    delay = true;
+    await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
+    await expect.poll(() => typeof release).toBe('function');
+    await page.getByRole('button', { name: 'Back to person', exact: true }).click();
+    release();
+    await expect(page.getByRole('button', { name: 'Contact information', exact: true })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Recorded profile changes' })).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

@@ -338,8 +338,10 @@ foreach ([null, 'unrecognized', []] as $badState) {
     }
     $invalidDecision = $app->router->match($signInPost
         ->withHeader('X-CSRF-Token', 'fictionalcsrftoken')->withParsedBody($badBody));
-    if ($invalidDecision->getStatusCode() !== 422
-        || $signInEvents !== $sis->sql->rows('sis_history_events')) {
+    if (
+        $invalidDecision->getStatusCode() !== 422
+        || $signInEvents !== $sis->sql->rows('sis_history_events')
+    ) {
         throw new RuntimeException('A missing or malformed sign-in state became a decision.');
     }
 }
@@ -355,6 +357,41 @@ if (
 $sis->access->grants = ['sis:person:manage'];
 if ($app->router->match($signInPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'))->getStatusCode() !== 403) {
     throw new RuntimeException('Person directory access implied account access.');
+}
+// Person history is a curated read, requiring both private-record and audit authority.
+$historyPost = $signInPost->withUri(new \Laminas\Diactoros\Uri(
+    '/sis/ui/people/' . $other->id->value . '/history/'
+))
+    ->withParsedBody(['after' => 0, 'person_id' => $person->id->value]);
+$beforeHistoryRead = $sis->sql->rows('sis_history_events');
+if ($app->router->match($historyPost)->getStatusCode() !== 403) {
+    throw new RuntimeException('A private profile history read bypassed CSRF.');
+}
+$historyPost = $historyPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken');
+if ($app->router->match($historyPost)->getStatusCode() !== 403) {
+    throw new RuntimeException('Person management implied audit-history permission.');
+}
+$sis->access->grants = ['sis:person:manage', 'sis:audit:read'];
+$historyResponse = $app->router->match($historyPost);
+if (
+    $historyResponse->getStatusCode() !== 200
+    || !str_contains($historyResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $historyResponse->getBody(), 'phpdebugbar')
+    || $beforeHistoryRead !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('The history reader failed actual provider/privacy/read-only boundaries.');
+}
+$historyBody = json_decode((string) $historyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $historyBody['items'][0]['category'] !== 'Emergency contacts'
+    || str_contains((string) $historyResponse->getBody(), 'Fictional Relative')
+    || str_contains((string) $historyResponse->getBody(), '001234')
+) {
+    throw new RuntimeException('The history reader used a supplied owner or disclosed private contact values.');
+}
+$sis->access->grants = ['sis:audit:read'];
+if ($app->router->match($historyPost)->getStatusCode() !== 403) {
+    throw new RuntimeException('Audit authority implied private person access.');
 }
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

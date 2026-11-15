@@ -27,6 +27,8 @@ return static function (Psr7Router $router): void {
         ->name('sis.ui.person.profile');
     $router->map(['POST'], '/sis/ui/people/{id}/profile/', [SisPersonEditorController::class, 'saveProfile'])
         ->name('sis.ui.person.profile.save');
+    $router->map(['POST'], '/sis/ui/people/{id}/history/', [SisPersonEditorController::class, 'history'])
+        ->name('sis.ui.person.history');
     $router->map(['GET'], '/sis/ui/people/{id}/contact/', [SisPersonEditorController::class, 'contact'])
         ->name('sis.ui.person.contact');
     $router->map(['POST'], '/sis/ui/people/{id}/contact/', [SisPersonEditorController::class, 'saveContact'])

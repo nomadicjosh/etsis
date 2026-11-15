@@ -20,7 +20,18 @@ final readonly class SisPersonEditorController
         private PersonProfileEditor $people,
         private PersonAccountEditor $accounts,
         private PersonContactService $contacts,
+        private \Domain\Person\Service\PersonHistoryReview $history,
     ) {
+    }
+
+    public function history(ServerRequest $request, string $id): ResponseInterface
+    {
+        $form = FormInput::from($request);
+        return new JsonResponse($this->history->page(
+            new EntityId($id),
+            $form->optionalInteger('after') ?? 0,
+            $form->optionalInteger('through_version')
+        ));
     }
 
     public function profile(string $id): ResponseInterface

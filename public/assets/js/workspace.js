@@ -550,6 +550,7 @@
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.contact(person)) }, 'Contact information'));
                 if (person.ownerUserId && can('admin:edit:user')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.account(person)) }, 'Manage sign-in account'));
                 if (can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(() => accountSetup(person)) }, 'Account setup'));
+                if (can('sis:person:manage') && can('sis:audit:read')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(() => peopleStudio.history(person)) }, 'Profile history'));
             if (can('sis:person:assign-id')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => editInstitutionalId(person)) }, 'Change institutional ID'));
                 if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value)) }, 'Start application'));
                 if (can('sis:hr:manage') && !data.employees?.length) actions.append(node('button', { class: 'btn btn-outline-secondary', type: 'button', onclick: () => task(() => createRecord('employees', { person_id: person.id.value })) }, 'Add employment'));
