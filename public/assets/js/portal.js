@@ -604,6 +604,10 @@
             { maxlength: 500, autocomplete: 'street-address' },
         );
         address.value = me.contact.address;
+        address.readOnly = !!me.contact.mailing_managed;
+        const addressHelp = el('p', { class: 'campus-muted', hidden: !me.contact.mailing_managed },
+            'This mailing address comes from dated addresses. Use Manage addresses to change it.');
+        form.append(addressHelp);
         form.append(
             el(
                 'button',
@@ -634,6 +638,23 @@
                 'Your contact information is encrypted and stays attached to your person record.',
             ),
         );
+        const addresses = el('div');
+        addresses.append(el('button', { type: 'button', class: 'btn campus-button', onclick: event => task(() =>
+            window.createPersonAddresses({ node: el, request, task, notify: notice })
+                .open(addresses, '/portal/api/addresses/', saved => {
+                    const revision = saved.contact_revision;
+                    if (revision && revision.preferred_name === me.contact.preferred_name && revision.phone === me.contact.phone) {
+                        me.contact.version = revision.version;
+                    }
+                    if (saved.mailing_managed) {
+                        me.contact.address = saved.mailing_address;
+                        me.contact.mailing_managed = true;
+                        address.value = saved.mailing_address;
+                        address.readOnly = true;
+                        addressHelp.hidden = false;
+                    }
+                }), event.currentTarget) }, 'Manage addresses'));
+        container.append(surface('Dated addresses', addresses));
         const emergency = el('div');
         emergency.append(el('button', { type: 'button', class: 'btn campus-button', onclick: event => task(() =>
             window.createPersonEmergencyContacts({ node: el, request, task, notify: notice })

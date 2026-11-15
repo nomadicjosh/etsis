@@ -393,5 +393,63 @@ $sis->access->grants = ['sis:audit:read'];
 if ($app->router->match($historyPost)->getStatusCode() !== 403) {
     throw new RuntimeException('Audit authority implied private person access.');
 }
+// Dated address routes share the canonical person, private responses and CSRF.
+$addressGet = $contactRequest->withUri(new \Laminas\Diactoros\Uri(
+    '/sis/ui/people/' . $other->id->value . '/addresses/'
+));
+if ($app->router->match($addressGet)->getStatusCode() !== 403) {
+    throw new RuntimeException('Dated addresses bypassed person-management authority.');
+}
+$sis->access->grants = ['sis:person:manage'];
+$addressRead = $app->router->match($addressGet);
+if (
+    $addressRead->getStatusCode() !== 200
+    || !str_contains($addressRead->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('Dated addresses did not resolve privately through the real providers.');
+}
+$addressData = json_decode((string) $addressRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$address = ['id' => $addressData['new_ids'][0], 'purpose' => 'mailing', 'lines' => 'Fictional staff address',
+    'locality' => 'Example', 'region' => '', 'postal_code' => '00123', 'country_code' => 'US',
+    'valid_from' => '2026-01-01', 'valid_until' => null];
+$addressPost = $emergencyPost->withUri($addressGet->getUri())
+    ->withParsedBody(['addresses' => [$address], 'version' => 0, 'person_id' => $person->id->value]);
+$beforeAddresses = $sis->sql->rows('sis_history_events');
+$usersBeforeAddresses = $sis->sql->rows('users');
+if (
+    $app->router->match($addressPost)->getStatusCode() !== 403
+    || $beforeAddresses !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Dated address changes bypassed CSRF.');
+}
+$addressSaved = $app->router->match($addressPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if (
+    $addressSaved->getStatusCode() !== 200
+    || !str_contains($addressSaved->getHeaderLine('Cache-Control'), 'no-store')
+    || $usersBeforeAddresses !== $sis->sql->rows('users')
+) {
+    throw new RuntimeException('The dated address mutation lost privacy or changed sign-in records.');
+}
+$sis->access->grants = [];
+$ownerAddresses = $addressGet->withUri(new \Laminas\Diactoros\Uri('/portal/api/addresses/'));
+$ownerAddressRead = $app->router->match($ownerAddresses);
+if (
+    $ownerAddressRead->getStatusCode() !== 200
+    || json_decode((string) $ownerAddressRead->getBody(), true, flags: JSON_THROW_ON_ERROR)['addresses'] !== []
+) {
+    throw new RuntimeException('The owner address reader returned another person.');
+}
+$address['id'] = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$address['lines'] = 'Fictional owner address';
+$ownerAddressPost = $addressPost->withUri($ownerAddresses->getUri())
+    ->withHeader('X-CSRF-Token', 'fictionalcsrftoken')
+    ->withParsedBody(['addresses' => [$address], 'version' => 0, 'person_id' => $other->id->value]);
+if (
+    $app->router->match($ownerAddressPost)->getStatusCode() !== 200
+    || $app->make(\Domain\Person\Service\PersonAddressService::class)->view()['addresses'][0]['lines']
+        !== 'Fictional owner address'
+) {
+    throw new RuntimeException('The owner address writer accepted a supplied person identity.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

@@ -218,6 +218,10 @@ window.createWorkspacePeople = function (ui) {
             form.elements[key].maxLength = length;
             form.elements[key].autocomplete = autocomplete;
         }
+        form.elements.address.readOnly = !!record.mailing_managed;
+        const addressHelp = node("p", { class: "form-text", hidden: !record.mailing_managed },
+            "This mailing address comes from dated addresses. Use Manage addresses to change it.");
+        form.append(addressHelp);
         form.append(
             node(
                 "p",
@@ -246,6 +250,8 @@ window.createWorkspacePeople = function (ui) {
                 const saved = await request(`/sis/ui/people/${id}/contact/`);
                 if (!form.isConnected) return;
                 record = saved;
+                form.elements.address.readOnly = !!saved.mailing_managed;
+                addressHelp.hidden = !saved.mailing_managed;
                 for (const key of ["preferred_name", "phone", "address"]) {
                     if (form.elements[key].value === submitted[key]) form.elements[key].value = saved[key];
                 }
@@ -253,6 +259,22 @@ window.createWorkspacePeople = function (ui) {
             }, save);
         });
         body.append(form);
+        const addresses = node("div", { class: "mt-4" });
+        addresses.append(button("Manage addresses", () => window.createPersonAddresses({ node, request, task, notify })
+            .open(addresses, `/sis/ui/people/${id}/addresses/`, saved => {
+                const revision = saved.contact_revision;
+                if (revision && revision.preferred_name === record.preferred_name && revision.phone === record.phone) {
+                    record.version = revision.version;
+                }
+                if (saved.mailing_managed) {
+                    record.address = saved.mailing_address;
+                    record.mailing_managed = true;
+                    form.elements.address.value = saved.mailing_address;
+                    form.elements.address.readOnly = true;
+                    addressHelp.hidden = false;
+                }
+            })));
+        body.append(addresses);
         const emergency = node("div", { class: "mt-4" });
         emergency.append(button("Emergency contacts", () =>
             window.createPersonEmergencyContacts({ node, request, task, notify })

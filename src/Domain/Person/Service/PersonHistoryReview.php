@@ -7,6 +7,7 @@ namespace Domain\Person\Service;
 use DateTimeZone;
 use Domain\Audit\Repository\ActorDirectory;
 use Domain\Person\Event\PersonContactWasRecorded;
+use Domain\Person\Event\PersonAddressesWereRecorded;
 use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
 use Domain\Person\ProfileHistory;
 use Domain\Person\Person;
@@ -124,6 +125,7 @@ final readonly class PersonHistoryReview
         return match (true) {
             $stored->event instanceof PersonContactWasRecorded => $root->contact()?->facts() ?? [],
             $stored->event instanceof PersonEmergencyContactsWereRecorded => $root->emergency()?->facts() ?? [],
+            $stored->event instanceof PersonAddressesWereRecorded => $root->addresses()?->facts() ?? [],
             default => $root->person() === null ? [] : ProfileFacts::of($root->person()),
         };
     }
@@ -138,13 +140,16 @@ final readonly class PersonHistoryReview
         $category = match (true) {
             $stored->event instanceof PersonContactWasRecorded => 'Contact information',
             $stored->event instanceof PersonEmergencyContactsWereRecorded => 'Emergency contacts',
+            $stored->event instanceof PersonAddressesWereRecorded => 'Dated addresses',
             default => 'Person profile',
         };
         $after = $this->facts($root, $stored);
         $labels = $stored->event instanceof PersonContactWasRecorded ? self::CONTACT_FIELDS : self::PROFILE_FIELDS;
         $fields = [];
         if (!$observed) {
-            if ($stored->event instanceof PersonEmergencyContactsWereRecorded) {
+            if ($stored->event instanceof PersonAddressesWereRecorded) {
+                $fields[] = 'Address details, purpose or dates';
+            } elseif ($stored->event instanceof PersonEmergencyContactsWereRecorded) {
                 $fields[] = 'Emergency contact details or priority order';
             } else {
                 foreach ($labels as $field => $label) {

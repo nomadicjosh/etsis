@@ -70,7 +70,9 @@ final class PersonHistoryReviewTest extends TestCase
             $s->profileLedger(),
             $this->access($f),
             $s->transactions,
-            $s->audit
+            $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlAddressBookRepository($s->sql, $s->dropCipher),
+            $s->clock
         );
     }
     public function testReviewSummarizesChangedFieldsWithoutValuesReasonsCredentialsOrWrites(): void

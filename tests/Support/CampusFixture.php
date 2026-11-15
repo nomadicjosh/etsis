@@ -66,6 +66,7 @@ final class CampusFixture
     public CampusService $service;
     public \Domain\Person\Service\PersonContactService $contacts;
     public \Domain\Person\Service\EmergencyContactsService $emergency;
+    public \Domain\Person\Service\PersonAddressService $addresses;
     public CampusContentService $content;
     public PortalService $posts;
     public DefuseMessageCipher $cipher;
@@ -106,19 +107,42 @@ final class CampusFixture
         );
         $profileAccess = new \Domain\Person\Service\PersonProfileAccess(
             new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
-                $f->sql, $f->admissions, new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
+                $f->sql,
+                $f->admissions,
+                new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
             ),
-            $f->admissions, new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql), $f->access
+            $f->admissions,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql),
+            $f->access
+        );
+        $addressBooks = new \Infrastructure\Persistence\Repository\SqlAddressBookRepository($f->sql, $this->cipher);
+        $this->addresses = new \Domain\Person\Service\PersonAddressService(
+            $addressBooks,
+            new \Infrastructure\Persistence\Repository\SqlPersonContactRepository($f->sql, $this->cipher),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+            $f->profileLedger(),
+            $profileAccess,
+            $f->transactions,
+            $f->audit,
+            $f->clock
         );
         $this->contacts = new \Domain\Person\Service\PersonContactService(
             new \Infrastructure\Persistence\Repository\SqlPersonContactRepository($f->sql, $this->cipher),
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
-            $f->profileLedger(), $profileAccess, $f->transactions, $f->audit
+            $f->profileLedger(),
+            $profileAccess,
+            $f->transactions,
+            $f->audit,
+            $addressBooks,
+            $f->clock
         );
         $this->emergency = new \Domain\Person\Service\EmergencyContactsService(
             new \Infrastructure\Persistence\Repository\SqlEmergencyContactsRepository($f->sql, $this->cipher),
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
-            $f->profileLedger(), $profileAccess, $f->transactions, $f->audit
+            $f->profileLedger(),
+            $profileAccess,
+            $f->transactions,
+            $f->audit
         );
         $this->service = new CampusService(
             $this->repository,

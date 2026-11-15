@@ -57,10 +57,14 @@ final class PersonContactHistoryTest extends TestCase
             $s->profileLedger(),
             new \Domain\Person\Service\PersonProfileAccess(
                 new SqlPersonAccountRepository($s->sql, $s->admissions, new RandomInstitutionalIdGenerator()),
-                $s->admissions, new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql), $s->access
+                $s->admissions,
+                new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+                $s->access
             ),
             $s->transactions,
-            $audit ?? $s->audit
+            $audit ?? $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlAddressBookRepository($s->sql, $c->cipher),
+            $s->clock
         );
     }
 
@@ -119,7 +123,7 @@ final class PersonContactHistoryTest extends TestCase
         foreach (['read', 'write'] as $action) {
             try {
                 $action === 'read' ? $c->contacts->staffView($person)
-                    : $c->contacts->staffSave($person, 'Fictional', '', '', 0);
+                : $c->contacts->staffSave($person, 'Fictional', '', '', 0);
                 self::fail('Credential administration allowed person-contact access.');
             } catch (AccessDeniedException) {
                 self::assertSame([], $s->sql->rows('sis_portal_contacts'));
@@ -171,21 +175,29 @@ final class PersonContactHistoryTest extends TestCase
         $s = $c->sis;
         $person = $s->student($s->user())->personId;
         $roles = new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql);
-        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole,
-            $s->admissions->person($person)->ownerUserId, $roles->roleNamed('super')->id, true);
+        $roles->assign(
+            \Domain\Access\Enum\GrantKind::UserRole,
+            $s->admissions->person($person)->ownerUserId,
+            $roles->roleNamed('super')->id,
+            true
+        );
         $s->access->staff = false;
         $s->access->grants = ['sis:person:manage'];
         foreach (['read', 'write'] as $action) {
             try {
                 $action === 'read' ? $c->contacts->staffView($person)
-                    : $c->contacts->staffSave($person, 'Fictional', '', '', 0);
+                : $c->contacts->staffSave($person, 'Fictional', '', '', 0);
                 self::fail('A regular administrator accessed protected super contact details.');
             } catch (AccessDeniedException) {
                 self::assertSame([], $s->sql->rows('sis_portal_contacts'));
             }
         }
-        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole,
-            $s->access->actor, $roles->roleNamed('super')->id, true);
+        $roles->assign(
+            \Domain\Access\Enum\GrantKind::UserRole,
+            $s->access->actor,
+            $roles->roleNamed('super')->id,
+            true
+        );
         $c->contacts->staffSave($person, 'Protected', '', '', 0);
         self::assertSame('Protected', $c->contacts->staffView($person)['preferred_name']);
     }
@@ -200,7 +212,9 @@ final class PersonContactHistoryTest extends TestCase
             $s->access->grants = ['sis:person:manage'];
             $audit = null;
             $rows = null;
-            $revoke = static function () use ($s): void { $s->access->grants = []; };
+            $revoke = static function () use ($s): void {
+                $s->access->grants = [];
+            };
             if ($case === 'lock') {
                 $rows = $this->createStub(PersonProfileRepository::class);
                 $rows->method('lock')->willReturnCallback($revoke);

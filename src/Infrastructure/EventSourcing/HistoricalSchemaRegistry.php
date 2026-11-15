@@ -55,6 +55,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'user', 'root' => \Domain\User\User::class,
                 'fields' => ['sign_in_enabled', 'token', 'operation_id', 'intent'],
             ],
+            \Domain\Person\Event\PersonAddressesWereRecorded::class => [
+                'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent'],
+            ],
             \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class => [
                 'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent'],
@@ -422,6 +426,9 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Person\Event\PersonAddressesWereRecorded::class) {
+                \Domain\Person\ValueObject\AddressBook::validateEvent($payload);
+            }
             if ($class === \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class) {
                 \Domain\Person\ValueObject\EmergencyContacts::validateEvent($payload);
             }

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Application\Http\Controller\PersonAddressController as Addresses;
 use Application\Http\Controller\SisWorkspaceController;
 use Application\Http\Controller\SisPersonEditorController;
 use Application\Http\Controller\SisReportController;
@@ -18,6 +19,10 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/sis/ui/people/{id}/addresses/', [Addresses::class, 'staff'])
+        ->name('sis.ui.person.addresses');
+    $router->map(['POST'], '/sis/ui/people/{id}/addresses/', [Addresses::class, 'saveStaff'])
+        ->name('sis.ui.person.addresses.save');
     $router->map(['GET'], '/sis/ui/people/{id}/emergency-contacts/', [Emergency::class, 'staff'])
         ->name('sis.ui.person.emergency');
     $router->map(['POST'], '/sis/ui/people/{id}/emergency-contacts/', [Emergency::class, 'saveStaff'])

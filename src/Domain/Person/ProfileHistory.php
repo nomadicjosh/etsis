@@ -10,6 +10,8 @@ use Domain\Person\Event\PersonProfileWasRecorded;
 use Domain\Person\Event\PersonContactWasRecorded;
 use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
 use Domain\Person\ValueObject\EmergencyContacts;
+use Domain\Person\ValueObject\AddressBook;
+use Domain\Person\Event\PersonAddressesWereRecorded;
 use Domain\Person\ValueObject\ContactDetails;
 use Domain\Person\ValueObject\ProfileFacts;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
@@ -20,6 +22,7 @@ final class ProfileHistory extends EventSourcedAggregate
     private ?ContactDetails $contact = null;
     private ?EmergencyContacts $emergency = null;
     private ?string $operation = null;
+    private ?AddressBook $addresses = null;
     public function acceptRecorded(\Domain\Shared\EventSourcing\StoredEvent $stored): void
     {
         $payload = $stored->event->payload();
@@ -36,13 +39,16 @@ final class ProfileHistory extends EventSourcedAggregate
         if (
             (!$e instanceof PersonProfileWasRecorded
             && !$e instanceof PersonContactWasRecorded
-                && !$e instanceof PersonEmergencyContactsWereRecorded)
+                && !$e instanceof PersonEmergencyContactsWereRecorded
+                && !$e instanceof PersonAddressesWereRecorded)
             || !$e->aggregateId()->equals($this->aggregateId())
             || $e->playhead() !== $this->playhead() + 1
         ) {
             throw new CorruptHistoryException();
         }
-        if ($e instanceof PersonEmergencyContactsWereRecorded) {
+        if ($e instanceof PersonAddressesWereRecorded) {
+            AddressBook::validateEvent($e->payload());
+        } elseif ($e instanceof PersonEmergencyContactsWereRecorded) {
             EmergencyContacts::validateEvent($e->payload());
         } elseif ($e instanceof PersonContactWasRecorded) {
             ContactDetails::validateEvent($e->payload());
@@ -122,6 +128,33 @@ final class ProfileHistory extends EventSourcedAggregate
         }
         $this->emergency = $next;
         $this->operation = $payload['operation_id'];
+    }
+    public function whenPersonAddressesWereRecorded(PersonAddressesWereRecorded $event): void
+    {
+        $payload = $event->payload();
+        $next = AddressBook::restore($payload['facts']);
+        if (
+            $this->person === null || $payload['previous_operation_id'] !== $this->operation
+            || $payload['operation_id'] === $this->operation
+            || $next->version !== ($this->addresses === null ? 1 : $this->addresses->version + 1)
+            || ($this->addresses !== null && ($next->addresses === $this->addresses->addresses
+                || ($this->addresses->mailingManaged && !$next->mailingManaged)))
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $expectedManaged = $this->addresses->mailingManaged ?? false;
+        foreach ($next->addresses as $address) {
+            $expectedManaged = $expectedManaged || $address['purpose'] === 'mailing';
+        }
+        if ($next->mailingManaged !== $expectedManaged) {
+            throw new CorruptHistoryException();
+        }
+        $this->addresses = $next;
+        $this->operation = $payload['operation_id'];
+    }
+    public function addresses(): ?AddressBook
+    {
+        return $this->addresses;
     }
     public function emergency(): ?EmergencyContacts
     {
