@@ -498,3 +498,20 @@ h3 { font-size: .9rem; font-weight: 650; }
 .audit-builder-grid.audit-adjustment-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
 .audit-adjustment-grid .audit-panel:last-child { grid-column: auto; }
 @media (max-width: 700px) { .audit-builder-grid.audit-adjustment-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* One booking calendar, with complete daily details below the month overview. */
+.booking-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .5rem; }
+.booking-month-day { min-width: 0; }
+.booking-month-day .btn { height: 100%; min-height: 7rem; padding: .65rem; white-space: normal; overflow-wrap: anywhere; }
+.booking-month-date { display: block; font-size: 1.4rem; font-weight: 700; margin-bottom: .4rem; }
+.booking-month-label { display: none; }
+.booking-month-count { display: block; font-size: .78rem; }
+.booking-month-day [aria-current="date"] { border-bottom-width: 4px; }
+.booking-month-day .btn:focus-visible { outline: 3px solid #174f88; outline-offset: 2px; }
+@media (max-width: 575px) {
+    .booking-month { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .booking-month-weekday, .booking-month-spacer { display: none; }
+    .booking-month-day .btn { min-height: 6rem; }
+    .booking-month-date { display: none; }
+    .booking-month-label { display: block; margin-bottom: .4rem; }
+}

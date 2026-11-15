@@ -109,18 +109,19 @@ final readonly class RoomService
     }
 
     /** @return array<string,mixed> */
-    public function week(EntityId $id, ?string $date = null): array
+    public function timetable(EntityId $id, ?string $date = null, string $view = 'week'): array
     {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $now = $this->clock->now();
         $room = $this->rooms->get($id);
-        $week = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone());
-        $rows = $this->rooms->agenda($id, new TimeSlot($week->startsAt, $week->endsAt), null, 501);
+        $period = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone(), $view);
+        $rows = $this->rooms->agenda($id, new TimeSlot($period->startsAt, $period->endsAt), null, 501);
+        $this->authorize($actor);
         if (count($rows) > 500) {
-            throw new ValidationException([['field' => 'week',
-                'message' => 'This week exceeds 500 occurrences. Use the paged room agenda for a narrower window.']]);
+            throw new ValidationException([['field' => 'date',
+                'message' => 'This period exceeds 500 occurrences. Choose a week or use the paged room agenda.']]);
         }
-        $result = $week->summarize($rows);
+        $result = $period->summarize($rows);
         if ($this->access->requirePermission('sis:scheduling:manage')->value !== $actor->value) {
             throw new AccessDeniedException('The scheduling session changed.');
         }

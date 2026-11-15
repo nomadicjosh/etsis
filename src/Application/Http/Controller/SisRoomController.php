@@ -89,10 +89,14 @@ final readonly class SisRoomController
         ));
     }
 
-    public function week(ServerRequest $request, string $id): ResponseInterface
+    public function timetable(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
 
-        return new JsonResponse($this->service->week(new EntityId($id), $f->optionalText('week', 10)));
+        return new JsonResponse($this->service->timetable(
+            new EntityId($id),
+            $f->optionalText('date', 10),
+            $f->optionalText('view', 5) ?? 'week'
+        ));
     }
 }

@@ -92,7 +92,10 @@ final class BookingOccurrenceCancellationTest extends TestCase
         $rooms = $this->rooms($f);
         self::assertTrue($rooms->availability($approved->roomId, $target->time)['available']);
         self::assertFalse($rooms->availability($approved->roomId, $stored->occurrences[0]->time)['available']);
-        self::assertSame(['approved' => 2, 'requested' => 0], $rooms->week($approved->roomId, '2026-08-12')['totals']);
+        self::assertSame(
+            ['approved' => 2, 'requested' => 0],
+            $rooms->timetable($approved->roomId, '2026-08-12')['totals']
+        );
         $f->clock->time = $f->clock->time->modify('+1 day');
         self::assertSame(2, $service->cancelOccurrence($approved->id, $target->id, 1)->version);
         self::assertCount(1, $f->sql->rows('sis_audit', ['action' => 'booking.occurrence_cancelled']));

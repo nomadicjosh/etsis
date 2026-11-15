@@ -3,7 +3,8 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 
 async function fixture(page) {
-    const state = { calls: [], errors: [], approved: false, release: null, delay: false };
+    const state = { calls: [], errors: [], approved: false, release: null, delay: false,
+        delayMonth: false, monthOverflow: false };
     const library = { id: id(8), code: 'LIB', name: 'Campus library' };
     const science = { id: id(9), code: 'SCI', name: 'Science building' };
     const rooms = [{ id: id(1), code: 'LIB.101', name: 'Seminar room', capacity: 30, building_id: library.id, building: library },
@@ -17,13 +18,20 @@ async function fixture(page) {
             starts_at: '2026-08-10T23:00:00-07:00', ends_at: '2026-08-11T01:00:00-07:00', room_id: rooms[0].id,
             room_code: rooms[0].code, room_name: rooms[0].name, building_id: library.id, building_code: library.code, building_name: library.name }];
     const week = data => {
-        const start = data.week || '2026-08-10';
-        const monday = new Date(`${start}T12:00:00Z`);
-        const dates = Array.from({ length: 8 }, (_, n) => new Date(monday.getTime() + n * 86400000).toISOString().slice(0, 10));
+        const view = data.view || 'week';
+        const monday = new Date(`${data.date || '2026-08-10'}T12:00:00Z`);
+        if (view === 'month') monday.setUTCDate(1);
+        else monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+        const start = monday.toISOString().slice(0, 10);
+        const length = view === 'month' ? new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth() + 1, 0)).getUTCDate() : 7;
+        const previous = new Date(monday);
+        if (view === 'month') previous.setUTCMonth(previous.getUTCMonth() - 1);
+        else previous.setUTCDate(previous.getUTCDate() - 7);
+        const dates = Array.from({ length: length + 1 }, (_, n) => new Date(monday.getTime() + n * 86400000).toISOString().slice(0, 10));
         const items = data.building_id === library.id && !data.search?.includes('missing')
-            ? allItems().filter(item => new Date(item.starts_at) < new Date(`${dates[7]}T00:00:00-07:00`)
+            ? allItems().filter(item => new Date(item.starts_at) < new Date(`${dates[length]}T00:00:00-07:00`)
                 && new Date(item.ends_at) > new Date(`${start}T00:00:00-07:00`)) : [];
-        const days = dates.slice(0, 7).map((date, n) => {
+        const days = dates.slice(0, length).map((date, n) => {
             const a = new Date(`${date}T00:00:00-07:00`), b = new Date(`${dates[n + 1]}T00:00:00-07:00`);
             const entries = items.filter(item => new Date(item.starts_at) < b && new Date(item.ends_at) > a);
             return { date, counts: { approved: entries.filter(item => item.status === 'approved').length,
@@ -31,8 +39,8 @@ async function fixture(page) {
                 items: entries.map(item => ({ id: item.id, continues_before: new Date(item.starts_at) < a,
                     continues_after: new Date(item.ends_at) > b })) };
         });
-        return { week: start, through: dates[6], previous: new Date(monday.getTime() - 7 * 86400000).toISOString().slice(0, 10),
-            next: dates[7], today: '2026-08-10', timezone: 'America/Los_Angeles', building: data.building_id === library.id ? library : science,
+        return { from: start, view, through: dates[length - 1], previous: previous.toISOString().slice(0, 10),
+            next: dates[length], today: '2026-08-10', timezone: 'America/Los_Angeles', building: data.building_id === library.id ? library : science,
             totals: { approved: items.filter(item => item.status === 'approved').length,
                 requested: items.filter(item => item.status === 'requested').length }, days, items };
     };
@@ -45,12 +53,14 @@ async function fixture(page) {
         let result = { items: [], next_after: null };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/buildings/') result = { items: [library, science], next_after: null };
-        else if (path === '/sis/calendar/context/') result = { week: '2026-08-10', today: '2026-08-10', timezone: 'America/Los_Angeles' };
-        else if (path === '/sis/calendar/week/') {
-            if (!data.building_id) return route.fulfill({ status: 422, json: { errors: [{ field: 'search',
+        else if (path === '/sis/calendar/context/') result = { today: '2026-08-10', timezone: 'America/Los_Angeles' };
+        else if (path === '/sis/calendar/view/') {
+            if (!data.building_id || (state.monthOverflow && data.view === 'month'))
+                return route.fulfill({ status: 422, json: { errors: [{ field: 'search',
                 message: 'More than 500 meetings match. Choose a building or narrow your search for a complete week.' }] } });
             result = week(data);
-            if (state.delay && data.week === '2026-08-17') await new Promise(resolve => { state.release = resolve; });
+            if ((state.delay && data.date === '2026-08-17') || (state.delayMonth && data.view === 'month'))
+                await new Promise(resolve => { state.release = resolve; });
         } else if (path.startsWith('/sis/bookings/') && path.endsWith('/approve/')) state.approved = true;
         else if (path === `/sis/bookings/${id(100)}/` || path === `/sis/bookings/${id(199)}/`) {
             const item = allItems().find(item => path === `/sis/bookings/${item.booking_id}/`);
@@ -65,7 +75,7 @@ async function fixture(page) {
     await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
     await page.locator('#directory-tabs').getByRole('link', { name: 'Calendar', exact: true }).click();
     await expect(page.locator('#directory-results')).toContainText('More than 500 meetings match.');
-    await expect(page.getByLabel('Date in week')).toHaveValue('2026-08-10');
+    await expect(page.getByLabel('Calendar date')).toHaveValue('2026-08-10');
     await page.getByRole('combobox', { name: 'Building', exact: true }).selectOption(library.id);
     await page.getByLabel('Search bookings or rooms').fill('Fictional');
     await page.getByRole('button', { name: 'View week', exact: true }).click();
@@ -119,7 +129,7 @@ test('edited and detached campus calendar responses never replace a newer search
     await page.getByRole('button', { name: 'Next week', exact: true }).click();
     await expect.poll(() => typeof state.release).toBe('function');
     await page.getByLabel('Search bookings or rooms').fill('Fictional changed');
-    const response = page.waitForResponse(response => response.url().endsWith('/sis/calendar/week/'));
+    const response = page.waitForResponse(response => response.url().endsWith('/sis/calendar/view/'));
     state.release(); await response;
     await expect(page.getByLabel('Search bookings or rooms')).toHaveValue('Fictional changed');
     await expect(page.locator('#directory-results')).toContainText('Choose View week to load these dates and filters.');
@@ -130,10 +140,74 @@ test('edited and detached campus calendar responses never replace a newer search
     await page.getByRole('button', { name: 'Next week', exact: true }).click();
     await expect.poll(() => typeof state.release).toBe('function');
     await page.locator('#directory-tabs').getByRole('link', { name: 'Space requests', exact: true }).click();
-    const oldResponse = page.waitForResponse(response => response.url().endsWith('/sis/calendar/week/'));
+    const oldResponse = page.waitForResponse(response => response.url().endsWith('/sis/calendar/view/'));
     state.release(); await oldResponse;
     await expect(page.locator('#directory-search-form')).toBeVisible();
     await expect(page.locator('#directory-heading')).toHaveText('Spaces & scheduling');
     await expect(page.getByLabel('Search bookings or rooms')).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('month overview keeps filters, selected days and booking actions with keyboard and narrow-screen access', async ({ page }) => {
+    const state = await fixture(page);
+    const results = page.locator('#directory-results');
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    await expect(results).toContainText('2026-08-01 through 2026-08-31');
+    await expect(results).toContainText('1 approved and 25 requested occurrences this month.');
+    await expect(results.locator('.booking-month [data-date]')).toHaveCount(31);
+    await expect(results.locator('.booking-month-weekday')).toHaveCount(7);
+    await expect(results.locator('.booking-month-spacer')).toHaveCount(5);
+    await expect(results.locator('[data-date="2026-08-10"]')).toHaveAttribute('aria-current', 'date');
+    await expect(results.locator('[data-date="2026-08-10"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Next month', exact: true }).click();
+    await expect(results).toContainText('2026-09-01 through 2026-09-30');
+    await expect(results.locator('.booking-month [data-date]')).toHaveCount(30);
+    await expect(results).toContainText('No requested or approved bookings for this day.');
+    await page.getByRole('button', { name: 'Previous month', exact: true }).click();
+    const tuesday = results.locator('[data-date="2026-08-11"]');
+    await tuesday.focus();
+    await page.keyboard.press('Enter');
+    await expect(results.getByRole('heading', { name: 'Tuesday, Aug 11', exact: true })).toBeFocused();
+    await page.getByLabel('Show approved bookings only').check();
+    await page.getByRole('button', { name: 'Fictional overnight meeting', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to calendar', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('combobox', { name: 'Building', exact: true })).toHaveValue(id(8));
+    await expect(page.getByLabel('Search bookings or rooms')).toHaveValue('Fictional');
+    await expect(page.getByLabel('Show approved bookings only')).toBeChecked();
+    await expect(tuesday).toHaveAttribute('aria-pressed', 'true');
+    for (const width of [1440, 320]) {
+        await page.setViewportSize({ width, height: 1000 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
+    }
+    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await expect(results).toContainText('2026-08-10 through 2026-08-16');
+    await expect(tuesday).toHaveAttribute('aria-pressed', 'true');
+    expect(state.errors).toEqual([]);
+    expect(state.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test('switching views ignores a delayed month and recovers from an oversized month without partial counts', async ({ page }) => {
+    const state = await fixture(page);
+    const results = page.locator('#directory-results');
+    state.delayMonth = true;
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    await expect.poll(() => typeof state.release).toBe('function');
+    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await expect(results).toContainText('2026-08-10 through 2026-08-16');
+    const response = page.waitForResponse(response => response.url().endsWith('/sis/calendar/view/'));
+    state.release(); await response;
+    await expect(results.locator('.booking-month')).toHaveCount(0);
+    await expect(page.getByLabel('Calendar date')).toHaveValue('2026-08-10');
+    state.delayMonth = false; state.monthOverflow = true;
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    await expect(results).toContainText('More than 500 meetings match.');
+    await expect(results.locator('[data-date], tbody')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Next month', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await expect(results).toContainText('1 approved and 25 requested occurrences this week.');
     expect(state.errors).toEqual([]);
 });

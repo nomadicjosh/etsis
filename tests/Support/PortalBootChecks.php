@@ -433,7 +433,7 @@ if ($seriesCreated->getStatusCode() !== 201
     throw new RuntimeException('The recurring booking request failed through the actual provider stack.');
 }
 
-$timetableResponse = $teachingPost($roomPath . '/week/', ['week' => '2026-08-10']);
+$timetableResponse = $teachingPost($roomPath . '/timetable/', ['date' => '2026-08-10']);
 $timetable = json_decode((string) $timetableResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if ($timetableResponse->getStatusCode() !== 200 || count($timetable['days'] ?? []) !== 7
     || ($timetable['totals'] ?? []) !== ['approved' => 0, 'requested' => 2]
@@ -488,7 +488,7 @@ if ($moveResponse->getStatusCode() !== 201 || $moveView->getStatusCode() !== 200
 $calendarContextResponse = $app->router->match($get->withUri(
     new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/calendar/context/')
 ));
-$calendarResponse = $teachingPost('/sis/calendar/week/', ['week' => '2026-08-10',
+$calendarResponse = $teachingPost('/sis/calendar/view/', ['date' => '2026-08-10',
     'building_id' => $buildingId, 'search' => 'Fictional']);
 $calendarPayload = json_decode((string) $calendarResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if ($calendarContextResponse->getStatusCode() !== 200 || $calendarResponse->getStatusCode() !== 200
@@ -497,6 +497,21 @@ if ($calendarContextResponse->getStatusCode() !== 200 || $calendarResponse->getS
     || !str_contains($calendarResponse->getHeaderLine('Cache-Control'), 'no-store')
     || $calendarResponse->hasHeader('phpdebugbar-id') || $sis->sql->rows('sis_history_events') !== $seriesEvents) {
     throw new RuntimeException('The private institution booking calendar lost its read-only CSRF boundary.');
+}
+foreach ([$roomPath . '/timetable/', '/sis/calendar/view/'] as $calendarPath) {
+    $response = $teachingPost($calendarPath, ['date' => '2026-08-31', 'view' => 'month']);
+    $payload = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if ($response->getStatusCode() !== 200 || ($payload['view'] ?? null) !== 'month'
+        || ($payload['from'] ?? null) !== '2026-08-01' || ($payload['through'] ?? null) !== '2026-08-31'
+        || count($payload['days'] ?? []) !== 31 || count($payload['items'] ?? []) !== 5
+        || !str_contains($response->getHeaderLine('Cache-Control'), 'no-store')
+        || $response->hasHeader('phpdebugbar-id') || $sis->sql->rows('sis_history_events') !== $seriesEvents) {
+        throw new RuntimeException('A monthly booking read lost its complete private read-only boundary.');
+    }
+    if ($teachingPost($calendarPath, ['date' => '2026-02-30', 'view' => 'month'])->getStatusCode() !== 422
+        || $teachingPost($calendarPath, ['date' => '2026-08-10', 'view' => 'year'])->getStatusCode() !== 422) {
+        throw new RuntimeException('A booking calendar accepted an invalid date or view.');
+    }
 }
 
 // Employment editing, historical reads and decisions also boot through the real providers.

@@ -97,7 +97,7 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(node('p', { class: 'private-text' }, buildingLabel(record)));
         if (!record.name || !record.building_id)
             body.append(node('p', { class: 'alert alert-info' }, 'Complete this room’s name and building in Edit room details. Existing bookings are preserved.'));
-        body.append(button('Weekly timetable', () => timetable(id)));
+        body.append(button('Room timetable', () => timetable(id)));
         body.append(
             button('Edit room details', () => roomForm(record)),
         );
@@ -210,9 +210,9 @@ window.createWorkspaceScheduling = function (ui) {
         window = formData(form, dateFields);
         await load();
     }
-    let lastCalendar = null, weekViewSerial = 0;
-    async function timetable(roomId, week = null, selected = null, approvedOnly = false) {
-        return weeklyView({ roomId, week, selected, approvedOnly });
+    let lastCalendar = null, timetableSerial = 0;
+    async function timetable(roomId, date = null, selected = null, approvedOnly = false, view = 'week') {
+        return calendarView({ roomId, date, selected, approvedOnly, view });
     }
     async function calendar(target, isCurrent = () => true) {
         const loading = node('p', { role: 'status' }, 'Loading booking calendar…');
@@ -220,7 +220,7 @@ window.createWorkspaceScheduling = function (ui) {
         try {
             const context = await request('/sis/calendar/context/');
             if (!loading.isConnected || !isCurrent()) return;
-            await weeklyView({ ...(lastCalendar || { week: context.week }), target, isCurrent });
+            await calendarView({ ...(lastCalendar || { date: context.today }), target, isCurrent });
         } catch (error) {
             if (!loading.isConnected || !isCurrent()) return;
             loading.textContent = 'The calendar could not be loaded. Try opening Calendar again.';
@@ -228,38 +228,63 @@ window.createWorkspaceScheduling = function (ui) {
             throw error;
         }
     }
-    async function weeklyView({ roomId = null, week = null, selected = null, approvedOnly = false,
-        target = null, isCurrent = () => true, filters = {} }) {
-        const body = roomId ? openDrawer('Weekly room timetable', 'SPACES & SCHEDULING')
+    async function calendarView({ roomId = null, date = null, selected = null, approvedOnly = false,
+        view = 'week', target = null, isCurrent = () => true, filters = {} }) {
+        const body = roomId ? openDrawer('Room timetable', 'SPACES & SCHEDULING')
             : node('section', { class: 'record-section' });
         if (target) target.replaceChildren(body);
         const active = () => body.isConnected && isCurrent();
-        const fields = [['week', 'Date in week', 'date'], ...(roomId ? [] : [
+        const fields = [['date', 'Calendar date', 'date'], ...(roomId ? [] : [
             ['building_id', 'Building', 'lookup', 'buildings', false],
             ['search', 'Search bookings or rooms', 'text', '', false],
         ])];
-        const form = await buildForm(fields, { ...filters, ...(week ? { week } : {}) });
+        const form = await buildForm(fields, { ...filters, ...(date ? { date } : {}) });
         if (!active()) return;
-        const input = form.elements.week;
+        const input = form.elements.date;
         if (!roomId) form.elements.search.maxLength = 100;
         const readFilters = () => roomId ? {} : { building_id: form.elements.building_id.value,
             search: form.elements.search.value.trim() };
-        input.min = '1000-01-06'; input.max = '9998-12-27';
         const heading = node('h3', { class: 'h5 private-text' });
         const status = node('p', { role: 'status', 'aria-live': 'polite' });
         const content = node('div');
-        const filter = node('input', { type: 'checkbox', class: 'form-check-input', id: `timetable-approved-${++weekViewSerial}` });
+        const filter = node('input', { type: 'checkbox', class: 'form-check-input', id: `timetable-approved-${++timetableSerial}` });
         filter.checked = approvedOnly;
         const filterField = node('div', { class: 'form-check my-3' }, filter,
             node('label', { class: 'form-check-label', for: filter.id }, 'Show approved bookings only'));
         let result = null, serial = 0, page = 0;
-        const weekButton = (label, direction) => node('button', { type: 'button', class: 'btn btn-outline-primary',
-            onclick: () => task(() => result && load(result[direction])) }, label);
-        const previous = weekButton('Previous week', 'previous');
-        const next = weekButton('Next week', 'next');
+        const periodButton = direction => node('button', { type: 'button', class: 'btn btn-outline-primary',
+            onclick: () => task(() => result && load(result[direction])) });
+        const previous = periodButton('previous');
+        const next = periodButton('next');
         previous.disabled = true; next.disabled = true;
-        const today = button('This week', () => { selected = null; return load(null); });
+        const today = button('', () => { selected = null; return load(null); });
         const controls = node('div', { class: 'inline-actions mb-3' }, previous, today, next);
+        const modes = node('div', { class: 'inline-actions mb-3', role: 'group', 'aria-label': 'Calendar view' });
+        for (const mode of ['week', 'month']) {
+            modes.append(button(mode === 'week' ? 'Week' : 'Month', () => {
+                if (view === mode) return;
+                let anchor = (result ? selected : null) || input.value || null;
+                view = mode;
+                labels();
+                if (anchor) anchor = anchor < input.min ? input.min : anchor > input.max ? input.max : anchor;
+                return load(anchor);
+            }));
+        }
+        const submit = node('button', { type: 'submit', class: 'btn btn-primary' });
+        function labels() {
+            previous.textContent = `Previous ${view}`;
+            next.textContent = `Next ${view}`;
+            today.textContent = `This ${view}`;
+            submit.textContent = `View ${view}`;
+            input.min = view === 'month' ? '1000-01-01' : '1000-01-06';
+            input.max = view === 'month' ? '9998-12-31' : '9998-12-27';
+            for (const [n, control] of [...modes.children].entries()) {
+                const chosen = ['week', 'month'][n] === view;
+                control.setAttribute('aria-pressed', String(chosen));
+                control.className = chosen ? 'btn btn-primary' : 'btn btn-outline-primary';
+            }
+        }
+        labels();
         const dateLabel = date => new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined,
             { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
         // Keep the server's school-local clock and explicit offset, regardless of browser timezone.
@@ -268,28 +293,45 @@ window.createWorkspaceScheduling = function (ui) {
             if (!result || !active()) return;
             const day = result.days.find(item => item.date === selected) || result.days[0];
             selected = day.date;
-            if (!roomId) lastCalendar = { week: result.week, selected, approvedOnly: filter.checked, filters: readFilters() };
+            if (!roomId) lastCalendar = { date: result.from, view, selected, approvedOnly: filter.checked, filters: readFilters() };
             const rowsById = new Map(result.items.map(item => [item.id, item]));
             const items = day.items.map(slot => ({ ...rowsById.get(slot.id), ...slot }))
                 .filter(item => !filter.checked || item.status === 'approved');
             page = Math.min(page, Math.max(0, Math.ceil(items.length / 20) - 1));
-            const days = node('div', { class: 'row g-2 mb-4', role: 'group', 'aria-label': 'Choose a timetable day' });
+            const month = result.view === 'month';
+            const days = node('div', { class: month ? 'booking-month mb-4' : 'row g-2 mb-4',
+                role: 'group', 'aria-label': 'Choose a timetable day' });
+            if (month) {
+                for (const label of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+                    days.append(node('span', { class: 'booking-month-weekday text-center small fw-semibold', 'aria-hidden': 'true' }, label));
+                const offset = (new Date(`${result.from}T12:00:00Z`).getUTCDay() + 6) % 7;
+                for (let n = 0; n < offset; ++n)
+                    days.append(node('span', { class: 'booking-month-spacer', 'aria-hidden': 'true' }));
+            }
             for (const item of result.days) {
                 const dayButton = button(dateLabel(item.date), () => { selected = item.date; page = 0; draw(true); },
                     item.date === selected ? 'btn-primary w-100 text-start' : 'btn-outline-primary w-100 text-start');
                 dayButton.setAttribute('aria-pressed', String(item.date === selected));
                 dayButton.dataset.date = item.date;
-                dayButton.append(node('span', { class: 'd-block small mt-1' },
+                if (item.date === result.today) dayButton.setAttribute('aria-current', 'date');
+                if (month) {
+                    dayButton.setAttribute('aria-label', `${dateLabel(item.date)}: ${item.counts.approved} approved, ${item.counts.requested} requested`);
+                    dayButton.replaceChildren(
+                        node('span', { class: 'booking-month-date' }, String(Number(item.date.slice(8)))),
+                        node('span', { class: 'booking-month-label' }, dateLabel(item.date)),
+                        node('span', { class: 'booking-month-count' }, `${item.counts.approved} approved`),
+                        node('span', { class: 'booking-month-count' }, `${item.counts.requested} requested`));
+                } else dayButton.append(node('span', { class: 'd-block small mt-1' },
                     `${item.counts.approved} approved · ${item.counts.requested} requested`));
-                days.append(node('div', { class: 'col-12 col-sm-6' }, dayButton));
+                days.append(node('div', { class: month ? 'booking-month-day' : 'col-12 col-sm-6' }, dayButton));
             }
             const dayHeading = node('h4', { class: 'h6', tabindex: '-1' }, dateLabel(day.date));
             const summary = node('p', { class: 'form-text' },
-                `${result.week} through ${result.through} · ${result.timezone}. ${result.totals.approved} approved and ${result.totals.requested} requested occurrences this week. Overnight meetings appear on each day they overlap.`);
+                `${result.from} through ${result.through} · ${result.timezone}. ${result.totals.approved} approved and ${result.totals.requested} requested occurrences this ${view}. Overnight meetings appear on each day they overlap.`);
             const listing = items.length ? grid(['Booking', ...(!roomId ? ['Room', 'Building'] : []), 'Status', 'Starts', 'Ends'],
                 items.slice(page * 20, (page + 1) * 20).map(item => [
                     button(item.title, () => booking(item.booking_id, roomId
-                        ? { label: 'Back to weekly timetable', open: () => timetable(roomId, result.week, selected, filter.checked) }
+                        ? { label: 'Back to room timetable', open: () => timetable(roomId, result.from, selected, filter.checked, view) }
                         : { label: 'Back to calendar', open: () => ui.openCalendar() })),
                     ...(!roomId ? [button([item.room_code, item.room_name].filter(Boolean).join(' · '), () => room(item.room_id)),
                         [item.building_code, item.building_name].filter(Boolean).join(' · ') || 'Building not assigned'] : []),
@@ -317,17 +359,17 @@ window.createWorkspaceScheduling = function (ui) {
             status.setAttribute('role', 'status');
             status.textContent = 'Loading timetable…';
             try {
-                const fresh = await request(roomId ? `/sis/rooms/${roomId}/week/` : '/sis/calendar/week/',
-                    'POST', { ...readFilters(), ...(date ? { week: date } : {}) });
+                const fresh = await request(roomId ? `/sis/rooms/${roomId}/timetable/` : '/sis/calendar/view/',
+                    'POST', { ...readFilters(), view, ...(date ? { date } : {}) });
                 if (!active() || current !== serial) return;
                 result = fresh; page = 0;
-                input.value = fresh.week;
+                input.value = fresh.from;
                 heading.textContent = roomId ? `${roomLabel(fresh.room)} · Capacity: ${fresh.room.capacity}`
                     : (fresh.building ? `${fresh.building.code} · ${fresh.building.name}` : 'All buildings');
                 previous.disabled = fresh.previous < input.min;
                 next.disabled = fresh.next > input.max;
                 if (!fresh.days.some(day => day.date === selected))
-                    selected = fresh.days.some(day => day.date === fresh.today) ? fresh.today : fresh.week;
+                    selected = fresh.days.some(day => day.date === fresh.today) ? fresh.today : fresh.from;
                 draw();
             } catch (error) {
                 if (!active() || current !== serial) return;
@@ -341,7 +383,7 @@ window.createWorkspaceScheduling = function (ui) {
                 if (active() && current === serial) content.removeAttribute('aria-busy');
             }
         }
-        form.append(node('button', { type: 'submit', class: 'btn btn-primary' }, 'View week'));
+        form.append(submit);
         form.addEventListener('submit', event => {
             event.preventDefault();
             if (form.reportValidity()) task(() => load(input.value), form.querySelector('[type="submit"]'));
@@ -351,8 +393,8 @@ window.createWorkspaceScheduling = function (ui) {
             previous.disabled = true; next.disabled = true;
             heading.textContent = ''; content.replaceChildren(); content.removeAttribute('aria-busy');
             status.setAttribute('role', 'status');
-            status.textContent = roomId ? 'Choose View week to load these dates.'
-                : 'Choose View week to load these dates and filters.';
+            status.textContent = roomId ? `Choose View ${view} to load these dates.`
+                : `Choose View ${view} to load these dates and filters.`;
         };
         form.addEventListener('input', changed); form.addEventListener('change', changed);
         filter.addEventListener('change', () => { page = 0; draw(); });
@@ -360,8 +402,8 @@ window.createWorkspaceScheduling = function (ui) {
             'Times use the institution’s timezone. Requested bookings do not reserve the room. Approval checks availability again.'),
             roomId ? button('Back to room agenda', () => room(roomId)) :
                 node('p', { class: 'form-text' }, 'Search booking purposes, room codes/names or building codes/names. Up to 500 matching meetings are shown, with complete counts for the chosen filters.'),
-            controls, form, filterField, status, content);
-        await load(week);
+            modes, controls, form, filterField, status, content);
+        await load(date);
     }
     async function requestBooking(preset = {}) {
         const body = openDrawer("Request a space", "SPACES & SCHEDULING");

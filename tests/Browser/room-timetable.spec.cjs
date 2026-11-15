@@ -6,9 +6,16 @@ async function fixture(page) {
     const room = id(1), booking = id(2);
     const state = { calls: [], errors: [], approved: false, delayed: null, release: null, overflow: false };
     page.on('pageerror', error => state.errors.push(error.message));
-    function week(date) {
-        const start = !date || date < '2026-03-09' ? '2026-03-02' : '2026-03-09';
-        const items = start !== '2026-03-02' ? [] : [
+    function week(date, view = 'week') {
+        const monday = new Date(`${date || '2026-03-08'}T12:00:00Z`);
+        if (view === 'month') monday.setUTCDate(1);
+        else monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+        const start = monday.toISOString().slice(0, 10);
+        const length = view === 'month' ? new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth() + 1, 0)).getUTCDate() : 7;
+        const previous = new Date(monday);
+        if (view === 'month') previous.setUTCMonth(previous.getUTCMonth() - 1);
+        else previous.setUTCDate(previous.getUTCDate() - 7);
+        const items = !['2026-03-02', '2026-03-01'].includes(start) ? [] : [
             { id: id(10), booking_id: id(3), title: 'Fictional overnight meeting', status: 'approved',
                 starts_at: '2026-03-01T23:00:00-08:00', ends_at: '2026-03-03T01:00:00-08:00' },
             ...Array.from({ length: 21 }, (_, n) => ({ id: id(20 + n), booking_id: id(4),
@@ -18,9 +25,8 @@ async function fixture(page) {
                 status: state.approved ? 'approved' : 'requested',
                 starts_at: '2026-03-08T01:30:00-08:00', ends_at: '2026-03-08T03:30:00-07:00' },
         ];
-        const monday = new Date(`${start}T12:00:00Z`);
-        const dates = Array.from({ length: 8 }, (_, n) => new Date(monday.getTime() + n * 86400000).toISOString().slice(0, 10));
-        const days = dates.slice(0, 7).map((date, n) => {
+        const dates = Array.from({ length: length + 1 }, (_, n) => new Date(monday.getTime() + n * 86400000).toISOString().slice(0, 10));
+        const days = dates.slice(0, length).map((date, n) => {
             const a = new Date(`${date}T00:00:00${date < '2026-03-09' ? '-08:00' : '-07:00'}`);
             const b = new Date(`${dates[n + 1]}T00:00:00${dates[n + 1] < '2026-03-09' ? '-08:00' : '-07:00'}`);
             const rows = items.filter(item => new Date(item.starts_at) < b && new Date(item.ends_at) > a);
@@ -29,8 +35,8 @@ async function fixture(page) {
                 items: rows.map(item => ({ id: item.id, continues_before: new Date(item.starts_at) < a,
                     continues_after: new Date(item.ends_at) > b })) };
         });
-        return { week: start, through: dates[6], today: '2026-03-08',
-            previous: start === '2026-03-02' ? '2026-02-23' : '2026-03-02', next: dates[7],
+        return { from: start, view, through: dates[length - 1], today: '2026-03-08',
+            previous: previous.toISOString().slice(0, 10), next: dates[length],
             timezone: 'America/Los_Angeles', room: { id: room, code: 'Fictional.101', capacity: 30 },
             totals: { approved: items.filter(item => item.status === 'approved').length,
                 requested: items.filter(item => item.status === 'requested').length }, days, items };
@@ -46,11 +52,11 @@ async function fixture(page) {
         else if (path.startsWith('/sis/ui/')) result = { items: [], next_after: null };
         else if (path === `/sis/rooms/${room}/`) result = { id: room, code: 'Fictional.101', capacity: 30, revision: 'fictional' };
         else if (path === `/sis/rooms/${room}/agenda/`) result = { items: [], next_after: null };
-        else if (path === `/sis/rooms/${room}/week/`) {
+        else if (path === `/sis/rooms/${room}/timetable/`) {
             if (state.overflow) return route.fulfill({ status: 422, json: { message: 'Use the paged room agenda.',
                 errors: [{ field: 'week', message: 'This week exceeds 500 occurrences. Use the paged room agenda.' }] } });
-            result = week(data.week);
-            if (data.week === state.delayed) await new Promise(resolve => { state.release = resolve; });
+            result = week(data.date, data.view);
+            if (data.date === state.delayed) await new Promise(resolve => { state.release = resolve; });
         } else if (path === `/sis/bookings/${booking}/`) result = { id: booking, room_id: room,
             title: 'Fictional spring seminar', status: state.approved ? 'approved' : 'requested', version: state.approved ? 1 : 0,
             occurrences: [{ id: id(50), status: state.approved ? 'approved' : 'requested', starts_at: '2026-03-08T01:30:00-08:00', ends_at: '2026-03-08T03:30:00-07:00' }] };
@@ -61,7 +67,7 @@ async function fixture(page) {
     await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
     await page.locator('#directory-tabs').getByRole('link', { name: 'Rooms & spaces' }).click();
     await page.getByRole('button', { name: 'Fictional.101', exact: true }).click();
-    await page.getByRole('button', { name: 'Weekly timetable', exact: true }).click();
+    await page.getByRole('button', { name: 'Room timetable', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Fictional.101 · Capacity: 30' })).toBeVisible();
     return state;
 }
@@ -97,7 +103,7 @@ test('weekly room timetable keeps school time, pages days and returns from booki
     await page.getByRole('button', { name: 'Fictional spring seminar', exact: true }).click();
     await page.getByRole('button', { name: 'Approve space request', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm space approval', exact: true }).click();
-    await page.getByRole('button', { name: 'Back to weekly timetable', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to room timetable', exact: true }).click();
     await expect(body).toContainText('2 approved and 21 requested occurrences');
     await expect(page.getByRole('button', { name: /^Sunday, Mar 8/ })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Next week', exact: true }).click();
@@ -118,10 +124,10 @@ test('weekly timetable ignores old and detached responses and offers the agenda 
     await expect.poll(() => typeof state.release).toBe('function');
     await page.getByRole('button', { name: 'This week', exact: true }).click();
     await expect(body).toContainText('2026-03-02 through 2026-03-08');
-    await page.getByLabel('Date in week').fill('2026-03-05');
+    await page.getByLabel('Calendar date').fill('2026-03-05');
     state.release();
     await expect(body).toContainText('Choose View week to load these dates.');
-    await expect(page.getByLabel('Date in week')).toHaveValue('2026-03-05');
+    await expect(page.getByLabel('Calendar date')).toHaveValue('2026-03-05');
     state.overflow = true;
     await page.getByRole('button', { name: 'View week', exact: true }).click();
     await expect(body).toContainText('Timetable unavailable. Retry or use the paged room agenda.');
@@ -136,5 +142,31 @@ test('weekly timetable ignores old and detached responses and offers the agenda 
     state.release();
     await expect(page.getByRole('button', { name: 'View agenda', exact: true })).toBeVisible();
     await expect(body).not.toContainText('2026-03-09 through 2026-03-15');
+    expect(state.errors).toEqual([]);
+});
+
+test('room month view retains school times, approval context and the chosen day when switching back to week', async ({ page }) => {
+    const state = await fixture(page);
+    const body = page.locator('#drawer-body');
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    await expect(body).toContainText('2026-03-01 through 2026-03-31');
+    await expect(body).toContainText('01:30 UTC-08:00');
+    await expect(body).toContainText('03:30 UTC-07:00');
+    await expect(body.locator('.booking-month [data-date]')).toHaveCount(31);
+    await page.getByRole('button', { name: 'Fictional spring seminar', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve space request', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm space approval', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to room timetable', exact: true }).click();
+    await expect(body).toContainText('2 approved and 21 requested occurrences this month.');
+    await expect(body.locator('[data-date="2026-03-08"]')).toHaveAttribute('aria-pressed', 'true');
+    for (const width of [1440, 320]) {
+        await page.setViewportSize({ width, height: 1000 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
+    }
+    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await expect(body).toContainText('2026-03-02 through 2026-03-08');
+    await expect(body.locator('[data-date="2026-03-08"]')).toHaveAttribute('aria-pressed', 'true');
     expect(state.errors).toEqual([]);
 });

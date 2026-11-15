@@ -91,10 +91,10 @@ final class BookingCalendarTest extends TestCase
         $before = array_map(fn(string $table): array => $f->sql->rows($table), $tables);
         $service = $this->service($f);
         self::assertSame(
-            ['week' => '2026-03-02', 'today' => '2026-03-08', 'timezone' => 'America/Los_Angeles'],
+            ['today' => '2026-03-08', 'timezone' => 'America/Los_Angeles'],
             $service->context()
         );
-        $result = $service->week();
+        $result = $service->timetable();
         self::assertSame(['approved' => 2, 'requested' => 1], $result['totals']);
         self::assertCount(7, $result['days']);
         self::assertCount(3, $result['items']);
@@ -105,13 +105,13 @@ final class BookingCalendarTest extends TestCase
         self::assertArrayNotHasKey('owner_user_id', $result['items'][0]);
         self::assertSame('LIB.101', $result['items'][0]['room_code']);
         self::assertNull($result['items'][1]['building_name']);
-        $filtered = $service->week(null, $science->id)['items'];
+        $filtered = $service->timetable(null, $science->id)['items'];
         self::assertSame([$request->id->value], array_column($filtered, 'booking_id'));
         foreach (['sCi.201', 'Science building', 'Fictional SCI'] as $search) {
-            $filtered = $service->week(null, null, $search)['items'];
+            $filtered = $service->timetable(null, null, $search)['items'];
             self::assertSame([$request->id->value], array_column($filtered, 'booking_id'));
         }
-        self::assertSame([], $service->week(null, $library, 'Science')['items']);
+        self::assertSame([], $service->timetable(null, $library, 'Science')['items']);
         self::assertSame($before, array_map(fn(string $table): array => $f->sql->rows($table), $tables));
     }
 
@@ -122,9 +122,42 @@ final class BookingCalendarTest extends TestCase
         $other = $this->room($f, 'ROOM_OTHER');
         $meeting = $this->meeting($f, $literal, '2026-08-10T10:00:00-07:00', '2026-08-10T11:00:00-07:00');
         $this->meeting($f, $other, '2026-08-10T10:00:00-07:00', '2026-08-10T11:00:00-07:00');
-        $filtered = $this->service($f)->week(null, null, '_%!')['items'];
+        $filtered = $this->service($f)->timetable(null, null, '_%!')['items'];
         self::assertSame([$meeting->id->value], array_column($filtered, 'booking_id'));
-        self::assertSame([], $this->service($f)->week(null, null, "' OR 1=1 --")['items']);
+        self::assertSame([], $this->service($f)->timetable(null, null, "' OR 1=1 --")['items']);
+    }
+
+    public function testMonthReadsFilterBeforeTheBoundAndUseHalfOpenSchoolCalendarDates(): void
+    {
+        $f = new SisFixture();
+        $f->clock->time = new DateTimeImmutable('2026-03-08T18:00:00', new DateTimeZone('America/Los_Angeles'));
+        $building = $f->building();
+        $a = $this->room($f, 'LIB.101', $building);
+        $b = $this->room($f, 'LIB.102', $building);
+        $this->meeting($f, $a, '2026-02-28T23:00:00-08:00', '2026-03-01T00:00:00-08:00');
+        $carry = $this->meeting($f, $a, '2026-02-28T23:30:00-08:00', '2026-03-01T01:00:00-08:00');
+        $dst = $this->meeting($f, $b, '2026-03-08T01:30:00-08:00', '2026-03-08T03:30:00-07:00');
+        $tail = $this->meeting($f, $a, '2026-03-31T23:30:00-07:00', '2026-04-01T01:00:00-07:00', 'requested');
+        $this->meeting($f, $a, '2026-04-01T00:00:00-07:00', '2026-04-01T01:00:00-07:00');
+        $this->meeting($f, $a, '2026-03-10T09:00:00-07:00', '2026-03-10T10:00:00-07:00', 'cancelled');
+        $tables = ['sis_bookings', 'sis_booking_slots', 'sis_history_events', 'sis_audit'];
+        $before = array_map(fn(string $table): array => $f->sql->rows($table), $tables);
+        $result = $this->service($f)->timetable('2026-03-31', $building, 'LIB', 'month');
+        self::assertSame('month', $result['view']);
+        self::assertSame('2026-03-01', $result['from']);
+        self::assertSame('2026-03-31', $result['through']);
+        self::assertCount(31, $result['days']);
+        self::assertSame(['approved' => 2, 'requested' => 1], $result['totals']);
+        self::assertSame(
+            [$carry->id->value, $dst->id->value, $tail->id->value],
+            array_column($result['items'], 'booking_id')
+        );
+        self::assertTrue($result['days'][0]['items'][0]['continues_before']);
+        self::assertTrue($result['days'][30]['items'][0]['continues_after']);
+        self::assertSame('2026-03-08T03:30:00-07:00', $result['items'][1]['ends_at']);
+        $filtered = $this->service($f)->timetable('2026-03-08', $building, 'LIB.102', 'month');
+        self::assertSame([$dst->id->value], array_column($filtered['items'], 'booking_id'));
+        self::assertSame($before, array_map(fn(string $table): array => $f->sql->rows($table), $tables));
     }
 
     public function testLargeWeeksRejectPartialCountsButCanBeNarrowed(): void
@@ -146,17 +179,25 @@ final class BookingCalendarTest extends TestCase
                 $chunk
             ));
         }
-        self::assertCount(500, $this->service($f)->week()['items']);
+        self::assertCount(500, $this->service($f)->timetable()['items']);
+        self::assertCount(500, $this->service($f)->timetable(view: 'month')['items']);
         $quiet = $this->room($f, 'QUIET.1');
         $this->meeting($f, $quiet, '2026-08-11T10:00:00-07:00', '2026-08-11T11:00:00-07:00');
         try {
-            $this->service($f)->week();
+            $this->service($f)->timetable();
             self::fail('An incomplete institution week was returned.');
         } catch (ValidationException $error) {
             self::assertSame('search', $error->errors[0]['field']);
             self::assertStringContainsString('500', $error->errors[0]['message']);
         }
-        self::assertCount(1, $this->service($f)->week(null, null, 'QUIET.1')['items']);
+        self::assertCount(1, $this->service($f)->timetable(null, null, 'QUIET.1')['items']);
+        try {
+            $this->service($f)->timetable(view: 'month');
+            self::fail('An incomplete month was returned.');
+        } catch (ValidationException $error) {
+            self::assertStringContainsString('week view', $error->errors[0]['message']);
+        }
+        self::assertCount(1, $this->service($f)->timetable(search: 'QUIET.1', view: 'month')['items']);
         self::assertSame(['cancelled_at', 'ends_at', 'starts_at', 'id'], array_column(
             $f->connection->pdo->query('PRAGMA index_info(sbs_calendar_window)')->fetchAll(\PDO::FETCH_ASSOC),
             'name'
@@ -174,7 +215,10 @@ final class BookingCalendarTest extends TestCase
     {
         $f = new SisFixture();
         $f->access->staff = false;
-        foreach ([fn() => $this->service($f)->context(), fn() => $this->service($f)->week()] as $read) {
+        foreach (
+            [fn() => $this->service($f)->context(), fn() => $this->service($f)->timetable(),
+            fn() => $this->service($f)->timetable(view: 'month')] as $read
+        ) {
             try {
                 $read();
                 self::fail('An ordinary owner read the campus calendar.');
@@ -190,7 +234,7 @@ final class BookingCalendarTest extends TestCase
                 return [];
             });
         $this->expectException(AccessDeniedException::class);
-        $this->service($f, $rooms)->week();
+        $this->service($f, $rooms)->timetable();
     }
 
     public function testInvalidSearchAndUnknownBuildingsAreRejected(): void
@@ -198,13 +242,13 @@ final class BookingCalendarTest extends TestCase
         $f = new SisFixture();
         foreach ([str_repeat('a', 101), "line\nbreak", "bad\0text"] as $search) {
             try {
-                $this->service($f)->week(null, null, $search);
+                $this->service($f)->timetable(null, null, $search);
                 self::fail('An invalid calendar search was accepted.');
             } catch (ValidationException $error) {
                 self::assertSame('search', $error->errors[0]['field']);
             }
         }
         $this->expectException(RecordNotFoundException::class);
-        $this->service($f)->week(null, EntityId::generate());
+        $this->service($f)->timetable(null, EntityId::generate());
     }
 }

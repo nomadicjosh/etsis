@@ -885,8 +885,8 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/courses/{id}/publication/page/", [SisCoursePublicationController::class, "page"]);
     $router->map(['GET'], '/sis/calendar/context/',
         [\Application\Http\Controller\SisBookingCalendarController::class, 'context'])->name('sis.calendar.context');
-    $router->map(['POST'], '/sis/calendar/week/',
-        [\Application\Http\Controller\SisBookingCalendarController::class, 'week'])->name('sis.calendar.week');
+    $router->map(['POST'], '/sis/calendar/view/',
+        [\Application\Http\Controller\SisBookingCalendarController::class, 'timetable'])->name('sis.calendar.view');
     $router->map(['POST'], '/sis/rooms/', [SisRoomController::class, 'create'])->name('sis.room.create');
     $router->map(['POST'], '/sis/buildings/', [SisRoomController::class, 'createBuilding'])->name('sis.building.create');
     $router->map(['GET'], '/sis/buildings/{id}/', [SisRoomController::class, 'building'])->name('sis.building.show');
@@ -907,8 +907,8 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/rooms/{id}/agenda/", [SisRoomController::class, "agenda"])
         ->name("sis.room.agenda");
-    $router->map(['POST'], '/sis/rooms/{id}/week/', [SisRoomController::class, 'week'])
-        ->name('sis.room.week');
+    $router->map(['POST'], '/sis/rooms/{id}/timetable/', [SisRoomController::class, 'timetable'])
+        ->name('sis.room.timetable');
     $router
         ->map(["POST"], "/sis/bookings/", [SisBookingController::class, "request"])
         ->name("sis.booking.request");

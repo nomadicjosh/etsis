@@ -24,20 +24,23 @@ final readonly class BookingCalendarService
     ) {
     }
 
-    /** @return array{week:string,today:string,timezone:string} */
+    /** @return array{today:string,timezone:string} */
     public function context(): array
     {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $now = $this->clock->now();
-        $week = new BookingTimetable($now->format('Y-m-d'), $now->getTimezone());
         $this->authorize($actor);
-        return ['week' => $week->startsAt->format('Y-m-d'), 'today' => $now->format('Y-m-d'),
+        return ['today' => $now->format('Y-m-d'),
             'timezone' => $now->getTimezone()->getName()];
     }
 
     /** @return array<string,mixed> */
-    public function week(?string $date = null, ?EntityId $building = null, string $search = ''): array
-    {
+    public function timetable(
+        ?string $date = null,
+        ?EntityId $building = null,
+        string $search = '',
+        string $view = 'week'
+    ): array {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         if (
             !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 100
@@ -49,16 +52,16 @@ final readonly class BookingCalendarService
         $search = trim($search);
         $selected = $building === null ? null : $this->buildings->get($building);
         $now = $this->clock->now();
-        $week = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone());
-        $rows = $this->rooms->calendar(new TimeSlot($week->startsAt, $week->endsAt), $building, $search, 501);
+        $period = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone(), $view);
+        $rows = $this->rooms->calendar(new TimeSlot($period->startsAt, $period->endsAt), $building, $search, 501);
         $this->authorize($actor);
         if (count($rows) > 500) {
             throw new ValidationException([['field' => 'search',
                 'message' => 'More than 500 meetings match. Choose a building'
-                    . ' or narrow your search to see a complete week.',
+                    . ' or narrow your search; a week view can also reduce the results.',
             ]]);
         }
-        $result = $week->summarize($rows);
+        $result = $period->summarize($rows);
         $this->authorize($actor);
         return $result + ['today' => $now->format('Y-m-d'), 'search' => $search,
             'building' => $selected === null ? null : ['id' => $selected->id->value,

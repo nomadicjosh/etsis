@@ -21,13 +21,14 @@ final readonly class SisBookingCalendarController
         return new JsonResponse($this->calendar->context());
     }
 
-    public function week(ServerRequest $request): ResponseInterface
+    public function timetable(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->calendar->week(
-            $f->optionalText('week', 10),
+        return new JsonResponse($this->calendar->timetable(
+            $f->optionalText('date', 10),
             $f->optionalId('building_id'),
-            $f->search('search')
+            $f->search('search'),
+            $f->optionalText('view', 5) ?? 'week'
         ));
     }
 }

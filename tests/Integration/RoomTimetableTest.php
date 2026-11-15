@@ -79,7 +79,7 @@ final class RoomTimetableTest extends TestCase
             $calendar = new BookingTimetable($boundary, $zone);
             self::assertSame(
                 $calendar->startsAt->format('Y-m-d'),
-                new BookingTimetable($calendar->summarize([])['week'], $zone)->startsAt->format('Y-m-d')
+                new BookingTimetable($calendar->summarize([])['from'], $zone)->startsAt->format('Y-m-d')
             );
         }
         $this->expectException(ValidationException::class);
@@ -101,8 +101,8 @@ final class RoomTimetableTest extends TestCase
         foreach (['sis_bookings', 'sis_booking_slots', 'sis_audit', 'sis_history_events'] as $table) {
             $before[$table] = $f->sql->rows($table);
         }
-        $result = $this->service($f)->week($room);
-        self::assertSame('2026-03-02', $result['week']);
+        $result = $this->service($f)->timetable($room);
+        self::assertSame('2026-03-02', $result['from']);
         self::assertSame('2026-03-08', $result['through']);
         self::assertSame('2026-02-23', $result['previous']);
         self::assertSame('2026-03-09', $result['next']);
@@ -128,10 +128,28 @@ final class RoomTimetableTest extends TestCase
         $f = new SisFixture();
         $room = $this->room($f);
         $this->booking($f, $room, '2026-08-10T23:00:00-07:00', '2026-08-11T00:00:00-07:00', 'approved');
-        $result = $this->service($f)->week($room, '2026-08-11');
+        $result = $this->service($f)->timetable($room, '2026-08-11');
         self::assertCount(1, $result['days'][0]['items']);
         self::assertFalse($result['days'][0]['items'][0]['continues_after']);
         self::assertSame([], $result['days'][1]['items']);
+    }
+
+    public function testRoomMonthUsesTheSameActiveOccurrencesWithCompleteDailyCounts(): void
+    {
+        $f = new SisFixture();
+        $room = $this->room($f);
+        $this->booking($f, $room, '2026-08-01T09:00:00-07:00', '2026-08-01T10:00:00-07:00', 'approved');
+        $this->booking($f, $room, '2026-08-31T23:00:00-07:00', '2026-09-01T01:00:00-07:00');
+        $this->booking($f, $this->room($f), '2026-08-10T09:00:00-07:00', '2026-08-10T10:00:00-07:00');
+        $this->booking($f, $room, '2026-08-10T09:00:00-07:00', '2026-08-10T10:00:00-07:00', 'cancelled');
+        $result = $this->service($f)->timetable($room, '2026-08-31', 'month');
+        self::assertSame('month', $result['view']);
+        self::assertSame('2026-08-01', $result['from']);
+        self::assertSame('2026-08-31', $result['through']);
+        self::assertCount(31, $result['days']);
+        self::assertCount(2, $result['items']);
+        self::assertSame(['approved' => 1, 'requested' => 1], $result['totals']);
+        self::assertTrue($result['days'][30]['items'][0]['continues_after']);
     }
 
     public function testAMidnightClockChangeDoesNotMoveLaterDayBoundaries(): void
@@ -140,8 +158,8 @@ final class RoomTimetableTest extends TestCase
         $f->clock->time = new DateTimeImmutable('2010-03-23T12:00:00', new DateTimeZone('Asia/Tehran'));
         $room = $this->room($f);
         $this->booking($f, $room, '2010-03-23T00:15:00+04:30', '2010-03-23T00:45:00+04:30');
-        $result = $this->service($f)->week($room);
-        self::assertSame('2010-03-22', $result['week']);
+        $result = $this->service($f)->timetable($room);
+        self::assertSame('2010-03-22', $result['from']);
         self::assertSame([], $result['days'][0]['items']);
         self::assertCount(1, $result['days'][1]['items']);
     }
@@ -158,19 +176,28 @@ final class RoomTimetableTest extends TestCase
         }
         $repository = new SqlBookingRepository($f->sql);
         foreach (array_chunk($slots, 250) as $chunk) {
-            $repository->add(new Booking(EntityId::generate(), $room, $f->access->actor, 'Fictional meetings', array_map(BookingOccurrence::plan(...), $chunk)));
+            $repository->add(new Booking(
+                EntityId::generate(),
+                $room,
+                $f->access->actor,
+                'Fictional meetings',
+                array_map(BookingOccurrence::plan(...), $chunk)
+            ));
         }
-        $result = $this->service($f)->week($room, '2026-08-10');
+        $result = $this->service($f)->timetable($room, '2026-08-10');
         self::assertCount(500, $result['items']);
         self::assertSame(['approved' => 0, 'requested' => 500], $result['totals']);
+        self::assertCount(500, $this->service($f)->timetable($room, '2026-08-10', 'month')['items']);
         $this->booking($f, $room, '2026-08-10T23:00:00-07:00', '2026-08-10T23:01:00-07:00');
         try {
-            $this->service($f)->week($room, '2026-08-10');
+            $this->service($f)->timetable($room, '2026-08-10');
             self::fail('An incomplete week was returned.');
         } catch (ValidationException $error) {
-            self::assertSame('week', $error->errors[0]['field']);
+            self::assertSame('date', $error->errors[0]['field']);
             self::assertStringContainsString('paged room agenda', $error->errors[0]['message']);
         }
+        $this->expectException(ValidationException::class);
+        $this->service($f)->timetable($room, '2026-08-10', 'month');
     }
 
     public function testOwnersCannotReadRoomTimetablesWithoutSchedulingPermission(): void
@@ -180,7 +207,7 @@ final class RoomTimetableTest extends TestCase
         $this->booking($f, $room, '2026-08-10T09:00:00Z', '2026-08-10T10:00:00Z');
         $f->access->staff = false;
         $this->expectException(AccessDeniedException::class);
-        $this->service($f)->week($room);
+        $this->service($f)->timetable($room);
     }
 
     public function testPermissionIsRecheckedAfterTheBoundedRead(): void
@@ -195,7 +222,7 @@ final class RoomTimetableTest extends TestCase
                 return [];
             });
         $this->expectException(AccessDeniedException::class);
-        $this->service($f, $repository)->week($room);
+        $this->service($f, $repository)->timetable($room);
     }
 
     public function testInvalidDatesAreActionableFieldErrors(): void
@@ -205,7 +232,7 @@ final class RoomTimetableTest extends TestCase
                 new BookingTimetable($date, new DateTimeZone('UTC'));
                 self::fail('An invalid date was accepted.');
             } catch (ValidationException $error) {
-                self::assertSame('week', $error->errors[0]['field']);
+                self::assertSame('date', $error->errors[0]['field']);
             }
         }
     }
