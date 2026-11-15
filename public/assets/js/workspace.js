@@ -200,10 +200,10 @@
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
-    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, flow: operations.flow, loginUrl: config.login_url || '/login/' });
+    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, historyPanel, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId) });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, buildForm, formData, openDrawer });
@@ -490,6 +490,48 @@
             if (section === 'people') await openPerson(saved.id); else { drawer.hide(); if (current === section) await loadDirectory(); }
         }, $one('[type="submit"]', form)); });
         body.append(form);
+    }
+
+    // Shared private change-review paging. Each domain supplies only its approved card content.
+    async function historyPanel({ body, endpoint, description, unknownText, emptyText, label, render }) {
+        const panel = node('div');
+        body.append(panel);
+        const notice = node('p', { class: 'alert alert-info', hidden: true }, unknownText);
+        const status = node('p', { role: 'status', class: 'form-text' }, 'Loading recorded changes…');
+        const list = node('ul', { class: 'list-unstyled', 'aria-label': label });
+        let after = 0, through = null, shown = 0, epoch = 0;
+        const time = (heading, value) => node('p', { class: 'small mb-1' }, `${heading}: `,
+            node('time', { datetime: value }, new Date(value).toLocaleString(undefined,
+                { dateStyle: 'medium', timeStyle: 'long' })));
+        async function load(older = false) {
+            const expectedEpoch = ++epoch;
+            const data = await request(endpoint, 'POST', older ? { after, through_version: through } : { after: 0 });
+            if (!panel.isConnected || epoch !== expectedEpoch) return;
+            if (!Array.isArray(data.items)) throw new Error('The history could not be loaded. Try refreshing it.');
+            const cards = data.items.map(item => {
+                const card = node('article', { class: 'record-section' },
+                    node('h3', {}, item.category ? `${item.category} · ${item.action}` : item.action),
+                    time('Recorded', item.recorded_at),
+                    node('p', { class: 'small mb-2 private-text' }, `Recorded by: ${item.recorded_by}`), render(item));
+                if (item.effective_at && !item.earlier_details_unknown) card.append(time('Effective', item.effective_at));
+                return node('li', {}, card);
+            });
+            if (!older) { list.replaceChildren(); shown = 0; }
+            list.append(...cards);
+            shown += cards.length;
+            through = data.through_version;
+            after = data.next_after;
+            notice.hidden = !data.earlier_history_unknown;
+            more.hidden = after === null;
+            status.textContent = through === 0 ? emptyText : `Showing ${shown} of ${through} recorded changes.`;
+        }
+        const control = (text, callback) => node('button', { type: 'button', class: 'btn btn-outline-secondary',
+            onclick: event => task(callback, event.currentTarget) }, text);
+        const refresh = control('Refresh history', () => load());
+        const more = control('Load older changes', () => load(true));
+        more.hidden = true;
+        panel.append(node('p', { class: 'form-text' }, description), refresh, notice, status, list, more);
+        await load();
     }
 
     async function buildForm(fields, preset = {}) {

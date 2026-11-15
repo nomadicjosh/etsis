@@ -176,3 +176,62 @@ test('weekly review keeps daily totals, empty weeks and approval connected with 
     expect(calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
+
+test('employment change history shares frozen paging, escaped cards and retained pages after an error', async ({ page }) => {
+    const { calls, errors } = await setup(page);
+    const reviews = [];
+    let head = 22, rejectOlder = true, delay = false, release;
+    await page.route(`**/sis/employees/${employee}/history/`, async route => {
+        const data = JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json'));
+        reviews.push({ data, csrf: route.request().headers()['x-csrf-token'] });
+        if (data.after && rejectOlder) {
+            rejectOlder = false;
+            return route.fulfill({ status: 409, json: { error: 'Fictional history temporarily unavailable.' } });
+        }
+        if (delay) await new Promise(resolve => { release = resolve; });
+        const through = data.through_version ?? head;
+        const first = through - data.after;
+        const sequences = Array.from({ length: Math.min(20, first) }, (_, index) => first - index);
+        await route.fulfill({ json: {
+            items: sequences.map(sequence => ({ sequence, action: sequence === 1
+                ? 'Existing details first recorded' : 'Employment updated',
+                fields: sequence === 1 ? [] : ['Job title'], earlier_details_unknown: sequence === 1,
+                job_title: '<img src=x onerror=alert(1)> Fictional historical title', active: sequence % 2 === 0,
+                recorded_at: '2026-11-15T10:00:00.000000Z', effective_at: '2026-11-15T10:00:00.000000Z',
+                recorded_by: '<script>FictionalRecorder</script>' })),
+            through_version: through, next_after: first > 20 ? data.after + 20 : null, earlier_history_unknown: true,
+        }, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    expect(reviews).toHaveLength(0);
+    await page.getByRole('button', { name: 'Employment change history', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const list = page.getByRole('list', { name: 'Recorded employment changes' });
+    await expect(list.locator('li')).toHaveCount(20);
+    await expect(page.locator('#drawer-body')).toContainText('Showing 20 of 22 recorded changes.');
+    await expect(page.locator('#drawer-body')).toContainText('Earlier employment history is unknown.');
+    expect(await page.locator('#drawer-body img, #drawer-body script').count()).toBe(0);
+    head = 23;
+    await page.getByRole('button', { name: 'Load older changes', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional history temporarily unavailable.');
+    await expect(list.locator('li')).toHaveCount(20);
+    await page.getByRole('button', { name: 'Load older changes', exact: true }).click();
+    await expect(list.locator('li')).toHaveCount(22);
+    expect(reviews[1].data).toEqual({ after: 20, through_version: 22 });
+    expect(reviews[2].data).toEqual(reviews[1].data);
+    await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Showing 20 of 23 recorded changes.');
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    delay = true;
+    await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
+    await expect.poll(() => typeof release).toBe('function');
+    await page.getByRole('button', { name: 'Back to employment', exact: true }).click();
+    release();
+    await expect(page.locator('#drawer-body')).toContainText('Recent time entries');
+    await expect(list).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect([...calls, ...reviews].every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});

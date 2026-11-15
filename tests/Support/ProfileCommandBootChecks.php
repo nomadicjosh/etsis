@@ -545,5 +545,35 @@ if (
 if ($app->router->match($weekPost->withParsedBody(['week' => '2026-02-30']))->getStatusCode() !== 422) {
     throw new RuntimeException('The weekly time review accepted an invalid calendar date.');
 }
+$employmentHistory = $weekPost
+    ->withUri(new \Laminas\Diactoros\Uri('/sis/employees/' . $employeeId . '/history/'))
+    ->withParsedBody(['after' => 0, 'person_id' => $person->id->value]);
+foreach ([[], ['sis:hr:manage'], ['sis:audit:read']] as $grants) {
+    $sis->access->grants = $grants;
+    if ($app->router->match($employmentHistory)->getStatusCode() !== 403) {
+        throw new RuntimeException('Employment ownership or one permission granted the other history permission.');
+    }
+}
+$sis->access->grants = ['sis:hr:manage', 'sis:audit:read'];
+if ($app->router->match($employmentHistory->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403) {
+    throw new RuntimeException('Employment change history bypassed CSRF.');
+}
+$employmentHistoryResponse = $app->router->match($employmentHistory);
+$employmentHistoryData = json_decode((string) $employmentHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $employmentHistoryResponse->getStatusCode() !== 200 || count($employmentHistoryData['items']) !== 2
+    || $employmentHistoryData['items'][0]['job_title'] !== 'Fictional librarian'
+    || $employmentHistoryData['items'][1]['job_title'] !== 'Fictional assistant'
+    || !str_contains($employmentHistoryResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $employmentHistoryResponse->getBody(), 'phpdebugbar')
+    || str_contains((string) $employmentHistoryResponse->getBody(), 'Fictional employment decision')
+    || str_contains((string) $employmentHistoryResponse->getBody(), 'actor_id')
+    || $beforeWeek !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Employment history lost its curated/private/read-only boundary.');
+}
+if ($app->router->match($employmentHistory->withParsedBody(['after' => 1]))->getStatusCode() !== 422) {
+    throw new RuntimeException('Employment history accepted an invalid page boundary.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

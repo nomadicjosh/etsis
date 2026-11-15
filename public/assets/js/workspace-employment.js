@@ -15,6 +15,7 @@ window.createWorkspaceEmployment = function (ui) {
         badge,
         flow,
         showAudit,
+        historyPanel,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -49,6 +50,8 @@ window.createWorkspaceEmployment = function (ui) {
             body.append(
                 button("View audit history", () => showAudit("employees", id)),
             );
+        if (can("sis:hr:manage") && can("sis:audit:read"))
+            body.append(button("Employment change history", () => history(record)));
         body.append(
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
             badge(record.active ? "Active" : "Inactive"),
@@ -167,6 +170,22 @@ window.createWorkspaceEmployment = function (ui) {
             );
         }
         await load();
+    }
+    async function history(record) {
+        const id = record.id;
+        const body = openDrawer("Employment change history", `${name(record)} · ${record.institutional_id}`);
+        body.append(button("Back to employment", () => employee(id)));
+        await historyPanel({
+            body, endpoint: `/sis/employees/${id}/history/`, label: "Recorded employment changes",
+            description: "Review recorded titles and active status, newest first. Private reasons, credentials and raw events are excluded. Recorder names are current account names. These changes do not establish hire or termination dates.",
+            unknownText: "Earlier employment history is unknown. Observed details describe the record when tracking began, not when employment started.",
+            emptyText: "No employment changes have been recorded yet. The current title and status remain in the employment record; earlier changes are unknown.",
+            render: item => node("div", {}, node("p", { class: "private-text" }, item.job_title),
+                badge(item.active ? "Active" : "Inactive"),
+                node("p", { class: "form-text" }, item.earlier_details_unknown
+                    ? "Existing details were observed here. Earlier changes and their dates are unknown."
+                    : `Fields: ${item.fields.join(", ")}`)),
+        });
     }
     async function week(id, selected = "") {
         const body = openDrawer("Weekly time review", "EMPLOYMENT & TIME");

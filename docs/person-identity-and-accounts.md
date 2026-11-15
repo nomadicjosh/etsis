@@ -114,6 +114,16 @@ Directories and searches use indexed current rows. Opening a selected employee o
 
 No migration, live-row conversion or additional event table is required. Time entries retain their existing audited CRUD and version checks; this change does not claim that payroll calculations or historical job titles at the time of work are implemented. Position/pay-grade definitions, hire/termination decisions, faculty assignments, payroll boundaries and operational rebuild/retention tooling remain separate work.
 
+### Reviewing employment changes
+
+Open **Team & timesheets → select an employee → Employment change history**. Review retained job titles and active status, with changed-field labels, recording/effective times and the recorder's current account name. Titles and status are the values recorded for that change; recorder names are current display labels, while original attribution remains in protected history. Unavailable recorder labels are explicit. Private reasons, account/operation identifiers, credentials, fingerprints and raw event payloads are excluded.
+
+The reviewer needs both `sis:hr:manage` and `sis:audit:read`. Ownership, either permission alone, or ordinary Person history access does not grant this review. Another super account still requires a super administrator. Actor, authority, current canonical person and employment integrity are checked, and a changed projection during the review requires a refresh. The curated endpoint is private/no-store, CSRF-protected and excluded from debug collectors. Reading writes no event, receipt, audit row or projection.
+
+Twenty-entry newest-first pages retain the first page's upper boundary. **Load older changes** preserves that boundary despite later edits; **Refresh history** starts a fresh review. Existing unknown history stays unknown, and a first observation is labeled without asserting a hire date or inventing earlier employment. Person and employment reviews share the same browser paging/card controls, preserve loaded pages after a failed request and ignore delayed responses after leaving the screen. Escaped labels, keyboard controls and narrow-screen reflow apply to both.
+
+The review reuses employment's existing validated replay, with the 2,000-event ceiling and at most twenty recorder lookups per response. Incomplete/non-advancing pages and changed replay boundaries are rejected. No migration, new event type or second event table is introduced. This reviews title/status facts already recorded; dated position assignments, compensation, pay-grade and hire/termination workflows remain on the roadmap.
+
 ## Weekly time review
 
 Open **Team & timesheets → select an employee → Weekly time review**. Choose any date in the desired week, or use **Previous week**, **Next week** and **Refresh week**. The review uses Monday–Sunday calendar weeks and the institution's configured application timezone. The server supplies the current week; the browser's timezone does not decide its boundaries.

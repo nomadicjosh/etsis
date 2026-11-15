@@ -7,6 +7,7 @@ namespace Domain\HumanResources\Service;
 use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Audit\Repository\ActorDirectory;
 use Domain\HumanResources\Dto\EmployeeProfile;
 use Domain\HumanResources\Employee;
 use Domain\HumanResources\Repository\TimeRepository;
@@ -38,6 +39,7 @@ final readonly class TimesheetService
         private AccessRepository $roles,
         private ProfileLedger $peopleHistory,
         private Clock $clock,
+        private ActorDirectory $actors,
     ) {
     }
 
@@ -81,6 +83,43 @@ final readonly class TimesheetService
     {
         $profile = $this->employeeProfile($id);
         return $this->profileDetails($profile);
+    }
+
+    /** @return array<string,mixed> */
+    public function historyPage(EntityId $id, int $after = 0, ?int $throughVersion = null): array
+    {
+        $actor = $this->access->requirePermission('sis:hr:manage');
+        $this->authorizeHistory($actor);
+        $employee = $this->repository->employee($id);
+        $person = $this->authorizeRead($employee, $actor);
+        $this->peopleHistory->verify($person);
+        $page = $this->history->review($employee, $after, $throughVersion);
+        $ids = [];
+        foreach ($page['items'] as $item) {
+            $ids[$item['actor_id']] = new EntityId($item['actor_id']);
+        }
+        $names = $this->actors->names(array_values($ids));
+        foreach ($page['items'] as &$item) {
+            $item['recorded_by'] = $names[$item['actor_id']] ?? 'Unavailable account';
+            unset($item['actor_id']);
+        }
+        unset($item);
+        $this->authorizeHistory($actor);
+        $this->authorizeRead($employee, $actor);
+        if (EmploymentFacts::of($this->repository->employee($id)) !== EmploymentFacts::of($employee)) {
+            throw new ConcurrentModificationException('Refresh employment history.');
+        }
+        return $page;
+    }
+
+    private function authorizeHistory(EntityId $actor): void
+    {
+        if (
+            $this->access->requirePermission('sis:hr:manage')->value !== $actor->value
+            || $this->access->requirePermission('sis:audit:read')->value !== $actor->value
+        ) {
+            throw new AccessDeniedException('The employment history reviewer changed.');
+        }
     }
     /** @return array<string,mixed> */
     private function profileDetails(EmployeeProfile $profile): array

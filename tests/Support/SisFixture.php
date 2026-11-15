@@ -828,7 +828,8 @@ final class SisFixture
     }
     public function timesheetService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
-        ?\Domain\HumanResources\Repository\TimeRepository $repository = null
+        ?\Domain\HumanResources\Repository\TimeRepository $repository = null,
+        ?\Domain\Audit\Repository\ActorDirectory $actors = null
     ): \Domain\HumanResources\Service\TimesheetService {
         return new \Domain\HumanResources\Service\TimesheetService(
             $repository ?? new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql),
@@ -840,7 +841,8 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
             $this->profileLedger(),
-            $this->clock
+            $this->clock,
+            $actors ?? new \Infrastructure\Persistence\SqlActorDirectory($this->sql)
         );
     }
     public function profileLedger(): \Domain\Person\Service\ProfileLedger

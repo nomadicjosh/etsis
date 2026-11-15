@@ -78,6 +78,16 @@ final readonly class SisTimesheetController
         ));
     }
 
+    public function history(ServerRequest $request, string $id): ResponseInterface
+    {
+        $input = FormInput::from($request);
+        return new JsonResponse($this->service->historyPage(
+            new EntityId($id),
+            $input->optionalInteger('after') ?? 0,
+            $input->optionalInteger('through_version')
+        ));
+    }
+
     public function week(ServerRequest $request, string $id): ResponseInterface
     {
         return new JsonResponse($this->service->week(
