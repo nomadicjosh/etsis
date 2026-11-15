@@ -33,6 +33,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
         <script defer src="/assets/js/degree-progress-guide.js"></script>
+        <script defer src="/assets/js/person-emergency-contacts.js"></script>
         <script defer src="/assets/js/portal.js"></script>
     </head>
     <body class="campus-site">

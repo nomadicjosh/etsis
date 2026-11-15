@@ -52,15 +52,15 @@ final class PersonContactHistoryTest extends TestCase
     ): PersonContactService {
         $s = $c->sis;
         return new PersonContactService(
-            new SqlPersonAccountRepository($s->sql, $s->admissions, new RandomInstitutionalIdGenerator()),
             $contacts ?? new SqlPersonContactRepository($s->sql, $c->cipher),
             $rows ?? new SqlPersonProfileRepository($s->sql),
             $s->profileLedger(),
-            $s->access,
+            new \Domain\Person\Service\PersonProfileAccess(
+                new SqlPersonAccountRepository($s->sql, $s->admissions, new RandomInstitutionalIdGenerator()),
+                $s->admissions, new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql), $s->access
+            ),
             $s->transactions,
-            $audit ?? $s->audit,
-            $s->admissions,
-            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql)
+            $audit ?? $s->audit
         );
     }
 

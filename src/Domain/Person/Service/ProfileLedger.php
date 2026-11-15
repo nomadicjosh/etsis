@@ -7,6 +7,8 @@ namespace Domain\Person\Service;
 use Domain\Shared\ValueObject\DerivedIdentity;
 use Domain\Person\Event\PersonProfileWasRecorded;
 use Domain\Person\Event\PersonContactWasRecorded;
+use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
+use Domain\Person\ValueObject\EmergencyContacts;
 use Domain\Person\ValueObject\ContactDetails;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Person\Person;
@@ -63,6 +65,60 @@ final readonly class ProfileLedger
         string $intent
     ): ?ContactDetails {
         return $this->load($person, $operation, $actor, $intent)['contact_receipt'];
+    }
+    public function emergencyReceipt(
+        EntityId $person,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent
+    ): ?EmergencyContacts {
+        return $this->load($person, $operation, $actor, $intent)['emergency_receipt'];
+    }
+    public function verifyEmergency(Person $person, ?EmergencyContacts $current): void
+    {
+        $this->checkEmergency($this->load($person->id)['root'], $person, $current);
+    }
+    private function checkEmergency(ProfileHistory $root, Person $person, ?EmergencyContacts $current): void
+    {
+        if (
+            ($root->person() !== null && ProfileFacts::of($root->person()) !== ProfileFacts::of($person))
+            || $root->emergency()?->facts() !== $current?->facts()
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
+    public function recordEmergency(
+        Person $person,
+        ?EmergencyContacts $before,
+        EmergencyContacts $after,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent
+    ): bool {
+        $root = $this->load($person->id)['root'];
+        $this->checkEmergency($root, $person, $before);
+        if ($after->version !== ($before === null ? 1 : $before->version + 1)) {
+            throw new ConcurrentModificationException('Reload the emergency contacts.');
+        }
+        if ($before !== null && $before->contacts === $after->contacts) {
+            return false;
+        }
+        if ($root->playhead() === 0) {
+            $this->append(
+                $root,
+                $person,
+                DerivedIdentity::from($operation, 'person.observation'),
+                $actor,
+                $intent,
+                'observed'
+            );
+        }
+        $event = PersonEmergencyContactsWereRecorded::occur($root->aggregateId(), [
+            'operation_id' => $operation->value, 'previous_operation_id' => $root->operation(),
+            'facts' => $after->facts(), 'intent' => $intent,
+        ], ['__aggregate_type' => 'person_profile'])->withPlayhead($root->playhead() + 1);
+        $this->commit($root, $event, $operation, $actor, 'changed');
+        return true;
     }
     public function verifyContact(Person $person, ?ContactDetails $current): int
     {
@@ -207,7 +263,7 @@ final readonly class ProfileLedger
             [$event]
         );
     }
-    /** @return array{root:ProfileHistory,receipt:?Person,contact_receipt:?ContactDetails} */
+    /** @return array{root:ProfileHistory,receipt:?Person,contact_receipt:?ContactDetails,emergency_receipt:?EmergencyContacts} */
     private function load(
         EntityId $id,
         ?EntityId $operation = null,
@@ -217,6 +273,7 @@ final readonly class ProfileLedger
         $root = ProfileHistory::root(new PersonProfileId($id->value));
         $receipt = null;
         $contactReceipt = null;
+        $emergencyReceipt = null;
         $cursor = null;
         $count = 0;
         do {
@@ -239,6 +296,8 @@ final readonly class ProfileLedger
                     }
                     if ($stored->event instanceof PersonContactWasRecorded) {
                         $contactReceipt = $root->contact();
+                    } elseif ($stored->event instanceof PersonEmergencyContactsWereRecorded) {
+                        $emergencyReceipt = $root->emergency();
                     } else {
                         $receipt = $root->person();
                     }
@@ -246,6 +305,7 @@ final readonly class ProfileLedger
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
-        return ['root' => $root, 'receipt' => $receipt, 'contact_receipt' => $contactReceipt];
+        return ['root' => $root, 'receipt' => $receipt,
+            'contact_receipt' => $contactReceipt, 'emergency_receipt' => $emergencyReceipt];
     }
 }

@@ -8,6 +8,8 @@ use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Person\Event\PersonProfileWasRecorded;
 use Domain\Person\Event\PersonContactWasRecorded;
+use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
+use Domain\Person\ValueObject\EmergencyContacts;
 use Domain\Person\ValueObject\ContactDetails;
 use Domain\Person\ValueObject\ProfileFacts;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
@@ -16,17 +18,22 @@ final class ProfileHistory extends EventSourcedAggregate
 {
     private ?Person $person = null;
     private ?ContactDetails $contact = null;
+    private ?EmergencyContacts $emergency = null;
     private ?string $operation = null;
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $e): void
     {
         if (
-            (!$e instanceof PersonProfileWasRecorded && !$e instanceof PersonContactWasRecorded) ||
-            !$e->aggregateId()->equals($this->aggregateId()) ||
-            $e->playhead() !== $this->playhead() + 1
+            (!$e instanceof PersonProfileWasRecorded
+            && !$e instanceof PersonContactWasRecorded
+                && !$e instanceof PersonEmergencyContactsWereRecorded)
+            || !$e->aggregateId()->equals($this->aggregateId())
+            || $e->playhead() !== $this->playhead() + 1
         ) {
             throw new CorruptHistoryException();
         }
-        if ($e instanceof PersonContactWasRecorded) {
+        if ($e instanceof PersonEmergencyContactsWereRecorded) {
+            EmergencyContacts::validateEvent($e->payload());
+        } elseif ($e instanceof PersonContactWasRecorded) {
             ContactDetails::validateEvent($e->payload());
         } else {
             ProfileFacts::validate($e->payload());
@@ -83,6 +90,25 @@ final class ProfileHistory extends EventSourcedAggregate
         }
         $this->contact = $next;
         $this->operation = $payload['operation_id'];
+    }
+    public function whenPersonEmergencyContactsWereRecorded(PersonEmergencyContactsWereRecorded $event): void
+    {
+        $payload = $event->payload();
+        $next = EmergencyContacts::restore($payload['facts']);
+        if (
+            $this->person === null || $payload['previous_operation_id'] !== $this->operation
+            || $payload['operation_id'] === $this->operation
+            || $next->version !== ($this->emergency === null ? 1 : $this->emergency->version + 1)
+            || ($this->emergency !== null && $next->contacts === $this->emergency->contacts)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->emergency = $next;
+        $this->operation = $payload['operation_id'];
+    }
+    public function emergency(): ?EmergencyContacts
+    {
+        return $this->emergency;
     }
     public function contact(): ?ContactDetails
     {

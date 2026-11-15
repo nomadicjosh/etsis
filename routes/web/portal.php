@@ -6,10 +6,16 @@ use Application\Http\Controller\CampusPortalController as Portal;
 use Application\Http\Controller\SisPortalEditorController as Editor;
 use Application\Http\Controller\PortalPaymentController as Payments;
 use Qubus\Routing\Interfaces\Mappable;
+use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/portal/api/emergency-contacts/', [Emergency::class, 'mine'])
+        ->name('portal.emergency');
+    $router->map(['POST'], '/portal/api/emergency-contacts/', [Emergency::class, 'saveMine'])
+        ->name('portal.emergency.save');
+
     $router->map(
         ['GET'],
         '/portal/password-setup/',

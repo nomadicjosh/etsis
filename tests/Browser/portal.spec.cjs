@@ -11,7 +11,9 @@ async function accessible(page) {
     expect(scan.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => ({ target: node.target, summary: node.failureSummary })) }))).toEqual([]);
 }
 
-async function mockServices(page) {
+async function mockServices(page, options = {}) {
+    let emergency = { contacts: [], version: 0 };
+    let rejectEmergency = options.rejectEmergency === true;
     const mutations = [];
     const me = { person: { id: person, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-EXAMPLE' },
         contact: { preferred_name: 'Alex', phone: '', address: '', version: 0 },
@@ -29,6 +31,14 @@ async function mockServices(page) {
         else if (path === '/portal/api/courses/') result = { items: [course], next_after: null };
         else if (path.includes('/transcript/')) result = { items: transcript };
         else if (path.includes('/scores/')) result = { items: [{ title: 'Fictional problem set', earned_hundredths: 9500, possible_hundredths: 10000 }] };
+        else if (path === '/portal/api/emergency-contacts/') {
+            if (data && rejectEmergency) {
+                rejectEmergency = false;
+                return route.fulfill({ status: 409, json: { error: 'This record changed. Reload it before trying again.' } });
+            }
+            if (data) emergency = { contacts: data.contacts, version: emergency.version + 1 };
+            result = data ? { status: 'saved' } : emergency;
+        }
         else if (path === '/portal/api/contact/') { me.contact = { ...data, version: 1 }; result = { status: 'saved' }; }
         else if (path === '/portal/api/transcripts/') { me.transcript_requests = [{ id: requestId, student_id: student, delivery: data.delivery, status: 'pending', requested_at: '2026-11-06T12:00:00Z', version: 0 }]; result = { id: requestId }; }
         else if (path.endsWith('/status/') && path.includes('/transcripts/')) { me.transcript_requests[0].status = data.status; result = { status: 'changed' }; }
@@ -181,5 +191,41 @@ test('failed campus sign-in shows a generic accessible notice without retaining 
     await accessible(page);
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+
+test('owners order and clear emergency contacts using the shared accessible editor without losing rejected values', async ({ page }) => {
+    const mutations = await mockServices(page, { rejectEmergency: true });
+    await page.goto('/portal/student/profile/');
+    await page.getByRole('button', { name: 'Manage emergency contacts', exact: true }).click();
+    await page.getByRole('button', { name: 'Add emergency contact', exact: true }).click();
+    let card = page.locator('[data-emergency-list] fieldset').first();
+    await card.getByLabel('Name', { exact: true }).fill('Fictional Relative');
+    await card.getByLabel('Phone number', { exact: true }).fill('001234');
+    await page.getByRole('button', { name: 'Add emergency contact', exact: true }).click();
+    card = page.locator('[data-emergency-list] fieldset').nth(1);
+    await card.getByLabel('Name', { exact: true }).fill('Fictional Friend');
+    await card.getByLabel('Phone number', { exact: true }).fill('005678');
+    await page.getByRole('button', { name: 'Move earlier: contact 2', exact: true }).press('Enter');
+    await expect(page.locator('[data-emergency-list] fieldset').first().getByLabel('Name', { exact: true })).toHaveValue('Fictional Friend');
+    await page.getByRole('button', { name: 'Save emergency contacts', exact: true }).click();
+    await expect(page.locator('#campus-error')).toContainText('This record changed');
+    await expect(page.locator('[data-emergency-list] fieldset').first().getByLabel('Phone number', { exact: true })).toHaveValue('005678');
+    await page.getByRole('button', { name: 'Save emergency contacts', exact: true }).click();
+    await expect.poll(() => mutations.filter(item => item.path === '/portal/api/emergency-contacts/').length).toBe(2);
+    await expect(page.getByRole('button', { name: 'Save emergency contacts', exact: true })).toBeEnabled();
+    const sent = mutations.filter(item => item.path === '/portal/api/emergency-contacts/')[1];
+    expect(sent.data.contacts.map(item => item.name)).toEqual(['Fictional Friend', 'Fictional Relative']);
+    expect(sent.data.contacts[1].phone).toBe('001234');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Remove contact 1', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove contact 1', exact: true }).click();
+    await page.getByRole('button', { name: 'Save emergency contacts', exact: true }).click();
+    await expect.poll(() => mutations.filter(item => item.path === '/portal/api/emergency-contacts/').length).toBe(3);
+    expect(mutations.filter(item => item.path === '/portal/api/emergency-contacts/')[2].data).toEqual({ contacts: [], version: 1 });
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

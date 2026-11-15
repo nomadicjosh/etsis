@@ -106,7 +106,7 @@ window.createWorkspacePeople = function (ui) {
     }
     async function contact(person) {
         const id = personId(person);
-        const record = await request(`/sis/ui/people/${id}/contact/`);
+        let record = await request(`/sis/ui/people/${id}/contact/`);
         const body = openDrawer(
             "Contact information",
             `${person.givenName} ${person.familyName}`,
@@ -143,18 +143,30 @@ window.createWorkspacePeople = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                await request(`/sis/ui/people/${id}/contact/`, "POST", {
+                const submitted = {
                     preferred_name: "",
                     phone: "",
                     address: "",
                     ...formData(form, fields),
                     version: record.version,
-                });
+                };
+                await request(`/sis/ui/people/${id}/contact/`, "POST", submitted);
+                const saved = await request(`/sis/ui/people/${id}/contact/`);
+                if (!form.isConnected) return;
+                record = saved;
+                for (const key of ["preferred_name", "phone", "address"]) {
+                    if (form.elements[key].value === submitted[key]) form.elements[key].value = saved[key];
+                }
                 notify("Contact information saved.");
-                await contact(person);
             }, save);
         });
         body.append(form);
+        const emergency = node("div", { class: "mt-4" });
+        emergency.append(button("Emergency contacts", () =>
+            window.createPersonEmergencyContacts({ node, request, task, notify })
+                .open(emergency, `/sis/ui/people/${id}/emergency-contacts/`)));
+        body.append(emergency);
+
     }
     async function password(person, record) {
         const id = personId(person);

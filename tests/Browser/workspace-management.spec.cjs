@@ -10,6 +10,8 @@ test('person managers maintain contact details without credential controls and k
     const person = id(40), user = id(41);
     let current = { preferred_name: 'Avery', phone: '001234', address: 'Fictional campus\nFictional town', version: 3 };
     let reject = true;
+    let emergency = { contacts: [], version: 0 };
+    const emergencySaves = [];
     const saves = [], reads = [], errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -22,6 +24,10 @@ test('person managers maintain contact details without credential controls and k
             person: { id: { value: person }, ownerUserId: { value: user }, givenName: 'Alex', familyName: 'Example', institutionalId: { value: 'S-EXAMPLE' } },
             students: [], employees: [], applications: [], accounts: []
         };
+        else if (path === `/sis/ui/people/${person}/emergency-contacts/`) {
+            if (data) { emergencySaves.push(data); emergency = { contacts: data.contacts, version: emergency.version + 1 }; }
+            result = data ? { status: 'saved' } : emergency;
+        }
         else if (path === `/sis/ui/people/${person}/contact/`) {
             if (data) {
                 expect(request.headers()['x-csrf-token']).toBe('fictional-test-token');
@@ -60,6 +66,18 @@ test('person managers maintain contact details without credential controls and k
     await expect.poll(() => saves.length).toBe(3);
     expect(saves[2]).toMatchObject({ address: '', version: 4 });
     await expect.poll(() => reads.length).toBe(3);
+    await page.getByRole('button', { name: 'Emergency contacts', exact: true }).click();
+    await page.getByRole('button', { name: 'Add emergency contact', exact: true }).click();
+    const emergencyCard = page.locator('[data-emergency-list] fieldset').first();
+    await emergencyCard.getByLabel('Name', { exact: true }).fill('Fictional Relative');
+    await emergencyCard.getByLabel('Phone number', { exact: true }).fill('001234');
+    await page.getByLabel('Preferred name', { exact: true }).fill('Another preferred name');
+    await page.getByRole('button', { name: 'Save contact information', exact: true }).click();
+    await expect.poll(() => reads.length).toBe(4);
+    await expect(emergencyCard.getByLabel('Name', { exact: true })).toHaveValue('Fictional Relative');
+    await page.getByRole('button', { name: 'Save emergency contacts', exact: true }).click();
+    await expect.poll(() => emergencySaves.length).toBe(1);
+    expect(emergencySaves[0].contacts[0]).toMatchObject({ name: 'Fictional Relative', phone: '001234' });
     await accessible(page);
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

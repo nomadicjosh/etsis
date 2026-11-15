@@ -26,6 +26,7 @@ final class EventClassMap
         return [
             \Domain\Person\Event\PersonProfileWasRecorded::class,
             \Domain\Person\Event\PersonContactWasRecorded::class,
+            \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class,
             \Domain\AcademicRecord\Event\AcademicWorkPursuitWasRecorded::class,
             \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class,
             \Domain\Student\Event\StudentSpecializationsWereSelected::class,

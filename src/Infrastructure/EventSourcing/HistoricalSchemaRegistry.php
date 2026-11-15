@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class => [
+                'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent'],
+            ],
             \Domain\Person\Event\PersonProfileWasRecorded::class,
             \Domain\Person\Event\PersonContactWasRecorded::class => [
                 'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
@@ -414,6 +418,9 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class) {
+                \Domain\Person\ValueObject\EmergencyContacts::validateEvent($payload);
+            }
             if ($class === \Domain\Person\Event\PersonContactWasRecorded::class) {
                 \Domain\Person\ValueObject\ContactDetails::validateEvent($payload);
             }

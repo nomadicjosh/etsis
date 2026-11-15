@@ -5,33 +5,25 @@ declare(strict_types=1);
 namespace Domain\Person\Service;
 
 use Domain\Person\Person;
-use Domain\Person\Repository\PersonAccountRepository;
 use Domain\Person\Repository\PersonContactRepository;
 use Domain\Person\Repository\PersonProfileRepository;
 use Domain\Person\ValueObject\ContactDetails;
-use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
-use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\DerivedIdentity;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Audit\Repository\AuditTrail;
-use Domain\Access\Repository\AccessRepository;
-use Domain\Admissions\Repository\AdmissionsRepository;
 
 /** Shared contact workflow with separate portal-owner and explicitly authorized staff entry points. */
 final readonly class PersonContactService
 {
     public function __construct(
-        private PersonAccountRepository $people,
         private PersonContactRepository $contacts,
         private PersonProfileRepository $rows,
         private ProfileLedger $history,
-        private StudentAccess $access,
+        private PersonProfileAccess $authorization,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
-        private AdmissionsRepository $records,
-        private AccessRepository $roles,
     ) {
     }
 
@@ -50,7 +42,7 @@ final readonly class PersonContactService
     /** @return array{preferred_name:string,phone:string,address:string,version:int} */
     private function viewAs(EntityId $expectedPerson, bool $staff): array
     {
-        $actor = $this->access->authenticatedUserId();
+        $actor = $this->authorization->actor();
         $person = $this->personFor($actor, $expectedPerson, $staff);
         $current = $this->contacts->current($person->id);
         $this->history->verifyContact($person, $current);
@@ -80,7 +72,7 @@ final readonly class PersonContactService
         int $expectedVersion,
         ?EntityId $staffPerson = null
     ): void {
-        $actor = $this->access->authenticatedUserId();
+        $actor = $this->authorization->actor();
         $staff = $staffPerson !== null;
         $person = $this->personFor($actor, $staffPerson, $staff);
         if ($expectedVersion < 0 || $expectedVersion === PHP_INT_MAX) {
@@ -100,7 +92,7 @@ final readonly class PersonContactService
         ): void {
             if ($staff) {
                 // Keep role changes serialized before the person lock, as in account administration.
-                $this->roles->lock();
+                $this->authorization->lockStaffRoles();
             }
             $this->rows->lock($person->id);
             $currentPerson = $this->personFor($actor, $person->id, $staff);
@@ -121,32 +113,6 @@ final readonly class PersonContactService
 
     private function personFor(EntityId $actor, ?EntityId $expectedPerson, bool $staff): Person
     {
-        if ($this->access->authenticatedUserId()->value !== $actor->value) {
-            throw new AccessDeniedException('The signed-in account changed.');
-        }
-        if ($staff) {
-            if (
-                $expectedPerson === null
-                || $this->access->requirePermission('sis:person:manage')->value !== $actor->value
-            ) {
-                throw new AccessDeniedException('Person-management permission is required.');
-            }
-            $person = $this->records->person($expectedPerson);
-            if (
-                $person->ownerUserId === null || ($this->roles->isSuper($person->ownerUserId->value)
-                && !$this->roles->isSuper($actor->value))
-            ) {
-                throw new AccessDeniedException('This person requires a super administrator.');
-            }
-            return $person;
-        }
-        $person = $this->people->findByUser($actor);
-        if (
-            $person === null || $person->ownerUserId?->value !== $actor->value
-            || ($expectedPerson !== null && $person->id->value !== $expectedPerson->value)
-        ) {
-            throw new AccessDeniedException('The current account does not own this person.');
-        }
-        return $person;
+        return $this->authorization->person($actor, $expectedPerson, $staff);
     }
 }

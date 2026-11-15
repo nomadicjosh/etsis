@@ -240,5 +240,54 @@ $sis->access->grants = [];
 if ($app->router->match($contactRequest)->getStatusCode() !== 403) {
     throw new RuntimeException('Contact reads survived permission revocation.');
 }
+// Emergency contacts use the same person identity and distinct staff/owner authorization paths.
+$emergencyGet = $contactRequest->withUri(new \Laminas\Diactoros\Uri(
+    '/sis/ui/people/' . $other->id->value . '/emergency-contacts/'));
+if ($app->router->match($emergencyGet)->getStatusCode() !== 403) {
+    throw new RuntimeException('Emergency contact reads bypassed staff permission.');
+}
+$sis->access->grants = ['sis:person:manage'];
+if ($app->router->match($emergencyGet)->getStatusCode() !== 200) {
+    throw new RuntimeException('Emergency contact reader failed to resolve through actual providers.');
+}
+$emergencyPost = $emergencyGet->withMethod('POST')
+    ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
+    ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE, 'fictionalcsrftoken')
+    ->withParsedBody(['contacts' => [['name' => 'Fictional Relative', 'phone' => '001234']], 'version' => 0]);
+$beforeEmergency = $sis->sql->rows('sis_history_events');
+if ($app->router->match($emergencyPost)->getStatusCode() !== 403
+    || $beforeEmergency !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Emergency contact mutation bypassed CSRF.');
+}
+$emergencySaved = $app->router->match($emergencyPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if ($emergencySaved->getStatusCode() !== 200
+    || !str_contains($emergencySaved->getHeaderLine('Cache-Control'), 'no-store')) {
+    throw new RuntimeException('Emergency contact update failed its routed private write.');
+}
+$sis->access->grants = [];
+$myEmergencyGet = $emergencyGet->withUri(new \Laminas\Diactoros\Uri('/portal/api/emergency-contacts/'));
+$myEmergencyResponse = $app->router->match($myEmergencyGet);
+if ($myEmergencyResponse->getStatusCode() !== 200
+    || json_decode((string) $myEmergencyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)['contacts'] !== []) {
+    throw new RuntimeException('The owner endpoint exposed the staff-selected person instead of the signed-in owner.');
+}
+$myEmergencyPost = $emergencyPost->withUri(new \Laminas\Diactoros\Uri('/portal/api/emergency-contacts/'))
+    ->withHeader('X-CSRF-Token', 'fictionalcsrftoken')->withParsedBody([
+        'contacts' => [['name' => 'Fictional Owner Contact', 'phone' => '005678']],
+        'version' => 0, 'person_id' => $other->id->value,
+    ]);
+if ($app->router->match($myEmergencyPost)->getStatusCode() !== 200) {
+    throw new RuntimeException('The owner emergency contact writer failed without staff grants.');
+}
+$ownerEmergency = $app->make(\Domain\Person\Service\EmergencyContactsService::class)->view($person->id);
+if ($ownerEmergency['contacts'][0]['phone'] !== '005678') {
+    throw new RuntimeException('The owner emergency contact endpoint used a supplied person identity.');
+}
+$sis->access->grants = ['sis:person:manage'];
+$otherEmergency = $app->make(\Domain\Person\Service\EmergencyContactsService::class)->staffView($other->id);
+if ($otherEmergency['contacts'][0]['phone'] !== '001234'
+    || $otherBefore !== $sis->sql->one('users', ['user_id' => $other->ownerUserId->value])) {
+    throw new RuntimeException('Emergency contact editing changed another person or credential record.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

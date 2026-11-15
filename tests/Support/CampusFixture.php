@@ -65,6 +65,7 @@ final class CampusFixture
     public SqlPaymentRepository $payments;
     public CampusService $service;
     public \Domain\Person\Service\PersonContactService $contacts;
+    public \Domain\Person\Service\EmergencyContactsService $emergency;
     public CampusContentService $content;
     public PortalService $posts;
     public DefuseMessageCipher $cipher;
@@ -103,14 +104,21 @@ final class CampusFixture
             ),
             $f->transferCredits(),
         );
-        $this->contacts = new \Domain\Person\Service\PersonContactService(
+        $profileAccess = new \Domain\Person\Service\PersonProfileAccess(
             new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
                 $f->sql, $f->admissions, new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
             ),
+            $f->admissions, new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql), $f->access
+        );
+        $this->contacts = new \Domain\Person\Service\PersonContactService(
             new \Infrastructure\Persistence\Repository\SqlPersonContactRepository($f->sql, $this->cipher),
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
-            $f->profileLedger(), $f->access, $f->transactions, $f->audit,
-            $f->admissions, new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql)
+            $f->profileLedger(), $profileAccess, $f->transactions, $f->audit
+        );
+        $this->emergency = new \Domain\Person\Service\EmergencyContactsService(
+            new \Infrastructure\Persistence\Repository\SqlEmergencyContactsRepository($f->sql, $this->cipher),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+            $f->profileLedger(), $profileAccess, $f->transactions, $f->audit
         );
         $this->service = new CampusService(
             $this->repository,

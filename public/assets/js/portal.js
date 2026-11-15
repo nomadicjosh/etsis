@@ -634,6 +634,12 @@
                 'Your contact information is encrypted and stays attached to your person record.',
             ),
         );
+        const emergency = el('div');
+        emergency.append(el('button', { type: 'button', class: 'btn campus-button', onclick: event => task(() =>
+            window.createPersonEmergencyContacts({ node: el, request, task, notify: notice })
+                .open(emergency, '/portal/api/emergency-contacts/'), event.currentTarget) }, 'Manage emergency contacts'));
+        container.append(surface('Emergency contacts', emergency));
+
     }
 
     function matches(group, facts) {
