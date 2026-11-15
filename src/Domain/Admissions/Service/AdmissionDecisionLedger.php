@@ -22,6 +22,7 @@ use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
+use Qubus\Exception\Data\TypeException;
 
 /** Internal ledger. Entry points authorize, hold the application lock and own the transaction. */
 final readonly class AdmissionDecisionLedger
@@ -31,6 +32,7 @@ final readonly class AdmissionDecisionLedger
         private StudentAccess $access,
         private Clock $clock,
         private ApplicationContext $context,
+        private \Domain\Admissions\Repository\SubmissionProjection $submissions,
     ) {
     }
     public function verify(AdmissionApplication $a): int
@@ -50,7 +52,10 @@ final readonly class AdmissionDecisionLedger
     {
         return $this->load($a, $operation, $actor)["receipt"];
     }
-    /** @param array<string,mixed> $source */
+    /**
+     * @param array<string,mixed> $source
+     * @throws TypeException
+     */
     public function submitted(
         AdmissionApplication $a,
         array $source,
@@ -87,9 +92,10 @@ final readonly class AdmissionDecisionLedger
             new EventContext($actor, $this->clock->now(), $operation, origin: "command"),
             [$e],
         );
-        $this->verify($a);
+        $this->submissions->project($this->load($a)['submission_fact'] ?? throw new CorruptHistoryException());
     }
-    /** Internal creation receipt. Permission/ownership is always checked by the calling service.
+    /**
+     * Internal creation receipt. Permission/ownership is always checked by the calling service.
      * @return array<string,mixed>|null */
     public function submissionReceipt(AdmissionApplication $a, EntityId $operation, EntityId $actor): ?array
     {
@@ -105,7 +111,9 @@ final readonly class AdmissionDecisionLedger
     }
     /** Called after projection CAS succeeds in the same transaction.
      * @param array<string,mixed> $source
-     * @return array<string,mixed> */
+     * @return array<string,mixed>
+     * @throws TypeException
+     */
     public function record(
         AdmissionApplication $before,
         AdmissionApplication $after,
@@ -182,9 +190,12 @@ final readonly class AdmissionDecisionLedger
             ),
         ];
     }
-    /** Projection CAS has succeeded; the authorized entry point owns the transaction.
+    /**
+     * Projection CAS has succeeded; the authorized entry point owns the transaction.
      * @param array<string,mixed> $source
-     * @return array<string,mixed> */
+     * @return array<string,mixed>
+     * @throws TypeException
+     */
     public function correct(
         AdmissionApplication $before,
         AdmissionApplication $after,
@@ -307,7 +318,10 @@ final readonly class AdmissionDecisionLedger
             "recorded_at" => $r["recorded_at"],
         ];
     }
-    /** @return array{root:AdmissionDecision,actor:?string,at:?string,recorded_at:?string,birth_actor:?string,birth_at:?string,birth_recorded_at:?string,receipt:?array<string,mixed>} */
+    /**
+     * @return array{root:AdmissionDecision,actor:?string,at:?string,recorded_at:?string,birth_actor:?string,birth_at:?string,birth_recorded_at:?string,submission_fact:?\Domain\Admissions\ValueObject\SubmissionFact,receipt:?array<string,mixed>}
+     * @throws TypeException
+     */
     private function load(
         AdmissionApplication $a,
         ?EntityId $operation = null,
@@ -319,6 +333,7 @@ final readonly class AdmissionDecisionLedger
         $birthActor = null;
         $birthAt = null;
         $birthRecordedAt = null;
+        $submissionFact = null;
         $actor = null;
         $at = null;
         $recordedAt = null;
@@ -327,6 +342,7 @@ final readonly class AdmissionDecisionLedger
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 if ($stored->event instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted) {
+                    $submissionFact = \Domain\Admissions\ValueObject\SubmissionFact::fromEvent($stored);
                     $birthActor = $stored->context->actor?->value;
                     $birthAt = $stored->context->effectiveAt?->format(DATE_ATOM);
                     $birthRecordedAt = $stored->recordedAt->format(DATE_ATOM);
@@ -389,8 +405,12 @@ final readonly class AdmissionDecisionLedger
             "birth_actor" => $birthActor,
             "birth_at" => $birthAt,
             "birth_recorded_at" => $birthRecordedAt,
+            'submission_fact' => $submissionFact,
         ];
     }
+    /**
+     * @throws TypeException
+     */
     private function verifyMatriculation(AdmissionApplication $a, int $version): void
     {
         $root = Matriculation::root(new MatriculationId($a->id->value));
@@ -428,6 +448,9 @@ final readonly class AdmissionDecisionLedger
             "effective_at" => $at,
         ];
     }
+    /**
+     * @throws TypeException
+     */
     private function stream(EntityId $id): StreamReference
     {
         return new StreamReference(new AdmissionDecisionId($id->value), "admission_decision");

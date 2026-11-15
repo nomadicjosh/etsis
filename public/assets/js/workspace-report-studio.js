@@ -169,8 +169,25 @@ window.createWorkspaceReportStudio = function (ui) {
             );
         const students = catalog.datasets.find((item) => item.id === "students");
         const sections = catalog.datasets.find((item) => item.id === "sections");
-        if (students?.fields.latest_term_code || sections?.fields.enrollment_id)
+        const applications = catalog.datasets.find((item) => item.id === "applications");
+        if (students?.fields.latest_term_code || sections?.fields.enrollment_id || applications?.fields.submitted_on)
             surface.append(node("h3", {}, "Try a useful starting point"));
+        if (applications?.fields.submitted_on)
+            surface.append(
+                button("Applications with recorded submission dates", () => edit(applications, {
+                    ...initial(applications),
+                    filters: { condition: "AND", rules: [
+                        { id: "submitted_on", operator: "is_not_null", value: null },
+                    ] },
+                })),
+                button("Applications with unknown submission dates", () => edit(applications, {
+                    ...initial(applications),
+                    filters: { condition: "AND", rules: [
+                        { id: "submitted_on", operator: "is_null", value: null },
+                    ] },
+                })),
+                node("p", { class: "form-text" }, "Submission dates come from recorded submissions, in their original timezone. Earlier unknown dates stay blank. Use Conditions to choose a date range; the intended entry term is a separate field."),
+            );
         if (students?.fields.latest_term_code) {
             const latestDefinition = (neverRegistered) => ({
                 dataset: "students",
@@ -264,7 +281,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
-            applications: ["institutional_id", "full_name", "program_code", "entry_term", "status"],
+            applications: ["institutional_id", "full_name", "program_code", "entry_term", "status", "submitted_on"],
             students: ["institutional_id", "full_name", "program_code", "entry_term"],
             programs: ["institutional_id", "full_name", "program_code", "catalog_year"],
             credits: ["full_name", "course_code", "course_title", "grade_code"],

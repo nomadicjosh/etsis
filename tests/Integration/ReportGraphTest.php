@@ -199,7 +199,8 @@ final class ReportGraphTest extends TestCase
         self::assertNotEmpty($data['items'][0]['c0']);
         $fields = AcademicReportSchema::datasets()['applications']['fields'];
         self::assertArrayNotHasKey('encrypted_answers', $fields);
-        self::assertArrayNotHasKey('submitted_on', $fields);
+        self::assertSame('submission', $fields['submitted_on']['relation']);
+        self::assertSame('date', $fields['submitted_on']['type']);
         $s->access->staff = false;
         $s->access->grants = ['sis:reporting:manage', 'sis:reporting:run', 'sis:student:read'];
         $this->expectException(AccessDeniedException::class);

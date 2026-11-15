@@ -288,6 +288,10 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Infrastructure\Persistence\PdoTransactionalEventStore::class,
         );
         $this->codefy->alias(AdmissionsRepository::class, PdoAdmissionsRepository::class);
+        $this->codefy->alias(
+            \Domain\Admissions\Repository\SubmissionProjection::class,
+            \Infrastructure\Persistence\Repository\SqlSubmissionProjection::class,
+        );
         $this->codefy->alias(StudentAccess::class, GateStudentAccess::class);
     }
 }

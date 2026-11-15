@@ -759,6 +759,7 @@ final class SisFixture
             $this->access,
             $this->clock,
             $this->applicationContext(),
+            new \Infrastructure\Persistence\Repository\SqlSubmissionProjection($this->sql),
         );
     }
     public function correctionService(

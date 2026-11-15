@@ -35,6 +35,8 @@ async function fixture(page, options = {}) {
         program_code: { label: 'Current program code', type: 'string', relation: 'program' },
         entry_term: { label: 'Intended entry term', type: 'string', relation: 'term' },
         term_starts_on: { label: 'Intended entry term starts', type: 'date', relation: 'term' },
+        submitted_on: { label: 'Submitted on (submission timezone)', type: 'date', relation: 'submission' },
+        submission_channel: { label: 'Submission channel (direct/form)', type: 'string', relation: 'submission' },
     } : options.students ? {
         student_id: { label: 'Student reference', type: 'string', relation: 'student' },
         institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
@@ -62,6 +64,7 @@ async function fixture(page, options = {}) {
             identity: { label: 'Institutional IDs', parent: 'person', many: false },
             program: { label: 'Academic programs', parent: 'application', many: false },
             term: { label: 'Academic terms', parent: 'application', many: false },
+            submission: { label: 'Recorded submissions', parent: 'application', many: false },
         },
     } : options.students ? {
         id: 'students', label: 'Students & current primary program',
@@ -105,7 +108,8 @@ async function fixture(page, options = {}) {
             const query = data.definition || definition;
             const values = { institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
-                latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04' };
+                latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
+                submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
             const rows = options.students || options.applications ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
@@ -350,6 +354,50 @@ test('admissions opens in the same field and condition builder and saves a confi
     });
     await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
+    expect(f.errors).toEqual([]);
+});
+
+test('submission dates use native date conditions and survive save and reopening without exposing history', async ({ page }) => {
+    const f = await fixture(page, { applications: true });
+    await page.getByRole('button', { name: 'Applications with recorded submission dates', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await expect(studio.getByLabel('Column 6 label', { exact: true })).toHaveValue('Submitted on (submission timezone)');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional August intake');
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    const rows = studio.getByRole('group', { name: 'Row conditions', exact: true });
+    await rows.getByLabel('Row conditions: comparison', { exact: true }).selectOption('between');
+    const dates = rows.locator('input[type="date"]');
+    await expect(dates).toHaveCount(2);
+    await dates.nth(0).fill('2026-08-01');
+    await dates.nth(1).fill('2026-08-31');
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('2026-08-10');
+    const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
+    expect(query.filters.rules[0]).toMatchObject({ id: 'submitted_on', operator: 'between', value: ['2026-08-01', '2026-08-31'] });
+    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await expect(studio).toContainText('Definition revision 1');
+    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await expect(studio.locator('input[type="date"]').nth(0)).toHaveValue('2026-08-01');
+    await expect(studio.locator('input[type="date"]').nth(1)).toHaveValue('2026-08-31');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+    expect(JSON.stringify(query)).not.toMatch(/sis_history|source_event_id|sealed_event/);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test('unknown submission dates are an explicit missing-date choice, separate from intended entry terms', async ({ page }) => {
+    const f = await fixture(page, { applications: true, unknownSubmission: true });
+    await expect(page.locator('dialog.report-studio')).toContainText('Earlier unknown dates stay blank');
+    await page.getByRole('button', { name: 'Applications with unknown submission dates', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
+    expect(query.filters.rules[0]).toMatchObject({ id: 'submitted_on', operator: 'is_null' });
+    expect(query.columns.map(c => c.field)).toContain('entry_term');
+    const results = page.getByRole('region', { name: 'Relational report results', exact: true });
+    await expect(results).toContainText('26/FA');
+    await expect(results).not.toContainText('2026-08-10');
     expect(f.errors).toEqual([]);
 });
 

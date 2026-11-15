@@ -452,9 +452,15 @@ final class AcademicReportSchema
                 'program' => $join('sis_programs', 'application', 'program_id', 'id'),
                 'term' => $join('sis_terms', 'application', 'entry_term_id', 'id'),
                 'student' => $join('sis_students', 'person', 'id', 'person_id', $studentRead),
+                'submission' => $join('sis_application_intake', 'application', 'id', 'id')
+                    + ['description' => 'Actual submission facts only; earlier unknown dates remain blank.'],
             ],
             'fields' => [
                 'application_id' => $field('Application reference', 'string', 'application', 'id'),
+                'submitted_on' => $field('Submitted on (submission timezone)', 'date', 'submission', 'submitted_on'),
+                'submission_timezone' => $field('Submission timezone', 'string', 'submission', 'submission_timezone'),
+                'submission_recorded_on' => $field('Submission recorded on (UTC)', 'date', 'submission', 'recorded_on'),
+                'submission_channel' => $field('Submission channel (direct/form)', 'string', 'submission', 'channel'),
                 'status' => $field(
                     'Application status (submitted/accepted/rejected/matriculated)',
                     'string',
@@ -475,6 +481,7 @@ final class AcademicReportSchema
                 'active' => $field('Person’s current student activity', 'boolean', 'student', 'active', $studentRead),
             ],
         ];
+        $applications['relationships']['submission']['label'] = 'Recorded submissions';
         $studentRelations = array_intersect_key($students['relationships'], array_flip([
             'registration', 'registered_section', 'registration_term', 'latest_registration',
         ])) + $academicRelations;

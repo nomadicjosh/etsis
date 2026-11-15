@@ -73,6 +73,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
         $p = $events[0]->payload();
         self::assertSame("owner", $p["authorization"]);
         self::assertSame("form", $p["channel"]);
+        self::assertSame('form', $f->sql->one('sis_application_intake', ['id' => $app->value])['channel']);
         self::assertSame($id->value, $p["decision_id"]);
         self::assertSame($id->value, $p["source"]["submission"]["id"]);
         self::assertSame($form->value, $p["source"]["submission"]["form_id"]);
@@ -331,6 +332,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
             }
             $tables = [
                 "sis_applications",
+                'sis_application_intake',
                 "sis_form_submissions",
                 "sis_history_events",
                 "sis_history_streams",
