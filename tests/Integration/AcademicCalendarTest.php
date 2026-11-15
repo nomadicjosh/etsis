@@ -24,6 +24,8 @@ final class AcademicCalendarTest extends TestCase
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
             $f->submissionService(),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
         );
         $person = $service->createPerson($f->user(), 'Fictional', 'Student');
         $app = $f->legacyApplication($person->id, $f->program, new EntityId($term));

@@ -104,6 +104,34 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testAccountSetupCompilesForAllSupportedDialects(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261114000004_CreateSisAccountSetup.php';
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method('create')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definition): void {
+                $definition = new CreateTable($name);
+                $callback($definition);
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new CreateSisAccountSetup('setup');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $commands = new $class($dialect)->create($definition);
+            self::assertNotEmpty($commands, $driver);
+            $sql = json_encode($commands, JSON_THROW_ON_ERROR);
+            self::assertStringContainsString('sealed_grant', $sql);
+            self::assertStringNotContainsString('AUTO_INCREMENT', strtoupper($sql));
+        }
+    }
+
     public function testPrivateReportCaptureTablesCompileForAllSupportedDialects(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261114000002_CreateSisReportLifecycles.php';

@@ -121,7 +121,7 @@ $framework = $app->make(\Codefy\Domain\EventSourcing\TransactionalEventStore::cl
 $history = iterator_to_array(
     $framework->getAggregateHistoryFor(new \Domain\User\ValueObject\UserId($person->ownerUserId->value)),
 );
-if (count($history) !== 5 || count($sis->sql->rows("sis_history_events")) !== count($beforeEvents) + 2) {
+if (count($history) !== 5 || count($sis->sql->rows("sis_history_events")) !== count($beforeEvents) + 3) {
     throw new RuntimeException("Profile event history was duplicated or missing.");
 }
 // A failed projection must roll back both the profile and its authoritative event writes.
@@ -174,6 +174,30 @@ if (
     (string) $replayed->token() !== $passwordSaved["token"]
 ) {
     throw new RuntimeException("Changed profile credentials did not replay from protected history.");
+}
+// Exercise the real setup controller/provider binding and global CSRF/privacy middleware.
+$app->make(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::class);
+$setupGet = new \Qubus\Http\ServerRequest([], [], 'https://campus.example.invalid/portal/password-setup/', 'GET');
+$setupPage = $app->router->match($setupGet);
+if ($setupPage->getStatusCode() !== 200
+    || !str_contains($setupPage->getHeaderLine('Cache-Control'), 'no-store')
+    || $setupPage->getHeaderLine('Referrer-Policy') !== 'no-referrer'
+    || !str_contains((string) $setupPage->getBody(), 'account-setup-form')
+    || str_contains((string) $setupPage->getBody(), 'phpdebugbar')) {
+    throw new RuntimeException('Initial account setup did not resolve as a private portal form.');
+}
+$setupPost = new \Qubus\Http\ServerRequest([], [], 'https://campus.example.invalid/portal/password-setup/', 'POST')
+    ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
+    ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE, 'fictionalcsrftoken')
+    ->withParsedBody(['token' => str_repeat('a', 64), 'password' => 'fictional', 'confirm_password' => 'different']);
+$setupEvents = $sis->sql->rows('sis_history_events');
+if ($app->router->match($setupPost)->getStatusCode() !== 403) {
+    throw new RuntimeException('Account setup bypassed CSRF.');
+}
+$invalidSetup = $app->router->match($setupPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if ($invalidSetup->getStatusCode() !== 200 || $setupEvents !== $sis->sql->rows('sis_history_events')
+    || !str_contains((string) $invalidSetup->getBody(), 'This link is unavailable')) {
+    throw new RuntimeException('Rejected account setup wrote credential history or lost its accessible error.');
 }
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

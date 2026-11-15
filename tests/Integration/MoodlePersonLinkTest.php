@@ -77,7 +77,7 @@ final class MoodlePersonLinkTest extends TestCase
     {
         $person = new Person(
             EntityId::generate(),
-            $owner,
+            $owner ?? $this->f->user(),
             "Alex",
             "Example",
             new InstitutionalId("S-" . bin2hex(random_bytes(4))),

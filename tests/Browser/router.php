@@ -85,6 +85,9 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     } elseif (str_starts_with($path, '/portal/news/')) {
         $template = 'article';
         $data['article'] = $public['news'][0];
+    } elseif ($path === '/portal/password-setup/') {
+        $template = 'account-setup';
+        $data += ['completed' => $_SERVER['REQUEST_METHOD'] === 'POST', 'error' => null];
     } elseif ($path === '/login/' || $path === '/register/') {
         $template = 'auth'; $data += ['mode' => $path === '/login/' ? 'login' : 'register',
             'continue' => true, 'signInFailed' => ($_GET['notice'] ?? '') === 'credentials',

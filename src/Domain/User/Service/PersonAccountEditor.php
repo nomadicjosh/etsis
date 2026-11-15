@@ -28,6 +28,7 @@ final readonly class PersonAccountEditor
         private UserAccountAccess $accounts,
         private StudentAccess $access,
         private AuditTrail $audit,
+        private \Domain\Person\Service\ProfileLedger $profiles,
         private int $minimumPasswordLength = 26,
     ) {
     }
@@ -53,7 +54,10 @@ final readonly class PersonAccountEditor
                 throw new ValidationException([['field' => 'email', 'message' => 'Enter a valid email address.']]);
             }
             $user->changeEmailAddress(new EmailAddress($email));
-            $this->users->saveAggregateRoot($user);
+            $this->users->saveProfile($user, $this->profiles->accountContext(
+                $this->access->authenticatedUserId(),
+                EntityId::generate()
+            ));
             $this->audit->record($this->access->authenticatedUserId(), 'person.account_email_changed', $person);
         });
     }
@@ -81,7 +85,10 @@ final readonly class PersonAccountEditor
                     . $this->minimumPasswordLength . ' characters, within the supported password length.']]);
             }
             $user->changePassword(new StringLiteral(Password::hash($password)), new UserToken());
-            $this->users->saveAggregateRoot($user);
+            $this->users->saveProfile($user, $this->profiles->accountContext(
+                $this->access->authenticatedUserId(),
+                EntityId::generate()
+            ));
             $this->audit->record($this->access->authenticatedUserId(), 'person.account_password_changed', $person);
         });
     }
@@ -90,7 +97,9 @@ final readonly class PersonAccountEditor
     {
         $this->access->requirePermission('sis:person:manage');
 
-        return $this->people->person($person)->ownerUserId
+        $record = $this->people->person($person);
+        $this->profiles->verify($record);
+        return $record->ownerUserId
         ?? throw new DomainException('Enable sign-in access on this person first.');
     }
 

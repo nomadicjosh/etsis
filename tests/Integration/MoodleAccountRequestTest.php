@@ -1120,7 +1120,7 @@ final class MoodleAccountRequestTest extends TestCase
     {
         $person = new Person(
             EntityId::generate(),
-            $owner,
+            $owner ?? $this->f->user(),
             "Alex",
             "Example",
             new InstitutionalId("T-" . bin2hex(random_bytes(4))),
@@ -1253,7 +1253,7 @@ final class MoodleAccountRequestTest extends TestCase
         } catch (AccessDeniedException) {
             self::assertSame(0, $this->reader->calls);
         }
-        $this->f->access->grants = ["sis:person:manage", MoodleAccountRequestService::CREATE];
+        $this->f->access->grants = ["sis:person:manage", "admin:edit:user", MoodleAccountRequestService::CREATE];
         $review = $this->review();
         self::assertSame(
             "queued",

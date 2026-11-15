@@ -29,6 +29,7 @@ final readonly class PersonProfileEditor
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private ProfileLedger $history,
     ) {
     }
 
@@ -45,6 +46,11 @@ final readonly class PersonProfileEditor
     {
         $actor = $this->access->requirePermission('sis:person:manage');
         $initial = $this->people->person($id);
+        if ($initial->ownerUserId === null) {
+            throw new \DomainException('A person must have a sign-in account.');
+        }
+        $intent = ProfileLedger::intent([$revision, trim($givenName), trim($familyName), $restricted]);
+        $operation = ProfileLedger::operation($id, $actor, $intent);
         $this->transactions->run(function () use (
             $id,
             $givenName,
@@ -52,23 +58,48 @@ final readonly class PersonProfileEditor
             $restricted,
             $revision,
             $actor,
-            $initial
+            $initial,
+            $intent,
+            $operation
         ): void {
-            $save = function () use ($id, $givenName, $familyName, $restricted, $revision, $actor, $initial): void {
+            $save = function () use (
+                $id,
+                $givenName,
+                $familyName,
+                $restricted,
+                $revision,
+                $actor,
+                $initial,
+                $intent,
+                $operation
+): void {
                 $this->profiles->lock($id);
+                if ($this->access->requirePermission('sis:person:manage')->value !== $actor->value) {
+                    throw new \Domain\Shared\Exception\AccessDeniedException('The profile editor changed.');
+                }
+                if ($this->history->receipt($id, $operation, $actor, $intent) !== null) {
+                    return;
+                }
                 $person = $this->people->person($id);
                 if (
-                    $person->ownerUserId?->value !== $initial->ownerUserId?->value
+                    $person->ownerUserId?->value !== $initial->ownerUserId->value
                     || !hash_equals($this->revision($person), $revision)
                 ) {
                     throw new ConcurrentModificationException('Reload this person before saving.');
                 }
                 $given = trim($givenName);
                 $family = trim($familyName);
-                new Person($id, $person->ownerUserId, $given, $family, $person->institutionalId, $restricted);
+                $changed = new Person(
+                    $id,
+                    $person->ownerUserId,
+                    $given,
+                    $family,
+                    $person->institutionalId,
+                    $restricted,
+                    $person->identityVersion
+                );
                 if (
-                    $person->ownerUserId !== null
-                    && ($person->givenName !== $given || $person->familyName !== $family)
+                    $person->givenName !== $given || $person->familyName !== $family
                 ) {
                     /** @var User $user */
                     $user = $this->users->loadAggregateRoot(new UserId($person->ownerUserId->value));
@@ -77,23 +108,32 @@ final readonly class PersonProfileEditor
                         $user->name()->getMiddleName(),
                         new StringLiteral($family)
                     ));
-                    $this->users->saveAggregateRoot($user);
+                    $this->users->saveProfile($user, $this->history->accountContext(
+                        $actor,
+                        \Domain\Shared\ValueObject\DerivedIdentity::from($operation, 'person.account.name')
+                    ));
                 }
                 $this->profiles->save($id, $given, $family, $restricted);
+                $this->history->record($person, $changed, $operation, $actor, $intent);
+                if ($this->access->requirePermission('sis:person:manage')->value !== $actor->value) {
+                    throw new \Domain\Shared\Exception\AccessDeniedException('The profile editor changed.');
+                }
                 $this->audit->record($actor, 'person.profile_updated', $id);
             };
-            if ($initial->ownerUserId !== null) {
-                // The shared account boundary also protects super users from profile takeover.
-                $this->accounts->update($initial->ownerUserId, $save);
-            } else {
-                $save();
-            }
+            // The shared account boundary also protects super users from profile takeover.
+            $this->accounts->update($initial->ownerUserId, $save);
         });
     }
 
     private function revision(Person $person): string
     {
-        return hash('sha256', json_encode([$person->id->value, $person->ownerUserId?->value,
-            $person->givenName, $person->familyName, $person->directoryRestricted], JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode(
+            [$person->id->value, $person->ownerUserId?->value,
+            $person->givenName,
+                $person->familyName,
+                $person->directoryRestricted,
+                $this->history->verify($person)],
+            JSON_THROW_ON_ERROR
+        ));
     }
 }

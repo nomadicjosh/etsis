@@ -38,7 +38,9 @@ final class WorkspaceWorkflowTest extends TestCase
                 new RandomInstitutionalIdGenerator(),
                 $fixture->decisionLedger(),
                 $fixture->submissionService(),
-            ),
+            $fixture->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sql),
+        ),
             $fixture->access,
             $fixture->transactions,
             $fixture->audit,
@@ -87,6 +89,8 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
             $fixture->submissionService(),
+            $fixture->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sql),
         );
         $record = $person->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
@@ -126,6 +130,8 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
             $fixture->submissionService(),
+            $fixture->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sql),
         );
         $person = $admissions->createPerson($fixture->access->actor, 'Taylor', 'Example');
         $service = $this->forms($fixture);
@@ -189,6 +195,8 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
             $fixture->submissionService(),
+            $fixture->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sql),
         );
         $service = new \Domain\Workspace\Service\WorkspaceService(
             new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog(), $fixture->clock),
@@ -215,9 +223,11 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
             $fixture->submissionService(),
+            $fixture->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sql),
         );
         for ($index = 0; $index < 52; ++$index) {
-            $admissions->createPerson(null, 'Example', 'Person ' . $index);
+            $admissions->createPerson($fixture->user(), 'Example', 'Person ' . $index);
         }
         $repository = new \Infrastructure\Persistence\Repository\SqlWorkspaceRepository($fixture->sql, $fixture->gradeCatalog(), $fixture->clock);
         $first = $repository->records('people', null, '', null);
@@ -230,7 +240,7 @@ final class WorkspaceWorkflowTest extends TestCase
         self::assertSame([], $repository->records('people', null, "' OR 1=1 --", null)['items']);
     }
 
-    public function testExistingPersonGetsOptionalAccountWithoutDuplicatingProfile(): void
+    public function testExistingAccountProjectionKeepsTheSamePersonWithoutDuplicatingProfile(): void
     {
         $fixture = new SisFixture();
         $admissions = new AdmissionsService(
@@ -241,14 +251,16 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $fixture->decisionLedger(),
             $fixture->submissionService(),
+            $fixture->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($fixture->sql),
         );
-        $person = $admissions->createPerson(null, 'Alex', 'Example', '00001234');
+        $person = $admissions->createPerson($fixture->user(), 'Alex', 'Example', '00001234');
         $repository = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
             $fixture->sql,
             $fixture->admissions,
             new RandomInstitutionalIdGenerator()
         );
-        $account = $fixture->user();
+        $account = $person->ownerUserId;
         $linked = $fixture->transactions->run(fn () => $repository->ensure($account, 'Alex', 'Example', $person->id));
         self::assertSame($person->id->value, $linked->id->value);
         self::assertSame('00001234', $linked->institutionalId->value);
@@ -294,6 +306,8 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
             $f->submissionService(),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
         );
         $person = $admissions->createPerson($f->access->actor, 'Alex', 'Example');
         $original = $forms->save(null, $f->program, 'Original application', $this->fields(), null);
@@ -329,8 +343,10 @@ final class WorkspaceWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
             $f->submissionService(),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
         );
-        $person = $admissions->createPerson(null, 'Jamie', 'Example');
+        $person = $admissions->createPerson($f->user(), 'Jamie', 'Example');
         $application = $f->legacyApplication($person->id, $f->program, $f->term);
         self::assertNull($this->forms($f)->reviewApplication($application->id)['submission']);
     }

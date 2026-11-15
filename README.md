@@ -57,7 +57,7 @@ Generate `.enc.key` **once for a new installation**. Reuse it when it already ex
 
 ### 4. Register your account and grant initial administrator access
 
-Open [the registration page](https://etsis.ddev.site/register/) and create your own account using a fictional name/email and a password of at least **26 characters**. Usernames use 6–20 lowercase letters, underscores or hyphens; for example, `alpha_tester`. Registration creates an ordinary account.
+Open [the registration page](https://etsis.ddev.site/register/) and create your own account using a fictional name/email and a password of at least **26 characters**. Usernames use 6–20 lowercase letters, underscores or hyphens; for example, `alpha_tester`. Registration creates a person record and its ordinary sign-in account together. Staff-created people also receive an account, with private [initial password setup](docs/person-identity-and-accounts.md).
 
 Then run:
 

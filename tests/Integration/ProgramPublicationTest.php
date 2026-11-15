@@ -24,7 +24,7 @@ final class ProgramPublicationTest extends TestCase
     private function student(ProgramPublicationFixture $p, array $year): \Domain\Student\Student
     {
         $f = $p->sis;
-        $person = $f->admissionsService()->createPerson($f->user(), "Fictional", "Student");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Student");
         $application = $f->legacyApplication($person->id, $f->program, new EntityId($year["terms"][0]["id"]));
         $f->legacyAdmissionDecision($application->id, true);
         return $f->matriculate($application->id);

@@ -318,4 +318,34 @@ final class ReportGraphTest extends TestCase
             self::assertSame(['26/FA', '27/SP'], $plan['parameters']);
         }
     }
+
+    public function testReadableChoiceMetadataKeepsCopyPermissionsAndSavedCustomComparisons(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $this->registration($s, $student->id, '26/FA');
+        // A retained/custom current value stays queryable; display choices do not redefine domain facts.
+        $s->sql->update('sis_enrollments', ['status' => 'X'], ['student_id' => $student->id->value]);
+        $service = $this->service($s);
+        $graph = $service->graph('students', $this->definition()['aliases'])['dataset'];
+        $choices = $graph['fields']['registration_status']['choices'];
+        self::assertSame('Registered by staff', $choices['A']);
+        self::assertSame($choices, $graph['fields']['copy1__registration_status']['choices']);
+        $query = ['dataset' => 'students', 'columns' => [
+            ['field' => 'student_id', 'label' => 'Student', 'aggregate' => 'none'],
+        ], 'filters' => ['condition' => 'AND', 'rules' => [
+            ['id' => 'registration_status', 'operator' => 'contains', 'value' => 'X'],
+        ]]];
+        $history = $s->sql->rows('sis_history_events');
+        $id = EntityId::generate();
+        $service->save($id, $id, -1, 'Fictional custom comparison', $query);
+        self::assertSame($query, $service->view($id)['definition']);
+        self::assertSame([['c0' => $student->id->value]], $service->run($id, 0)['items']);
+        self::assertSame($history, $s->sql->rows('sis_history_events'));
+        $s->access->staff = false;
+        $s->access->grants = ['sis:reporting:manage', 'sis:admissions:manage'];
+        $admissions = $service->graph('applications', [])['dataset'];
+        self::assertSame('Accepted', $admissions['fields']['status']['choices']['accepted']);
+        self::assertArrayNotHasKey('registration_status', $admissions['fields']);
+    }
 }

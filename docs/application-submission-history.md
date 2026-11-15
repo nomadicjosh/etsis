@@ -45,16 +45,16 @@ Offers, documents/checklists, further institution-specific approval/reopening po
 
 ## Submission-date reporting
 
-Implemented 2026-11-14. Open **Report Studio → Applications & admissions**. **Submitted on (submission timezone)** is included in the initial columns. Under **Conditions**, choose that field and **between** to enter a start/end date. Add status, current program, intended entry term or independently authorized student/registration conditions as needed. These use the existing general builder; submission reports are not a separate reporting screen.
+Implemented 2026-11-14. Open **Report Studio → Applications & admissions**. **Submitted on** is included in the initial columns. Under **Conditions**, choose that field and **between** to enter a start/end date. Add status, current program, intended entry term or independently authorized student/registration conditions as needed. These use the existing general builder; submission reports are not a separate reporting screen.
 
 The launch screen also offers **Applications with recorded submission dates** and **Applications with unknown submission dates**. An unknown date means the original submission was not recorded in the current journal. It does not mean the application was never submitted. The default optional relationship retains these applications with blank date/channel fields; an inner join deliberately selects only known submissions.
 
 Available fields are:
 
-- **Submitted on (submission timezone)**: the actual submission's effective calendar date in its retained timezone. A submission at 11:30 p.m. in Los Angeles belongs to that local day, even when its UTC date is the next day.
+- **Submitted on**: the actual submission's effective calendar date in its retained timezone. A submission at 11:30 p.m. in Los Angeles belongs to that local day, even when its UTC date is the next day.
 - **Submission timezone**: the original timezone or offset, making that calendar-date interpretation visible.
-- **Submission recorded on (UTC)**: the journal's separate UTC recording date.
-- **Submission channel (direct/form)**: staff direct entry or an application form. This does not identify the submitting actor or expose form answers.
+- **Submission recorded on**: the journal's separate UTC recording date.
+- **Submission channel**: staff direct entry or an application form. This does not identify the submitting actor or expose form answers.
 
 The intended entry term remains separate. Later acceptance/rejection, correction, matriculation, retries or catalog changes do not alter the original submission date. Date MIN/MAX and grouped application counts use the same typed query engine. All fields require current admissions data authority plus the relevant report duty; adding student-linked fields still requires student-read authority. Sharing, static captures, expiry and private CSV pages retain their existing checks. A report grants no permission to accept or matriculate anyone.
 

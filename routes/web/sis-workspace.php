@@ -12,7 +12,6 @@ use Application\Http\Controller\SisRegistrationController;
 use Application\Http\Controller\SisFormBuilderController;
 use Application\Http\Controller\SisMappedImportController;
 use Application\Http\Controller\SisRulesController;
-use Application\Http\Controller\SisPersonAccountController;
 use Qubus\Routing\Interfaces\Mappable;
 use Qubus\Routing\Psr7Router;
 
@@ -22,6 +21,19 @@ return static function (Psr7Router $router): void {
         ->name('sis.ui.person.profile');
     $router->map(['POST'], '/sis/ui/people/{id}/profile/', [SisPersonEditorController::class, 'saveProfile'])
         ->name('sis.ui.person.profile.save');
+
+    $router->map(
+        ['GET'],
+        '/sis/ui/people/{id}/password-setup/',
+        [\Application\Http\Controller\AccountSetupController::class,
+        'status']
+    )->name('sis.person.setup.status');
+    $router->map(
+        ['POST'],
+        '/sis/ui/people/{id}/password-setup/',
+        [\Application\Http\Controller\AccountSetupController::class,
+        'reissue']
+    )->name('sis.person.setup.reissue')->middleware(['rate.limiter']);
     $router->map(['GET'], '/sis/ui/people/{id}/account/', [SisPersonEditorController::class, 'account'])
         ->name('sis.ui.person.account');
     $router->map(['POST'], '/sis/ui/people/{id}/account/email/', [SisPersonEditorController::class, 'email'])
@@ -51,8 +63,7 @@ return static function (Psr7Router $router): void {
         ->name('sis.workspace')->middleware(['gate:admin:dashboard,/login/']);
     $router->map(['GET'], '/sis/ui/me/', [SisWorkspaceController::class, 'me'])
         ->name('sis.ui.me');
-    $router->map(['POST'], '/sis/ui/people/{id}/account/', [SisPersonAccountController::class, 'enable'])
-        ->name('sis.ui.account');
+
     $router->map(['GET'], '/sis/ui/metrics/', [SisWorkspaceController::class, 'metrics'])
         ->name('sis.ui.metrics');
     $router->map(['POST'], '/sis/ui/data/{dataset}/', [SisWorkspaceController::class, 'records'])
@@ -87,15 +98,40 @@ return static function (Psr7Router $router): void {
         ->name('sis.import.commit');
     $router->map(['POST'], '/sis/rules/', [SisRulesController::class, 'save'])
         ->name('sis.rules.save');
-    $router->map(['POST'], '/sis/course-rules/page/', [\Application\Http\Controller\SisCourseRuleController::class, 'page'])
+    $router->map(
+        ['POST'],
+        '/sis/course-rules/page/',
+        [\Application\Http\Controller\SisCourseRuleController::class,
+        'page']
+    )
         ->name('sis.course-rules.page');
-    $router->map(['GET'], '/sis/course-rules/{id}/', [\Application\Http\Controller\SisCourseRuleController::class, 'get'])
+    $router->map(
+        ['GET'],
+        '/sis/course-rules/{id}/',
+        [\Application\Http\Controller\SisCourseRuleController::class,
+        'get']
+    )
         ->name('sis.course-rules.get');
-    $router->map(['POST'], '/sis/course-rules/{id}/revisions/', [\Application\Http\Controller\SisCourseRuleController::class, 'versions'])
+    $router->map(
+        ['POST'],
+        '/sis/course-rules/{id}/revisions/',
+        [\Application\Http\Controller\SisCourseRuleController::class,
+        'versions']
+    )
         ->name('sis.course-rules.versions');
-    $router->map(['POST'], '/sis/course-rules/save/', [\Application\Http\Controller\SisCourseRuleController::class, 'save'])
+    $router->map(
+        ['POST'],
+        '/sis/course-rules/save/',
+        [\Application\Http\Controller\SisCourseRuleController::class,
+        'save']
+    )
         ->name('sis.course-rules.save');
-    $router->map(['POST'], '/sis/course-rules/preview/', [\Application\Http\Controller\SisCourseRuleController::class, 'preview'])
+    $router->map(
+        ['POST'],
+        '/sis/course-rules/preview/',
+        [\Application\Http\Controller\SisCourseRuleController::class,
+        'preview']
+    )
         ->name('sis.course-rules.preview');
     $router->map(['GET'], '/sis/rules/{id}/', [SisRulesController::class, 'get'])
         ->name('sis.rules.get');

@@ -119,7 +119,7 @@ final class AcademicReportSchema
                 'program_code' => $field('Primary program code', 'string', 'program', 'code'),
                 'program_title' => $field('Primary program title', 'string', 'program', 'title'),
                 'entry_term' => $field('Institutional entry term', 'string', 'term', 'code'),
-                'registration_status' => $field('Registration status (A/N/D/W/C)', 'string', 'registration', 'status'),
+                'registration_status' => $field('Registration status', 'string', 'registration', 'status'),
                 'registration_section_code' => $field(
                     'Registered section code',
                     'string',
@@ -149,8 +149,8 @@ final class AcademicReportSchema
                 ),
             ],
         ];
-        $students['relationships']['latest_registration']['label'] = 'Latest registered term (all pursuits)';
-        $students['relationships']['registration']['label'] = 'Registrations (all pursuits)';
+        $students['relationships']['latest_registration']['label'] = 'Latest registered term';
+        $students['relationships']['registration']['label'] = 'Registrations';
         $students['relationships']['registered_section']['label'] = 'Registered sections';
         $students['relationships']['registration_term']['label'] = 'Registration terms';
         $program = [
@@ -425,7 +425,7 @@ final class AcademicReportSchema
             'credit_term' => $join('sis_terms', 'academic_credit', 'term_id', 'id'),
             'credit_grade' => $join('sis_grades', 'academic_credit', 'grade_id', 'id'),
         ];
-        $academicRelations['academic_credit']['label'] = 'Recorded academic credits (all pursuits)';
+        $academicRelations['academic_credit']['label'] = 'Recorded academic credits';
         $academicRelations['credit_term']['label'] = 'Recorded-credit terms';
         $academicRelations['credit_grade']['label'] = 'Recorded grades';
         $academicFields = [
@@ -457,12 +457,12 @@ final class AcademicReportSchema
             ],
             'fields' => [
                 'application_id' => $field('Application reference', 'string', 'application', 'id'),
-                'submitted_on' => $field('Submitted on (submission timezone)', 'date', 'submission', 'submitted_on'),
+                'submitted_on' => $field('Submitted on', 'date', 'submission', 'submitted_on'),
                 'submission_timezone' => $field('Submission timezone', 'string', 'submission', 'submission_timezone'),
-                'submission_recorded_on' => $field('Submission recorded on (UTC)', 'date', 'submission', 'recorded_on'),
-                'submission_channel' => $field('Submission channel (direct/form)', 'string', 'submission', 'channel'),
+                'submission_recorded_on' => $field('Submission recorded on', 'date', 'submission', 'recorded_on'),
+                'submission_channel' => $field('Submission channel', 'string', 'submission', 'channel'),
                 'status' => $field(
-                    'Application status (submitted/accepted/rejected/matriculated)',
+                    'Application status',
                     'string',
                     'application',
                     'status'
@@ -493,12 +493,29 @@ final class AcademicReportSchema
             'relationships' => $dataset['relationships'] + $studentRelations,
             'fields' => $dataset['fields'] + $studentFields,
         ]);
-        return [
+        $registrationChoices = [
+            'A' => 'Registered by staff', 'N' => 'Self-registered', 'D' => 'Dropped',
+            'W' => 'Withdrawn', 'C' => 'Cancelled',
+        ];
+        $datasets = [
             'applications' => ['id' => 'applications'] + $withStudentWork($applications),
             'students' => ['id' => 'students'] + $withStudentWork($students),
             "programs" => ["id" => "programs"] + $withStudentWork($program),
             "credits" => ["id" => "credits"] + $withStudentWork($credits),
             "sections" => ["id" => "sections"] + $withStudentWork($sections),
         ];
+        foreach ($datasets as &$dataset) {
+            $dataset['fields']['registration_status']['choices'] = $registrationChoices;
+        }
+        unset($dataset);
+        $datasets['sections']['fields']['enrollment_status']['choices'] = $registrationChoices;
+        $datasets['applications']['fields']['status']['choices'] = [
+            'submitted' => 'Submitted', 'accepted' => 'Accepted', 'rejected' => 'Rejected',
+            'matriculated' => 'Matriculated',
+        ];
+        $datasets['applications']['fields']['submission_channel']['choices'] = [
+            'direct' => 'Direct staff entry', 'form' => 'Application form',
+        ];
+        return $datasets;
     }
 }

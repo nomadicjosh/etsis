@@ -371,7 +371,9 @@ final class RegistrationBatchTest extends TestCase
                 new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
                 $f->decisionLedger(),
                 $f->submissionService(),
-            )
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+        )
         );
         self::assertCount(1, $workspace->records('registration')['items']);
         $row = $workspace->records('registrationstudents')['items'][0];

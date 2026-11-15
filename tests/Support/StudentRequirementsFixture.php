@@ -38,8 +38,10 @@ final class StudentRequirementsFixture
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $s->decisionLedger(),
             $s->submissionService(),
+            $s->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($s->sql),
         );
-        $person = $admit->createPerson($s->access->actor, "Fictional", "Learner");
+        $person = $s->legacyPerson($s->access->actor, "Fictional", "Learner");
         $application = $s->legacyApplication($person->id, $s->program, $term);
         $s->legacyAdmissionDecision($application->id, true);
         $student = $s->legacyStudent($application->id);

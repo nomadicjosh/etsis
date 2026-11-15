@@ -29,14 +29,16 @@ async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
     const fields = options.applications ? {
         application_id: { label: 'Application reference', type: 'string', relation: 'application' },
-        status: { label: 'Application status (submitted/accepted/rejected/matriculated)', type: 'string', relation: 'application' },
+        status: { label: 'Application status', type: 'string', relation: 'application',
+            choices: { submitted: 'Submitted', accepted: 'Accepted', rejected: 'Rejected', matriculated: 'Matriculated' } },
         institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
         full_name: { label: 'Applicant full name', type: 'string', relation: 'person' },
         program_code: { label: 'Current program code', type: 'string', relation: 'program' },
         entry_term: { label: 'Intended entry term', type: 'string', relation: 'term' },
         term_starts_on: { label: 'Intended entry term starts', type: 'date', relation: 'term' },
-        submitted_on: { label: 'Submitted on (submission timezone)', type: 'date', relation: 'submission' },
-        submission_channel: { label: 'Submission channel (direct/form)', type: 'string', relation: 'submission' },
+        submitted_on: { label: 'Submitted on', type: 'date', relation: 'submission' },
+        submission_channel: { label: 'Submission channel', type: 'string', relation: 'submission',
+            choices: { direct: 'Direct staff entry', form: 'Application form' } },
     } : options.students ? {
         student_id: { label: 'Student reference', type: 'string', relation: 'student' },
         institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
@@ -46,7 +48,8 @@ async function fixture(page, options = {}) {
         entry_term: { label: 'Institutional entry term', type: 'string', relation: 'term' },
         latest_term_code: { label: 'Latest registered term', type: 'string', relation: 'latest_registration' },
         latest_term_starts_on: { label: 'Latest registered term starts', type: 'date', relation: 'latest_registration' },
-        registration_status: { label: 'Registration status (A/N/D/W/C)', type: 'string', relation: 'registration' },
+        registration_status: { label: 'Registration status', type: 'string', relation: 'registration',
+            choices: { A: 'Registered by staff', N: 'Self-registered', D: 'Dropped', W: 'Withdrawn', C: 'Cancelled' } },
         registration_term_code: { label: 'Registration term', type: 'string', relation: 'registration_term' },
         registration_section_code: { label: 'Registered section code', type: 'string', relation: 'registered_section' },
     } : {
@@ -74,8 +77,8 @@ async function fixture(page, options = {}) {
             identity: { label: 'Institutional IDs', parent: 'person', many: false },
             program: { label: 'Academic programs', parent: 'student', many: false },
             term: { label: 'Academic terms', parent: 'student', many: false },
-            latest_registration: { label: 'Latest registered term (all pursuits)', parent: 'student', many: false },
-            registration: { label: 'Registrations (all pursuits)', parent: 'student', many: true },
+            latest_registration: { label: 'Latest registered term', parent: 'student', many: false },
+            registration: { label: 'Registrations', parent: 'student', many: true },
             registration_term: { label: 'Registration terms', parent: 'registration', many: false },
             registered_section: { label: 'Registered sections', parent: 'registration', many: false },
         },
@@ -229,11 +232,11 @@ test('related-record cards preserve same-record conditions, modes and editable s
     await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
     const panel = studio.locator('[data-report-match="registration"]');
     await expect(panel.getByRole('button', { name: 'Has matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    const matching = panel.getByRole('group', { name: 'Matching registrations (all pursuits)', exact: true });
+    const matching = panel.getByRole('group', { name: 'Matching registrations', exact: true });
     await matching.getByRole('button', { name: 'Add condition', exact: true }).click();
-    await matching.getByLabel('Matching registrations (all pursuits): field', { exact: true }).nth(1)
+    await matching.getByLabel('Matching registrations: field', { exact: true }).nth(1)
         .selectOption('registration_term_code');
-    await matching.getByLabel('Matching registrations (all pursuits): value', { exact: true }).nth(1).fill('26/FA');
+    await matching.getByLabel('Matching registrations: value', { exact: true }).nth(1).fill('26/FA');
     await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     const preview = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
@@ -246,7 +249,7 @@ test('related-record cards preserve same-record conditions, modes and editable s
     await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
     await panel.getByRole('button', { name: 'Has no matching records', exact: true }).click();
     await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(matching.getByLabel('Matching registrations (all pursuits): value', { exact: true }).nth(1)).toHaveValue('26/FA');
+    await expect(matching.getByLabel('Matching registrations: value', { exact: true }).nth(1)).toHaveValue('26/FA');
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -258,11 +261,11 @@ test('related-record cards preserve same-record conditions, modes and editable s
     await studio.getByLabel('Related record source', { exact: true }).selectOption('latest_registration');
     await studio.getByRole('button', { name: 'Add related-record condition', exact: true }).click();
     const added = studio.locator('[data-report-match="latest_registration"]');
-    await expect(added.getByRole('heading', { name: 'Latest registered term (all pursuits)', exact: true })).toBeFocused();
-    await added.getByRole('button', { name: 'Remove Latest registered term (all pursuits) condition', exact: true }).click();
+    await expect(added.getByRole('heading', { name: 'Latest registered term', exact: true })).toBeFocused();
+    await added.getByRole('button', { name: 'Remove Latest registered term condition', exact: true }).click();
     await expect(added).toHaveCount(0);
     await expect(studio.getByLabel('Related record source', { exact: true })).toBeFocused();
-    await panel.getByRole('button', { name: 'Remove Registrations (all pursuits) condition', exact: true }).click();
+    await panel.getByRole('button', { name: 'Remove Registrations condition', exact: true }).click();
     await expect(panel).toHaveCount(0);
     await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
@@ -276,13 +279,13 @@ test('staff add named join copies, compare independent terms, save and reopen th
     await page.getByRole('button', { name: 'Explore Students & current primary program', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional Fall and Spring comparison');
-    await studio.getByRole('button', { name: 'Add another Registrations (all pursuits)', exact: true }).click();
+    await studio.getByRole('button', { name: 'Add another Registrations', exact: true }).click();
     const copy = studio.locator('[data-relation="copy1"]');
     await expect(copy.getByLabel('Name this record copy', { exact: true })).toBeFocused();
     await copy.getByLabel('Name this record copy', { exact: true }).fill('Spring registrations');
     await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
     for (const [source, label, field, value] of [
-        ['registration', 'registrations (all pursuits)', 'registration_term_code', '26/FA'],
+        ['registration', 'registrations', 'registration_term_code', '26/FA'],
         ['copy1', 'spring registrations', 'copy1__registration_term_code', '27/SP'],
     ]) {
         await studio.getByLabel('Related record source', { exact: true }).selectOption(source);
@@ -323,15 +326,15 @@ test('copied fields become ordinary output columns and removing the copy removes
     const f = await fixture(page, { students: true });
     await page.getByRole('button', { name: 'Explore Students & current primary program', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
-    await studio.getByRole('button', { name: 'Add another Registrations (all pursuits)', exact: true }).click();
+    await studio.getByRole('button', { name: 'Add another Registrations', exact: true }).click();
     const copy = studio.locator('[data-relation="copy1"]');
-    await copy.getByRole('checkbox', { name: 'Registration status (A/N/D/W/C)', exact: true }).check();
+    await copy.getByRole('checkbox', { name: 'Registration status', exact: true }).check();
     await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     expect(f.calls.find(c => c.path.endsWith('/preview/')).data.definition.columns.at(-1).field)
         .toBe('copy1__registration_status');
     await studio.getByRole('tab', { name: 'Build', exact: true }).click();
-    await copy.getByRole('button', { name: 'Remove Registrations (all pursuits) 2 and its fields', exact: true }).click();
+    await copy.getByRole('button', { name: 'Remove Registrations 2 and its fields', exact: true }).click();
     await expect(copy).toHaveCount(0);
     await expect(studio.getByLabel('Column 5 label', { exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
@@ -346,7 +349,7 @@ test('admissions opens in the same field and condition builder and saves a confi
     await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
     const rows = studio.getByRole('group', { name: 'Row conditions', exact: true });
     await rows.getByLabel('Row conditions: field', { exact: true }).selectOption('status');
-    await rows.getByLabel('Row conditions: value', { exact: true }).fill('accepted');
+    await rows.getByLabel('Row conditions: value', { exact: true }).selectOption('accepted');
     await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('accepted');
     expect(f.calls.find(c => c.path.endsWith('/preview/')).data.definition).toMatchObject({
@@ -357,11 +360,45 @@ test('admissions opens in the same field and condition builder and saves a confi
     expect(f.errors).toEqual([]);
 });
 
+test('readable status choices preserve codes, multiple values and saved custom text comparisons', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Students with active registrations', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional custom status');
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    const matching = studio.getByRole('group', { name: 'Matching registrations', exact: true });
+    const comparison = matching.getByLabel('Matching registrations: comparison', { exact: true });
+    const value = matching.getByLabel('Matching registrations: value', { exact: true });
+    await expect(value).toHaveValues(['A', 'N']);
+    await expect(value.getByRole('option', { name: 'Registered by staff', exact: true })).toHaveAttribute('value', 'A');
+    await comparison.selectOption('equal');
+    await value.selectOption({ label: 'Dropped' });
+    await comparison.selectOption('in');
+    await value.selectOption(['D', 'W']);
+    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    expect(f.calls.find(c => c.path.endsWith('/preview/')).data.definition.existence.registration.filters.rules[0])
+        .toMatchObject({ id: 'registration_status', operator: 'in', value: ['D', 'W'] });
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await comparison.selectOption('contains');
+    await value.fill('X');
+    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await expect(studio).toContainText('Definition revision 1');
+    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await expect(value).toHaveValue('X');
+    await comparison.selectOption('equal');
+    await expect(value).toHaveValue('X');
+    await value.selectOption('A');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
 test('submission dates use native date conditions and survive save and reopening without exposing history', async ({ page }) => {
     const f = await fixture(page, { applications: true });
     await page.getByRole('button', { name: 'Applications with recorded submission dates', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
-    await expect(studio.getByLabel('Column 6 label', { exact: true })).toHaveValue('Submitted on (submission timezone)');
+    await expect(studio.getByLabel('Column 6 label', { exact: true })).toHaveValue('Submitted on');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional August intake');
     await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
     const rows = studio.getByRole('group', { name: 'Row conditions', exact: true });

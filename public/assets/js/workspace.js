@@ -156,7 +156,7 @@
 
     const deliveryModes = [{ value: 'in_person', label: 'In person' }, { value: 'online', label: 'Online' }, { value: 'hybrid', label: 'Hybrid' }, { value: 'unspecified', label: 'Delivery to be confirmed' }];
     const datasets = {
-        people: { title: 'People', description: 'One person. One connected story. Keep admissions, academics, work and access together.', icon: 'people', action: 'Add a person', endpoint: '/sis/persons/', permission: 'sis:person:manage', fields: [ ['given_name', 'Given name'], ['family_name', 'Family name'], ['institutional_id', 'Assigned institutional ID', 'text', '', false] ], columns: [['Person', 'name'], ['Institutional ID', 'institutional_id'], ['Sign-in access', 'account']] },
+        people: { title: 'People', description: 'One person. One connected story. Keep admissions, academics, work and access together.', icon: 'people', action: 'Add a person', endpoint: '/sis/persons/', permission: 'sis:person:manage', fields: [ ['given_name', 'Given name'], ['family_name', 'Family name'], ['email', 'Email address', 'email'], ['institutional_id', 'Assigned institutional ID', 'text', '', false] ], columns: [['Person', 'name'], ['Institutional ID', 'institutional_id'], ['Sign-in access', 'account']] },
         applications: { title: 'Admissions', description: 'From a first hello to a new beginning. Review and decide without losing your place.', icon: 'inboxes', action: 'Start an application', permission: 'sis:admissions:manage', columns: [['Applicant', 'name'], ['Institutional ID', 'institutional_id'], ['Status', 'status']] },
         students: { title: 'Students', description: 'A clearer picture of every student’s academic journey.', icon: 'mortarboard', permission: 'sis:student:read', columns: [['Student', 'name'], ['Institutional ID', 'institutional_id'], ['Status', 'active']] },
         courses: { title: 'Academic catalog', description: 'Keep programs, courses, terms and sections in one connected workspace.', icon: 'journal-bookmark', action: 'Add a course', endpoint: '/sis/courses/', permission: 'sis:catalog:manage', fields: [['code', 'Course code'], ['title', 'Course title'], ['credits_milli', 'Credits', 'credits']], columns: [['Course', 'title'], ['Code', 'code'], ['Credits', 'credits_milli'], ['Status', 'active']] },
@@ -447,6 +447,7 @@
         if (section === 'bookings') return schedulingStudio.requestBooking(preset);
         if (section === 'journals') return operations.createJournal();
         const definition = datasets[section];
+        const operation = section === 'people' ? (await request('/sis/ui/operation-id/')).id : null;
         const body = openDrawer(definition.action, definition.title.toUpperCase());
         const form = await buildForm(definition.fields, preset);
         if (section === 'portal') {
@@ -466,11 +467,11 @@
             deadline.setAttribute('aria-describedby', 'term-deadline-help');
             deadline.after(node('div', { class: 'form-text', id: 'term-deadline-help' }, 'Choose a date between the first and last day of the term.'));
         }
-        form.append(node('p', { class: 'form-text mb-4' }, section === 'people' ? 'Leave the institutional ID blank to have the system assign one. Student, employment and sign-in access can be added to this same person later.' : 'Save here and keep your place in the workspace.'));
+        form.append(node('p', { class: 'form-text mb-4' }, section === 'people' ? 'Leave the institutional ID blank to have the system assign one. A linked account is created now. A private password-setup email is queued; student, employment and faculty records attach to this same person.' : 'Save here and keep your place in the workspace.'));
         form.append(node('button', { class: 'btn btn-primary', type: 'submit' }, 'Save and continue ', icon('arrow-right')));
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!form.reportValidity()) return;
-            const data = formData(form, definition.fields);
+            const data = { ...formData(form, definition.fields), ...(operation ? { operation_id: operation } : {}) };
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
@@ -547,10 +548,11 @@
                 if (can('sis:moodle:create-person') && can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => moodleRequests.open(person.id.value)) }, 'Create a Moodle account'));
                 if (can('sis:person:manage') && (!person.ownerUserId || can('admin:edit:user'))) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.editProfile(person)) }, 'Edit person profile'));
                 if (person.ownerUserId && can('admin:edit:user')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.account(person)) }, 'Manage sign-in account'));
-                if (can('sis:person:assign-id')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => editInstitutionalId(person)) }, 'Change institutional ID'));
+                if (can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(() => accountSetup(person)) }, 'Account setup'));
+            if (can('sis:person:assign-id')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => editInstitutionalId(person)) }, 'Change institutional ID'));
                 if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value)) }, 'Start application'));
                 if (can('sis:hr:manage') && !data.employees?.length) actions.append(node('button', { class: 'btn btn-outline-secondary', type: 'button', onclick: () => task(() => createRecord('employees', { person_id: person.id.value })) }, 'Add employment'));
-                if (!person.ownerUserId && can('admin:create:user')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => enableAccount(person)) }, 'Enable sign-in access'));
+
                 panel.append(actions, node('p', { class: 'muted-text' }, 'This institutional ID follows the person across student, employment and financial records. Sign-in access is attached to the same person.'));
             } else if (key === 'access') {
                 if (person.ownerUserId) {
@@ -576,20 +578,15 @@
         body.append(tabs, panes);
     }
 
-    async function enableAccount(person) {
-        const body = openDrawer('Enable sign-in access', 'THE SAME PERSON. ONE OPTIONAL ACCOUNT.');
-        const fields = [['username', 'Username (6–20 letters, underscore or hyphen)'], ['email', 'Email address', 'email'], ['password', 'Initial password (at least 26 characters)', 'password']];
-        const form = await buildForm(fields);
-        form.elements.password.minLength = 26; form.elements.password.autocomplete = 'new-password';
-        form.append(node('p', { class: 'form-text' }, 'The account starts with the basic user role. Assign additional roles from this person’s Access tab.'), node('button', { class: 'btn btn-primary mt-3', type: 'submit' }, 'Enable access'));
-        form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
-            if (!form.reportValidity()) return;
-            await request(`/sis/ui/people/${person.id.value}/account/`, 'POST', formData(form, fields));
-            form.reset(); notify('Sign-in access enabled on this person.'); await openPerson(person.id.value);
-        }, $one('[type="submit"]', form)); });
-        body.append(form);
+    async function accountSetup(person) {
+        const body = openDrawer('Account password setup', 'ONE PERSON. ONE CAMPUS ACCOUNT.');
+        const state = await request(`/sis/ui/people/${person.id.value}/password-setup/`);
+        body.append(node('p', {}, state.pending ? `Password setup: ${state.state}. A setup link is delivered privately to the account’s email address.` : 'This account does not need an initial password setup.'));
+        if (state.pending) body.append(node('button', { type: 'button', class: 'btn btn-primary', onclick: event => task(async () => {
+            await request(`/sis/ui/people/${person.id.value}/password-setup/`, 'POST', {});
+            notify('A new setup email is queued. Earlier links are no longer valid.'); await accountSetup(person);
+        }, event.currentTarget) }, 'Send a new setup link'));
     }
-
     async function editInstitutionalId(person) {
         const body = openDrawer('Change institutional ID', 'PERSON IDENTITY');
         const form = await buildForm([['institutional_id', 'Institutional ID', 'text', '', false]], { institutional_id: person.institutionalId.value });

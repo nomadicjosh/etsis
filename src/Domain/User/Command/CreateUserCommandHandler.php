@@ -6,37 +6,35 @@ namespace Domain\User\Command;
 
 use Codefy\CommandBus\Command;
 use Codefy\CommandBus\CommandHandler;
-use Domain\User\Repository\UserAggregateRepository;
-use Domain\User\User;
-use Domain\User\ValueObject\UserId;
-use Qubus\Support\DateTime\QubusDateTimeImmutable;
-use Qubus\ValueObjects\Person\Name;
 
 final readonly class CreateUserCommandHandler implements CommandHandler
 {
-    public function __construct(public UserAggregateRepository $aggregateRepository)
-    {
+    public function __construct(
+        private \Domain\Person\Service\PersonRegistrationService $registration,
+        private \Domain\Shared\Security\StudentAccess $access,
+    ) {
     }
-
     public function handle(CreateUserCommand|Command $command): void
     {
         /** @var CreateUserCommand $command */
-        $user = User::createUser(
-            userId: new UserId(),
-            username: $command->username,
-            token: $command->token,
-            name: new Name(
-                firstName: $command->firstName,
-                middleName: $command->middleName,
-                lastName: $command->lastName
-            ),
-            emailAddress: $command->email,
-            // Privileged roles are assigned separately through access administration.
-            role: new \Domain\User\ValueObject\UserRole('user'),
-            password: $command->password,
-            createdOn: QubusDateTimeImmutable::now()
+        $creator = null;
+        try {
+            $creator = $this->access->authenticatedUserId();
+        } catch (\Domain\Shared\Exception\AccessDeniedException) {
+            // Anonymous registration creates only a basic account.
+        }
+        if ($creator !== null) {
+            $this->access->requirePermission('admin:create:user');
+        }
+        $this->registration->register(
+            \Domain\Shared\ValueObject\EntityId::generate(),
+            (string) $command->firstName,
+            (string) $command->lastName,
+            (string) $command->email,
+            (string) $command->username,
+            (string) $command->password,
+            $creator,
+            (string) $command->middleName
         );
-
-        $this->aggregateRepository->saveAggregateRoot(aggregate: $user);
     }
 }

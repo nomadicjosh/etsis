@@ -39,7 +39,7 @@ final class StudentSpecializationFixture
         $this->policies()->saveInstitution(0, 3, 1);
         $this->policies()->saveProgram($f->program, 0, 0, 2);
         $this->publication = $this->publish();
-        $person = $f->admissionsService()->createPerson($f->user(), 'Fictional', 'Learner');
+        $person = $f->legacyPerson($f->user(), 'Fictional', 'Learner');
         $application = $f->legacyApplication($person->id, $f->program, new EntityId($this->year['terms'][0]['id']));
         $f->legacyAdmissionDecision($application->id, true);
         $this->student = $f->matriculate($application->id)->id;

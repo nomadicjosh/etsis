@@ -89,6 +89,8 @@ final class CatalogYearWorkflowTest extends TestCase
             new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
             $f->submissionService(),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
         );
         $person = $service->createPerson($f->user(), 'Alex', 'Example');
         $application = $f->legacyApplication($person->id, $program ?? $f->program, $term);
@@ -233,7 +235,10 @@ final class CatalogYearWorkflowTest extends TestCase
         $audit = $this->createStub(AuditTrail::class);
         $audit->method('record')->willThrowException(new RuntimeException('Fictional catalog audit failure'));
         $initializer = new InitialCatalogEnrollment(new SqlCatalogYearRepository($f->sql), $audit, $f->clock);
-        $service = new AdmissionsService($f->admissions, $f->access, $f->transactions, $f->audit, new RandomInstitutionalIdGenerator(), $f->decisionLedger(), $f->submissionService());
+        $service = new AdmissionsService($f->admissions, $f->access, $f->transactions, $f->audit, new RandomInstitutionalIdGenerator(), $f->decisionLedger(), $f->submissionService(),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+        );
         $person = $service->createPerson($f->user(), 'Alex', 'Example');
         $app = $f->legacyApplication($person->id, $f->program, $f->term);
         $f->legacyAdmissionDecision($app->id, true);

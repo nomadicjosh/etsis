@@ -376,7 +376,9 @@ final class TransferCatalogTest extends TestCase
                 new RandomInstitutionalIdGenerator(),
                 $f->decisionLedger(),
                 $f->submissionService(),
-            ),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+        ),
         );
         self::assertCount(1, $workspace->records("courses")["items"]);
         $recipient = $workspace->records("transferstudents")["items"][0];

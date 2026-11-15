@@ -17,6 +17,7 @@ use Exception;
 use Qubus\Exception\Data\TypeException;
 use Qubus\Expressive\Database;
 use Qubus\Expressive\QueryBuilderException;
+use Throwable;
 
 final class ExpressiveDbalUserProjection extends BaseProjection implements UserProjection
 {
@@ -30,6 +31,7 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
     /**
      * @throws TypeException
      * @throws Exception
+     * @throws Throwable
      */
     public function projectWhenUserWasCreated(UserWasCreated $event): void
     {
@@ -68,6 +70,7 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
     /**
      * @throws TypeException
      * @throws Exception
+     * @throws Throwable
      */
     public function projectWhenEmailAddressWasChanged(EmailAddressWasChanged $event): void
     {
@@ -89,6 +92,7 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
     /**
      * @throws TypeException
      * @throws Exception
+     * @throws Throwable
      */
     public function projectWhenNameWasChanged(NameWasChanged $event): void
     {
@@ -117,6 +121,7 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
     /**
      * @throws TypeException
      * @throws Exception
+     * @throws Throwable
      */
     public function projectWhenRoleWasChanged(RoleWasChanged $event): void
     {
@@ -138,6 +143,7 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
     /**
      * @throws TypeException
      * @throws Exception
+     * @throws Throwable
      */
     public function projectWhenPasswordWasChanged(PasswordWasChanged $event): void
     {
@@ -159,9 +165,13 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
 
     /**
      * @throws Exception
+     * @throws Throwable
      */
     public function projectWhenUserWasDeleted(UserWasDeleted $event): void
     {
+        if ($this->people->findByUser(new \Domain\Shared\ValueObject\EntityId((string) $event->userId())) !== null) {
+            throw new \DomainException('A person retains their account and history; account removal is not permitted.');
+        }
         try {
             \Infrastructure\Persistence\PortableTransactions::run(db: $this->db, callback: function () use ($event) {
                 $this->access->removeUserAssignments($event->userId()->toNative());

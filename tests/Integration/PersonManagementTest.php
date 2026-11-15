@@ -47,10 +47,10 @@ final class PersonManagementTest extends TestCase
         $fixture->profiles->save($person->id, 'Stale', 'Example', true, $record['revision']);
     }
 
-    public function testStaffCanEditAnUnlinkedProfileButOwnershipAloneCannotEditLegalNames(): void
+    public function testStaffCanEditALinkedProfileButOwnershipAloneCannotEditLegalNames(): void
     {
         $fixture = new PersonManagementFixture();
-        $person = $fixture->person(false);
+        $person = $fixture->person();
         $record = $fixture->profiles->view($person->id);
         $fixture->profiles->save($person->id, 'Jamie', 'Example', true, $record['revision']);
         self::assertSame('Jamie', $fixture->sis->admissions->person($person->id)->givenName);
@@ -146,7 +146,7 @@ final class PersonManagementTest extends TestCase
         $fixture->sis->access->grants = ['admin:profile'];
         $command = new UpdateUserPasswordCommand(['userId' => new UserId($person->ownerUserId->value),
             'password' => new StringLiteral('fictional-prehashed-value'), 'token' => new UserToken()]);
-        $handler = new UpdateUserPasswordCommandHandler($fixture->users, $fixture->guard);
+        $handler = new UpdateUserPasswordCommandHandler($fixture->users, $fixture->guard, $fixture->sis->profileLedger(), $fixture->sis->access);
         $this->expectException(AccessDeniedException::class);
         $handler->handle($command);
     }
@@ -193,7 +193,8 @@ final class PersonManagementTest extends TestCase
             $fixture->guard,
             $fixture->sis->access,
             $fixture->sis->transactions,
-            $audit
+            $audit,
+            $fixture->sis->profileLedger(),
         );
         try {
             $editor->save($person->id, 'RolledBack', 'Example', false, $record['revision']);

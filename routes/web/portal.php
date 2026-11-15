@@ -10,6 +10,20 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(
+        ['GET'],
+        '/portal/password-setup/',
+        [\Application\Http\Controller\AccountSetupController::class,
+        'show']
+    )->name('portal.account.setup');
+    $router->map(
+        ['POST'],
+        '/portal/password-setup/',
+        [\Application\Http\Controller\AccountSetupController::class,
+        'complete']
+    )->name('portal.account.setup.complete')->middleware(['rate.limiter']);
+
+    /** @var Psr7Router&Mappable $router */
     $moodle = \Application\Http\Controller\PortalMoodleController::class;
     $router->map(["GET"], "/portal/moodle/", [$moodle, "page"])->name("portal.moodle");
     $router->map(["POST"], "/portal/moodle/launch/", [$moodle, "launch"])->name("portal.moodle.launch");

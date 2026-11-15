@@ -23,7 +23,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
 {
     private function person(SisFixture $f): EntityId
     {
-        return $f->admissionsService()->createPerson($f->access->actor, "Fictional", "Applicant")->id;
+        return $f->legacyPerson($f->access->actor, "Fictional", "Applicant")->id;
     }
     private function forms(SisFixture $f): ApplicationFormService
     {
@@ -237,7 +237,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
     {
         $f = new SisFixture();
         $owner = $f->user();
-        $person = $f->admissionsService()->createPerson($owner, "Fictional", "Applicant")->id;
+        $person = $f->legacyPerson($owner, "Fictional", "Applicant")->id;
         $form = $this->form($f);
         $id = EntityId::generate();
         $app = $this->forms($f)->submit($id, $form, $person, $f->term, [
@@ -453,7 +453,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
     public function testSubmissionOwnershipAndActorAreRecheckedAfterWaitingForLocks(): void
     {
         $f = new SisFixture();
-        $person = $f->admissionsService()->createPerson($f->access->actor, "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->access->actor, "Fictional", "Applicant");
         $repo = $this->createMock(\Domain\Admissions\Repository\AdmissionsRepository::class);
         $repo->method("person")->willReturn($person);
         $repo
@@ -512,7 +512,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
     public function testDirectEntryPermissionIsRecheckedEvenWhenTheStaffMemberOwnsThePerson(): void
     {
         $f = new SisFixture();
-        $person = $f->admissionsService()->createPerson($f->access->actor, "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->access->actor, "Fictional", "Applicant");
         $repo = $this->createMock(\Domain\Admissions\Repository\AdmissionsRepository::class);
         $repo->method("person")->willReturn($person);
         $repo

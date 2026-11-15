@@ -25,7 +25,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
     private function application(SisFixture $f): AdmissionApplication
     {
         $service = $f->admissionsService();
-        $person = $service->createPerson($f->user(), "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Applicant");
         return $f->legacyApplication($person->id, $f->program, $f->term);
     }
     private function forms(SisFixture $f): ApplicationFormService
@@ -111,7 +111,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
     {
         $f = new SisFixture();
         $forms = $this->forms($f);
-        $person = $f->admissionsService()->createPerson($f->user(), "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Applicant");
         $fields = [
             ["key" => "statement", "label" => "Personal statement", "type" => "textarea", "required" => true],
         ];
@@ -166,11 +166,12 @@ final class AdmissionDecisionHistoryTest extends TestCase
                 "term" => $f->sql->update("sis_terms", ["code" => "NEW.TERM"], ["id" => $f->term->value]),
                 "version" => $f->sql->update("sis_applications", ["version" => 2], ["id" => $a->id->value]),
             };
+            $beforeRejectedConfirmation = $f->sql->rows('sis_history_events');
             try {
                 $s->commit($a->id, $review["review_token"]);
                 self::fail("A stale review was accepted.");
             } catch (ConcurrentModificationException) {
-                self::assertSame([], $f->sql->rows("sis_history_events"));
+                self::assertSame($beforeRejectedConfirmation, $f->sql->rows("sis_history_events"));
             }
         }
     }
@@ -178,7 +179,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
     {
         $f = new SisFixture();
         $forms = $this->forms($f);
-        $person = $f->admissionsService()->createPerson($f->user(), "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Applicant");
         $form = $forms->save(
             null,
             $f->program,
@@ -416,7 +417,7 @@ final class AdmissionDecisionHistoryTest extends TestCase
     public function testSubmissionRechecksTheOwnerAfterWaitingForThePersonLock(): void
     {
         $f = new SisFixture();
-        $person = $f->admissionsService()->createPerson($f->access->actor, "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->access->actor, "Fictional", "Applicant");
         $repo = $this->createMock(\Domain\Admissions\Repository\AdmissionsRepository::class);
         $repo->method('person')->willReturn($person);
         $repo->expects(self::once())->method('lockPerson')->willReturnCallback(function () use ($f): void {

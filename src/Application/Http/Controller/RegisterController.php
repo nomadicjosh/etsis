@@ -54,6 +54,9 @@ final class RegisterController extends BaseController
      */
     public function create(ServerRequest $request, UserService $service): ResponseInterface
     {
+        if ($this->gate->isLoggedIn()) {
+            return $this->redirect(url: '/portal/student/');
+        }
         if (false === $service->createAccount(RegisterUserValidator::make($request))) {
             return $this->redirect(
                 url: $this->router->url(

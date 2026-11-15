@@ -44,7 +44,7 @@ final class AdmissionsTest extends TestCase
 
     public function testAcceptedApplicationCreatesStudentAndProgramAtomically(): void
     {
-        $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
+        $person = $this->f->legacyPerson($this->owner, 'Alex', 'Example');
         $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->matriculate($application->id);
@@ -55,7 +55,7 @@ final class AdmissionsTest extends TestCase
 
     public function testSubmittedApplicationCannotMatriculate(): void
     {
-        $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
+        $person = $this->f->legacyPerson($this->owner, 'Alex', 'Example');
         $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->expectException(\Domain\Shared\Exception\ValidationException::class);
         $this->f->matriculate($application->id);
@@ -63,7 +63,7 @@ final class AdmissionsTest extends TestCase
 
     public function testStaleDecisionCannotOverwriteAcceptance(): void
     {
-        $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
+        $person = $this->f->legacyPerson($this->owner, 'Alex', 'Example');
         $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $this->expectException(ConcurrentModificationException::class);
@@ -72,7 +72,7 @@ final class AdmissionsTest extends TestCase
 
     public function testDuplicateStudentRollsBackApplicationTransition(): void
     {
-        $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
+        $person = $this->f->legacyPerson($this->owner, 'Alex', 'Example');
         $first = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $second = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($first->id, true);
@@ -87,15 +87,15 @@ final class AdmissionsTest extends TestCase
         }
     }
 
-    public function testPersonCanExistBeforeLoginAccount(): void
+    public function testPersonHasALinkedLoginAccount(): void
     {
-        $person = $this->service->createPerson(null, 'Alex', 'Example');
-        self::assertNull($this->repository->person($person->id)->ownerUserId);
+        $person = $this->f->legacyPerson($this->f->user(), 'Alex', 'Example');
+        self::assertNotNull($this->repository->person($person->id)->ownerUserId);
     }
 
     public function testPrivateReadChecksOwner(): void
     {
-        $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
+        $person = $this->f->legacyPerson($this->owner, 'Alex', 'Example');
         $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->matriculate($application->id);
@@ -112,6 +112,8 @@ final class AdmissionsTest extends TestCase
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $this->f->decisionLedger(),
             $this->f->submissionService(),
+            $this->f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($this->f->sql),
         )->student($student->id);
     }
 
@@ -131,7 +133,7 @@ final class AdmissionsTest extends TestCase
 
     public function testFinancialHistoryReplaysAndRejectsConcurrentRefunds(): void
     {
-        $person = $this->service->createPerson($this->owner, 'Alex', 'Example');
+        $person = $this->f->legacyPerson($this->owner, 'Alex', 'Example');
         $application = $this->f->legacyApplication($person->id, $this->program, $this->term);
         $this->f->legacyAdmissionDecision($application->id, true);
         $student = $this->f->legacyStudent($application->id);
@@ -188,12 +190,12 @@ final class AdmissionsTest extends TestCase
             ],
         ]);
         $container = new \Qubus\Injector\Psr11\Container($injector);
-        $container->share(new \Application\Http\Controller\SisAdmissionsController($this->service));
+        $container->share(new \Application\Http\Controller\SisAdmissionsController($this->service, $this->f->registrationService()));
         $router = new \Qubus\Routing\Router(new \Qubus\Routing\Route\RouteCollector(), $container);
         $register = require dirname(__DIR__, 2) . '/routes/web/sis.php';
         $register($router);
         $request = new \Qubus\Http\ServerRequest([], [], '/sis/persons/', 'POST');
-        $request = $request->withParsedBody(['given_name' => 'Alex', 'family_name' => 'Example']);
+        $request = $request->withParsedBody(['given_name' => 'Alex', 'family_name' => 'Example', 'email' => 'example@fictional.invalid', 'operation_id' => EntityId::generate()->value]);
         $response = $router->match($request);
         self::assertSame(201, $response->getStatusCode());
         $data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);

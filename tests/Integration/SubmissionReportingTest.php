@@ -50,7 +50,7 @@ final class SubmissionReportingTest extends TestCase
 
     private function submit(SisFixture $s): EntityId
     {
-        $person = $s->admissionsService()->createPerson(null, 'Fictional', 'Applicant')->id;
+        $person = $s->legacyPerson($s->user(), 'Fictional', 'Applicant')->id;
         return $s->submissionService()->apply(EntityId::generate(), $person, $s->program, $s->term)->id;
     }
 
@@ -102,7 +102,7 @@ final class SubmissionReportingTest extends TestCase
     public function testExistingApplicationsAndLaterObservationsKeepUnknownSubmissionDates(): void
     {
         $s = new SisFixture();
-        $person = $s->admissionsService()->createPerson(null, 'Earlier', 'Applicant')->id;
+        $person = $s->legacyPerson($s->user(), 'Earlier', 'Applicant')->id;
         $older = $s->legacyApplication($person, $s->program, $s->term);
         $review = $s->decisionService()->review($older->id, true, 'Fictional later acceptance');
         $s->decisionService()->commit($older->id, $review['review_token']);
@@ -267,7 +267,7 @@ final class SubmissionReportingTest extends TestCase
         $before = $s->sql->rows('sis_application_intake');
         new SqlSubmissionProjection($s->sql)->project(SubmissionFact::fromEvent($event));
         self::assertSame($before, $s->sql->rows('sis_application_intake'));
-        $person = $s->admissionsService()->createPerson(null, 'Earlier', 'Applicant')->id;
+        $person = $s->legacyPerson($s->user(), 'Earlier', 'Applicant')->id;
         $older = $s->legacyApplication($person, $s->program, $s->term);
         $review = $s->decisionService()->review($older->id, true, 'Fictional later acceptance');
         $s->decisionService()->commit($older->id, $review['review_token']);
@@ -349,7 +349,7 @@ final class SubmissionReportingTest extends TestCase
     {
         $s = new SisFixture();
         $this->submit($s);
-        $person = $s->admissionsService()->createPerson(null, 'Earlier', 'Applicant')->id;
+        $person = $s->legacyPerson($s->user(), 'Earlier', 'Applicant')->id;
         $s->legacyApplication($person, $s->program, $s->term);
         $service = $this->service($s);
         $report = EntityId::generate();

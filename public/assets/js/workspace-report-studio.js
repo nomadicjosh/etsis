@@ -320,6 +320,33 @@ window.createWorkspaceReportStudio = function (ui) {
             id,
             label: escapeLabel(field.label),
             type: field.type,
+            ...(field.choices ? {
+                input: (rule, name) => {
+                    if (!["equal", "not_equal", "in", "not_in"].includes(rule.operator.type))
+                        return `<input class="form-control" name="${escapeLabel(name)}" data-report-choice="text">`;
+                    return `<select class="form-select" name="${escapeLabel(name)}" data-report-choice="select"${rule.operator.multiple ? " multiple" : ""}>`
+                        + '<option value="" disabled selected>Choose a value</option>'
+                        + Object.entries(field.choices).map(([value, title]) =>
+                            `<option value="${escapeLabel(value)}">${escapeLabel(title)}</option>`).join("")
+                        + '</select>';
+                },
+                valueGetter: (rule) => {
+                    const value = rule.$el.find("[data-report-choice]").val();
+                    return rule.operator.multiple && typeof value === "string"
+                        ? value.split(",").map((item) => item.trim()) : value;
+                },
+                valueSetter: (rule, value) => {
+                    const input = rule.$el.find("[data-report-choice]");
+                    if (input.is("select")) {
+                        // Keep retained/custom values when reopening; labels are display metadata only.
+                        for (const item of [].concat(value ?? []))
+                            if (item !== "" && !Array.from(input[0].options).some((option) => option.value === String(item)))
+                                input.append(new Option(String(item), String(item)));
+                        input.val(rule.operator.multiple ? [].concat(value ?? []) : value ?? "");
+                    } else input.val(Array.isArray(value) ? value.join(",") : value ?? "");
+                    input.trigger("change");
+                },
+            } : {}),
             ...(field.type === "boolean"
                 ? {
                       input: "select",
@@ -374,11 +401,21 @@ window.createWorkspaceReportStudio = function (ui) {
             lang: {
                 add_rule: "Add condition",
                 add_group: "Add group",
-                conditions: { AND: "All (AND)", OR: "Any (OR)" },
+                conditions: { AND: "All", OR: "Any" },
             },
         });
         widgets.push(widget);
         widget.on("afterUpdateRuleOperator.queryBuilder", (_event, rule) => {
+            if (fields[rule.filter?.id]?.choices && rule.operator?.nb_inputs) {
+                const input = rule.$el.find("[data-report-choice]");
+                const select = ["equal", "not_equal", "in", "not_in"].includes(rule.operator.type);
+                if (input.is("select") !== select || (select && input.prop("multiple") !== rule.operator.multiple)) {
+                    const previous = rule.value;
+                    widget.queryBuilder("createRuleInput", rule);
+                    rule.value = rule.operator.multiple ? [].concat(previous ?? [])
+                        : Array.isArray(previous) ? previous[0] ?? "" : previous ?? "";
+                }
+            }
             if (rule.filter?.type !== "date" || !rule.operator) return;
             const type = rule.operator.multiple ? "text" : "date";
             // QueryBuilder reuses one input when switching equality and date-list operators.

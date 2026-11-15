@@ -87,7 +87,7 @@ final class PortalStudentProgressTest extends TestCase
         $this->progress->expects(self::never())->method("student");
         $s = $this->f->f->sis;
         $other = $s->user();
-        $s->admissionsService()->createPerson($other, "Other", "Owner");
+        $s->legacyPerson($other, "Other", "Owner");
         $s->access->actor = $other; // Fixture remains unrestricted staff.
         $this->expectException(AccessDeniedException::class);
         $this->service->review($this->f->student, $this->f->assignment);
@@ -100,7 +100,7 @@ final class PortalStudentProgressTest extends TestCase
         $original = $repo->assignment($this->f->assignment);
         $id = EntityId::generate();
         // Foreign target exists in the same fixture database; no student history is read.
-        $person = $s->admissionsService()->createPerson($s->user(), "Other", "Learner");
+        $person = $s->legacyPerson($s->user(), "Other", "Learner");
         $application = $s->legacyApplication($person->id, $s->program, $original->entryTermId);
         $s->legacyAdmissionDecision($application->id, true);
         $other = $s->legacyStudent($application->id);

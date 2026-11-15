@@ -27,6 +27,9 @@ final class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
+        if ($this->codefy->configContainer->getConfigKey('sis.mail_enabled', false) === true) {
+            $schedule->command('sis:accounts:send-setup --apply')->everyMinute()->onlyOneInstance();
+        }
         $schedule->command('sis:reports:prune --apply --limit=50')->hourly()->onlyOneInstance();
         // Register existing scripts using absolute paths and explicit arguments.
         // onlyOneInstance() runs in the foreground and holds the lock until completion.

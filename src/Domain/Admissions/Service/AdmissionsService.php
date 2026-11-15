@@ -27,11 +27,13 @@ final readonly class AdmissionsService
         private InstitutionalIdGenerator $identifiers,
         private AdmissionDecisionLedger $decisions,
         private ApplicationSubmissionService $submissions,
+        private \Domain\Person\Service\ProfileLedger $profiles,
+        private \Domain\Person\Repository\PersonProfileRepository $profileRows,
     ) {
     }
 
     public function createPerson(
-        ?EntityId $ownerUserId,
+        EntityId $ownerUserId,
         string $givenName,
         string $familyName,
         ?string $institutionalId = null,
@@ -48,9 +50,30 @@ final readonly class AdmissionsService
                 $assigned ?? $this->identifiers->next(),
             );
             try {
-                $this->transactions->run(function () use ($person, $actor): void {
+                $this->transactions->run(function () use ($person, $actor, $assigned): void {
+                    if ($this->access->requirePermission('sis:person:manage')->value !== $actor->value) {
+                        throw new \Domain\Shared\Exception\AccessDeniedException('The person creator changed.');
+                    }
+                    if ($assigned !== null) {
+                        $this->access->requirePermission('sis:person:assign-id');
+                    }
                     $this->repository->addPerson($person);
+                    $this->profiles->create(
+                        $person,
+                        EntityId::generate(),
+                        $actor,
+                        \Domain\Person\Service\ProfileLedger::intent([
+                            $person->id->value, $person->ownerUserId?->value,
+                            $person->givenName, $person->familyName, $person->institutionalId->value,
+                        ])
+                    );
                     $this->audit->record($actor, "person.created", $person->id);
+                    if ($this->access->requirePermission('sis:person:manage')->value !== $actor->value) {
+                        throw new \Domain\Shared\Exception\AccessDeniedException('The person creator changed.');
+                    }
+                    if ($assigned !== null) {
+                        $this->access->requirePermission('sis:person:assign-id');
+                    }
                 });
 
                 return $person;
@@ -91,13 +114,28 @@ final readonly class AdmissionsService
                     $expectedVersion,
                     $actor,
                 ): Person {
+                    $this->profileRows->lock($id);
+                    if ($this->access->requirePermission('sis:person:assign-id')->value !== $actor->value) {
+                        throw new \Domain\Shared\Exception\AccessDeniedException('The identity editor changed.');
+                    }
+                    $intent = \Domain\Person\Service\ProfileLedger::intent([$expectedVersion, $assigned?->value]);
+                    $operation = \Domain\Person\Service\ProfileLedger::operation($id, $actor, $intent);
+                    $receipt = $this->profiles->receipt($id, $operation, $actor, $intent);
+                    if ($receipt !== null) {
+                        return $receipt;
+                    }
                     $person = $this->repository->person($id);
+                    if ($person->ownerUserId === null) {
+                        throw new \DomainException('A person must have a sign-in account.');
+                    }
+                    $this->profiles->verify($person);
                     if ($person->identityVersion !== $expectedVersion) {
                         throw new ConcurrentModificationException("The person identity changed. Reload it.");
                     }
                     $changed = $person->withInstitutionalId($assigned ?? $this->identifiers->next());
                     if ($changed !== $person) {
                         $this->repository->saveInstitutionalId($changed, $expectedVersion);
+                        $this->profiles->record($person, $changed, $operation, $actor, $intent);
                         $this->audit->record($actor, "person.institutional_id_changed", $id);
                     }
 

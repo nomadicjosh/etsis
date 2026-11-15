@@ -25,6 +25,7 @@ final class EventSourcedUserRepository implements UserAggregateRepository
         protected TransactionalEventStore $eventStore,
         protected UserProjection $projection,
         private readonly Database $db,
+        private readonly \Domain\Shared\EventSourcing\HistoricalEventStore $history,
     ) {
     }
 
@@ -54,15 +55,43 @@ final class EventSourcedUserRepository implements UserAggregateRepository
      */
     public function saveAggregateRoot(RecordsEvents $aggregate): void
     {
+        $this->save($aggregate, null);
+    }
+    public function saveProfile(User $user, \Domain\Shared\EventSourcing\EventContext $context): void
+    {
+        if (
+            $context->origin !== 'command' || $context->actor === null || $context->effectiveAt === null ||
+            $context->correlation === null
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $this->save($user, $context);
+    }
+    private function save(RecordsEvents $aggregate, ?\Domain\Shared\EventSourcing\EventContext $context): void
+    {
         $this->attachToIdentityMap($aggregate);
 
-        /** @var DomainEvent[] $events */
-        $events = iterator_to_array($aggregate->getRecordedEvents());
+        /** @var list<DomainEvent> $events */
+        $events = array_values(iterator_to_array($aggregate->getRecordedEvents()));
 
         try {
-            \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use ($events): void {
-                $transaction = $this->eventStore->commit(...$events);
-                $this->projection->project(...$transaction->committedEvents);
+            \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use ($events, $context): void {
+                if ($events === []) {
+                    return;
+                }
+                if ($context === null) {
+                    $transaction = $this->eventStore->commit(...$events);
+                    $this->projection->project(...$transaction->committedEvents);
+                } else {
+                    $this->history->append(
+                        new \Domain\Shared\EventSourcing\StreamReference($events[0]->aggregateId(), 'user'),
+                        $context->correlation ?? throw new \Domain\Shared\EventSourcing\CorruptHistoryException(),
+                        $events[0]->playhead() - 1,
+                        $context,
+                        $events
+                    );
+                    $this->projection->project(...$events);
+                }
             });
             $aggregate->clearRecordedEvents();
         } finally {

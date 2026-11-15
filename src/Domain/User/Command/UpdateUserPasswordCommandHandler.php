@@ -14,8 +14,12 @@ use Domain\User\Service\UserAccountAccess;
 
 final readonly class UpdateUserPasswordCommandHandler implements CommandHandler
 {
-    public function __construct(public UserAggregateRepository $aggregateRepository, private UserAccountAccess $access)
-    {
+    public function __construct(
+        public UserAggregateRepository $aggregateRepository,
+        private UserAccountAccess $access,
+        private \Domain\Person\Service\ProfileLedger $profiles,
+        private \Domain\Shared\Security\StudentAccess $actors,
+    ) {
     }
 
     /**
@@ -32,7 +36,10 @@ final readonly class UpdateUserPasswordCommandHandler implements CommandHandler
 
             $user->changePassword(password: $command->password, token: $command->token);
 
-            $this->aggregateRepository->saveAggregateRoot(aggregate: $user);
+            $this->aggregateRepository->saveProfile($user, $this->profiles->accountContext(
+                $this->actors->authenticatedUserId(),
+                EntityId::generate()
+            ));
         });
     }
 }

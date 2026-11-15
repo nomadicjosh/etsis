@@ -25,7 +25,7 @@ final class AdmissionCorrectionTest extends TestCase
         bool $accept = true,
         bool $legacy = false,
     ): AdmissionApplication {
-        $person = $f->admissionsService()->createPerson($f->user(), "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Applicant");
         if ($legacy) {
             $a = $f->legacyApplication($person->id, $f->program, $f->term);
             $f->legacyAdmissionDecision($a->id, $accept);
@@ -112,7 +112,7 @@ final class AdmissionCorrectionTest extends TestCase
     public function testExactInitialAndCorrectionRetriesReturnEarlierResultsAfterLaterCorrectionsAndMatriculation(): void
     {
         $f = new SisFixture();
-        $person = $f->admissionsService()->createPerson($f->user(), "Fictional", "Applicant");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Applicant");
         $a = $f->submissionService()->apply(EntityId::generate(), $person->id, $f->program, $f->term);
         $initial = $f->decisionService()->review($a->id, true, "Fictional first acceptance");
         $original = $f->decisionService()->commit($a->id, $initial["review_token"]);

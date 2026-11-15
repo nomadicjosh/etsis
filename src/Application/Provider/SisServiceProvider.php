@@ -15,6 +15,8 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Person\Repository\AccountSetupRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAccountSetupRepository::class,
             \Domain\Catalog\Repository\SpecializationPolicyRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlSpecializationPolicyRepository::class,
             \Domain\Catalog\Repository\ProgramSpecializationRepository::class =>
@@ -249,19 +251,41 @@ final class SisServiceProvider extends CodefyServiceProvider
                 ),
             );
         });
-        // Auth configuration translates messages through the bootstrapped application.
-        // Resolve it only when the account service is requested, after provider registration.
-        $this->codefy->delegate(\Domain\User\Service\PersonAccountService::class, function () {
-            return new \Domain\User\Service\PersonAccountService(
+        $this->codefy->delegate(\Domain\Person\Service\PersonRegistrationService::class, function () {
+            return new \Domain\Person\Service\PersonRegistrationService(
                 $this->codefy->make(AdmissionsRepository::class),
+                $this->codefy->make(\Domain\Person\Repository\PersonAccountRepository::class),
                 $this->codefy->make(\Domain\User\Repository\UserAggregateRepository::class),
+                $this->codefy->make(\Domain\Person\Service\ProfileLedger::class),
+                $this->codefy->make(\Domain\Person\Repository\AccountSetupRepository::class),
                 $this->codefy->make(StudentAccess::class),
                 $this->codefy->make(\Domain\Shared\Persistence\UnitOfWork::class),
                 $this->codefy->make(\Domain\Audit\Repository\AuditTrail::class),
-                $this->codefy->make(\Domain\Person\Repository\PersonProfileRepository::class),
-                $this->codefy->configContainer->integer("auth.password_min_length", 26),
+                $this->codefy->make(\Domain\Shared\Service\Clock::class),
+                $this->codefy->make(\Domain\Communications\Service\MessageCipher::class),
+                $this->codefy->configContainer->string('app.url', ''),
+                $this->codefy->configContainer->integer('auth.password_min_length', 26),
             );
         });
+        $this->codefy->delegate(\Domain\Person\Service\AccountSetupService::class, function () {
+            return new \Domain\Person\Service\AccountSetupService(
+                $this->codefy->make(\Domain\Person\Repository\AccountSetupRepository::class),
+                $this->codefy->make(\Domain\User\Repository\UserAggregateRepository::class),
+                $this->codefy->make(\Domain\Shared\Persistence\UnitOfWork::class),
+                $this->codefy->make(\Domain\Shared\Service\Clock::class),
+                $this->codefy->make(\Domain\Communications\Service\MessageCipher::class),
+                $this->codefy->make(\Domain\Communications\Service\MailTransport::class),
+                $this->codefy->make(\Domain\Person\Service\ProfileLedger::class),
+                $this->codefy->make(AdmissionsRepository::class),
+                $this->codefy->make(StudentAccess::class),
+                $this->codefy->make(\Domain\Audit\Repository\AuditTrail::class),
+                $this->codefy->make(\Domain\User\Service\UserAccountAccess::class),
+                $this->codefy->configContainer->string('app.url', ''),
+                $this->codefy->configContainer->integer('auth.password_min_length', 26),
+            );
+        });
+        // Auth configuration translates messages through the bootstrapped application.
+        // Resolve it only when the account service is requested, after provider registration.
         $this->codefy->delegate(\Domain\User\Service\PersonAccountEditor::class, function () {
             return new \Domain\User\Service\PersonAccountEditor(
                 $this->codefy->make(AdmissionsRepository::class),
@@ -269,6 +293,7 @@ final class SisServiceProvider extends CodefyServiceProvider
                 $this->codefy->make(\Domain\User\Service\UserAccountAccess::class),
                 $this->codefy->make(StudentAccess::class),
                 $this->codefy->make(\Domain\Audit\Repository\AuditTrail::class),
+                $this->codefy->make(\Domain\Person\Service\ProfileLedger::class),
                 $this->codefy->configContainer->integer("auth.password_min_length", 26),
             );
         });

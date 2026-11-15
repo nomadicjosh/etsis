@@ -48,7 +48,7 @@ final class StudentSpecializationRequirementsFixture
                 new \Domain\DegreeAudit\ValueObject\AuditRequirementsV3($definition));
             $this->versions[$code] = $this->publish($code);
         }
-        $person = $s->admissionsService()->createPerson($s->user(), 'Fictional', 'Learner');
+        $person = $s->legacyPerson($s->user(), 'Fictional', 'Learner');
         $term = $s->sql->rows('sis_term_calendar', ['academic_year_id' => $r->year->value], 1)[0]['id'];
         $application = $s->legacyApplication($person->id, $s->program, new EntityId($term));
         $s->legacyAdmissionDecision($application->id, true);

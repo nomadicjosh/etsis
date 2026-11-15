@@ -24,6 +24,7 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\Person\Event\PersonProfileWasRecorded::class,
             \Domain\AcademicRecord\Event\AcademicWorkPursuitWasRecorded::class,
             \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class,
             \Domain\Student\Event\StudentSpecializationsWereSelected::class,

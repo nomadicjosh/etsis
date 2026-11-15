@@ -810,7 +810,37 @@ final class SisFixture
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $this->decisionLedger(),
             $this->submissionService(),
+            $this->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($this->sql),
         );
+    }
+
+    public function profileLedger(): \Domain\Person\Service\ProfileLedger
+    {
+        return new \Domain\Person\Service\ProfileLedger(new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql, $this->transactions, $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        ), $this->clock);
+    }
+    public function registrationService(): \Domain\Person\Service\PersonRegistrationService
+    {
+        $columns = array_column($this->connection->pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+        foreach (['username', 'token', 'middle_name', 'password', 'created_on'] as $column) {
+            if (!in_array($column, $columns, true)) { $this->connection->pdo->exec('ALTER TABLE users ADD COLUMN ' . $column . ' VARCHAR(191)'); }
+        }
+        $db = $this->connection->queryBuilder();
+        $links = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository($this->sql, $this->admissions,
+            new \Infrastructure\Identity\RandomInstitutionalIdGenerator());
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore($this->sql, $this->transactions, $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($db)),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry());
+        $users = new \Infrastructure\Persistence\Repository\EventSourcedUserRepository(EventStoreFixture::framework($db),
+            new \Infrastructure\Projection\ExpressiveDbalUserProjection($db,
+                new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql), $links), $db, $history);
+        return new \Domain\Person\Service\PersonRegistrationService($this->admissions, $links, $users, $this->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlAccountSetupRepository($this->sql), $this->access,
+            $this->transactions, $this->audit, $this->clock, $this->dropCipher, 'https://fictional.example.invalid');
     }
     public function programEntryContext(
         ?\Domain\Catalog\Service\CatalogEnrollment $initializer = null,
@@ -883,6 +913,15 @@ final class SisFixture
         });
         return $student;
     }
+    /** Explicit older current-state fixture; no historical creation is invented. */
+    public function legacyPerson(EntityId $owner, string $given, string $family): \Domain\Person\Person
+    {
+        $p = new \Domain\Person\Person(EntityId::generate(), $owner, $given, $family,
+            new \Domain\Person\ValueObject\InstitutionalId('T-' . bin2hex(random_bytes(6))));
+        $this->admissions->addPerson($p);
+        return $p;
+    }
+
     public function student(?EntityId $owner = null): Student
     {
         $service = new AdmissionsService(
@@ -893,6 +932,8 @@ final class SisFixture
             new \Infrastructure\Identity\RandomInstitutionalIdGenerator(),
             $this->decisionLedger(),
             $this->submissionService(),
+            $this->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($this->sql),
         );
         if (
             $owner === null &&
@@ -900,7 +941,7 @@ final class SisFixture
         ) {
             $owner = $this->user();
         }
-        $person = $service->createPerson($owner ?? $this->access->actor, "Alex", "Example");
+        $person = $this->legacyPerson($owner ?? $this->access->actor, "Alex", "Example");
         $application = $this->legacyApplication($person->id, $this->program, $this->term);
         $this->legacyAdmissionDecision($application->id, true);
 

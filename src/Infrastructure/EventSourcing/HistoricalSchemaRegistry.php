@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Person\Event\PersonProfileWasRecorded::class => [
+                'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'provenance', 'facts', 'intent'],
+            ],
             \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class => [
                 'type' => 'student_specializations', 'root' => \Domain\Student\StudentSpecializations::class,
                 'fields' => \Domain\Student\ValueObject\StudentSpecializationRequirementsSchema::FIELDS,
@@ -409,6 +413,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Person\Event\PersonProfileWasRecorded::class) {
+                \Domain\Person\ValueObject\ProfileFacts::validate($payload);
+                if ($payload['facts']['id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Catalog\Event\ProgramDefinitionWasPublished::class) {
                 \Domain\Catalog\ValueObject\ProgramPublicationSchema::validate($payload);
                 if ($payload['specializations']['program_id'] !== (string) $stream->aggregateId) {
@@ -673,6 +683,12 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 if (str_ends_with((string) $name, "_id")) {
                     if (
+                        $class === \Domain\Person\Event\PersonProfileWasRecorded::class &&
+                        $name === 'previous_operation_id' && $value === null
+                    ) {
+                        continue;
+                    }
+                    if (
                         in_array($class, [\Domain\Transfer\Event\TransferCourseWasAccepted::class,
                             \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class], true) &&
                         $name === "previous_course_version_id" && $value === null
@@ -882,6 +898,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Person\ProfileHistory::class => 'person_profile',
             \Domain\AcademicRecord\WorkPursuit::class => 'work_pursuit',
             \Domain\Student\StudentSpecializations::class => 'student_specializations',
             \Domain\Gradebook\GradingScale::class => "grading_scale",
@@ -917,6 +934,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'person_profile' => new \Domain\Person\ValueObject\PersonProfileId($id),
             'work_pursuit' => new \Domain\AcademicRecord\ValueObject\WorkPursuitId($id),
             'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),
             "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),

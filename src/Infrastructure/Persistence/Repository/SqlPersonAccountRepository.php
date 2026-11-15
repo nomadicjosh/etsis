@@ -14,6 +14,38 @@ use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlPersonAccountRepository implements PersonAccountRepository
 {
+    public function emailInUse(string $email): bool
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch('SELECT ' . $q('user_id') . ' FROM ' . $q('users') . ' WHERE LOWER('
+            . $q('email') . ') = ?', [strtolower($email)], 1) !== [];
+    }
+    public function findByUser(EntityId $user): ?Person
+    {
+        $rows = $this->sql->rows('sis_persons', ['owner_user_id' => $user->value], 2);
+        if (count($rows) > 1) {
+            throw new DomainException('Resolve duplicate person links.');
+        }
+        return $rows === [] ? null : $this->admissions->person(new EntityId($rows[0]['id']));
+    }
+    public function assignInitialIdentifier(EntityId $person, \Domain\Person\ValueObject\InstitutionalId $id): void
+    {
+        try {
+            $this->sql->update(
+                'sis_person_identifiers',
+                ['institutional_id' => $id->value],
+                ['person_id' => $person->value,
+                'version' => 0]
+            );
+        } catch (\PDOException $error) {
+            if (in_array((string) $error->getCode(), ['23000', '23505'], true)) {
+                throw new \Domain\Person\Exception\InstitutionalIdUnavailableException(
+                    'The institutional ID is already assigned.'
+                );
+            }
+            throw $error;
+        }
+    }
     public function __construct(
         private SqlRecords $sql,
         private AdmissionsRepository $admissions,
@@ -38,7 +70,13 @@ final readonly class SqlPersonAccountRepository implements PersonAccountReposito
             return $this->admissions->person(new EntityId($linked[0]['id']));
         }
         if ($person !== null) {
-            $existing = $this->admissions->person($person);
+            try {
+                $existing = $this->admissions->person($person);
+            } catch (\Domain\Shared\Exception\RecordNotFoundException) {
+                $created = new Person($person, $user, $givenName, $familyName, $this->identifiers->next());
+                $this->admissions->addPerson($created);
+                return $created;
+            }
             if ($existing->ownerUserId !== null) {
                 throw new DomainException('This person already has sign-in access.');
             }

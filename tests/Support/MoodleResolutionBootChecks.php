@@ -33,7 +33,7 @@ $kernel->bootstrap();
 $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
 $app->router->baseMiddleware = ['sis.privacy', 'sis.json', 'csrf.protection', 'bind.request', 'php.debugbar'];
 $id = \Domain\Shared\ValueObject\EntityId::generate();
-$person = new \Domain\Person\Person($id, null, 'Alex', 'Example', new \Domain\Person\ValueObject\InstitutionalId('FICTIONAL-01'));
+$person = new \Domain\Person\Person($id, $sis->user(), 'Alex', 'Example', new \Domain\Person\ValueObject\InstitutionalId('FICTIONAL-01'));
 $sis->admissions->addPerson($person);
 $binding = new \Domain\Lms\ValueObject\MoodleBinding(
     \Domain\Shared\ValueObject\EntityId::generate(), str_repeat('a', 64), str_repeat('b', 64),
@@ -94,7 +94,7 @@ if ($send('confirm', ['review_token' => $review['review_token']])->getStatusCode
 
 $app->configContainer->setConfigKey('moodle', ['enabled' => true]);
 $id = \Domain\Shared\ValueObject\EntityId::generate();
-$person = new \Domain\Person\Person($id, null, 'Alex', 'Example', new \Domain\Person\ValueObject\InstitutionalId('FICTIONAL-02'));
+$person = new \Domain\Person\Person($id, $sis->user(), 'Alex', 'Example', new \Domain\Person\ValueObject\InstitutionalId('FICTIONAL-02'));
 $sis->admissions->addPerson($person);
 $operationId = \Domain\Shared\ValueObject\EntityId::generate();
 $approval = [

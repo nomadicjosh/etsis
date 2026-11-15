@@ -98,7 +98,10 @@ final readonly class RelationalReportService
             } catch (AccessDeniedException) {
                 continue;
             }
-            $fields[$id] = array_intersect_key($field, array_flip(['label', 'type', 'relation', 'copy_group']));
+            $fields[$id] = array_intersect_key(
+                $field,
+                array_flip(['label', 'type', 'relation', 'copy_group', 'choices']),
+            );
         }
         $relationships = [];
         foreach ($dataset['relationships'] as $id => $relation) {

@@ -30,12 +30,12 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
 
     public function addPerson(Person $person): void
     {
-        if ($person->ownerUserId !== null) {
-            $this->record("users", "user_id", $person->ownerUserId);
+        if ($person->ownerUserId === null) {
+            throw new DomainException('A current person must have a linked account.');
         }
+        $this->record("users", "user_id", $person->ownerUserId);
         PortableTransactions::run($this->db, function () use ($person): void {
-            if ($person->ownerUserId !== null) {
-                $sql = new SqlRecords($this->db);
+            $sql = new SqlRecords($this->db);
                 $q = $sql->quote(...);
                 $sql->execute(
                     "UPDATE " .
@@ -49,13 +49,12 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
                         " = ?",
                     [$person->ownerUserId->value],
                 );
-                if ($sql->rows("sis_persons", ["owner_user_id" => $person->ownerUserId->value], 1) !== []) {
-                    throw new DomainException("This sign-in account already has a person record.");
-                }
+            if ($sql->rows("sis_persons", ["owner_user_id" => $person->ownerUserId->value], 1) !== []) {
+                throw new DomainException("This sign-in account already has a person record.");
             }
             $this->insert("sis_persons", [
                 "id" => $person->id->value,
-                "owner_user_id" => $person->ownerUserId?->value,
+                "owner_user_id" => $person->ownerUserId->value,
                 "given_name" => $person->givenName,
                 "family_name" => $person->familyName,
                 "directory_restricted" => (int) $person->directoryRestricted,

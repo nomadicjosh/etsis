@@ -31,6 +31,8 @@ final class PersonIdentityTest extends TestCase
             $generator ?? new RandomInstitutionalIdGenerator(),
             $f->decisionLedger(),
             $f->submissionService(),
+            $f->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
         );
     }
 
@@ -38,9 +40,9 @@ final class PersonIdentityTest extends TestCase
     {
         $f = new SisFixture();
         $service = $this->service($f);
-        $first = $service->createPerson(null, 'Alex', 'Example');
-        $second = $service->createPerson(null, 'Jamie', 'Example', '  ');
-        $manual = $service->createPerson(null, 'Morgan', 'Example', '  00001234  ');
+        $first = $service->createPerson($f->user(), 'Alex', 'Example');
+        $second = $service->createPerson($f->user(), 'Jamie', 'Example', '  ');
+        $manual = $service->createPerson($f->user(), 'Morgan', 'Example', '  00001234  ');
         self::assertMatchesRegularExpression('/^P-[A-F0-9]{12}$/D', $first->institutionalId->value);
         self::assertNotSame($first->institutionalId->value, $second->institutionalId->value);
         self::assertSame('00001234', $service->person($manual->id)->institutionalId->value);
@@ -51,10 +53,10 @@ final class PersonIdentityTest extends TestCase
     {
         $f = new SisFixture();
         $service = $this->service($f);
-        $service->createPerson(null, 'Alex', 'Example', 'AbC-100');
+        $service->createPerson($f->user(), 'Alex', 'Example', 'AbC-100');
         $beforeAudit = count($f->sql->rows('sis_audit'));
         try {
-            $service->createPerson(null, 'Jamie', 'Example', 'abc-100');
+            $service->createPerson($f->user(), 'Jamie', 'Example', 'abc-100');
             self::fail('A duplicate institutional ID was accepted.');
         } catch (InstitutionalIdUnavailableException) {
             self::assertCount(1, $f->sql->rows('sis_persons'));
@@ -66,7 +68,7 @@ final class PersonIdentityTest extends TestCase
     public function testGeneratedCollisionRetriesInAFreshTransaction(): void
     {
         $f = new SisFixture();
-        $this->service($f)->createPerson(null, 'Alex', 'Example', 'P-COLLISION');
+        $this->service($f)->createPerson($f->user(), 'Alex', 'Example', 'P-COLLISION');
         $generator = new class implements InstitutionalIdGenerator {
             public int $calls = 0;
 
@@ -75,7 +77,7 @@ final class PersonIdentityTest extends TestCase
                 return new InstitutionalId(++$this->calls === 1 ? 'P-COLLISION' : 'P-FRESH');
             }
         };
-        $person = $this->service($f, $generator)->createPerson(null, 'Jamie', 'Example');
+        $person = $this->service($f, $generator)->createPerson($f->user(), 'Jamie', 'Example');
         self::assertSame(2, $generator->calls);
         self::assertSame('P-FRESH', $person->institutionalId->value);
         self::assertCount(2, $f->sql->rows('sis_persons'));
@@ -104,7 +106,8 @@ final class PersonIdentityTest extends TestCase
         self::assertSame('00009001', new SqlReportRepository($f->sql, $f->clock)->run($report, null, 50)[0]['institutional_id']);
         self::assertSame($student->personId->value, $person->id->value);
         self::assertSame($enrollment, $f->sql->rows('sis_enrollments'));
-        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        $after = array_column($f->sql->rows('sis_history_events'), null, 'id');
+        foreach ($events as $event) { self::assertSame($event, $after[$event['id']]); }
         self::assertStringNotContainsString('00009001', json_encode($f->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
     }
 
@@ -112,8 +115,8 @@ final class PersonIdentityTest extends TestCase
     {
         $f = new SisFixture();
         $service = $this->service($f);
-        $first = $service->createPerson(null, 'Alex', 'Example', '00000001');
-        $second = $service->createPerson(null, 'Jamie', 'Example', '00000002');
+        $first = $service->createPerson($f->user(), 'Alex', 'Example', '00000001');
+        $second = $service->createPerson($f->user(), 'Jamie', 'Example', '00000002');
         try {
             $service->updateInstitutionalId($first->id, '00000002', 0);
             self::fail('A duplicate reassignment was accepted.');
@@ -143,17 +146,17 @@ final class PersonIdentityTest extends TestCase
         $service = $this->service($f);
         $f->access->staff = false;
         $f->access->grants = ['sis:person:manage'];
-        $automatic = $service->createPerson(null, 'Alex', 'Example');
+        $automatic = $service->createPerson($f->user(), 'Alex', 'Example');
         self::assertNotSame('', $automatic->institutionalId->value);
         $this->expectException(AccessDeniedException::class);
-        $service->createPerson(null, 'Jamie', 'Example', '00000123');
+        $service->createPerson($f->user(), 'Jamie', 'Example', '00000123');
     }
 
     public function testSameIdDoesNotAdvanceVersionAndBlankEditGeneratesAnId(): void
     {
         $f = new SisFixture();
         $service = $this->service($f);
-        $person = $service->createPerson(null, 'Alex', 'Example', 'STAFF-1');
+        $person = $service->createPerson($f->user(), 'Alex', 'Example', 'STAFF-1');
         self::assertSame(0, $service->updateInstitutionalId($person->id, ' staff-1 ', 0)->identityVersion);
         $changed = $service->updateInstitutionalId($person->id, '  ', 0);
         self::assertSame(1, $changed->identityVersion);
@@ -164,7 +167,7 @@ final class PersonIdentityTest extends TestCase
     {
         $f = new SisFixture();
         $personId = EntityId::generate();
-        $f->sql->insert('sis_persons', ['id' => $personId->value, 'owner_user_id' => null, 'given_name' => 'Alex',
+        $f->sql->insert('sis_persons', ['id' => $personId->value, 'owner_user_id' => $f->user()->value, 'given_name' => 'Alex',
             'family_name' => 'Example', 'directory_restricted' => 1]);
         $migration = new CreateSisPersonIdentifiersTable('5');
         $migration->setObjectMap(new ArrayObject([
@@ -189,13 +192,13 @@ final class PersonIdentityTest extends TestCase
                 \Qubus\Routing\Interfaces\MiddlewareResolver::class => \Qubus\Routing\Route\InjectorMiddlewareResolver::class,
             ],
         ]));
-        $container->share(new \Application\Http\Controller\SisAdmissionsController($this->service($f)));
+        $container->share(new \Application\Http\Controller\SisAdmissionsController($this->service($f), $f->registrationService()));
         $router = new \Qubus\Routing\Router(new \Qubus\Routing\Route\RouteCollector(), $container);
         $register = require dirname(__DIR__, 2) . '/routes/web/sis.php';
         $register($router);
         $create = new \Qubus\Http\ServerRequest([], [], '/sis/persons/', 'POST');
         $response = $router->match($create->withParsedBody(['given_name' => 'Alex', 'family_name' => 'Example',
-            'owner_user_id' => $f->access->actor->value, 'institutional_id' => '00001001']));
+            'operation_id' => EntityId::generate()->value, 'email' => 'fictional@example.invalid', 'institutional_id' => '00001001']));
         self::assertSame(201, $response->getStatusCode());
         $data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertSame('00001001', $data['institutional_id']);
@@ -209,6 +212,7 @@ final class PersonIdentityTest extends TestCase
         $lookup = new \Qubus\Http\ServerRequest([], [], '/sis/persons/lookup/', 'POST');
         $response = $router->match($lookup->withParsedBody(['institutional_id' => 'staff-2001']));
         self::assertSame($id, json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR)['id']);
+        $f->access->actor = $f->admissions->person(new EntityId($id))->ownerUserId;
         $f->access->staff = false;
         $get = new \Qubus\Http\ServerRequest([], [], '/sis/persons/' . $id . '/', 'GET');
         self::assertSame('STAFF-2001', json_decode(

@@ -1,0 +1,36 @@
+<section class="campus-container campus-auth" aria-labelledby="account-setup-title">
+    <div class="campus-auth-intro">
+        <p class="campus-eyebrow">YOUR CAMPUS ACCOUNT</p>
+        <h1 id="account-setup-title">Your next chapter starts here.</h1>
+        <p class="campus-lead">One account connects your applications, studies, and work at your institution.</p>
+    </div>
+    <div class="campus-surface campus-auth-form">
+        <?php if ($completed): ?>
+            <h2>Your password is ready</h2>
+            <p>Sign in using your email address and new password.</p>
+            <a class="btn btn-primary" href="<?= $this->esc($loginUrl) ?>">Continue to sign in</a>
+        <?php else: ?>
+            <h2>Choose your password</h2>
+            <p class="campus-muted">Use the private setup link in your invitation email. Links expire after 48 hours.</p>
+            <?php if ($error): ?>
+                <p class="alert alert-danger" role="alert"><?= $this->esc($error) ?></p>
+            <?php endif; ?>
+            <p id="setup-link-error" class="alert alert-warning" role="status" hidden>Open the setup link from your email to continue.</p>
+            <form method="post" action="/portal/password-setup/" id="account-setup-form">
+                <?= $csrfMarkup ?? csrf_field() ?>
+                <input type="hidden" name="token" id="account-setup-token" />
+                <div class="mb-4">
+                    <label class="form-label" for="account-setup-password">New password</label>
+                    <input class="form-control" type="password" name="password" id="account-setup-password" autocomplete="new-password" required minlength="<?= $this->esc($passwordLength) ?>" maxlength="4096" aria-describedby="account-setup-password-help" />
+                    <p class="form-text" id="account-setup-password-help">Use at least <?= $this->esc($passwordLength) ?> characters.</p>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label" for="account-setup-confirm">Confirm password</label>
+                    <input class="form-control" type="password" name="confirm_password" id="account-setup-confirm" autocomplete="new-password" required maxlength="4096" />
+                </div>
+                <button class="btn btn-primary" type="submit" id="account-setup-submit" disabled>Set password</button>
+            </form>
+        <?php endif; ?>
+    </div>
+</section>
+<script src="/assets/js/account-setup.js" defer></script>

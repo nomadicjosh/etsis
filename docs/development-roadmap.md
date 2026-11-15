@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-14**, after adding indexed submission-date reporting from genuine admissions events, alongside named joins and connected admissions/student/registration/recorded-credit sources. Starting points remain editable examples, including section headcounts with configurable thresholds. Authoritative graduation sources, derived financial aggregates, richer expressions and broader source/relationship coverage remain open.
+Last reviewed: **2026-11-14**, after the canonical person/account foundation and core protected profile history, following Report Studio label/status cleanup. Indexed submission-date reporting, named joins and connected admissions/student/registration/recorded-credit sources remain available. Starting points remain editable examples, including section headcounts with configurable thresholds. Authoritative graduation sources, derived financial aggregates, richer expressions and broader source/relationship coverage remain open.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -56,6 +56,9 @@ These are relative estimates, not calendar commitments or percentages complete. 
 This is an order of emphasis, not a requirement to finish every item in a large milestone before doing any independent work elsewhere. Historical/security acceptance applies to every stage. Each implementation stage should identify the checklist items it advances and update this document.
 
 ## 1. Historical definitions and security/recovery
+
+- [x] Establish [canonical person/account creation and core profile history](person-identity-and-accounts.md): required email and one linked basic account, staff password-setup invitations, genuine person creation, protected name/privacy/identifier changes, coordinated User writes and preserved older unknown history. Student/employment/faculty capabilities retain the same parent identity.
+- [ ] Complete person contact/address/emergency-contact history, role-specific profile decisions, account suspension and operational profile rebuild/retention controls.
 
 - [ ] Finish normalized classifications: [subjects](course-subjects.md), [course departments/levels](course-classifications.md) and [program department/academic-level/award publications](program-publication.md) have setup, assignment and retained references. School, major/minor/specialization, CIP/location classifications and further program relationships remain.
 - [x] [Link new degree-requirement publications to the reviewed program definition](degree-program-publication-link.md), retain earlier publications and require matching program catalog references for new student selections. Earlier unlinked history remains explicitly unlinked.

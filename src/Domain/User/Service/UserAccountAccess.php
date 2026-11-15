@@ -29,9 +29,15 @@ final readonly class UserAccountAccess
     public function update(EntityId $target, Closure $operation): mixed
     {
         return $this->transactions->run(function () use ($target, $operation): mixed {
+            $actor = $this->access->authenticatedUserId();
             $this->repository->lock();
             $this->authorizeUpdate($target);
-            return $operation();
+            $result = $operation();
+            $this->authorizeUpdate($target);
+            if ($this->access->authenticatedUserId()->value !== $actor->value) {
+                throw new AccessDeniedException('The account editor changed.');
+            }
+            return $result;
         });
     }
 

@@ -21,6 +21,15 @@ use function Codefy\Framework\Helpers\env;
 return [
     "container" => [
         Injector::DELEGATIONS => [
+            Domain\Person\Service\PersonRegistrationService::class => static fn() => app()->make(
+                Domain\Person\Service\PersonRegistrationService::class
+            ),
+            Domain\Person\Service\ProfileLedger::class => static fn() => app()->make(
+                Domain\Person\Service\ProfileLedger::class
+            ),
+            Domain\Person\Repository\PersonProfileRepository::class => static fn() => app()->make(
+                Domain\Person\Repository\PersonProfileRepository::class
+            ),
             // Share application bindings, encryption configuration and transaction boundaries.
             UserAggregateRepository::class => static fn() => app()->make(UserAggregateRepository::class),
             UserProjection::class => static fn() => app()->make(UserProjection::class),

@@ -15,18 +15,20 @@ use Qubus\Http\ServerRequest;
 
 final class SisAdmissionsController extends BaseController
 {
-    public function __construct(private readonly AdmissionsService $service)
-    {
+    public function __construct(
+        private readonly AdmissionsService $service,
+        private readonly \Domain\Person\Service\PersonRegistrationService $registration
+    ) {
     }
 
     public function createPerson(ServerRequest $request): ResponseInterface
     {
         $data = $this->data($request);
-        $owner = isset($data["owner_user_id"]) ? new EntityId($this->text($data, "owner_user_id")) : null;
-        $person = $this->service->createPerson(
-            $owner,
+        $person = $this->registration->staff(
+            FormInput::from($request)->id('operation_id'),
             $this->text($data, "given_name"),
             $this->text($data, "family_name"),
+            $this->text($data, 'email'),
             $this->optionalInstitutionalId($data),
         );
 

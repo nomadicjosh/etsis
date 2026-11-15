@@ -21,7 +21,7 @@ final class MatriculationHistoryTest extends TestCase
     private function application(SisFixture $f): AdmissionApplication
     {
         $a = $f->admissionsService();
-        $person = $a->createPerson($f->user(), "Fictional", "Prospect");
+        $person = $f->legacyPerson($f->user(), "Fictional", "Prospect");
         $application = $f->legacyApplication($person->id, $f->program, $f->term);
         $f->legacyAdmissionDecision($application->id, true);
         return $f->admissions->application($application->id);

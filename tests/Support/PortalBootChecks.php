@@ -1792,7 +1792,7 @@ $sis->access->staff = true;
 $sis->access->grants = [];
 
 $matriculation = $app->make(\Domain\Admissions\Service\AdmissionsService::class);
-$catalogPerson = $matriculation->createPerson($sis->user(), "Fictional", "Cohort");
+$catalogPerson = $sis->legacyPerson($sis->user(), "Fictional", "Cohort");
 $applicationIdentity = \Domain\Shared\ValueObject\EntityId::generate();
 $directApplicationData = ["application_id" => $applicationIdentity->value, "person_id" => $catalogPerson->id->value,
     "program_id" => $sis->program->value, "entry_term_id" => $sis->term->value];
@@ -3601,7 +3601,7 @@ if ($teachingPost($programDetailsBase . 'publication/commit/', [
 ])->getStatusCode() !== 200) {
     throw new RuntimeException('Specialization publication failed before the student choice fixture.');
 }
-$specializationPerson = $sis->admissionsService()->createPerson($sis->user(), 'Fictional', 'Specialization');
+$specializationPerson = $sis->legacyPerson($sis->user(), 'Fictional', 'Specialization');
 $specializationApplication = $sis->legacyApplication(
     $specializationPerson->id,
     $sis->program,

@@ -329,3 +329,10 @@ The same visual workspace supports adding/naming copies, ordinary field/relation
 ## Submission dates in the shared reporting engine
 
 [Submission-date reporting](application-submission-history.md#submission-date-reporting) now adds an indexed admissions read model from genuine opening events. The same visual builder supports date ranges, grouped dates/counts and explicit known/unknown submission choices. Form/direct commands maintain it atomically; older observed applications retain blank dates. Migration `20261114000003` reconstructs only authenticated recorded submissions under explicit work bounds, preserving journal bytes, receipts and existing application/academic rows. Report reads join the projection and perform no stream replay. Full source permissions, private output and existing saved/static report rules remain in force. Derived financial sources and authoritative graduation workflows remain separate roadmap work.
+
+
+## Canonical person/account foundation
+
+New staff-created people require an email and receive a basic linked account with a protected initial-password invitation. Public registration creates the same person/account relationship before applying. Student and employment records remain children of the person; roles may coexist or change without replacing that identity. Person creation/name/privacy/institutional-ID history and coordinated User account writes use the existing protected journal. Existing User facts remain unchanged; older untracked profiles are observed explicitly on their first accepted edit. See [identity, setup delivery and remaining scope](person-identity-and-accounts.md).
+
+The additive `20261114000004_CreateSisAccountSetup` migration is applied to the configured test database. Bounded verification retained all 20 existing event rows and checked identity/student/employment facts unchanged; no invitations were sent. Fictional integration tests cover atomic creation, retries, setup grants, account authority and an employee becoming a student. Contact/address/emergency-contact history, role-specific decisions, suspension and operational rebuild/retention remain open.
