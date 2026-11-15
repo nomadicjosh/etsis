@@ -6,6 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\Person\Service\PersonProfileEditor;
+use Domain\Person\Service\PersonContactService;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\User\Service\PersonAccountEditor;
@@ -15,8 +16,11 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisPersonEditorController
 {
-    public function __construct(private PersonProfileEditor $people, private PersonAccountEditor $accounts)
-    {
+    public function __construct(
+        private PersonProfileEditor $people,
+        private PersonAccountEditor $accounts,
+        private PersonContactService $contacts,
+    ) {
     }
 
     public function profile(string $id): ResponseInterface
@@ -41,6 +45,30 @@ final readonly class SisPersonEditorController
     public function account(string $id): ResponseInterface
     {
         return new JsonResponse($this->accounts->view(new EntityId($id)));
+    }
+
+    public function contact(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->contacts->staffView(new EntityId($id)));
+    }
+
+    public function saveContact(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $body = $request->getParsedBody();
+        foreach (['preferred_name', 'phone', 'address'] as $key) {
+            if (!is_array($body) || !is_string($body[$key] ?? null)) {
+                throw new \InvalidArgumentException('Contact fields must be supplied.');
+            }
+        }
+        $this->contacts->staffSave(
+            new EntityId($id),
+            $body['preferred_name'],
+            $body['phone'],
+            $body['address'],
+            $f->integer('version')
+        );
+        return new JsonResponse(['status' => 'saved']);
     }
 
     public function email(ServerRequest $request, string $id): ResponseInterface

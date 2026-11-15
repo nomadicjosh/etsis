@@ -58,7 +58,9 @@ final class PersonContactHistoryTest extends TestCase
             $s->profileLedger(),
             $s->access,
             $s->transactions,
-            $audit ?? $s->audit
+            $audit ?? $s->audit,
+            $s->admissions,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql)
         );
     }
 
@@ -85,6 +87,152 @@ final class PersonContactHistoryTest extends TestCase
         self::assertSame('created', $events[1]->event->payload()['provenance']);
         self::assertSame([], $s->sql->rows('sis_students'));
         self::assertSame('Fictional prospect address', $c->service->me()['contact']['address']);
+    }
+
+    public function testAuthorizedStaffEditTheSamePersonContactWithoutReceivingCredentialAccess(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $actor = $s->access->actor;
+        $person = $s->student($s->user())->personId;
+        $s->access->staff = false;
+        $s->access->grants = ['sis:person:manage'];
+        $users = $s->sql->rows('users');
+        self::assertSame(0, $c->contacts->staffView($person)['version']);
+        $c->contacts->staffSave($person, 'Preferred', '001234', 'Fictional staff-entered address', 0);
+        $events = $this->events($c, $person);
+        self::assertSame($actor->value, $events[1]->context->actor->value);
+        self::assertSame('Preferred', $c->contacts->staffView($person)['preferred_name']);
+        self::assertSame($users, $s->sql->rows('users'));
+        $s->access->actor = $s->admissions->person($person)->ownerUserId;
+        $s->access->grants = [];
+        self::assertSame('Fictional staff-entered address', $c->contacts->view($person)['address']);
+    }
+
+    public function testAccountEditingPermissionAloneDoesNotAuthorizeStaffContactAccess(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $person = $s->student($s->user())->personId;
+        $s->access->staff = false;
+        $s->access->grants = ['admin:edit:user'];
+        foreach (['read', 'write'] as $action) {
+            try {
+                $action === 'read' ? $c->contacts->staffView($person)
+                    : $c->contacts->staffSave($person, 'Fictional', '', '', 0);
+                self::fail('Credential administration allowed person-contact access.');
+            } catch (AccessDeniedException) {
+                self::assertSame([], $s->sql->rows('sis_portal_contacts'));
+                self::assertSame([], $s->sql->rows('sis_history_events'));
+            }
+        }
+    }
+
+    public function testStaffAndOwnerEditsShareRevisionsAndRetriesKeepLaterValues(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $actor = $s->access->actor;
+        $s->legacyPerson($actor, 'Fictional', 'Staff');
+        $person = $s->student($s->user())->personId;
+        $s->access->staff = false;
+        $s->access->grants = ['sis:person:manage'];
+        $c->contacts->staffSave($person, 'Staff entry', '', 'Fictional first address', 0);
+        $owner = $s->admissions->person($person)->ownerUserId;
+        $s->access->actor = $owner;
+        $s->access->grants = [];
+        $c->contacts->save('Owner entry', '', 'Fictional later address', 1);
+        $s->access->actor = $actor;
+        $s->access->grants = ['sis:person:manage'];
+        $before = $s->sql->rows('sis_history_events');
+        $c->contacts->staffSave($person, 'Staff entry', '', 'Fictional first address', 0);
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
+        self::assertSame('Fictional later address', $c->contacts->staffView($person)['address']);
+        try {
+            $c->contacts->view($person);
+            self::fail('A portal read used staff permission to override ownership.');
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $s->sql->rows('sis_history_events'));
+        }
+        try {
+            $c->contacts->staffSave($person, 'Competing edit', '', '', 0);
+            self::fail('Accepted a stale competing staff edit.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $s->sql->rows('sis_history_events'));
+        }
+        $s->access->grants = [];
+        $this->expectException(AccessDeniedException::class);
+        $c->contacts->staffSave($person, 'Staff entry', '', 'Fictional first address', 0);
+    }
+
+    public function testOnlyASuperAdministratorCanReadOrEditASuperPersonsContactsThroughStaffRoutes(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $person = $s->student($s->user())->personId;
+        $roles = new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql);
+        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole,
+            $s->admissions->person($person)->ownerUserId, $roles->roleNamed('super')->id, true);
+        $s->access->staff = false;
+        $s->access->grants = ['sis:person:manage'];
+        foreach (['read', 'write'] as $action) {
+            try {
+                $action === 'read' ? $c->contacts->staffView($person)
+                    : $c->contacts->staffSave($person, 'Fictional', '', '', 0);
+                self::fail('A regular administrator accessed protected super contact details.');
+            } catch (AccessDeniedException) {
+                self::assertSame([], $s->sql->rows('sis_portal_contacts'));
+            }
+        }
+        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole,
+            $s->access->actor, $roles->roleNamed('super')->id, true);
+        $c->contacts->staffSave($person, 'Protected', '', '', 0);
+        self::assertSame('Protected', $c->contacts->staffView($person)['preferred_name']);
+    }
+
+    public function testRevokedStaffAuthorityWhileWaitingOrAfterWritesRollsBackTheWholeChange(): void
+    {
+        foreach (['lock', 'audit'] as $case) {
+            $c = new CampusFixture();
+            $s = $c->sis;
+            $person = $s->student($s->user())->personId;
+            $s->access->staff = false;
+            $s->access->grants = ['sis:person:manage'];
+            $audit = null;
+            $rows = null;
+            $revoke = static function () use ($s): void { $s->access->grants = []; };
+            if ($case === 'lock') {
+                $rows = $this->createStub(PersonProfileRepository::class);
+                $rows->method('lock')->willReturnCallback($revoke);
+            } else {
+                $audit = $this->createStub(AuditTrail::class);
+                $audit->method('record')->willReturnCallback($revoke);
+            }
+            try {
+                $this->service($c, $audit, rows: $rows)->staffSave($person, 'Fictional', '', '', 0);
+                self::fail('A staff update committed after its permission was revoked.');
+            } catch (AccessDeniedException) {
+                foreach (['sis_portal_contacts', 'sis_history_events', 'sis_history_operations', 'sis_history_streams'] as $table) {
+                    self::assertSame([], $s->sql->rows($table));
+                }
+            }
+        }
+    }
+
+    public function testAStaffReadRechecksPermissionAfterLoadingProtectedContactDetails(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $person = $s->student($s->user())->personId;
+        $s->access->staff = false;
+        $s->access->grants = ['sis:person:manage'];
+        $contacts = $this->createStub(PersonContactRepository::class);
+        $contacts->method('current')->willReturnCallback(static function () use ($s): ?ContactDetails {
+            $s->access->grants = [];
+            return null;
+        });
+        $this->expectException(AccessDeniedException::class);
+        $this->service($c, contacts: $contacts)->staffView($person);
     }
 
     public function testNewContactFactsShareThePersonStreamAndDoNotChangeItsIdentityOrOtherRecords(): void

@@ -109,7 +109,8 @@ final class CampusFixture
             ),
             new \Infrastructure\Persistence\Repository\SqlPersonContactRepository($f->sql, $this->cipher),
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
-            $f->profileLedger(), $f->access, $f->transactions, $f->audit
+            $f->profileLedger(), $f->access, $f->transactions, $f->audit,
+            $f->admissions, new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql)
         );
         $this->service = new CampusService(
             $this->repository,

@@ -104,6 +104,58 @@ window.createWorkspacePeople = function (ui) {
                 ),
             );
     }
+    async function contact(person) {
+        const id = personId(person);
+        const record = await request(`/sis/ui/people/${id}/contact/`);
+        const body = openDrawer(
+            "Contact information",
+            `${person.givenName} ${person.familyName}`,
+        );
+        body.append(button("Back to person", () => openPerson(id), "btn-link"));
+        const fields = [
+            ["preferred_name", "Preferred name", "text", "", false],
+            ["phone", "Phone number", "tel", "", false],
+            ["address", "Mailing address", "textarea", "", false],
+        ];
+        const form = await buildForm(fields, record);
+        for (const [key, length, autocomplete] of [
+            ["preferred_name", 80, "nickname"],
+            ["phone", 40, "tel"],
+            ["address", 500, "street-address"],
+        ]) {
+            form.elements[key].maxLength = length;
+            form.elements[key].autocomplete = autocomplete;
+        }
+        form.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "These details stay connected to this person throughout their studies and employment. Use Manage sign-in account to change their sign-in email.",
+            ),
+        );
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save contact information",
+        );
+        form.append(save);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request(`/sis/ui/people/${id}/contact/`, "POST", {
+                    preferred_name: "",
+                    phone: "",
+                    address: "",
+                    ...formData(form, fields),
+                    version: record.version,
+                });
+                notify("Contact information saved.");
+                await contact(person);
+            }, save);
+        });
+        body.append(form);
+    }
     async function password(person, record) {
         const id = personId(person);
         const body = openDrawer(
@@ -776,5 +828,5 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
-    return { editProfile, account, application };
+    return { editProfile, account, contact, application };
 };

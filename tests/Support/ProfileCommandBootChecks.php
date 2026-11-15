@@ -21,6 +21,7 @@ $app->delegate(
     ),
 );
 $app->delegate(\Domain\Shared\Persistence\UnitOfWork::class, static fn() => $sis->transactions);
+$app->delegate(\Domain\Communications\Service\MessageCipher::class, static fn() => $sis->dropCipher);
 $app->delegate(\Domain\Shared\Security\StudentAccess::class, static fn() => $sis->access);
 $app->delegate(\Domain\Admissions\Repository\AdmissionsRepository::class, static fn() => $sis->admissions);
 $app->delegate(\Domain\Access\Repository\AccessRepository::class, static fn() => $people->access);
@@ -198,6 +199,46 @@ $invalidSetup = $app->router->match($setupPost->withHeader('X-CSRF-Token', 'fict
 if ($invalidSetup->getStatusCode() !== 200 || $setupEvents !== $sis->sql->rows('sis_history_events')
     || !str_contains((string) $invalidSetup->getBody(), 'This link is unavailable')) {
     throw new RuntimeException('Rejected account setup wrote credential history or lost its accessible error.');
+}
+// Staff contact maintenance uses real routes/providers and does not borrow credential authority.
+$contactRequest = new \Qubus\Http\ServerRequest([], [], '/sis/ui/people/' . $other->id->value . '/contact/', 'GET')
+    ->withHeader('Accept', 'application/json');
+$beforeContact = $sis->sql->rows('sis_history_events');
+if ($app->router->match($contactRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException('Profile permission alone exposed another person contact.');
+}
+$sis->access->grants = ['sis:person:manage'];
+$contactResponse = $app->router->match($contactRequest);
+if ($contactResponse->getStatusCode() !== 200
+    || !str_contains($contactResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $contactResponse->getBody(), 'phpdebugbar')) {
+    throw new RuntimeException('Staff contact reader did not resolve privately through the configured provider.');
+}
+$contactBody = json_decode((string) $contactResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$contactPost = $contactRequest->withMethod('POST')
+    ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
+    ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE, 'fictionalcsrftoken')
+    ->withParsedBody(['preferred_name' => 'Fictional contact', 'phone' => '001234',
+        'address' => "Fictional campus\nFictional town", 'version' => $contactBody['version'],
+        'person_id' => $person->id->value]);
+if ($app->router->match($contactPost)->getStatusCode() !== 403
+    || $beforeContact !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Staff contact mutation bypassed CSRF or a read wrote history.');
+}
+$savedContact = $app->router->match($contactPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if ($savedContact->getStatusCode() !== 200
+    || !str_contains($savedContact->getHeaderLine('Cache-Control'), 'no-store')
+    || $otherBefore !== $sis->sql->one('users', ['user_id' => $other->ownerUserId->value])) {
+    throw new RuntimeException('Staff contact update failed or changed credentials.');
+}
+$verifiedContact = $app->make(\Domain\Person\Service\PersonContactService::class)->staffView($other->id);
+if ($verifiedContact['phone'] !== '001234' || $verifiedContact['version'] !== 1
+    || count($sis->sql->rows('sis_history_events')) !== count($beforeContact) + 2) {
+    throw new RuntimeException('The routed contact change did not retain the intended person and revision.');
+}
+$sis->access->grants = [];
+if ($app->router->match($contactRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException('Contact reads survived permission revocation.');
 }
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

@@ -6,6 +6,68 @@ async function accessible(page) {
     expect(scan.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) }))).toEqual([]);
 }
 
+test('person managers maintain contact details without credential controls and keep failed form values', async ({ page }) => {
+    const person = id(40), user = id(41);
+    let current = { preferred_name: 'Avery', phone: '001234', address: 'Fictional campus\nFictional town', version: 3 };
+    let reject = true;
+    const saves = [], reads = [], errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const request = route.request(), path = new URL(request.url()).pathname;
+        const data = request.postData() ? JSON.parse(new URLSearchParams(request.postData()).get('_workspace_json')) : null;
+        let result = {};
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path.startsWith('/sis/ui/data/')) result = { items: [{ id: person, owner_user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-EXAMPLE' }], next_after: null };
+        else if (path === `/sis/ui/people/${person}/`) result = {
+            person: { id: { value: person }, ownerUserId: { value: user }, givenName: 'Alex', familyName: 'Example', institutionalId: { value: 'S-EXAMPLE' } },
+            students: [], employees: [], applications: [], accounts: []
+        };
+        else if (path === `/sis/ui/people/${person}/contact/`) {
+            if (data) {
+                expect(request.headers()['x-csrf-token']).toBe('fictional-test-token');
+                saves.push(data);
+                if (reject) {
+                    reject = false;
+                    return route.fulfill({ status: 409, json: { error: 'This record changed. Reload it before trying again.' } });
+                }
+                current = { ...data, version: current.version + 1 };
+                result = { status: 'saved' };
+            } else { reads.push(path); result = current; }
+        }
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/person-contact-fixture/');
+    await page.locator('.workspace-nav-link[data-workspace="people"]').click();
+    await page.getByLabel('Search this workspace').fill('Alex');
+    await page.getByLabel('Search this workspace').press('Enter');
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    expect(reads).toHaveLength(0);
+    await expect(page.getByRole('button', { name: 'Manage sign-in account', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Contact information', exact: true }).click();
+    await expect(page.getByLabel('Phone number', { exact: true })).toHaveValue('001234');
+    await expect(page.getByLabel('Preferred name', { exact: true })).toHaveAttribute('maxlength', '80');
+    await expect(page.getByLabel('Mailing address', { exact: true })).toHaveAttribute('maxlength', '500');
+    await page.getByLabel('Preferred name', { exact: true }).fill('Updated preferred name');
+    await page.getByLabel('Phone number', { exact: true }).fill('000555');
+    await page.getByRole('button', { name: 'Save contact information', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('This record changed');
+    await expect(page.getByLabel('Preferred name', { exact: true })).toHaveValue('Updated preferred name');
+    await page.getByRole('button', { name: 'Save contact information', exact: true }).click();
+    await expect.poll(() => reads.length).toBe(2);
+    expect(saves[1]).toEqual({ preferred_name: 'Updated preferred name', phone: '000555', address: 'Fictional campus\nFictional town', version: 3 });
+    await page.getByLabel('Mailing address', { exact: true }).fill('');
+    await page.getByRole('button', { name: 'Save contact information', exact: true }).click();
+    await expect.poll(() => saves.length).toBe(3);
+    expect(saves[2]).toMatchObject({ address: '', version: 4 });
+    await expect.poll(() => reads.length).toBe(3);
+    await accessible(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(errors).toEqual([]);
+});
+
 test('person edits, linked account maintenance and bounded access controls', async ({ page }) => {
     const person = id(1); const user = id(2);
     const calls = []; const errors = []; let given = 'Alex'; let email = 'alex@example.invalid'; let version = 0;
