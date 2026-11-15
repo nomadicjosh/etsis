@@ -74,8 +74,37 @@ window.createWorkspaceScheduling = function (ui) {
             .slice(0, 16);
     const display = (instant) => new Date(instant).toLocaleString();
     const meetingTime = instant => new Date(instant).toLocaleString(undefined, { timeZoneName: 'shortOffset' });
-    const roomLabel = record => [record.code, record.name].filter(Boolean).join(' · ');
-    const buildingLabel = record => record.building ? `${record.building.code} · ${record.building.name}` : 'Building not assigned';
+    const roomLabel = record => record ? [record.code, record.name].filter(Boolean).join(' · ') : 'Online · No room';
+    const buildingLabel = record => record?.building ? `${record.building.code} · ${record.building.name}`
+        : record ? 'Building not assigned' : 'No physical building';
+    const onlineField = ['online', 'Online meeting without a room', 'checkbox', '', false];
+    function locationControls(form, initialOnline = false) {
+        const online = form.elements.online, room = form.elements.room_id, section = form.elements.section_id;
+        if (!online) return;
+        const roomMark = room.labels[0]?.querySelector('.required-indicator');
+        let sectionMark = section?.labels[0]?.querySelector('.required-indicator');
+        if (section && !sectionMark) {
+            sectionMark = node('span', { class: 'required-indicator', 'aria-hidden': 'true' }, ' *');
+            section.labels[0]?.append(sectionMark);
+        }
+        let previousRoom = room.value;
+        online.checked = initialOnline;
+        const apply = () => {
+            if (online.checked) {
+                previousRoom = room.value || previousRoom;
+                room.value = '';
+            } else if (!room.value && previousRoom) room.value = previousRoom;
+            room.disabled = online.checked;
+            room.required = !online.checked;
+            if (section) section.required = online.checked;
+            if (roomMark) roomMark.hidden = online.checked;
+            if (sectionMark) sectionMark.hidden = !online.checked;
+        };
+        online.addEventListener('change', apply);
+        apply();
+        online.closest('.mb-4').append(node('p', { class: 'form-text' },
+            'Online meetings require a linked published online or hybrid section. They do not reserve a physical room.'));
+    }
     const grid = (headers, rows, caption) =>
         node(
             "div",
@@ -279,13 +308,18 @@ window.createWorkspaceScheduling = function (ui) {
             ['building_id', 'Building', 'lookup', 'buildings', false],
             ['search', 'Search bookings, rooms or sections', 'text', '', false],
             ['category_id', 'Category filter', 'lookup', 'bookingcategories', false],
+            ['location', 'Meeting location', 'choice', [
+                { value: 'all', label: 'All locations' }, { value: 'room', label: 'Rooms' }, { value: 'online', label: 'Online' },
+            ]],
         ])];
-        const form = await buildForm(fields, { ...filters, ...(date ? { date } : {}) });
+        const form = await buildForm(fields, { location: 'all', ...filters, ...(date ? { date } : {}) });
         if (!active()) return;
         const input = form.elements.date;
+        if (!roomId) form.classList.add('booking-calendar-filters');
         if (!roomId) form.elements.search.maxLength = 100;
         const readFilters = () => roomId ? {} : { building_id: form.elements.building_id.value,
-            search: form.elements.search.value.trim(), category_id: form.elements.category_id.value };
+            search: form.elements.search.value.trim(), category_id: form.elements.category_id.value,
+            location: form.elements.location.value };
         const heading = node('h3', { class: 'h5 private-text' });
         const status = node('p', { role: 'status', 'aria-live': 'polite' });
         const content = node('div');
@@ -377,8 +411,9 @@ window.createWorkspaceScheduling = function (ui) {
                         : { label: 'Back to calendar', open: () => ui.openCalendar() })),
                     categoryBadge(item),
                     item.section_code ? `${item.section_code} · ${item.section_term_code}` : '—',
-                    ...(!roomId ? [button([item.room_code, item.room_name].filter(Boolean).join(' · '), () => room(item.room_id)),
-                        [item.building_code, item.building_name].filter(Boolean).join(' · ') || 'Building not assigned'] : []),
+                    ...(!roomId ? [item.room_id ? button([item.room_code, item.room_name].filter(Boolean).join(' · '), () => room(item.room_id))
+                        : 'Online · No room', item.room_id
+                        ? [item.building_code, item.building_name].filter(Boolean).join(' · ') || 'Building not assigned' : '—'] : []),
                     badge(item.status),
                     item.continues_before ? 'Continues from an earlier day' : clockLabel(item.starts_at),
                     item.continues_after ? 'Continues into the next day' :
@@ -445,20 +480,22 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(heading, node('p', { class: 'form-text' },
             'Times use the institution’s timezone. Requested bookings do not reserve the room. Approval checks availability again.'),
             roomId ? button('Back to room agenda', () => room(roomId)) :
-                node('p', { class: 'form-text' }, 'Search booking purposes, rooms, buildings, category names or retained section/term codes. Category filters include retired categories already in use. Up to 500 matching meetings are shown, with complete counts for the chosen filters.'),
+                node('p', { class: 'form-text' }, 'Search meeting purposes, rooms, buildings, categories or retained section/term codes. A building filter excludes room-free online meetings. Up to 500 matching meetings are shown, with complete counts for the chosen filters.'),
             modes, controls, form, filterField, status, content);
         await load(date);
     }
     async function requestBooking(preset = {}) {
-        const body = openDrawer("Request a space", "SPACES & SCHEDULING");
+        const body = openDrawer("Plan a meeting", "SPACES & SCHEDULING");
         body.append(note());
         const fields = [
+            onlineField,
             ["room_id", "Room", "lookup", "rooms"],
-            ["title", "What is the space for?"],
+            ["title", "Meeting purpose"],
             ...classificationFields,
             ...dateFields,
         ];
         const form = await buildForm(fields, preset);
+        locationControls(form, preset.online === true);
         const status = node("p", {
             role: "status",
             "aria-live": "polite",
@@ -474,11 +511,16 @@ window.createWorkspaceScheduling = function (ui) {
         });
         form.append(
             button('Plan recurring meetings', () => {
-                const draft = { ...formData(form, classificationFields), room_id: form.elements.room_id.value, title: form.elements.title.value,
+                const draft = { ...formData(form, classificationFields), online: form.elements.online.checked,
+                    room_id: form.elements.room_id.value, title: form.elements.title.value,
                     starts_at: form.elements.starts_at.value, ends_at: form.elements.ends_at.value };
                 return requestSeries(draft, () => requestBooking(draft));
             }),
             button("Check availability", async () => {
+                if (form.elements.online.checked) {
+                    status.textContent = 'Online meetings do not reserve a room. Choose a published online or hybrid section.';
+                    return;
+                }
                 if (
                     !["room_id", "starts_at", "ends_at"].every((key) =>
                         form.elements[key].reportValidity(),
@@ -498,7 +540,7 @@ window.createWorkspaceScheduling = function (ui) {
             node(
                 "button",
                 { type: "submit", class: "btn btn-primary" },
-                "Submit space request",
+                "Submit meeting request",
             ),
         );
         form.addEventListener("submit", (event) => {
@@ -546,13 +588,14 @@ window.createWorkspaceScheduling = function (ui) {
                 defaults.overnight = `${end.year}-${end.month}-${end.day}` > defaults.from;
             } catch { /* Keep explicit institution-date defaults if the browser cannot format its timezone. */ }
         }
-        const fields = [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'], ...classificationFields,
+        const fields = [onlineField, ['room_id', 'Room', 'lookup', 'rooms'], ['title', 'Meeting purpose'], ...classificationFields,
             ['from', 'First date', 'date'], ['through', 'Last date', 'date'],
             ['start_time', 'Meeting starts', 'time'], ['end_time', 'Meeting ends', 'time'],
             ['overnight', 'Ends next day', 'checkbox', '', false], ['interval_weeks', 'Repeat interval in weeks', 'number'],
             ['excluded_dates', 'Dates to skip', 'textarea', '', false]];
         const form = await buildForm(fields, defaults);
         if (!body.isConnected) return;
+        locationControls(form, defaults.online === true);
         form.elements.interval_weeks.min = '1'; form.elements.interval_weeks.max = '12';
         form.elements.excluded_dates.maxLength = 1500;
         form.elements.excluded_dates.placeholder = '2026-11-26\n2026-12-24';
@@ -597,14 +640,17 @@ window.createWorkspaceScheduling = function (ui) {
                 function draw() {
                     const items = result.items.slice(page * 20, (page + 1) * 20);
                     content.replaceChildren(grid(['Starts', 'Ends', 'Availability'], items.map(item => [
-                        item.local_start, item.local_end, badge(item.available ? 'Available at review' : 'Conflict'),
+                        item.local_start, item.local_end,
+                        badge(result.room === null ? 'No room required' : item.available ? 'Available at review' : 'Conflict'),
                     ]), 'Meetings to request'));
                     status.textContent = `Meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, result.items.length)} of ${result.items.length}.`;
                     previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= result.items.length;
                 }
-                preview.replaceChildren(node('h3', { class: 'h5 private-text' }, `${result.room.code} · ${data.title}`),
+                preview.replaceChildren(node('h3', { class: 'h5 private-text' }, `${roomLabel(result.room)} · ${data.title}`),
                     categoryBadge(result.category), node('p', { class: 'form-text' }, sectionLabel(result.section)),
-                    node('p', { class: 'form-text' }, `${roomLabel(result.room)} · ${result.items.length} meetings in ${result.timezone}. ${result.conflicts} conflicts with approved bookings. Approval will check again.`),
+                    node('p', { class: 'form-text' }, result.room === null
+                        ? `${result.items.length} online meetings in ${result.timezone}. Approval confirms the schedule without reserving a room.`
+                        : `${roomLabel(result.room)} · ${result.items.length} meetings in ${result.timezone}. ${result.conflicts} conflicts with approved bookings. Approval will check again.`),
                     content, status, node('div', { class: 'inline-actions' }, previous, next),
                     button('Back to meeting pattern', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
                     button('Submit recurring request', async () => {
@@ -627,7 +673,7 @@ window.createWorkspaceScheduling = function (ui) {
     }
     async function booking(id, back = null) {
         const record = await request(`/sis/bookings/${id}/`);
-        const place = await request(`/sis/rooms/${record.room_id}/`);
+        const place = record.room_id ? await request(`/sis/rooms/${record.room_id}/`) : null;
         const body = openDrawer(record.title, "SPACE REQUEST");
         if (back) body.append(button(back.label, back.open));
         if (record.source_booking_id)
@@ -640,12 +686,12 @@ window.createWorkspaceScheduling = function (ui) {
             badge(record.status),
             categoryBadge(record.category),
             node('p', { class: 'form-text' }, sectionLabel(record.section)),
-            node("p", {}, `Room: ${roomLabel(place)} · Capacity: ${place.capacity}`),
+            node("p", {}, place ? `Room: ${roomLabel(place)} · Capacity: ${place.capacity}` : roomLabel(place)),
             node('p', { class: 'private-text' }, buildingLabel(place)),
             note(),
-            button("View room agenda", () =>
+            place ? button("View room agenda", () =>
                 room(record.room_id, record.occurrences[0].starts_at),
-            ),
+            ) : null,
         );
         if (can('sis:scheduling:manage')) body.append(button('Change category', async () => {
             const edit = openDrawer('Change booking category', 'SPACES & SCHEDULING');
@@ -711,10 +757,10 @@ window.createWorkspaceScheduling = function (ui) {
         if (record.status === "requested")
             body.append(
                 button(
-                    "Approve space request",
+                    place ? "Approve space request" : 'Approve online meetings',
                     () =>
                         flow(
-                            "Confirm space approval",
+                            place ? "Confirm space approval" : 'Confirm online meeting approval',
                             [],
                             `/sis/bookings/${id}/approve/`,
                             () => ({ version: record.version }),
@@ -723,16 +769,17 @@ window.createWorkspaceScheduling = function (ui) {
                                 await booking(id, back);
                             },
                             {},
-                            "Approval reserves the remaining active meetings. Overlapping approved bookings prevent approval.",
+                            place ? "Approval reserves the remaining active meetings. Overlapping approved bookings prevent approval."
+                                : 'Approval confirms the remaining online meetings. It does not reserve a physical room or check student/faculty conflicts.',
                         ),
                     "btn-primary",
                 ),
             );
         if (record.status !== "cancelled")
             body.append(
-                button("Cancel space request", () =>
+                button(place ? "Cancel space request" : 'Cancel online meetings', () =>
                     flow(
-                        "Confirm space cancellation",
+                        place ? "Confirm space cancellation" : 'Confirm online meeting cancellation',
                         [],
                         `/sis/bookings/${id}/cancel/`,
                         () => ({ version: record.version }),
@@ -748,12 +795,14 @@ window.createWorkspaceScheduling = function (ui) {
     }
     async function reschedule(record, occurrence, place, back) {
         const body = openDrawer('Reschedule one meeting', 'SPACES & SCHEDULING');
-        const fields = [['room_id', 'New room', 'lookup', 'rooms'], ...dateFields];
+        const fields = [...(['online', 'hybrid'].includes(record.section?.delivery_mode) ? [onlineField] : []),
+            ['room_id', 'New room', 'lookup', 'rooms'], ...dateFields];
         const form = await buildForm(fields, { room_id: record.room_id,
             starts_at: local(new Date(occurrence.starts_at)), ends_at: local(new Date(occurrence.ends_at)) });
         if (!body.isConnected) return;
+        locationControls(form, !record.room_id);
         const selectedRoom = form.elements.room_id.selectedOptions[0];
-        if (selectedRoom) selectedRoom.textContent = `${roomLabel(place)} · ${buildingLabel(place)}`;
+        if (selectedRoom && place) selectedRoom.textContent = `${roomLabel(place)} · ${buildingLabel(place)}`;
         const status = node('p', { role: 'status', class: 'form-text' });
         const preview = node('div', { hidden: true });
         const reviewButton = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review new meeting');
@@ -763,7 +812,7 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(node('p', { class: 'private-text' }, record.title),
             node('p', {}, `Current meeting: ${roomLabel(place)} · ${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
             node('p', { class: 'form-text' },
-                'The current reservation stays in place until confirmation. Move this meeting to another room, another time, or both. Times use your browser’s timezone; meetings may last up to 31 days.'),
+                'The current meeting stays in place until confirmation. Change its room, time or online location. Online meetings require a retained online or hybrid offering. Times use your browser’s timezone; meetings may last up to 31 days.'),
             form, status, preview);
         form.addEventListener('submit', event => {
             event.preventDefault();
@@ -791,7 +840,9 @@ window.createWorkspaceScheduling = function (ui) {
                         ['Replacement', roomLabel(review.room), meetingTime(review.starts_at), meetingTime(review.ends_at)],
                     ], 'Meeting change review'),
                     node('p', { class: review.available ? 'form-text' : 'alert alert-warning', role: 'status' },
-                        review.available ? `No approved conflict at review. The replacement will be ${review.status}. Confirmation checks again and preserves the original meeting history.`
+                        review.available ? (review.room === null
+                            ? `The replacement will be online and ${review.status}. No room will be reserved; the original meeting stays in history.`
+                            : `No approved conflict at review. The replacement will be ${review.status}. Confirmation checks again and preserves the original meeting history.`)
                             : 'An approved booking overlaps the new meeting. Choose another room or time. The current reservation is unchanged.'),
                     button('Back to new meeting', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
                     button('Back to booking', () => booking(record.id, back)), confirm);

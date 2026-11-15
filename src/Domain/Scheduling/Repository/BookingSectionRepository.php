@@ -9,6 +9,7 @@ use Domain\Shared\ValueObject\EntityId;
 /** Published academic context, referenced by operational room reservations. */
 interface BookingSectionRepository
 {
+    public function lock(EntityId $section): void;
     /** Verify the selected offering; lock its section during booking confirmation.
      * @return array<string,string>
      */

@@ -26,9 +26,14 @@ final readonly class SqlBookingRepository implements BookingRepository
         $this->sql->lock('sis_rooms', $id->value, 'capacity');
     }
 
+    public function lockBooking(EntityId $id): void
+    {
+        $this->sql->lock('sis_bookings', $id->value, 'version');
+    }
+
     public function add(Booking $booking): void
     {
-        $this->sql->insert('sis_bookings', ['id' => $booking->id->value, 'room_id' => $booking->roomId->value,
+        $this->sql->insert('sis_bookings', ['id' => $booking->id->value, 'room_id' => $booking->roomId?->value,
             'owner_user_id' => $booking->ownerUserId->value, 'title' => $booking->title,
             'status' => $booking->status, 'version' => $booking->version,
             'category_id' => $booking->categoryId?->value,
@@ -38,7 +43,7 @@ final readonly class SqlBookingRepository implements BookingRepository
             $slot = $occurrence->time;
             $cancelledAt = $occurrence->cancelledAt?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
             $this->sql->insert('sis_booking_slots', ['id' => $occurrence->id->value,
-                'booking_id' => $booking->id->value, 'room_id' => $booking->roomId->value,
+                'booking_id' => $booking->id->value, 'room_id' => $booking->roomId?->value,
                 'starts_at' => $slot->startsAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
                 'ends_at' => $slot->endsAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
                 'cancelled_at' => $cancelledAt,
@@ -63,7 +68,7 @@ final readonly class SqlBookingRepository implements BookingRepository
 
         return new Booking(
             $id,
-            new EntityId($r['room_id']),
+            $r['room_id'] === null ? null : new EntityId($r['room_id']),
             new EntityId($r['owner_user_id']),
             $r['title'],
             $occurrences,
@@ -134,10 +139,12 @@ final readonly class SqlBookingRepository implements BookingRepository
         $q = $this->sql->quote(...);
         $changed = $this->sql->execute('UPDATE ' . $q('sis_booking_slots') . ' SET '
             . $q('cancelled_at') . ' = ?, ' . $q('cancelled_by') . ' = ? WHERE ' . $q('id')
-            . ' = ? AND ' . $q('booking_id') . ' = ? AND ' . $q('room_id') . ' = ? AND '
+            . ' = ? AND ' . $q('booking_id') . ' = ? AND ' . $q('room_id')
+            . ($booking->roomId === null ? ' IS NULL AND ' : ' = ? AND ')
             . $q('cancelled_at') . ' IS NULL', [
                 $cancelled->cancelledAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
-                $cancelled->cancelledBy->value, $occurrence->value, $booking->id->value, $booking->roomId->value,
+                $cancelled->cancelledBy->value, $occurrence->value, $booking->id->value,
+                ...($booking->roomId === null ? [] : [$booking->roomId->value]),
             ]);
         if ($changed !== 1) {
             throw new ConcurrentModificationException('The meeting changed.');

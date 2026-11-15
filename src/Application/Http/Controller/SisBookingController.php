@@ -29,7 +29,7 @@ final readonly class SisBookingController
     {
         $f = FormInput::from($request);
         return new JsonResponse($this->service->review(
-            $f->id('room_id'),
+            $f->optionalId('room_id'),
             $f->text('title'),
             $this->pattern($request),
             $f->optionalId('category_id'),
@@ -41,7 +41,7 @@ final readonly class SisBookingController
         $f = FormInput::from($request);
         $booking = $this->service->requestSeries(
             $f->id('id'),
-            $f->id('room_id'),
+            $f->optionalId('room_id'),
             $f->text('title'),
             $this->pattern($request),
             $f->text('revision', 64),
@@ -78,7 +78,7 @@ final readonly class SisBookingController
             $f->items('slots', 366)
         );
         $booking = $this->service->request(
-            $f->id('room_id'),
+            $f->optionalId('room_id'),
             $f->text('title'),
             $slots,
             $f->optionalId('category_id'),
@@ -119,7 +119,7 @@ final readonly class SisBookingController
         $context = $this->service->view(new EntityId($id));
         $booking = $context['booking'];
 
-        return new JsonResponse(['id' => $booking->id->value, 'room_id' => $booking->roomId->value,
+        return new JsonResponse(['id' => $booking->id->value, 'room_id' => $booking->roomId?->value,
             'title' => $booking->title, 'status' => $booking->status, 'version' => $booking->version,
             'category_id' => $booking->categoryId?->value, 'category' => $context['category'],
             'section' => $context['section'],
@@ -150,7 +150,7 @@ final readonly class SisBookingController
         return new JsonResponse($this->service->reviewReplacement(
             new EntityId($id),
             new EntityId($occurrence),
-            $f->id('room_id'),
+            $f->optionalId('room_id'),
             new TimeSlot($f->instant('starts_at'), $f->instant('ends_at')),
             $f->integer('version')
         ));
@@ -163,7 +163,7 @@ final readonly class SisBookingController
             new EntityId($id),
             new EntityId($occurrence),
             $f->id('id'),
-            $f->id('room_id'),
+            $f->optionalId('room_id'),
             new TimeSlot($f->instant('starts_at'), $f->instant('ends_at')),
             $f->integer('version'),
             $f->text('revision', 64)

@@ -511,6 +511,10 @@ h3 { font-size: .9rem; font-weight: 650; }
 .booking-category[data-tone="teal"] { background: #e4f4ef; color: #1b5745; }
 .booking-category[data-tone="amber"] { background: #fff3d7; color: #684700; }
 .booking-category[data-tone="purple"] { background: #efe8fa; color: #533078; }
+.booking-calendar-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.booking-calendar-filters > .mb-4 { margin-bottom: 0 !important; }
+.booking-calendar-filters > button { justify-self: start; align-self: end; }
+@media (max-width: 575px) { .booking-calendar-filters { grid-template-columns: minmax(0, 1fr); } }
 .booking-month-day [aria-current="date"] { border-bottom-width: 4px; }
 .booking-month-day .btn:focus-visible { outline: 3px solid #174f88; outline-offset: 2px; }
 @media (max-width: 575px) {

@@ -42,9 +42,14 @@ final readonly class BookingCalendarService
         ?EntityId $building = null,
         string $search = '',
         string $view = 'week',
-        ?EntityId $category = null
+        ?EntityId $category = null,
+        string $location = 'all'
     ): array {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
+        if (!in_array($location, ['all', 'room', 'online'], true)) {
+            throw new ValidationException([['field' => 'location',
+                'message' => 'Choose rooms, online or all locations.']]);
+        }
         if (
             !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 100
             || preg_match('/[\x00-\x1f\x7f]/', $search)
@@ -58,7 +63,7 @@ final readonly class BookingCalendarService
         $now = $this->clock->now();
         $period = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone(), $view);
         $window = new TimeSlot($period->startsAt, $period->endsAt);
-        $rows = $this->rooms->calendar($window, $building, $search, 501, $category);
+        $rows = $this->rooms->calendar($window, $building, $search, 501, $category, $location);
         $this->authorize($actor);
         if (count($rows) > 500) {
             throw new ValidationException([['field' => 'search',
@@ -68,7 +73,8 @@ final readonly class BookingCalendarService
         }
         $result = $period->summarize($rows);
         $this->authorize($actor);
-        return $result + ['today' => $now->format('Y-m-d'), 'search' => $search, 'category' => $selectedCategory,
+        return $result + ['today' => $now->format('Y-m-d'), 'search' => $search,
+            'category' => $selectedCategory, 'location' => $location,
             'building' => $selected === null ? null : ['id' => $selected->id->value,
                 'code' => $selected->code, 'name' => $selected->name]];
     }

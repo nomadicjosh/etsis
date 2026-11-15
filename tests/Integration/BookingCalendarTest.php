@@ -229,7 +229,7 @@ final class BookingCalendarTest extends TestCase
         }
         $f->access->staff = true;
         $rooms = $this->createMock(RoomRepository::class);
-        $rooms->expects(self::once())->method('calendar')->with(self::anything(), null, '', 501, null)
+        $rooms->expects(self::once())->method('calendar')->with(self::anything(), null, '', 501, null, 'all')
             ->willReturnCallback(static function () use ($f): array {
                 $f->access->staff = false;
                 return [];

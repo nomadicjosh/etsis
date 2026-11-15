@@ -42,26 +42,26 @@ final readonly class BookingService
 
     /** @param list<TimeSlot> $slots */
     public function request(
-        EntityId $room,
+        ?EntityId $room,
         string $title,
         array $slots,
         ?EntityId $category = null,
         ?EntityId $section = null
     ): Booking {
         $actor = $this->access->authenticatedUserId();
-        $booking = Booking::request(EntityId::generate(), $room, $actor, $title, $slots, $category);
-        return $this->transactions->run(function () use ($booking, $actor, $section): Booking {
-            $this->repository->lockRoom($booking->roomId);
-            $this->category($booking->categoryId, true);
-            $selected = $this->section($section, $booking->times(), true);
-            $booking = new Booking(
-                $booking->id,
-                $booking->roomId,
+        return $this->transactions->run(function () use ($room, $title, $slots, $category, $section, $actor): Booking {
+            $this->lockRequest($room, $section);
+            $this->category($category, true);
+            $selected = $this->section($section, $slots, true);
+            $this->location($room, $selected);
+            $booking = Booking::request(
+                EntityId::generate(),
+                $room,
                 $actor,
-                $booking->title,
-                $booking->occurrences,
-                categoryId: $booking->categoryId,
-                sectionPublicationId: $selected === null ? null : new EntityId($selected['publication_id'])
+                $title,
+                $slots,
+                $category,
+                $selected === null ? null : new EntityId($selected['publication_id'])
             );
             $this->repository->add($booking);
             $this->audit->record($actor, 'booking.requested', $booking->id);
@@ -84,7 +84,7 @@ final readonly class BookingService
 
     /** @return array<string,mixed> */
     public function review(
-        EntityId $room,
+        ?EntityId $room,
         string $title,
         BookingPattern $pattern,
         ?EntityId $category = null,
@@ -93,7 +93,6 @@ final readonly class BookingService
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $this->timezone($pattern);
         $slots = new BookingSeries()->pattern($pattern);
-        Booking::request(EntityId::generate(), $room, $actor, trim($title), $slots);
         $review = $this->seriesProposal($room, trim($title), $slots, $category, $section, false);
         $this->manager($actor);
         return $review + ['timezone' => $pattern->timezone->getName()];
@@ -101,7 +100,7 @@ final readonly class BookingService
 
     public function requestSeries(
         EntityId $id,
-        EntityId $room,
+        ?EntityId $room,
         string $title,
         BookingPattern $pattern,
         string $reviewedRevision,
@@ -110,19 +109,22 @@ final readonly class BookingService
     ): Booking {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $slots = new BookingSeries()->pattern($pattern);
-        $booking = Booking::request($id, $room, $actor, trim($title), $slots, $category);
+        $title = trim($title);
         return $this->transactions->run(function () use (
-            $booking,
+            $id,
+            $room,
+            $title,
+            $slots,
             $actor,
             $pattern,
             $reviewedRevision,
-            $section
+            $section,
+            $category
         ): Booking {
-            $this->repository->lockRoom($booking->roomId);
+            $this->lockRequest($room, $section);
             $this->manager($actor);
             try {
-                $existing = $this->repository->get($booking->id);
-
+                $existing = $this->repository->get($id);
             } catch (RecordNotFoundException) {
                 $existing = null;
             }
@@ -130,20 +132,20 @@ final readonly class BookingService
                 $originalSection = $existing->sectionPublicationId === null ? null
                     : $this->sections->describe($existing->sectionPublicationId);
                 $proposed = Booking::request(
-                    $booking->id,
-                    $booking->roomId,
+                    $id,
+                    $room,
                     $actor,
-                    $booking->title,
-                    $booking->times(),
-                    $booking->categoryId,
+                    $title,
+                    $slots,
+                    $category,
                     $existing->sectionPublicationId
                 );
                 if (
                     $existing->ownerUserId->value !== $actor->value
-                    || $existing->roomId->value !== $booking->roomId->value || $existing->title !== $booking->title
+                    || $existing->roomId?->value !== $room?->value || $existing->title !== $title
                     || ($originalSection['id'] ?? null) !== $section?->value
                     || !$this->repository->matchesRequest($proposed)
-                    || $this->instants($existing->times()) !== $this->instants($booking->times())
+                    || $this->instants($existing->times()) !== $this->instants($slots)
                 ) {
                     throw new ConcurrentModificationException('That identity already belongs to another request.');
                 }
@@ -151,32 +153,59 @@ final readonly class BookingService
                 return $existing;
             }
             $this->timezone($pattern);
-            $review = $this->seriesProposal(
-                $booking->roomId,
-                $booking->title,
-                $booking->times(),
-                $booking->categoryId,
-                $section,
-                true
-            );
+            $review = $this->seriesProposal($room, $title, $slots, $category, $section, true);
             if (!hash_equals($review['revision'], $reviewedRevision)) {
-                throw new ConcurrentModificationException('Room details or availability changed. Review again.');
+                throw new ConcurrentModificationException('Meeting details or availability changed. Review again.');
             }
-            $booking = new Booking(
-                $booking->id,
-                $booking->roomId,
+            $booking = Booking::request(
+                $id,
+                $room,
                 $actor,
-                $booking->title,
-                $booking->occurrences,
-                categoryId: $booking->categoryId,
-                sectionPublicationId: $review['section'] === null ? null
-                : new EntityId($review['section']['publication_id'])
+                $title,
+                $slots,
+                $category,
+                $review['section'] === null ? null : new EntityId($review['section']['publication_id'])
             );
             $this->repository->add($booking);
             $this->audit->record($actor, 'booking.requested', $booking->id);
             $this->manager($actor);
             return $booking;
         });
+    }
+
+    private function lockRequest(?EntityId $room, ?EntityId $section): void
+    {
+        if ($room !== null) {
+            $this->repository->lockRoom($room);
+        } elseif ($section !== null) {
+            $this->access->requirePermission('sis:scheduling:manage');
+            $this->sections->lock($section);
+        } else {
+            throw new ValidationException([['field' => 'room_id',
+                'message' => 'Choose a room, or link an online meeting to a published online/hybrid section.']]);
+        }
+    }
+
+    private function lockCurrent(Booking $booking): void
+    {
+        if ($booking->roomId === null) {
+            $this->repository->lockBooking($booking->id);
+        } else {
+            $this->repository->lockRoom($booking->roomId);
+        }
+    }
+
+    /** @param ?array<string,string> $selected */
+    private function location(?EntityId $room, ?array $selected): void
+    {
+        if (
+            $room === null
+            && ($selected === null || !in_array($selected['delivery_mode'], ['online', 'hybrid'], true))
+        ) {
+            throw new ValidationException([['field' => 'room_id',
+                'message' => 'An online meeting needs a published online or hybrid section.'
+                    . ' Otherwise choose a room.']]);
+        }
     }
 
     /** @return ?array<string,mixed> */
@@ -200,7 +229,7 @@ final readonly class BookingService
      * @return array<string,mixed>
      */
     private function seriesProposal(
-        EntityId $room,
+        ?EntityId $room,
         string $title,
         array $slots,
         ?EntityId $category,
@@ -209,6 +238,16 @@ final readonly class BookingService
     ): array {
         $selected = $this->category($category, $lock);
         $offering = $this->section($section, $slots, $lock);
+        $this->location($room, $offering);
+        Booking::request(
+            EntityId::generate(),
+            $room,
+            $this->access->authenticatedUserId(),
+            $title,
+            $slots,
+            $category,
+            $offering === null ? null : new EntityId($offering['publication_id'])
+        );
         $result = $this->proposal($room, $title, $slots);
         $result['category'] = $selected;
         $result['section'] = $offering;
@@ -263,10 +302,10 @@ final readonly class BookingService
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $initial = $this->get($id);
         return $this->transactions->run(function () use ($initial, $actor, $category, $version): Booking {
-            $this->repository->lockRoom($initial->roomId);
+            $this->lockCurrent($initial);
             $this->manager($actor);
             $current = $this->repository->get($initial->id);
-            if ($current->version !== $version || $current->roomId->value !== $initial->roomId->value) {
+            if ($current->version !== $version || $current->roomId?->value !== $initial->roomId?->value) {
                 throw new ConcurrentModificationException('Reload the booking before changing its category.');
             }
             if ($current->categoryId?->value !== $category?->value) {
@@ -285,23 +324,29 @@ final readonly class BookingService
      * @return array<string,mixed>
      * @throws JsonException
      */
-    private function proposal(EntityId $room, string $title, array $slots, ?EntityId $excludingOccurrence = null): array
-    {
-        $place = $this->rooms->get($room);
+    private function proposal(
+        ?EntityId $room,
+        string $title,
+        array $slots,
+        ?EntityId $excludingOccurrence = null
+    ): array {
+        $place = $room === null ? null : $this->rooms->get($room);
         $items = [];
         foreach ($slots as $slot) {
             $items[] = ['starts_at' => $slot->startsAt->format(DATE_ATOM),
                 'ends_at' => $slot->endsAt->format(DATE_ATOM), 'local_start' => $slot->startsAt->format('Y-m-d H:i P'),
                 'local_end' => $slot->endsAt->format('Y-m-d H:i P'),
-                'available' => !($excludingOccurrence === null ? $this->repository->conflicts($room, $slot)
+                'available' => $room === null || !($excludingOccurrence === null
+                    ? $this->repository->conflicts($room, $slot)
                     : $this->repository->conflictsExceptOccurrence($room, $slot, $excludingOccurrence))];
         }
-        return ['room' => ['id' => $room->value, 'code' => $place->code, 'name' => $place->name,
+        return ['room' => $place === null ? null : [
+            'id' => $place->id->value, 'code' => $place->code, 'name' => $place->name,
             'building_id' => $place->buildingId?->value, 'capacity' => $place->capacity],
             'items' => $items,
             'conflicts' => count(array_filter($items, static fn(array $s): bool => !$s['available'])),
-            'revision' => hash('sha256', json_encode([$room->value, $place->code, $place->name,
-                $place->buildingId?->value, $place->capacity, $title,
+            'revision' => hash('sha256', json_encode([$room?->value, $place?->code, $place?->name,
+                $place?->buildingId?->value, $place?->capacity, $title,
                 $this->instants($slots), array_column($items, 'available')], JSON_THROW_ON_ERROR))];
     }
 
@@ -343,10 +388,10 @@ final readonly class BookingService
 
         $initial = $this->repository->get($id);
         return $this->transactions->run(function () use ($id, $actor, $initial, $expectedVersion): Booking {
-            $this->repository->lockRoom($initial->roomId);
+            $this->lockCurrent($initial);
             $this->manager($actor);
             $booking = $this->repository->get($id);
-            if ($booking->roomId->value !== $initial->roomId->value) {
+            if ($booking->roomId?->value !== $initial->roomId?->value) {
                 throw new ConcurrentModificationException('The booking room changed.');
             }
             if ($expectedVersion !== null && $booking->version !== $expectedVersion) {
@@ -354,7 +399,7 @@ final readonly class BookingService
             }
             foreach ($booking->occurrences as $occurrence) {
                 if (
-                    $occurrence->cancelledAt === null
+                    $booking->roomId !== null && $occurrence->cancelledAt === null
                     && $this->repository->conflicts($booking->roomId, $occurrence->time, $booking->id)
                 ) {
                     throw new DomainException('A booking occurrence conflicts with an approved booking.');
@@ -374,9 +419,9 @@ final readonly class BookingService
         $booking = $this->get($id);
         $actor = $this->access->authenticatedUserId();
         $this->transactions->run(function () use ($booking, $actor, $expectedVersion): void {
-            $this->repository->lockRoom($booking->roomId);
+            $this->lockCurrent($booking);
             $latest = $this->repository->get($booking->id);
-            if ($latest->roomId->value !== $booking->roomId->value) {
+            if ($latest->roomId?->value !== $booking->roomId?->value) {
                 throw new ConcurrentModificationException('The booking room changed.');
             }
             $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
@@ -404,11 +449,11 @@ final readonly class BookingService
         $initial = $this->get($id);
         $actor = $this->access->authenticatedUserId();
         return $this->transactions->run(function () use ($initial, $actor, $occurrence, $expectedVersion): Booking {
-            $this->repository->lockRoom($initial->roomId);
+            $this->lockCurrent($initial);
             $latest = $this->repository->get($initial->id);
             $this->actor($actor);
             $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
-            if ($latest->roomId->value !== $initial->roomId->value) {
+            if ($latest->roomId?->value !== $initial->roomId?->value) {
                 throw new ConcurrentModificationException('The booking room changed.');
             }
             if ($latest->occurrence($occurrence)->cancelledAt !== null) {
@@ -444,7 +489,7 @@ final readonly class BookingService
     public function reviewReplacement(
         EntityId $id,
         EntityId $occurrence,
-        EntityId $room,
+        ?EntityId $room,
         TimeSlot $time,
         int $version
     ): array {
@@ -459,7 +504,7 @@ final readonly class BookingService
         EntityId $id,
         EntityId $occurrence,
         EntityId $replacementId,
-        EntityId $room,
+        ?EntityId $room,
         TimeSlot $time,
         int $version,
         string $revision
@@ -476,14 +521,22 @@ final readonly class BookingService
             $revision,
             $actor
         ): Booking {
-            $locks = [$initial->roomId->value => $initial->roomId, $room->value => $room];
+            $locks = [];
+            foreach ([$initial->roomId, $room] as $place) {
+                if ($place !== null) {
+                    $locks[$place->value] = $place;
+                }
+            }
             ksort($locks, SORT_STRING);
             foreach ($locks as $lock) {
                 $this->repository->lockRoom($lock);
             }
+            if ($initial->roomId === null) {
+                $this->repository->lockBooking($initial->id);
+            }
             $this->manager($actor);
             $current = $this->repository->get($initial->id);
-            if ($current->roomId->value !== $initial->roomId->value) {
+            if ($current->roomId?->value !== $initial->roomId?->value) {
                 throw new ConcurrentModificationException('The booking room changed.');
             }
             $source = $current->occurrence($occurrence);
@@ -498,7 +551,7 @@ final readonly class BookingService
                     $links['source_occurrence_id'] !== $occurrence->value
                     || $source->cancelledBy?->value !== $actor->value
                     || $existing->ownerUserId->value !== $current->ownerUserId->value
-                    || $existing->roomId->value !== $room->value || $existing->title !== $current->title
+                    || $existing->roomId?->value !== $room?->value || $existing->title !== $current->title
                     || $this->instants($existing->times()) !== $this->instants([$time])
                 ) {
                     throw new ConcurrentModificationException('That identity belongs to another reschedule request.');
@@ -539,7 +592,7 @@ final readonly class BookingService
     private function replacementProposal(
         Booking $booking,
         EntityId $occurrence,
-        EntityId $room,
+        ?EntityId $room,
         TimeSlot $time,
         int $version,
         EntityId $actor
@@ -548,21 +601,28 @@ final readonly class BookingService
             throw new ConcurrentModificationException('Reload the booking before rescheduling.');
         }
         $source = $booking->occurrence($occurrence);
-        if ($booking->sectionPublicationId !== null) {
-            $this->sectionDates($this->sections->describe($booking->sectionPublicationId), [$time]);
+        $offering = $booking->sectionPublicationId === null ? null
+        : $this->sections->describe($booking->sectionPublicationId);
+        $this->location($room, $offering);
+        if ($offering !== null) {
+            $this->sectionDates($offering, [$time]);
         }
         if ($source->cancelledAt !== null || $booking->status === 'cancelled') {
             throw new ConcurrentModificationException('This meeting is no longer active. Reload the booking.');
         }
-        if ($booking->roomId->value === $room->value && $this->instants([$source->time]) === $this->instants([$time])) {
+        if (
+            $booking->roomId?->value === $room?->value
+            && $this->instants([$source->time]) === $this->instants([$time])
+        ) {
             throw new ValidationException([['field' => 'starts_at', 'message' => 'Choose a different room or time.']]);
         }
         if ($time->endsAt->getTimestamp() - $time->startsAt->getTimestamp() > 31 * 86400) {
             throw new ValidationException([['field' => 'ends_at', 'message' => 'Use a meeting of 31 days or fewer.']]);
         }
-        $oldRoom = $this->rooms->get($booking->roomId);
+        $oldRoom = $booking->roomId === null ? null : $this->rooms->get($booking->roomId);
         $review = $this->proposal($room, $booking->title, [$time], $occurrence);
-        $before = ['id' => $oldRoom->id->value, 'code' => $oldRoom->code, 'name' => $oldRoom->name,
+        $before = $oldRoom === null ? null : [
+            'id' => $oldRoom->id->value, 'code' => $oldRoom->code, 'name' => $oldRoom->name,
             'building_id' => $oldRoom->buildingId?->value, 'capacity' => $oldRoom->capacity];
         $sourceTimes = $this->instants([$source->time])[0];
         return ['room' => $review['room'], 'source_room' => $before, 'title' => $booking->title,

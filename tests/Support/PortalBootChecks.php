@@ -3305,6 +3305,7 @@ $bindingSection = new \Domain\Registration\Section(
     true,
     true,
     new \Domain\Finance\ValueObject\Money(0, "USD"),
+    \Domain\Registration\Enum\DeliveryMode::Hybrid,
 );
 $sis->registration->addSection($bindingSection);
 $bindingPath = "/sis/sections/" . $bindingSection->id->value . "/course-definition/";
@@ -3415,6 +3416,40 @@ if ($classContext->getStatusCode() !== 200 || $classRequest->getStatusCode() !==
     || $sis->sql->one('sis_bookings', ['id' => $classBooking['id']])['section_publication_id']
         !== $sectionPublicationReview['operation_id']) {
     throw new RuntimeException('Course-section room planning failed to retain its published context privately.');
+}
+$onlineResponse = $teachingPost('/sis/bookings/', [
+    'room_id' => null, 'section_id' => $bindingSection->id->value, 'title' => 'Fictional online class',
+    'slots' => [['starts_at' => '2026-08-24T19:00:00Z', 'ends_at' => '2026-08-24T20:00:00Z']],
+]);
+$onlineId = json_decode((string) $onlineResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'] ?? null;
+if ($onlineResponse->getStatusCode() !== 201 || $onlineId === null
+    || $teachingPost('/sis/bookings/' . $onlineId . '/approve/', ['version' => 0])->getStatusCode() !== 200) {
+    throw new RuntimeException('Room-free class requests or approvals failed through the actual provider.');
+}
+$onlineRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/bookings/' . $onlineId . '/'
+)));
+$online = json_decode((string) $onlineRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$onlineCalendarResponse = $teachingPost('/sis/calendar/view/', ['date' => '2026-08-24', 'location' => 'online']);
+$onlineCalendar = json_decode((string) $onlineCalendarResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($onlineRead->getStatusCode() !== 200 || $online['room_id'] !== null
+    || $onlineCalendarResponse->getStatusCode() !== 200 || count($onlineCalendar['items'] ?? []) !== 1
+    || $onlineCalendar['items'][0]['room_id'] !== null
+    || !str_contains($onlineCalendarResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $onlineCalendarResponse->hasHeader('phpdebugbar-id')
+    || $sis->sql->rows('sis_history_events') !== $classEvents) {
+    throw new RuntimeException('The online calendar lost its minimized, private read-only boundary.');
+}
+$onlineMovePath = '/sis/bookings/' . $onlineId . '/occurrences/' . $online['occurrences'][0]['id'] . '/reschedule/';
+$onlineMoveInput = ['room_id' => $roomId, 'starts_at' => '2026-08-25T19:00:00Z',
+    'ends_at' => '2026-08-25T20:00:00Z', 'version' => 1];
+$onlineMoveReviewResponse = $teachingPost($onlineMovePath . 'review/', $onlineMoveInput);
+$onlineMoveReview = json_decode((string) $onlineMoveReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($onlineMoveReviewResponse->getStatusCode() !== 200 || $onlineMoveReview['source_room'] !== null
+    || $teachingPost($onlineMovePath . 'confirm/', $onlineMoveInput + [
+        'id' => $onlineMoveReview['new_id'], 'revision' => $onlineMoveReview['revision'],
+    ])->getStatusCode() !== 201 || $sis->sql->rows('sis_history_events') !== $classEvents) {
+    throw new RuntimeException('An online-to-room move failed to preserve its protected section and booking history.');
 }
 $sectionChoicesResponse = $teachingPost('/sis/ui/data/bookingsections/', []);
 $sectionChoices = json_decode((string) $sectionChoicesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);

@@ -58,7 +58,7 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
     await expect(page.locator('#drawer-body')).toContainText('Capacity: 35');
     expect(calls.find(item => item.path.endsWith('/edit/'))?.data).toMatchObject({ code: 'LIBRARY.102', capacity: 35, revision: 'fictional-room-revision' });
     await page.getByRole('button', { name: 'Request this room' }).click();
-    await page.getByLabel('What is the space for?').fill('Fictional seminar');
+    await page.getByLabel('Meeting purpose').fill('Fictional seminar');
     await page.getByLabel(/^Starts/).fill('2026-08-11T10:00');
     await page.getByLabel(/^Ends/).fill('2026-08-11T09:00');
     const checksBefore = calls.filter(item => item.path.endsWith('/availability/')).length;
@@ -69,7 +69,7 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
     await page.getByLabel(/^Ends/).fill('2026-08-11T10:00');
     await page.getByRole('button', { name: 'Check availability', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('An approved booking overlaps');
-    await page.getByRole('button', { name: 'Submit space request' }).click();
+    await page.getByRole('button', { name: 'Submit meeting request' }).click();
     await expect(page.getByRole('button', { name: 'Approve space request', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Approve space request', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm space approval', exact: true }).click();
@@ -136,14 +136,14 @@ async function recurringFixture(page) {
     await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
     await page.locator('#directory-create').click();
     await page.getByRole('combobox', { name: 'Room', exact: true }).selectOption(room);
-    await page.getByLabel(/^What is the space for/).fill('<script>Fictional seminar</script>');
+    await page.getByLabel(/^Meeting purpose/).fill('<script>Fictional seminar</script>');
     await page.getByRole('button', { name: 'Plan recurring meetings', exact: true }).click();
     return state;
 }
 
 test('recurring room requests review paged meetings, preserve drafts after a stale check and retain explicit choices', async ({ page }) => {
     const state = await recurringFixture(page);
-    await expect(page.getByLabel(/^What is the space for/)).toHaveValue('<script>Fictional seminar</script>');
+    await expect(page.getByLabel(/^Meeting purpose/)).toHaveValue('<script>Fictional seminar</script>');
     await page.getByLabel('First date', { exact: false }).fill('2026-03-02');
     await page.getByLabel('Last date', { exact: false }).fill('2026-08-12');
     await page.getByLabel(/^Meeting starts/).fill('10:00');

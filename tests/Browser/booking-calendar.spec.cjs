@@ -4,7 +4,7 @@ const id = n => String(n).padStart(26, '0');
 
 async function fixture(page) {
     const state = { calls: [], errors: [], approved: false, release: null, delay: false,
-        delayMonth: false, monthOverflow: false };
+        delayMonth: false, monthOverflow: false, includeOnline: false };
     const library = { id: id(8), code: 'LIB', name: 'Campus library' };
     const science = { id: id(9), code: 'SCI', name: 'Science building' };
     const category = { id: id(7), code: 'COURSE', name: 'Course sections', tone: 'blue', active: true, version: 0 };
@@ -17,7 +17,11 @@ async function fixture(page) {
         building_id: library.id, building_code: library.code, building_name: library.name })),
         { id: id(299), booking_id: id(199), title: 'Fictional overnight meeting', status: 'approved',
             starts_at: '2026-08-10T23:00:00-07:00', ends_at: '2026-08-11T01:00:00-07:00', room_id: rooms[0].id,
-            room_code: rooms[0].code, room_name: rooms[0].name, building_id: library.id, building_code: library.code, building_name: library.name }];
+            room_code: rooms[0].code, room_name: rooms[0].name, building_id: library.id, building_code: library.code, building_name: library.name },
+        ...(state.includeOnline ? [{ id: id(298), booking_id: id(198), title: 'Fictional online Algebra', status: 'approved',
+            starts_at: '2026-08-10T10:00:00-07:00', ends_at: '2026-08-10T11:00:00-07:00', room_id: null,
+            room_code: null, room_name: null, building_id: null, building_code: null, building_name: null,
+            section_code: 'MATH.101.26FA.A', section_term_code: '26/FA' }] : [])];
     const week = data => {
         const view = data.view || 'week';
         const monday = new Date(`${data.date || '2026-08-10'}T12:00:00Z`);
@@ -29,9 +33,12 @@ async function fixture(page) {
         if (view === 'month') previous.setUTCMonth(previous.getUTCMonth() - 1);
         else previous.setUTCDate(previous.getUTCDate() - 7);
         const dates = Array.from({ length: length + 1 }, (_, n) => new Date(monday.getTime() + n * 86400000).toISOString().slice(0, 10));
-        const items = data.building_id === library.id && !data.search?.includes('missing')
+        const items = (data.building_id === library.id || (!data.building_id && data.location === 'online'))
+            && !data.search?.includes('missing')
             ? allItems().filter(item => new Date(item.starts_at) < new Date(`${dates[length]}T00:00:00-07:00`)
-                && new Date(item.ends_at) > new Date(`${start}T00:00:00-07:00`)) : [];
+                && new Date(item.ends_at) > new Date(`${start}T00:00:00-07:00`)
+                && (!data.building_id || item.building_id === data.building_id)
+                && (data.location === 'online' ? !item.room_id : data.location === 'room' ? !!item.room_id : true)) : [];
         const days = dates.slice(0, length).map((date, n) => {
             const a = new Date(`${date}T00:00:00-07:00`), b = new Date(`${dates[n + 1]}T00:00:00-07:00`);
             const entries = items.filter(item => new Date(item.starts_at) < b && new Date(item.ends_at) > a);
@@ -57,14 +64,14 @@ async function fixture(page) {
         else if (path === '/sis/ui/data/bookingcategories/') result = { items: [category], next_after: null };
         else if (path === '/sis/calendar/context/') result = { today: '2026-08-10', timezone: 'America/Los_Angeles' };
         else if (path === '/sis/calendar/view/') {
-            if (!data.building_id || (state.monthOverflow && data.view === 'month'))
+            if ((!data.building_id && data.location !== 'online') || (state.monthOverflow && data.view === 'month'))
                 return route.fulfill({ status: 422, json: { errors: [{ field: 'search',
                 message: 'More than 500 meetings match. Choose a building or narrow your search for a complete week.' }] } });
             result = week(data);
             if ((state.delay && data.date === '2026-08-17') || (state.delayMonth && data.view === 'month'))
                 await new Promise(resolve => { state.release = resolve; });
         } else if (path.startsWith('/sis/bookings/') && path.endsWith('/approve/')) state.approved = true;
-        else if (path === `/sis/bookings/${id(100)}/` || path === `/sis/bookings/${id(199)}/`) {
+        else if ([id(100), id(199), id(198)].some(booking => path === `/sis/bookings/${booking}/`)) {
             const item = allItems().find(item => path === `/sis/bookings/${item.booking_id}/`);
             result = { id: item.booking_id, room_id: item.room_id, title: item.title, status: item.status,
                 version: state.approved ? 1 : 0, source_booking_id: null, occurrences: [{ id: item.id,
@@ -215,5 +222,27 @@ test('switching views ignores a delayed month and recovers from an oversized mon
     await expect(page.getByRole('button', { name: 'Next month', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Week', exact: true }).click();
     await expect(results).toContainText('1 approved and 25 requested occurrences this week.');
+    expect(state.errors).toEqual([]);
+});
+
+test('online location filtering shows class context without room requests and survives a connected booking read', async ({ page }) => {
+    const state = await fixture(page);
+    state.includeOnline = true;
+    const results = page.locator('#directory-results');
+    await page.getByRole('combobox', { name: 'Meeting location', exact: true }).selectOption('online');
+    await page.getByRole('button', { name: 'View week', exact: true }).click();
+    await expect(results).toContainText('No requested or approved bookings for this day.');
+    await page.getByRole('combobox', { name: 'Building', exact: true }).selectOption('');
+    await page.getByRole('button', { name: 'View week', exact: true }).click();
+    await expect(results.locator('tbody tr')).toHaveCount(1);
+    await expect(results).toContainText('Online · No room');
+    await expect(results).toContainText('MATH.101.26FA.A · 26/FA');
+    await page.getByRole('button', { name: 'Fictional online Algebra', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'View room agenda', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to calendar', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Meeting location', exact: true })).toHaveValue('online');
+    await expect(results.locator('tbody tr')).toHaveCount(1);
+    expect(state.calls.some(call => /\/sis\/rooms\/(null|undefined)\//.test(call.path))).toBe(false);
+    expect(state.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(state.errors).toEqual([]);
 });

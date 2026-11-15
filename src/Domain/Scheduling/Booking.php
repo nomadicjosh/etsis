@@ -15,7 +15,7 @@ final readonly class Booking
     /** @param list<BookingOccurrence> $occurrences */
     public function __construct(
         public EntityId $id,
-        public EntityId $roomId,
+        public ?EntityId $roomId,
         public EntityId $ownerUserId,
         public string $title,
         public array $occurrences,
@@ -28,6 +28,7 @@ final readonly class Booking
             trim($title) === '' || !mb_check_encoding($title, 'UTF-8') || mb_strlen($title) > 191
             || preg_match('/[\x00-\x1f\x7f]/', $title) || count($occurrences) < 1 || count($occurrences) > 366
             || !in_array($status, ['requested', 'approved', 'cancelled'], true)
+            || ($roomId === null && $sectionPublicationId === null)
         ) {
             throw new InvalidArgumentException('A booking requires a title, bounded occurrences and a valid state.');
         }
@@ -48,7 +49,7 @@ final readonly class Booking
     /** @param list<TimeSlot> $times */
     public static function request(
         EntityId $id,
-        EntityId $room,
+        ?EntityId $room,
         EntityId $owner,
         string $title,
         array $times,
@@ -155,7 +156,7 @@ final readonly class Booking
             $slot->endsAt->setTimezone($utc)->format(DATE_ATOM),
         ], $this->times());
         sort($times);
-        $facts = [$this->id->value, $this->ownerUserId->value, $this->roomId->value,
+        $facts = [$this->id->value, $this->ownerUserId->value, $this->roomId?->value,
             $this->title, $times, $this->categoryId?->value, $this->sectionPublicationId?->value];
         return hash('sha256', json_encode($facts, JSON_THROW_ON_ERROR));
     }

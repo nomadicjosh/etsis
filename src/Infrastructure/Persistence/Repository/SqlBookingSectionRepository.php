@@ -37,6 +37,11 @@ final readonly class SqlBookingSectionRepository implements BookingSectionReposi
         return $this->details($selected);
     }
 
+    public function lock(EntityId $section): void
+    {
+        $this->sql->lock('sis_sections', $section->value, 'capacity');
+    }
+
     public function describe(EntityId $publication): array
     {
         return $this->details($this->versions->find($publication) ?? throw new CorruptHistoryException());

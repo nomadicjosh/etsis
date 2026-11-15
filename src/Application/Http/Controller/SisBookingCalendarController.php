@@ -29,7 +29,8 @@ final readonly class SisBookingCalendarController
             $f->optionalId('building_id'),
             $f->search('search'),
             $f->optionalText('view', 5) ?? 'week',
-            $f->optionalId('category_id')
+            $f->optionalId('category_id'),
+            $f->optionalText('location', 6) ?? 'all'
         ));
     }
 }

@@ -21,6 +21,7 @@ interface RoomRepository
         ?EntityId $building,
         string $search,
         int $limit,
-        ?EntityId $category = null
+        ?EntityId $category = null,
+        string $location = 'all'
     ): array;
 }

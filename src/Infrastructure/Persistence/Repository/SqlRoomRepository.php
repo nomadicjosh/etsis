@@ -72,9 +72,10 @@ final readonly class SqlRoomRepository implements RoomRepository
         ?EntityId $building,
         string $search,
         int $limit,
-        ?EntityId $category = null
+        ?EntityId $category = null,
+        string $location = 'all'
     ): array {
-        return $this->meetings($window, null, null, $building, $search, $limit, $category);
+        return $this->meetings($window, null, null, $building, $search, $limit, $category, $location);
     }
 
     /** @return list<array<string,mixed>> */
@@ -85,7 +86,8 @@ final readonly class SqlRoomRepository implements RoomRepository
         ?EntityId $building,
         string $search,
         int $limit,
-        ?EntityId $category = null
+        ?EntityId $category = null,
+        string $location = 'all'
     ): array {
         $q = $this->sql->quote(...);
         $utc = new DateTimeZone('UTC');
@@ -94,6 +96,12 @@ final readonly class SqlRoomRepository implements RoomRepository
         $cursor = '';
         $parameters = ['requested', 'approved', $end, $start];
         $filters = '';
+        if (!in_array($location, ['all', 'room', 'online'], true)) {
+            throw new InvalidArgumentException('Choose a known meeting location.');
+        }
+        if ($location !== 'all') {
+            $filters .= ' AND s.' . $q('room_id') . ($location === 'online' ? ' IS NULL' : ' IS NOT NULL');
+        }
         if ($category !== null) {
             $filters .= ' AND b.' . $q('category_id') . ' = ?';
             $parameters[] = $category->value;
@@ -146,7 +154,7 @@ final readonly class SqlRoomRepository implements RoomRepository
             // Category and offering labels are joined once; calendar rows never replay each section.
             . $q('sis_booking_slots') . ' s JOIN ' . $q('sis_bookings') . ' b ON b.' . $q('id')
             . ' = s.' . $q('booking_id')
-            . ' JOIN ' . $q('sis_rooms') . ' r ON r.' . $q('id') . ' = s.' . $q('room_id')
+            . ' LEFT JOIN ' . $q('sis_rooms') . ' r ON r.' . $q('id') . ' = s.' . $q('room_id')
             . ' LEFT JOIN ' . $q('sis_buildings') . ' building ON building.' . $q('id') . ' = r.' . $q('building_id')
             . ' LEFT JOIN ' . $q('sis_booking_categories') . ' category ON category.' . $q('id')
             . ' = b.' . $q('category_id')
