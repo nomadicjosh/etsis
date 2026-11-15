@@ -622,5 +622,52 @@ $gradeBody['maximum_minor'] = 10;
 if ($app->router->match($gradePost->withParsedBody($gradeBody))->getStatusCode() !== 422) {
     throw new RuntimeException('The pay grade form accepted a reversed range.');
 }
+// Dated employee agreements resolve through the same private, CSRF-protected routing stack.
+$positionId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$positionBody = ['id' => $positionId, 'job_id' => $jobId, 'job_version' => 0, 'grade_version' => 0,
+    'valid_from' => '2026-09-01', 'valid_through' => null, 'rate_minor' => 2700,
+    'weekly_minutes' => 1800, 'reason' => 'Fictional private position agreement'];
+$positionBase = '/sis/employees/' . $employeeId . '/positions/';
+$positionPost = $jobPost->withUri(new \Laminas\Diactoros\Uri($positionBase . 'assign/'))->withParsedBody($positionBody);
+if ($app->router->match($positionPost->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403
+    || $sis->sql->rows('sis_employee_positions') !== []) {
+    throw new RuntimeException('Position assignments bypassed CSRF.');
+}
+$positionSaved = $app->router->match($positionPost);
+if ($positionSaved->getStatusCode() !== 201
+    || json_decode((string) $positionSaved->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'] !== $positionId) {
+    throw new RuntimeException('Position assignment failed through the real providers.');
+}
+$positionGet = $employeeGet->withUri(new \Laminas\Diactoros\Uri($positionBase . $positionId . '/'));
+$positionRead = $app->router->match($positionGet);
+$positionDetail = json_decode((string) $positionRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($positionRead->getStatusCode() !== 200 || $positionDetail['rate_minor'] !== 2700
+    || !str_contains($positionRead->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $positionRead->getBody(), 'phpdebugbar')
+    || str_contains((string) $positionRead->getBody(), 'Fictional private position agreement')) {
+    throw new RuntimeException('Position detail lost its protected private boundary.');
+}
+$positionEnd = $positionPost->withUri(new \Laminas\Diactoros\Uri($positionBase . $positionId . '/end/'))
+    ->withParsedBody(['version' => 1, 'valid_through' => '2027-06-30', 'reason' => 'Fictional closure']);
+if ($app->router->match($positionEnd)->getStatusCode() !== 200) {
+    throw new RuntimeException('The assignment end-date route failed.');
+}
+$positionVoid = $positionPost->withUri(new \Laminas\Diactoros\Uri($positionBase . $positionId . '/void/'))
+    ->withParsedBody(['version' => 2, 'voided' => true, 'reason' => 'Fictional correction']);
+if ($app->router->match($positionVoid)->getStatusCode() !== 200) {
+    throw new RuntimeException('The assignment correction route failed.');
+}
+$positionPage = $positionPost->withUri(new \Laminas\Diactoros\Uri($positionBase . 'page/'))->withParsedBody([]);
+$positionPageResponse = $app->router->match($positionPage);
+if ($positionPageResponse->getStatusCode() !== 200
+    || count(json_decode((string) $positionPageResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)['items']) !== 1) {
+    throw new RuntimeException('The position paging route failed.');
+}
+$sis->access->grants = [];
+foreach ([$positionGet, $positionPost, $positionPage, $positionEnd, $positionVoid] as $deniedPosition) {
+    if ($app->router->match($deniedPosition)->getStatusCode() !== 403) {
+        throw new RuntimeException('Employment ownership granted HR compensation authority.');
+    }
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

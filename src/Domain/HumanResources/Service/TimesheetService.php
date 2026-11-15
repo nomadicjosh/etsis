@@ -180,6 +180,35 @@ final readonly class TimesheetService
     }
 
     /** @template T
+     * @param \Closure(Employee,EntityId):T $operation
+     * @return T
+     */
+    public function maintainEmployee(EntityId $id, \Closure $operation): mixed
+    {
+        $actor = $this->access->requirePermission('sis:hr:manage');
+        $initial = $this->repository->employee($id);
+        return $this->maintain($initial->personId, $actor, function () use ($id, $initial, $actor, $operation): mixed {
+            $this->repository->lockEmployee($id);
+            $current = $this->repository->employee($id);
+            if ($current->personId->value !== $initial->personId->value) {
+                throw new AccessDeniedException('The employment person changed.');
+            }
+            $this->history->inspect($current);
+            return $operation($current, $actor);
+        });
+    }
+
+    /** Internal companion for private child reads; repeats authorization without replaying the parent again. */
+    public function recheckEmployee(Employee $expected, EntityId $actor): void
+    {
+        $current = $this->repository->employee($expected->id);
+        $this->authorizeRead($current, $actor);
+        if (EmploymentFacts::of($current) !== EmploymentFacts::of($expected)) {
+            throw new ConcurrentModificationException('Reload employment before continuing.');
+        }
+    }
+
+    /** @template T
      * @param \Closure():T $operation
      * @return T
      */

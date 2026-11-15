@@ -33,12 +33,17 @@ final class DefinitionRules
     }
     public static function units(string $currency, string $basis): void
     {
-        if (preg_match('/^[A-Z]{3}$/D', $currency) !== 1 || !new ISOCurrencies()->contains(new Currency($currency))) {
-            self::invalid('currency', 'Choose a supported ISO currency.');
-        }
+        self::precision($currency);
         if (!in_array($basis, ['hourly', 'annual'], true)) {
             self::invalid('basis', 'Choose an hourly or annual rate.');
         }
+    }
+    public static function precision(string $currency): int
+    {
+        if (preg_match('/^[A-Z]{3}$/D', $currency) !== 1 || !new ISOCurrencies()->contains(new Currency($currency))) {
+            self::invalid('currency', 'Choose a supported ISO currency.');
+        }
+        return new ISOCurrencies()->subunitFor(new Currency($currency));
     }
     public static function amount(?int $value, string $field): void
     {

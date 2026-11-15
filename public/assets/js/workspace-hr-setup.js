@@ -9,13 +9,14 @@ window.createWorkspaceHrSetup = function (ui) {
         type: 'button', class: `btn ${style}`, onclick: event => task(callback, event.currentTarget),
     }, label);
     const digits = code => currencies.find(item => item.code === code)?.digits ?? 2;
-    const amountText = (minor, code) => minor == null ? '' : (minor / 10 ** digits(code)).toFixed(digits(code));
-    const amount = (minor, code) => minor == null ? 'Not set' : new Intl.NumberFormat(undefined, {
-        style: 'currency', currency: code,
-    }).format(minor / 10 ** digits(code));
-    const minor = (value, code, control) => {
+    const textAmount = (minor, places) => minor == null ? '' : (minor / 10 ** places).toFixed(places);
+    const amountText = (minor, code) => textAmount(minor, digits(code));
+    const formatAmount = (minor, code, places) => minor == null ? 'Not set' : new Intl.NumberFormat(undefined, {
+        style: 'currency', currency: code, minimumFractionDigits: places, maximumFractionDigits: places,
+    }).format(minor / 10 ** places);
+    const amount = (minor, code) => formatAmount(minor, code, digits(code));
+    const parseAmount = (value, places, control) => {
         if (value.trim() === '') return null;
-        const places = digits(code);
         if (!new RegExp(`^[0-9]+(?:\\.[0-9]{1,${Math.max(1, places)}})?$`).test(value)
             || (places === 0 && value.includes('.'))) {
             control.setCustomValidity(`Use an amount with at most ${places} decimal places.`);
@@ -29,6 +30,7 @@ window.createWorkspaceHrSetup = function (ui) {
         }
         return result;
     };
+    const minor = (value, code, control) => parseAmount(value, digits(code), control);
     async function library(kind = 'jobs', search = '', after = null, stack = []) {
         const body = openDrawer('HR setup', title(kind));
         body.append(button('Refresh setup', () => library(kind, search, after, stack)));
@@ -218,5 +220,5 @@ window.createWorkspaceHrSetup = function (ui) {
         });
         body.append(form);
     }
-    return { library };
+    return { library, amounts: { text: textAmount, format: formatAmount, parse: parseAmount } };
 };

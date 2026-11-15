@@ -909,6 +909,17 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/employees/", [SisTimesheetController::class, "employee"])
         ->name("sis.timesheet.employee");
+    $positions = \Application\Http\Controller\SisPositionController::class;
+    $router->map(['POST'], '/sis/employees/{employee}/positions/page/', [$positions, 'page'])
+        ->name('sis.position.page');
+    $router->map(['POST'], '/sis/employees/{employee}/positions/assign/', [$positions, 'assign'])
+        ->name('sis.position.assign');
+    $router->map(['GET'], '/sis/employees/{employee}/positions/{id}/', [$positions, 'get'])
+        ->name('sis.position.get');
+    $router->map(['POST'], '/sis/employees/{employee}/positions/{id}/end/', [$positions, 'end'])
+        ->name('sis.position.end');
+    $router->map(['POST'], '/sis/employees/{employee}/positions/{id}/void/', [$positions, 'void'])
+        ->name('sis.position.void');
     $router->map(['POST'], '/sis/hr/{kind}/page/', [\Application\Http\Controller\SisHrLibraryController::class, 'page'])
         ->name('sis.hr.library.page');
     $router->map(['POST'], '/sis/hr/{kind}/save/', [\Application\Http\Controller\SisHrLibraryController::class, 'save'])

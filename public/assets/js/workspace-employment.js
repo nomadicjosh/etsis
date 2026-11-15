@@ -52,6 +52,7 @@ window.createWorkspaceEmployment = function (ui) {
             );
         if (can("sis:hr:manage") && can("sis:audit:read"))
             body.append(button("Employment change history", () => history(record)));
+        if (can("sis:hr:manage")) body.append(button("Position assignments", () => ui.positions().page(id)));
         body.append(
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
             badge(record.active ? "Active" : "Inactive"),

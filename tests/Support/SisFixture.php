@@ -826,6 +826,25 @@ final class SisFixture
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
         ), $this->clock);
     }
+    public function positions(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\HumanResources\Repository\PositionRepository $rows = null,
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null
+    ): \Domain\HumanResources\Service\PositionService {
+        return new \Domain\HumanResources\Service\PositionService(
+            $this->timesheetService(),
+            $rows ?? new \Infrastructure\Persistence\Repository\SqlPositionRepository($this->sql, $this->dropCipher),
+            new \Infrastructure\Persistence\Repository\SqlHrLibraryRepository($this->sql),
+            $history ?? new \Infrastructure\EventSourcing\SqlHistoricalEventStore($this->sql, $this->transactions,
+                $this->clock, new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder())),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()),
+            $this->access,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Infrastructure\Persistence\SqlActorDirectory($this->sql)
+        );
+    }
     public function hrLibrary(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\HumanResources\Repository\HrLibraryRepository $rows = null,
