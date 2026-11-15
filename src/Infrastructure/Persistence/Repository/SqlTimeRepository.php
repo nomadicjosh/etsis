@@ -41,7 +41,16 @@ final readonly class SqlTimeRepository implements TimeRepository
     {
         $row = $this->sql->one('sis_employees', ['id' => $id->value]);
 
-        return new Employee($id, new EntityId($row['person_id']), $row['job_title'], (bool) $row['active']);
+        if (!in_array((string) $row['active'], ['0', '1'], true)) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        return new Employee($id, new EntityId($row['person_id']), $row['job_title'], (int) $row['active'] === 1);
+    }
+
+    public function employeeForPerson(EntityId $person): ?Employee
+    {
+        $row = $this->sql->rows('sis_employees', ['person_id' => $person->value], 1)[0] ?? null;
+        return $row === null ? null : $this->employee(new EntityId($row['id']));
     }
 
     public function employeePerson(EntityId $employee): EntityId
@@ -56,11 +65,14 @@ final readonly class SqlTimeRepository implements TimeRepository
 
     public function saveEmployee(Employee $employee): void
     {
-        $this->sql->update(
+        $updated = $this->sql->update(
             'sis_employees',
             ['job_title' => $employee->jobTitle, 'active' => (int) $employee->active],
             ['id' => $employee->id->value]
         );
+        if ($updated !== 1) {
+            throw new ConcurrentModificationException('Reload employment before editing.');
+        }
     }
 
     public function entries(EntityId $employee, ?EntityId $after, int $limit): array

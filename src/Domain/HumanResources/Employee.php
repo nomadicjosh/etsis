@@ -15,7 +15,10 @@ final readonly class Employee
         public string $jobTitle,
         public bool $active,
     ) {
-        if (trim($jobTitle) === '' || mb_strlen($jobTitle) > 191 || preg_match('/[\x00-\x1F\x7F]/', $jobTitle)) {
+        if (
+            !mb_check_encoding($jobTitle, 'UTF-8') || trim($jobTitle) === '' || mb_strlen($jobTitle) > 191
+            || preg_match('/[\x00-\x1F\x7F]/', $jobTitle)
+        ) {
             throw new ValidationException([['field' => 'job_title',
                 'message' => 'Enter a job title of up to 191 characters.']]);
         }

@@ -309,13 +309,7 @@ final class PersonAccountFoundationTest extends TestCase
     {
         $s = new SisFixture();
         $p = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Colleague', 'colleague@example.invalid');
-        $hr = new \Domain\HumanResources\Service\TimesheetService(
-            new \Infrastructure\Persistence\Repository\SqlTimeRepository($s->sql),
-            $s->admissions,
-            $s->access,
-            $s->transactions,
-            $s->audit
-        );
+        $hr = $s->timesheetService();
         $employee = $hr->addEmployee($p->id, 'Fictional analyst');
         $app = $s->submissionService()->apply(EntityId::generate(), $p->id, $s->program, $s->term);
         $review = $s->decisionService()->review($app->id, true, 'Fictional acceptance');

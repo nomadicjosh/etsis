@@ -451,5 +451,79 @@ if (
 ) {
     throw new RuntimeException('The owner address writer accepted a supplied person identity.');
 }
+// Employment history resolves through the real providers without changing the parent/account.
+$sis->access->grants = ['sis:hr:manage'];
+$employeePost = $emergencyPost->withUri(new \Laminas\Diactoros\Uri('/sis/employees/'))
+    ->withoutHeader('X-CSRF-Token')
+    ->withParsedBody(['person_id' => $other->id->value, 'job_title' => 'Fictional assistant']);
+$beforeEmployment = $sis->sql->rows('sis_history_events');
+if (
+    $app->router->match($employeePost)->getStatusCode() !== 403
+    || $beforeEmployment !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Employment creation bypassed CSRF.');
+}
+$employeeCreated = $app->router->match($employeePost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if (
+    $employeeCreated->getStatusCode() !== 201
+    || !str_contains($employeeCreated->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('Employment creation did not resolve privately through the real providers.');
+}
+$employeeId = json_decode((string) $employeeCreated->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$employeeGet = $contactRequest->withUri(new \Laminas\Diactoros\Uri('/sis/employees/' . $employeeId . '/'));
+$employeeResponse = $app->router->match($employeeGet);
+$employeeData = json_decode((string) $employeeResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $employeeResponse->getStatusCode() !== 200 || $employeeData['earlier_history_unknown'] !== false
+    || $employeeData['person_id'] !== $other->id->value
+    || !str_contains($employeeResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $employeeResponse->getBody(), 'phpdebugbar')
+) {
+    throw new RuntimeException('The employment reader lost its private parent/history boundary.');
+}
+$employeeEdit = $employeePost->withUri(new \Laminas\Diactoros\Uri('/sis/employees/' . $employeeId . '/edit/'))
+    ->withParsedBody(['job_title' => 'Fictional librarian', 'active' => false,
+        'revision' => $employeeData['revision'], 'reason' => 'Fictional employment decision',
+        'person_id' => $person->id->value]);
+$beforeEmploymentEdit = $sis->sql->rows('sis_history_events');
+if (
+    $app->router->match($employeeEdit)->getStatusCode() !== 403
+    || $beforeEmploymentEdit !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Employment editing bypassed CSRF.');
+}
+$employeeEdit = $employeeEdit->withHeader('X-CSRF-Token', 'fictionalcsrftoken');
+$withoutReason = $employeeEdit->getParsedBody();
+unset($withoutReason['reason']);
+if (
+    $app->router->match($employeeEdit->withParsedBody($withoutReason))->getStatusCode() !== 422
+    || $beforeEmploymentEdit !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Employment editing accepted a missing reason.');
+}
+$employmentUsers = $sis->sql->rows('users');
+$employmentPeople = $sis->sql->rows('sis_persons');
+$editedEmployee = $app->router->match($employeeEdit);
+$afterEmploymentRead = $app->router->match($employeeGet);
+$afterEmployment = json_decode((string) $afterEmploymentRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $editedEmployee->getStatusCode() !== 200 || $afterEmployment['active'] !== false
+    || $afterEmployment['job_title'] !== 'Fictional librarian' || $afterEmployment['person_id'] !== $other->id->value
+    || count($sis->sql->rows('sis_history_events')) !== count($beforeEmploymentEdit) + 1
+    || $employmentUsers !== $sis->sql->rows('users') || $employmentPeople !== $sis->sql->rows('sis_persons')
+    || str_contains((string) $afterEmploymentRead->getBody(), 'Fictional employment decision')
+    || !str_contains($editedEmployee->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('Employment editing lost history, privacy or the canonical parent.');
+}
+$sis->access->grants = [];
+if ($app->router->match($employeeGet)->getStatusCode() !== 403) {
+    throw new RuntimeException('Another person read employment without HR authority.');
+}
+$sis->access->actor = $other->ownerUserId;
+if ($app->router->match($employeeGet)->getStatusCode() !== 200) {
+    throw new RuntimeException('Employment inactivity blocked owner history access.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

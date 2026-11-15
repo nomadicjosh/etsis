@@ -9,7 +9,11 @@ use Domain\Person\Person;
 
 final readonly class EmployeeProfile
 {
-    public function __construct(public Employee $employee, public Person $person)
-    {
+    public function __construct(
+        public Employee $employee,
+        public Person $person,
+        public string $revision,
+        public bool $earlierHistoryUnknown
+    ) {
     }
 }

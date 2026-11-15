@@ -423,6 +423,7 @@ if (
         "job_title" => "Fictional archivist",
         "active" => false,
         "revision" => $employee["revision"],
+        "reason" => "Fictional staffing decision",
     ])->getStatusCode() !== 200 ||
     $teachingPost($employeePath . "/time-entries/", [])->getStatusCode() !== 200
 ) {

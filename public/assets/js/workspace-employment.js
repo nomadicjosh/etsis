@@ -53,6 +53,15 @@ window.createWorkspaceEmployment = function (ui) {
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
             badge(record.active ? "Active" : "Inactive"),
         );
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                record.earlier_history_unknown
+                    ? "Earlier employment history is unknown. Changes made here retain the previous title and status."
+                    : "Employment profile changes are retained in protected history.",
+            ),
+        );
         if (can("sis:person:manage"))
             body.append(
                 button("Open connected person", () =>
@@ -66,6 +75,7 @@ window.createWorkspaceEmployment = function (ui) {
                     [
                         ["job_title", "Job title"],
                         ["active", "Active employment", "checkbox"],
+                        ["reason", "Reason for employment change", "textarea"],
                     ],
                     `/sis/employees/${id}/edit/`,
                     (data) => ({ ...data, revision: record.revision }),

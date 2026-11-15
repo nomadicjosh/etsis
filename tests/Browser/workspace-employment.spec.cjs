@@ -3,7 +3,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 const employee = id(1), person = id(2), entry = id(3);
 
-async function setup(page, self = false) {
+async function setup(page, self = false, rejectFirstEdit = false) {
     const calls = [], errors = [];
     let active = true, title = 'Fictional librarian', status = 'pending', version = 0;
     page.on('pageerror', error => errors.push(error.message));
@@ -13,7 +13,8 @@ async function setup(page, self = false) {
         const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
         if (data) calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         const profile = { id: employee, person_id: person, given_name: 'Alex', family_name: 'Example',
-            institutional_id: 'S-EXAMPLE', job_title: title, active, is_self: self, revision: 'fictional-employment-revision' };
+            institutional_id: 'S-EXAMPLE', job_title: title, active, is_self: self,
+            revision: 'fictional-employment-revision', earlier_history_unknown: true };
         const time = { ...profile, id: entry, employee_id: employee, status, version,
             starts_at: '2026-08-11T09:00:00+00:00', ends_at: '2026-08-11T10:00:00+00:00', duration_seconds: 3600 };
         let result = {};
@@ -25,7 +26,16 @@ async function setup(page, self = false) {
             { action: 'employee.updated', recorded_at: '2026-08-11 10:00:00', actor_id: id(9) },
         ], next_after: null };
         else if (path === `/sis/employees/${employee}/`) result = profile;
-        else if (path === `/sis/employees/${employee}/edit/`) { active = data.active; title = data.job_title; }
+        else if (path === `/sis/employees/${employee}/edit/`) {
+            if (rejectFirstEdit) {
+                rejectFirstEdit = false;
+                await route.fulfill({ status: 422, json: { errors: [
+                    { field: 'reason', message: 'Fictional review needed. Please try again.' },
+                ] } });
+                return;
+            }
+            active = data.active; title = data.job_title;
+        }
         else if (path === `/sis/employees/${employee}/time-entries/`) result = {
             items: data.after ? [time] : Array.from({ length: 50 }, (_, index) => ({ ...time, id: index ? id(100 + index) : entry })),
             next_after: data.after ? null : id(149),
@@ -45,9 +55,10 @@ async function accessible(page) {
 }
 
 test('staff maintain employment and review paged time entries without leaving the connected workspace', async ({ page }) => {
-    const { calls, errors } = await setup(page);
+    const { calls, errors } = await setup(page, false, true);
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('S-EXAMPLE');
+    await expect(page.locator('#drawer-body')).toContainText('Earlier employment history is unknown.');
     await expect(page.locator('#drawer-body tbody tr')).toHaveCount(50);
     await page.getByRole('button', { name: 'Next time page' }).click();
     await expect(page.locator('#drawer-body tbody tr')).toHaveCount(1);
@@ -68,12 +79,21 @@ test('staff maintain employment and review paged time entries without leaving th
     await page.getByRole('button', { name: 'Edit employment' }).click();
     await page.getByLabel('Job title').fill('Fictional archivist');
     await page.getByLabel('Active employment').uncheck();
+    await page.getByRole('button', { name: 'Save employment' }).click();
+    expect(calls.filter(call => call.path.endsWith('/edit/'))).toHaveLength(0);
+    await page.getByLabel('Reason for employment change').fill('Fictional staffing decision');
     await accessible(page);
+    await page.getByRole('button', { name: 'Save employment' }).click();
+    await expect(page.getByLabel('Reason for employment change')).toHaveValue('Fictional staffing decision');
+    await expect(page.getByLabel('Job title')).toHaveValue('Fictional archivist');
+    await expect(page.getByLabel('Active employment')).not.toBeChecked();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional review needed.');
     await page.getByRole('button', { name: 'Save employment' }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional archivist');
     await expect(page.getByRole('button', { name: 'Submit time for this employee' })).toHaveCount(0);
     expect(calls.find(call => call.path.endsWith('/edit/'))?.data).toEqual({
         job_title: 'Fictional archivist', active: false, revision: 'fictional-employment-revision',
+        reason: 'Fictional staffing decision',
     });
     await page.getByRole('button', { name: 'Review time entry' }).first().click();
     await expect(page.getByRole('button', { name: 'Back to employment', exact: true })).toBeVisible();

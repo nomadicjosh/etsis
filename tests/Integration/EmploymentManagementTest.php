@@ -21,13 +21,7 @@ final class EmploymentManagementTest extends TestCase
 {
     private function service(SisFixture $f, ?AuditTrail $audit = null, ?TimeRepository $repository = null): TimesheetService
     {
-        return new TimesheetService(
-            $repository ?? new SqlTimeRepository($f->sql),
-            $f->admissions,
-            $f->access,
-            $f->transactions,
-            $audit ?? $f->audit
-        );
+        return $f->timesheetService($audit, $repository);
     }
 
     private function employee(SisFixture $f, TimesheetService $service): EntityId
@@ -49,7 +43,7 @@ final class EmploymentManagementTest extends TestCase
         $entry = $service->submit($id, $this->work());
         $before = $service->employeeDetails($id);
         self::assertTrue($before['is_self']);
-        $service->editEmployee($id, 'Senior librarian', false, $before['revision']);
+        $service->editEmployee($id, 'Senior librarian', false, $before['revision'], 'Fictional HR review');
         $changed = $service->employeeDetails($id);
         self::assertFalse($changed['active']);
         self::assertSame($before['person_id'], $changed['person_id']);
@@ -63,12 +57,12 @@ final class EmploymentManagementTest extends TestCase
             self::assertCount(1, $f->sql->rows('sis_timesheets'));
         }
         try {
-            $service->editEmployee($id, 'Stale title', true, $before['revision']);
+            $service->editEmployee($id, 'Stale title', true, $before['revision'], 'Fictional HR review');
             self::fail('Stale employment edit was accepted.');
         } catch (ConcurrentModificationException) {
             self::assertFalse($service->employeeDetails($id)['active']);
         }
-        $service->editEmployee($id, 'Senior librarian', true, $changed['revision']);
+        $service->editEmployee($id, 'Senior librarian', true, $changed['revision'], 'Fictional HR review');
         self::assertSame($id->value, $service->submit($id, $this->work(2))->employeeId->value);
         self::assertStringNotContainsString('librarian', json_encode($f->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
     }
@@ -79,7 +73,7 @@ final class EmploymentManagementTest extends TestCase
         $service = $this->service($f);
         $id = $this->employee($f, $service);
         $entry = $service->submit($id, $this->work());
-        $service->editEmployee($id, 'Fictional librarian', false, $service->employeeDetails($id)['revision']);
+        $service->editEmployee($id, 'Fictional librarian', false, $service->employeeDetails($id)['revision'], 'Fictional HR review');
         try {
             $service->decide($entry->id, true, 0);
             self::fail('A staff owner approved their own time.');
@@ -109,7 +103,7 @@ final class EmploymentManagementTest extends TestCase
         self::assertTrue($service->employeeDetails($id)['is_self']);
         self::assertCount(1, $service->entries($id)['items']);
         try {
-            $service->editEmployee($id, 'Unauthorized', false, $service->employeeDetails($id)['revision']);
+            $service->editEmployee($id, 'Unauthorized', false, $service->employeeDetails($id)['revision'], 'Fictional HR review');
             self::fail('Record ownership granted HR maintenance.');
         } catch (AccessDeniedException) {
             self::assertTrue($service->employeeDetails($id)['active']);
@@ -157,7 +151,7 @@ final class EmploymentManagementTest extends TestCase
         $profile = $service->employeeDetails($id);
         foreach (
             [fn () => $service->addEmployee(new EntityId($profile['person_id']), 'Duplicate'),
-            fn () => $service->editEmployee($id, "Bad\nTitle", true, $profile['revision'])] as $invalid
+            fn () => $service->editEmployee($id, "Bad\nTitle", true, $profile['revision'], 'Fictional HR review')] as $invalid
         ) {
             try {
                 $invalid();
@@ -180,7 +174,7 @@ final class EmploymentManagementTest extends TestCase
         $audit->method('record')->willThrowException(new RuntimeException('fictional failure'));
         $service = $this->service($f, $audit);
         try {
-            $service->editEmployee($id, 'Changed', false, $service->employeeDetails($id)['revision']);
+            $service->editEmployee($id, 'Changed', false, $service->employeeDetails($id)['revision'], 'Fictional HR review');
             self::fail('Unaudited employment edit committed.');
         } catch (RuntimeException) {
             self::assertSame('Fictional librarian', $service->employeeDetails($id)['job_title']);
@@ -195,6 +189,7 @@ final class EmploymentManagementTest extends TestCase
         $id = $this->employee($f, $service);
         $real = new SqlTimeRepository($f->sql);
         $repository = $this->createMock(TimeRepository::class);
+        $repository->method('employee')->willReturnCallback(fn ($id) => $real->employee($id));
         $repository->method('employeePerson')->willReturnCallback(fn ($id) => $real->employeePerson($id));
         $repository->method('lockEmployee')->willReturnCallback(function () use ($f, $id): void {
             $f->sql->update('sis_employees', ['active' => 0], ['id' => $id->value]);
@@ -231,6 +226,7 @@ final class EmploymentManagementTest extends TestCase
         $f->access->staff = false;
         $real = new SqlTimeRepository($f->sql);
         $repository = $this->createMock(TimeRepository::class);
+        $repository->method('employee')->willReturnCallback(fn ($id) => $real->employee($id));
         $repository->method('employeePerson')->willReturnCallback(fn ($id) => $real->employeePerson($id));
         $repository->method('lockEmployee')->willReturnCallback(function () use ($f, $person, $replacementOwner): void {
             $f->sql->update('sis_persons', ['owner_user_id' => $replacementOwner->value], ['id' => $person->id->value]);

@@ -4,14 +4,21 @@ declare(strict_types=1);
 
 namespace Domain\HumanResources\Service;
 
+use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\HumanResources\Dto\EmployeeProfile;
 use Domain\HumanResources\Employee;
-use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\HumanResources\Repository\TimeRepository;
 use Domain\HumanResources\TimeEntry;
+use Domain\HumanResources\ValueObject\EmploymentFacts;
+use Domain\Person\Person;
+use Domain\Person\Repository\PersonProfileRepository;
+use Domain\Person\Service\ProfileLedger;
 use Domain\Scheduling\TimeSlot;
+use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
@@ -24,58 +31,160 @@ final readonly class TimesheetService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private EmploymentLedger $history,
+        private PersonProfileRepository $peopleRows,
+        private AccessRepository $roles,
+        private ProfileLedger $peopleHistory,
     ) {
     }
 
     public function addEmployee(EntityId $person, string $jobTitle): EntityId
     {
         $actor = $this->access->requirePermission('sis:hr:manage');
-        $this->admissions->person($person);
-        $id = EntityId::generate();
-        $employee = new Employee($id, $person, trim($jobTitle), true);
-        $this->transactions->run(function () use ($employee, $actor, $id, $person): void {
-            $this->repository->addEmployee($id, $person, $employee->jobTitle);
+        $jobTitle = trim($jobTitle);
+        $intent = EmploymentLedger::intent(['create', $person->value, $jobTitle]);
+        return $this->maintain($person, $actor, function () use ($actor, $person, $jobTitle, $intent): EntityId {
+            $existing = $this->repository->employeeForPerson($person);
+            if ($existing !== null) {
+                $operation = EmploymentLedger::operation($existing->id, $actor, $intent);
+                if ($this->history->receipt($existing->id, $operation, $actor, $intent)) {
+                    return $existing->id;
+                }
+                throw new ValidationException([['field' => 'person_id',
+                    'message' => 'This person already has employment. Open their existing record.']]);
+            }
+            $id = EntityId::generate();
+            $employee = new Employee($id, $person, $jobTitle, true);
+            $this->history->create($employee, EmploymentLedger::operation($id, $actor, $intent), $actor, $intent);
+            $this->repository->addEmployee($id, $person, $jobTitle);
             $this->audit->record($actor, 'employee.created', $id);
+            return $id;
         });
-
-        return $id;
     }
 
     public function employeeProfile(EntityId $id): EmployeeProfile
     {
-        $this->access->authenticatedUserId();
+        $actor = $this->access->authenticatedUserId();
         $employee = $this->repository->employee($id);
-        $person = $this->admissions->person($employee->personId);
-        $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
-
-        return new EmployeeProfile($employee, $person);
+        $person = $this->authorizeRead($employee, $actor);
+        $this->peopleHistory->verify($person);
+        $state = $this->history->inspect($employee);
+        $this->authorizeRead($employee, $actor);
+        return new EmployeeProfile($employee, $person, $state['revision'], $state['earlier_unknown']);
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string,mixed> */
     public function employeeDetails(EntityId $id): array
     {
         $profile = $this->employeeProfile($id);
-        $employee = $profile->employee;
-
-        return ['id' => $id->value, 'person_id' => $employee->personId->value,
+        return $this->profileDetails($profile);
+    }
+    /** @return array<string,mixed> */
+    private function profileDetails(EmployeeProfile $profile): array
+    {
+        return ['id' => $profile->employee->id->value, 'person_id' => $profile->person->id->value,
             'given_name' => $profile->person->givenName, 'family_name' => $profile->person->familyName,
-            'institutional_id' => $profile->person->institutionalId->value, 'job_title' => $employee->jobTitle,
-            'active' => $employee->active, 'revision' => $this->revision($employee),
+            'institutional_id' => $profile->person->institutionalId->value, 'job_title' => $profile->employee->jobTitle,
+            'active' => $profile->employee->active, 'revision' => $profile->revision,
+            'earlier_history_unknown' => $profile->earlierHistoryUnknown,
             'is_self' => $profile->person->ownerUserId?->value === $this->access->authenticatedUserId()->value];
     }
 
-    public function editEmployee(EntityId $id, string $jobTitle, bool $active, string $revision): void
-    {
+    public function editEmployee(
+        EntityId $id,
+        string $jobTitle,
+        bool $active,
+        string $revision,
+        #[\SensitiveParameter] string $reason
+    ): void {
         $actor = $this->access->requirePermission('sis:hr:manage');
-        $this->transactions->run(function () use ($id, $jobTitle, $active, $revision, $actor): void {
+        $reason = trim($reason);
+        if (
+            $reason === '' || !mb_check_encoding($reason, 'UTF-8') || mb_strlen($reason) > 1000
+            || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $reason)
+        ) {
+            throw new ValidationException([['field' => 'reason',
+                'message' => 'Enter a reason within 1,000 characters.']]);
+        }
+        $initial = $this->repository->employee($id);
+        $next = new Employee($id, $initial->personId, trim($jobTitle), $active);
+        $intent = EmploymentLedger::intent(['edit', EmploymentFacts::of($next),
+            $revision, $reason]);
+        $operation = EmploymentLedger::operation($id, $actor, $intent);
+        $this->maintain($initial->personId, $actor, function () use (
+            $id,
+            $initial,
+            $next,
+            $revision,
+            $actor,
+            $operation,
+            $intent,
+            $reason
+        ): void {
             $this->repository->lockEmployee($id);
             $current = $this->repository->employee($id);
-            if (!hash_equals($this->revision($current), $revision)) {
-                throw new ConcurrentModificationException('Reload employment before editing.');
+            if ($current->personId->value !== $initial->personId->value) {
+                throw new AccessDeniedException('The employment person changed.');
             }
-            $this->repository->saveEmployee(new Employee($id, $current->personId, trim($jobTitle), $active));
+            if ($this->history->receipt($id, $operation, $actor, $intent)) {
+                return;
+            }
+            if (!$this->history->change($current, $next, $revision, $operation, $actor, $intent, $reason)) {
+                return;
+            }
+            $this->repository->saveEmployee($next);
             $this->audit->record($actor, 'employee.updated', $id);
         });
+    }
+
+    /** @template T
+     * @param \Closure():T $operation
+     * @return T
+     */
+    private function maintain(EntityId $person, EntityId $actor, \Closure $operation): mixed
+    {
+        return $this->transactions->run(function () use ($person, $actor, $operation): mixed {
+            $this->roles->lock();
+            $this->peopleRows->lock($person);
+            $record = $this->authorizeMaintenance($person, $actor);
+            $this->peopleHistory->verify($record);
+            $result = $operation();
+            $this->authorizeMaintenance($person, $actor);
+            return $result;
+        });
+    }
+    private function authorizeMaintenance(EntityId $person, EntityId $actor): Person
+    {
+        if (
+            $this->access->requirePermission('sis:hr:manage')->value !== $actor->value
+            || $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
+            throw new AccessDeniedException('The HR editor changed.');
+        }
+        $record = $this->admissions->person($person);
+        $this->protectSuper($record, $actor);
+        return $record;
+    }
+    private function authorizeRead(Employee $employee, EntityId $actor): Person
+    {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException('The HR reader changed.');
+        }
+        $person = $this->admissions->person($employee->personId);
+        $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
+        if ($person->ownerUserId?->value !== $actor->value) {
+            $this->protectSuper($person, $actor);
+        }
+        return $person;
+    }
+    private function protectSuper(Person $person, EntityId $actor): void
+    {
+        if (
+            $person->ownerUserId !== null && $this->roles->isSuper($person->ownerUserId->value)
+            && !$this->roles->isSuper($actor->value)
+        ) {
+            throw new AccessDeniedException('This employment requires a super administrator.');
+        }
     }
 
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
@@ -89,12 +198,6 @@ final readonly class TimesheetService
         return ['items' => $rows, 'next_after' => $more ? (string) $rows[49]['id'] : null];
     }
 
-    private function revision(Employee $employee): string
-    {
-        return hash('sha256', json_encode([$employee->id->value, $employee->personId->value,
-            $employee->jobTitle, $employee->active], JSON_THROW_ON_ERROR));
-    }
-
     public function submit(EntityId $employee, TimeSlot $work): TimeEntry
     {
         $this->access->authenticatedUserId();
@@ -105,8 +208,10 @@ final readonly class TimesheetService
             $this->repository->lockEmployee($employee);
             $person = $this->admissions->person($this->repository->employeePerson($employee));
             $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
+            $this->employeeProfile($employee);
             $this->repository->add($entry);
             $this->audit->record($actor, 'timesheet.submitted', $entry->id);
+            $this->authorizeRead($this->repository->employee($employee), $actor);
         });
 
         return $entry;
@@ -122,19 +227,40 @@ final readonly class TimesheetService
             if ($expectedVersion !== null && $entry->version !== $expectedVersion) {
                 throw new ConcurrentModificationException('Reload the time entry before deciding.');
             }
-            $person = $this->admissions->person($this->repository->employee($entry->employeeId)->personId);
+            $person = $this->employeeProfile($entry->employeeId)->person;
             $this->repository->save($entry->decide($approve, $actor, $person->ownerUserId), $entry->version);
             $this->audit->record($actor, $approve ? 'timesheet.approved' : 'timesheet.rejected', $id);
+            if ($this->access->requirePermission('sis:hr:manage')->value !== $actor->value) {
+                throw new AccessDeniedException('The time reviewer changed.');
+            }
         });
     }
 
-    public function get(EntityId $id): TimeEntry
+    /** @return array{entry:TimeEntry,profile:EmployeeProfile} */
+    private function entryProfile(EntityId $id): array
     {
         $this->access->authenticatedUserId();
         $entry = $this->repository->get($id);
-        $person = $this->admissions->person($this->repository->employee($entry->employeeId)->personId);
-        $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
-
-        return $entry;
+        return ['entry' => $entry, 'profile' => $this->employeeProfile($entry->employeeId)];
+    }
+    public function get(EntityId $id): TimeEntry
+    {
+        return $this->entryProfile($id)['entry'];
+    }
+    /** @return array<string,mixed> */
+    public function entryDetails(EntityId $id): array
+    {
+        $data = $this->entryProfile($id);
+        $entry = $data['entry'];
+        $profile = $this->profileDetails($data['profile']);
+        return ['id' => $entry->id->value, 'employee_id' => $entry->employeeId->value,
+            'status' => $entry->status, 'version' => $entry->version,
+            'institutional_id' => $profile['institutional_id'], 'given_name' => $profile['given_name'],
+            'family_name' => $profile['family_name'], 'job_title' => $profile['job_title'],
+            'is_self' => $profile['is_self'],
+            'duration_seconds' => $entry->work->endsAt->getTimestamp()
+                - $entry->work->startsAt->getTimestamp(),
+            'starts_at' => $entry->work->startsAt->format(DATE_ATOM),
+            'ends_at' => $entry->work->endsAt->format(DATE_ATOM)];
     }
 }

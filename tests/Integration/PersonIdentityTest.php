@@ -6,7 +6,6 @@ require_once dirname(__DIR__) . '/Support/SisFixture.php';
 
 use Domain\Admissions\Service\AdmissionsService;
 use Domain\Finance\Service\StudentAccountService;
-use Domain\HumanResources\Service\TimesheetService;
 use Domain\Person\Exception\InstitutionalIdUnavailableException;
 use Domain\Person\Service\InstitutionalIdGenerator;
 use Domain\Person\ValueObject\InstitutionalId;
@@ -15,7 +14,6 @@ use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Identity\RandomInstitutionalIdGenerator;
 use Infrastructure\Persistence\Repository\SqlReportRepository;
-use Infrastructure\Persistence\Repository\SqlTimeRepository;
 use Infrastructure\Persistence\Repository\SqlTransferRepository;
 use PHPUnit\Framework\TestCase;
 
@@ -90,7 +88,7 @@ final class PersonIdentityTest extends TestCase
         $student = $f->student();
         $section = $f->section();
         $f->service->register($student->id, $section->id);
-        $hr = new TimesheetService(new SqlTimeRepository($f->sql), $f->admissions, $f->access, $f->transactions, $f->audit);
+        $hr = $f->timesheetService();
         $employee = $hr->addEmployee($student->personId, 'Teaching Assistant');
         $locator = $f->sql->one('sis_student_accounts', ['student_id' => $student->id->value]);
         $finance = new StudentAccountService($f->accounts, $f->admissions, $f->access);
@@ -107,7 +105,9 @@ final class PersonIdentityTest extends TestCase
         self::assertSame($student->personId->value, $person->id->value);
         self::assertSame($enrollment, $f->sql->rows('sis_enrollments'));
         $after = array_column($f->sql->rows('sis_history_events'), null, 'id');
-        foreach ($events as $event) { self::assertSame($event, $after[$event['id']]); }
+        foreach ($events as $event) {
+            self::assertSame($event, $after[$event['id']]);
+        }
         self::assertStringNotContainsString('00009001', json_encode($f->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
     }
 

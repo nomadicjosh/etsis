@@ -815,6 +815,32 @@ final class SisFixture
         );
     }
 
+    public function employmentLedger(): \Domain\HumanResources\Service\EmploymentLedger
+    {
+        return new \Domain\HumanResources\Service\EmploymentLedger(new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql,
+            $this->transactions,
+            $this->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+        ), $this->clock);
+    }
+    public function timesheetService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\HumanResources\Repository\TimeRepository $repository = null
+    ): \Domain\HumanResources\Service\TimesheetService {
+        return new \Domain\HumanResources\Service\TimesheetService(
+            $repository ?? new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql),
+            $this->admissions,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->employmentLedger(),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->profileLedger()
+        );
+    }
     public function profileLedger(): \Domain\Person\Service\ProfileLedger
     {
         return new \Domain\Person\Service\ProfileLedger(new \Infrastructure\EventSourcing\SqlHistoricalEventStore(

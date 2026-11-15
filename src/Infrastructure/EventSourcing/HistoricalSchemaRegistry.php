@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class => [
+                'type' => 'employment_profile', 'root' => \Domain\HumanResources\EmploymentHistory::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'provenance', 'facts', 'intent'],
+            ],
             \Domain\User\Event\UserSignInWasChanged::class => [
                 'type' => 'user', 'root' => \Domain\User\User::class,
                 'fields' => ['sign_in_enabled', 'token', 'operation_id', 'intent'],
@@ -426,6 +430,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class) {
+                \Domain\HumanResources\ValueObject\EmploymentFacts::validate($payload);
+                if ($payload['facts']['id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Person\Event\PersonAddressesWereRecorded::class) {
                 \Domain\Person\ValueObject\AddressBook::validateEvent($payload);
             }
@@ -705,7 +715,8 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 if (str_ends_with((string) $name, "_id")) {
                     if (
-                        $class === \Domain\Person\Event\PersonProfileWasRecorded::class &&
+                        in_array($class, [\Domain\Person\Event\PersonProfileWasRecorded::class,
+                            \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class], true) &&
                         $name === 'previous_operation_id' && $value === null
                     ) {
                         continue;
@@ -929,6 +940,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\HumanResources\EmploymentHistory::class => 'employment_profile',
             \Domain\Person\ProfileHistory::class => 'person_profile',
             \Domain\AcademicRecord\WorkPursuit::class => 'work_pursuit',
             \Domain\Student\StudentSpecializations::class => 'student_specializations',
@@ -966,6 +978,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $aggregateId = match ($type) {
             'person_profile' => new \Domain\Person\ValueObject\PersonProfileId($id),
+            'employment_profile' => new \Domain\HumanResources\ValueObject\EmploymentProfileId($id),
             'work_pursuit' => new \Domain\AcademicRecord\ValueObject\WorkPursuitId($id),
             'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),
             "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),

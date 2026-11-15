@@ -13,7 +13,6 @@ use Domain\Finance\ValueObject\Money;
 use Domain\Gradebook\Assignment;
 use Domain\Gradebook\GradeDefinition;
 use Domain\Gradebook\Service\GradebookService;
-use Domain\HumanResources\Service\TimesheetService;
 use Domain\Scheduling\Service\BookingService;
 use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -26,7 +25,6 @@ use Infrastructure\Persistence\PdoTransactionalEventStore;
 use Infrastructure\Persistence\Repository\EventSourcedJournalRepository;
 use Infrastructure\Persistence\Repository\SqlBookingRepository;
 use Infrastructure\Persistence\Repository\SqlGradebookRepository;
-use Infrastructure\Persistence\Repository\SqlTimeRepository;
 use Infrastructure\Persistence\Repository\SqlTransferRepository;
 use PHPUnit\Framework\TestCase;
 
@@ -86,13 +84,7 @@ final class ModuleWorkflowTest extends TestCase
     {
         $f = new SisFixture();
         $student = $f->student();
-        $service = new TimesheetService(
-            new SqlTimeRepository($f->sql),
-            $f->admissions,
-            $f->access,
-            $f->transactions,
-            $f->audit,
-        );
+        $service = $f->timesheetService();
         $employee = $service->addEmployee($student->personId, "Library Assistant");
         $work = new TimeSlot(
             new DateTimeImmutable("2026-08-10T08:00:00Z"),

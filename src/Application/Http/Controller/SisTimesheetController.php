@@ -48,17 +48,7 @@ final readonly class SisTimesheetController
 
     public function show(string $id): ResponseInterface
     {
-        $entry = $this->service->get(new EntityId($id));
-        $profile = $this->service->employeeDetails($entry->employeeId);
-
-        return new JsonResponse(['id' => $entry->id->value, 'employee_id' => $entry->employeeId->value,
-            'status' => $entry->status, 'version' => $entry->version,
-            'institutional_id' => $profile['institutional_id'],
-            'given_name' => $profile['given_name'], 'family_name' => $profile['family_name'],
-            'job_title' => $profile['job_title'], 'is_self' => $profile['is_self'],
-            'duration_seconds' => $entry->work->endsAt->getTimestamp() - $entry->work->startsAt->getTimestamp(),
-            'starts_at' => $entry->work->startsAt->format(DATE_ATOM),
-                'ends_at' => $entry->work->endsAt->format(DATE_ATOM)]);
+        return new JsonResponse($this->service->entryDetails(new EntityId($id)));
     }
 
     public function employeeProfile(string $id): ResponseInterface
@@ -73,7 +63,8 @@ final readonly class SisTimesheetController
             new EntityId($id),
             $f->text('job_title'),
             $f->requiredBoolean('active'),
-            $f->text('revision', 64)
+            $f->text('revision', 64),
+            $f->bodyText('reason')
         );
 
         return new JsonResponse(['status' => 'saved']);
