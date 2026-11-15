@@ -182,4 +182,14 @@ final readonly class FormInput
 
         return $result;
     }
+
+    /** @return list<mixed> */
+    public function values(string $key, int $maximum = 500): array
+    {
+        $values = $this->data[$key] ?? [];
+        if (!is_array($values) || !array_is_list($values) || count($values) > $maximum) {
+            throw new InvalidArgumentException('A bounded list is required.');
+        }
+        return $values;
+    }
 }

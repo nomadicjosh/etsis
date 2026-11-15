@@ -387,6 +387,35 @@ if (
     throw new RuntimeException("Booking decisions failed to enforce the displayed version.");
 }
 
+// The recurring planner is read-only until its reviewed request is confirmed.
+$seriesContextResponse = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/bookings/planning/')
+));
+$seriesContext = json_decode((string) $seriesContextResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$seriesBody = ['room_id' => $roomId, 'title' => 'Fictional recurring seminar', 'pattern' => [
+    'from' => '2026-08-03', 'through' => '2026-08-19', 'start_time' => '10:00', 'end_time' => '11:00',
+    'weekdays' => [1, 3], 'interval_weeks' => 1, 'excluded_dates' => [], 'overnight' => false,
+    'timezone' => $seriesContext['timezone'],
+]];
+$seriesEvents = $sis->sql->rows('sis_history_events');
+$seriesAudits = $sis->sql->rows('sis_audit');
+$seriesReviewResponse = $teachingPost('/sis/bookings/planning/review/', $seriesBody);
+$seriesReview = json_decode((string) $seriesReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($seriesContextResponse->getStatusCode() !== 200 || $seriesReviewResponse->getStatusCode() !== 200
+    || count($seriesReview['items']) !== 6 || $seriesAudits !== $sis->sql->rows('sis_audit')
+    || !str_contains($seriesReviewResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $seriesReviewResponse->getBody(), 'phpdebugbar')) {
+    throw new RuntimeException('The recurring booking review lost its private read-only boundary.');
+}
+$seriesCreated = $teachingPost('/sis/bookings/planning/request/', $seriesBody + [
+    'id' => $seriesContext['new_id'], 'revision' => $seriesReview['revision'],
+]);
+if ($seriesCreated->getStatusCode() !== 201
+    || count($sis->sql->rows('sis_booking_slots', ['booking_id' => $seriesContext['new_id']])) !== 6
+    || $seriesEvents !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('The recurring booking request failed through the actual provider stack.');
+}
+
 // Employment editing, historical reads and decisions also boot through the real providers.
 $employeeResponse = $teachingPost("/sis/employees/", [
     "person_id" => $teachingStudent->personId->value,

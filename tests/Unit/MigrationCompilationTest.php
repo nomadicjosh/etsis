@@ -104,6 +104,43 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testBookingWindowIndexesCompileForAllFrameworkDialectsWithoutChangingRecordedRows(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000005_AddSisBookingWindowIndexes.php';
+        $definitions = [];
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method('alter')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definitions): void {
+                self::assertSame('sis_booking_slots', $name);
+                $table = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($table);
+                $definitions[] = $table;
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new AddSisBookingWindowIndexes('booking-window-indexes');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        try {
+            $migration->down();
+            self::fail('An index downgrade could remove foreign-key support without planning.');
+        } catch (LogicException) {
+            self::assertCount(1, $definitions);
+        }
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            foreach ($definitions as $definition) {
+                $commands = json_encode(new $class($dialect)->alter($definition), JSON_THROW_ON_ERROR);
+                self::assertStringContainsString('sbs_room_overlap', $commands, $driver);
+                self::assertStringContainsString('sbs_room_agenda', $commands, $driver);
+                self::assertDoesNotMatchRegularExpression('/DELETE FROM|UPDATE |DROP TABLE/i', $commands);
+            }
+        }
+    }
+
     public function testTimesheetPositionReferencesCompileForEverySupportedDatabaseWithoutChangingTimeRows(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000004_CreateSisTimesheetPositions.php';

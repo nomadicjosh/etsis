@@ -54,10 +54,13 @@ final readonly class SqlBookingRepository implements BookingRepository
     public function get(EntityId $id): Booking
     {
         $r = $this->sql->one('sis_bookings', ['id' => $id->value]);
+        $q = $this->sql->quote(...);
         $slots = array_map(static fn (array $s): TimeSlot => new TimeSlot(
             new DateTimeImmutable($s['starts_at'], new DateTimeZone('UTC')),
             new DateTimeImmutable($s['ends_at'], new DateTimeZone('UTC')),
-        ), $this->sql->rows('sis_booking_slots', ['booking_id' => $id->value]));
+        ), $this->sql->fetch('SELECT ' . $q('starts_at') . ', ' . $q('ends_at') . ' FROM '
+            . $q('sis_booking_slots') . ' WHERE ' . $q('booking_id') . ' = ? ORDER BY '
+            . $q('starts_at') . ', ' . $q('id'), [$id->value], 367));
 
         return new Booking(
             $id,

@@ -21,7 +21,8 @@ final readonly class Booking
         public int $version = 0,
     ) {
         if (
-            trim($title) === '' || mb_strlen($title) > 191 || count($slots) < 1 || count($slots) > 366
+            trim($title) === '' || !mb_check_encoding($title, 'UTF-8') || mb_strlen($title) > 191
+            || preg_match('/[\x00-\x1f\x7f]/', $title) || count($slots) < 1 || count($slots) > 366
             || !in_array($status, ['requested', 'approved', 'cancelled'], true)
         ) {
             throw new InvalidArgumentException('A booking requires a title, bounded occurrences and a valid state.');

@@ -51,6 +51,8 @@ final class ModuleWorkflowTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlRoomRepository($f->sql),
+            $f->clock,
         );
         $room = $service->addRoom("LAB-1", 30);
         $first = $service->request($room, "Class", [

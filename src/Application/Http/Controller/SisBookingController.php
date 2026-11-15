@@ -7,6 +7,8 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\Scheduling\Service\BookingService;
 use Domain\Scheduling\TimeSlot;
+use Domain\Scheduling\BookingPattern;
+use InvalidArgumentException;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -24,6 +26,47 @@ final readonly class SisBookingController
         $id = $this->service->addRoom($f->text('code', 80), $f->integer('capacity', 1, 100000));
 
         return new JsonResponse(['id' => $id->value], 201);
+    }
+
+    public function planning(): ResponseInterface
+    {
+        return new JsonResponse($this->service->planningContext());
+    }
+    public function review(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->review($f->id('room_id'), $f->text('title'), $this->pattern($request)));
+    }
+    public function requestSeries(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $booking = $this->service->requestSeries(
+            $f->id('id'),
+            $f->id('room_id'),
+            $f->text('title'),
+            $this->pattern($request),
+            $f->text('revision', 64)
+        );
+        return new JsonResponse(['id' => $booking->id->value, 'status' => $booking->status], 201);
+    }
+    private function pattern(ServerRequest $request): BookingPattern
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body) || !is_array($body['pattern'] ?? null)) {
+            throw new InvalidArgumentException('A booking pattern is required.');
+        }
+        $p = new FormInput($body['pattern']);
+        return new BookingPattern(
+            $p->text('from', 10),
+            $p->text('through', 10),
+            $p->text('start_time', 5),
+            $p->text('end_time', 5),
+            $p->values('weekdays', 7),
+            $p->integer('interval_weeks', 1, 12),
+            $p->values('excluded_dates', 100),
+            $p->requiredBoolean('overnight'),
+            $p->text('timezone', 80)
+        );
     }
 
     public function request(ServerRequest $request): ResponseInterface

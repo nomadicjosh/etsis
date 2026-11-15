@@ -193,6 +193,7 @@ window.createWorkspaceScheduling = function (ui) {
                     ends_at: form.elements.ends_at.value,
                 }),
             ),
+            button('Plan recurring meetings', () => requestSeries({ room_id: id }, () => room(id))),
         );
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -239,6 +240,11 @@ window.createWorkspaceScheduling = function (ui) {
             form.elements.ends_at.setCustomValidity("");
         });
         form.append(
+            button('Plan recurring meetings', () => {
+                const draft = { room_id: form.elements.room_id.value, title: form.elements.title.value,
+                    starts_at: form.elements.starts_at.value, ends_at: form.elements.ends_at.value };
+                return requestSeries(draft, () => requestBooking(draft));
+            }),
             button("Check availability", async () => {
                 if (
                     !["room_id", "starts_at", "ends_at"].every((key) =>
@@ -280,6 +286,105 @@ window.createWorkspaceScheduling = function (ui) {
             }, form.querySelector('[type="submit"]'));
         });
         body.append(form, status);
+    }
+
+    async function requestSeries(preset = {}, back = () => requestBooking(preset)) {
+        const body = openDrawer('Plan recurring meetings', 'SPACES & SCHEDULING');
+        body.append(button('Back to space request', back));
+        const context = await request('/sis/bookings/planning/');
+        if (!body.isConnected) return;
+        body.append(node('p', { class: 'form-text' },
+            `Meeting dates and times use ${context.timezone}. Choose days once, skip closures and review every occurrence. Requests do not reserve a room until approved.`));
+        const defaults = { ...preset, from: context.today, through: context.today, start_time: '09:00', end_time: '10:00', interval_weeks: 1 };
+        if (preset.starts_at && preset.ends_at) {
+            try {
+                const parts = instant => Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+                    timeZone: context.timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+                }).formatToParts(new Date(instant)).filter(p => p.type !== 'literal').map(p => [p.type, p.value]));
+                const start = parts(preset.starts_at), end = parts(preset.ends_at);
+                defaults.from = `${start.year}-${start.month}-${start.day}`;
+                defaults.through = defaults.from;
+                defaults.start_time = `${start.hour}:${start.minute}`;
+                defaults.end_time = `${end.hour}:${end.minute}`;
+                defaults.overnight = `${end.year}-${end.month}-${end.day}` > defaults.from;
+            } catch { /* Keep explicit institution-date defaults if the browser cannot format its timezone. */ }
+        }
+        const fields = [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'],
+            ['from', 'First date', 'date'], ['through', 'Last date', 'date'],
+            ['start_time', 'Meeting starts', 'time'], ['end_time', 'Meeting ends', 'time'],
+            ['overnight', 'Ends next day', 'checkbox', '', false], ['interval_weeks', 'Repeat interval in weeks', 'number'],
+            ['excluded_dates', 'Dates to skip', 'textarea', '', false]];
+        const form = await buildForm(fields, defaults);
+        if (!body.isConnected) return;
+        form.elements.interval_weeks.min = '1'; form.elements.interval_weeks.max = '12';
+        form.elements.excluded_dates.maxLength = 1500;
+        form.elements.excluded_dates.placeholder = '2026-11-26\n2026-12-24';
+        const days = node('fieldset', { class: 'mb-3', 'aria-describedby': 'meeting-days-error' },
+            node('legend', { class: 'h6' }, 'Meeting days'));
+        const errors = node('p', { role: 'alert', class: 'text-danger', id: 'meeting-days-error' });
+        const selected = new Date(`${defaults.from}T12:00:00Z`).getUTCDay() || 7;
+        const checks = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((label, i) => {
+            const control = node('input', { type: 'checkbox', class: 'form-check-input', id: `meeting-day-${i + 1}`,
+                value: i + 1, checked: selected === i + 1 });
+            control.addEventListener('change', () => { errors.textContent = ''; });
+            days.append(node('div', { class: 'form-check form-check-inline' }, control,
+                node('label', { for: control.id, class: 'form-check-label' }, label)));
+            return control;
+        });
+        days.append(node('p', { class: 'form-text' },
+            'The date range is inclusive. Alternate weeks start with the week containing the first date. List skipped meeting dates one per line or separated by commas.'), errors);
+        form.elements.interval_weeks.closest('.mb-4').before(days);
+        const reviewButton = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review meetings');
+        form.append(reviewButton);
+        const preview = node('div', { hidden: true });
+        body.append(form, preview);
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const weekdays = checks.filter(input => input.checked).map(input => Number(input.value));
+                if (!weekdays.length) { errors.textContent = 'Choose at least one meeting day.'; checks[0].focus(); return; }
+                const data = formData(form, fields);
+                const payload = { room_id: data.room_id, title: data.title, pattern: {
+                    from: data.from, through: data.through, start_time: data.start_time, end_time: data.end_time,
+                    overnight: data.overnight, interval_weeks: data.interval_weeks, weekdays,
+                    excluded_dates: (data.excluded_dates || '').split(/[\s,]+/).filter(Boolean), timezone: context.timezone,
+                } };
+                const result = await request('/sis/bookings/planning/review/', 'POST', payload);
+                if (!body.isConnected) return;
+                const content = node('div'), status = node('p', { role: 'status', class: 'form-text' });
+                let page = 0;
+                const previous = button('Previous meetings', () => { page--; draw(); });
+                const next = button('Next meetings', () => { page++; draw(); });
+                function draw() {
+                    const items = result.items.slice(page * 20, (page + 1) * 20);
+                    content.replaceChildren(grid(['Starts', 'Ends', 'Availability'], items.map(item => [
+                        item.local_start, item.local_end, badge(item.available ? 'Available at review' : 'Conflict'),
+                    ]), 'Meetings to request'));
+                    status.textContent = `Meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, result.items.length)} of ${result.items.length}.`;
+                    previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= result.items.length;
+                }
+                preview.replaceChildren(node('h3', { class: 'h5 private-text' }, `${result.room.code} · ${data.title}`),
+                    node('p', { class: 'form-text' }, `${result.items.length} meetings in ${result.timezone}. ${result.conflicts} conflicts with approved bookings. Approval will check again.`),
+                    content, status, node('div', { class: 'inline-actions' }, previous, next),
+                    button('Back to meeting pattern', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
+                    button('Submit recurring request', async () => {
+                        const saved = await request('/sis/bookings/planning/request/', 'POST',
+                            { ...payload, id: context.new_id, revision: result.revision });
+                        if (!body.isConnected) return;
+                        notify('Meetings requested. Approval is required to reserve the room.');
+                        await ui.refreshDirectory();
+                        await booking(saved.id);
+                    }, 'btn-primary'));
+                if (result.conflicts) preview.append(button('Show first conflict', () => {
+                    page = Math.floor(result.items.findIndex(item => !item.available) / 20); draw();
+                    content.querySelector('table')?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+                }));
+                draw(); form.hidden = true; preview.hidden = false;
+                preview.querySelector('button:not(:disabled)').focus();
+            }, reviewButton);
+        });
     }
     async function booking(id) {
         const record = await request(`/sis/bookings/${id}/`);
@@ -338,7 +443,7 @@ window.createWorkspaceScheduling = function (ui) {
                             await booking(id);
                         },
                         {},
-                        "Cancellation releases approved times and keeps the booking history.",
+                        "Cancellation applies to every occurrence, releases approved times and keeps the booking history.",
                     ),
                 ),
             );

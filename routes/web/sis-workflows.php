@@ -884,6 +884,12 @@ return static function (Psr7Router $router): void {
     ]);
     $router->post("/sis/courses/{id}/publication/page/", [SisCoursePublicationController::class, "page"]);
     $router->map(["POST"], "/sis/rooms/", [SisBookingController::class, "room"])->name("sis.booking.room");
+    $router->map(['GET'], '/sis/bookings/planning/', [SisBookingController::class, 'planning'])
+        ->name('sis.booking.planning');
+    $router->map(['POST'], '/sis/bookings/planning/review/', [SisBookingController::class, 'review'])
+        ->name('sis.booking.planning.review');
+    $router->map(['POST'], '/sis/bookings/planning/request/', [SisBookingController::class, 'requestSeries'])
+        ->name('sis.booking.planning.request');
     $router->map(["GET"], "/sis/rooms/{id}/", [SisRoomController::class, "show"])->name("sis.room.show");
     $router
         ->map(["POST"], "/sis/rooms/{id}/edit/", [SisRoomController::class, "edit"])
