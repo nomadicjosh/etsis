@@ -36,6 +36,7 @@ final readonly class CampusService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private \Domain\Person\Service\PersonContactService $contacts,
     ) {
     }
 
@@ -95,13 +96,7 @@ final readonly class CampusService
         $user = $this->access->authenticatedUserId();
         $data = $this->repository->overview($user);
         $person = new EntityId($data["person"]["id"]);
-        $contact = $this->repository->contact($person);
-        $data["contact"] =
-        $contact === null
-        ? ["preferred_name" => "", "phone" => "", "address" => "", "version" => 0]
-        : json_decode($this->cipher->open($contact["encrypted_contact"]), true, flags: JSON_THROW_ON_ERROR) + [
-                        "version" => (int) $contact["version"],
-                    ];
+        $data["contact"] = $this->contacts->view($person);
         $data["news"] = $this->repository->news(true);
         $data["transcript_requests"] = $this->repository->transcriptRequests($user);
         $data["request_id"] = EntityId::generate()->value;
@@ -120,35 +115,7 @@ final readonly class CampusService
 
     public function saveContact(string $preferredName, string $phone, string $address, int $version): void
     {
-        $user = $this->access->authenticatedUserId();
-        $errors = [];
-        $fields = ["preferred_name" => [$preferredName, 80], "phone" => [$phone, 40], "address" => [$address, 500]];
-        foreach ($fields as $field => [$value, $limit]) {
-            if (mb_strlen($value) > $limit || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $value)) {
-                $errors[] = ["field" => $field, "message" => "Enter a shorter valid value."];
-            }
-        }
-        if ($errors !== []) {
-            throw new ValidationException($errors);
-        }
-        $this->transactions->run(function () use ($user, $preferredName, $phone, $address, $version): void {
-            $person = $this->repository->personForUser($user);
-            $this->repository->saveContact(
-                $person,
-                $this->cipher->seal(
-                    json_encode(
-                        [
-                            "preferred_name" => trim($preferredName),
-                            "phone" => trim($phone),
-                            "address" => trim($address),
-                        ],
-                        JSON_THROW_ON_ERROR,
-                    ),
-                ),
-                $version,
-            );
-            $this->audit->record($user, "portal.contact_updated", $person);
-        });
+        $this->contacts->save($preferredName, $phone, $address, $version);
     }
 
     public function register(EntityId $student, EntityId $section): void

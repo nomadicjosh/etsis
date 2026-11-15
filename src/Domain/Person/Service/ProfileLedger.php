@@ -6,6 +6,9 @@ namespace Domain\Person\Service;
 
 use Domain\Shared\ValueObject\DerivedIdentity;
 use Domain\Person\Event\PersonProfileWasRecorded;
+use Domain\Person\Event\PersonContactWasRecorded;
+use Domain\Person\ValueObject\ContactDetails;
+use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Person\Person;
 use Domain\Person\ProfileHistory;
 use Domain\Person\ValueObject\PersonProfileId;
@@ -16,12 +19,15 @@ use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 
 /** Internal: authorized entry points own person locks, projection writes, audits and the enclosing transaction. */
 final readonly class ProfileLedger
 {
+    private const int MAX_EVENTS = 2000;
+
     public function __construct(private HistoricalEventStore $history, private Clock $clock)
     {
     }
@@ -49,6 +55,85 @@ final readonly class ProfileLedger
     public function receipt(EntityId $person, EntityId $operation, EntityId $actor, string $intent): ?Person
     {
         return $this->load($person, $operation, $actor, $intent)['receipt'];
+    }
+    public function contactReceipt(
+        EntityId $person,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent
+    ): ?ContactDetails {
+        return $this->load($person, $operation, $actor, $intent)['contact_receipt'];
+    }
+    public function verifyContact(Person $person, ?ContactDetails $current): int
+    {
+        $root = $this->load($person->id)['root'];
+        $this->checkContact($root, $person, $current);
+        return $root->playhead();
+    }
+    private function checkContact(ProfileHistory $root, Person $person, ?ContactDetails $current): void
+    {
+        if (
+            ($root->person() !== null && ProfileFacts::of($root->person()) !== ProfileFacts::of($person))
+            || ($root->contact() !== null && $root->contact()->facts() !== $current?->facts())
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
+    public function recordContact(
+        Person $person,
+        ?ContactDetails $before,
+        ContactDetails $after,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent
+    ): bool {
+        $root = $this->load($person->id)['root'];
+        $this->checkContact($root, $person, $before);
+        if ($after->version !== ($before === null ? 1 : $before->version + 1)) {
+            throw new ConcurrentModificationException('Reload your current contact information.');
+        }
+        if (
+            $before !== null && [$before->preferredName, $before->phone, $before->address]
+            === [$after->preferredName, $after->phone, $after->address]
+        ) {
+            return false;
+        }
+        if ($root->playhead() === 0) {
+            $this->append(
+                $root,
+                $person,
+                DerivedIdentity::from($operation, 'person.observation'),
+                $actor,
+                $intent,
+                'observed'
+            );
+        }
+        if ($before !== null && $root->contact() === null) {
+            $this->appendContact(
+                $root,
+                $before,
+                DerivedIdentity::from($operation, 'person.contact.observation'),
+                $actor,
+                $intent,
+                'observed'
+            );
+        }
+        $this->appendContact($root, $after, $operation, $actor, $intent, $before === null ? 'created' : 'changed');
+        return true;
+    }
+    private function appendContact(
+        ProfileHistory $root,
+        ContactDetails $contact,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent,
+        string $provenance
+    ): void {
+        $event = PersonContactWasRecorded::occur($root->aggregateId(), [
+            'operation_id' => $operation->value, 'previous_operation_id' => $root->operation(),
+            'provenance' => $provenance, 'facts' => $contact->facts(), 'intent' => $intent,
+        ], ['__aggregate_type' => 'person_profile'])->withPlayhead($root->playhead() + 1);
+        $this->commit($root, $event, $operation, $actor, $provenance);
     }
     public function create(Person $person, EntityId $operation, EntityId $actor, string $intent): void
     {
@@ -93,7 +178,20 @@ final readonly class ProfileLedger
                 'intent' => $intent],
             ['__aggregate_type' => 'person_profile']
         )->withPlayhead($version + 1);
-        $root->acceptHistorical($e);
+        $this->commit($root, $e, $operation, $actor, $provenance);
+    }
+    private function commit(
+        ProfileHistory $root,
+        DomainEvent $event,
+        EntityId $operation,
+        EntityId $actor,
+        string $provenance
+    ): void {
+        $version = $root->playhead();
+        if ($version >= self::MAX_EVENTS) {
+            throw new HistoryReadLimitException();
+        }
+        $root->acceptHistorical($event);
         $this->history->append(
             new StreamReference($root->aggregateId(), 'person_profile'),
             $operation,
@@ -106,10 +204,10 @@ final readonly class ProfileLedger
                     ? 'Current profile observed; earlier personal history is unknown.'
                     : null
             ),
-            [$e]
+            [$event]
         );
     }
-    /** @return array{root:ProfileHistory,receipt:?Person} */
+    /** @return array{root:ProfileHistory,receipt:?Person,contact_receipt:?ContactDetails} */
     private function load(
         EntityId $id,
         ?EntityId $operation = null,
@@ -118,12 +216,13 @@ final readonly class ProfileLedger
     ): array {
         $root = ProfileHistory::root(new PersonProfileId($id->value));
         $receipt = null;
+        $contactReceipt = null;
         $cursor = null;
         $count = 0;
         do {
             $page = $this->history->page(new StreamReference($root->aggregateId(), 'person_profile'), $cursor, 20);
             foreach ($page->events as $stored) {
-                if (++$count > 2000) {
+                if (++$count > self::MAX_EVENTS) {
                     throw new HistoryReadLimitException();
                 }
                 $root->acceptHistorical($stored->event);
@@ -138,11 +237,15 @@ final readonly class ProfileLedger
                     if ($stored->context->actor->value !== $actor?->value || $p['intent'] !== $intent) {
                         throw new AccessDeniedException('This profile operation has another actor or intent.');
                     }
-                    $receipt = $root->person();
+                    if ($stored->event instanceof PersonContactWasRecorded) {
+                        $contactReceipt = $root->contact();
+                    } else {
+                        $receipt = $root->person();
+                    }
                 }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
-        return ['root' => $root, 'receipt' => $receipt];
+        return ['root' => $root, 'receipt' => $receipt, 'contact_receipt' => $contactReceipt];
     }
 }

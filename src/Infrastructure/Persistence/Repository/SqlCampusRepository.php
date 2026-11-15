@@ -411,34 +411,6 @@ final readonly class SqlCampusRepository implements CampusRepository
         );
     }
 
-    public function contact(EntityId $person): ?array
-    {
-        return $this->sql->rows("sis_portal_contacts", ["person_id" => $person->value], 1)[0] ?? null;
-    }
-
-    public function saveContact(EntityId $person, string $encrypted, int $version): void
-    {
-        $this->sql->lock("sis_persons", $person->value, "id");
-        $existing = $this->contact($person);
-        if ($existing === null && $version === 0) {
-            $this->sql->insert("sis_portal_contacts", [
-                "id" => EntityId::generate()->value,
-                "person_id" => $person->value,
-                "encrypted_contact" => $encrypted,
-                "version" => 1,
-            ]);
-        } elseif (
-            $existing === null ||
-            $this->sql->update(
-                "sis_portal_contacts",
-                ["encrypted_contact" => $encrypted, "version" => $version + 1],
-                ["person_id" => $person->value, "version" => $version],
-            ) !== 1
-        ) {
-            throw new ConcurrentModificationException("Reload your current contact information.");
-        }
-    }
-
     public function addTranscriptRequest(EntityId $id, array $data): void
     {
         $this->sql->insert("sis_transcript_requests", ["id" => $id->value] + $data);

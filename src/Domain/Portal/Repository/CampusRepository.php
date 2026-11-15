@@ -29,9 +29,6 @@ interface CampusRepository
     public function ownedStudent(EntityId $user, EntityId $student): array;
     /** @return list<array<string, mixed>> */
     public function enrollments(EntityId $student): array;
-    /** @return array<string, mixed>|null */
-    public function contact(EntityId $person): ?array;
-    public function saveContact(EntityId $person, string $encrypted, int $version): void;
     /** @param array<string, scalar> $data */
     public function addTranscriptRequest(EntityId $id, array $data): void;
     /** @return list<array<string, mixed>> */

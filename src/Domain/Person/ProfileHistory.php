@@ -7,22 +7,30 @@ namespace Domain\Person;
 use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Person\Event\PersonProfileWasRecorded;
+use Domain\Person\Event\PersonContactWasRecorded;
+use Domain\Person\ValueObject\ContactDetails;
 use Domain\Person\ValueObject\ProfileFacts;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 
 final class ProfileHistory extends EventSourcedAggregate
 {
     private ?Person $person = null;
+    private ?ContactDetails $contact = null;
     private ?string $operation = null;
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $e): void
     {
         if (
-            !$e instanceof PersonProfileWasRecorded || !$e->aggregateId()->equals($this->aggregateId()) ||
+            (!$e instanceof PersonProfileWasRecorded && !$e instanceof PersonContactWasRecorded) ||
+            !$e->aggregateId()->equals($this->aggregateId()) ||
             $e->playhead() !== $this->playhead() + 1
         ) {
             throw new CorruptHistoryException();
         }
-        ProfileFacts::validate($e->payload());
+        if ($e instanceof PersonContactWasRecorded) {
+            ContactDetails::validateEvent($e->payload());
+        } else {
+            ProfileFacts::validate($e->payload());
+        }
         $this->applyThat($e);
         $this->playhead = $e->playhead();
     }
@@ -53,6 +61,32 @@ final class ProfileHistory extends EventSourcedAggregate
     public function person(): ?Person
     {
         return $this->person;
+    }
+    public function whenPersonContactWasRecorded(PersonContactWasRecorded $event): void
+    {
+        $payload = $event->payload();
+        $next = ContactDetails::restore($payload['facts']);
+        if (
+            $this->person === null || $payload['previous_operation_id'] !== $this->operation
+            || $payload['operation_id'] === $this->operation
+            || (($this->contact === null) !== ($payload['provenance'] !== 'changed'))
+            || ($payload['provenance'] === 'created' && $next->version !== 1)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if (
+            $this->contact !== null && ($next->version !== $this->contact->version + 1
+            || [$next->preferredName, $next->phone, $next->address]
+                === [$this->contact->preferredName, $this->contact->phone, $this->contact->address])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->contact = $next;
+        $this->operation = $payload['operation_id'];
+    }
+    public function contact(): ?ContactDetails
+    {
+        return $this->contact;
     }
     public function operation(): ?string
     {

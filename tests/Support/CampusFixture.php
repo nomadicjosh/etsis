@@ -64,6 +64,7 @@ final class CampusFixture
     public SqlCampusRepository $repository;
     public SqlPaymentRepository $payments;
     public CampusService $service;
+    public \Domain\Person\Service\PersonContactService $contacts;
     public CampusContentService $content;
     public PortalService $posts;
     public DefuseMessageCipher $cipher;
@@ -102,6 +103,14 @@ final class CampusFixture
             ),
             $f->transferCredits(),
         );
+        $this->contacts = new \Domain\Person\Service\PersonContactService(
+            new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
+                $f->sql, $f->admissions, new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
+            ),
+            new \Infrastructure\Persistence\Repository\SqlPersonContactRepository($f->sql, $this->cipher),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+            $f->profileLedger(), $f->access, $f->transactions, $f->audit
+        );
         $this->service = new CampusService(
             $this->repository,
             $f->access,
@@ -113,6 +122,7 @@ final class CampusFixture
             $f->transactions,
             $f->audit,
             $f->clock,
+            $this->contacts,
         );
         $posts = new SqlPortalRepository($f->sql);
         $this->posts = new PortalService($posts, $f->access, $f->transactions, $f->audit);
