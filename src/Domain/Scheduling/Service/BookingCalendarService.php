@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Scheduling\Service;
 
-use Domain\Scheduling\BookingTimetable;
+use Domain\Scheduling\CalendarPeriod;
 use Domain\Scheduling\Repository\BuildingRepository;
 use Domain\Scheduling\Repository\RoomRepository;
 use Domain\Scheduling\Repository\BookingCategoryRepository;
@@ -61,7 +61,7 @@ final readonly class BookingCalendarService
         $selected = $building === null ? null : $this->buildings->get($building);
         $selectedCategory = $category === null ? null : $this->categories->get($category)->details();
         $now = $this->clock->now();
-        $period = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone(), $view);
+        $period = new CalendarPeriod($date ?? $now->format('Y-m-d'), $now->getTimezone(), $view);
         $window = new TimeSlot($period->startsAt, $period->endsAt);
         $rows = $this->rooms->calendar($window, $building, $search, 501, $category, $location);
         $this->authorize($actor);

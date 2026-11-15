@@ -36,6 +36,7 @@ final readonly class SectionMeetingPlanService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private PublishedSectionMeetingPlanReader $reader,
     ) {
     }
 
@@ -190,21 +191,7 @@ final readonly class SectionMeetingPlanService
 
     private function current(EntityId $section): ?StoredEvent
     {
-        $head = $this->history->latest($this->stream($section));
-        $projection = $this->plans->current($section);
-        if ($head === null && $projection === null) {
-            return null;
-        }
-        if (
-            $head === null || $projection === null || !$head->event instanceof SectionMeetingPlanWasPublished
-            || $head->event->playhead() !== (int) $projection['version']
-            || $head->event->payload()['version_id'] !== $projection['publication_id']
-            || new SectionMeetingPlanDefinition($head->event->payload()['definition'])->fingerprint() !==
-                $projection['definition_hash']
-        ) {
-            throw new CorruptHistoryException();
-        }
-        return $head;
+        return $this->reader->read($section);
     }
 
     /** Verify retained offering references from protected facts, including earlier selections.

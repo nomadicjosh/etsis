@@ -1250,3 +1250,36 @@
 
 .campus-course-description { white-space: pre-wrap; overflow-wrap: anywhere; }
 .campus-course-card summary:focus-visible, .campus-program-card summary:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+/* Published personal timetables share one responsive calendar across campus roles. */
+.academic-timetable-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: end;
+    gap: 1rem;
+}
+.academic-timetable-controls > *, .academic-timetable { min-width: 0; }
+.academic-timetable-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.academic-timetable-day {
+    min-width: 0;
+    padding: .75rem;
+    border: 1px solid var(--campus-line, #d8e1e9);
+    border-radius: .75rem;
+    background: var(--campus-paper, #fff);
+    color: #293e52;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.academic-timetable-day strong { display: block; margin-top: .5rem; color: #154b7d; }
+.academic-timetable-day[aria-pressed="true"] { border-color: #154b7d; background: #eef5fb; box-shadow: inset 0 0 0 1px #154b7d; }
+.academic-timetable-day:focus-visible, .academic-timetable summary:focus-visible { outline: 3px solid #154b7d; outline-offset: 3px; }
+.academic-timetable-weekday, .academic-timetable-spacer { display: none; }
+.academic-timetable-class { padding: .75rem 0; border-bottom: 1px solid var(--campus-line, #d8e1e9); overflow-wrap: anywhere; }
+.academic-timetable .btn[aria-pressed="true"] { background: var(--campus-primary, #154b7d); color: #fff; }
+@media (min-width: 576px) {
+    .academic-timetable-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (min-width: 700px) { .academic-timetable-days { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1100px) {
+    .academic-timetable-days { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .academic-timetable-weekday, .academic-timetable-spacer { display: block; }
+}

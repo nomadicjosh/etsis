@@ -7,6 +7,7 @@ $sections = [
     'grades' => ['Grades & academic status', 'mortarboard'],
     'progress' => ['Degree progress', 'signpost-split'],
     'registration' => ['Course registration', 'calendar2-plus'],
+    'timetable' => ['My timetable', 'calendar3-week'],
     'accounts' => ['Student accounts', 'wallet2'],
     'transcripts' => ['Transcripts', 'file-earmark-text'],
     'updates' => ['Campus updates', 'chat-square-heart'],
@@ -27,9 +28,16 @@ $client = [
     <?php if (!$applicationPage): ?>
         <aside class="campus-student-sidebar">
             <p class="campus-eyebrow">YOUR CAMPUS. YOUR JOURNEY.</p>
-            <nav aria-label="Student services">
+            <nav aria-label="Campus services">
                 <?php foreach ($sections as $key => [$label, $icon]): ?>
-                    <a href="/portal/student/<?= $key === 'overview' ? '' : $this->esc($key) . '/'; ?>" <?= $section === $key ? ' aria-current="page"' : ''; ?>>
+                    <?php
+                    $serviceUrl = $key === 'timetable'
+                        ? '/portal/timetable/'
+                        : '/portal/student/' . ($key === 'overview' ? '' : $key . '/');
+                    ?>
+                    <a
+                        href="<?= $this->esc($serviceUrl); ?>"
+                        <?= $section === $key ? 'aria-current="page"' : ''; ?>>
                         <i class="bi bi-<?= $this->esc($icon); ?>" aria-hidden="true"></i>
                         <?= $this->esc($label); ?>
                     </a>

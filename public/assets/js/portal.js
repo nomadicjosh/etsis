@@ -2196,7 +2196,7 @@
             applications(container);
             return;
         }
-        await refreshMe();
+        if (config.section !== 'timetable') await refreshMe();
         const restoreFocus = container.contains(document.activeElement);
         const content = document.createDocumentFragment();
         const actions = {
@@ -2209,6 +2209,13 @@
             transcripts,
             accounts,
             updates,
+            timetable: async content => {
+                const context = await request('/portal/api/timetable/context/');
+                const selected = context.recommended_term || context.terms[0];
+                const initial = selected ? await request('/portal/api/timetable/view/', 'POST', { term_id: selected.id }) : null;
+                if (pageLeaving) return;
+                window.createAcademicTimetable({ node: el, request, task, table }).mount(content, context, initial);
+            },
         };
         await actions[config.section](content);
         if (pageLeaving) return;

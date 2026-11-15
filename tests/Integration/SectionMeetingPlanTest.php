@@ -75,22 +75,28 @@ final class SectionMeetingPlanTest extends TestCase
         ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
     ): \Domain\Registration\Service\SectionMeetingPlanService {
         $f = $c->sis;
-        return new \Domain\Registration\Service\SectionMeetingPlanService(
-            new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository($f->sql, $f->bookingSections()),
-            $history ?? new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-                $f->sql,
-                $f->transactions,
-                $f->clock,
-                new \Infrastructure\EventSourcing\ProtectedEventCodec(
-                    EventStoreFixture::config($f->connection->queryBuilder())
-                ),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        $plans = new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+            $f->sql,
+            $f->bookingSections()
+        );
+        $history ??= new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $f->sql,
+            $f->transactions,
+            $f->clock,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                EventStoreFixture::config($f->connection->queryBuilder())
             ),
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+        );
+        return new \Domain\Registration\Service\SectionMeetingPlanService(
+            $plans,
+            $history,
             $f->access,
             $f->transactions,
             $audit ?? $f->audit,
             $c->fixture->cipher,
             $f->clock,
+            new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history),
         );
     }
 

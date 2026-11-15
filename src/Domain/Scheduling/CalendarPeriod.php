@@ -8,8 +8,8 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Shared\Exception\ValidationException;
 
-/** A bounded booking calendar read; it makes no reservation or approval decision. */
-final readonly class BookingTimetable
+/** Shared civil-date bounds and day grouping for working bookings and published academic timetables. */
+final readonly class CalendarPeriod
 {
     public DateTimeImmutable $startsAt;
     public DateTimeImmutable $endsAt;
@@ -41,7 +41,7 @@ final readonly class BookingTimetable
             $boundary = new DateTimeImmutable($expected, $timezone);
             if ($boundary->format('Y-m-d') !== $expected) {
                 throw new ValidationException([['field' => 'date',
-                    'message' => 'This timezone skips a date in this period. Use the room agenda for these dates.']]);
+                    'message' => 'This timezone skips a date in this period. Choose another date or view.']]);
             }
             $boundaries[] = $boundary;
         }
@@ -56,15 +56,19 @@ final readonly class BookingTimetable
 
     /**
      * @param list<array<string,mixed>> $rows
+     * @param non-empty-list<string> $statuses
      * @return array<string,mixed>
      */
-    public function summarize(array $rows): array
+    public function summarize(array $rows, array $statuses = ['approved', 'requested']): array
     {
         $days = [];
-        $totals = ['approved' => 0, 'requested' => 0];
+        $totals = array_fill_keys($statuses, 0);
         $timezone = $this->startsAt->getTimezone();
         $intervals = [];
         foreach ($rows as &$row) {
+            if (!array_key_exists($row['status'], $totals)) {
+                throw new \InvalidArgumentException('Unexpected timetable status.');
+            }
             $start = new DateTimeImmutable($row['starts_at'])->setTimezone($timezone);
             $end = new DateTimeImmutable($row['ends_at'])->setTimezone($timezone);
             $intervals[$row['id']] = [$start, $end];
@@ -77,7 +81,7 @@ final readonly class BookingTimetable
             $day = $interval->startsAt;
             $end = $interval->endsAt;
             $items = [];
-            $counts = ['approved' => 0, 'requested' => 0];
+            $counts = array_fill_keys($statuses, 0);
             foreach ($rows as $row) {
                 [$startAt, $endAt] = $intervals[$row['id']];
                 if ($startAt < $end && $endAt > $day) {

@@ -77,6 +77,9 @@ final readonly class CampusPortalController
         if (!$this->gate->isLoggedIn()) {
             return new RedirectResponse($this->renderer->loginUrl());
         }
+        if ($section === 'timetable') {
+            return $this->timetable();
+        }
         if (
             !in_array(
                 $section,
@@ -94,6 +97,15 @@ final readonly class CampusPortalController
             "public" => $this->service->publicData(),
             "applicationPage" => false,
         ]);
+    }
+
+    public function timetable(): ResponseInterface
+    {
+        if (!$this->gate->isLoggedIn()) {
+            return new RedirectResponse($this->renderer->loginUrl());
+        }
+        return $this->renderer->render('workspace', 'My timetable', ['section' => 'timetable',
+            'public' => ['programs' => [], 'terms' => []], 'applicationPage' => false]);
     }
 
     public function publicData(): ResponseInterface

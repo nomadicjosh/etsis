@@ -10,7 +10,7 @@ use Domain\Scheduling\Booking;
 use Domain\Scheduling\BookingOccurrence;
 use Domain\Scheduling\Repository\RoomRepository;
 use Domain\Scheduling\Room;
-use Domain\Scheduling\BookingTimetable;
+use Domain\Scheduling\CalendarPeriod;
 use Domain\Scheduling\Service\RoomService;
 use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -68,22 +68,22 @@ final class RoomTimetableTest extends TestCase
     public function testSchoolCalendarWeekUsesActualDstBoundariesAndRejectsSkippedCivilDates(): void
     {
         $zone = new DateTimeZone('America/Los_Angeles');
-        $spring = new BookingTimetable('2026-03-08', $zone);
+        $spring = new CalendarPeriod('2026-03-08', $zone);
         self::assertSame('2026-03-02T00:00:00-08:00', $spring->startsAt->format(DATE_ATOM));
         self::assertSame('2026-03-09T00:00:00-07:00', $spring->endsAt->format(DATE_ATOM));
         self::assertSame(167 * 3600, $spring->endsAt->getTimestamp() - $spring->startsAt->getTimestamp());
-        $fall = new BookingTimetable('2026-11-01', $zone);
+        $fall = new CalendarPeriod('2026-11-01', $zone);
         self::assertSame(169 * 3600, $fall->endsAt->getTimestamp() - $fall->startsAt->getTimestamp());
         self::assertCount(7, $fall->summarize([])['days']);
         foreach (['1000-01-06', '9998-12-27'] as $boundary) {
-            $calendar = new BookingTimetable($boundary, $zone);
+            $calendar = new CalendarPeriod($boundary, $zone);
             self::assertSame(
                 $calendar->startsAt->format('Y-m-d'),
-                new BookingTimetable($calendar->summarize([])['from'], $zone)->startsAt->format('Y-m-d')
+                new CalendarPeriod($calendar->summarize([])['from'], $zone)->startsAt->format('Y-m-d')
             );
         }
         $this->expectException(ValidationException::class);
-        new BookingTimetable('2011-12-30', new DateTimeZone('Pacific/Apia'));
+        new CalendarPeriod('2011-12-30', new DateTimeZone('Pacific/Apia'));
     }
 
     public function testWeekUsesHalfOpenBoundariesOmitsCancelledAndOtherRoomsAndDoesNotWrite(): void
@@ -229,7 +229,7 @@ final class RoomTimetableTest extends TestCase
     {
         foreach (['2026-02-30', '2026-2-03', '2026-03-08T00:00:00Z', '0000-01-01', '9999-12-31', ''] as $date) {
             try {
-                new BookingTimetable($date, new DateTimeZone('UTC'));
+                new CalendarPeriod($date, new DateTimeZone('UTC'));
                 self::fail('An invalid date was accepted.');
             } catch (ValidationException $error) {
                 self::assertSame('date', $error->errors[0]['field']);

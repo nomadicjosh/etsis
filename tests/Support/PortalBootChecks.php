@@ -3576,6 +3576,42 @@ if ($mixedMeetingResponse->getStatusCode() !== 200 || $mixedOfferingIds !== $exp
     || $teachingPost($meetingPath . 'publish/', ['review_token' => $mixedMeeting['review_token']])->getStatusCode() !== 200) {
     throw new RuntimeException('Meeting plan publication lost an earlier retained offering or its online/room mix.');
 }
+$timetableOwner = $sis->access->actor;
+$timetableFaculty = $sis->sql->one('sis_sections', ['id' => $bindingSection->id->value])['faculty_user_id'];
+$sis->sql->update('sis_sections', ['faculty_user_id' => $timetableOwner->value], ['id' => $bindingSection->id->value]);
+$timetableEvents = $sis->sql->rows('sis_history_events');
+$timetableContext = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/portal/api/timetable/context/'
+)));
+$timetableNoCsrf = $unverifiedPublication->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/portal/api/timetable/view/'
+));
+if ($timetableContext->getStatusCode() !== 200 || $timetableContext->hasHeader('phpdebugbar-id')
+    || !str_contains($timetableContext->getHeaderLine('Cache-Control'), 'no-store')
+    || $app->router->match($timetableNoCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('Personal timetable context/view lost provider, privacy or CSRF protections.');
+}
+$timetableResponse = $teachingPost('/portal/api/timetable/view/', ['term_id' => $sis->term->value,
+    'date' => '2026-08-24', 'view' => 'week', 'owner_user_id' => 'ignored-impostor']);
+$timetableData = json_decode((string) $timetableResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$timetableTerms = $teachingPost('/portal/api/timetable/terms/', ['search' => '']);
+if ($timetableResponse->getStatusCode() !== 200 || count($timetableData['items'] ?? []) !== 2
+    || $timetableTerms->getStatusCode() !== 200 || $timetableResponse->hasHeader('phpdebugbar-id')
+    || !str_contains($timetableResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $timetableResponse->getBody(), 'Fictional revised timetable')
+    || str_contains((string) $timetableResponse->getBody(), 'owner_user_id')
+    || str_contains((string) $timetableResponse->getBody(), 'booking_id')) {
+    throw new RuntimeException('Personal timetable failed its minimized published-meeting read.');
+}
+$sis->access->actor = $sis->user();
+if ($teachingPost('/portal/api/timetable/view/', ['term_id' => $sis->term->value])->getStatusCode() !== 403) {
+    throw new RuntimeException('Personal timetable accepted a term owned only by another account.');
+}
+$sis->access->actor = $timetableOwner;
+$sis->sql->update('sis_sections', ['faculty_user_id' => $timetableFaculty], ['id' => $bindingSection->id->value]);
+if ($sis->sql->rows('sis_history_events') !== $timetableEvents) {
+    throw new RuntimeException('Viewing a personal timetable appended academic history.');
+}
 $sis->clock->time = $meetingClock;
 $sis->access->staff = false;
 $sis->access->grants = ['sis:registration:manage'];

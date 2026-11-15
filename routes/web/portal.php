@@ -42,6 +42,11 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/moodle/session-channel/", [$moodle, "channel"])
         ->name("moodle.session.channel");
     $router->map(["GET"], "/portal/", [Portal::class, "home"])->name("portal.home");
+    $router->map(['GET'], '/portal/timetable/', [Portal::class, 'timetable'])->name('portal.timetable');
+    $timetable = \Application\Http\Controller\PortalTimetableController::class;
+    $router->map(['GET'], '/portal/api/timetable/context/', [$timetable, 'context'])->name('portal.timetable.context');
+    $router->map(['POST'], '/portal/api/timetable/terms/', [$timetable, 'terms'])->name('portal.timetable.terms');
+    $router->map(['POST'], '/portal/api/timetable/view/', [$timetable, 'view'])->name('portal.timetable.view');
     $router->map(["GET"], "/portal/sign-in/", [Portal::class, "landing"])->name("portal.landing");
     $router->map(["GET"], "/portal/courses/", [Portal::class, "catalog"])->name("portal.courses");
     $router->map(["GET"], "/portal/news/", [Portal::class, "news"])->name("portal.news");
