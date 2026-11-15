@@ -77,4 +77,12 @@ final readonly class SisTimesheetController
             FormInput::from($request)->optionalId('after')
         ));
     }
+
+    public function week(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->week(
+            new EntityId($id),
+            FormInput::from($request)->optionalText('week', 10)
+        ));
+    }
 }

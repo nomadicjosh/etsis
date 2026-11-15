@@ -105,6 +105,27 @@ final readonly class SqlTimeRepository implements TimeRepository
         $this->sql->lock('sis_employees', $employee->value, 'active');
     }
 
+    public function inWindow(EntityId $employee, TimeSlot $window, int $limit): array
+    {
+        if ($limit < 1 || $limit > 501) {
+            throw new \InvalidArgumentException('Invalid time review limit.');
+        }
+        $q = $this->sql->quote(...);
+        $utc = new DateTimeZone('UTC');
+        $rows = $this->sql->fetch(
+            'SELECT * FROM ' . $q('sis_timesheets') . ' WHERE ' . $q('employee_id') . ' = ?'
+            . ' AND ' . $q('starts_at') . ' >= ? AND ' . $q('starts_at') . ' < ?'
+            . ' AND ' . $q('ends_at') . ' > ?'
+            . ' ORDER BY ' . $q('starts_at') . ', ' . $q('id'),
+            // TimeEntry permits at most 24 elapsed hours, including overnight/DST shifts.
+            [$employee->value, $window->startsAt->setTimezone($utc)->modify('-24 hours')->format('Y-m-d H:i:s'),
+                $window->endsAt->setTimezone($utc)->format('Y-m-d H:i:s'),
+                $window->startsAt->setTimezone($utc)->format('Y-m-d H:i:s')],
+            $limit
+        );
+        return array_map($this->restore(...), $rows);
+    }
+
     public function add(TimeEntry $entry): void
     {
         $q = $this->sql->quote(...);
@@ -126,10 +147,13 @@ final readonly class SqlTimeRepository implements TimeRepository
 
     public function get(EntityId $id): TimeEntry
     {
-        $r = $this->sql->one('sis_timesheets', ['id' => $id->value]);
-
+        return $this->restore($this->sql->one('sis_timesheets', ['id' => $id->value]));
+    }
+    /** @param array<string,mixed> $r */
+    private function restore(array $r): TimeEntry
+    {
         return new TimeEntry(
-            $id,
+            new EntityId($r['id']),
             new EntityId($r['employee_id']),
             new TimeSlot(
                 new DateTimeImmutable($r['starts_at'], new DateTimeZone('UTC')),

@@ -916,6 +916,9 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/employees/{id}/time-entries/", [SisTimesheetController::class, "entries"])
         ->name("sis.employee.entries");
     $router
+        ->map(["POST"], "/sis/employees/{id}/time-week/", [SisTimesheetController::class, "week"])
+        ->name("sis.employee.week");
+    $router
         ->map(["POST"], "/sis/timesheets/", [SisTimesheetController::class, "submit"])
         ->name("sis.timesheet.submit");
     $router

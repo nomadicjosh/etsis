@@ -6,6 +6,7 @@ namespace Infrastructure\Security;
 
 use Codefy\Framework\Auth\Gate;
 use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\AuthenticationRequiredException;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 use Qubus\Exception\Data\TypeException;
@@ -60,7 +61,7 @@ final readonly class GateStudentAccess implements StudentAccess
     {
         $user = $this->gate->current();
         if (!is_object($user) || !isset($user->user_id) || !is_string($user->user_id)) {
-            throw new AccessDeniedException('Authentication required.');
+            throw new AuthenticationRequiredException('Authentication required.');
         }
 
         return new EntityId($user->user_id);

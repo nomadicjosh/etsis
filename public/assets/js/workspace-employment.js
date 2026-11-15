@@ -69,6 +69,7 @@ window.createWorkspaceEmployment = function (ui) {
                 ),
             );
         body.append(
+            button("Weekly time review", () => week(id)),
             button("Edit employment", () =>
                 flow(
                     "Save employment",
@@ -167,7 +168,74 @@ window.createWorkspaceEmployment = function (ui) {
         }
         await load();
     }
-    async function entry(id) {
+    async function week(id, selected = "") {
+        const body = openDrawer("Weekly time review", "EMPLOYMENT & TIME");
+        body.append(button("Back to employment", () => employee(id)));
+        const form = node("form", { class: "record-form mt-3" });
+        const date = node("input", {
+            id: "time-review-date", name: "week", type: "date", required: true,
+            min: "1000-01-08", max: "9998-12-24", class: "form-control",
+        });
+        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review week");
+        form.append(
+            node("label", { for: date.id, class: "form-label" }, "Any date in the week"),
+            date,
+            node("div", { class: "inline-actions mt-3" }, submit),
+        );
+        const information = node("p", { role: "status", "aria-live": "polite", class: "mt-3" });
+        const content = node("div");
+        let reviewed = null;
+        let serial = 0;
+        const previous = button("Previous week", () => load(reviewed.previous));
+        const next = button("Next week", () => load(reviewed.next));
+        const refresh = button("Refresh week", () => load(reviewed.week));
+        previous.disabled = next.disabled = refresh.disabled = true;
+        body.append(form, node("div", { class: "inline-actions" }, previous, next, refresh), information, content);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            if (form.reportValidity()) task(() => load(date.value), submit);
+        });
+        async function load(value) {
+            const token = ++serial;
+            const data = await request(`/sis/employees/${id}/time-week/`, "POST", value ? { week: value } : {});
+            if (!body.isConnected || token !== serial) return;
+            reviewed = data;
+            date.value = data.week;
+            previous.disabled = data.previous < date.min;
+            next.disabled = data.next > date.max;
+            refresh.disabled = false;
+            information.textContent = `${name(data.employee)} · ${data.employee.institutional_id}. Showing ${data.week} through ${data.through}. Times use ${data.timezone}.`;
+            const cards = node("div", { class: "row g-3 my-2" });
+            for (const status of ["pending", "approved", "rejected"]) {
+                const total = data.totals[status];
+                cards.append(node("div", { class: "col-12 col-sm-4" },
+                    node("div", { class: "card h-100" }, node("div", { class: "card-body" },
+                        node("h3", { class: "h6 text-capitalize" }, status),
+                        node("p", { class: "h4" }, duration(total.seconds)),
+                        node("p", { class: "mb-0" }, `${total.entries} ${total.entries === 1 ? "entry" : "entries"}`),
+                    )),
+                ));
+            }
+            const inZone = instant => new Date(instant).toLocaleString(undefined, { timeZone: data.timezone });
+            content.replaceChildren(
+                node("p", { class: "form-text" },
+                    "Monday–Sunday calendar review. Overnight shifts are split by local day; only time inside this week is counted. Rejected time is shown separately. These are elapsed hours, without break deductions, overtime rules or payroll rounding."),
+                cards,
+                grid(["Day", "Pending", "Approved", "Rejected"], data.days.map(day => [
+                    day.date, duration(day.pending_seconds), duration(day.approved_seconds), duration(day.rejected_seconds),
+                ]), "Daily time totals"),
+                node("h3", { class: "h5 mt-4" }, "Entries in this week"),
+                node("p", { class: "form-text" },
+                    "An entry crossing a week boundary shows only its portion here. Review opens its full work interval. Refresh this week after another reviewer makes changes."),
+                data.items.length ? grid(["Started", "Finished", "Time this week", "Status", "Action"],
+                    data.items.map(item => [inZone(item.starts_at), inZone(item.ends_at), duration(item.week_seconds),
+                        badge(item.status), button("Review weekly time entry", () => entry(item.id, { employee: id, week: data.week })),
+                    ]), "Weekly time entries") : node("p", {}, "No time entries overlap this week."),
+            );
+        }
+        await load(selected);
+    }
+    async function entry(id, weekly = null) {
         const record = await request(`/sis/timesheets/${id}/`);
         const body = openDrawer(name(record), "TIME ENTRY REVIEW");
         if (can("sis:audit:read"))
@@ -195,6 +263,7 @@ window.createWorkspaceEmployment = function (ui) {
                 "Times use your browser’s local timezone. Recorded elapsed time excludes no breaks and applies no payroll rounding.",
             ),
         );
+        if (weekly) body.append(button("Back to weekly time review", () => week(weekly.employee, weekly.week)));
         if (record.status === "pending" && record.is_self)
             body.append(
                 node(
@@ -218,7 +287,7 @@ window.createWorkspaceEmployment = function (ui) {
                                 () => ({ approve, version: record.version }),
                                 async () => {
                                     await ui.refreshDirectory();
-                                    await entry(id);
+                                    await entry(id, weekly);
                                 },
                                 {},
                                 "Review the employee and work interval. Saving checks the displayed version and prevents self approval. Decisions retain the submitted work interval.",

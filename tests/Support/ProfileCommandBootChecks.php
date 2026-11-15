@@ -525,5 +525,25 @@ $sis->access->actor = $other->ownerUserId;
 if ($app->router->match($employeeGet)->getStatusCode() !== 200) {
     throw new RuntimeException('Employment inactivity blocked owner history access.');
 }
+$weekPost = $employeeEdit->withUri(new \Laminas\Diactoros\Uri('/sis/employees/' . $employeeId . '/time-week/'))
+    ->withParsedBody(['week' => '2026-08-12', 'person_id' => $person->id->value]);
+$beforeWeek = $sis->sql->rows('sis_history_events');
+if ($app->router->match($weekPost->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403) {
+    throw new RuntimeException('The private weekly time review bypassed CSRF.');
+}
+$weeklyResponse = $app->router->match($weekPost);
+$weeklyData = json_decode((string) $weeklyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $weeklyResponse->getStatusCode() !== 200 || $weeklyData['week'] !== '2026-08-10'
+    || $weeklyData['employee']['person_id'] !== $other->id->value || count($weeklyData['days']) !== 7
+    || !str_contains($weeklyResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $weeklyResponse->getBody(), 'phpdebugbar')
+    || $beforeWeek !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('The weekly time review lost its private owner/read-only boundary.');
+}
+if ($app->router->match($weekPost->withParsedBody(['week' => '2026-02-30']))->getStatusCode() !== 422) {
+    throw new RuntimeException('The weekly time review accepted an invalid calendar date.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

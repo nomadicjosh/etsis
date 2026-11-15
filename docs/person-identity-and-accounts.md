@@ -10,6 +10,12 @@ Prospects register before applying. Public registration creates the person and b
 
 In **People → Add a person**, staff enter a name and required email, plus an optional assigned institutional ID. One transaction creates the linked person, basic account, protected history and queued initial-password invitation. Staff do not choose a password for this flow. Duplicate email is rejected with instructions to find the existing person; the system never adopts another account by matching an email. Duplicate submissions using the same operation return the original person. An audit or projection failure rolls back the whole creation.
 
+## Expired workspace sign-ins
+
+When a workspace request finds that sign-in has ended, it returns a private HTTP 401 response. The workspace opens the configured sign-in page as a normal browser navigation, including when the failed request was a form submission or download. It does not forward private form values, save them in browser storage or automatically replay the request after sign-in. A signed-in person who lacks permission still receives HTTP 403 and stays in the workspace with their form values intact.
+
+Workspace cookie/session checks run before CSRF validation, so expiry does not become a misleading permission or expired-form message. CSRF remains required for authenticated mutations. Public sign-in/password-setup flows and the separately authenticated Moodle server channel keep their existing boundaries; this behavior does not extend a sign-in deadline or establish a new session.
+
 ## Initial password setup
 
 Configure an HTTPS `APP_BASE_URL` and the existing mail settings, including `SIS_MAIL_ENABLED`, `SIS_MAIL_FROM` and the configured SMTP transport. The application can queue invitations while delivery is disabled. When delivery is enabled, the scheduler sends at most ten queued notices per minute. Configure the normal Codefy scheduler in your environment. A manual bounded batch is:
@@ -107,5 +113,17 @@ Role/person/employee locks, expected revisions, history, projection and required
 Directories and searches use indexed current rows. Opening a selected employee or authorizing a time submission verifies that employee's protected history and canonical person; altered tracked projections are rejected. Replay is bounded to 2,000 events, and a change cannot exceed that ceiling. Reading adds no historical events. Time-entry detail reuses its selected employment result rather than loading the same employment stream twice.
 
 No migration, live-row conversion or additional event table is required. Time entries retain their existing audited CRUD and version checks; this change does not claim that payroll calculations or historical job titles at the time of work are implemented. Position/pay-grade definitions, hire/termination decisions, faculty assignments, payroll boundaries and operational rebuild/retention tooling remain separate work.
+
+## Weekly time review
+
+Open **Team & timesheets → select an employee → Weekly time review**. Choose any date in the desired week, or use **Previous week**, **Next week** and **Refresh week**. The review uses Monday–Sunday calendar weeks and the institution's configured application timezone. The server supplies the current week; the browser's timezone does not decide its boundaries.
+
+Cards show pending, approved and rejected elapsed time separately, with unique entry counts. Seven daily rows split overnight work at local midnight. Entries crossing a week boundary contribute only the portion inside that week. Spring/fall clock changes use actual elapsed seconds, and rejected entries never inflate approved or pending totals. This is a calendar review, not a payroll-period definition, overtime calculation, break deduction or rounding rule.
+
+**Review weekly time entry** opens the existing full-interval decision screen. Approve/reject uses the displayed version and existing HR/self-approval safeguards. **Back to weekly time review** returns to the selected week and refreshes totals. A failed refresh keeps the last successful week and its displayed date range visible. The shared labeled controls, status/error messages and tables support keyboard access and narrow screens. Data remains in page memory.
+
+Owners can read only their own employee record; authorized HR staff can review another employee subject to super-account safeguards. Inactive employment retains weekly history and pending review. Current person and employment history are verified before reading, and actor/permission checks run again afterward. The private, CSRF-protected read adds no event, audit, receipt or projection. Time entries continue using their existing audited CRUD rather than acquiring an unnecessary event stream.
+
+The query selects overlapping entries for one employee and one week. The existing maximum shift of 24 elapsed hours provides a lower work-start bound, and the `sts_employee_work` index supports the employee/time range. At most 501 rows are read; more than 500 refuses the review rather than displaying incomplete totals. The index-only `20261115000000_AddSisTimesheetWorkIndex` migration is applied to the configured test database, with existing employee/time rows and all 20 event rows verified unchanged. Schema compilation covers the five supported framework databases; additional live-server qualification remains on the roadmap.
 
 This foundation covers current person creation, names, privacy, identifiers, personal contacts, account writers and employment title/active-status changes. Further role-specific decisions and complete operational projection rebuild/retention tooling remain on the roadmap. Existing academic and financial histories keep their own domain boundaries and exact historical snapshots.

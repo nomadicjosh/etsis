@@ -119,6 +119,7 @@ final class SisFixture
                     !str_contains($name, "CreateEventStoreTable") &&
                     !str_contains($name, "CreateSis") &&
                     !str_contains($name, "AddSisOfferingSelectionPosition") &&
+                    !str_contains($name, "AddSisTimesheetWorkIndex") &&
                     !str_contains($name, "CreateCampus")
                 ) {
                     continue;
@@ -838,7 +839,8 @@ final class SisFixture
             $this->employmentLedger(),
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
-            $this->profileLedger()
+            $this->profileLedger(),
+            $this->clock
         );
     }
     public function profileLedger(): \Domain\Person\Service\ProfileLedger

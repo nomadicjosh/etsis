@@ -270,4 +270,31 @@ final class LoginSessionMiddlewareTest extends TestCase
         self::assertStringContainsString("no-store", $response->getHeaderLine("Cache-Control"));
         self::assertStringNotContainsString("sis_login_sessions", (string) $response->getBody());
     }
+    public function testWorkspaceGuestsExpireBeforeCsrfWhileSignedInPermissionDenialsRemain403(): void
+    {
+        $cookie = $this->cookie();
+        $proof = $this->reader->read($this->request($cookie));
+        $this->authority->revokeCurrent($proof);
+        foreach ([null, 'invalid', $cookie] as $value) {
+            $request = new ServerRequest([], [], '/sis/employees/', 'POST');
+            if ($value !== null) {
+                $request = $request->withCookieParams(['USERSESSID' => $value]);
+            }
+            $response = new SisPrivacyMiddleware()->process($request, new CallableRequestHandler(
+                fn($request) => $this->guard->process($request, new CallableRequestHandler(static function (): never {
+                    self::fail('An expired workspace request reached CSRF or its write handler.');
+                }))
+            ));
+            self::assertSame(401, $response->getStatusCode());
+            self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
+            self::assertSame(['error' => 'Sign in again to continue.'], json_decode((string) $response->getBody(), true));
+        }
+        $request = $this->request($this->cookie(), '/sis/employees/');
+        $response = new SisPrivacyMiddleware()->process($request, new CallableRequestHandler(
+            fn($request) => $this->guard->process($request, new CallableRequestHandler(static function (): never {
+                throw new \Domain\Shared\Exception\AccessDeniedException('Fictional permission denial');
+            }))
+        ));
+        self::assertSame(403, $response->getStatusCode());
+    }
 }

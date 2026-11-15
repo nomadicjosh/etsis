@@ -104,6 +104,36 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testTimeReviewIndexCompilesWithoutRowChangesForEverySupportedDialect(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000000_AddSisTimesheetWorkIndex.php';
+        $definitions = [];
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::exactly(2))->method('alter')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definitions): void {
+                self::assertSame('sis_timesheets', $name);
+                $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($definition);
+                $definitions[] = $definition;
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new AddSisTimesheetWorkIndex('time-review');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        $migration->down();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            foreach ($definitions as $definition) {
+                $commands = json_encode(new $class($dialect)->alter($definition), JSON_THROW_ON_ERROR);
+                self::assertStringContainsString('sts_employee_work', $commands, $driver);
+                self::assertDoesNotMatchRegularExpression('/\\b(?:DELETE|UPDATE|INSERT|DROP TABLE)\\b/i', $commands);
+            }
+        }
+    }
     public function testSignInStatusCompilesForEveryInstalledSchemaCompiler(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261114000006_CreateSisUserSignInStatus.php';

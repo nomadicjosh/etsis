@@ -24,6 +24,7 @@
     let formSerial = 0;
     let drawerOpener = null;
     let pendingNavigation = null;
+    let signInPending = false;
     let formDraft = { id: null, version: null, status: 'draft', fields: [] };
     let importState = { csv: '', mapping: {}, preview: null };
     const drawer = bootstrap.Offcanvas.getOrCreateInstance($one('#record-drawer'));
@@ -49,13 +50,23 @@
     }
 
     async function send(path, method = 'GET', data, accept = 'application/json') {
-        return fetch(path, {
+        const response = await fetch(path, {
             method, credentials: 'same-origin', cache: 'no-store', redirect: 'error',
             // The router's legacy input parser accepts form strings, but crashes on JSON numbers/booleans.
             // Private middleware restores the typed object before CSRF, firewall and controller handling.
             headers: { Accept: accept, ...(method === 'GET' ? {} : { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-CSRF-Token': csrf() }) },
             body: method === 'GET' ? undefined : new URLSearchParams({ _workspace_json: JSON.stringify(data || {}) }).toString(),
         });
+        if (response.status === 401) {
+            if (!signInPending) {
+                signInPending = true;
+                window.location.assign(config.login_url || '/login/');
+            }
+            const error = new Error('Sign in again to continue.');
+            error.status = 401;
+            throw error;
+        }
+        return response;
     }
     async function request(path, method = 'GET', data) {
         return jsonResponse(await send(path, method, data));
@@ -85,6 +96,7 @@
     }
 
     function showError(error) {
+        if (error.status === 401 && signInPending) return;
         const main = $one('#workspace-alert');
         const inDrawer = $one('#record-drawer').matches('.show, .showing');
         let alert = main;

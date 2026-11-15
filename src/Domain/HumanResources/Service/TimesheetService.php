@@ -12,6 +12,7 @@ use Domain\HumanResources\Employee;
 use Domain\HumanResources\Repository\TimeRepository;
 use Domain\HumanResources\TimeEntry;
 use Domain\HumanResources\ValueObject\EmploymentFacts;
+use Domain\HumanResources\ValueObject\TimeReviewWeek;
 use Domain\Person\Person;
 use Domain\Person\Repository\PersonProfileRepository;
 use Domain\Person\Service\ProfileLedger;
@@ -21,6 +22,7 @@ use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
+use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 
 final readonly class TimesheetService
@@ -35,6 +37,7 @@ final readonly class TimesheetService
         private PersonProfileRepository $peopleRows,
         private AccessRepository $roles,
         private ProfileLedger $peopleHistory,
+        private Clock $clock,
     ) {
     }
 
@@ -196,6 +199,28 @@ final readonly class TimesheetService
         $rows = array_slice($rows, 0, 50);
 
         return ['items' => $rows, 'next_after' => $more ? (string) $rows[49]['id'] : null];
+    }
+
+    /** @return array<string,mixed> */
+    public function week(EntityId $id, ?string $date = null): array
+    {
+        $actor = $this->access->authenticatedUserId();
+        $profile = $this->employeeProfile($id);
+        $now = $this->clock->now();
+        $week = new TimeReviewWeek($date ?? $now->format('Y-m-d'), $now->getTimezone());
+        $entries = $this->repository->inWindow($id, new TimeSlot($week->startsAt, $week->endsAt), 501);
+        if (count($entries) > 500) {
+            throw new ValidationException([['field' => 'week',
+                'message' => 'This week exceeds the review limit. Ask HR for a detailed time review.']]);
+        }
+        foreach ($entries as $entry) {
+            if ($entry->employeeId->value !== $id->value) {
+                throw new AccessDeniedException('The time review contains another employee.');
+            }
+        }
+        $summary = $week->summarize($entries);
+        $this->authorizeRead($profile->employee, $actor);
+        return $summary + ['employee' => $this->profileDetails($profile)];
     }
 
     public function submit(EntityId $employee, TimeSlot $work): TimeEntry

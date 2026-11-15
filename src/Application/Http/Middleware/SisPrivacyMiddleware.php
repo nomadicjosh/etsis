@@ -8,6 +8,7 @@ use Codefy\Framework\Http\Middleware\Csrf\InvalidTokenException;
 use Codefy\Framework\Http\Middleware\Csrf\TokenMismatchException;
 use DomainException;
 use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\AuthenticationRequiredException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use InvalidArgumentException;
@@ -46,6 +47,8 @@ final class SisPrivacyMiddleware implements MiddlewareInterface
         }
         try {
             $response = $handler->handle($request);
+        } catch (AuthenticationRequiredException) {
+            $response = PrivateErrorResponse::make($request, 401, 'Sign in again to continue.');
         } catch (AccessDeniedException | UnauthorizedException) {
             $response = PrivateErrorResponse::make($request, 403, 'Access denied.');
         } catch (InvalidTokenException | TokenMismatchException) {

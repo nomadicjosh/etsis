@@ -6,6 +6,7 @@ namespace Domain\HumanResources\Repository;
 
 use Domain\HumanResources\Employee;
 use Domain\HumanResources\TimeEntry;
+use Domain\Scheduling\TimeSlot;
 use Domain\Shared\ValueObject\EntityId;
 
 interface TimeRepository
@@ -16,6 +17,8 @@ interface TimeRepository
     public function saveEmployee(Employee $employee): void;
     /** @return list<array<string, mixed>> */
     public function entries(EntityId $employee, ?EntityId $after, int $limit): array;
+    /** @return list<TimeEntry> Entries overlapping the window, ordered by work time and stable ID. */
+    public function inWindow(EntityId $employee, TimeSlot $window, int $limit): array;
     /** Resolve the person only when employment is active, for new time submissions. */
     public function employeePerson(EntityId $employee): EntityId;
     public function lockEmployee(EntityId $employee): void;

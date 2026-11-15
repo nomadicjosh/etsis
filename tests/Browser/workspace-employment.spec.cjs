@@ -40,6 +40,24 @@ async function setup(page, self = false, rejectFirstEdit = false) {
             items: data.after ? [time] : Array.from({ length: 50 }, (_, index) => ({ ...time, id: index ? id(100 + index) : entry })),
             next_after: data.after ? null : id(149),
         };
+        else if (path === `/sis/employees/${employee}/time-week/`) {
+            const week = !data.week || data.week === '2026-08-12' ? '2026-08-10' : data.week;
+            const shifted = days => {
+                const date = new Date(`${week}T12:00:00Z`);
+                date.setUTCDate(date.getUTCDate() + days);
+                return date.toISOString().slice(0, 10);
+            };
+            const present = week === '2026-08-10';
+            result = { week, through: shifted(6), previous: shifted(-7), next: shifted(7),
+                timezone: 'America/Los_Angeles', employee: profile,
+                totals: Object.fromEntries(['pending', 'approved', 'rejected'].map(key => [key,
+                    { entries: present && key === status ? 1 : 0, seconds: present && key === status ? 3600 : 0 }])),
+                days: Array.from({ length: 7 }, (_, index) => ({ date: shifted(index),
+                    pending_seconds: present && status === 'pending' && index === 1 ? 3600 : 0,
+                    approved_seconds: present && status === 'approved' && index === 1 ? 3600 : 0,
+                    rejected_seconds: 0 })), items: present ? [{ ...time, week_seconds: 3600 }] : [],
+            };
+        }
         else if (path === `/sis/timesheets/${entry}/`) result = time;
         else if (path.endsWith('/decision/')) { status = data.approve ? 'approved' : 'rejected'; version++; }
         else if (path === '/sis/timesheets/') { status = 'pending'; version = 0; result = { id: entry, status }; }
@@ -124,4 +142,37 @@ test('time submission validates elapsed hours and self review offers no approval
     expect(calls.find(call => call.path === '/sis/timesheets/')?.data).toMatchObject({ employee_id: employee });
     await accessible(page);
     expect(errors).toEqual([]);
+});
+
+test('weekly review keeps daily totals, empty weeks and approval connected with private accessible controls', async ({ page }) => {
+    const { calls, errors } = await setup(page);
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Weekly time review', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('2026-08-10 through 2026-08-16');
+    await expect(page.locator('#drawer-body')).toContainText('America/Los_Angeles');
+    await expect(page.getByRole('table', { name: 'Daily time totals' }).locator('tbody tr')).toHaveCount(7);
+    await accessible(page);
+    await page.getByRole('button', { name: 'Next week', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No time entries overlap this week.');
+    await page.getByRole('button', { name: 'Previous week', exact: true }).click();
+    await page.getByLabel('Any date in the week').fill('2026-08-12');
+    await page.getByRole('button', { name: 'Review week', exact: true }).click();
+    await expect(page.getByLabel('Any date in the week')).toHaveValue('2026-08-10');
+    await page.getByRole('button', { name: 'Review weekly time entry', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve time entry', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm time approval', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to weekly time review', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Weekly time entries' })).toContainText('approved');
+    await page.route(`**/sis/employees/${employee}/time-week/`, route => route.fulfill({
+        status: 409, json: { error: 'Fictional weekly review unavailable.' },
+    }));
+    await page.getByRole('button', { name: 'Refresh week', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional weekly review unavailable.');
+    await expect(page.getByRole('table', { name: 'Weekly time entries' })).toContainText('approved');
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(errors).toEqual([]);
+    expect(calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

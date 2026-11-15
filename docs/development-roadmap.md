@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-15**, after retaining employment title/active-status changes in protected history, with required reasons, preserved canonical person/account records, bounded verification and retry-safe time eligibility. Dated person addresses retain their shared portal/staff workflow and atomic mailing-source transitions. Indexed submission-date reporting, named joins and connected admissions/student/registration/recorded-credit sources remain available. Starting points remain editable examples, including section headcounts with configurable thresholds. Authoritative graduation sources, derived financial aggregates, richer expressions and broader source/relationship coverage remain open.
+Last reviewed: **2026-11-15**, after adding bounded weekly employee time review and restoring sign-in navigation when a workspace session expires. Employment title/active-status decisions retain protected history, required reasons and safe retries. Dated person addresses retain their shared portal/staff workflow and atomic mailing-source transitions. Indexed submission-date reporting, named joins and connected admissions/student/registration/recorded-credit sources remain available. Starting points remain editable examples, including section headcounts with configurable thresholds. Authoritative graduation sources, derived financial aggregates, richer expressions and broader source/relationship coverage remain open.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -232,7 +232,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 - [ ] Link published section meeting patterns to optional rooms/resources; support online/hybrid sections, multiple patterns, team teaching and institution timezone/DST behavior.
 - [ ] Complete recurring booking authoring, calendar categories/timetable views and controlled notifications.
-- [ ] Extend retained employment title/active-status decisions with position/pay-grade and hire/termination history, plus weekly timesheet exception/approval summaries; determine payroll calculation/export boundaries before implementing them.
+- [x] Add [weekly employee time review](person-identity-and-accounts.md#weekly-time-review): institution-timezone calendar weeks, daily/weekly pending/approved/rejected elapsed totals, clipped overnight/DST intervals and connected version-checked entry decisions. Preserve owner/HR/super boundaries and inactive history; index and bound the read without new events or partial totals.
+- [ ] Extend retained employment title/active-status decisions with position/pay-grade and hire/termination history, plus institution-defined timesheet exception rules; determine payroll calculation/export boundaries before implementing them.
 - [ ] Add communications templates, office approvals, reviewed audience selection and scheduled dispatch/reconciliation without uncontrolled retries.
 - [ ] Complete office ownership, resolution tasks and scoped delegation for holds and other shared queues; keep permission grants independent of case assignment.
 - [ ] Provide contextual, privacy-safe support diagnostics and operational audit views. Raw logs and event payloads remain outside ordinary staff reporting.

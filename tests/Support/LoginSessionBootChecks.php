@@ -36,9 +36,9 @@ $app->configContainer->setConfigKey("app", [
 $app->router->baseMiddleware = [
     "sis.privacy",
     "moodle.session.channel",
-    "csrf.protection",
     "user.cookie.decrypt",
     "auth.session.authority",
+    "csrf.protection",
     "bind.request",
     "php.debugbar",
 ];
@@ -54,6 +54,7 @@ $app->router->get("/portal/session-probe/", static function () use (
     $session = $app->make(\Domain\User\Service\LoginSessionAuthority::class)->current($proof);
     return new \Laminas\Diactoros\Response\JsonResponse(["reference" => $session->id->value]);
 });
+$app->router->post('/sis/session-probe/', static fn() => new \Laminas\Diactoros\Response\JsonResponse(['ok' => true]));
 $request = static function (
     string $path,
     string $method = "GET",
@@ -110,6 +111,22 @@ if ($probe->getStatusCode() !== 200) {
     throw new RuntimeException("The real Gate could not register its sign-in reference.");
 }
 $firstRef = json_decode((string) $probe->getBody(), true, flags: JSON_THROW_ON_ERROR)["reference"];
+
+foreach ([null, 'fictional-invalid-cookie'] as $cookie) {
+    $expiredWorkspace = $app->router->match($request('/sis/session-probe/', 'POST', $cookie, csrf: false));
+    if (
+        $expiredWorkspace->getStatusCode() !== 401
+        || !str_contains($expiredWorkspace->getHeaderLine('Cache-Control'), 'no-store')
+    ) {
+        throw new RuntimeException('The real workspace pipeline mistook an expired sign-in for CSRF or access denial.');
+    }
+}
+if (
+    $app->router->match($request('/sis/session-probe/', 'POST', $first, csrf: false))->getStatusCode() !== 403
+    || $app->router->match($request('/sis/session-probe/', 'POST', $first))->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Workspace authentication weakened CSRF for signed-in users.');
+}
 
 // This fixture supplies CSRF proof directly; initialize the view helper without changing that proof.
 $app->make(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::class);

@@ -6,6 +6,6 @@ namespace Domain\Shared\Exception;
 
 use RuntimeException;
 
-final class AccessDeniedException extends RuntimeException
+class AccessDeniedException extends RuntimeException
 {
 }
