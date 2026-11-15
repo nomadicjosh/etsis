@@ -84,7 +84,8 @@ final readonly class SqlRoomRepository implements RoomRepository
             . ', s.' . $q('ends_at') . ', b.' . $q('title') . ', b.' . $q('status') . ' FROM '
             . $q('sis_booking_slots') . ' s JOIN ' . $q('sis_bookings') . ' b ON b.' . $q('id')
             . ' = s.' . $q('booking_id')
-            . ' WHERE s.' . $q('room_id') . ' = ? AND b.' . $q('status') . ' IN (?, ?) AND s.' . $q('starts_at')
+            . ' WHERE s.' . $q('cancelled_at') . ' IS NULL AND s.'
+            . $q('room_id') . ' = ? AND b.' . $q('status') . ' IN (?, ?) AND s.' . $q('starts_at')
             . ' < ? AND s.' . $q('ends_at') . ' > ?' . $cursor . ' ORDER BY s.' . $q('starts_at') . ', s.' . $q('id'),
             $parameters,
             $limit

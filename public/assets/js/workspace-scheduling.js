@@ -34,6 +34,7 @@ window.createWorkspaceScheduling = function (ui) {
             .toISOString()
             .slice(0, 16);
     const display = (instant) => new Date(instant).toLocaleString();
+    const meetingTime = instant => new Date(instant).toLocaleString(undefined, { timeZoneName: 'shortOffset' });
     const roomLabel = record => [record.code, record.name].filter(Boolean).join(' · ');
     const buildingLabel = record => record.building ? `${record.building.code} · ${record.building.name}` : 'Building not assigned';
     const grid = (headers, rows, caption) =>
@@ -502,17 +503,43 @@ window.createWorkspaceScheduling = function (ui) {
             node('p', { class: 'private-text' }, buildingLabel(place)),
             note(),
             button("View room agenda", () =>
-                room(record.room_id, record.slots[0].starts_at),
-            ),
-            grid(
-                ["Starts", "Ends"],
-                record.slots.map((slot) => [
-                    display(slot.starts_at),
-                    display(slot.ends_at),
-                ]),
-                "Requested times",
+                room(record.room_id, record.occurrences[0].starts_at),
             ),
         );
+        const content = node('div'), status = node('p', { role: 'status', class: 'form-text', tabindex: '-1' });
+        let page = 0;
+        const previous = button('Previous booking meetings', () => { page--; draw(true); });
+        const next = button('Next booking meetings', () => { page++; draw(true); });
+        function draw(focus = false) {
+            content.replaceChildren(grid(['Starts', 'Ends', 'Status', 'Actions'],
+                record.occurrences.slice(page * 20, (page + 1) * 20).map(occurrence => [
+                    meetingTime(occurrence.starts_at), meetingTime(occurrence.ends_at), badge(occurrence.status),
+                    occurrence.status === 'cancelled'
+                        ? (occurrence.cancelled_at ? `Cancelled ${display(occurrence.cancelled_at)}` : 'Booking cancelled')
+                        : button(`Cancel meeting on ${meetingTime(occurrence.starts_at)}`, () => {
+                            const panel = openDrawer('Cancel one meeting', 'SPACE REQUEST');
+                            panel.append(node('p', { class: 'private-text' }, record.title),
+                                node('p', {}, `${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
+                                node('p', {}, 'This cancels only this meeting and releases its reservation. Other meetings keep their current approval. The original date stays in this booking’s history.'),
+                                button('Back to booking', () => booking(id, back)),
+                                button('Confirm meeting cancellation', async () => {
+                                    await request(`/sis/bookings/${id}/occurrences/${occurrence.id}/cancel/`, 'POST',
+                                        { version: record.version });
+                                    if (!panel.isConnected) return;
+                                    notify('Meeting cancelled.');
+                                    await ui.refreshDirectory();
+                                    await booking(id, back);
+                                }, 'btn-primary'));
+                            panel.querySelector('button').focus();
+                        }),
+                ]), 'Booking meetings'));
+            status.textContent = `Meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, record.occurrences.length)} of ${record.occurrences.length}.`;
+            status.textContent += ` ${record.occurrences.filter(item => item.status !== 'cancelled').length} active meetings.`;
+            previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= record.occurrences.length;
+            if (focus) status.focus();
+        }
+        body.append(content, status, node('div', { class: 'inline-actions' }, previous, next));
+        draw();
         if (record.status === "requested")
             body.append(
                 button(
@@ -528,7 +555,7 @@ window.createWorkspaceScheduling = function (ui) {
                                 await booking(id, back);
                             },
                             {},
-                            "Approval reserves every listed occurrence. Overlapping approved bookings prevent approval.",
+                            "Approval reserves the remaining active meetings. Overlapping approved bookings prevent approval.",
                         ),
                     "btn-primary",
                 ),

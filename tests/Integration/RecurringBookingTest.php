@@ -172,9 +172,13 @@ final class RecurringBookingTest extends TestCase
         self::assertCount(7, $s->sql->rows('sis_booking_slots'));
         self::assertSame($before[0], $s->sql->rows('sis_history_events'));
         $read = $service->get($id);
-        self::assertSame('2026-03-09T17:00:00+00:00', $read->slots[2]->startsAt->format(DATE_ATOM));
+        self::assertSame('2026-03-09T17:00:00+00:00', $read->occurrences[2]->time->startsAt->format(DATE_ATOM));
         $service->approve($id, 0);
-        $service->cancel($id, 1);
+        $service->cancelOccurrence($id, $read->occurrences[0]->id, 1);
+        $retry = $service->requestSeries($id, $room, 'Fictional seminar', $this->pattern(), $review['revision']);
+        self::assertSame(2, $retry->version);
+        self::assertNotNull($retry->occurrences[0]->cancelledAt);
+        $service->cancel($id, 2);
         $rows = $s->sql->rows('sis_booking_slots');
         self::assertSame('cancelled', $service->requestSeries(
             $id,

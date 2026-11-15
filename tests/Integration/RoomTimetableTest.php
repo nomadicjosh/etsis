@@ -7,6 +7,7 @@ namespace Tests\Integration;
 use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Scheduling\Booking;
+use Domain\Scheduling\BookingOccurrence;
 use Domain\Scheduling\Repository\RoomRepository;
 use Domain\Scheduling\Room;
 use Domain\Scheduling\RoomTimetable;
@@ -57,7 +58,7 @@ final class RoomTimetableTest extends TestCase
             $room,
             $f->access->actor,
             'Fictional meeting',
-            [new TimeSlot(new DateTimeImmutable($start), new DateTimeImmutable($end))],
+            [BookingOccurrence::plan(new TimeSlot(new DateTimeImmutable($start), new DateTimeImmutable($end)))],
             $status
         );
         new SqlBookingRepository($f->sql)->add($booking);
@@ -157,7 +158,7 @@ final class RoomTimetableTest extends TestCase
         }
         $repository = new SqlBookingRepository($f->sql);
         foreach (array_chunk($slots, 250) as $chunk) {
-            $repository->add(new Booking(EntityId::generate(), $room, $f->access->actor, 'Fictional meetings', $chunk));
+            $repository->add(new Booking(EntityId::generate(), $room, $f->access->actor, 'Fictional meetings', array_map(BookingOccurrence::plan(...), $chunk)));
         }
         $result = $this->service($f)->week($room, '2026-08-10');
         self::assertCount(500, $result['items']);

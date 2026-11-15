@@ -39,7 +39,7 @@ final readonly class BookingService
     public function request(EntityId $room, string $title, array $slots): Booking
     {
         $actor = $this->access->authenticatedUserId();
-        $booking = new Booking(EntityId::generate(), $room, $actor, $title, $slots);
+        $booking = Booking::request(EntityId::generate(), $room, $actor, $title, $slots);
         $this->transactions->run(function () use ($booking, $actor): void {
             $this->repository->lockRoom($booking->roomId);
             $this->repository->add($booking);
@@ -65,7 +65,7 @@ final readonly class BookingService
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         $this->timezone($pattern);
         $slots = new BookingSeries()->pattern($pattern);
-        new Booking(EntityId::generate(), $room, $actor, trim($title), $slots);
+        Booking::request(EntityId::generate(), $room, $actor, trim($title), $slots);
         $review = $this->proposal($room, trim($title), $slots);
         $this->manager($actor);
         return $review + ['timezone' => $pattern->timezone->getName()];
@@ -79,7 +79,7 @@ final readonly class BookingService
         string $reviewedRevision
     ): Booking {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
-        $booking = new Booking($id, $room, $actor, trim($title), new BookingSeries()->pattern($pattern));
+        $booking = Booking::request($id, $room, $actor, trim($title), new BookingSeries()->pattern($pattern));
         return $this->transactions->run(function () use ($booking, $actor, $pattern, $reviewedRevision): Booking {
             $this->repository->lockRoom($booking->roomId);
             $this->manager($actor);
@@ -93,7 +93,7 @@ final readonly class BookingService
                 if (
                     $existing->ownerUserId->value !== $actor->value
                     || $existing->roomId->value !== $booking->roomId->value || $existing->title !== $booking->title
-                    || $this->instants($existing->slots) !== $this->instants($booking->slots)
+                    || $this->instants($existing->times()) !== $this->instants($booking->times())
                 ) {
                     throw new ConcurrentModificationException('That identity already belongs to another request.');
                 }
@@ -101,7 +101,7 @@ final readonly class BookingService
                 return $existing;
             }
             $this->timezone($pattern);
-            $review = $this->proposal($booking->roomId, $booking->title, $booking->slots);
+            $review = $this->proposal($booking->roomId, $booking->title, $booking->times());
             if (!hash_equals($review['revision'], $reviewedRevision)) {
                 throw new ConcurrentModificationException('Room details or availability changed. Review again.');
             }
@@ -183,8 +183,11 @@ final readonly class BookingService
             if ($expectedVersion !== null && $booking->version !== $expectedVersion) {
                 throw new ConcurrentModificationException('Reload the booking before deciding.');
             }
-            foreach ($booking->slots as $slot) {
-                if ($this->repository->conflicts($booking->roomId, $slot, $booking->id)) {
+            foreach ($booking->occurrences as $occurrence) {
+                if (
+                    $occurrence->cancelledAt === null
+                    && $this->repository->conflicts($booking->roomId, $occurrence->time, $booking->id)
+                ) {
                     throw new DomainException('A booking occurrence conflicts with an approved booking.');
                 }
             }
@@ -225,5 +228,32 @@ final readonly class BookingService
         $this->access->requireOwnerOrPermission($booking->ownerUserId, 'sis:scheduling:manage');
         $this->actor($actor);
         return $booking;
+    }
+
+    public function cancelOccurrence(EntityId $id, EntityId $occurrence, int $expectedVersion): Booking
+    {
+        $initial = $this->get($id);
+        $actor = $this->access->authenticatedUserId();
+        return $this->transactions->run(function () use ($initial, $actor, $occurrence, $expectedVersion): Booking {
+            $this->repository->lockRoom($initial->roomId);
+            $latest = $this->repository->get($initial->id);
+            $this->actor($actor);
+            $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
+            if ($latest->roomId->value !== $initial->roomId->value) {
+                throw new ConcurrentModificationException('The booking room changed.');
+            }
+            if ($latest->occurrence($occurrence)->cancelledAt !== null) {
+                return $latest;
+            }
+            if ($latest->version !== $expectedVersion) {
+                throw new ConcurrentModificationException('Reload the booking before cancelling a meeting.');
+            }
+            $changed = $latest->cancelOccurrence($occurrence, $actor, $this->clock->now());
+            $this->repository->cancelOccurrence($changed, $occurrence, $latest->version);
+            $this->audit->record($actor, 'booking.occurrence_cancelled', $latest->id);
+            $this->actor($actor);
+            $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
+            return $changed;
+        });
     }
 }

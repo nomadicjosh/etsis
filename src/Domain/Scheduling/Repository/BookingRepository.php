@@ -14,5 +14,6 @@ interface BookingRepository
     public function add(Booking $booking): void;
     public function get(EntityId $id): Booking;
     public function save(Booking $booking, int $expectedVersion): void;
+    public function cancelOccurrence(Booking $booking, EntityId $occurrence, int $expectedVersion): void;
     public function conflicts(EntityId $room, TimeSlot $slot, ?EntityId $excluding = null): bool;
 }

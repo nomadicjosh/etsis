@@ -444,6 +444,24 @@ if ($timetableResponse->getStatusCode() !== 200 || count($timetable['days'] ?? [
     throw new RuntimeException('The private read-only weekly room route failed.');
 }
 
+$seriesPath = '/sis/bookings/' . $seriesContext['new_id'];
+$seriesRead = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $seriesPath . '/')
+));
+$seriesRecord = json_decode((string) $seriesRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$meetingPath = $seriesPath . '/occurrences/' . $seriesRecord['occurrences'][2]['id'] . '/cancel/';
+$meetingMissingVersion = $teachingPost($meetingPath, []);
+$meetingCancelled = $teachingPost($meetingPath, ['version' => 0]);
+$meetingRetry = $teachingPost($meetingPath, ['version' => 0]);
+$meetingResult = json_decode((string) $meetingRetry->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($meetingMissingVersion->getStatusCode() !== 422 || $meetingCancelled->getStatusCode() !== 200
+    || $meetingRetry->getStatusCode() !== 200 || ($meetingResult['version'] ?? null) !== 1
+    || $sis->sql->rows('sis_history_events') !== $seriesEvents
+    || !str_contains($meetingCancelled->getHeaderLine('Cache-Control'), 'no-store')
+    || $meetingCancelled->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('The individual meeting cancellation lost its private version-checked boundary.');
+}
+
 // Employment editing, historical reads and decisions also boot through the real providers.
 $employeeResponse = $teachingPost("/sis/employees/", [
     "person_id" => $teachingStudent->personId->value,

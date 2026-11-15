@@ -7,6 +7,7 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\Scheduling\Service\BookingService;
 use Domain\Scheduling\TimeSlot;
+use Domain\Scheduling\BookingOccurrence;
 use Domain\Scheduling\BookingPattern;
 use InvalidArgumentException;
 use Domain\Shared\ValueObject\EntityId;
@@ -93,7 +94,22 @@ final readonly class SisBookingController
 
         return new JsonResponse(['id' => $booking->id->value, 'room_id' => $booking->roomId->value,
             'title' => $booking->title, 'status' => $booking->status, 'version' => $booking->version,
-            'slots' => array_map(static fn (TimeSlot $s): array => ['starts_at' => $s->startsAt->format(DATE_ATOM),
-                'ends_at' => $s->endsAt->format(DATE_ATOM)], $booking->slots)]);
+            'occurrences' => array_map(static fn (BookingOccurrence $s): array => [
+                'id' => $s->id->value, 'starts_at' => $s->time->startsAt->format(DATE_ATOM),
+                'ends_at' => $s->time->endsAt->format(DATE_ATOM),
+                'status' => $booking->status === 'cancelled' || $s->cancelledAt !== null
+                    ? 'cancelled' : $booking->status,
+                'cancelled_at' => $s->cancelledAt?->format(DATE_ATOM),
+            ], $booking->occurrences)]);
+    }
+
+    public function cancelOccurrence(ServerRequest $request, string $id, string $occurrence): ResponseInterface
+    {
+        $booking = $this->service->cancelOccurrence(
+            new EntityId($id),
+            new EntityId($occurrence),
+            FormInput::from($request)->integer('version')
+        );
+        return new JsonResponse(['id' => $id, 'status' => $booking->status, 'version' => $booking->version]);
     }
 }

@@ -53,7 +53,7 @@ async function fixture(page) {
             if (data.week === state.delayed) await new Promise(resolve => { state.release = resolve; });
         } else if (path === `/sis/bookings/${booking}/`) result = { id: booking, room_id: room,
             title: 'Fictional spring seminar', status: state.approved ? 'approved' : 'requested', version: state.approved ? 1 : 0,
-            slots: [{ starts_at: '2026-03-08T01:30:00-08:00', ends_at: '2026-03-08T03:30:00-07:00' }] };
+            occurrences: [{ id: id(50), status: state.approved ? 'approved' : 'requested', starts_at: '2026-03-08T01:30:00-08:00', ends_at: '2026-03-08T03:30:00-07:00' }] };
         else if (path.endsWith('/approve/')) state.approved = true;
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });

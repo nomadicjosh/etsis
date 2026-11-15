@@ -104,6 +104,40 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testMeetingCancellationColumnsCompileWithoutChangingRecordedFacts(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000007_CreateSisBookingCancellations.php';
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method('alter')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definition): void {
+                self::assertSame('sis_booking_slots', $name);
+                $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($definition);
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new CreateSisBookingCancellations('meeting-cancellation');
+        $migration->setObjectMap(new ArrayObject([
+            'phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration'),
+        ]));
+        $migration->up();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(
+                static fn(string $name): string => '"' . $name . '"'
+            );
+            $commands = json_encode(new $class($dialect)->alter($definition), JSON_THROW_ON_ERROR);
+            self::assertStringContainsString('cancelled_at', $commands, $driver);
+            self::assertStringContainsString('cancelled_by', $commands, $driver);
+            self::assertDoesNotMatchRegularExpression('/UPDATE |DELETE FROM|DROP TABLE/i', $commands);
+        }
+        $this->expectException(LogicException::class);
+        $migration->down();
+    }
+
     public function testBookingWindowIndexesCompileForAllFrameworkDialectsWithoutChangingRecordedRows(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000005_AddSisBookingWindowIndexes.php';

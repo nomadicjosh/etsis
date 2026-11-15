@@ -27,7 +27,7 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
             starts_at: '2026-08-11T09:00:00+00:00', ends_at: '2026-08-11T10:00:00+00:00' }], next_after: data.after ? null : id(3) };
         else if (path === '/sis/bookings/') result = { id: booking, status };
         else if (path === `/sis/bookings/${booking}/`) result = { id: booking, room_id: room, title: 'Fictional seminar', status, version,
-            slots: [{ starts_at: '2026-08-11T09:00:00+00:00', ends_at: '2026-08-11T10:00:00+00:00' }] };
+            occurrences: [{ id: id(50), status, starts_at: '2026-08-11T09:00:00+00:00', ends_at: '2026-08-11T10:00:00+00:00' }] };
         else if (path.endsWith('/approve/')) { status = 'approved'; version++; }
         else if (path.endsWith('/cancel/')) { status = 'cancelled'; version++; }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -73,11 +73,11 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
     await expect(page.getByRole('button', { name: 'Approve space request', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Approve space request', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm space approval', exact: true }).click();
-    await expect(page.locator('#drawer-body .status-badge')).toHaveText('approved');
+    await expect(page.locator('#drawer-body .status-badge').first()).toHaveText('approved');
     expect(calls.find(item => item.path.endsWith('/approve/'))?.data).toEqual({ version: 0 });
     await page.getByRole('button', { name: 'Cancel space request', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm space cancellation', exact: true }).click();
-    await expect(page.locator('#drawer-body .status-badge')).toHaveText('cancelled');
+    await expect(page.locator('#drawer-body .status-badge').first()).toHaveText('cancelled');
     expect(calls.find(item => item.path.endsWith('/cancel/'))?.data).toEqual({ version: 1 });
     expect(calls.every(item => item.csrf === 'fictional-test-token')).toBe(true);
     await accessible();
@@ -129,7 +129,7 @@ async function recurringFixture(page) {
         }
         else if (path === `/sis/rooms/${room}/`) result = { id: room, code: 'LIB.101', capacity: 30, revision: 'fictional-room' };
         else if (path === `/sis/bookings/${booking}/`) result = { id: booking, room_id: room,
-            title: '<script>Fictional seminar</script>', status: 'requested', version: 0, slots: occurrences };
+            title: '<script>Fictional seminar</script>', status: 'requested', version: 0, occurrences: occurrences.map((item, i) => ({ ...item, id: id(100 + i), status: 'requested' })) };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
@@ -172,7 +172,11 @@ test('recurring room requests review paged meetings, preserve drafts after a sta
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Submit recurring request', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Requested times', exact: true }).locator('tbody tr')).toHaveCount(state.slotCount);
+    await expect(page.getByRole('table', { name: 'Booking meetings', exact: true }).locator('tbody tr')).toHaveCount(20);
+    await expect(page.locator('#drawer-body')).toContainText(`${state.slotCount} active meetings.`);
+    await page.getByRole('button', { name: 'Next booking meetings', exact: true }).click();
+    await page.getByRole('button', { name: 'Next booking meetings', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Booking meetings', exact: true }).locator('tbody tr')).toHaveCount(state.slotCount - 40);
     const submitted = state.calls.filter(call => call.path.endsWith('/planning/request/'));
     expect(submitted[0].data).toEqual(submitted[1].data);
     expect(submitted[1].data).toMatchObject({ id: id(2), pattern: { weekdays: [1, 3], excluded_dates: ['2026-03-11'],
