@@ -706,6 +706,9 @@
             actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary',
                 onclick: () => task(() => schedulingStudio.requestSeries({ section_id: row.id, title: row.code })) },
                 'Plan class meetings'));
+        if (section === 'sections' && can('sis:scheduling:manage') && can('sis:catalog:manage'))
+            actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary',
+                onclick: () => task(() => schedulingStudio.meetingPlan(row.id)) }, 'Meeting plan'));
         await operations.enhance(section, row, body);
     }
 

@@ -3457,6 +3457,44 @@ if ($sectionChoicesResponse->getStatusCode() !== 200
     || !in_array($bindingSection->id->value, array_column($sectionChoices['items'] ?? [], 'id'), true)) {
     throw new RuntimeException('Published class meeting choices failed through the real provider.');
 }
+// Approved meeting plans are separate protected academic facts; booking decisions remain audited CRUD.
+$meetingClock = $sis->clock->time;
+$sis->clock->time = $meetingClock->setTimezone(new \DateTimeZone('America/Los_Angeles'));
+$meetingPath = '/sis/sections/' . $bindingSection->id->value . '/meeting-plan/';
+$pendingMeetingReview = $teachingPost($meetingPath . 'review/', ['reason' => 'Fictional undecided schedule']);
+if ($pendingMeetingReview->getStatusCode() !== 422
+    || $teachingPost('/sis/bookings/' . $classBooking['id'] . '/cancel/', ['version' => 0])->getStatusCode() !== 200) {
+    throw new RuntimeException('Meeting plan review did not require a pending booking decision.');
+}
+$meetingUnverified = $unverifiedPublication->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $meetingPath . 'review/'
+));
+if ($app->router->match($meetingUnverified)->getStatusCode() !== 403) {
+    throw new RuntimeException('Meeting plan review bypassed browser CSRF protection.');
+}
+$meetingSetupResponse = $teachingPost($meetingPath . 'setup/', []);
+$meetingSetup = json_decode((string) $meetingSetupResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$meetingReviewResponse = $teachingPost($meetingPath . 'review/', ['reason' => 'Fictional timetable approval']);
+$meetingReview = json_decode((string) $meetingReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($meetingSetupResponse->getStatusCode() !== 200 || $meetingReviewResponse->getStatusCode() !== 200
+    || !isset($meetingReview['review_token']) || count($meetingSetup['working']['meetings'] ?? []) !== 1
+    || !str_contains($meetingSetupResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $meetingSetupResponse->hasHeader('phpdebugbar-id') || $sis->sql->rows('sis_history_events') !== $classEvents) {
+    throw new RuntimeException('Meeting plan setup/review lost provider, privacy or read-only protections.');
+}
+$meetingPublishedResponse = $teachingPost($meetingPath . 'publish/', ['review_token' => $meetingReview['review_token']]);
+$meetingRetryResponse = $teachingPost($meetingPath . 'publish/', ['review_token' => $meetingReview['review_token']]);
+$meetingHistoryResponse = $teachingPost($meetingPath . 'versions/', []);
+$meetingHistory = json_decode((string) $meetingHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($meetingPublishedResponse->getStatusCode() !== 200 || $meetingRetryResponse->getStatusCode() !== 200
+    || (string) $meetingPublishedResponse->getBody() !== (string) $meetingRetryResponse->getBody()
+    || count($meetingHistory['items'] ?? []) !== 1
+    || count($sis->sql->rows('sis_history_events')) !== count($classEvents) + 1
+    || !str_contains($meetingHistoryResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $meetingHistoryResponse->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('Meeting plan publication did not preserve a private idempotent academic fact.');
+}
+$sis->clock->time = $meetingClock;
 // Reviewed amendments resolve through the same real providers, protected routes and browser guards.
 $offeringCatalog = new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($sis->sql);
 $offeringCatalog->save("sections", $bindingSection->id, ["capacity" => 30]);
@@ -3518,8 +3556,35 @@ if (
         "Future offering amendment failed its private history and original receipt checks.",
     );
 }
+$sis->clock->time = $meetingClock->setTimezone(new \DateTimeZone('America/Los_Angeles'));
+$newOfferingMeeting = $teachingPost('/sis/bookings/', [
+    'room_id' => null, 'section_id' => $bindingSection->id->value, 'title' => 'Fictional amended offering class',
+    'slots' => [['starts_at' => '2026-08-26T19:00:00Z', 'ends_at' => '2026-08-26T20:00:00Z']],
+]);
+$newOfferingMeetingId = json_decode((string) $newOfferingMeeting->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'] ?? null;
+if ($newOfferingMeeting->getStatusCode() !== 201 || $newOfferingMeetingId === null
+    || $teachingPost('/sis/bookings/' . $newOfferingMeetingId . '/approve/', ['version' => 0])->getStatusCode() !== 200) {
+    throw new RuntimeException('A new class meeting failed to retain the amended offering.');
+}
+$mixedMeetingResponse = $teachingPost($meetingPath . 'review/', ['reason' => 'Fictional revised timetable']);
+$mixedMeeting = json_decode((string) $mixedMeetingResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$mixedOfferingIds = array_column($mixedMeeting['definition']['meetings'] ?? [], 'offering_publication_id');
+sort($mixedOfferingIds);
+$expectedOfferingIds = [$sectionPublicationReview['operation_id'], $nextPublished['operation_id']];
+sort($expectedOfferingIds);
+if ($mixedMeetingResponse->getStatusCode() !== 200 || $mixedOfferingIds !== $expectedOfferingIds
+    || $teachingPost($meetingPath . 'publish/', ['review_token' => $mixedMeeting['review_token']])->getStatusCode() !== 200) {
+    throw new RuntimeException('Meeting plan publication lost an earlier retained offering or its online/room mix.');
+}
+$sis->clock->time = $meetingClock;
 $sis->access->staff = false;
 $sis->access->grants = ['sis:registration:manage'];
+foreach (['setup' => [], 'review' => ['reason' => 'Forbidden'],
+    'publish' => ['review_token' => $meetingReview['review_token']], 'versions' => []] as $action => $data) {
+    if ($teachingPost($meetingPath . $action . '/', $data)->getStatusCode() !== 403) {
+        throw new RuntimeException('Meeting plans bypassed catalog/scheduling authority.');
+    }
+}
 if (
     $teachingPost($sectionPublicationPath . 'selection-review/', [
     'version_id' => $sectionPublicationReview['operation_id'], 'reason' => 'Forbidden',

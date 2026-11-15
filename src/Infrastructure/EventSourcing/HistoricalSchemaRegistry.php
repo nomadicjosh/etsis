@@ -100,6 +100,10 @@ final readonly class HistoricalSchemaRegistry
                 "type" => "section_offering_binding", "root" => \Domain\Registration\SectionOfferingBinding::class,
                 "fields" => ["publication_id", "definition_hash"],
             ],
+            \Domain\Registration\Event\SectionMeetingPlanWasPublished::class => [
+                'type' => 'section_meeting_plan', 'root' => \Domain\Registration\SectionMeetingPlan::class,
+                'fields' => ['version_id', 'previous_version_id', 'definition'],
+            ],
             \Domain\Registration\Event\SectionDefinitionWasPublished::class => [
                 "type" => "section_publication",
                 "root" => \Domain\Registration\SectionPublication::class,
@@ -873,6 +877,15 @@ final readonly class HistoricalSchemaRegistry
             ) {
                 throw new CorruptHistoryException();
             }
+            if ($definition['type'] === 'section_meeting_plan') {
+                if (!is_array($payload['definition']) || $payload['version_id'] === $payload['previous_version_id']) {
+                    throw new CorruptHistoryException();
+                }
+                $plan = new \Domain\Registration\ValueObject\SectionMeetingPlanDefinition($payload['definition']);
+                if ($plan->data['section_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($definition["type"] === "section_publication") {
                 if (!is_array($payload["definition"]) || $payload["version_id"] === $payload["previous_version_id"]) {
                     throw new CorruptHistoryException();
@@ -971,6 +984,7 @@ final readonly class HistoricalSchemaRegistry
             \Domain\Gradebook\GradingScale::class => "grading_scale",
             \Domain\Catalog\ProgramPublication::class => "program_publication",
             \Domain\Registration\SectionOfferingBinding::class => "section_offering_binding",
+            \Domain\Registration\SectionMeetingPlan::class => 'section_meeting_plan',
             \Domain\Registration\SectionPublication::class => "section_publication",
             \Domain\Admissions\AdmissionDecision::class => "admission_decision",
             \Domain\Admissions\Matriculation::class => "matriculation",
@@ -1009,6 +1023,7 @@ final readonly class HistoricalSchemaRegistry
             'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),
             "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),
             "section_offering_binding" => new \Domain\Registration\ValueObject\SectionOfferingBindingId($id),
+            'section_meeting_plan' => new \Domain\Registration\ValueObject\SectionMeetingPlanId($id),
             "section_publication" => new \Domain\Registration\ValueObject\SectionPublicationId($id),
             "admission_decision" => new \Domain\Admissions\ValueObject\AdmissionDecisionId($id),
             "matriculation" => new \Domain\Admissions\ValueObject\MatriculationId($id),

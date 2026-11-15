@@ -39,6 +39,7 @@ final class EventClassMap
             \Domain\Registration\Event\SectionOfferingVersionWasAmended::class,
             \Domain\Registration\Event\SectionOfferingVersionWasSelected::class,
             \Domain\Registration\Event\SectionDefinitionWasPublished::class,
+            \Domain\Registration\Event\SectionMeetingPlanWasPublished::class,
             \Domain\Admissions\Event\AdmissionDecisionWasObserved::class,
             \Domain\Admissions\Event\AdmissionDecisionWasCorrected::class,
             \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class,

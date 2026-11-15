@@ -937,5 +937,161 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(node('p', { class: 'form-text' },
             'Use labels such as Course sections, Meetings or Conferences. Retiring a category keeps existing links and calendar filters; restoring it makes it available again. Labels accompany every color.'), sample, form);
     }
-    return { room, booking, requestBooking, requestSeries, building, buildingForm, roomForm, calendar, categoryForm, categoryBadge };
+    function meetingPlanTable(definition, heading) {
+        const region = node('section', { class: 'mt-4', 'aria-label': heading });
+        const content = node('div');
+        let page = 0;
+        const meetings = definition.meetings;
+        const locations = new Map(definition.locations.map(location => [location.room_id, location]));
+        const time = instant => new Date(instant).toLocaleString(undefined, {
+            timeZone: definition.timezone, timeZoneName: 'shortOffset',
+        });
+        const draw = () => {
+            const start = page * 20;
+            content.replaceChildren();
+            if (!meetings.length) {
+                content.append(node('p', { class: 'alert alert-info' },
+                    'No scheduled meetings. This plan contains no room or online meeting times.'));
+                return;
+            }
+            content.append(grid(['Starts', 'Ends', 'Location', 'Building'],
+                meetings.slice(start, start + 20).map(meeting => {
+                    const location = locations.get(meeting.room_id);
+                    return [time(meeting.starts_at), time(meeting.ends_at),
+                        location ? `${location.code} · ${location.name}` : 'Online · No room',
+                        location?.building_id ? `${location.building_code} · ${location.building_name}`
+                            : location ? 'Building not assigned' : 'No physical building'];
+                }), `${heading} · ${definition.timezone}`));
+            const nav = node('nav', { class: 'inline-actions mt-3', 'aria-label': `${heading} pages` });
+            if (page > 0) nav.append(button('Previous meetings', () => { page--; draw(); }));
+            const status = node('p', { class: 'small mb-0', role: 'status', tabindex: '-1' },
+                `Meetings ${start + 1}–${Math.min(start + 20, meetings.length)} of ${meetings.length}`);
+            nav.append(status);
+            if (start + 20 < meetings.length) nav.append(button('Next meetings', () => { page++; draw(); }));
+            content.append(nav);
+            if (region.isConnected) status.focus();
+        };
+        region.append(node('h3', { class: 'h5' }, heading), node('p', { class: 'form-text' },
+            `${meetings.length} meetings · ${definition.timezone}. Room and building names are retained at publication.`), content);
+        draw();
+        return region;
+    }
+    async function meetingPlan(sectionId) {
+        if (!can('sis:scheduling:manage') || !can('sis:catalog:manage')) return;
+        const body = openDrawer('Section meeting plan', 'ACADEMIC SCHEDULE');
+        body.append(node('p', { role: 'status' }, 'Loading the section meeting plan…'));
+        const base = `/sis/sections/${sectionId}/meeting-plan/`;
+        const snapshot = await request(`${base}setup/`, 'POST', {});
+        if (!body.isConnected) return;
+        let reason = '', generation = 0;
+        const focusTitle = () => body.querySelector('h2')?.focus();
+        const title = text => node('h2', { class: 'h4', tabindex: '-1' }, text);
+        const explain = () => node('p', { class: 'form-text' },
+            'Publishing retains a historical academic schedule. It does not approve requests, move reservations or change student registration. Later booking changes need a new reviewed publication.');
+        const home = () => {
+            generation++;
+            body.replaceChildren(title(`${snapshot.working.section_code} · ${snapshot.working.term_code}`), explain());
+            const status = node('p', { class: 'alert alert-info', role: 'status' },
+                !snapshot.published ? 'No meeting plan has been published.' : snapshot.changed
+                    ? 'The working schedule differs from the published plan. Review and publish the approved changes.'
+                    : `Published plan ${snapshot.published.version} matches the approved working schedule.`);
+            body.append(status);
+            if (snapshot.published) body.append(button('View published plan', () => retained(snapshot.published)));
+            if (snapshot.published) body.append(button('Publication history', () => history()));
+            if (snapshot.pending_booking_ids.length) {
+                body.append(node('h3', { class: 'h5 mt-4' }, 'Meeting requests need a decision'),
+                    node('p', {}, 'Approve or cancel these pending requests before reviewing the plan. Return here after making the decisions.'));
+                const pending = node('div');
+                let page = 0;
+                const draw = () => {
+                    const start = page * 20;
+                    pending.replaceChildren();
+                    snapshot.pending_booking_ids.slice(start, start + 20).forEach((id, index) =>
+                        pending.append(button(`Review request ${start + index + 1}`, () => booking(id,
+                            { label: 'Back to meeting plan', open: () => meetingPlan(sectionId) }))));
+                    const nav = node('nav', { class: 'inline-actions mt-3', 'aria-label': 'Pending request pages' });
+                    if (page) nav.append(button('Previous requests', () => { page--; draw(); }));
+                    nav.append(node('p', { class: 'small mb-0', role: 'status' },
+                        `Requests ${start + 1}–${Math.min(start + 20, snapshot.pending_booking_ids.length)} of ${snapshot.pending_booking_ids.length}`));
+                    if (start + 20 < snapshot.pending_booking_ids.length)
+                        nav.append(button('Next requests', () => { page++; draw(); }));
+                    pending.append(nav);
+                };
+                draw();
+                body.append(pending);
+                body.append(button('Reload meeting plan', () => meetingPlan(sectionId)));
+            }
+            body.append(meetingPlanTable(snapshot.working, 'Approved working meetings'));
+            if (snapshot.changed && !snapshot.pending_booking_ids.length) {
+                const form = node('form', { class: 'mt-4' });
+                const input = node('textarea', { id: 'meeting-plan-reason', name: 'reason', required: true,
+                    maxlength: 1000, rows: 3, class: 'form-control' });
+                input.value = reason;
+                const submit = node('button', { type: 'submit', class: 'btn btn-primary mt-3' }, 'Review meeting plan');
+                form.append(node('label', { for: input.id, class: 'form-label' }, 'Reason for publication'), input, submit);
+                input.addEventListener('input', () => { reason = input.value; generation++; });
+                form.addEventListener('submit', event => {
+                    event.preventDefault();
+                    task(async () => {
+                        if (!form.reportValidity()) return;
+                        reason = input.value;
+                        const serial = ++generation;
+                        const review = await request(`${base}review/`, 'POST', { reason });
+                        if (!form.isConnected || serial !== generation || input.value !== reason) return;
+                        confirm(review);
+                    }, submit);
+                });
+                body.append(form);
+            }
+            focusTitle();
+        };
+        const retained = (publication, back = home) => {
+            generation++;
+            body.replaceChildren(title(`Published meeting plan ${publication.version}`),
+                node('p', {}, `Published ${display(publication.recorded_at)}`),
+                node('p', {}, publication.reason || 'Publication reason not available.'),
+                meetingPlanTable(publication.definition, 'Retained meetings'), button('Back', back));
+            focusTitle();
+        };
+        const history = async (cursor = null) => {
+            const serial = ++generation;
+            const result = await request(`${base}versions/`, 'POST', { cursor });
+            if (!body.isConnected || serial !== generation) return;
+            body.replaceChildren(title('Meeting plan publications'), node('p', { class: 'form-text' },
+                `History through publication ${result.through_version}. Earlier plans retain their original locations and meeting times.`));
+            result.items.forEach(item => body.append(node('article', { class: 'border rounded p-3 mb-3' },
+                node('h3', { class: 'h5' }, `Plan ${item.version}`),
+                node('p', {}, `${display(item.recorded_at)} · ${item.definition.meetings.length} meetings`),
+                button('View retained plan', () => retained(item, () => history(cursor))))));
+            if (result.next_cursor) body.append(button('More publications', () => history(result.next_cursor)));
+            body.append(button('Back to working schedule', home));
+            focusTitle();
+        };
+        const confirm = review => {
+            generation++;
+            body.replaceChildren(title('Review before publishing'), explain(), node('p', {}, review.reason),
+                node('p', { class: 'alert alert-info' }, review.previous
+                    ? `This will replace plan ${review.previous.version} with ${review.previous.definition.meetings.length} meetings. Its history will be retained.`
+                    : 'This will publish the first meeting plan for this section.'),
+                meetingPlanTable(review.definition, 'Meetings to publish'));
+            const status = node('p', { class: 'form-text', role: 'status' },
+                `Review expires ${display(new Date(review.expires_at * 1000))}.`);
+            const confirmButton = button(review.definition.meetings.length ? 'Publish reviewed meeting plan' : 'Publish plan with no scheduled meetings', async () => {
+                if (!body.isConnected || Date.now() >= review.expires_at * 1000) {
+                    status.textContent = 'This review has expired. Go back and review the meeting plan again.';
+                    return;
+                }
+                const serial = generation;
+                await request(`${base}publish/`, 'POST', { review_token: review.review_token });
+                if (!body.isConnected || serial !== generation) return;
+                notify('Meeting plan published. Earlier publications are retained.');
+                await meetingPlan(sectionId);
+            }, 'btn-primary');
+            body.append(status, node('div', { class: 'inline-actions' },
+                button('Back to working schedule', home), confirmButton));
+            focusTitle();
+        };
+        home();
+    }
+    return { room, booking, requestBooking, requestSeries, building, buildingForm, roomForm, calendar, categoryForm, categoryBadge, meetingPlan };
 };
