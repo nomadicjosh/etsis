@@ -84,12 +84,23 @@ final readonly class SqlBookingRepository implements BookingRepository
 
     public function conflicts(EntityId $room, TimeSlot $slot, ?EntityId $excluding = null): bool
     {
+        return $this->overlaps($room, $slot, $excluding, null);
+    }
+
+    public function conflictsExceptOccurrence(EntityId $room, TimeSlot $slot, EntityId $excluding): bool
+    {
+        return $this->overlaps($room, $slot, null, $excluding);
+    }
+
+    private function overlaps(EntityId $room, TimeSlot $slot, ?EntityId $booking, ?EntityId $occurrence): bool
+    {
         $q = $this->sql->quote(...);
         $utc = new DateTimeZone('UTC');
         $parameters = [$room->value, 'approved', $slot->endsAt->setTimezone($utc)->format('Y-m-d H:i:s'),
             $slot->startsAt->setTimezone($utc)->format('Y-m-d H:i:s')];
-        if ($excluding !== null) {
-            $parameters[] = $excluding->value;
+        $excluded = $booking ?? $occurrence;
+        if ($excluded !== null) {
+            $parameters[] = $excluded->value;
         }
 
         return $this->sql->fetch('SELECT s.' . $q('id') . ' FROM ' . $q('sis_booking_slots') . ' s JOIN '
@@ -97,7 +108,8 @@ final readonly class SqlBookingRepository implements BookingRepository
             . ' WHERE s.' . $q('cancelled_at') . ' IS NULL AND s.'
             . $q('room_id') . ' = ? AND b.' . $q('status') . ' = ? AND s.' . $q('starts_at')
             . ' < ? AND s.' . $q('ends_at') . ' > ?'
-            . ($excluding === null ? '' : ' AND b.' . $q('id') . ' <> ?'), $parameters, 1) !== [];
+            . ($booking !== null ? ' AND b.' . $q('id') . ' <> ?'
+                : ($occurrence !== null ? ' AND s.' . $q('id') . ' <> ?' : '')), $parameters, 1) !== [];
     }
 
     public function cancelOccurrence(Booking $booking, EntityId $occurrence, int $expectedVersion): void
@@ -118,5 +130,38 @@ final readonly class SqlBookingRepository implements BookingRepository
         if ($changed !== 1) {
             throw new ConcurrentModificationException('The meeting changed.');
         }
+    }
+
+    public function replaceOccurrence(
+        Booking $original,
+        EntityId $occurrence,
+        Booking $replacement,
+        int $expectedVersion
+    ): void {
+        $this->cancelOccurrence($original, $occurrence, $expectedVersion);
+        $this->add($replacement);
+        $this->sql->insert('sis_booking_replacements', [
+            'id' => $occurrence->value, 'booking_id' => $replacement->id->value,
+        ]);
+    }
+
+    public function links(EntityId $booking): array
+    {
+        $q = $this->sql->quote(...);
+        $from = ' FROM ' . $q('sis_booking_replacements') . ' r JOIN ' . $q('sis_booking_slots')
+        . ' s ON s.' . $q('id') . ' = r.' . $q('id');
+        $source = $this->sql->fetch('SELECT s.' . $q('booking_id') . ', r.' . $q('id') . $from
+            . ' WHERE r.' . $q('booking_id') . ' = ?', [$booking->value], 1);
+        $rows = $this->sql->fetch('SELECT r.' . $q('id') . ', r.' . $q('booking_id') . $from
+            . ' WHERE s.' . $q('booking_id') . ' = ?', [$booking->value], 367);
+        if (count($rows) > 366) {
+            throw new LogicException('A booking has too many replacement references.');
+        }
+        $replacements = [];
+        foreach ($rows as $row) {
+            $replacements[$row['id']] = $row['booking_id'];
+        }
+        return ['source_booking_id' => $source[0]['booking_id'] ?? null,
+            'source_occurrence_id' => $source[0]['id'] ?? null, 'replacements' => $replacements];
     }
 }

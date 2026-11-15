@@ -462,6 +462,28 @@ if ($meetingMissingVersion->getStatusCode() !== 422 || $meetingCancelled->getSta
     throw new RuntimeException('The individual meeting cancellation lost its private version-checked boundary.');
 }
 
+$movePath = $seriesPath . '/occurrences/' . $seriesRecord['occurrences'][3]['id'] . '/reschedule/';
+$moveInput = ['room_id' => $roomId, 'starts_at' => '2026-08-12T19:00:00+00:00',
+    'ends_at' => '2026-08-12T20:00:00+00:00', 'version' => 1];
+$moveReviewResponse = $teachingPost($movePath . 'review/', $moveInput);
+$moveReview = json_decode((string) $moveReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($moveReviewResponse->getStatusCode() !== 200 || !($moveReview['available'] ?? false)) {
+    throw new RuntimeException('The meeting reschedule review failed.');
+}
+$moveResponse = $teachingPost($movePath . 'confirm/', $moveInput + [
+    'id' => $moveReview['new_id'], 'revision' => $moveReview['revision'],
+]);
+$moveView = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/bookings/' . $moveReview['new_id'] . '/'
+)));
+$moveRecord = json_decode((string) $moveView->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($moveResponse->getStatusCode() !== 201 || $moveView->getStatusCode() !== 200
+    || ($moveRecord['source_booking_id'] ?? null) !== $seriesContext['new_id']
+    || !str_contains($moveResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $moveResponse->hasHeader('phpdebugbar-id') || $sis->sql->rows('sis_history_events') !== $seriesEvents) {
+    throw new RuntimeException('The private meeting reschedule lost its connected history or CSRF boundary.');
+}
+
 // Employment editing, historical reads and decisions also boot through the real providers.
 $employeeResponse = $teachingPost("/sis/employees/", [
     "person_id" => $teachingStudent->personId->value,

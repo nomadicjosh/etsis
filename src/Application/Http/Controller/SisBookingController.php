@@ -90,16 +90,19 @@ final readonly class SisBookingController
 
     public function show(string $id): ResponseInterface
     {
-        $booking = $this->service->get(new EntityId($id));
+        $context = $this->service->view(new EntityId($id));
+        $booking = $context['booking'];
 
         return new JsonResponse(['id' => $booking->id->value, 'room_id' => $booking->roomId->value,
             'title' => $booking->title, 'status' => $booking->status, 'version' => $booking->version,
+            'source_booking_id' => $context['source_booking_id'],
             'occurrences' => array_map(static fn (BookingOccurrence $s): array => [
                 'id' => $s->id->value, 'starts_at' => $s->time->startsAt->format(DATE_ATOM),
                 'ends_at' => $s->time->endsAt->format(DATE_ATOM),
                 'status' => $booking->status === 'cancelled' || $s->cancelledAt !== null
                     ? 'cancelled' : $booking->status,
                 'cancelled_at' => $s->cancelledAt?->format(DATE_ATOM),
+                'replacement_booking_id' => $context['replacements'][$s->id->value] ?? null,
             ], $booking->occurrences)]);
     }
 
@@ -111,5 +114,33 @@ final readonly class SisBookingController
             FormInput::from($request)->integer('version')
         );
         return new JsonResponse(['id' => $id, 'status' => $booking->status, 'version' => $booking->version]);
+    }
+
+    public function reviewReplacement(ServerRequest $request, string $id, string $occurrence): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reviewReplacement(
+            new EntityId($id),
+            new EntityId($occurrence),
+            $f->id('room_id'),
+            new TimeSlot($f->instant('starts_at'), $f->instant('ends_at')),
+            $f->integer('version')
+        ));
+    }
+
+    public function replaceOccurrence(ServerRequest $request, string $id, string $occurrence): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $booking = $this->service->replaceOccurrence(
+            new EntityId($id),
+            new EntityId($occurrence),
+            $f->id('id'),
+            $f->id('room_id'),
+            new TimeSlot($f->instant('starts_at'), $f->instant('ends_at')),
+            $f->integer('version'),
+            $f->text('revision', 64)
+        );
+        return new JsonResponse(['id' => $booking->id->value, 'status' => $booking->status,
+            'version' => $booking->version], 201);
     }
 }

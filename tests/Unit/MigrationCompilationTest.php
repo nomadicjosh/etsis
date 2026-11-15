@@ -104,6 +104,41 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testBookingReplacementLinksCompileWithoutRewritingEarlierFacts(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000008_CreateSisBookingReplacements.php';
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method('create')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definition): void {
+                self::assertSame('sis_booking_replacements', $name);
+                $definition = new CreateTable($name);
+                $callback($definition);
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new CreateSisBookingReplacements('booking-replacements');
+        $migration->setObjectMap(new ArrayObject([
+            'phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration'),
+        ]));
+        $migration->up();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(
+                static fn(string $name): string => '"' . $name . '"'
+            );
+            $commands = json_encode(new $class($dialect)->create($definition), JSON_THROW_ON_ERROR);
+            foreach (['sbr_booking_uq', 'sbr_occurrence_fk', 'sbr_booking_fk', 'PRIMARY KEY'] as $part) {
+                self::assertStringContainsString($part, $commands, $driver);
+            }
+            self::assertDoesNotMatchRegularExpression('/UPDATE |DELETE FROM|DROP TABLE/i', $commands);
+        }
+        $this->expectException(LogicException::class);
+        $migration->down();
+    }
+
     public function testMeetingCancellationColumnsCompileWithoutChangingRecordedFacts(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000007_CreateSisBookingCancellations.php';

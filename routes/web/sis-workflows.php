@@ -913,6 +913,10 @@ return static function (Psr7Router $router): void {
         ->name("sis.booking.approve");
     $router->map(['POST'], '/sis/bookings/{id}/occurrences/{occurrence}/cancel/',
         [SisBookingController::class, 'cancelOccurrence'])->name('sis.booking.occurrence.cancel');
+    $router->map(['POST'], '/sis/bookings/{id}/occurrences/{occurrence}/reschedule/review/',
+        [SisBookingController::class, 'reviewReplacement'])->name('sis.booking.occurrence.reschedule.review');
+    $router->map(['POST'], '/sis/bookings/{id}/occurrences/{occurrence}/reschedule/confirm/',
+        [SisBookingController::class, 'replaceOccurrence'])->name('sis.booking.occurrence.reschedule.confirm');
     $router
         ->map(["POST"], "/sis/bookings/{id}/cancel/", [SisBookingController::class, "cancel"])
         ->name("sis.booking.cancel");

@@ -493,6 +493,8 @@ window.createWorkspaceScheduling = function (ui) {
         const place = await request(`/sis/rooms/${record.room_id}/`);
         const body = openDrawer(record.title, "SPACE REQUEST");
         if (back) body.append(button('Back to weekly timetable', back));
+        if (record.source_booking_id)
+            body.append(button('View previous booking', () => booking(record.source_booking_id, back)));
         if (can("sis:audit:read"))
             body.append(
                 button("View audit history", () => showAudit("bookings", id)),
@@ -515,8 +517,15 @@ window.createWorkspaceScheduling = function (ui) {
                 record.occurrences.slice(page * 20, (page + 1) * 20).map(occurrence => [
                     meetingTime(occurrence.starts_at), meetingTime(occurrence.ends_at), badge(occurrence.status),
                     occurrence.status === 'cancelled'
-                        ? (occurrence.cancelled_at ? `Cancelled ${display(occurrence.cancelled_at)}` : 'Booking cancelled')
-                        : button(`Cancel meeting on ${meetingTime(occurrence.starts_at)}`, () => {
+                        ? node('div', {},
+                            node('p', { class: 'small mb-2' }, occurrence.cancelled_at
+                                ? `Cancelled ${display(occurrence.cancelled_at)}` : 'Booking cancelled'),
+                            occurrence.replacement_booking_id ? button(`View replacement for ${meetingTime(occurrence.starts_at)}`,
+                                () => booking(occurrence.replacement_booking_id, back)) : null)
+                        : node('div', { class: 'inline-actions' },
+                            can('sis:scheduling:manage') ? button(`Reschedule meeting on ${meetingTime(occurrence.starts_at)}`,
+                                () => reschedule(record, occurrence, place, back)) : null,
+                            button(`Cancel meeting on ${meetingTime(occurrence.starts_at)}`, () => {
                             const panel = openDrawer('Cancel one meeting', 'SPACE REQUEST');
                             panel.append(node('p', { class: 'private-text' }, record.title),
                                 node('p', {}, `${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
@@ -531,10 +540,11 @@ window.createWorkspaceScheduling = function (ui) {
                                     await booking(id, back);
                                 }, 'btn-primary'));
                             panel.querySelector('button').focus();
-                        }),
+                        })),
                 ]), 'Booking meetings'));
             status.textContent = `Meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, record.occurrences.length)} of ${record.occurrences.length}.`;
-            status.textContent += ` ${record.occurrences.filter(item => item.status !== 'cancelled').length} active meetings.`;
+            const active = record.occurrences.filter(item => item.status !== 'cancelled').length;
+            status.textContent += ` ${active} active ${active === 1 ? 'meeting' : 'meetings'}.`;
             previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= record.occurrences.length;
             if (focus) status.focus();
         }
@@ -577,6 +587,60 @@ window.createWorkspaceScheduling = function (ui) {
                     ),
                 ),
             );
+    }
+    async function reschedule(record, occurrence, place, back) {
+        const body = openDrawer('Reschedule one meeting', 'SPACES & SCHEDULING');
+        const fields = [['room_id', 'New room', 'lookup', 'rooms'], ...dateFields];
+        const form = await buildForm(fields, { room_id: record.room_id,
+            starts_at: local(new Date(occurrence.starts_at)), ends_at: local(new Date(occurrence.ends_at)) });
+        if (!body.isConnected) return;
+        const selectedRoom = form.elements.room_id.selectedOptions[0];
+        if (selectedRoom) selectedRoom.textContent = `${roomLabel(place)} · ${buildingLabel(place)}`;
+        const status = node('p', { role: 'status', class: 'form-text' });
+        const preview = node('div', { hidden: true });
+        const reviewButton = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review new meeting');
+        let epoch = 0;
+        for (const event of ['input', 'change']) form.addEventListener(event, () => { ++epoch; status.textContent = ''; });
+        form.append(reviewButton, button('Back to booking', () => booking(record.id, back)));
+        body.append(node('p', { class: 'private-text' }, record.title),
+            node('p', {}, `Current meeting: ${roomLabel(place)} · ${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
+            node('p', { class: 'form-text' },
+                'The current reservation stays in place until confirmation. Move this meeting to another room, another time, or both. Times use your browser’s timezone; meetings may last up to 31 days.'),
+            form, status, preview);
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!validWindow(form) || !form.reportValidity()) return;
+                const current = ++epoch;
+                const payload = { ...formData(form, fields), version: record.version };
+                status.textContent = 'Checking the new meeting…';
+                const review = await request(`/sis/bookings/${record.id}/occurrences/${occurrence.id}/reschedule/review/`,
+                    'POST', payload);
+                if (!body.isConnected || current !== epoch) return;
+                status.textContent = '';
+                const confirm = button('Confirm reschedule', async () => {
+                    const saved = await request(`/sis/bookings/${record.id}/occurrences/${occurrence.id}/reschedule/confirm/`,
+                        'POST', { ...payload, id: review.new_id, revision: review.revision });
+                    if (!body.isConnected) return;
+                    notify('Meeting rescheduled. Other meetings keep their current status.');
+                    await ui.refreshDirectory();
+                    await booking(saved.id, back);
+                }, 'btn-primary');
+                confirm.disabled = !review.available;
+                preview.replaceChildren(node('h3', { class: 'h5' }, 'Review the move'),
+                    grid(['Meeting', 'Room', 'Starts', 'Ends'], [
+                        ['Current', roomLabel(review.source_room), meetingTime(review.source_starts_at), meetingTime(review.source_ends_at)],
+                        ['Replacement', roomLabel(review.room), meetingTime(review.starts_at), meetingTime(review.ends_at)],
+                    ], 'Meeting change review'),
+                    node('p', { class: review.available ? 'form-text' : 'alert alert-warning', role: 'status' },
+                        review.available ? `No approved conflict at review. The replacement will be ${review.status}. Confirmation checks again and preserves the original meeting history.`
+                            : 'An approved booking overlaps the new meeting. Choose another room or time. The current reservation is unchanged.'),
+                    button('Back to new meeting', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
+                    button('Back to booking', () => booking(record.id, back)), confirm);
+                form.hidden = true; preview.hidden = false;
+                preview.querySelector('button').focus();
+            }, reviewButton);
+        });
     }
     async function building(id) {
         const record = await request(`/sis/buildings/${id}/`);

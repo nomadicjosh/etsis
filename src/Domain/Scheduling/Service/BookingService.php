@@ -19,6 +19,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\RecordNotFoundException;
+use Domain\Shared\Exception\ValidationException;
 use DateTimeZone;
 use JsonException;
 
@@ -117,7 +118,7 @@ final readonly class BookingService
      * @return array<string,mixed>
      * @throws JsonException
      */
-    private function proposal(EntityId $room, string $title, array $slots): array
+    private function proposal(EntityId $room, string $title, array $slots, ?EntityId $excludingOccurrence = null): array
     {
         $place = $this->rooms->get($room);
         $items = [];
@@ -125,7 +126,8 @@ final readonly class BookingService
             $items[] = ['starts_at' => $slot->startsAt->format(DATE_ATOM),
                 'ends_at' => $slot->endsAt->format(DATE_ATOM), 'local_start' => $slot->startsAt->format('Y-m-d H:i P'),
                 'local_end' => $slot->endsAt->format('Y-m-d H:i P'),
-                'available' => !$this->repository->conflicts($room, $slot)];
+                'available' => !($excludingOccurrence === null ? $this->repository->conflicts($room, $slot)
+                    : $this->repository->conflictsExceptOccurrence($room, $slot, $excludingOccurrence))];
         }
         return ['room' => ['id' => $room->value, 'code' => $place->code, 'name' => $place->name,
             'building_id' => $place->buildingId?->value, 'capacity' => $place->capacity],
@@ -255,5 +257,138 @@ final readonly class BookingService
             $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
             return $changed;
         });
+    }
+
+    /** @return array{booking:Booking,source_booking_id:?string,source_occurrence_id:?string,replacements:array<string,string>} */
+    public function view(EntityId $id): array
+    {
+        $actor = $this->access->authenticatedUserId();
+        $booking = $this->get($id);
+        $links = $this->repository->links($id);
+        $this->actor($actor);
+        $this->access->requireOwnerOrPermission($booking->ownerUserId, 'sis:scheduling:manage');
+        return ['booking' => $booking] + $links;
+    }
+
+    /** @return array<string,mixed> */
+    public function reviewReplacement(
+        EntityId $id,
+        EntityId $occurrence,
+        EntityId $room,
+        TimeSlot $time,
+        int $version
+    ): array {
+        $actor = $this->access->requirePermission('sis:scheduling:manage');
+        $booking = $this->get($id);
+        $review = $this->replacementProposal($booking, $occurrence, $room, $time, $version, $actor);
+        $this->manager($actor);
+        return $review + ['new_id' => EntityId::generate()->value];
+    }
+
+    public function replaceOccurrence(
+        EntityId $id,
+        EntityId $occurrence,
+        EntityId $replacementId,
+        EntityId $room,
+        TimeSlot $time,
+        int $version,
+        string $revision
+    ): Booking {
+        $actor = $this->access->requirePermission('sis:scheduling:manage');
+        $initial = $this->get($id);
+        return $this->transactions->run(function () use (
+            $initial,
+            $occurrence,
+            $replacementId,
+            $room,
+            $time,
+            $version,
+            $revision,
+            $actor
+        ): Booking {
+            $locks = [$initial->roomId->value => $initial->roomId, $room->value => $room];
+            ksort($locks, SORT_STRING);
+            foreach ($locks as $lock) {
+                $this->repository->lockRoom($lock);
+            }
+            $this->manager($actor);
+            $current = $this->repository->get($initial->id);
+            if ($current->roomId->value !== $initial->roomId->value) {
+                throw new ConcurrentModificationException('The booking room changed.');
+            }
+            $source = $current->occurrence($occurrence);
+            try {
+                $existing = $this->repository->get($replacementId);
+            } catch (RecordNotFoundException) {
+                $existing = null;
+            }
+            if ($existing !== null) {
+                $links = $this->repository->links($existing->id);
+                if (
+                    $links['source_occurrence_id'] !== $occurrence->value
+                    || $source->cancelledBy?->value !== $actor->value
+                    || $existing->ownerUserId->value !== $current->ownerUserId->value
+                    || $existing->roomId->value !== $room->value || $existing->title !== $current->title
+                    || $this->instants($existing->times()) !== $this->instants([$time])
+                ) {
+                    throw new ConcurrentModificationException('That identity belongs to another reschedule request.');
+                }
+                $this->manager($actor);
+                return $existing;
+            }
+            $review = $this->replacementProposal($current, $occurrence, $room, $time, $version, $actor);
+            if (!hash_equals($review['revision'], $revision)) {
+                throw new ConcurrentModificationException('Booking details or availability changed. Review again.');
+            }
+            if (!$review['available']) {
+                throw new ValidationException([['field' => 'starts_at',
+                    'message' => 'Choose a time without an approved booking conflict.']]);
+            }
+            $replacement = Booking::request($replacementId, $room, $current->ownerUserId, $current->title, [$time]);
+            if ($current->status === 'approved') {
+                $replacement = $replacement->transition('approved');
+            }
+            $changed = $current->cancelOccurrence($occurrence, $actor, $this->clock->now());
+            $this->repository->replaceOccurrence($changed, $occurrence, $replacement, $current->version);
+            $this->audit->record($actor, 'booking.occurrence_rescheduled', $current->id);
+            $this->audit->record($actor, 'booking.replacement_created', $replacement->id);
+            $this->manager($actor);
+            return $replacement;
+        });
+    }
+
+    /** @return array<string,mixed> */
+    private function replacementProposal(
+        Booking $booking,
+        EntityId $occurrence,
+        EntityId $room,
+        TimeSlot $time,
+        int $version,
+        EntityId $actor
+    ): array {
+        if ($booking->version !== $version) {
+            throw new ConcurrentModificationException('Reload the booking before rescheduling.');
+        }
+        $source = $booking->occurrence($occurrence);
+        if ($source->cancelledAt !== null || $booking->status === 'cancelled') {
+            throw new ConcurrentModificationException('This meeting is no longer active. Reload the booking.');
+        }
+        if ($booking->roomId->value === $room->value && $this->instants([$source->time]) === $this->instants([$time])) {
+            throw new ValidationException([['field' => 'starts_at', 'message' => 'Choose a different room or time.']]);
+        }
+        if ($time->endsAt->getTimestamp() - $time->startsAt->getTimestamp() > 31 * 86400) {
+            throw new ValidationException([['field' => 'ends_at', 'message' => 'Use a meeting of 31 days or fewer.']]);
+        }
+        $oldRoom = $this->rooms->get($booking->roomId);
+        $review = $this->proposal($room, $booking->title, [$time], $occurrence);
+        $before = ['id' => $oldRoom->id->value, 'code' => $oldRoom->code, 'name' => $oldRoom->name,
+            'building_id' => $oldRoom->buildingId?->value, 'capacity' => $oldRoom->capacity];
+        $sourceTimes = $this->instants([$source->time])[0];
+        return ['room' => $review['room'], 'source_room' => $before, 'title' => $booking->title,
+            'starts_at' => $time->startsAt->format(DATE_ATOM), 'ends_at' => $time->endsAt->format(DATE_ATOM),
+            'source_starts_at' => $sourceTimes[0], 'source_ends_at' => $sourceTimes[1],
+            'available' => $review['items'][0]['available'], 'status' => $booking->status, 'version' => $version,
+            'revision' => hash('sha256', json_encode([$actor->value, $booking->id->value, $occurrence->value,
+                $version, $before, $sourceTimes, $review['revision']], JSON_THROW_ON_ERROR))];
     }
 }
