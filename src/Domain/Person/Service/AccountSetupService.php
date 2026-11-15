@@ -55,6 +55,9 @@ final readonly class AccountSetupService
                 throw new \DomainException('A new setup notice cannot be requested yet.');
             }
             /** @var User $user */ $user = $this->users->loadAggregateRoot(new UserId($r['user_id']));
+            if (!$user->signInEnabled()) {
+                throw new \DomainException('Enable sign-in before issuing a setup link.');
+            }
             $credential = self::credential($user);
             $origin = rtrim($this->baseUrl, '/');
             if (!str_starts_with($origin, 'https://') || filter_var($origin, FILTER_VALIDATE_URL) === false) {
@@ -180,7 +183,7 @@ final readonly class AccountSetupService
             }
             /** @var User $user */
             $user = $this->users->loadAggregateRoot(new UserId($r['user_id']));
-            if (!hash_equals($r['credential_hash'], self::credential($user))) {
+            if (!$user->signInEnabled() || !hash_equals($r['credential_hash'], self::credential($user))) {
                 throw new \DomainException('This setup link is unavailable.');
             }
             $user->changePassword(new StringLiteral(Password::hash($password)), new UserToken());
@@ -218,7 +221,7 @@ final readonly class AccountSetupService
                     $this->verifyGrant($row);
                     /** @var User $user */
                     $user = $this->users->loadAggregateRoot(new UserId($row['user_id']));
-                    if (hash_equals($row['credential_hash'], self::credential($user))) {
+                    if ($user->signInEnabled() && hash_equals($row['credential_hash'], self::credential($user))) {
                         $notice = json_decode(
                             $this->cipher->open($row['encrypted_notice']),
                             true,

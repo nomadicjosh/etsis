@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\User\Event\UserSignInWasChanged::class => [
+                'type' => 'user', 'root' => \Domain\User\User::class,
+                'fields' => ['sign_in_enabled', 'token', 'operation_id', 'intent'],
+            ],
             \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class => [
                 'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent'],
@@ -853,6 +857,15 @@ final readonly class HistoricalSchemaRegistry
     private function user(#[\SensitiveParameter] array $payload, StreamReference $stream): void
     {
         foreach ($payload as $name => $value) {
+            if ($name === 'sign_in_enabled') {
+                if (!is_bool($value)) {
+                    throw new CorruptHistoryException();
+                }
+                continue;
+            }
+            if ($name === 'intent' && (!is_string($value) || preg_match('/^[a-f0-9]{64}$/D', $value) !== 1)) {
+                throw new CorruptHistoryException();
+            }
             if ($name === "person_id" && $value === null) {
                 continue;
             }

@@ -71,6 +71,19 @@ final readonly class SisPersonEditorController
         return new JsonResponse(['status' => 'saved']);
     }
 
+    public function signIn(ServerRequest $request, string $id): ResponseInterface
+    {
+        $form = FormInput::from($request);
+        $this->accounts->signIn(
+            new EntityId($id),
+            $form->requiredBoolean('sign_in_enabled'),
+            $form->integer('version'),
+            $form->id('operation_id'),
+            $form->bodyText('reason')
+        );
+        return new JsonResponse(['status' => 'saved']);
+    }
+
     public function email(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);

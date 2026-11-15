@@ -33,7 +33,7 @@ class PdoAuthUserRespository implements AuthUserRepository
         $table = $this->config->getConfigKey('auth.pdo.table');
 
         $sql = sprintf(
-            "SELECT * FROM %s WHERE %s = :identity",
+            "SELECT * FROM %s WHERE %s = :identity AND sign_in_enabled = 1",
             $table,
             $fields['identity']
         );
@@ -64,7 +64,7 @@ class PdoAuthUserRespository implements AuthUserRepository
             if (Password::needsRehash($passwordHash)) {
                 // Compare the old hash too, so a concurrent password change is never overwritten.
                 $update = $this->connection->pdo->prepare(sprintf(
-                    'UPDATE %s SET %s = :hash WHERE %s = :identity AND %s = :old_hash',
+                    'UPDATE %s SET %s = :hash WHERE %s = :identity AND %s = :old_hash AND sign_in_enabled = 1',
                     $table,
                     $fields['password'],
                     $fields['identity'],
@@ -97,7 +97,7 @@ class PdoAuthUserRespository implements AuthUserRepository
         $table = $this->config->getConfigKey('auth.pdo.table');
         $tokenField = $this->config->string('auth.pdo.fields.token', 'token');
         $sql = sprintf(
-            "SELECT * FROM %s WHERE %s = :token",
+            "SELECT * FROM %s WHERE %s = :token AND sign_in_enabled = 1",
             $table,
             $tokenField,
         );

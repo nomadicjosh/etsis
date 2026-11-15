@@ -298,6 +298,7 @@ final class SisServiceProvider extends CodefyServiceProvider
                 $this->codefy->make(StudentAccess::class),
                 $this->codefy->make(\Domain\Audit\Repository\AuditTrail::class),
                 $this->codefy->make(\Domain\Person\Service\ProfileLedger::class),
+                $this->codefy->make(\Domain\Shared\EventSourcing\HistoricalEventStore::class),
                 $this->codefy->configContainer->integer("auth.password_min_length", 26),
             );
         });

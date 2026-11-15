@@ -12,6 +12,8 @@ use Domain\User\Event\UserWasCreated;
 
 interface UserProjection extends Projection
 {
+    public function projectWhenUserSignInWasChanged(\Domain\User\Event\UserSignInWasChanged $event): void;
+
     /**
      * Projects when a user was created.
      *

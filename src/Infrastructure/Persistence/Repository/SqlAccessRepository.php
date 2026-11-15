@@ -28,9 +28,11 @@ final readonly class SqlAccessRepository implements AccessRepository
         $user = $this->sql->quote('user_id');
         $name = $this->sql->quote('name');
         $id = $this->sql->quote('id');
+        $enabled = $this->sql->quote('sign_in_enabled');
         $match = $this->superMatch("u.$user");
 
-        return $this->sql->fetch("SELECT u.$user FROM $users u WHERE u.$user = ? AND ($match OR EXISTS "
+        return $this->sql->fetch("SELECT u.$user FROM $users u WHERE u.$user = ? "
+            . "AND u.$enabled = 1 AND ($match OR EXISTS "
             . "(SELECT p.$id FROM $permissions p WHERE p.$name = ? AND "
             . $this->permissionMatch("u.$user") . '))', [$userId, $permission], 1) !== [];
     }
@@ -55,9 +57,10 @@ final readonly class SqlAccessRepository implements AccessRepository
         $permission = $q('permission_id');
         $role = $q('role_id');
         $directMatch = "EXISTS (SELECT 1 FROM $closure c JOIN $direct d ON d.$permission = c.$ancestor "
-        . "JOIN $users u ON u.$user = d.$user WHERE c.$descendant = p.$id)";
+        . "JOIN $users u ON u.$user = d.$user AND u." . $q('sign_in_enabled') . " = 1 WHERE c.$descendant = p.$id)";
         $roleMatch = "EXISTS (SELECT 1 FROM $closure c JOIN $roleGrants r ON r.$permission = c.$ancestor "
         . "JOIN $assignments a ON a.$role = r.$role JOIN $users u ON u.$user = a.$user "
+        . "AND u." . $q('sign_in_enabled') . " = 1 "
         . "WHERE c.$descendant = p.$id)";
 
         return $this->sql->fetch("SELECT p.$id FROM $permissions p WHERE p.$name = ? AND "
@@ -86,7 +89,8 @@ final readonly class SqlAccessRepository implements AccessRepository
         $system = $q('is_system');
 
         return $this->sql->fetch("SELECT sr.$id FROM $roles sr JOIN $assignments sa ON sa.$role = sr.$id "
-            . "JOIN $users u ON u.$user = sa.$user WHERE sr.$name = ? AND sr.$system = 1", ['super'], 1) !== [];
+            . "JOIN $users u ON u.$user = sa.$user WHERE sr.$name = ? AND sr.$system = 1 "
+            . "AND u." . $q('sign_in_enabled') . " = 1", ['super'], 1) !== [];
     }
 
     private function superMatch(string $userReference): string

@@ -74,6 +74,8 @@ window.createWorkspacePeople = function (ui) {
                     node("dt", {}, "Email address"),
                     node("dd", {}, record.email),
                 ),
+                node("div", {}, node("dt", {}, "Sign-in access"),
+                    node("dd", {}, record.sign_in_enabled ? "Enabled" : "Disabled")),
             ),
         );
         body.append(
@@ -95,6 +97,10 @@ window.createWorkspacePeople = function (ui) {
                 () => password(person, record),
             ),
         );
+        if (!record.is_self) {
+            body.append(button(record.sign_in_enabled ? "Disable sign-in" : "Enable sign-in",
+                () => signIn(person, record)));
+        }
         if (can("admin:access:manage"))
             body.append(
                 node(
@@ -103,6 +109,37 @@ window.createWorkspacePeople = function (ui) {
                     "Assign effective roles and extra permissions from this person’s Access tab. A sign-in profile does not assign roles.",
                 ),
             );
+    }
+    async function signIn(person, record) {
+        const id = personId(person);
+        const enabled = !record.sign_in_enabled;
+        const operation = (await request("/sis/ui/operation-id/")).id;
+        const body = openDrawer(enabled ? "Enable sign-in" : "Disable sign-in", "ACCOUNT ACCESS");
+        body.append(button("Back to account", () => account(person), "btn-link"));
+        body.append(node("p", {}, enabled
+            ? "This person will be able to sign in again with their current password. Earlier sessions and setup links stay invalid."
+            : "This blocks new sign-ins and invalidates existing etSIS sessions and linked Moodle launches on their next check. Their person, academic and employment records and roles remain intact."));
+        body.append(node("p", { class: "form-text" },
+            "This does not change academic standing or independent Moodle password/SSO access."));
+        const fields = [["reason", "Reason for sign-in change", "textarea"]];
+        const form = await buildForm(fields);
+        form.elements.reason.maxLength = 1000;
+        const save = node("button", { type: "submit", class: "btn btn-primary" },
+            enabled ? "Confirm enable sign-in" : "Confirm disable sign-in");
+        form.append(save);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request(`/sis/ui/people/${id}/account/sign-in/`, "POST", {
+                    ...formData(form, fields), sign_in_enabled: enabled,
+                    version: record.version, operation_id: operation,
+                });
+                notify("Sign-in decision saved.");
+                await account(person);
+            }, save);
+        });
+        body.append(form);
     }
     async function contact(person) {
         const id = personId(person);

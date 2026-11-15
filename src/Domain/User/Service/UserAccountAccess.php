@@ -41,6 +41,22 @@ final readonly class UserAccountAccess
         });
     }
 
+    /** Preserve active administrative access while changing another person's sign-in. */
+    public function updateSignIn(EntityId $target, Closure $operation): void
+    {
+        $this->update($target, function () use ($operation): void {
+            $hadSuper = $this->repository->anySuper();
+            $hadManager = $this->repository->anyoneCanManage();
+            $operation();
+            if (
+                ($hadSuper && !$this->repository->anySuper())
+                || ($hadManager && !$this->repository->anyoneCanManage())
+            ) {
+                throw new DomainException('Keep another active access administrator before disabling this account.');
+            }
+        });
+    }
+
     public function authorizeUpdate(EntityId $target): void
     {
         $actor = $this->access->authenticatedUserId();

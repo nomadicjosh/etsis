@@ -46,6 +46,8 @@ return static function (Psr7Router $router): void {
     )->name('sis.person.setup.reissue')->middleware(['rate.limiter']);
     $router->map(['GET'], '/sis/ui/people/{id}/account/', [SisPersonEditorController::class, 'account'])
         ->name('sis.ui.person.account');
+    $router->map(['POST'], '/sis/ui/people/{id}/account/sign-in/', [SisPersonEditorController::class, 'signIn'])
+        ->name('sis.ui.person.account.signin');
     $router->map(['POST'], '/sis/ui/people/{id}/account/email/', [SisPersonEditorController::class, 'email'])
         ->name('sis.ui.person.account.email');
     $router->map(['POST'], '/sis/ui/people/{id}/account/password/', [SisPersonEditorController::class, 'password'])

@@ -88,7 +88,7 @@ test('person managers maintain contact details without credential controls and k
 
 test('person edits, linked account maintenance and bounded access controls', async ({ page }) => {
     const person = id(1); const user = id(2);
-    const calls = []; const errors = []; let given = 'Alex'; let email = 'alex@example.invalid'; let version = 0;
+    const calls = []; const errors = []; let given = 'Alex'; let email = 'alex@example.invalid'; let version = 0; let enabled = true; let rejectSignIn = true;
     const grants = new Set();
     page.on('pageerror', error => errors.push(error.message));
     const profile = () => ({ id: { value: person }, ownerUserId: { value: user }, givenName: given, familyName: 'Example', institutionalId: { value: 'S-EXAMPLE' }, directoryRestricted: true, identityVersion: 0 });
@@ -104,9 +104,18 @@ test('person edits, linked account maintenance and bounded access controls', asy
         else if (path === `/sis/ui/people/${person}/profile/`) {
             if (data) given = data.given_name;
             result = data ? { status: 'saved' } : { person: profile(), revision: 'fictional-profile-revision' };
-        } else if (path === `/sis/ui/people/${person}/account/`) result = { username: 'alex_example', email, version, minimum_password_length: 26, is_self: false };
+        } else if (path === `/sis/ui/people/${person}/account/`) result = { username: 'alex_example', email, version, minimum_password_length: 26, is_self: false, sign_in_enabled: enabled };
         else if (path.endsWith('/account/email/')) { email = data.email; version++; }
         else if (path.endsWith('/account/password/')) version++;
+        else if (path === '/sis/ui/operation-id/') result = { id: id(800) };
+        else if (path.endsWith('/account/sign-in/')) {
+            expect(route.request().headers()['x-csrf-token']).toBe('fictional-test-token');
+            if (rejectSignIn) {
+                rejectSignIn = false;
+                return route.fulfill({ status: 409, json: { error: 'Fictional conflict. Reload before changing access.' } });
+            }
+            enabled = data.sign_in_enabled; version++;
+        }
         else if (path.startsWith('/sis/access/directory/')) {
             const roles = path.endsWith('/roles/');
             let items = Array.from({ length: 1000 }, (_, index) => ({ id: id(index + 100), name: roles ? `office-${index}` : `campus:permission:${index}`, description: 'Fictional definition', is_system: false, assigned: grants.has(id(index + 100)), effective: index === 1 || grants.has(id(index + 100)), assignable: true }));
@@ -145,6 +154,24 @@ test('person edits, linked account maintenance and bounded access controls', asy
     await page.getByRole('button', { name: 'Save new password', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('alex_example');
     expect(calls.find(item => item.path.endsWith('/account/password/'))?.data.version).toBe(1);
+    await page.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
+    await page.getByLabel('Reason for sign-in change').fill('Fictional approved access review');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Confirm disable sign-in', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional conflict');
+    await expect(page.getByLabel('Reason for sign-in change')).toHaveValue('Fictional approved access review');
+    await page.getByRole('button', { name: 'Confirm disable sign-in', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Enable sign-in', exact: true })).toBeVisible();
+    const decisions = calls.filter(item => item.path.endsWith('/account/sign-in/'));
+    expect(decisions[0].data).toEqual({ sign_in_enabled: false, version: 2,
+        operation_id: id(800), reason: 'Fictional approved access review' });
+    expect(decisions[1].data).toEqual(decisions[0].data);
+    await page.getByRole('button', { name: 'Enable sign-in', exact: true }).click();
+    await page.getByLabel('Reason for sign-in change').fill('Fictional restored access');
+    await page.getByRole('button', { name: 'Confirm enable sign-in', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Disable sign-in', exact: true })).toBeVisible();
+    expect(calls.filter(item => item.path.endsWith('/account/sign-in/')).at(-1).data.sign_in_enabled).toBe(true);
+
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="access"]').click();
     await expect(page.locator('#access-roles .role-card')).toHaveCount(50);

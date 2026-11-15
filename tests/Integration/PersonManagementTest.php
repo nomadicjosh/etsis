@@ -91,7 +91,7 @@ final class PersonManagementTest extends TestCase
         $fixture = new PersonManagementFixture();
         $person = $fixture->person();
         $record = $fixture->accounts->view($person->id);
-        self::assertSame(['username', 'email', 'version', 'minimum_password_length', 'is_self'], array_keys($record));
+        self::assertSame(['username', 'email', 'sign_in_enabled', 'version', 'minimum_password_length', 'is_self'], array_keys($record));
         $roles = $fixture->access->assignments(GrantKind::UserRole, $person->ownerUserId, null, 100);
         $fixture->accounts->email($person->id, 'updated@example.invalid', $record['version']);
         self::assertSame('updated@example.invalid', $fixture->accounts->view($person->id)['email']);

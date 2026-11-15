@@ -23,6 +23,7 @@ final readonly class FindUserByTokenQueryHandler implements QueryHandler
         return $this->db->table(tableName: 'users')
             ->select(columns: ['user_id','username','first_name','middle_name','last_name','email','role'])
             ->where(condition: 'token = ?', parameters: $query->token->toNative())
+            ->where('sign_in_enabled = ?', 1)
             ->findOne();
     }
 }

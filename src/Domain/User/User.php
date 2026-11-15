@@ -23,6 +23,8 @@ use Qubus\ValueObjects\Web\EmailAddress;
 
 final class User extends EventSourcedAggregate implements AggregateRoot
 {
+    private bool $signInEnabled = true;
+
     private UserId $userId;
 
     private Username $username;
@@ -70,6 +72,30 @@ final class User extends EventSourcedAggregate implements AggregateRoot
     public static function fromNative(UserId $userId): User
     {
         return self::root(aggregateId: $userId);
+    }
+
+    public function signInEnabled(): bool
+    {
+        return $this->signInEnabled;
+    }
+    public function changeSignIn(bool $enabled, \Domain\Shared\ValueObject\EntityId $operation, string $intent): void
+    {
+        if ($enabled === $this->signInEnabled) {
+            return;
+        }
+        $this->recordApplyAndPublishThat(\Domain\User\Event\UserSignInWasChanged::occur($this->userId, [
+            'sign_in_enabled' => $enabled, 'token' => (string) new UserToken(),
+            'operation_id' => $operation->value, 'intent' => $intent,
+        ], [\Codefy\Domain\Metadata::AGGREGATE_TYPE => 'user']));
+    }
+    public function whenUserSignInWasChanged(\Domain\User\Event\UserSignInWasChanged $event): void
+    {
+        $payload = $event->payload();
+        if (!is_bool($payload['sign_in_enabled'] ?? null) || $payload['sign_in_enabled'] === $this->signInEnabled) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $this->signInEnabled = $payload['sign_in_enabled'];
+        $this->token = new UserToken($payload['token']);
     }
 
     public function userId(): UserId

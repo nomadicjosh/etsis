@@ -261,6 +261,50 @@ final class PersonAccountFoundationTest extends TestCase
         $setup->complete($next, self::PASSWORD);
         self::assertFalse($setup->status($p->id)['pending']);
     }
+    public function testDisabledSignInCannotCompleteOrReissueOrSendInitialPasswordSetup(): void
+    {
+        $s = new SisFixture();
+        $p = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Applicant', 'disabled@example.invalid');
+        $user = $this->users($s);
+        $accounts = new \Domain\User\Service\PersonAccountEditor(
+            $s->admissions,
+            $user,
+            new \Domain\User\Service\UserAccountAccess(new SqlAccessRepository($s->sql), $s->access, $s->transactions),
+            $s->access,
+            $s->audit,
+            $s->profileLedger(),
+            $this->history($s)
+        );
+        $token = $this->token($s, $p->id);
+        $accounts->signIn($p->id, false, $accounts->view($p->id)['version'], EntityId::generate(), 'Fictional review');
+        $mail = $this->createMock(MailTransport::class);
+        $mail->expects(self::never())->method('send');
+        $setup = $this->onboarding($s, $mail);
+        $s->clock->time = $s->clock->time->modify('+2 minutes');
+        try {
+            $setup->complete($token, self::PASSWORD);
+            self::fail('A disabled account used an initial-password invitation.');
+        } catch (\DomainException) {
+
+        }
+        try {
+            $setup->reissue($p->id);
+            self::fail('A disabled account issued an initial-password invitation.');
+        } catch (\DomainException) {
+
+        }
+        self::assertSame(1, $setup->dispatch()['expired']);
+        $accounts->signIn($p->id, true, $accounts->view($p->id)['version'], EntityId::generate(), 'Fictional restoration');
+        try {
+            $setup->complete($token, self::PASSWORD);
+            self::fail('Re-enabling revived an earlier invitation.');
+        } catch (\DomainException) {
+
+        }
+        $setup->reissue($p->id);
+        $setup->complete($this->token($s, $p->id), self::PASSWORD);
+        self::assertFalse($setup->status($p->id)['pending']);
+    }
     public function testPersonStaysTheParentWhenAnEmployeeBecomesAStudent(): void
     {
         $s = new SisFixture();

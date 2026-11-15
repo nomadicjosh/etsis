@@ -156,7 +156,7 @@
 
     const deliveryModes = [{ value: 'in_person', label: 'In person' }, { value: 'online', label: 'Online' }, { value: 'hybrid', label: 'Hybrid' }, { value: 'unspecified', label: 'Delivery to be confirmed' }];
     const datasets = {
-        people: { title: 'People', description: 'One person. One connected story. Keep admissions, academics, work and access together.', icon: 'people', action: 'Add a person', endpoint: '/sis/persons/', permission: 'sis:person:manage', fields: [ ['given_name', 'Given name'], ['family_name', 'Family name'], ['email', 'Email address', 'email'], ['institutional_id', 'Assigned institutional ID', 'text', '', false] ], columns: [['Person', 'name'], ['Institutional ID', 'institutional_id'], ['Sign-in access', 'account']] },
+        people: { title: 'People', description: 'One person. One connected story. Keep admissions, academics, work and access together.', icon: 'people', action: 'Add a person', endpoint: '/sis/persons/', permission: 'sis:person:manage', fields: [ ['given_name', 'Given name'], ['family_name', 'Family name'], ['email', 'Email address', 'email'], ['institutional_id', 'Assigned institutional ID', 'text', '', false] ], columns: [['Person', 'name'], ['Institutional ID', 'institutional_id'], ['Sign-in account', 'account']] },
         applications: { title: 'Admissions', description: 'From a first hello to a new beginning. Review and decide without losing your place.', icon: 'inboxes', action: 'Start an application', permission: 'sis:admissions:manage', columns: [['Applicant', 'name'], ['Institutional ID', 'institutional_id'], ['Status', 'status']] },
         students: { title: 'Students', description: 'A clearer picture of every student’s academic journey.', icon: 'mortarboard', permission: 'sis:student:read', columns: [['Student', 'name'], ['Institutional ID', 'institutional_id'], ['Status', 'active']] },
         courses: { title: 'Academic catalog', description: 'Keep programs, courses, terms and sections in one connected workspace.', icon: 'journal-bookmark', action: 'Add a course', endpoint: '/sis/courses/', permission: 'sis:catalog:manage', fields: [['code', 'Course code'], ['title', 'Course title'], ['credits_milli', 'Credits', 'credits']], columns: [['Course', 'title'], ['Code', 'code'], ['Credits', 'credits_milli'], ['Status', 'active']] },
@@ -404,7 +404,7 @@
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
         if (field === 'status') return badge(value);
-        if (field === 'account') return badge(row.owner_user_id ? 'Enabled' : 'Not enabled');
+        if (field === 'account') return badge(row.owner_user_id ? 'Linked' : 'Not linked');
         if (field === 'credits_milli') value = Number(value) / 1000;
         if (index === 0) {
             const link = node('button', { class: 'record-link', type: 'button', onclick: () => task(() => openRecord(section, row)) }, text(value));
@@ -542,7 +542,7 @@
             button.addEventListener('click', () => { [...tabs.children].forEach(tab => { tab.classList.toggle('active', tab === button); tab.setAttribute('aria-selected', tab === button ? 'true' : 'false'); tab.tabIndex = tab === button ? 0 : -1; }); [...panes.children].forEach(item => { item.hidden = item !== panel; }); });
             button.addEventListener('keydown', event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const all = [...tabs.children]; const next = all[(all.indexOf(button) + (event.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]; next.click(); next.focus(); } });
             if (key === 'overview') {
-                panel.append(node('dl', { class: 'detail-list' }, node('div', {}, node('dt', {}, 'Institutional ID'), node('dd', {}, person.institutionalId.value)), node('div', {}, node('dt', {}, 'Sign-in access'), node('dd', {}, person.ownerUserId ? 'Enabled' : 'Not enabled'))));
+                panel.append(node('dl', { class: 'detail-list' }, node('div', {}, node('dt', {}, 'Institutional ID'), node('dd', {}, person.institutionalId.value)), node('div', {}, node('dt', {}, 'Sign-in account'), node('dd', {}, person.ownerUserId ? 'Linked' : 'Not linked'))));
                 const actions = node('div', { class: 'inline-actions' });
                 if (can('sis:moodle:link-person')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => moodlePeople.open(person.id.value)) }, 'Moodle account link'));
                 if (can('sis:moodle:create-person') && can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => moodleRequests.open(person.id.value)) }, 'Create a Moodle account'));

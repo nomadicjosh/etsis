@@ -42,7 +42,9 @@ $app->delegate(\Domain\Access\Repository\AccessRepository::class, static fn() =>
 $app->delegate(
     \Codefy\Framework\Auth\Gate::class,
     static fn() => new class ($sis, $person->ownerUserId) implements \Codefy\Framework\Auth\Gate {
-        public function __construct(private SisFixture $sis, private \Domain\Shared\ValueObject\EntityId $owner) {}
+        public function __construct(private SisFixture $sis, private \Domain\Shared\ValueObject\EntityId $owner)
+        {
+        }
         public function can(string $permissionName, array $ruleParams = []): bool
         {
             return $permissionName === "admin:profile";
@@ -180,11 +182,13 @@ if (
 $app->make(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::class);
 $setupGet = new \Qubus\Http\ServerRequest([], [], 'https://campus.example.invalid/portal/password-setup/', 'GET');
 $setupPage = $app->router->match($setupGet);
-if ($setupPage->getStatusCode() !== 200
+if (
+    $setupPage->getStatusCode() !== 200
     || !str_contains($setupPage->getHeaderLine('Cache-Control'), 'no-store')
     || $setupPage->getHeaderLine('Referrer-Policy') !== 'no-referrer'
     || !str_contains((string) $setupPage->getBody(), 'account-setup-form')
-    || str_contains((string) $setupPage->getBody(), 'phpdebugbar')) {
+    || str_contains((string) $setupPage->getBody(), 'phpdebugbar')
+) {
     throw new RuntimeException('Initial account setup did not resolve as a private portal form.');
 }
 $setupPost = new \Qubus\Http\ServerRequest([], [], 'https://campus.example.invalid/portal/password-setup/', 'POST')
@@ -196,8 +200,10 @@ if ($app->router->match($setupPost)->getStatusCode() !== 403) {
     throw new RuntimeException('Account setup bypassed CSRF.');
 }
 $invalidSetup = $app->router->match($setupPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
-if ($invalidSetup->getStatusCode() !== 200 || $setupEvents !== $sis->sql->rows('sis_history_events')
-    || !str_contains((string) $invalidSetup->getBody(), 'This link is unavailable')) {
+if (
+    $invalidSetup->getStatusCode() !== 200 || $setupEvents !== $sis->sql->rows('sis_history_events')
+    || !str_contains((string) $invalidSetup->getBody(), 'This link is unavailable')
+) {
     throw new RuntimeException('Rejected account setup wrote credential history or lost its accessible error.');
 }
 // Staff contact maintenance uses real routes/providers and does not borrow credential authority.
@@ -209,9 +215,11 @@ if ($app->router->match($contactRequest)->getStatusCode() !== 403) {
 }
 $sis->access->grants = ['sis:person:manage'];
 $contactResponse = $app->router->match($contactRequest);
-if ($contactResponse->getStatusCode() !== 200
+if (
+    $contactResponse->getStatusCode() !== 200
     || !str_contains($contactResponse->getHeaderLine('Cache-Control'), 'no-store')
-    || str_contains((string) $contactResponse->getBody(), 'phpdebugbar')) {
+    || str_contains((string) $contactResponse->getBody(), 'phpdebugbar')
+) {
     throw new RuntimeException('Staff contact reader did not resolve privately through the configured provider.');
 }
 $contactBody = json_decode((string) $contactResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
@@ -221,19 +229,25 @@ $contactPost = $contactRequest->withMethod('POST')
     ->withParsedBody(['preferred_name' => 'Fictional contact', 'phone' => '001234',
         'address' => "Fictional campus\nFictional town", 'version' => $contactBody['version'],
         'person_id' => $person->id->value]);
-if ($app->router->match($contactPost)->getStatusCode() !== 403
-    || $beforeContact !== $sis->sql->rows('sis_history_events')) {
+if (
+    $app->router->match($contactPost)->getStatusCode() !== 403
+    || $beforeContact !== $sis->sql->rows('sis_history_events')
+) {
     throw new RuntimeException('Staff contact mutation bypassed CSRF or a read wrote history.');
 }
 $savedContact = $app->router->match($contactPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
-if ($savedContact->getStatusCode() !== 200
+if (
+    $savedContact->getStatusCode() !== 200
     || !str_contains($savedContact->getHeaderLine('Cache-Control'), 'no-store')
-    || $otherBefore !== $sis->sql->one('users', ['user_id' => $other->ownerUserId->value])) {
+    || $otherBefore !== $sis->sql->one('users', ['user_id' => $other->ownerUserId->value])
+) {
     throw new RuntimeException('Staff contact update failed or changed credentials.');
 }
 $verifiedContact = $app->make(\Domain\Person\Service\PersonContactService::class)->staffView($other->id);
-if ($verifiedContact['phone'] !== '001234' || $verifiedContact['version'] !== 1
-    || count($sis->sql->rows('sis_history_events')) !== count($beforeContact) + 2) {
+if (
+    $verifiedContact['phone'] !== '001234' || $verifiedContact['version'] !== 1
+    || count($sis->sql->rows('sis_history_events')) !== count($beforeContact) + 2
+) {
     throw new RuntimeException('The routed contact change did not retain the intended person and revision.');
 }
 $sis->access->grants = [];
@@ -242,7 +256,8 @@ if ($app->router->match($contactRequest)->getStatusCode() !== 403) {
 }
 // Emergency contacts use the same person identity and distinct staff/owner authorization paths.
 $emergencyGet = $contactRequest->withUri(new \Laminas\Diactoros\Uri(
-    '/sis/ui/people/' . $other->id->value . '/emergency-contacts/'));
+    '/sis/ui/people/' . $other->id->value . '/emergency-contacts/'
+));
 if ($app->router->match($emergencyGet)->getStatusCode() !== 403) {
     throw new RuntimeException('Emergency contact reads bypassed staff permission.');
 }
@@ -255,20 +270,26 @@ $emergencyPost = $emergencyGet->withMethod('POST')
     ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE, 'fictionalcsrftoken')
     ->withParsedBody(['contacts' => [['name' => 'Fictional Relative', 'phone' => '001234']], 'version' => 0]);
 $beforeEmergency = $sis->sql->rows('sis_history_events');
-if ($app->router->match($emergencyPost)->getStatusCode() !== 403
-    || $beforeEmergency !== $sis->sql->rows('sis_history_events')) {
+if (
+    $app->router->match($emergencyPost)->getStatusCode() !== 403
+    || $beforeEmergency !== $sis->sql->rows('sis_history_events')
+) {
     throw new RuntimeException('Emergency contact mutation bypassed CSRF.');
 }
 $emergencySaved = $app->router->match($emergencyPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
-if ($emergencySaved->getStatusCode() !== 200
-    || !str_contains($emergencySaved->getHeaderLine('Cache-Control'), 'no-store')) {
+if (
+    $emergencySaved->getStatusCode() !== 200
+    || !str_contains($emergencySaved->getHeaderLine('Cache-Control'), 'no-store')
+) {
     throw new RuntimeException('Emergency contact update failed its routed private write.');
 }
 $sis->access->grants = [];
 $myEmergencyGet = $emergencyGet->withUri(new \Laminas\Diactoros\Uri('/portal/api/emergency-contacts/'));
 $myEmergencyResponse = $app->router->match($myEmergencyGet);
-if ($myEmergencyResponse->getStatusCode() !== 200
-    || json_decode((string) $myEmergencyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)['contacts'] !== []) {
+if (
+    $myEmergencyResponse->getStatusCode() !== 200
+    || json_decode((string) $myEmergencyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)['contacts'] !== []
+) {
     throw new RuntimeException('The owner endpoint exposed the staff-selected person instead of the signed-in owner.');
 }
 $myEmergencyPost = $emergencyPost->withUri(new \Laminas\Diactoros\Uri('/portal/api/emergency-contacts/'))
@@ -285,9 +306,55 @@ if ($ownerEmergency['contacts'][0]['phone'] !== '005678') {
 }
 $sis->access->grants = ['sis:person:manage'];
 $otherEmergency = $app->make(\Domain\Person\Service\EmergencyContactsService::class)->staffView($other->id);
-if ($otherEmergency['contacts'][0]['phone'] !== '001234'
-    || $otherBefore !== $sis->sql->one('users', ['user_id' => $other->ownerUserId->value])) {
+if (
+    $otherEmergency['contacts'][0]['phone'] !== '001234'
+    || $otherBefore !== $sis->sql->one('users', ['user_id' => $other->ownerUserId->value])
+) {
     throw new RuntimeException('Emergency contact editing changed another person or credential record.');
+}
+// The real provider/controller path requires account authority, explicit state, and CSRF.
+$sis->access->grants = ['sis:person:manage', 'admin:edit:user'];
+$accountEditor = $app->make(\Domain\User\Service\PersonAccountEditor::class);
+$account = $accountEditor->view($other->id);
+$signInPost = $emergencyPost->withUri(new \Laminas\Diactoros\Uri(
+    '/sis/ui/people/' . $other->id->value . '/account/sign-in/'
+))
+    ->withParsedBody(['sign_in_enabled' => false, 'version' => $account['version'],
+        'operation_id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+        'reason' => 'Fictional account review', 'person_id' => $person->id->value]);
+$signInEvents = $sis->sql->rows('sis_history_events');
+if (
+    $app->router->match($signInPost)->getStatusCode() !== 403
+    || $signInEvents !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Sign-in changes bypassed CSRF.');
+}
+foreach ([null, 'unrecognized', []] as $badState) {
+    $badBody = $signInPost->getParsedBody();
+    if ($badState === null) {
+        unset($badBody['sign_in_enabled']);
+    } else {
+        $badBody['sign_in_enabled'] = $badState;
+    }
+    $invalidDecision = $app->router->match($signInPost
+        ->withHeader('X-CSRF-Token', 'fictionalcsrftoken')->withParsedBody($badBody));
+    if ($invalidDecision->getStatusCode() !== 422
+        || $signInEvents !== $sis->sql->rows('sis_history_events')) {
+        throw new RuntimeException('A missing or malformed sign-in state became a decision.');
+    }
+}
+$signInResponse = $app->router->match($signInPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if (
+    $signInResponse->getStatusCode() !== 200
+    || !str_contains($signInResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $accountEditor->view($other->id)['sign_in_enabled'] !== false
+    || (int) $sis->sql->one('users', ['user_id' => $person->ownerUserId->value])['sign_in_enabled'] !== 1
+) {
+    throw new RuntimeException('The routed sign-in change lost privacy or used a supplied owner.');
+}
+$sis->access->grants = ['sis:person:manage'];
+if ($app->router->match($signInPost->withHeader('X-CSRF-Token', 'fictionalcsrftoken'))->getStatusCode() !== 403) {
+    throw new RuntimeException('Person directory access implied account access.');
 }
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

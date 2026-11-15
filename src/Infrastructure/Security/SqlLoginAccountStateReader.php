@@ -26,7 +26,7 @@ final readonly class SqlLoginAccountStateReader implements LoginAccountStateRead
                 $q("users") .
                 " WHERE " .
                 $q("user_id") .
-                " = ?",
+                " = ? AND " . $q("sign_in_enabled") . " = 1",
             [$user->value],
             1,
         );

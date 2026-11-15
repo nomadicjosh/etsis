@@ -104,6 +104,32 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testSignInStatusCompilesForEveryInstalledSchemaCompiler(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261114000006_CreateSisUserSignInStatus.php';
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method('alter')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definition): void {
+                $definition = new \Qubus\Expressive\Schema\AlterTable($name);
+                $callback($definition);
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new CreateSisUserSignInStatus('setup');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $commands = new $class($dialect)->alter($definition);
+            self::assertNotEmpty($commands, $driver);
+            self::assertStringContainsString('sign_in_enabled', json_encode($commands, JSON_THROW_ON_ERROR));
+        }
+    }
+
     public function testEmergencyContactsCompileForAllSupportedDialects(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261114000005_CreateSisPersonEmergencyContacts.php';
@@ -257,7 +283,7 @@ final class MigrationCompilationTest extends TestCase
     public function testMoodleProvisioningLeaseUpgradePreservesRequestsAndCompilesAcrossDialects(): void
     {
         require_once dirname(__DIR__, 2) .
-            "/database/migrations/20261112000001_CreateSisMoodleProvisioningLeases.php";
+        "/database/migrations/20261112000001_CreateSisMoodleProvisioningLeases.php";
         $definition = null;
         $schema = $this->createMock(Schema::class);
         $schema
@@ -303,7 +329,10 @@ final class MigrationCompilationTest extends TestCase
         $schema
             ->expects(self::exactly(4))
             ->method("alter")
-            ->willReturnCallback(static function (string $name, callable $callback) use (
+            ->willReturnCallback(static function (
+                string $name,
+                callable $callback
+            ) use (
                 &$alters,
                 $fixture,
             ): void {
@@ -378,7 +407,10 @@ final class MigrationCompilationTest extends TestCase
         $schema
             ->expects(self::exactly(2))
             ->method("alter")
-            ->willReturnCallback(static function (string $name, callable $callback) use (
+            ->willReturnCallback(static function (
+                string $name,
+                callable $callback
+            ) use (
                 &$alters,
                 $fixture,
             ): void {
@@ -433,7 +465,10 @@ final class MigrationCompilationTest extends TestCase
         $schema
             ->expects(self::exactly(130))
             ->method("create")
-            ->willReturnCallback(static function (string $name, callable $callback) use (
+            ->willReturnCallback(static function (
+                string $name,
+                callable $callback
+            ) use (
                 &$tables,
                 $live,
             ): void {
@@ -594,35 +629,38 @@ final class MigrationCompilationTest extends TestCase
         $fixture->sql->execute('ALTER TABLE sis_specialization_policies DROP COLUMN component_sharing');
         $before = $fixture->sql->rows('sis_specialization_policies');
         $migration = new CreateSisComponentSharingPolicy('sharing');
-        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($fixture->connection,'test_migrations')]));
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($fixture->connection, 'test_migrations')]));
         $migration->up();
         $after = $fixture->sql->rows('sis_specialization_policies');
-        foreach ($after as &$row) { self::assertNull($row['component_sharing']); unset($row['component_sharing']); }
+        foreach ($after as &$row) {
+            self::assertNull($row['component_sharing']);
+            unset($row['component_sharing']);
+        }
         unset($row);
         self::assertSame($before, $after);
         $migration->up();
         self::assertSame($after, array_map(static function (array $row): array {
-            unset($row['component_sharing']); return $row;
+            unset($row['component_sharing']);
+            return $row;
         }, $fixture->sql->rows('sis_specialization_policies')));
         $schema = $this->createMock(Schema::class);
         $schema->method('getColumns')->willReturn([]);
         $schema->expects(self::once())->method('alter')->willReturnCallback(static function (string $name, callable $callback) use (&$definition): void {
-            self::assertSame('sis_specialization_policies',$name);
+            self::assertSame('sis_specialization_policies', $name);
             $definition = new \Qubus\Expressive\Schema\AlterTable($name);
             $callback($definition);
         });
         $connection = $this->createStub(Connection::class);
         $connection->method('getSchema')->willReturn($schema);
-        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection,'test_migrations')]));
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'test_migrations')]));
         $migration->up();
         foreach (['MySQL','PostgreSQL','SQLite','SQLServer','Oracle'] as $driver) {
             $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
             $dialect = $this->createStub(Connection::class);
-            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"'.$name.'"');
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
             $commands = new $class($dialect)->alter($definition);
             self::assertNotEmpty($commands);
-            self::assertStringContainsString('component_sharing',json_encode($commands,JSON_THROW_ON_ERROR));
+            self::assertStringContainsString('component_sharing', json_encode($commands, JSON_THROW_ON_ERROR));
         }
     }
-
 }

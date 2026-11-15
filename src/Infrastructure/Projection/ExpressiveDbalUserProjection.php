@@ -28,6 +28,14 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
     ) {
     }
 
+    public function projectWhenUserSignInWasChanged(\Domain\User\Event\UserSignInWasChanged $event): void
+    {
+        $payload = $event->payload();
+        $this->db->table('users')->set([
+            'sign_in_enabled' => (int) $payload['sign_in_enabled'], 'token' => $payload['token'],
+        ])->where('user_id = ?', (string) $event->aggregateId())->update();
+    }
+
     /**
      * @throws TypeException
      * @throws Exception

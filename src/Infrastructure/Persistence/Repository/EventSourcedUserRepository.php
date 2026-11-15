@@ -35,19 +35,50 @@ final class EventSourcedUserRepository implements UserAggregateRepository
      */
     public function loadAggregateRoot(AggregateId $aggregateId): RecordsEvents
     {
-        $cached = $this->retrieveFromIdentityMap($aggregateId);
-        if ($cached instanceof RecordsEvents) {
-            return $cached;
-        }
-
-        $aggregateHistory = $this->eventStore->getAggregateHistoryFor(aggregateId: $aggregateId);
+        // Account decisions and their reviews must see the committed stream, including writes
+        // made through another repository instance in the same request.
+        $events = [];
+        $cursor = null;
+        $stream = new \Domain\Shared\EventSourcing\StreamReference($aggregateId, 'user');
+        do {
+            $page = $this->history->page($stream, $cursor, 100);
+            if ($page->throughVersion > 2000) {
+                throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
+            }
+            foreach ($page->events as $stored) {
+                if (count($events) >= 2000) {
+                    throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
+                }
+                $events[] = $stored->event;
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        $aggregateHistory = new \Codefy\Domain\EventSourcing\EventStream($aggregateId, $events);
         $eventSourcedAggregate = User::reconstituteFromEventStream(
             aggregateHistory: $aggregateHistory
         );
 
+        if (!$eventSourcedAggregate instanceof User) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $this->verifySignIn($aggregateId, $eventSourcedAggregate);
         $this->attachToIdentityMap($eventSourcedAggregate);
 
         return $eventSourcedAggregate;
+    }
+
+    private function verifySignIn(AggregateId $aggregateId, User $user): void
+    {
+        $row = new \Infrastructure\Persistence\SqlRecords($this->db)->one(
+            'users',
+            ['user_id' => (string) $aggregateId]
+        );
+        if (
+            !in_array((string) $row['sign_in_enabled'], ['0', '1'], true)
+            || ((int) $row['sign_in_enabled'] === 1) !== $user->signInEnabled()
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
     }
 
     /**
@@ -75,6 +106,9 @@ final class EventSourcedUserRepository implements UserAggregateRepository
         $events = array_values(iterator_to_array($aggregate->getRecordedEvents()));
 
         try {
+            if ($events !== [] && $events[array_key_last($events)]->playhead() > 2000) {
+                throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
+            }
             \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use ($events, $context): void {
                 if ($events === []) {
                     return;
