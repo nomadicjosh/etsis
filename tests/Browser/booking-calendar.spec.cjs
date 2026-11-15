@@ -7,6 +7,7 @@ async function fixture(page) {
         delayMonth: false, monthOverflow: false };
     const library = { id: id(8), code: 'LIB', name: 'Campus library' };
     const science = { id: id(9), code: 'SCI', name: 'Science building' };
+    const category = { id: id(7), code: 'COURSE', name: 'Course sections', tone: 'blue', active: true, version: 0 };
     const rooms = [{ id: id(1), code: 'LIB.101', name: 'Seminar room', capacity: 30, building_id: library.id, building: library },
         { id: id(2), code: 'LIB.102', name: '<img> Reading room', capacity: 20, building_id: library.id, building: library }];
     const allItems = () => [...Array.from({ length: 25 }, (_, n) => ({ id: id(200 + n), booking_id: id(100 + n),
@@ -53,6 +54,7 @@ async function fixture(page) {
         let result = { items: [], next_after: null };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/buildings/') result = { items: [library, science], next_after: null };
+        else if (path === '/sis/ui/data/bookingcategories/') result = { items: [category], next_after: null };
         else if (path === '/sis/calendar/context/') result = { today: '2026-08-10', timezone: 'America/Los_Angeles' };
         else if (path === '/sis/calendar/view/') {
             if (!data.building_id || (state.monthOverflow && data.view === 'month'))
@@ -77,7 +79,7 @@ async function fixture(page) {
     await expect(page.locator('#directory-results')).toContainText('More than 500 meetings match.');
     await expect(page.getByLabel('Calendar date')).toHaveValue('2026-08-10');
     await page.getByRole('combobox', { name: 'Building', exact: true }).selectOption(library.id);
-    await page.getByLabel('Search bookings or rooms').fill('Fictional');
+    await page.getByLabel('Search bookings, rooms or sections').fill('Fictional');
     await page.getByRole('button', { name: 'View week', exact: true }).click();
     await expect(page.locator('#directory-results')).toContainText('1 approved and 25 requested');
     return state;
@@ -92,6 +94,8 @@ test('campus calendar narrows large weeks, shows rooms and returns from approval
     await expect(results).toContainText('LIB.101 · Seminar room');
     await expect(results).toContainText('LIB.102 · <img> Reading room');
     await expect(results.locator('img, script')).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'Category filter', exact: true }).selectOption(id(7));
+    await page.getByRole('button', { name: 'View week', exact: true }).click();
     await page.getByRole('button', { name: 'Next daily page', exact: true }).click();
     await expect(results.locator('tbody tr')).toHaveCount(6);
     await expect(results).toContainText('Continues into the next day');
@@ -105,14 +109,16 @@ test('campus calendar narrows large weeks, shows rooms and returns from approval
     await page.getByRole('button', { name: 'Confirm space approval', exact: true }).click();
     await page.getByRole('button', { name: 'Back to calendar', exact: true }).click();
     await expect(page.getByRole('combobox', { name: 'Building', exact: true })).toHaveValue(id(8));
-    await expect(page.getByLabel('Search bookings or rooms')).toHaveValue('Fictional');
+    await expect(page.getByLabel('Search bookings, rooms or sections')).toHaveValue('Fictional');
+    await expect(page.getByRole('combobox', { name: 'Category filter', exact: true })).toHaveValue(id(7));
+    expect(state.calls.some(call => call.data?.category_id === id(7))).toBe(true);
     await expect(results).toContainText('2 approved and 24 requested');
     await page.getByRole('button', { name: /^Tuesday, Aug 11/ }).click();
     await expect(results).toContainText('Continues from an earlier day');
     await page.getByRole('button', { name: 'Fictional overnight meeting', exact: true }).click();
     await page.getByRole('button', { name: 'Back to calendar', exact: true }).click();
     await expect(page.getByRole('button', { name: /^Tuesday, Aug 11/ })).toHaveAttribute('aria-pressed', 'true');
-    await page.getByLabel('Search bookings or rooms').fill('missing');
+    await page.getByLabel('Search bookings, rooms or sections').fill('missing');
     await page.getByRole('button', { name: 'View week', exact: true }).click();
     await expect(results).toContainText('No requested or approved bookings for this day.');
     expect(state.calls.filter(call => call.path === '/sis/ui/data/calendar/')).toHaveLength(0);
@@ -128,10 +134,10 @@ test('edited and detached campus calendar responses never replace a newer search
     state.delay = true;
     await page.getByRole('button', { name: 'Next week', exact: true }).click();
     await expect.poll(() => typeof state.release).toBe('function');
-    await page.getByLabel('Search bookings or rooms').fill('Fictional changed');
+    await page.getByLabel('Search bookings, rooms or sections').fill('Fictional changed');
     const response = page.waitForResponse(response => response.url().endsWith('/sis/calendar/view/'));
     state.release(); await response;
-    await expect(page.getByLabel('Search bookings or rooms')).toHaveValue('Fictional changed');
+    await expect(page.getByLabel('Search bookings, rooms or sections')).toHaveValue('Fictional changed');
     await expect(page.locator('#directory-results')).toContainText('Choose View week to load these dates and filters.');
     await expect(page.locator('#directory-results tbody')).toHaveCount(0);
     await page.getByRole('button', { name: 'View week', exact: true }).click();
@@ -144,7 +150,7 @@ test('edited and detached campus calendar responses never replace a newer search
     state.release(); await oldResponse;
     await expect(page.locator('#directory-search-form')).toBeVisible();
     await expect(page.locator('#directory-heading')).toHaveText('Spaces & scheduling');
-    await expect(page.getByLabel('Search bookings or rooms')).toHaveCount(0);
+    await expect(page.getByLabel('Search bookings, rooms or sections')).toHaveCount(0);
     expect(state.errors).toEqual([]);
 });
 
@@ -173,7 +179,7 @@ test('month overview keeps filters, selected days and booking actions with keybo
     await page.getByRole('button', { name: 'Back to calendar', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('combobox', { name: 'Building', exact: true })).toHaveValue(id(8));
-    await expect(page.getByLabel('Search bookings or rooms')).toHaveValue('Fictional');
+    await expect(page.getByLabel('Search bookings, rooms or sections')).toHaveValue('Fictional');
     await expect(page.getByLabel('Show approved bookings only')).toBeChecked();
     await expect(tuesday).toHaveAttribute('aria-pressed', 'true');
     for (const width of [1440, 320]) {

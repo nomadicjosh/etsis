@@ -885,6 +885,14 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/courses/{id}/publication/page/", [SisCoursePublicationController::class, "page"]);
     $router->map(['GET'], '/sis/calendar/context/',
         [\Application\Http\Controller\SisBookingCalendarController::class, 'context'])->name('sis.calendar.context');
+    $router->map(['POST'], '/sis/booking-categories/',
+        [\Application\Http\Controller\SisBookingCategoryController::class, 'create']);
+    $router->map(['GET'], '/sis/booking-categories/{id}/',
+        [\Application\Http\Controller\SisBookingCategoryController::class, 'show']);
+    $router->map(['POST'], '/sis/booking-categories/{id}/edit/',
+        [\Application\Http\Controller\SisBookingCategoryController::class, 'edit']);
+    $router->map(['GET'], '/sis/booking-sections/{id}/', [SisBookingController::class, 'sectionContext']);
+    $router->map(['POST'], '/sis/bookings/{id}/category/', [SisBookingController::class, 'categorize']);
     $router->map(['POST'], '/sis/calendar/view/',
         [\Application\Http\Controller\SisBookingCalendarController::class, 'timetable'])->name('sis.calendar.view');
     $router->map(['POST'], '/sis/rooms/', [SisRoomController::class, 'create'])->name('sis.room.create');

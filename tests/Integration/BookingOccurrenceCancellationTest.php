@@ -36,7 +36,9 @@ final class BookingOccurrenceCancellationTest extends TestCase
             $f->transactions,
             $audit ?? $f->audit,
             new SqlRoomRepository($f->sql),
-            $f->clock
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlBookingCategoryRepository($f->sql),
+            $f->bookingSections()
         );
     }
 

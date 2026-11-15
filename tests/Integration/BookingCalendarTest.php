@@ -36,7 +36,8 @@ final class BookingCalendarTest extends TestCase
             $rooms ?? new SqlRoomRepository($f->sql),
             new SqlBuildingRepository($f->sql),
             $f->access,
-            $f->clock
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlBookingCategoryRepository($f->sql)
         );
     }
 
@@ -228,7 +229,7 @@ final class BookingCalendarTest extends TestCase
         }
         $f->access->staff = true;
         $rooms = $this->createMock(RoomRepository::class);
-        $rooms->expects(self::once())->method('calendar')->with(self::anything(), null, '', 501)
+        $rooms->expects(self::once())->method('calendar')->with(self::anything(), null, '', 501, null)
             ->willReturnCallback(static function () use ($f): array {
                 $f->access->staff = false;
                 return [];

@@ -385,10 +385,33 @@ if (
 ) {
     throw new RuntimeException("A protected room planning route failed.");
 }
+$categoryCreated = $teachingPost('/sis/booking-categories/', [
+    'code' => 'MEETING', 'name' => 'Fictional office meetings', 'tone' => 'teal',
+]);
+$bookingCategoryId = json_decode((string) $categoryCreated->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$categoryRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/booking-categories/' . $bookingCategoryId . '/'
+)));
+if ($categoryCreated->getStatusCode() !== 201 || $categoryRead->getStatusCode() !== 200
+    || !str_contains($categoryRead->getHeaderLine('Cache-Control'), 'no-store')
+    || $categoryRead->hasHeader('phpdebugbar-id')
+    || $teachingPost('/sis/booking-categories/' . $bookingCategoryId . '/edit/', [
+        'code' => 'MEETING', 'name' => 'Fictional office meetings', 'tone' => 'teal', 'active' => true, 'version' => 1,
+    ])->getStatusCode() !== 409) {
+    throw new RuntimeException('Category setup lost its private versioned provider boundary.');
+}
+foreach (['bookingcategories', 'activebookingcategories'] as $categoryDataset) {
+    $response = $teachingPost('/sis/ui/data/' . $categoryDataset . '/', []);
+    $items = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR)['items'] ?? [];
+    if ($response->getStatusCode() !== 200 || array_column($items, 'id') !== [$bookingCategoryId]) {
+        throw new RuntimeException('The protected category directory or choices failed.');
+    }
+}
 $bookingResponse = $teachingPost("/sis/bookings/", [
     "room_id" => $roomId,
     "title" => "Fictional planning meeting",
     "slots" => [$planningWindow],
+    "category_id" => $bookingCategoryId,
 ]);
 if ($bookingResponse->getStatusCode() !== 201) {
     throw new RuntimeException("The booking request route failed.");
@@ -402,6 +425,11 @@ if (
     $teachingPost("/sis/bookings/" . $bookingId . "/cancel/", ["version" => 1])->getStatusCode() !== 200
 ) {
     throw new RuntimeException("Booking decisions failed to enforce the displayed version.");
+}
+if ($teachingPost('/sis/bookings/' . $bookingId . '/category/', [
+    'category_id' => null, 'version' => 2,
+])->getStatusCode() !== 200) {
+    throw new RuntimeException('Category assignment failed through the protected booking provider.');
 }
 
 // The recurring planner is read-only until its reviewed request is confirmed.
@@ -3370,6 +3398,29 @@ if ($offeringSelected->getStatusCode() !== 200 || (string) $offeringSelected->ge
 $selectedSetup = json_decode((string) $teachingPost($sectionPublicationPath . 'setup/', [])->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (($selectedSetup['selected_offering']['version_id'] ?? null) !== $sectionPublicationReview['operation_id']) {
     throw new RuntimeException('Offering selection read model was not available.');
+}
+$classEvents = $sis->sql->rows('sis_history_events');
+$classContext = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/booking-sections/' . $bindingSection->id->value . '/'
+)));
+$classRequest = $teachingPost('/sis/bookings/', [
+    'room_id' => $roomId, 'title' => 'Fictional section meeting', 'section_id' => $bindingSection->id->value,
+    'category_id' => $bookingCategoryId,
+    'slots' => [['starts_at' => '2026-08-24T19:00:00Z', 'ends_at' => '2026-08-24T20:00:00Z']],
+]);
+$classBooking = json_decode((string) $classRequest->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($classContext->getStatusCode() !== 200 || $classRequest->getStatusCode() !== 201
+    || !str_contains($classContext->getHeaderLine('Cache-Control'), 'no-store')
+    || $classContext->hasHeader('phpdebugbar-id') || $sis->sql->rows('sis_history_events') !== $classEvents
+    || $sis->sql->one('sis_bookings', ['id' => $classBooking['id']])['section_publication_id']
+        !== $sectionPublicationReview['operation_id']) {
+    throw new RuntimeException('Course-section room planning failed to retain its published context privately.');
+}
+$sectionChoicesResponse = $teachingPost('/sis/ui/data/bookingsections/', []);
+$sectionChoices = json_decode((string) $sectionChoicesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($sectionChoicesResponse->getStatusCode() !== 200
+    || !in_array($bindingSection->id->value, array_column($sectionChoices['items'] ?? [], 'id'), true)) {
+    throw new RuntimeException('Published class meeting choices failed through the real provider.');
 }
 // Reviewed amendments resolve through the same real providers, protected routes and browser guards.
 $offeringCatalog = new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($sis->sql);

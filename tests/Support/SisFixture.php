@@ -244,6 +244,21 @@ final class SisFixture
             "counts_gpa" => (int) $grade->countsGpa,
         ]);
     }
+    public function bookingSections(): \Domain\Scheduling\Repository\BookingSectionRepository
+    {
+        return new \Infrastructure\Persistence\Repository\SqlBookingSectionRepository(
+            $this->sql,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql, $this->transactions, $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder())
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            )
+        );
+    }
+
     public function gradingScales(): \Domain\Gradebook\Service\GradingScaleService
     {
         if (!isset($this->dropCipher)) {

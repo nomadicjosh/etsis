@@ -506,6 +506,11 @@ h3 { font-size: .9rem; font-weight: 650; }
 .booking-month-date { display: block; font-size: 1.4rem; font-weight: 700; margin-bottom: .4rem; }
 .booking-month-label { display: none; }
 .booking-month-count { display: block; font-size: .78rem; }
+.booking-category { display: inline-block; padding: .3rem .65rem; border-radius: 1rem; font-size: .8rem; font-weight: 600; overflow-wrap: anywhere; background: #e9edf2; color: #364454; }
+.booking-category[data-tone="blue"] { background: #e7f0fb; color: #16466f; }
+.booking-category[data-tone="teal"] { background: #e4f4ef; color: #1b5745; }
+.booking-category[data-tone="amber"] { background: #fff3d7; color: #684700; }
+.booking-category[data-tone="purple"] { background: #efe8fa; color: #533078; }
 .booking-month-day [aria-current="date"] { border-bottom-width: 4px; }
 .booking-month-day .btn:focus-visible { outline: 3px solid #174f88; outline-offset: 2px; }
 @media (max-width: 575px) {

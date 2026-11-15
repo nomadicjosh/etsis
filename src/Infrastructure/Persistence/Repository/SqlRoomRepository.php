@@ -67,9 +67,14 @@ final readonly class SqlRoomRepository implements RoomRepository
         return $this->meetings($window, $room, $after, null, '', $limit);
     }
 
-    public function calendar(TimeSlot $window, ?EntityId $building, string $search, int $limit): array
-    {
-        return $this->meetings($window, null, null, $building, $search, $limit);
+    public function calendar(
+        TimeSlot $window,
+        ?EntityId $building,
+        string $search,
+        int $limit,
+        ?EntityId $category = null
+    ): array {
+        return $this->meetings($window, null, null, $building, $search, $limit, $category);
     }
 
     /** @return list<array<string,mixed>> */
@@ -79,7 +84,8 @@ final readonly class SqlRoomRepository implements RoomRepository
         ?EntityId $after,
         ?EntityId $building,
         string $search,
-        int $limit
+        int $limit,
+        ?EntityId $category = null
     ): array {
         $q = $this->sql->quote(...);
         $utc = new DateTimeZone('UTC');
@@ -88,6 +94,10 @@ final readonly class SqlRoomRepository implements RoomRepository
         $cursor = '';
         $parameters = ['requested', 'approved', $end, $start];
         $filters = '';
+        if ($category !== null) {
+            $filters .= ' AND b.' . $q('category_id') . ' = ?';
+            $parameters[] = $category->value;
+        }
         if ($room !== null) {
             $filters .= ' AND s.' . $q('room_id') . ' = ?';
             $parameters[] = $room->value;
@@ -99,7 +109,10 @@ final readonly class SqlRoomRepository implements RoomRepository
         if ($search !== '') {
             $or = [];
             $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
-            foreach (['b.title', 'r.code', 'r.name', 'building.code', 'building.name'] as $field) {
+            foreach (
+                ['b.title', 'r.code', 'r.name', 'building.code', 'building.name',
+                'category.code', 'category.name', 'offering.code', 'offering.term_code'] as $field
+            ) {
                 [$alias, $column] = explode('.', $field);
                 $or[] = 'LOWER(' . $alias . '.' . $q($column) . ") LIKE ? ESCAPE '!'";
                 $parameters[] = $term;
@@ -124,11 +137,21 @@ final readonly class SqlRoomRepository implements RoomRepository
             . ', s.' . $q('room_id') . ', r.' . $q('code') . ' AS ' . $q('room_code')
             . ', r.' . $q('name') . ' AS ' . $q('room_name') . ', r.' . $q('building_id')
             . ', building.' . $q('code') . ' AS ' . $q('building_code')
-            . ', building.' . $q('name') . ' AS ' . $q('building_name') . ' FROM '
+            . ', building.' . $q('name') . ' AS ' . $q('building_name')
+            . ', b.' . $q('category_id') . ', category.' . $q('name') . ' AS ' . $q('category_name')
+            . ', category.' . $q('tone') . ' AS ' . $q('category_tone')
+            . ', b.' . $q('section_publication_id') . ', offering.' . $q('section_id')
+            . ', offering.' . $q('code') . ' AS ' . $q('section_code')
+            . ', offering.' . $q('term_code') . ' AS ' . $q('section_term_code') . ' FROM '
+            // Category and offering labels are joined once; calendar rows never replay each section.
             . $q('sis_booking_slots') . ' s JOIN ' . $q('sis_bookings') . ' b ON b.' . $q('id')
             . ' = s.' . $q('booking_id')
             . ' JOIN ' . $q('sis_rooms') . ' r ON r.' . $q('id') . ' = s.' . $q('room_id')
             . ' LEFT JOIN ' . $q('sis_buildings') . ' building ON building.' . $q('id') . ' = r.' . $q('building_id')
+            . ' LEFT JOIN ' . $q('sis_booking_categories') . ' category ON category.' . $q('id')
+            . ' = b.' . $q('category_id')
+            . ' LEFT JOIN ' . $q('sis_section_versions') . ' offering ON offering.' . $q('id')
+            . ' = b.' . $q('section_publication_id')
             . ' WHERE s.' . $q('cancelled_at') . ' IS NULL AND b.' . $q('status')
             . ' IN (?, ?) AND s.' . $q('starts_at')
             . ' < ? AND s.' . $q('ends_at') . ' > ?' . $filters . $cursor

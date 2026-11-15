@@ -7,6 +7,7 @@ namespace Domain\Scheduling\Service;
 use Domain\Scheduling\BookingTimetable;
 use Domain\Scheduling\Repository\BuildingRepository;
 use Domain\Scheduling\Repository\RoomRepository;
+use Domain\Scheduling\Repository\BookingCategoryRepository;
 use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ValidationException;
@@ -21,6 +22,7 @@ final readonly class BookingCalendarService
         private BuildingRepository $buildings,
         private StudentAccess $access,
         private Clock $clock,
+        private BookingCategoryRepository $categories,
     ) {
     }
 
@@ -39,7 +41,8 @@ final readonly class BookingCalendarService
         ?string $date = null,
         ?EntityId $building = null,
         string $search = '',
-        string $view = 'week'
+        string $view = 'week',
+        ?EntityId $category = null
     ): array {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
         if (
@@ -51,9 +54,11 @@ final readonly class BookingCalendarService
         }
         $search = trim($search);
         $selected = $building === null ? null : $this->buildings->get($building);
+        $selectedCategory = $category === null ? null : $this->categories->get($category)->details();
         $now = $this->clock->now();
         $period = new BookingTimetable($date ?? $now->format('Y-m-d'), $now->getTimezone(), $view);
-        $rows = $this->rooms->calendar(new TimeSlot($period->startsAt, $period->endsAt), $building, $search, 501);
+        $window = new TimeSlot($period->startsAt, $period->endsAt);
+        $rows = $this->rooms->calendar($window, $building, $search, 501, $category);
         $this->authorize($actor);
         if (count($rows) > 500) {
             throw new ValidationException([['field' => 'search',
@@ -63,7 +68,7 @@ final readonly class BookingCalendarService
         }
         $result = $period->summarize($rows);
         $this->authorize($actor);
-        return $result + ['today' => $now->format('Y-m-d'), 'search' => $search,
+        return $result + ['today' => $now->format('Y-m-d'), 'search' => $search, 'category' => $selectedCategory,
             'building' => $selected === null ? null : ['id' => $selected->id->value,
                 'code' => $selected->code, 'name' => $selected->name]];
     }

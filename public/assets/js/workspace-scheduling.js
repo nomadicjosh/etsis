@@ -29,6 +29,45 @@ window.createWorkspaceScheduling = function (ui) {
         ["starts_at", "Starts", "datetime-local"],
         ["ends_at", "Ends", "datetime-local"],
     ];
+    const classificationFields = [
+        ['category_id', 'Category', 'lookup', 'activebookingcategories', false],
+        ['section_id', 'Course section', 'lookup', 'bookingsections', false],
+    ];
+    function categoryBadge(record) {
+        const name = record?.name || record?.category_name;
+        if (!name) return node('span', { class: 'small text-secondary' }, 'Unassigned');
+        const tone = record.tone || record.category_tone;
+        const span = node('span', { class: 'booking-category' }, name);
+        span.dataset.tone = ['blue', 'teal', 'amber', 'purple', 'gray'].includes(tone) ? tone : 'gray';
+        return span;
+    }
+    const sectionLabel = record => record ? `${record.code} · ${record.term_code}` : 'No course section linked';
+    async function sectionHint(form) {
+        const select = form.elements.section_id;
+        const panel = node('div', { class: 'form-text mb-3', role: 'status' });
+        select.closest('.mb-4').append(panel);
+        let serial = 0;
+        const load = async () => {
+            const current = ++serial, id = select.value;
+            panel.replaceChildren();
+            if (!id) return;
+            panel.textContent = 'Loading the selected offering…';
+            try {
+                const context = await request(`/sis/booking-sections/${id}/`);
+                if (!form.isConnected || serial !== current || select.value !== id) return;
+                panel.textContent = `${sectionLabel(context)} · ${context.delivery_mode.replaceAll('_', ' ')} · Instruction: ${context.instruction_starts_on} through ${context.instruction_ends_on}. The meeting keeps this published offering reference.`;
+                if (form.elements.from) panel.append(button('Use section dates', () => {
+                    form.elements.from.value = context.instruction_starts_on;
+                    form.elements.through.value = context.instruction_ends_on;
+                    form.dispatchEvent(new Event('input', { bubbles: true }));
+                }, 'btn-link'));
+            } catch {
+                if (form.isConnected && serial === current) panel.textContent = 'Select an active section with a published offering, or leave it unlinked.';
+            }
+        };
+        select.addEventListener('change', load);
+        await load();
+    }
     const local = (date) =>
         new Date(date.getTime() - date.getTimezoneOffset() * 60000)
             .toISOString()
@@ -144,11 +183,13 @@ window.createWorkspaceScheduling = function (ui) {
             content.replaceChildren(
                 result.items.length
                     ? grid(
-                          ["Booking", "Status", "Starts", "Ends"],
+                          ["Booking", "Category", "Course section", "Status", "Starts", "Ends"],
                           result.items.map((item) => [
                               button(item.title, () =>
                                   booking(item.booking_id),
                               ),
+                              categoryBadge(item),
+                              item.section_code ? `${item.section_code} · ${item.section_term_code}` : '—',
                               badge(item.status),
                               display(item.starts_at),
                               display(item.ends_at),
@@ -236,14 +277,15 @@ window.createWorkspaceScheduling = function (ui) {
         const active = () => body.isConnected && isCurrent();
         const fields = [['date', 'Calendar date', 'date'], ...(roomId ? [] : [
             ['building_id', 'Building', 'lookup', 'buildings', false],
-            ['search', 'Search bookings or rooms', 'text', '', false],
+            ['search', 'Search bookings, rooms or sections', 'text', '', false],
+            ['category_id', 'Category filter', 'lookup', 'bookingcategories', false],
         ])];
         const form = await buildForm(fields, { ...filters, ...(date ? { date } : {}) });
         if (!active()) return;
         const input = form.elements.date;
         if (!roomId) form.elements.search.maxLength = 100;
         const readFilters = () => roomId ? {} : { building_id: form.elements.building_id.value,
-            search: form.elements.search.value.trim() };
+            search: form.elements.search.value.trim(), category_id: form.elements.category_id.value };
         const heading = node('h3', { class: 'h5 private-text' });
         const status = node('p', { role: 'status', 'aria-live': 'polite' });
         const content = node('div');
@@ -328,11 +370,13 @@ window.createWorkspaceScheduling = function (ui) {
             const dayHeading = node('h4', { class: 'h6', tabindex: '-1' }, dateLabel(day.date));
             const summary = node('p', { class: 'form-text' },
                 `${result.from} through ${result.through} · ${result.timezone}. ${result.totals.approved} approved and ${result.totals.requested} requested occurrences this ${view}. Overnight meetings appear on each day they overlap.`);
-            const listing = items.length ? grid(['Booking', ...(!roomId ? ['Room', 'Building'] : []), 'Status', 'Starts', 'Ends'],
+            const listing = items.length ? grid(['Booking', 'Category', 'Course section', ...(!roomId ? ['Room', 'Building'] : []), 'Status', 'Starts', 'Ends'],
                 items.slice(page * 20, (page + 1) * 20).map(item => [
                     button(item.title, () => booking(item.booking_id, roomId
                         ? { label: 'Back to room timetable', open: () => timetable(roomId, result.from, selected, filter.checked, view) }
                         : { label: 'Back to calendar', open: () => ui.openCalendar() })),
+                    categoryBadge(item),
+                    item.section_code ? `${item.section_code} · ${item.section_term_code}` : '—',
                     ...(!roomId ? [button([item.room_code, item.room_name].filter(Boolean).join(' · '), () => room(item.room_id)),
                         [item.building_code, item.building_name].filter(Boolean).join(' · ') || 'Building not assigned'] : []),
                     badge(item.status),
@@ -401,7 +445,7 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(heading, node('p', { class: 'form-text' },
             'Times use the institution’s timezone. Requested bookings do not reserve the room. Approval checks availability again.'),
             roomId ? button('Back to room agenda', () => room(roomId)) :
-                node('p', { class: 'form-text' }, 'Search booking purposes, room codes/names or building codes/names. Up to 500 matching meetings are shown, with complete counts for the chosen filters.'),
+                node('p', { class: 'form-text' }, 'Search booking purposes, rooms, buildings, category names or retained section/term codes. Category filters include retired categories already in use. Up to 500 matching meetings are shown, with complete counts for the chosen filters.'),
             modes, controls, form, filterField, status, content);
         await load(date);
     }
@@ -411,6 +455,7 @@ window.createWorkspaceScheduling = function (ui) {
         const fields = [
             ["room_id", "Room", "lookup", "rooms"],
             ["title", "What is the space for?"],
+            ...classificationFields,
             ...dateFields,
         ];
         const form = await buildForm(fields, preset);
@@ -429,7 +474,7 @@ window.createWorkspaceScheduling = function (ui) {
         });
         form.append(
             button('Plan recurring meetings', () => {
-                const draft = { room_id: form.elements.room_id.value, title: form.elements.title.value,
+                const draft = { ...formData(form, classificationFields), room_id: form.elements.room_id.value, title: form.elements.title.value,
                     starts_at: form.elements.starts_at.value, ends_at: form.elements.ends_at.value };
                 return requestSeries(draft, () => requestBooking(draft));
             }),
@@ -464,6 +509,8 @@ window.createWorkspaceScheduling = function (ui) {
                 const saved = await request("/sis/bookings/", "POST", {
                     room_id: data.room_id,
                     title: data.title,
+                    category_id: data.category_id,
+                    section_id: data.section_id,
                     slots: [
                         { starts_at: data.starts_at, ends_at: data.ends_at },
                     ],
@@ -474,6 +521,7 @@ window.createWorkspaceScheduling = function (ui) {
             }, form.querySelector('[type="submit"]'));
         });
         body.append(form, status);
+        await sectionHint(form);
     }
 
     async function requestSeries(preset = {}, back = () => requestBooking(preset)) {
@@ -498,7 +546,7 @@ window.createWorkspaceScheduling = function (ui) {
                 defaults.overnight = `${end.year}-${end.month}-${end.day}` > defaults.from;
             } catch { /* Keep explicit institution-date defaults if the browser cannot format its timezone. */ }
         }
-        const fields = [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'],
+        const fields = [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'], ...classificationFields,
             ['from', 'First date', 'date'], ['through', 'Last date', 'date'],
             ['start_time', 'Meeting starts', 'time'], ['end_time', 'Meeting ends', 'time'],
             ['overnight', 'Ends next day', 'checkbox', '', false], ['interval_weeks', 'Repeat interval in weeks', 'number'],
@@ -534,7 +582,8 @@ window.createWorkspaceScheduling = function (ui) {
                 const weekdays = checks.filter(input => input.checked).map(input => Number(input.value));
                 if (!weekdays.length) { errors.textContent = 'Choose at least one meeting day.'; checks[0].focus(); return; }
                 const data = formData(form, fields);
-                const payload = { room_id: data.room_id, title: data.title, pattern: {
+                const payload = { room_id: data.room_id, title: data.title,
+                    category_id: data.category_id, section_id: data.section_id, pattern: {
                     from: data.from, through: data.through, start_time: data.start_time, end_time: data.end_time,
                     overnight: data.overnight, interval_weeks: data.interval_weeks, weekdays,
                     excluded_dates: (data.excluded_dates || '').split(/[\s,]+/).filter(Boolean), timezone: context.timezone,
@@ -554,6 +603,7 @@ window.createWorkspaceScheduling = function (ui) {
                     previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= result.items.length;
                 }
                 preview.replaceChildren(node('h3', { class: 'h5 private-text' }, `${result.room.code} · ${data.title}`),
+                    categoryBadge(result.category), node('p', { class: 'form-text' }, sectionLabel(result.section)),
                     node('p', { class: 'form-text' }, `${roomLabel(result.room)} · ${result.items.length} meetings in ${result.timezone}. ${result.conflicts} conflicts with approved bookings. Approval will check again.`),
                     content, status, node('div', { class: 'inline-actions' }, previous, next),
                     button('Back to meeting pattern', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
@@ -573,6 +623,7 @@ window.createWorkspaceScheduling = function (ui) {
                 preview.querySelector('button:not(:disabled)').focus();
             }, reviewButton);
         });
+        await sectionHint(form);
     }
     async function booking(id, back = null) {
         const record = await request(`/sis/bookings/${id}/`);
@@ -587,6 +638,8 @@ window.createWorkspaceScheduling = function (ui) {
             );
         body.append(
             badge(record.status),
+            categoryBadge(record.category),
+            node('p', { class: 'form-text' }, sectionLabel(record.section)),
             node("p", {}, `Room: ${roomLabel(place)} · Capacity: ${place.capacity}`),
             node('p', { class: 'private-text' }, buildingLabel(place)),
             note(),
@@ -594,6 +647,25 @@ window.createWorkspaceScheduling = function (ui) {
                 room(record.room_id, record.occurrences[0].starts_at),
             ),
         );
+        if (can('sis:scheduling:manage')) body.append(button('Change category', async () => {
+            const edit = openDrawer('Change booking category', 'SPACES & SCHEDULING');
+            const fields = [classificationFields[0]];
+            const form = await buildForm(fields, { category_id: record.category_id || '' });
+            if (!edit.isConnected) return;
+            form.append(button('Back to booking', () => booking(id, back)),
+                node('button', { type: 'submit', class: 'btn btn-primary' }, 'Save category'));
+            form.addEventListener('submit', event => {
+                event.preventDefault();
+                task(async () => {
+                    await request(`/sis/bookings/${id}/category/`, 'POST',
+                        { ...formData(form, fields), version: record.version });
+                    if (!edit.isConnected) return;
+                    notify('Booking category saved.'); await ui.refreshDirectory(); await booking(id, back);
+                }, form.querySelector('[type="submit"]'));
+            });
+            edit.append(categoryBadge(record.category), node('p', { class: 'form-text' },
+                'A category labels the booking; it does not change its linked course section or reservation.'), form);
+        }));
         const content = node('div'), status = node('p', { role: 'status', class: 'form-text', tabindex: '-1' });
         let page = 0;
         const previous = button('Previous booking meetings', () => { page--; draw(true); });
@@ -786,5 +858,33 @@ window.createWorkspaceScheduling = function (ui) {
         });
         body.append(form);
     }
-    return { room, booking, requestBooking, building, buildingForm, roomForm, calendar };
+    async function categoryForm(row = null) {
+        const body = openDrawer(row ? 'Edit booking category' : 'Add a category', 'SPACES & SCHEDULING');
+        const record = row ? await request(`/sis/booking-categories/${row.id}/`) : null;
+        if (!body.isConnected) return;
+        const fields = [['code', 'Category code'], ['name', 'Category name'],
+            ['tone', 'Color', 'choice', ['blue', 'teal', 'amber', 'purple', 'gray']],
+            ...(record ? [['active', 'Available for new bookings', 'checkbox', '', false]] : [])];
+        const form = await buildForm(fields, record || { tone: 'blue' });
+        if (!body.isConnected) return;
+        form.elements.code.maxLength = 80;
+        const sample = node('p', { class: 'my-3', 'aria-label': 'Category preview' });
+        const draw = () => sample.replaceChildren(categoryBadge({ name: form.elements.name.value || 'Category preview', tone: form.elements.tone.value }));
+        form.addEventListener('input', draw); draw();
+        form.append(node('button', { type: 'submit', class: 'btn btn-primary' }, 'Save category'));
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const result = await request(record ? `/sis/booking-categories/${record.id}/edit/` : '/sis/booking-categories/',
+                    'POST', { ...formData(form, fields), ...(record ? { version: record.version } : {}) });
+                if (!body.isConnected) return;
+                notify('Category saved.'); await ui.refreshDirectory();
+                await categoryForm({ id: result.id || record.id });
+            }, form.querySelector('[type="submit"]'));
+        });
+        body.append(node('p', { class: 'form-text' },
+            'Use labels such as Course sections, Meetings or Conferences. Retiring a category keeps existing links and calendar filters; restoring it makes it available again. Labels accompany every color.'), sample, form);
+    }
+    return { room, booking, requestBooking, requestSeries, building, buildingForm, roomForm, calendar, categoryForm, categoryBadge };
 };

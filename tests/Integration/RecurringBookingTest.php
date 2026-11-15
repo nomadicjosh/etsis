@@ -36,7 +36,9 @@ final class RecurringBookingTest extends TestCase
             $s->transactions,
             $audit ?? $s->audit,
             new SqlRoomRepository($s->sql),
-            $s->clock
+            $s->clock,
+            new \Infrastructure\Persistence\Repository\SqlBookingCategoryRepository($s->sql),
+            $s->bookingSections()
         );
     }
     private function pattern(): BookingPattern

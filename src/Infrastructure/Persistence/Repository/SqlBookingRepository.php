@@ -30,7 +30,10 @@ final readonly class SqlBookingRepository implements BookingRepository
     {
         $this->sql->insert('sis_bookings', ['id' => $booking->id->value, 'room_id' => $booking->roomId->value,
             'owner_user_id' => $booking->ownerUserId->value, 'title' => $booking->title,
-            'status' => $booking->status, 'version' => $booking->version]);
+            'status' => $booking->status, 'version' => $booking->version,
+            'category_id' => $booking->categoryId?->value,
+            'section_publication_id' => $booking->sectionPublicationId?->value,
+            'request_hash' => $booking->requestFingerprint()]);
         foreach ($booking->occurrences as $occurrence) {
             $slot = $occurrence->time;
             $cancelledAt = $occurrence->cancelledAt?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
@@ -65,8 +68,16 @@ final readonly class SqlBookingRepository implements BookingRepository
             $r['title'],
             $occurrences,
             $r['status'],
-            (int) $r['version']
+            (int) $r['version'],
+            $r['category_id'] === null ? null : new EntityId($r['category_id']),
+            $r['section_publication_id'] === null ? null : new EntityId($r['section_publication_id'])
         );
+    }
+
+    public function matchesRequest(Booking $request): bool
+    {
+        $row = $this->sql->one('sis_bookings', ['id' => $request->id->value]);
+        return is_string($row['request_hash']) && hash_equals($row['request_hash'], $request->requestFingerprint());
     }
 
     public function save(Booking $booking, int $expectedVersion): void
@@ -74,7 +85,8 @@ final readonly class SqlBookingRepository implements BookingRepository
         if (
             $this->sql->update(
                 'sis_bookings',
-                ['status' => $booking->status, 'version' => $booking->version],
+                ['status' => $booking->status, 'version' => $booking->version,
+                    'category_id' => $booking->categoryId?->value],
                 ['id' => $booking->id->value, 'version' => $expectedVersion]
             ) !== 1
         ) {

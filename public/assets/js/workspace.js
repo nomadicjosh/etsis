@@ -178,7 +178,8 @@
         rooms: { title: 'Rooms & spaces', description: 'Make room for classes, meetings, and everything in between.', icon: 'door-open', action: 'Add a room', endpoint: '/sis/rooms/', permission: 'sis:scheduling:manage', fields: [], columns: [['Code', 'code'], ['Room name', 'name'], ['Building', 'building_name'], ['Capacity', 'capacity']] },
         calendar: { title: 'Campus booking calendar', description: 'Find meetings across campus and keep room changes connected.', icon: 'calendar-week', permission: 'sis:scheduling:manage', columns: [] },
         buildings: { title: 'Buildings', description: 'Give every room a clear home on campus.', icon: 'buildings', action: 'Add a building', permission: 'sis:scheduling:manage', columns: [['Code', 'code'], ['Building name', 'name']] },
-        bookings: { title: 'Spaces & scheduling', description: 'See what’s requested, approve what fits, and keep the day flowing.', icon: 'calendar3', action: 'Request a space', endpoint: '/sis/bookings/', permission: 'sis:scheduling:manage', fields: [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'], ['starts_at', 'Starts', 'datetime-local'], ['ends_at', 'Ends', 'datetime-local']], columns: [['Request', 'title'], ['Status', 'status']] },
+        bookingcategories: { title: 'Booking categories', description: 'Give meetings, course sections and campus events clear labels.', icon: 'tags', action: 'Add a category', permission: 'sis:scheduling:manage', columns: [['Code', 'code'], ['Category name', 'name'], ['Color', 'tone'], ['Available', 'active']] },
+        bookings: { title: 'Spaces & scheduling', description: 'See what’s requested, approve what fits, and keep the day flowing.', icon: 'calendar3', action: 'Request a space', endpoint: '/sis/bookings/', permission: 'sis:scheduling:manage', fields: [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'], ['starts_at', 'Starts', 'datetime-local'], ['ends_at', 'Ends', 'datetime-local']], columns: [['Request', 'title'], ['Category', 'category_name'], ['Course section', 'section_code'], ['Status', 'status']] },
         employees: { title: 'Team & timesheets', description: 'The people who make your campus work. All connected to their person record.', icon: 'person-workspace', action: 'Add employment', endpoint: '/sis/employees/', permission: 'sis:hr:manage', fields: [['person_id', 'Person', 'lookup', 'people'], ['job_title', 'Job title']], columns: [['Team member', 'name'], ['Job title', 'job_title'], ['Status', 'active']] },
         timesheets: { title: 'Timesheets', description: 'Review time entries with the context you need, right here.', icon: 'clock-history', action: 'Submit time', endpoint: '/sis/timesheets/', permission: 'sis:hr:manage', fields: [['employee_id', 'Team member', 'lookup', 'employees'], ['starts_at', 'Started', 'datetime-local'], ['ends_at', 'Finished', 'datetime-local']], columns: [['Started', 'starts_at'], ['Finished', 'ends_at'], ['Status', 'status']] },
         accounts: { title: 'Student accounts', description: 'Clear statements, careful corrections, and a history you can trust.', icon: 'wallet2', action: 'Open an account', endpoint: '/sis/accounts/', permission: 'sis:finance:post', fields: [['student_id', 'Student', 'lookup', 'students'], ['term_id', 'Term', 'lookup', 'terms'], ['currency', 'Currency', 'currency']], columns: [['Student', 'name'], ['Currency', 'currency']] },
@@ -239,7 +240,7 @@
         $all('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== (datasets[section] ? 'directory' : section); });
         $all('[data-workspace]').forEach(link => {
             const key = link.dataset.workspace;
-            const active = key === section || (key === 'courses' && catalogTabs.some(([tab]) => tab === section)) || (key === 'bookings' && ['rooms', 'buildings', 'calendar'].includes(section)) || (key === 'employees' && section === 'timesheets');
+            const active = key === section || (key === 'courses' && catalogTabs.some(([tab]) => tab === section)) || (key === 'bookings' && ['rooms', 'buildings', 'bookingcategories', 'calendar'].includes(section)) || (key === 'employees' && section === 'timesheets');
             link.classList.toggle('active', active);
             if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
         });
@@ -361,7 +362,7 @@
         const create = $one('#directory-create'); create.hidden = !definition.action || !can(definition.permission);
         $one('span', create).textContent = definition.action || 'Add record';
         const tabs = $one('#directory-tabs'); clear(tabs);
-        const related = catalogTabs.some(([key]) => key === section) ? catalogTabs : ['rooms', 'buildings', 'bookings', 'calendar'].includes(section) ? [['bookings', 'Space requests'], ['calendar', 'Calendar'], ['rooms', 'Rooms & spaces'], ['buildings', 'Buildings']] : ['employees', 'timesheets'].includes(section) ? [['employees', 'Team'], ['timesheets', 'Timesheets']] : ['accounts', 'journals', 'billing', 'ledger'].includes(section) ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']] : ['institutions', 'external', 'equivalencies'].includes(section) ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
+        const related = catalogTabs.some(([key]) => key === section) ? catalogTabs : ['rooms', 'buildings', 'bookings', 'bookingcategories', 'calendar'].includes(section) ? [['bookings', 'Space requests'], ['calendar', 'Calendar'], ['rooms', 'Rooms & spaces'], ['buildings', 'Buildings'], ['bookingcategories', 'Categories']] : ['employees', 'timesheets'].includes(section) ? [['employees', 'Team'], ['timesheets', 'Timesheets']] : ['accounts', 'journals', 'billing', 'ledger'].includes(section) ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']] : ['institutions', 'external', 'equivalencies'].includes(section) ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
         related.forEach(([key, label]) => tabs.append(node('a', { href: `/admin/workspace/${key}/`, 'data-workspace': key, class: section === key ? 'active' : '' }, label)));
         if (['employees', 'timesheets'].includes(section) && can('sis:hr:manage')) tabs.append(node('button', {
             type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => hrSetup.library(), event.currentTarget),
@@ -430,7 +431,9 @@
 
     function recordLabel(row) { if (row.external_code && row.course_code) return `${row.external_code} → ${row.course_code}`; return [row.given_name, row.family_name].filter(Boolean).join(' ') || row.title || row.name || row.code || row.reference || `Record ${row.id.slice(-6)}`; }
     function renderCell(section, row, field, index) {
-        if (['rooms', 'buildings', 'calendar'].includes(section) && field === 'name') return row.name || 'Name not set';
+        if (section === 'bookingcategories' && field === 'tone') return schedulingStudio.categoryBadge({ name: row.tone, tone: row.tone });
+        if (field === 'category_name') return schedulingStudio.categoryBadge(row);
+        if (['rooms', 'buildings', 'bookingcategories', 'calendar'].includes(section) && field === 'name') return row.name || 'Name not set';
         if (section === 'rooms' && field === 'building_name') return row.building_name || 'Building not assigned';
         if (section === 'terms' && field === 'kind') return row.kind === 'standard' ? 'Standard' : row.kind === 'non_standard' ? 'Non-standard' : 'Classification needed';
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
@@ -479,6 +482,7 @@
         if (section === 'bookings') return schedulingStudio.requestBooking(preset);
         if (section === 'rooms') return schedulingStudio.roomForm(null, preset);
         if (section === 'buildings') return schedulingStudio.buildingForm();
+        if (section === 'bookingcategories') return schedulingStudio.categoryForm();
         if (section === 'journals') return operations.createJournal();
         const definition = datasets[section];
         const operation = section === 'people' ? (await request('/sis/ui/operation-id/')).id : null;
@@ -680,6 +684,7 @@
         if (section === 'timesheets') return employmentStudio.entry(row.id);
         if (section === 'rooms') return schedulingStudio.room(row.id);
         if (section === 'buildings') return schedulingStudio.building(row.id);
+        if (section === 'bookingcategories') return schedulingStudio.categoryForm(row);
         if (section === 'bookings') return schedulingStudio.booking(row.id);
         if (['reports', 'sharedreports'].includes(section)) return reportStudio.record(row.id);
         if (section === 'people') return openPerson(row.id);
@@ -697,6 +702,10 @@
         const action = (label, path, data = {}, success = 'Updated.', style = 'btn-outline-primary') => actions.append(node('button', { type: 'button', class: `btn ${style}`, onclick: event => task(async () => { await request(path, 'POST', data); notify(success); drawer.hide(); if (datasets[current]) await loadDirectory(); }, event.currentTarget) }, label));
         if (row.person_id && can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => task(() => openPerson(row.person_id)) }, 'Open person record'));
         body.append(actions);
+        if (section === 'sections' && can('sis:scheduling:manage'))
+            actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary',
+                onclick: () => task(() => schedulingStudio.requestSeries({ section_id: row.id, title: row.code })) },
+                'Plan room meetings'));
         await operations.enhance(section, row, body);
     }
 

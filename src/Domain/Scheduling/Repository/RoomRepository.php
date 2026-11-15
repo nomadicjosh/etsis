@@ -16,5 +16,11 @@ interface RoomRepository
     /** @return list<array<string, mixed>> */
     public function agenda(EntityId $room, TimeSlot $window, ?EntityId $after, int $limit): array;
     /** @return list<array<string, mixed>> */
-    public function calendar(TimeSlot $window, ?EntityId $building, string $search, int $limit): array;
+    public function calendar(
+        TimeSlot $window,
+        ?EntityId $building,
+        string $search,
+        int $limit,
+        ?EntityId $category = null
+    ): array;
 }

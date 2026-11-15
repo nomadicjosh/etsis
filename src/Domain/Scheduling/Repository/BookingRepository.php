@@ -13,6 +13,7 @@ interface BookingRepository
     public function lockRoom(EntityId $id): void;
     public function add(Booking $booking): void;
     public function get(EntityId $id): Booking;
+    public function matchesRequest(Booking $request): bool;
     public function save(Booking $booking, int $expectedVersion): void;
     public function cancelOccurrence(Booking $booking, EntityId $occurrence, int $expectedVersion): void;
     public function replaceOccurrence(

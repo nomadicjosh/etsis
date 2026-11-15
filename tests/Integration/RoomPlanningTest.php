@@ -35,7 +35,10 @@ final class RoomPlanningTest extends TestCase
     private function bookings(SisFixture $f): BookingService
     {
         return new BookingService(new SqlBookingRepository($f->sql), $f->access, $f->transactions, $f->audit,
-            new SqlRoomRepository($f->sql), $f->clock);
+            new SqlRoomRepository($f->sql), $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlBookingCategoryRepository($f->sql),
+            $f->bookingSections()
+        );
     }
 
     private function slot(string $start, string $end): TimeSlot

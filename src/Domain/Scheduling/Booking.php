@@ -21,6 +21,8 @@ final readonly class Booking
         public array $occurrences,
         public string $status = 'requested',
         public int $version = 0,
+        public ?EntityId $categoryId = null,
+        public ?EntityId $sectionPublicationId = null,
     ) {
         if (
             trim($title) === '' || !mb_check_encoding($title, 'UTF-8') || mb_strlen($title) > 191
@@ -44,9 +46,24 @@ final readonly class Booking
     }
 
     /** @param list<TimeSlot> $times */
-    public static function request(EntityId $id, EntityId $room, EntityId $owner, string $title, array $times): self
-    {
-        return new self($id, $room, $owner, $title, array_map(BookingOccurrence::plan(...), $times));
+    public static function request(
+        EntityId $id,
+        EntityId $room,
+        EntityId $owner,
+        string $title,
+        array $times,
+        ?EntityId $category = null,
+        ?EntityId $sectionPublication = null
+    ): self {
+        return new self(
+            $id,
+            $room,
+            $owner,
+            $title,
+            array_map(BookingOccurrence::plan(...), $times),
+            categoryId: $category,
+            sectionPublicationId: $sectionPublication
+        );
     }
 
     /** @return list<TimeSlot> Original requested times, including later cancelled meetings. */
@@ -86,7 +103,9 @@ final readonly class Booking
             $this->title,
             $occurrences,
             $active === [] ? 'cancelled' : $this->status,
-            $this->version + 1
+            $this->version + 1,
+            $this->categoryId,
+            $this->sectionPublicationId
         );
     }
 
@@ -107,7 +126,37 @@ final readonly class Booking
             $this->title,
             $this->occurrences,
             $status,
-            $this->version + 1
+            $this->version + 1,
+            $this->categoryId,
+            $this->sectionPublicationId
         );
+    }
+
+    public function categorize(?EntityId $category): self
+    {
+        return new self(
+            $this->id,
+            $this->roomId,
+            $this->ownerUserId,
+            $this->title,
+            $this->occurrences,
+            $this->status,
+            $this->version + 1,
+            $category,
+            $this->sectionPublicationId
+        );
+    }
+
+    public function requestFingerprint(): string
+    {
+        $utc = new \DateTimeZone('UTC');
+        $times = array_map(static fn(TimeSlot $slot): array => [
+            $slot->startsAt->setTimezone($utc)->format(DATE_ATOM),
+            $slot->endsAt->setTimezone($utc)->format(DATE_ATOM),
+        ], $this->times());
+        sort($times);
+        $facts = [$this->id->value, $this->ownerUserId->value, $this->roomId->value,
+            $this->title, $times, $this->categoryId?->value, $this->sectionPublicationId?->value];
+        return hash('sha256', json_encode($facts, JSON_THROW_ON_ERROR));
     }
 }

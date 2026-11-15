@@ -28,7 +28,13 @@ final readonly class SisBookingController
     public function review(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->service->review($f->id('room_id'), $f->text('title'), $this->pattern($request)));
+        return new JsonResponse($this->service->review(
+            $f->id('room_id'),
+            $f->text('title'),
+            $this->pattern($request),
+            $f->optionalId('category_id'),
+            $f->optionalId('section_id')
+        ));
     }
     public function requestSeries(ServerRequest $request): ResponseInterface
     {
@@ -38,7 +44,9 @@ final readonly class SisBookingController
             $f->id('room_id'),
             $f->text('title'),
             $this->pattern($request),
-            $f->text('revision', 64)
+            $f->text('revision', 64),
+            $f->optionalId('category_id'),
+            $f->optionalId('section_id')
         );
         return new JsonResponse(['id' => $booking->id->value, 'status' => $booking->status], 201);
     }
@@ -69,9 +77,27 @@ final readonly class SisBookingController
             static fn (FormInput $s): TimeSlot => new TimeSlot($s->instant('starts_at'), $s->instant('ends_at')),
             $f->items('slots', 366)
         );
-        $booking = $this->service->request($f->id('room_id'), $f->text('title'), $slots);
+        $booking = $this->service->request(
+            $f->id('room_id'),
+            $f->text('title'),
+            $slots,
+            $f->optionalId('category_id'),
+            $f->optionalId('section_id')
+        );
 
         return new JsonResponse(['id' => $booking->id->value, 'status' => $booking->status], 201);
+    }
+
+    public function sectionContext(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->sectionContext(new EntityId($id)));
+    }
+
+    public function categorize(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $booking = $this->service->categorize(new EntityId($id), $f->optionalId('category_id'), $f->integer('version'));
+        return new JsonResponse(['id' => $id, 'version' => $booking->version]);
     }
 
     public function approve(ServerRequest $request, string $id): ResponseInterface
@@ -95,6 +121,8 @@ final readonly class SisBookingController
 
         return new JsonResponse(['id' => $booking->id->value, 'room_id' => $booking->roomId->value,
             'title' => $booking->title, 'status' => $booking->status, 'version' => $booking->version,
+            'category_id' => $booking->categoryId?->value, 'category' => $context['category'],
+            'section' => $context['section'],
             'source_booking_id' => $context['source_booking_id'],
             'occurrences' => array_map(static fn (BookingOccurrence $s): array => [
                 'id' => $s->id->value, 'starts_at' => $s->time->startsAt->format(DATE_ATOM),

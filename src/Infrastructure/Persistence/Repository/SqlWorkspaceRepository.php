@@ -38,6 +38,9 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
         $q = $this->sql->quote(...);
         $conditions = [];
         $parameters = [];
+        if (in_array($dataset, ['activebookingcategories', 'bookingsections'], true)) {
+            $conditions[] = 'r.' . $q('active') . ' = 1';
+        }
         if ($dataset === "faculty") {
             $conditions[] = "r." . $q("owner_user_id") . " IS NOT NULL";
         }
@@ -107,6 +110,27 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
             ", ",
             array_map(static fn(string $name): string => "r." . $q($name), $names),
         );
+        if (in_array($dataset, ['bookingcategories', 'activebookingcategories'], true)) {
+            return [$columns(['id', 'code', 'name', 'tone', 'active', 'version']),
+                $q('sis_booking_categories') . ' r', ['r.' . $q('code'), 'r.' . $q('name')]];
+        }
+        if ($dataset === 'bookings') {
+            return [$columns(['id', 'room_id', 'title', 'status', 'version'])
+                    . ', c.' . $q('name') . ' AS ' . $q('category_name')
+                    . ', c.' . $q('tone') . ' AS ' . $q('category_tone')
+                    . ', v.' . $q('code') . ' AS ' . $q('section_code'),
+                $q('sis_bookings') . ' r LEFT JOIN ' . $q('sis_booking_categories') . ' c ON c.' . $q('id')
+                    . ' = r.' . $q('category_id') . ' LEFT JOIN ' . $q('sis_section_versions') . ' v ON v.' . $q('id')
+                    . ' = r.' . $q('section_publication_id'),
+                ['r.' . $q('title'), 'r.' . $q('status'), 'c.' . $q('name'), 'v.' . $q('code')]];
+        }
+        if ($dataset === 'bookingsections') {
+            return ['r.' . $q('id') . ', v.' . $q('code') . ', v.' . $q('term_code') . ' AS ' . $q('name'),
+                $q('sis_sections') . ' r JOIN ' . $q('sis_section_offering_versions') . ' sv ON sv.' . $q('id')
+                    . ' = r.' . $q('id') . ' JOIN ' . $q('sis_section_versions') . ' v ON v.' . $q('id')
+                    . ' = sv.' . $q('publication_id'),
+                ['v.' . $q('code'), 'v.' . $q('term_code')]];
+        }
         if ($dataset === 'rooms') {
             return [$columns(['id', 'code', 'name', 'capacity', 'building_id'])
                 . ', b.' . $q('code') . ' AS ' . $q('building_code')
