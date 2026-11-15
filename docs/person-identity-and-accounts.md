@@ -98,42 +98,8 @@ The ordered list and each accepted revision are retained in the existing person 
 
 `PersonProfileAccess` is shared by ordinary/emergency contact workflows: portal ownership remains mandatory, staff need person-management permission, and super records require a super administrator through staff routes. Person locks, trusted actor/time, expected revisions, shared replay limits, encrypted payloads, required audit and atomic rollback remain in force. Lists and general portal overviews do not eagerly load emergency contacts. Raw event streams and emergency contact details are not ordinary Report Studio sources.
 
-## Employment profile changes
+## Employment and time review
 
-Open **Team & timesheets → select an employee → Edit employment** to change the job title or active status in place. Enter a reason for the change. HR maintenance requires `sis:hr:manage`; another super account requires a super administrator. Owners may read their own employment and time entries without gaining HR maintenance or self-approval authority.
-
-Employment remains a child of the same `Person`. Creating it neither creates another account nor grants a security role. Deactivation blocks new time submissions while leaving earlier entries and pending reviews available. It does not disable sign-in, close a student program, or change student status. The active flag and recording date are not legal hire/termination dates.
-
-Genuine new employment and subsequent title/status decisions use one `employment_profile` stream per employee in the existing protected `sis_history_events` journal. This separate HR boundary retains the person reference without copying person names, addresses or account credentials. The existing `sis_employees` table remains the current projection. Payloads and change reasons are encrypted; ordinary employee responses and metadata audits exclude private reasons and raw events.
-
-Older employment rows remain unchanged on reads and unchanged saves. Their first actual edit records a current observation followed by the accepted change, explicitly marking earlier history as unknown. It does not invent a past hiring decision. Each accepted change retains its recorder, trusted recording/effective time, previous title/status and reason. This workflow records changes effective now; retrospective hire, termination and payroll-effective decisions need their own rules.
-
-Role/person/employee locks, expected revisions, history, projection and required audit commit in one transaction. Authority is checked again before completion. Revisions include the stream version, so changing a value back does not make an old form current. An exact authorized retry returns successfully without undoing later changes, including later reactivation. Another actor cannot adopt that receipt. Rejected UI saves preserve the entered title, status and reason.
-
-Directories and searches use indexed current rows. Opening a selected employee or authorizing a time submission verifies that employee's protected history and canonical person; altered tracked projections are rejected. Replay is bounded to 2,000 events, and a change cannot exceed that ceiling. Reading adds no historical events. Time-entry detail reuses its selected employment result rather than loading the same employment stream twice.
-
-No migration, live-row conversion or additional event table is required. Time entries retain their existing audited CRUD and version checks; this change does not claim that payroll calculations or historical job titles at the time of work are implemented. Position/pay-grade definitions, hire/termination decisions, faculty assignments, payroll boundaries and operational rebuild/retention tooling remain separate work.
-
-### Reviewing employment changes
-
-Open **Team & timesheets → select an employee → Employment change history**. Review retained job titles and active status, with changed-field labels, recording/effective times and the recorder's current account name. Titles and status are the values recorded for that change; recorder names are current display labels, while original attribution remains in protected history. Unavailable recorder labels are explicit. Private reasons, account/operation identifiers, credentials, fingerprints and raw event payloads are excluded.
-
-The reviewer needs both `sis:hr:manage` and `sis:audit:read`. Ownership, either permission alone, or ordinary Person history access does not grant this review. Another super account still requires a super administrator. Actor, authority, current canonical person and employment integrity are checked, and a changed projection during the review requires a refresh. The curated endpoint is private/no-store, CSRF-protected and excluded from debug collectors. Reading writes no event, receipt, audit row or projection.
-
-Twenty-entry newest-first pages retain the first page's upper boundary. **Load older changes** preserves that boundary despite later edits; **Refresh history** starts a fresh review. Existing unknown history stays unknown, and a first observation is labeled without asserting a hire date or inventing earlier employment. Person and employment reviews share the same browser paging/card controls, preserve loaded pages after a failed request and ignore delayed responses after leaving the screen. Escaped labels, keyboard controls and narrow-screen reflow apply to both.
-
-The review reuses employment's existing validated replay, with the 2,000-event ceiling and at most twenty recorder lookups per response. Incomplete/non-advancing pages and changed replay boundaries are rejected. No migration, new event type or second event table is introduced. This reviews title/status facts already recorded; dated position assignments, compensation, pay-grade and hire/termination workflows remain on the roadmap.
-
-## Weekly time review
-
-Open **Team & timesheets → select an employee → Weekly time review**. Choose any date in the desired week, or use **Previous week**, **Next week** and **Refresh week**. The review uses Monday–Sunday calendar weeks and the institution's configured application timezone. The server supplies the current week; the browser's timezone does not decide its boundaries.
-
-Cards show pending, approved and rejected elapsed time separately, with unique entry counts. Seven daily rows split overnight work at local midnight. Entries crossing a week boundary contribute only the portion inside that week. Spring/fall clock changes use actual elapsed seconds, and rejected entries never inflate approved or pending totals. This is a calendar review, not a payroll-period definition, overtime calculation, break deduction or rounding rule.
-
-**Review weekly time entry** opens the existing full-interval decision screen. Approve/reject uses the displayed version and existing HR/self-approval safeguards. **Back to weekly time review** returns to the selected week and refreshes totals. A failed refresh keeps the last successful week and its displayed date range visible. The shared labeled controls, status/error messages and tables support keyboard access and narrow screens. Data remains in page memory.
-
-Owners can read only their own employee record; authorized HR staff can review another employee subject to super-account safeguards. Inactive employment retains weekly history and pending review. Current person and employment history are verified before reading, and actor/permission checks run again afterward. The private, CSRF-protected read adds no event, audit, receipt or projection. Time entries continue using their existing audited CRUD rather than acquiring an unnecessary event stream.
-
-The query selects overlapping entries for one employee and one week. The existing maximum shift of 24 elapsed hours provides a lower work-start bound, and the `sts_employee_work` index supports the employee/time range. At most 501 rows are read; more than 500 refuses the review rather than displaying incomplete totals. The index-only `20261115000000_AddSisTimesheetWorkIndex` migration is applied to the configured test database, with existing employee/time rows and all 20 event rows verified unchanged. Schema compilation covers the five supported framework databases; additional live-server qualification remains on the roadmap.
+Employment retains the same parent person and sign-in account. See the consolidated [Human resources guide](human-resources.md) for job/pay-grade setup, protected employment changes, historical review and weekly time review. Library edits do not rewrite employee or academic facts.
 
 This foundation covers current person creation, names, privacy, identifiers, personal contacts, account writers and employment title/active-status changes. Further role-specific decisions and complete operational projection rebuild/retention tooling remain on the roadmap. Existing academic and financial histories keep their own domain boundaries and exact historical snapshots.

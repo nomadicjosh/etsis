@@ -909,6 +909,12 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/employees/", [SisTimesheetController::class, "employee"])
         ->name("sis.timesheet.employee");
+    $router->map(['POST'], '/sis/hr/{kind}/page/', [\Application\Http\Controller\SisHrLibraryController::class, 'page'])
+        ->name('sis.hr.library.page');
+    $router->map(['POST'], '/sis/hr/{kind}/save/', [\Application\Http\Controller\SisHrLibraryController::class, 'save'])
+        ->name('sis.hr.library.save');
+    $router->map(['GET'], '/sis/hr/{kind}/{id}/', [\Application\Http\Controller\SisHrLibraryController::class, 'get'])
+        ->name('sis.hr.library.get');
     $router
         ->map(["POST"], "/sis/employees/{id}/edit/", [SisTimesheetController::class, "editEmployee"])
         ->name("sis.employee.edit");

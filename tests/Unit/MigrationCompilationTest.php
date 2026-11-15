@@ -104,6 +104,36 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testHrDefinitionsCompileForEveryFrameworkDatabaseWithMatchingUlidReferences(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000001_CreateSisHrDefinitions.php';
+        $definitions = [];
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::exactly(2))->method('create')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definitions): void {
+                $table = new CreateTable($name);
+                $callback($table);
+                $definitions[] = $table;
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new CreateSisHrDefinitions('hr-setup');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            foreach ($definitions as $definition) {
+                $commands = json_encode(new $class($dialect)->create($definition), JSON_THROW_ON_ERROR);
+                self::assertNotEmpty($commands, $driver);
+                self::assertStringContainsString('version', $commands);
+                self::assertStringContainsString('26', $commands);
+                self::assertDoesNotMatchRegularExpression('/AUTO_INCREMENT|AUTOINCREMENT|IDENTITY\\(/i', $commands);
+            }
+        }
+    }
     public function testTimeReviewIndexCompilesWithoutRowChangesForEverySupportedDialect(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000000_AddSisTimesheetWorkIndex.php';

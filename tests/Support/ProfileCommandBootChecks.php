@@ -575,5 +575,52 @@ if (
 if ($app->router->match($employmentHistory->withParsedBody(['after' => 1]))->getStatusCode() !== 422) {
     throw new RuntimeException('Employment history accepted an invalid page boundary.');
 }
+// HR reference definitions use the real provider/controller path and remain audited CRUD.
+$gradeId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$gradeBody = ['id' => $gradeId, 'code' => 'H.1', 'title' => 'Fictional hourly grade', 'currency' => 'USD',
+    'basis' => 'hourly', 'minimum_minor' => 1500, 'maximum_minor' => 5000, 'active' => true, 'version' => null];
+$gradePost = $employeeEdit->withUri(new \Laminas\Diactoros\Uri('/sis/hr/pay-grades/save/'))
+    ->withParsedBody($gradeBody);
+$hrEvents = $sis->sql->rows('sis_history_events');
+$sis->access->grants = ['sis:audit:read'];
+if ($app->router->match($gradePost)->getStatusCode() !== 403 || $sis->sql->rows('sis_hr_pay_grades') !== []) {
+    throw new RuntimeException('Audit access implied HR setup authority.');
+}
+$sis->access->grants = ['sis:hr:manage'];
+if ($app->router->match($gradePost->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403) {
+    throw new RuntimeException('HR setup bypassed CSRF.');
+}
+$gradeSaved = $app->router->match($gradePost);
+if (
+    $gradeSaved->getStatusCode() !== 200
+    || !str_contains($gradeSaved->getHeaderLine('Cache-Control'), 'no-store')
+    || json_decode((string) $gradeSaved->getBody(), true, flags: JSON_THROW_ON_ERROR)['version'] !== 0
+) {
+    throw new RuntimeException('HR setup failed through the real providers.');
+}
+$jobId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$jobPost = $gradePost->withUri(new \Laminas\Diactoros\Uri('/sis/hr/jobs/save/'))
+    ->withParsedBody(['id' => $jobId, 'code' => 'LIB.ASST', 'title' => 'Fictional library default', 'currency' => 'USD',
+        'basis' => 'hourly', 'active' => true, 'pay_grade_id' => $gradeId, 'rate_minor' => 2500,
+        'weekly_minutes' => 2250, 'version' => null]);
+if ($app->router->match($jobPost)->getStatusCode() !== 200) {
+    throw new RuntimeException('The job definition route failed.');
+}
+$libraryPost = $jobPost->withUri(new \Laminas\Diactoros\Uri('/sis/hr/jobs/page/'))->withParsedBody(['search' => 'LIB']);
+$libraryResponse = $app->router->match($libraryPost);
+$libraryData = json_decode((string) $libraryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$jobRead = $app->router->match($employeeGet->withUri(new \Laminas\Diactoros\Uri('/sis/hr/jobs/' . $jobId . '/')));
+if (
+    $libraryResponse->getStatusCode() !== 200 || count($libraryData['items']) !== 1
+    || $jobRead->getStatusCode() !== 200 || str_contains((string) $jobRead->getBody(), 'phpdebugbar')
+    || !str_contains($jobRead->getHeaderLine('Cache-Control'), 'no-store')
+    || $hrEvents !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('HR setup lost its private read or separate CRUD boundary.');
+}
+$gradeBody['maximum_minor'] = 10;
+if ($app->router->match($gradePost->withParsedBody($gradeBody))->getStatusCode() !== 422) {
+    throw new RuntimeException('The pay grade form accepted a reversed range.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();
