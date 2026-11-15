@@ -6,6 +6,8 @@ const employee = id(1), person = id(2), entry = id(3);
 async function setup(page, self = false, rejectFirstEdit = false) {
     const calls = [], errors = [];
     const dates = { periods: [], version: 0, reject: false };
+    const positions = { items: [], position_required: false, timezone: 'America/Los_Angeles', reject: false };
+    let selectedPosition = null;
     let active = true, title = 'Fictional librarian', status = 'pending', version = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -16,7 +18,7 @@ async function setup(page, self = false, rejectFirstEdit = false) {
         const profile = { id: employee, person_id: person, given_name: 'Alex', family_name: 'Example',
             institutional_id: 'S-EXAMPLE', job_title: title, active, is_self: self,
             revision: 'fictional-employment-revision', earlier_history_unknown: true };
-        const time = { ...profile, id: entry, employee_id: employee, status, version,
+        const time = { ...profile, id: entry, employee_id: employee, status, version, position: selectedPosition,
             starts_at: '2026-08-11T09:00:00+00:00', ends_at: '2026-08-11T10:00:00+00:00', duration_seconds: 3600 };
         let result = {};
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
@@ -27,6 +29,7 @@ async function setup(page, self = false, rejectFirstEdit = false) {
             { action: 'employee.updated', recorded_at: '2026-08-11 10:00:00', actor_id: id(9) },
         ], next_after: null };
         else if (path === `/sis/employees/${employee}/`) result = profile;
+        else if (path === `/sis/employees/${employee}/work-positions/`) result = positions;
         else if (path === `/sis/employees/${employee}/employment-dates/`) result = {
             employee_id: employee, periods: dates.periods, version: dates.version,
             new_id: id(200 + dates.periods.length), today: '2026-11-15', earlier_dates_unknown: true,
@@ -83,12 +86,21 @@ async function setup(page, self = false, rejectFirstEdit = false) {
         }
         else if (path === `/sis/timesheets/${entry}/`) result = time;
         else if (path.endsWith('/decision/')) { status = data.approve ? 'approved' : 'rejected'; version++; }
-        else if (path === '/sis/timesheets/') { status = 'pending'; version = 0; result = { id: entry, status }; }
+        else if (path === '/sis/timesheets/') {
+            if (positions.reject) {
+                positions.reject = false;
+                return route.fulfill({ status: 409, json: { error: 'Fictional work position changed. Refresh choices.' } });
+            }
+            const source = positions.items.find(item => item.id === data.position_id);
+            selectedPosition = source ? { ...source, accepted_version: data.position_version,
+                current_version: data.position_version, voided: false } : null;
+            status = 'pending'; version = 0; result = { id: entry, status };
+        }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="employees"]').click();
-    return { calls, errors, dates };
+    return { calls, errors, dates, positions };
 }
 async function accessible(page) {
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
@@ -322,5 +334,74 @@ test('employment dates ignore delayed reads after leaving the record panel', asy
     release();
     await expect(page.locator('#drawer-body')).toContainText('Recent time entries');
     await expect(page.getByRole('table', { name: 'Recorded employment periods' })).toHaveCount(0);
+    expect(errors).toEqual([]);
+});
+
+
+test('time submission requires a choice across jobs and preserves the draft after a stale assignment', async ({ page }) => {
+    const { calls, errors, positions } = await setup(page, true);
+    positions.position_required = true;
+    positions.items = [
+        { id: id(400), code: 'LIB', title: '<script>Fictional library assistant</script>', version: 1 },
+        { id: id(401), code: 'LAB', title: 'Fictional lab assistant', version: 2 },
+    ];
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Submit time for this employee', exact: true }).click();
+    await page.getByLabel(/^Started/).fill('2026-08-11T09:00');
+    await page.getByLabel(/^Finished/).fill('2026-08-11T10:00');
+    await expect(page.getByLabel('Position worked', { exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Submit time entry', exact: true }).click();
+    expect(calls.filter(call => call.path === '/sis/timesheets/')).toHaveLength(0);
+    await page.getByLabel('Position worked', { exact: true }).selectOption(id(400));
+    positions.reject = true;
+    await page.getByRole('button', { name: 'Submit time entry', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional work position changed. Refresh choices.');
+    await expect(page.getByLabel('Position worked', { exact: true })).toHaveValue(id(400));
+    await expect(page.getByLabel(/^Started/)).toHaveValue('2026-08-11T09:00');
+    positions.items[0].version = 3;
+    await page.getByRole('button', { name: 'Refresh work positions', exact: true }).click();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Submit time entry', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Position worked: LIB');
+    expect(calls.filter(call => call.path === '/sis/timesheets/').at(-1).data).toMatchObject({
+        position_id: id(400), position_version: 3,
+    });
+    expect(await page.locator('#drawer-body img, #drawer-body script').count()).toBe(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(errors).toEqual([]);
+    expect(calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test('one matching job is preselected and delayed choices cannot replace another employee review', async ({ page }) => {
+    const { calls, errors, positions } = await setup(page, true);
+    positions.position_required = true;
+    positions.items = [{ id: id(400), code: 'LIB', title: 'Fictional library assistant', version: 1 }];
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Submit time for this employee', exact: true }).click();
+    await page.getByLabel(/^Started/).fill('2026-08-11T09:00');
+    await page.getByLabel(/^Finished/).fill('2026-08-11T10:00');
+    await expect(page.getByLabel('Position worked', { exact: true })).toHaveValue(id(400));
+    await page.getByRole('button', { name: 'Submit time entry', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Position worked: LIB');
+    expect(calls.filter(call => call.path === '/sis/timesheets/').at(-1).data).toMatchObject({
+        position_id: id(400), position_version: 1,
+    });
+    await page.getByRole('button', { name: 'Back to employment', exact: true }).click();
+    await page.getByRole('button', { name: 'Submit time for this employee', exact: true }).click();
+    let release;
+    await page.route(`**/sis/employees/${employee}/work-positions/`, async route => {
+        await new Promise(resolve => { release = resolve; });
+        await route.fulfill({ json: positions });
+    });
+    await page.getByLabel(/^Started/).fill('2026-08-12T09:00');
+    await page.getByLabel(/^Finished/).fill('2026-08-12T10:00');
+    await expect.poll(() => typeof release).toBe('function');
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await expect(page.locator('#record-drawer')).not.toBeVisible();
+    release();
+    await expect(page.getByLabel('Position worked', { exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
 });

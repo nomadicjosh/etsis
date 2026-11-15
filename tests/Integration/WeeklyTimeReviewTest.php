@@ -114,7 +114,7 @@ final class WeeklyTimeReviewTest extends TestCase
             $s = new SisFixture();
             $service = $s->timesheetService();
             $id = $service->addEmployee($s->student($s->user())->personId, 'Fictional assistant');
-            $real = new SqlTimeRepository($s->sql);
+            $real = new SqlTimeRepository($s->sql, $s->dropCipher);
             $entry = new TimeEntry(
                 EntityId::generate(),
                 $case === 'other_employee' ? EntityId::generate() : $id,

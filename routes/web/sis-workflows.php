@@ -911,6 +911,8 @@ return static function (Psr7Router $router): void {
         ->name("sis.timesheet.employee");
     $positions = \Application\Http\Controller\SisPositionController::class;
     $dates = \Application\Http\Controller\SisEmploymentDatesController::class;
+    $router->map(['POST'], '/sis/employees/{id}/work-positions/', [SisTimesheetController::class, 'workPositions'])
+        ->name('sis.timesheet.work-positions');
     $router->map(['GET'], '/sis/employees/{employee}/employment-dates/', [$dates, 'get'])
         ->name('sis.employment.dates');
     $router->map(['POST'], '/sis/employees/{employee}/employment-dates/review/', [$dates, 'review'])

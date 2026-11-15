@@ -49,6 +49,7 @@ final readonly class TimeReviewWeek
                 throw new RuntimeException('A time review contains an interval outside its week.');
             }
             $items[] = ['id' => $entry->id->value, 'status' => $entry->status, 'version' => $entry->version,
+                'position_id' => $entry->positionId?->value, 'position_version' => $entry->positionVersion,
                 'starts_at' => $entry->work->startsAt->setTimezone($this->startsAt->getTimezone())->format(DATE_ATOM),
                 'ends_at' => $entry->work->endsAt->setTimezone($this->startsAt->getTimezone())->format(DATE_ATOM),
                 'week_seconds' => $end - $start,

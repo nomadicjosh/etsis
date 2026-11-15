@@ -153,6 +153,7 @@ window.createWorkspaceEmployment = function (ui) {
                 page.items.length
                     ? grid(
                           [
+                              "Position",
                               "Started",
                               "Finished",
                               "Duration",
@@ -160,6 +161,7 @@ window.createWorkspaceEmployment = function (ui) {
                               "Action",
                           ],
                           page.items.map((item) => [
+                              item.position ? `${item.position.code} · ${item.position.title}` : 'Not recorded',
                               display(item.starts_at),
                               display(item.ends_at),
                               duration(item.duration_seconds),
@@ -316,8 +318,9 @@ window.createWorkspaceEmployment = function (ui) {
                 node("h3", { class: "h5 mt-4" }, "Entries in this week"),
                 node("p", { class: "form-text" },
                     "An entry crossing a week boundary shows only its portion here. Review opens its full work interval. Refresh this week after another reviewer makes changes."),
-                data.items.length ? grid(["Started", "Finished", "Time this week", "Status", "Action"],
-                    data.items.map(item => [inZone(item.starts_at), inZone(item.ends_at), duration(item.week_seconds),
+                data.items.length ? grid(["Position", "Started", "Finished", "Time this week", "Status", "Action"],
+                    data.items.map(item => [item.position ? `${item.position.code} · ${item.position.title}` : 'Not recorded',
+                        inZone(item.starts_at), inZone(item.ends_at), duration(item.week_seconds),
                         badge(item.status), button("Review weekly time entry", () => entry(item.id, { employee: id, week: data.week })),
                     ]), "Weekly time entries") : node("p", {}, "No time entries overlap this week."),
             );
@@ -333,6 +336,10 @@ window.createWorkspaceEmployment = function (ui) {
             );
         body.append(
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
+            node('p', { class: 'private-text' }, record.position
+                ? `Position worked: ${record.position.code} · ${record.position.title}` : 'Position worked: Not recorded'),
+            record.position?.voided ? node('p', { class: 'form-text' },
+                'This assignment has since been marked incorrect. Review it before approving the work.') : null,
             badge(record.status),
             button("Back to employment", () => employee(record.employee_id)),
             grid(
@@ -401,6 +408,56 @@ window.createWorkspaceEmployment = function (ui) {
             ["ends_at", "Finished", "datetime-local"],
         ];
         const form = await buildForm(fields, preset);
+        if (!body.isConnected) return;
+        const positionGroup = node('div', { class: 'mb-3' });
+        const position = node('select', { id: 'time-work-position', name: 'position_id', class: 'form-select',
+            disabled: true, 'aria-describedby': 'time-work-position-status' });
+        const positionStatus = node('p', { id: 'time-work-position-status', class: 'form-text', role: 'status', 'aria-live': 'polite' });
+        positionGroup.append(node('label', { for: position.id, class: 'form-label' }, 'Position worked'), position,
+            positionStatus, button('Refresh work positions', () => loadPositions(true)));
+        form.append(positionGroup);
+        let epoch = 0, loadedKey = null, choices = null;
+        function workKey() {
+            return JSON.stringify([form.elements.employee_id.value, form.elements.starts_at.value, form.elements.ends_at.value]);
+        }
+        function validWork() {
+            const elapsed = new Date(form.elements.ends_at.value) - new Date(form.elements.starts_at.value);
+            return form.elements.employee_id.value && Number.isFinite(elapsed) && elapsed > 0 && elapsed <= 86400000;
+        }
+        async function loadPositions(force = false) {
+            if (!validWork()) {
+                positionStatus.textContent = 'Choose the team member and work times first.';
+                return;
+            }
+            const key = workKey();
+            if (!force && loadedKey === key) return;
+            const token = ++epoch, previous = position.value;
+            choices = null; loadedKey = null; position.disabled = true; position.required = false;
+            positionStatus.textContent = 'Checking work positions…';
+            const data = formData(form, fields);
+            const result = await request(`/sis/employees/${data.employee_id}/work-positions/`, 'POST',
+                { starts_at: data.starts_at, ends_at: data.ends_at });
+            if (!body.isConnected || token !== epoch || key !== workKey()) return;
+            choices = result; loadedKey = key;
+            position.replaceChildren(node('option', { value: '' }, result.position_required ? 'Choose the position worked' : 'Not recorded'));
+            result.items.forEach(item => position.append(node('option', { value: item.id }, `${item.code} · ${item.title}`)));
+            if (result.items.some(item => item.id === previous)) position.value = previous;
+            else if (result.items.length === 1) position.value = result.items[0].id;
+            position.required = result.position_required;
+            position.disabled = !result.position_required;
+            positionStatus.textContent = result.position_required
+                ? result.items.length ? `Choose the position covering the full interval. Assignment dates use ${result.timezone}.`
+                    : 'No position covers the full work interval. Split work at assignment boundaries or ask HR to review the dates.'
+                : 'No position has been recorded for this employee. Earlier time stays unassigned.';
+        }
+        for (const key of ['employee_id', 'starts_at', 'ends_at']) {
+            form.elements[key].addEventListener('input', () => {
+                epoch++; loadedKey = null; choices = null; position.required = false; position.disabled = true;
+                position.replaceChildren(); positionStatus.textContent = 'Review positions for the entered work times.';
+            });
+            form.elements[key].addEventListener('change', () => { if (validWork()) task(() => loadPositions()); });
+        }
+        positionStatus.textContent = 'Choose the team member and work times first.';
         form.append(
             node(
                 "button",
@@ -427,11 +484,18 @@ window.createWorkspaceEmployment = function (ui) {
                           : "",
                 );
                 if (!form.reportValidity()) return;
+                await loadPositions();
+                if (!body.isConnected || !choices || loadedKey !== workKey()) return;
+                if (choices.position_required && !position.value) {
+                    position.disabled = false; position.required = true; position.reportValidity(); return;
+                }
+                const selected = choices.items.find(item => item.id === position.value);
                 const saved = await request(
                     "/sis/timesheets/",
                     "POST",
-                    formData(form, fields),
+                    { ...formData(form, fields), position_id: selected?.id ?? null, position_version: selected?.version ?? null },
                 );
+                if (!body.isConnected) return;
                 notify("Time submitted for review.");
                 await ui.refreshDirectory();
                 await entry(saved.id);

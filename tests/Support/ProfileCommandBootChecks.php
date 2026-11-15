@@ -707,5 +707,53 @@ if ($datesSavedData['version'] !== 1 || count($datesSavedData['periods']) !== 1
     || str_contains((string) $datesSaved->getBody(), 'Fictional private hire decision')) {
     throw new RuntimeException('Employment-date confirmation failed to retain curated private facts.');
 }
+// Time positions share owner/HR authorization without exposing compensation or bypassing CSRF.
+$workPositions = $positionPost->withUri(new \Laminas\Diactoros\Uri('/sis/employees/' . $employeeId . '/work-positions/'))
+    ->withParsedBody(['starts_at' => '2026-09-01T09:00:00+00:00', 'ends_at' => '2026-09-01T10:00:00+00:00']);
+$workEvents = $sis->sql->rows('sis_history_events');
+if ($app->router->match($workPositions->withoutHeader('X-CSRF-Token'))->getStatusCode() !== 403) {
+    throw new RuntimeException('Work-position lookup bypassed CSRF.');
+}
+$sis->access->grants = [];
+$workResponse = $app->router->match($workPositions);
+$workData = json_decode((string) $workResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($workResponse->getStatusCode() !== 200 || !$workData['position_required'] || $workData['items'] !== []
+    || !str_contains($workResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $workResponse->getBody(), 'phpdebugbar') || $workEvents !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('The private work-position lookup lost its minimized, read-only boundary.');
+}
+$sis->access->grants = ['sis:hr:manage'];
+$validPositionId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$validPositionPost = $positionPost->withParsedBody(array_replace($positionBody,
+    ['id' => $validPositionId, 'valid_from' => '2026-01-01', 'valid_through' => null]));
+if ($app->router->match($validPositionPost)->getStatusCode() !== 201) {
+    throw new RuntimeException('The work-position fixture assignment failed through real providers.');
+}
+$sis->access->grants = [];
+$workResponse = $app->router->match($workPositions);
+$workData = json_decode((string) $workResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (count($workData['items']) !== 1 || array_keys($workData['items'][0]) !== ['id', 'code', 'title', 'version']) {
+    throw new RuntimeException('An owner could not read minimized work-position choices.');
+}
+// The existing employee fixture is paused; HR explicitly enables time before the owner submits it.
+$sis->access->grants = ['sis:hr:manage'];
+$enabledEmployee = $sis->timesheetService()->employeeDetails(new \Domain\Shared\ValueObject\EntityId($employeeId));
+$sis->timesheetService()->editEmployee(new \Domain\Shared\ValueObject\EntityId($employeeId),
+    $enabledEmployee['job_title'], true, $enabledEmployee['revision'], 'Fictional time-submission enablement');
+$sis->access->grants = [];
+$workSubmit = $workPositions->withUri(new \Laminas\Diactoros\Uri('/sis/timesheets/'))
+    ->withParsedBody(['employee_id' => $employeeId, 'starts_at' => '2026-09-01T09:00:00+00:00',
+        'ends_at' => '2026-09-01T10:00:00+00:00', 'position_id' => $validPositionId, 'position_version' => 1]);
+$workSaved = $app->router->match($workSubmit);
+if ($workSaved->getStatusCode() !== 201) {
+    throw new RuntimeException('The owner could not submit a position-bound time entry through real providers.');
+}
+$workId = json_decode((string) $workSaved->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$boundTime = $app->router->match($employeeGet->withUri(new \Laminas\Diactoros\Uri('/sis/timesheets/' . $workId . '/')));
+$boundData = json_decode((string) $boundTime->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($boundTime->getStatusCode() !== 200 || $boundData['position']['id'] !== $validPositionId
+    || isset($boundData['position']['rate_minor']) || isset($boundData['encrypted_reference'])) {
+    throw new RuntimeException('The time-entry response exposed a private reference or compensation.');
+}
 session_write_close();
 \Codefy\Framework\Http\RequestContext::clear();

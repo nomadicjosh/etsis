@@ -41,6 +41,7 @@ final readonly class TimesheetService
         private Clock $clock,
         private ActorDirectory $actors,
         private EmploymentDatesLedger $employmentDates,
+        private PositionLedger $positions,
     ) {
     }
 
@@ -255,11 +256,13 @@ final readonly class TimesheetService
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
     public function entries(EntityId $id, ?EntityId $after = null): array
     {
-        $this->employeeProfile($id);
+        $actor = $this->access->authenticatedUserId();
+        $profile = $this->employeeProfile($id);
         $rows = $this->repository->entries($id, $after, 51);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
-
+        $rows = $this->positions->labelEntries($id, $rows);
+        $this->recheckEmployee($profile->employee, $actor);
         return ['items' => $rows, 'next_after' => $more ? (string) $rows[49]['id'] : null];
     }
 
@@ -281,21 +284,60 @@ final readonly class TimesheetService
             }
         }
         $summary = $week->summarize($entries);
+        $summary['items'] = $this->positions->labelEntries($id, $summary['items']);
         $this->authorizeRead($profile->employee, $actor);
         return $summary + ['employee' => $this->profileDetails($profile)];
     }
 
-    public function submit(EntityId $employee, TimeSlot $work): TimeEntry
+    /** Owner/HR choices exclude pay terms and do not replay every candidate's stream.
+     * @return array<string,mixed>
+     */
+    public function workPositions(EntityId $employee, TimeSlot $work): array
     {
+        $actor = $this->access->authenticatedUserId();
+        $profile = $this->employeeProfile($employee);
+        new TimeEntry(EntityId::generate(), $employee, $work);
+        $zone = $this->clock->now()->getTimezone();
+        $this->employmentDates->requireCoverage(
+            $employee,
+            $work->startsAt->setTimezone($zone)->format('Y-m-d'),
+            $work->endsAt->modify('-1 microsecond')->setTimezone($zone)->format('Y-m-d'),
+            'starts_at'
+        );
+        $result = $this->positions->choices($employee, $work);
+        $this->recheckEmployee($profile->employee, $actor);
+        return $result + ['timezone' => $zone->getName()];
+    }
+
+    public function submit(
+        EntityId $employee,
+        TimeSlot $work,
+        ?EntityId $positionId = null,
+        ?int $positionVersion = null
+    ): TimeEntry {
         $this->access->authenticatedUserId();
         $person = $this->admissions->person($this->repository->employeePerson($employee));
         $actor = $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
-        $entry = new TimeEntry(EntityId::generate(), $employee, $work);
-        $this->transactions->run(function () use ($employee, $entry, $actor): void {
+        return $this->transactions->run(function () use (
+            $employee,
+            $work,
+            $actor,
+            $positionId,
+            $positionVersion
+        ): TimeEntry {
             $this->repository->lockEmployee($employee);
             $person = $this->admissions->person($this->repository->employeePerson($employee));
             $this->access->requireOwnerOrPermission($person->ownerUserId, 'sis:hr:manage');
             $this->employeeProfile($employee);
+            new TimeEntry(EntityId::generate(), $employee, $work);
+            $position = $this->positions->select($employee, $work, $positionId, $positionVersion);
+            $entry = new TimeEntry(
+                EntityId::generate(),
+                $employee,
+                $work,
+                positionId: $position?->id,
+                positionVersion: $position?->version
+            );
             $zone = $this->clock->now()->getTimezone();
             $this->employmentDates->requireCoverage(
                 $employee,
@@ -306,9 +348,8 @@ final readonly class TimesheetService
             $this->repository->add($entry);
             $this->audit->record($actor, 'timesheet.submitted', $entry->id);
             $this->authorizeRead($this->repository->employee($employee), $actor);
+            return $entry;
         });
-
-        return $entry;
     }
 
     public function decide(EntityId $id, bool $approve, ?int $expectedVersion = null): void
@@ -323,6 +364,7 @@ final readonly class TimesheetService
             }
             $person = $this->employeeProfile($entry->employeeId)->person;
             if ($approve) {
+                $this->positions->requireApprovalCoverage($entry);
                 $zone = $this->clock->now()->getTimezone();
                 $this->employmentDates->requireCoverage(
                     $entry->employeeId,
@@ -330,6 +372,8 @@ final readonly class TimesheetService
                     $entry->work->endsAt->modify('-1 microsecond')->setTimezone($zone)->format('Y-m-d'),
                     'starts_at'
                 );
+            } else {
+                $this->positions->verifyEntryReference($entry);
             }
             $this->repository->save($entry->decide($approve, $actor, $person->ownerUserId), $entry->version);
             $this->audit->record($actor, $approve ? 'timesheet.approved' : 'timesheet.rejected', $id);
@@ -344,7 +388,9 @@ final readonly class TimesheetService
     {
         $this->access->authenticatedUserId();
         $entry = $this->repository->get($id);
-        return ['entry' => $entry, 'profile' => $this->employeeProfile($entry->employeeId)];
+        $profile = $this->employeeProfile($entry->employeeId);
+        $this->positions->verifyEntryReference($entry);
+        return ['entry' => $entry, 'profile' => $profile];
     }
     public function get(EntityId $id): TimeEntry
     {
@@ -353,10 +399,15 @@ final readonly class TimesheetService
     /** @return array<string,mixed> */
     public function entryDetails(EntityId $id): array
     {
+        $actor = $this->access->authenticatedUserId();
         $data = $this->entryProfile($id);
         $entry = $data['entry'];
         $profile = $this->profileDetails($data['profile']);
-        return ['id' => $entry->id->value, 'employee_id' => $entry->employeeId->value,
+        $position = $this->positions->labelEntries($entry->employeeId, [[
+            'position_id' => $entry->positionId?->value, 'position_version' => $entry->positionVersion,
+        ]])[0]['position'];
+        $this->recheckEmployee($data['profile']->employee, $actor);
+        return ['id' => $entry->id->value, 'employee_id' => $entry->employeeId->value, 'position' => $position,
             'status' => $entry->status, 'version' => $entry->version,
             'institutional_id' => $profile['institutional_id'], 'given_name' => $profile['given_name'],
             'family_name' => $profile['family_name'], 'job_title' => $profile['job_title'],

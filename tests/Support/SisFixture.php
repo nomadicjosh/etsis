@@ -831,19 +831,26 @@ final class SisFixture
         ?\Domain\HumanResources\Repository\PositionRepository $rows = null,
         ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null
     ): \Domain\HumanResources\Service\PositionService {
+        $repository = $rows ?? new \Infrastructure\Persistence\Repository\SqlPositionRepository($this->sql, $this->dropCipher);
         return new \Domain\HumanResources\Service\PositionService(
-            $this->timesheetService(),
-            $rows ?? new \Infrastructure\Persistence\Repository\SqlPositionRepository($this->sql, $this->dropCipher),
+            $this->timesheetService(), $repository,
             new \Infrastructure\Persistence\Repository\SqlHrLibraryRepository($this->sql),
+            $this->access, $this->clock, new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
+            $this->employmentDatesLedger(), $this->positionLedger($audit, $repository, $history)
+        );
+    }
+    public function positionLedger(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\HumanResources\Repository\PositionRepository $rows = null,
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null
+    ): \Domain\HumanResources\Service\PositionLedger {
+        return new \Domain\HumanResources\Service\PositionLedger(
+            $rows ?? new \Infrastructure\Persistence\Repository\SqlPositionRepository($this->sql, $this->dropCipher),
             $history ?? new \Infrastructure\EventSourcing\SqlHistoricalEventStore($this->sql, $this->transactions,
                 $this->clock, new \Infrastructure\EventSourcing\ProtectedEventCodec(
                     EventStoreFixture::config($this->connection->queryBuilder())),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()),
-            $this->access,
-            $audit ?? $this->audit,
-            $this->clock,
-            new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
-            $this->employmentDatesLedger()
+            $audit ?? $this->audit, $this->clock
         );
     }
     public function employmentDatesLedger(): \Domain\HumanResources\Service\EmploymentDatesLedger
@@ -882,7 +889,7 @@ final class SisFixture
         ?\Domain\Audit\Repository\ActorDirectory $actors = null
     ): \Domain\HumanResources\Service\TimesheetService {
         return new \Domain\HumanResources\Service\TimesheetService(
-            $repository ?? new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql),
+            $repository ?? new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql, $this->dropCipher),
             $this->admissions,
             $this->access,
             $this->transactions,
@@ -893,7 +900,8 @@ final class SisFixture
             $this->profileLedger(),
             $this->clock,
             $actors ?? new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
-            $this->employmentDatesLedger()
+            $this->employmentDatesLedger(),
+            $this->positionLedger()
         );
     }
     public function profileLedger(): \Domain\Person\Service\ProfileLedger

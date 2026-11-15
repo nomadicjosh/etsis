@@ -280,7 +280,7 @@ final class TeachingWorkflowTest extends TestCase
         $pdo->prepares = 0;
         self::assertFalse($bookings->conflicts($room, $slot));
         self::assertSame(1, $pdo->prepares);
-        $times = new \Infrastructure\Persistence\Repository\SqlTimeRepository($f->sql);
+        $times = new \Infrastructure\Persistence\Repository\SqlTimeRepository($f->sql, $f->dropCipher);
         $employee = EntityId::generate();
         $times->addEmployee($employee, $student->personId, "Fictional assistant");
         $pdo->prepares = 0;

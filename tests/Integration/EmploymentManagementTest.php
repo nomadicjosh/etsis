@@ -187,7 +187,7 @@ final class EmploymentManagementTest extends TestCase
         $f = new SisFixture();
         $service = $this->service($f);
         $id = $this->employee($f, $service);
-        $real = new SqlTimeRepository($f->sql);
+        $real = new SqlTimeRepository($f->sql, $f->dropCipher);
         $repository = $this->createMock(TimeRepository::class);
         $repository->method('employee')->willReturnCallback(fn ($id) => $real->employee($id));
         $repository->method('employeePerson')->willReturnCallback(fn ($id) => $real->employeePerson($id));
@@ -224,7 +224,7 @@ final class EmploymentManagementTest extends TestCase
         $person = $service->employeeProfile($id)->person;
         $replacementOwner = $f->user();
         $f->access->staff = false;
-        $real = new SqlTimeRepository($f->sql);
+        $real = new SqlTimeRepository($f->sql, $f->dropCipher);
         $repository = $this->createMock(TimeRepository::class);
         $repository->method('employee')->willReturnCallback(fn ($id) => $real->employee($id));
         $repository->method('employeePerson')->willReturnCallback(fn ($id) => $real->employeePerson($id));

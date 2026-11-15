@@ -88,7 +88,7 @@ final class EmploymentHistoryTest extends TestCase
         $s = new SisFixture();
         $student = $s->student();
         $id = EntityId::generate();
-        new SqlTimeRepository($s->sql)->addEmployee($id, $student->personId, 'Earlier title');
+        new SqlTimeRepository($s->sql, $s->dropCipher)->addEmployee($id, $student->personId, 'Earlier title');
         $service = $s->timesheetService();
         $row = $service->employeeDetails($id);
         self::assertTrue($row['earlier_history_unknown']);

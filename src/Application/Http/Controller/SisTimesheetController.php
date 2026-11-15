@@ -33,9 +33,18 @@ final readonly class SisTimesheetController
         $entry = $this->service->submit($f->id('employee_id'), new TimeSlot(
             $f->instant('starts_at'),
             $f->instant('ends_at')
-        ));
+        ), $f->optionalId('position_id'), $f->optionalInteger('position_version'));
 
         return new JsonResponse(['id' => $entry->id->value, 'status' => $entry->status], 201);
+    }
+
+    public function workPositions(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->workPositions(new EntityId($id), new TimeSlot(
+            $f->instant('starts_at'),
+            $f->instant('ends_at')
+        )));
     }
 
     public function decide(ServerRequest $request, string $id): ResponseInterface

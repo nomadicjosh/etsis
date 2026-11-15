@@ -10,6 +10,10 @@ use Domain\Shared\ValueObject\EntityId;
 interface PositionRepository
 {
     public function find(EntityId $id): ?EmployeePosition;
+    /** @param list<EntityId> $ids
+     * @return list<EmployeePosition>
+     */
+    public function forEntries(EntityId $employee, array $ids): array;
     /** @return list<EmployeePosition> */
     public function page(EntityId $employee, ?EntityId $after = null): array;
     public function lock(EntityId $id): void;

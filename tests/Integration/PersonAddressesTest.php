@@ -64,10 +64,18 @@ final class PersonAddressesTest extends TestCase
             self::assertContains($row, $s->sql->rows('sis_history_events'));
         }
         foreach (['sis_person_addresses', 'sis_history_events', 'sis_audit'] as $table) {
-            $json = json_encode($s->sql->rows($table), JSON_THROW_ON_ERROR);
-            foreach (['Fictional campus', '00123', 'Example town'] as $private) {
+            $rows = $s->sql->rows($table);
+            $json = json_encode($rows, JSON_THROW_ON_ERROR);
+            foreach (['Fictional campus', 'postal_code', 'Example town'] as $private) {
                 self::assertStringNotContainsString($private, $json);
             }
+            // Short numeric substrings can occur inside opaque ciphertext, hashes or identifiers.
+            // Check the whole postal-code value; the rendered address above verifies retention.
+            foreach ($rows as &$stored) {
+                unset($stored['encrypted_addresses'], $stored['sealed_event']);
+            }
+            unset($stored);
+            self::assertStringNotContainsString('"00123"', json_encode($rows, JSON_THROW_ON_ERROR));
         }
         self::assertSame($users, $s->sql->rows('users'));
         $this->expectException(ValidationException::class);

@@ -18,10 +18,14 @@ final readonly class TimeEntry
         public string $status = 'pending',
         public ?EntityId $approvedBy = null,
         public int $version = 0,
+        public ?EntityId $positionId = null,
+        public ?int $positionVersion = null,
     ) {
         if (
             $work->endsAt->getTimestamp() - $work->startsAt->getTimestamp() > 86400
             || !in_array($status, ['pending', 'approved', 'rejected'], true)
+            || ($positionId === null) !== ($positionVersion === null)
+            || ($positionVersion !== null && ($positionVersion < 1 || $positionVersion > 2000))
         ) {
             throw new InvalidArgumentException('A time entry must have a valid state and span at most 24 hours.');
         }
@@ -39,7 +43,9 @@ final readonly class TimeEntry
             $this->work,
             $approve ? 'approved' : 'rejected',
             $actor,
-            $this->version + 1
+            $this->version + 1,
+            $this->positionId,
+            $this->positionVersion
         );
     }
 }

@@ -20,28 +20,45 @@ final readonly class SqlPositionRepository implements PositionRepository
     }
     public function find(EntityId $id): ?EmployeePosition
     {
-        $row = $this->sql->rows('sis_employee_positions', ['id' => $id->value], 1)[0] ?? null;
-        return $row === null ? null : $this->restore($row);
+        $q = $this->sql->quote(...);
+        $row = $this->sql->fetch($this->selectWithHead()
+            . ' WHERE p.' . $q('id') . ' = ?', ['employment_position', $id->value], 1)[0] ?? null;
+        if ($row === null) {
+            return null;
+        }
+        return $this->restore($row);
     }
     public function page(EntityId $employee, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $rows = $this->sql->fetch(
-            'SELECT p.*, h.' . $q('version') . ' AS ' . $q('head_version')
-            . ' FROM ' . $q('sis_employee_positions') . ' p LEFT JOIN ' . $q('sis_history_streams')
-            . ' h ON h.' . $q('aggregate_id') . ' = p.' . $q('id') . ' AND h.' . $q('stream_type') . ' = ?'
+            $this->selectWithHead()
             . ' WHERE p.' . $q('employee_id') . ' = ?' . ($after === null ? '' : ' AND p.' . $q('id') . ' < ?')
             . ' ORDER BY p.' . $q('id') . ' DESC',
             $after === null ? ['employment_position', $employee->value]
                 : ['employment_position', $employee->value, $after->value],
             21
         );
-        return array_map(function (array $row): EmployeePosition {
-            if ((string) $row['head_version'] !== (string) $row['version']) {
-                throw new CorruptHistoryException();
-            }
-            return $this->restore($row);
-        }, $rows);
+        return array_map($this->restore(...), $rows);
+    }
+    public function forEntries(EntityId $employee, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        if (count($ids) > 500) {
+            throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
+        }
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch(
+            $this->selectWithHead()
+            . ' WHERE p.' . $q('employee_id') . ' = ? AND p.' . $q('id') . ' IN ('
+            . implode(', ', array_fill(0, count($ids), '?')) . ')',
+            ['employment_position', $employee->value,
+                ...array_map(static fn(EntityId $id): string => $id->value, $ids)],
+            count($ids)
+        );
+        return array_map($this->restore(...), $rows);
     }
     public function lock(EntityId $id): void
     {
@@ -69,10 +86,20 @@ final readonly class SqlPositionRepository implements PositionRepository
             throw new ConcurrentModificationException('Reload the position assignment.');
         }
     }
+    private function selectWithHead(): string
+    {
+        $q = $this->sql->quote(...);
+        return 'SELECT p.*, h.' . $q('version') . ' AS ' . $q('head_version')
+        . ' FROM ' . $q('sis_employee_positions') . ' p LEFT JOIN ' . $q('sis_history_streams')
+        . ' h ON h.' . $q('aggregate_id') . ' = p.' . $q('id') . ' AND h.' . $q('stream_type') . ' = ?';
+    }
     /** @param array<string,mixed> $row */
     private function restore(array $row): EmployeePosition
     {
         try {
+            if ((string) $row['head_version'] !== (string) $row['version']) {
+                throw new CorruptHistoryException();
+            }
             if (!is_string($row['encrypted_position']) || strlen($row['encrypted_position']) > 65536) {
                 throw new CorruptHistoryException();
             }

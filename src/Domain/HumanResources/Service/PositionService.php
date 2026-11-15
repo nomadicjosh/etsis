@@ -6,25 +6,17 @@ namespace Domain\HumanResources\Service;
 
 use DateTimeImmutable;
 use Domain\Audit\Repository\ActorDirectory;
-use Domain\Audit\Repository\AuditTrail;
 use Domain\HumanResources\Employee;
 use Domain\HumanResources\EmployeePosition;
 use Domain\HumanResources\Enum\HrLibraryKind;
-use Domain\HumanResources\Event\EmployeePositionWasRecorded;
 use Domain\HumanResources\JobDefinition;
 use Domain\HumanResources\PayGrade;
-use Domain\HumanResources\PositionHistory;
 use Domain\HumanResources\Repository\HrLibraryRepository;
 use Domain\HumanResources\Repository\PositionRepository;
 use Domain\HumanResources\ValueObject\DefinitionRules;
-use Domain\HumanResources\ValueObject\EmployeePositionId;
 use Domain\HumanResources\ValueObject\EmploymentDates;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
-use Domain\Shared\EventSourcing\EventContext;
-use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
-use Domain\Shared\EventSourcing\StoredEvent;
-use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
@@ -35,17 +27,16 @@ use Domain\Shared\ValueObject\EntityId;
 
 final readonly class PositionService
 {
-    public const int MAX_EVENTS = 2000;
+    public const int MAX_EVENTS = PositionLedger::MAX_EVENTS;
     public function __construct(
         private TimesheetService $employment,
         private PositionRepository $rows,
         private HrLibraryRepository $definitions,
-        private HistoricalEventStore $history,
         private StudentAccess $access,
-        private AuditTrail $audit,
         private Clock $clock,
         private ActorDirectory $actors,
         private EmploymentDatesLedger $employmentDates,
+        private PositionLedger $ledger,
     ) {
     }
     /** @return array<string,mixed> */
@@ -68,12 +59,12 @@ final readonly class PositionService
         $actor = $this->access->requirePermission('sis:hr:manage');
         $profile = $this->employment->employeeProfile($employee);
         $row = $this->rows->find($id);
-        $loaded = $this->load($id);
+        $loaded = $this->ledger->load($id);
         if ($row === null && $loaded['root']->playhead() === 0) {
             throw new RecordNotFoundException('Position assignment not found.');
         }
         $this->owns($row ?? throw new CorruptHistoryException(), $employee);
-        $this->verify($loaded['root'], $row);
+        $this->ledger->verify($loaded['root'], $row);
         $last = $loaded['last'] ?? throw new CorruptHistoryException();
         $recorder = $last->context->actor ?? throw new CorruptHistoryException();
         $names = $this->actors->names([$recorder]);
@@ -121,10 +112,10 @@ final readonly class PositionService
             $intent
         ): EntityId {
             $operation = $this->operation($id, $actor, $intent);
-            $loaded = $this->load($id, $operation, $actor, $intent);
+            $loaded = $this->ledger->load($id, $operation, $actor, $intent);
             $existing = $this->rows->find($id);
             if ($loaded['receipt']) {
-                $this->verify($loaded['root'], $existing);
+                $this->ledger->verify($loaded['root'], $existing);
                 $this->owns($existing ?? throw new CorruptHistoryException(), $parent->id);
                 return $id;
             }
@@ -175,8 +166,8 @@ final readonly class PositionService
                 $old = $this->rows->find($replaces)
                     ?? throw new RecordNotFoundException('Previous assignment not found.');
                 $this->owns($old, $parent->id);
-                $oldRoot = $this->load($replaces)['root'];
-                $this->verify($oldRoot, $old);
+                $oldRoot = $this->ledger->load($replaces)['root'];
+                $this->ledger->verify($oldRoot, $old);
                 $end = new DateTimeImmutable($from, $this->clock->now()->getTimezone())
                     ->modify('-1 day')->format('Y-m-d');
                 if (
@@ -193,7 +184,7 @@ final readonly class PositionService
                         throw new HistoryReadLimitException();
                     }
                     $closed = $old->changeEnd($end);
-                    $this->record(
+                    $this->ledger->record(
                         $oldRoot,
                         $closed,
                         DerivedIdentity::from($operation, 'close-previous'),
@@ -204,7 +195,7 @@ final readonly class PositionService
                     );
                 }
             }
-            $this->record($loaded['root'], $position, $operation, $actor, $intent, 'assigned', $reason);
+            $this->ledger->record($loaded['root'], $position, $operation, $actor, $intent, 'assigned', $reason);
             return $id;
         });
     }
@@ -271,15 +262,15 @@ final readonly class PositionService
                 $this->rows->lock($id);
                 $current = $this->rows->find($id) ?? throw new CorruptHistoryException();
                 $this->owns($current, $parent->id);
-                $root = $this->load($id)['root'];
-                $this->verify($root, $current);
+                $root = $this->ledger->load($id)['root'];
+                $this->ledger->verify($root, $current);
                 if ($root->playhead() >= self::MAX_EVENTS) {
                     throw new HistoryReadLimitException();
                 }
                 $next = $change['action'] === 'Close assignment' ? $current->changeEnd($change['through'])
                     : $current->changeVoid(true);
                 $intent = EmploymentLedger::intent(['employment-dates', $operation->value, $next->facts()]);
-                $this->record(
+                $this->ledger->record(
                     $root,
                     $next,
                     DerivedIdentity::from($operation, 'position:' . $id->value),
@@ -367,8 +358,8 @@ final readonly class PositionService
             $current = $this->rows->find($id) ?? throw new RecordNotFoundException('Position assignment not found.');
             $this->owns($current, $parent->id);
             $operation = $this->operation($id, $actor, $intent);
-            $loaded = $this->load($id, $operation, $actor, $intent);
-            $this->verify($loaded['root'], $current);
+            $loaded = $this->ledger->load($id, $operation, $actor, $intent);
+            $this->ledger->verify($loaded['root'], $current);
             if ($loaded['receipt']) {
                 return;
             }
@@ -388,102 +379,8 @@ final readonly class PositionService
             if (!$next->voided) {
                 $this->employmentDates->requireCoverage($parent->id, $next->from, $next->through, 'valid_through');
             }
-            $this->record($loaded['root'], $next, $operation, $actor, $intent, $action, $reason);
+            $this->ledger->record($loaded['root'], $next, $operation, $actor, $intent, $action, $reason);
         });
-    }
-    private function record(
-        PositionHistory $root,
-        EmployeePosition $next,
-        EntityId $operation,
-        EntityId $actor,
-        string $intent,
-        string $action,
-        #[\SensitiveParameter] string $reason
-    ): void {
-        if ($root->playhead() >= self::MAX_EVENTS) {
-            throw new HistoryReadLimitException();
-        }
-        $payload = ['operation_id' => $operation->value, 'previous_operation_id' => $root->operation(),
-            'action' => $action, 'facts' => $next->facts(), 'intent' => $intent];
-        $event = EmployeePositionWasRecorded::occur(
-            $root->aggregateId(),
-            $payload,
-            ['__aggregate_type' => 'employment_position']
-        )->withPlayhead($root->playhead() + 1);
-        $version = $root->playhead();
-        $now = $this->clock->now();
-        $effective = $action === 'assigned' ? new DateTimeImmutable($next->from, $now->getTimezone()) : $now;
-        if ($action === 'end_changed' && $next->through !== null) {
-            $effective = new DateTimeImmutable($next->through, $now->getTimezone())->modify('+1 day');
-        }
-        $root->applyRecord($event);
-        $this->history->append(
-            $this->stream($next->id),
-            $operation,
-            $version,
-            new EventContext($actor, $effective, $operation, reason: $reason),
-            [$event]
-        );
-        $this->rows->save($next, $version);
-        $this->audit->record($actor, 'employee.position.' . $action, $next->id);
-    }
-    /** @return array{root:PositionHistory,receipt:bool,last:?StoredEvent} */
-    private function load(
-        EntityId $id,
-        ?EntityId $operation = null,
-        ?EntityId $actor = null,
-        ?string $intent = null
-    ): array {
-        $root = PositionHistory::root(new EmployeePositionId($id->value));
-        $cursor = null;
-        $head = null;
-        $count = 0;
-        $receipt = false;
-        $last = null;
-        do {
-            $page = $this->history->page($this->stream($id), $cursor, 100);
-            if ($page->throughVersion > self::MAX_EVENTS) {
-                throw new HistoryReadLimitException();
-            }
-            $head ??= $page->throughVersion;
-            if (
-                $head !== $page->throughVersion || ($page->nextCursor !== null
-                && ($page->events === [] || $page->nextCursor === $cursor))
-            ) {
-                throw new CorruptHistoryException();
-            }
-            foreach ($page->events as $stored) {
-                if (++$count > self::MAX_EVENTS) {
-                    throw new HistoryReadLimitException();
-                }
-                $root->accept($stored);
-                $last = $stored;
-                if ($stored->event->payload()['operation_id'] === $operation?->value) {
-                    if (
-                        $stored->context->actor?->value !== $actor?->value
-                        || $stored->event->payload()['intent'] !== $intent
-                    ) {
-                        throw new AccessDeniedException('The position operation belongs to another actor or intent.');
-                    }
-                    $receipt = true;
-                }
-            }
-            $cursor = $page->nextCursor;
-        } while ($cursor !== null);
-        if ($root->playhead() !== $head) {
-            throw new CorruptHistoryException();
-        }
-        return ['root' => $root, 'receipt' => $receipt, 'last' => $last];
-    }
-    private function stream(EntityId $id): StreamReference
-    {
-        return new StreamReference(new EmployeePositionId($id->value), 'employment_position');
-    }
-    private function verify(PositionHistory $root, ?EmployeePosition $row): void
-    {
-        if ($root->position() === null || $root->position()->facts() !== $row?->facts()) {
-            throw new CorruptHistoryException();
-        }
     }
     private function owns(EmployeePosition $position, EntityId $employee): void
     {

@@ -73,7 +73,7 @@ final class EmploymentHistoryReviewTest extends TestCase
     {
         $s = new SisFixture();
         $id = EntityId::generate();
-        new SqlTimeRepository($s->sql)->addEmployee($id, $s->student()->personId, 'Earlier title');
+        new SqlTimeRepository($s->sql, $s->dropCipher)->addEmployee($id, $s->student()->personId, 'Earlier title');
         $service = $s->timesheetService();
         self::assertSame(['items' => [], 'through_version' => 0, 'next_after' => null,
             'earlier_history_unknown' => true], $service->historyPage($id));
@@ -206,7 +206,7 @@ final class EmploymentHistoryReviewTest extends TestCase
     {
         $s = new SisFixture();
         $id = $s->timesheetService()->addEmployee($s->student()->personId, 'Fictional assistant');
-        $employee = new SqlTimeRepository($s->sql)->employee($id);
+        $employee = new SqlTimeRepository($s->sql, $s->dropCipher)->employee($id);
         foreach ([new EventPage([], null, 2001), new EventPage([], 'non-advancing', 1)] as $page) {
             $history = $this->createMock(HistoricalEventStore::class);
             $history->expects(self::once())->method('page')->willReturn($page);

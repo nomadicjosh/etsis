@@ -104,6 +104,36 @@ require_once $registrationCompilerMigrations . "20261112000008_CreateSisMoodleCa
 
 final class MigrationCompilationTest extends TestCase
 {
+    public function testTimesheetPositionReferencesCompileForEverySupportedDatabaseWithoutChangingTimeRows(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000004_CreateSisTimesheetPositions.php';
+        $definition = null;
+        $schema = $this->createMock(Schema::class);
+        $schema->expects(self::once())->method('create')->willReturnCallback(
+            static function (string $name, callable $callback) use (&$definition): void {
+                self::assertSame('sis_timesheet_positions', $name);
+                $definition = new CreateTable($name);
+                $callback($definition);
+            }
+        );
+        $connection = $this->createStub(Connection::class);
+        $connection->method('getSchema')->willReturn($schema);
+        $migration = new CreateSisTimesheetPositions('timesheet-positions');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
+            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $driver;
+            $dialect = $this->createStub(Connection::class);
+            $dialect->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $commands = json_encode(new $class($dialect)->create($definition), JSON_THROW_ON_ERROR);
+            foreach (['26', 'entry_id', 'position_id', 'position_version', 'encrypted_reference',
+                'sis_timesheets', 'sis_employee_positions', 'stp_position_entries'] as $part) {
+                self::assertStringContainsString($part, $commands, $driver);
+            }
+            self::assertDoesNotMatchRegularExpression('/AUTO_INCREMENT|AUTOINCREMENT|IDENTITY\\(/i', $commands);
+        }
+    }
+
     public function testEmploymentDatesUseMatchingUlidsAndPortableEncryptedProjectionStorage(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000003_CreateSisEmploymentDates.php';
