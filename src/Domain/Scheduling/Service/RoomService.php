@@ -6,6 +6,7 @@ namespace Domain\Scheduling\Service;
 
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Scheduling\Repository\BookingRepository;
+use Domain\Scheduling\Repository\BuildingRepository;
 use Domain\Scheduling\Repository\RoomRepository;
 use Domain\Scheduling\Room;
 use Domain\Scheduling\RoomTimetable;
@@ -17,6 +18,7 @@ use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
+use JsonException;
 
 final readonly class RoomService
 {
@@ -27,30 +29,59 @@ final readonly class RoomService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private BuildingRepository $buildings,
     ) {
     }
 
-    /** @return array{id: string, code: string, capacity: int, revision: string} */
+    /**
+     * @return array<string,mixed>
+     * @throws JsonException
+     */
     public function view(EntityId $id): array
     {
-        $this->access->requirePermission('sis:scheduling:manage');
+        $actor = $this->access->requirePermission('sis:scheduling:manage');
         $room = $this->rooms->get($id);
-
-        return ['id' => $id->value, 'code' => $room->code, 'capacity' => $room->capacity,
-            'revision' => $this->revision($room)];
+        $data = $this->details($room) + ['revision' => $this->revision($room)];
+        $this->authorize($actor);
+        return $data;
     }
 
-    public function edit(EntityId $id, string $code, int $capacity, string $revision): void
+    public function create(string $code, string $name, EntityId $building, int $capacity): EntityId
     {
         $actor = $this->access->requirePermission('sis:scheduling:manage');
-        $changed = new Room($id, trim($code), $capacity);
-        $this->transactions->run(function () use ($id, $changed, $revision, $actor): void {
+        $room = new Room(EntityId::generate(), trim($code), $capacity, trim($name), $building);
+        $this->transactions->run(function () use ($actor, $room, $building): void {
+            $this->buildings->lock($building);
+            $this->buildings->get($building);
+            $this->authorize($actor);
+            $this->rooms->add($room);
+            $this->audit->record($actor, 'room.created', $room->id);
+            $this->authorize($actor);
+        });
+        return $room->id;
+    }
+
+    public function edit(
+        EntityId $id,
+        string $code,
+        string $name,
+        EntityId $building,
+        int $capacity,
+        string $revision
+    ): void {
+        $actor = $this->access->requirePermission('sis:scheduling:manage');
+        $changed = new Room($id, trim($code), $capacity, trim($name), $building);
+        $this->transactions->run(function () use ($id, $changed, $revision, $actor, $building): void {
+            $this->buildings->lock($building);
+            $this->buildings->get($building);
             $this->bookings->lockRoom($id);
+            $this->authorize($actor);
             if (!hash_equals($this->revision($this->rooms->get($id)), $revision)) {
                 throw new ConcurrentModificationException('Reload the room before editing.');
             }
             $this->rooms->save($changed);
             $this->audit->record($actor, 'room.updated', $id);
+            $this->authorize($actor);
         });
     }
 
@@ -94,8 +125,9 @@ final readonly class RoomService
             throw new AccessDeniedException('The scheduling session changed.');
         }
 
-        return $result + ['today' => $now->format('Y-m-d'),
-            'room' => ['id' => $id->value, 'code' => $room->code, 'capacity' => $room->capacity]];
+        $data = $result + ['today' => $now->format('Y-m-d'), 'room' => $this->details($room)];
+        $this->authorize($actor);
+        return $data;
     }
 
     private function window(TimeSlot $window): void
@@ -106,8 +138,29 @@ final readonly class RoomService
         }
     }
 
+    /**
+     * @throws JsonException
+     */
     private function revision(Room $room): string
     {
-        return hash('sha256', json_encode([$room->id->value, $room->code, $room->capacity], JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode([$room->id->value, $room->code, $room->name,
+            $room->buildingId?->value, $room->capacity], JSON_THROW_ON_ERROR));
+    }
+
+    /** @return array<string,mixed> */
+    private function details(Room $room): array
+    {
+        $building = $room->buildingId === null ? null : $this->buildings->get($room->buildingId);
+        return ['id' => $room->id->value, 'code' => $room->code, 'name' => $room->name,
+            'capacity' => $room->capacity, 'building_id' => $room->buildingId?->value,
+            'building' => $building === null ? null : ['id' => $building->id->value,
+                'code' => $building->code, 'name' => $building->name]];
+    }
+
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->access->requirePermission('sis:scheduling:manage')->value !== $actor->value) {
+            throw new AccessDeniedException('The scheduling session changed.');
+        }
     }
 }

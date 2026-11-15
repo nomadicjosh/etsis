@@ -54,7 +54,7 @@ final class ModuleWorkflowTest extends TestCase
             new \Infrastructure\Persistence\Repository\SqlRoomRepository($f->sql),
             $f->clock,
         );
-        $room = $service->addRoom("LAB-1", 30);
+        $room = $f->room("LAB-1", 30);
         $first = $service->request($room, "Class", [
             new TimeSlot(
                 new DateTimeImmutable("2026-08-10T10:00:00Z"),

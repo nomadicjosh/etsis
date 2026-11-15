@@ -98,6 +98,26 @@ final class SisFixture
     public EntityId $term;
     public EntityId $program;
 
+    private ?EntityId $fixtureBuilding = null;
+
+    public function building(): EntityId
+    {
+        return $this->fixtureBuilding ??= new \Domain\Scheduling\Service\BuildingService(
+            new \Infrastructure\Persistence\Repository\SqlBuildingRepository($this->sql),
+            $this->access, $this->transactions, $this->audit
+        )->create('FIXTURE', 'Fictional campus building');
+    }
+
+    public function room(string $code, int $capacity): EntityId
+    {
+        return new \Domain\Scheduling\Service\RoomService(
+            new \Infrastructure\Persistence\Repository\SqlRoomRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlBookingRepository($this->sql),
+            $this->access, $this->transactions, $this->audit, $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlBuildingRepository($this->sql)
+        )->create($code, 'Fictional room', $this->building(), $capacity);
+    }
+
     public function __construct(
         ?Sqlite $connection = null,
         bool $versionedGrades = true,

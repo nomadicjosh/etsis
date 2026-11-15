@@ -159,7 +159,7 @@ final class RecurringBookingTest extends TestCase
     {
         $s = $this->school();
         $service = $this->service($s);
-        $room = $service->addRoom('LIB.101', 30);
+        $room = $s->room('LIB.101', 30);
         $before = [$s->sql->rows('sis_history_events'), $s->sql->rows('sis_audit')];
         $review = $service->review($room, 'Fictional seminar', $this->pattern());
         self::assertCount(7, $review['items']);
@@ -190,7 +190,7 @@ final class RecurringBookingTest extends TestCase
     {
         $s = $this->school();
         $service = $this->service($s);
-        $room = $service->addRoom('LIB.101', 30);
+        $room = $s->room('LIB.101', 30);
         $review = $service->review($room, 'Fictional seminar', $this->pattern());
         $other = $service->request(
             $room,
@@ -228,7 +228,7 @@ final class RecurringBookingTest extends TestCase
     {
         $s = $this->school();
         $service = $this->service($s);
-        $room = $service->addRoom('LIB.101', 30);
+        $room = $s->room('LIB.101', 30);
         $review = $service->review($room, 'Fictional seminar', $this->pattern());
         $id = EntityId::generate();
         $audit = $this->createStub(AuditTrail::class);
@@ -255,7 +255,7 @@ final class RecurringBookingTest extends TestCase
     {
         $s = $this->school();
         $service = $this->service($s);
-        $room = $service->addRoom('LIB.101', 30);
+        $room = $s->room('LIB.101', 30);
         $own = $service->request($room, 'Own request', [new BookingSeries()->pattern($this->pattern())[0]]);
         $s->access->staff = false;
         self::assertSame($own->id->value, $service->get($own->id)->id->value);
@@ -267,7 +267,7 @@ final class RecurringBookingTest extends TestCase
     {
         $s = $this->school();
         $service = $this->service($s);
-        $room = $service->addRoom('LIB.101', 30);
+        $room = $s->room('LIB.101', 30);
         $review = $service->review($room, 'Fictional seminar', $this->pattern());
         $s->sql->update('sis_rooms', ['capacity' => 35], ['id' => $room->value]);
         try {
@@ -302,7 +302,7 @@ final class RecurringBookingTest extends TestCase
         foreach (['request', 'approve'] as $action) {
             $s = $this->school();
             $service = $this->service($s);
-            $room = $service->addRoom('LIB.101', 30);
+            $room = $s->room('LIB.101', 30);
             $review = $service->review($room, 'Fictional seminar', $this->pattern());
             $id = EntityId::generate();
             if ($action === 'approve') {

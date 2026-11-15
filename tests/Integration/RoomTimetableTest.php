@@ -35,15 +35,14 @@ final class RoomTimetableTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
-            $f->clock
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlBuildingRepository($f->sql)
         );
     }
 
     private function room(SisFixture $f): EntityId
     {
-        $room = EntityId::generate();
-        new SqlBookingRepository($f->sql)->addRoom($room, $room->value, 20);
-        return $room;
+        return $f->room(EntityId::generate()->value, 20);
     }
 
     private function booking(
@@ -188,7 +187,7 @@ final class RoomTimetableTest extends TestCase
         $f = new SisFixture();
         $room = EntityId::generate();
         $repository = $this->createMock(RoomRepository::class);
-        $repository->method('get')->willReturn(new Room($room, 'Fictional room', 30));
+        $repository->method('get')->willReturn(new Room($room, 'Fictional room', 30, null, null));
         $repository->expects(self::once())->method('agenda')->with($room, self::anything(), null, 501)
             ->willReturnCallback(static function () use ($f): array {
                 $f->access->staff = false;

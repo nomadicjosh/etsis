@@ -10,7 +10,6 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface BookingRepository
 {
-    public function addRoom(EntityId $id, string $code, int $capacity): void;
     public function lockRoom(EntityId $id): void;
     public function add(Booking $booking): void;
     public function get(EntityId $id): Booking;

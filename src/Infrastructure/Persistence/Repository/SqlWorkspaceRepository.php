@@ -107,6 +107,14 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
             ", ",
             array_map(static fn(string $name): string => "r." . $q($name), $names),
         );
+        if ($dataset === 'rooms') {
+            return [$columns(['id', 'code', 'name', 'capacity', 'building_id'])
+                . ', b.' . $q('code') . ' AS ' . $q('building_code')
+                . ', b.' . $q('name') . ' AS ' . $q('building_name'),
+                $q('sis_rooms') . ' r LEFT JOIN ' . $q('sis_buildings') . ' b ON b.' . $q('id')
+                . ' = r.' . $q('building_id'),
+                ['r.' . $q('code'), 'r.' . $q('name'), 'b.' . $q('code'), 'b.' . $q('name')]];
+        }
         if ($dataset === "terms") {
             return [
                 "r.*, c." .
@@ -385,7 +393,7 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
                 ],
                 ["code"],
             ],
-            "rooms" => ["sis_rooms", ["id", "code", "capacity"], ["code"]],
+            "buildings" => ["sis_buildings", ["id", "code", "name"], ["code", "name"]],
             "bookings" => [
                 "sis_bookings",
                 ["id", "room_id", "title", "status", "version"],

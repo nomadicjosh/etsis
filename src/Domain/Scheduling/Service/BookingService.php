@@ -9,7 +9,6 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Scheduling\Booking;
 use Domain\Scheduling\BookingPattern;
 use Domain\Scheduling\BookingSeries;
-use Domain\Scheduling\Room;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Scheduling\Repository\BookingRepository;
 use Domain\Scheduling\Repository\RoomRepository;
@@ -21,6 +20,7 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use DateTimeZone;
+use JsonException;
 
 final readonly class BookingService
 {
@@ -34,19 +34,6 @@ final readonly class BookingService
     ) {
     }
 
-    public function addRoom(string $code, int $capacity): EntityId
-    {
-        $actor = $this->access->requirePermission('sis:scheduling:manage');
-        $id = EntityId::generate();
-        $room = new Room($id, trim($code), $capacity);
-        $this->transactions->run(function () use ($id, $room, $actor): void {
-            $this->repository->addRoom($id, $room->code, $room->capacity);
-            $this->audit->record($actor, 'room.created', $id);
-            $this->manager($actor);
-        });
-
-        return $id;
-    }
 
     /** @param list<TimeSlot> $slots */
     public function request(EntityId $room, string $title, array $slots): Booking
@@ -125,8 +112,10 @@ final readonly class BookingService
         });
     }
 
-    /** @param list<TimeSlot> $slots
+    /**
+     * @param list<TimeSlot> $slots
      * @return array<string,mixed>
+     * @throws JsonException
      */
     private function proposal(EntityId $room, string $title, array $slots): array
     {
@@ -138,10 +127,12 @@ final readonly class BookingService
                 'local_end' => $slot->endsAt->format('Y-m-d H:i P'),
                 'available' => !$this->repository->conflicts($room, $slot)];
         }
-        return ['room' => ['id' => $room->value, 'code' => $place->code, 'capacity' => $place->capacity],
+        return ['room' => ['id' => $room->value, 'code' => $place->code, 'name' => $place->name,
+            'building_id' => $place->buildingId?->value, 'capacity' => $place->capacity],
             'items' => $items,
             'conflicts' => count(array_filter($items, static fn(array $s): bool => !$s['available'])),
-            'revision' => hash('sha256', json_encode([$room->value, $place->code, $place->capacity, $title,
+            'revision' => hash('sha256', json_encode([$room->value, $place->code, $place->name,
+                $place->buildingId?->value, $place->capacity, $title,
                 $this->instants($slots), array_column($items, 'available')], JSON_THROW_ON_ERROR))];
     }
 

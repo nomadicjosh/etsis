@@ -34,6 +34,8 @@ window.createWorkspaceScheduling = function (ui) {
             .toISOString()
             .slice(0, 16);
     const display = (instant) => new Date(instant).toLocaleString();
+    const roomLabel = record => [record.code, record.name].filter(Boolean).join(' · ');
+    const buildingLabel = record => record.building ? `${record.building.code} · ${record.building.name}` : 'Building not assigned';
     const grid = (headers, rows, caption) =>
         node(
             "div",
@@ -85,29 +87,18 @@ window.createWorkspaceScheduling = function (ui) {
     }
     async function room(id, startsAt = null) {
         const record = await request(`/sis/rooms/${id}/`);
-        const body = openDrawer(record.code, "ROOM & AGENDA");
+        const body = openDrawer(roomLabel(record), "ROOM & AGENDA");
         if (can("sis:audit:read"))
             body.append(
                 button("View audit history", () => showAudit("rooms", id)),
             );
         body.append(node("p", {}, `Capacity: ${record.capacity}`), note());
+        body.append(node('p', { class: 'private-text' }, buildingLabel(record)));
+        if (!record.name || !record.building_id)
+            body.append(node('p', { class: 'alert alert-info' }, 'Complete this room’s name and building in Edit room details. Existing bookings are preserved.'));
         body.append(button('Weekly timetable', () => timetable(id)));
         body.append(
-            button("Edit room details", async () => {
-                const form = await flow(
-                    "Save room details",
-                    [
-                        ["code", "Room name or code"],
-                        ["capacity", "Capacity", "number"],
-                    ],
-                    `/sis/rooms/${id}/edit/`,
-                    (data) => ({ ...data, revision: record.revision }),
-                    () => room(id),
-                    record,
-                    "Existing booking identities and times are preserved. A stale edit requires reloading.",
-                );
-                form.elements.code.maxLength = 80;
-            }),
+            button('Edit room details', () => roomForm(record)),
         );
         const starts = new Date(startsAt || Date.now());
         starts.setHours(0, 0, 0, 0);
@@ -296,7 +287,7 @@ window.createWorkspaceScheduling = function (ui) {
                 if (!body.isConnected || current !== serial) return;
                 result = fresh; page = 0;
                 input.value = fresh.week;
-                heading.textContent = `${fresh.room.code} · Capacity: ${fresh.room.capacity}`;
+                heading.textContent = `${roomLabel(fresh.room)} · Capacity: ${fresh.room.capacity}`;
                 previous.disabled = fresh.previous < input.min;
                 next.disabled = fresh.next > input.max;
                 if (!fresh.days.some(day => day.date === selected))
@@ -476,7 +467,7 @@ window.createWorkspaceScheduling = function (ui) {
                     previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= result.items.length;
                 }
                 preview.replaceChildren(node('h3', { class: 'h5 private-text' }, `${result.room.code} · ${data.title}`),
-                    node('p', { class: 'form-text' }, `${result.items.length} meetings in ${result.timezone}. ${result.conflicts} conflicts with approved bookings. Approval will check again.`),
+                    node('p', { class: 'form-text' }, `${roomLabel(result.room)} · ${result.items.length} meetings in ${result.timezone}. ${result.conflicts} conflicts with approved bookings. Approval will check again.`),
                     content, status, node('div', { class: 'inline-actions' }, previous, next),
                     button('Back to meeting pattern', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
                     button('Submit recurring request', async () => {
@@ -507,7 +498,8 @@ window.createWorkspaceScheduling = function (ui) {
             );
         body.append(
             badge(record.status),
-            node("p", {}, `Room: ${place.code} · Capacity: ${place.capacity}`),
+            node("p", {}, `Room: ${roomLabel(place)} · Capacity: ${place.capacity}`),
+            node('p', { class: 'private-text' }, buildingLabel(place)),
             note(),
             button("View room agenda", () =>
                 room(record.room_id, record.slots[0].starts_at),
@@ -559,5 +551,63 @@ window.createWorkspaceScheduling = function (ui) {
                 ),
             );
     }
-    return { room, booking, requestBooking };
+    async function building(id) {
+        const record = await request(`/sis/buildings/${id}/`);
+        const body = openDrawer(`${record.code} · ${record.name}`, 'BUILDING');
+        body.append(node('p', {}, 'Rooms reference this building by its stable identity. Renaming it preserves room and booking links.'),
+            button('Edit building details', () => buildingForm(record)));
+    }
+    async function buildingForm(record = null, saved = null, back = null) {
+        const fields = [['code', 'Building code'], ['name', 'Building name']];
+        const body = openDrawer(record ? 'Edit building' : 'Add a building', 'SPACES & SCHEDULING');
+        const form = await buildForm(fields, record || {});
+        if (!body.isConnected) return;
+        form.elements.code.maxLength = 80;
+        if (back) form.append(button('Back to room details', back));
+        form.append(node('button', { type: 'submit', class: 'btn btn-primary' }, 'Save building'));
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const result = await request(record ? `/sis/buildings/${record.id}/edit/` : '/sis/buildings/', 'POST',
+                    { ...formData(form, fields), ...(record ? { revision: record.revision } : {}) });
+                if (!body.isConnected) return;
+                notify('Building saved.');
+                await ui.refreshDirectory();
+                if (saved) await saved(result.id || record.id);
+                else await building(result.id || record.id);
+            }, form.querySelector('[type="submit"]'));
+        });
+        body.append(form);
+    }
+    async function roomForm(record = null, preset = {}) {
+        const fields = [['code', 'Room code'], ['name', 'Room name'],
+            ['building_id', 'Building', 'lookup', 'buildings'], ['capacity', 'Capacity', 'number']];
+        const body = openDrawer(record ? 'Edit room details' : 'Add a room', 'SPACES & SCHEDULING');
+        const initial = Object.fromEntries(Object.entries({ ...record, ...preset }).filter(([, value]) => value !== null));
+        const form = await buildForm(fields, initial);
+        if (!body.isConnected) return;
+        form.elements.code.maxLength = 80;
+        body.append(node('p', { class: 'form-text' },
+            'Use a short unique code and a descriptive name, for example LIB.101 and Quiet study room. Choose its building; booking links stay connected when room details change.'));
+        form.append(button('Add a building', () => {
+            const draft = formData(form, fields);
+            return buildingForm(null, id => roomForm(record, { ...draft, building_id: id }), () => roomForm(record, draft));
+        }));
+        if (record) form.append(button('Back to room agenda', () => room(record.id)));
+        form.append(node('button', { type: 'submit', class: 'btn btn-primary' }, record ? 'Save room details' : 'Save room'));
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const result = await request(record ? `/sis/rooms/${record.id}/edit/` : '/sis/rooms/', 'POST',
+                    { ...formData(form, fields), ...(record ? { revision: record.revision } : {}) });
+                if (!body.isConnected) return;
+                notify('Room saved.'); await ui.refreshDirectory();
+                await room(result.id || record.id);
+            }, form.querySelector('[type="submit"]'));
+        });
+        body.append(form);
+    }
+    return { room, booking, requestBooking, building, buildingForm, roomForm };
 };

@@ -344,7 +344,22 @@ if (
 }
 
 // Room planning and booking decisions use real provider bindings and the same CSRF pipeline.
-$roomCreated = $teachingPost("/sis/rooms/", ["code" => "Fictional.101", "capacity" => 30]);
+$buildingCreated = $teachingPost('/sis/buildings/', ['code' => 'LIB', 'name' => 'Fictional Library']);
+if ($buildingCreated->getStatusCode() !== 201) {
+    throw new RuntimeException('The building create route failed.');
+}
+$buildingId = json_decode((string) $buildingCreated->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$buildingResponse = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/buildings/' . $buildingId . '/')
+));
+$buildingRecord = json_decode((string) $buildingResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($buildingResponse->getStatusCode() !== 200 || $teachingPost('/sis/buildings/' . $buildingId . '/edit/', [
+    'code' => 'LIB', 'name' => 'Fictional Campus Library', 'revision' => $buildingRecord['revision'],
+])->getStatusCode() !== 200) {
+    throw new RuntimeException('The building read/edit routes failed.');
+}
+$roomCreated = $teachingPost('/sis/rooms/', ['code' => 'Fictional.101', 'name' => 'Fictional seminar room',
+    'building_id' => $buildingId, 'capacity' => 30]);
 if ($roomCreated->getStatusCode() !== 201) {
     throw new RuntimeException("The room create route failed.");
 }
@@ -360,6 +375,8 @@ if (
     !isset($roomRecord["revision"]) ||
     $teachingPost($roomPath . "/edit/", [
         "code" => "Fictional.102",
+        "name" => "Fictional seminar room",
+        "building_id" => $buildingId,
         "capacity" => 25,
         "revision" => $roomRecord["revision"],
     ])->getStatusCode() !== 200 ||

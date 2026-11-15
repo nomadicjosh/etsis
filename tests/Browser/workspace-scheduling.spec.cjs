@@ -19,7 +19,8 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
         else if (path.startsWith('/sis/ui/context/audit/')) result = { items: [
             { action: 'room.updated', recorded_at: '2026-08-11 10:00:00', actor_id: id(9) },
         ], next_after: null };
-        else if (path === `/sis/rooms/${room}/`) result = { id: room, code, capacity, revision: 'fictional-room-revision' };
+        else if (path === '/sis/ui/data/buildings/') result = { items: [{ id: id(8), code: 'LIB', name: 'Campus library' }], next_after: null };
+        else if (path === `/sis/rooms/${room}/`) result = { id: room, code, name: 'Seminar room', building_id: id(8), building: { id: id(8), code: 'LIB', name: 'Campus library' }, capacity, revision: 'fictional-room-revision' };
         else if (path === `/sis/rooms/${room}/edit/`) { code = data.code; capacity = data.capacity; }
         else if (path === `/sis/rooms/${room}/availability/`) result = { available: false };
         else if (path === `/sis/rooms/${room}/agenda/`) result = { items: [{ id: id(3), booking_id: booking, title: 'Fictional seminar', status,
@@ -51,7 +52,7 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
     await expect(page.locator('#drawer-body')).toContainText('An approved booking overlaps');
     await accessible();
     await page.getByRole('button', { name: 'Edit room details' }).click();
-    await page.getByLabel('Room name or code').fill('LIBRARY.102');
+    await page.getByLabel('Room code').fill('LIBRARY.102');
     await page.getByLabel(/^Capacity/).fill('35');
     await page.getByRole('button', { name: 'Save room details' }).click();
     await expect(page.locator('#drawer-body')).toContainText('Capacity: 35');

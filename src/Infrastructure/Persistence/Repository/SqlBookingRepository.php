@@ -12,25 +12,11 @@ use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
-use Domain\Shared\Exception\ValidationException;
-use PDOException;
 
 final readonly class SqlBookingRepository implements BookingRepository
 {
     public function __construct(private SqlRecords $sql)
     {
-    }
-
-    public function addRoom(EntityId $id, string $code, int $capacity): void
-    {
-        try {
-            $this->sql->insert('sis_rooms', ['id' => $id->value, 'code' => $code, 'capacity' => $capacity]);
-        } catch (PDOException $error) {
-            if (in_array((string) $error->getCode(), ['23000', '23505'], true)) {
-                throw new ValidationException([['field' => 'code', 'message' => 'This room code is already in use.']]);
-            }
-            throw $error;
-        }
     }
 
     public function lockRoom(EntityId $id): void

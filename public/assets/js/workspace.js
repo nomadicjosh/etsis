@@ -175,7 +175,8 @@
         programs: { title: 'Academic programs', description: 'Give every academic path a clear home.', icon: 'signpost-split', action: 'Add a program', endpoint: '/sis/programs/', permission: 'sis:catalog:manage', fields: [['code', 'Program code'], ['title', 'Program title']], columns: [['Program', 'title'], ['Code', 'code']] },
         terms: { title: 'Academic terms', description: 'Set the dates once. Keep everyone on the same page.', icon: 'calendar-range', action: 'Add a term', endpoint: '/sis/terms/', permission: 'sis:catalog:manage', fields: [['code', 'Term code'], ['starts_on', 'First day', 'date'], ['ends_on', 'Last day', 'date'], ['add_drop_ends_on', 'Last day to add or drop', 'date']], columns: [['Term', 'code'], ['Name', 'name'], ['Academic year', 'academic_year_code'], ['Category', 'kind'], ['Starts', 'starts_on'], ['Ends', 'ends_on'], ['Add/drop deadline', 'add_drop_ends_on']] },
         sections: { title: 'Course sections', description: 'Turn your course catalog into a schedule that works.', icon: 'collection', action: 'Offer a section', endpoint: '/sis/sections/', permission: 'sis:catalog:manage', fields: [['course_id', 'Course', 'lookup', 'courses'], ['term_id', 'Term', 'lookup', 'terms'], ['code', 'Section code'], ['capacity', 'Seats', 'number'], ['delivery_mode', 'Delivery mode', 'choice', deliveryModes], ['faculty_user_id', 'Faculty account (optional)', 'lookup', 'faculty', false], ['web_registration', 'Allow student self-registration', 'checkbox'], ['fee_minor', 'Section fee', 'money'], ['currency', 'Currency', 'currency']], columns: [['Section', 'code'], ['Seats', 'capacity'], ['Status', 'active']] },
-        rooms: { title: 'Rooms & spaces', description: 'Make room for classes, meetings, and everything in between.', icon: 'door-open', action: 'Add a room', endpoint: '/sis/rooms/', permission: 'sis:scheduling:manage', fields: [['code', 'Room name or code'], ['capacity', 'Capacity', 'number']], columns: [['Room', 'code'], ['Capacity', 'capacity']] },
+        rooms: { title: 'Rooms & spaces', description: 'Make room for classes, meetings, and everything in between.', icon: 'door-open', action: 'Add a room', endpoint: '/sis/rooms/', permission: 'sis:scheduling:manage', fields: [], columns: [['Code', 'code'], ['Room name', 'name'], ['Building', 'building_name'], ['Capacity', 'capacity']] },
+        buildings: { title: 'Buildings', description: 'Give every room a clear home on campus.', icon: 'buildings', action: 'Add a building', permission: 'sis:scheduling:manage', columns: [['Code', 'code'], ['Building name', 'name']] },
         bookings: { title: 'Spaces & scheduling', description: 'See what’s requested, approve what fits, and keep the day flowing.', icon: 'calendar3', action: 'Request a space', endpoint: '/sis/bookings/', permission: 'sis:scheduling:manage', fields: [['room_id', 'Room', 'lookup', 'rooms'], ['title', 'What is the space for?'], ['starts_at', 'Starts', 'datetime-local'], ['ends_at', 'Ends', 'datetime-local']], columns: [['Request', 'title'], ['Status', 'status']] },
         employees: { title: 'Team & timesheets', description: 'The people who make your campus work. All connected to their person record.', icon: 'person-workspace', action: 'Add employment', endpoint: '/sis/employees/', permission: 'sis:hr:manage', fields: [['person_id', 'Person', 'lookup', 'people'], ['job_title', 'Job title']], columns: [['Team member', 'name'], ['Job title', 'job_title'], ['Status', 'active']] },
         timesheets: { title: 'Timesheets', description: 'Review time entries with the context you need, right here.', icon: 'clock-history', action: 'Submit time', endpoint: '/sis/timesheets/', permission: 'sis:hr:manage', fields: [['employee_id', 'Team member', 'lookup', 'employees'], ['starts_at', 'Started', 'datetime-local'], ['ends_at', 'Finished', 'datetime-local']], columns: [['Started', 'starts_at'], ['Finished', 'ends_at'], ['Status', 'status']] },
@@ -237,7 +238,7 @@
         $all('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== (datasets[section] ? 'directory' : section); });
         $all('[data-workspace]').forEach(link => {
             const key = link.dataset.workspace;
-            const active = key === section || (key === 'courses' && catalogTabs.some(([tab]) => tab === section)) || (key === 'bookings' && section === 'rooms') || (key === 'employees' && section === 'timesheets');
+            const active = key === section || (key === 'courses' && catalogTabs.some(([tab]) => tab === section)) || (key === 'bookings' && ['rooms', 'buildings'].includes(section)) || (key === 'employees' && section === 'timesheets');
             link.classList.toggle('active', active);
             if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
         });
@@ -302,7 +303,7 @@
 
     async function records(dataset, search = '', after = '') { return dataset === 'academic_years' ? request('/sis/academic-years/', 'POST', { ...(search ? { search } : {}), ...(after ? { after } : {}) }) : request(`/sis/ui/data/${dataset}/`, 'POST', { search, after }); }
     function recordOption(item, dataset = '') {
-        return { value: dataset === 'faculty' ? item.owner_user_id : item.id, label: item.term_code ? [item.code, item.course_code, item.term_code].filter(Boolean).join(' · ') : item.institutional_id ? `${item.given_name} ${item.family_name} · ${item.institutional_id}` : [item.code, item.title || item.name || item.job_title].filter(Boolean).join(' · ') || item.id };
+        return { value: dataset === 'faculty' ? item.owner_user_id : item.id, label: dataset === 'rooms' ? [item.code, item.name, item.building_name].filter(Boolean).join(' · ') : item.term_code ? [item.code, item.course_code, item.term_code].filter(Boolean).join(' · ') : item.institutional_id ? `${item.given_name} ${item.family_name} · ${item.institutional_id}` : [item.code, item.title || item.name || item.job_title].filter(Boolean).join(' · ') || item.id };
     }
     async function options(dataset, search = '') {
         const result = await records(dataset, search);
@@ -359,7 +360,7 @@
         const create = $one('#directory-create'); create.hidden = !definition.action || !can(definition.permission);
         $one('span', create).textContent = definition.action || 'Add record';
         const tabs = $one('#directory-tabs'); clear(tabs);
-        const related = catalogTabs.some(([key]) => key === section) ? catalogTabs : ['rooms', 'bookings'].includes(section) ? [['bookings', 'Space requests'], ['rooms', 'Rooms & spaces']] : ['employees', 'timesheets'].includes(section) ? [['employees', 'Team'], ['timesheets', 'Timesheets']] : ['accounts', 'journals', 'billing', 'ledger'].includes(section) ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']] : ['institutions', 'external', 'equivalencies'].includes(section) ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
+        const related = catalogTabs.some(([key]) => key === section) ? catalogTabs : ['rooms', 'buildings', 'bookings'].includes(section) ? [['bookings', 'Space requests'], ['rooms', 'Rooms & spaces'], ['buildings', 'Buildings']] : ['employees', 'timesheets'].includes(section) ? [['employees', 'Team'], ['timesheets', 'Timesheets']] : ['accounts', 'journals', 'billing', 'ledger'].includes(section) ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']] : ['institutions', 'external', 'equivalencies'].includes(section) ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
         related.forEach(([key, label]) => tabs.append(node('a', { href: `/admin/workspace/${key}/`, 'data-workspace': key, class: section === key ? 'active' : '' }, label)));
         if (['employees', 'timesheets'].includes(section) && can('sis:hr:manage')) tabs.append(node('button', {
             type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => hrSetup.library(), event.currentTarget),
@@ -418,6 +419,8 @@
 
     function recordLabel(row) { if (row.external_code && row.course_code) return `${row.external_code} → ${row.course_code}`; return [row.given_name, row.family_name].filter(Boolean).join(' ') || row.title || row.name || row.code || row.reference || `Record ${row.id.slice(-6)}`; }
     function renderCell(section, row, field, index) {
+        if (['rooms', 'buildings'].includes(section) && field === 'name') return row.name || 'Name not set';
+        if (section === 'rooms' && field === 'building_name') return row.building_name || 'Building not assigned';
         if (section === 'terms' && field === 'kind') return row.kind === 'standard' ? 'Standard' : row.kind === 'non_standard' ? 'Non-standard' : 'Classification needed';
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
@@ -463,6 +466,8 @@
         if (section === 'reports') return relationalStudio.start();
         if (section === 'timesheets') return employmentStudio.submit(preset);
         if (section === 'bookings') return schedulingStudio.requestBooking(preset);
+        if (section === 'rooms') return schedulingStudio.roomForm(null, preset);
+        if (section === 'buildings') return schedulingStudio.buildingForm();
         if (section === 'journals') return operations.createJournal();
         const definition = datasets[section];
         const operation = section === 'people' ? (await request('/sis/ui/operation-id/')).id : null;
@@ -475,7 +480,6 @@
             code.after(node('p', { class: 'form-text', id: 'portal-code-help' }, 'Use lowercase letters, numbers and hyphens, for example fall-welcome.'));
             form.append(node('p', { class: 'form-text' }, 'Choose News for portal updates. Campus content requires sign-in; public news appears on the public website. Use Page builder to design public pages.'));
         }
-        if (section === 'rooms') form.elements.code.maxLength = 80;
         if (section === 'terms') {
             const code = form.elements.namedItem('code');
             code.maxLength = 22; code.pattern = String.raw`[A-Za-z0-9][A-Za-z0-9._\/\-]{0,21}`;
@@ -664,6 +668,7 @@
         if (section === 'employees') return employmentStudio.employee(row.id);
         if (section === 'timesheets') return employmentStudio.entry(row.id);
         if (section === 'rooms') return schedulingStudio.room(row.id);
+        if (section === 'buildings') return schedulingStudio.building(row.id);
         if (section === 'bookings') return schedulingStudio.booking(row.id);
         if (['reports', 'sharedreports'].includes(section)) return reportStudio.record(row.id);
         if (section === 'people') return openPerson(row.id);

@@ -20,14 +20,6 @@ final readonly class SisBookingController
     {
     }
 
-    public function room(ServerRequest $request): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        $id = $this->service->addRoom($f->text('code', 80), $f->integer('capacity', 1, 100000));
-
-        return new JsonResponse(['id' => $id->value], 201);
-    }
-
     public function planning(): ResponseInterface
     {
         return new JsonResponse($this->service->planningContext());

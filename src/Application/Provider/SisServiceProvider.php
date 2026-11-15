@@ -155,6 +155,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlStudentSpecializationRepository::class,
             \Domain\Scheduling\Repository\RoomRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRoomRepository::class,
+            \Domain\Scheduling\Repository\BuildingRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlBuildingRepository::class,
             \Domain\Portal\Repository\PaymentRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPaymentRepository::class,
             \Domain\Portal\Service\PaymentGateway::class =>

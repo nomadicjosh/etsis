@@ -25,6 +25,7 @@ final readonly class WorkspaceService
         "courses" => "sis:catalog:manage",
         "sections" => "sis:registration:manage",
         "rooms" => "sis:scheduling:manage",
+        "buildings" => "sis:scheduling:manage",
         "bookings" => "sis:scheduling:manage",
         "employees" => "sis:hr:manage",
         "timesheets" => "sis:hr:manage",

@@ -271,8 +271,7 @@ final class TeachingWorkflowTest extends TestCase
         self::assertCount(51, $repository->scores($student->id, $section->id, null, 51));
         self::assertSame(1, $pdo->prepares);
         $bookings = new \Infrastructure\Persistence\Repository\SqlBookingRepository($f->sql);
-        $room = EntityId::generate();
-        $bookings->addRoom($room, "Fictional room", 20);
+        $room = $f->room("Fictional room", 20);
         $slot = new \Domain\Scheduling\TimeSlot(
             new DateTimeImmutable("2026-08-11T10:00:00Z"),
             new DateTimeImmutable("2026-08-11T11:00:00Z"),

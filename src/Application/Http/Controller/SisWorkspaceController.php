@@ -31,7 +31,7 @@ final readonly class SisWorkspaceController
     {
         $sections = ['overview', 'people', 'registration', 'students', 'applications', 'courses', 'sections',
             'programs', 'terms',
-            'rooms', 'bookings', 'employees', 'timesheets', 'accounts', 'journals', 'reports', 'campaigns',
+            'rooms', 'buildings', 'bookings', 'employees', 'timesheets', 'accounts', 'journals', 'reports', 'campaigns',
             'sharedreports', 'grades', 'teaching', 'billing', 'ledger', 'institutions', 'external', 'equivalencies',
             'transcripts', 'portal', 'forms', 'imports', 'rules', 'access', 'moodle', 'apply'];
         if (!in_array($section, $sections, true)) {

@@ -27,7 +27,8 @@ final class RoomPlanningTest extends TestCase
             $f->access,
             $f->transactions,
             $audit ?? $f->audit,
-            $f->clock
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlBuildingRepository($f->sql)
         );
     }
 
@@ -47,15 +48,15 @@ final class RoomPlanningTest extends TestCase
         $f = new SisFixture();
         $bookings = $this->bookings($f);
         $rooms = $this->rooms($f);
-        $id = $bookings->addRoom(' Library.101 ', 30);
+        $id = $f->room(' Library.101 ', 30);
         $booking = $bookings->request($id, 'Fictional seminar', [$this->slot('2026-08-11T09:00:00Z', '2026-08-11T10:00:00Z')]);
         $before = $rooms->view($id);
         self::assertSame('Library.101', $before['code']);
-        $rooms->edit($id, 'Library.102', 40, $before['revision']);
+        $rooms->edit($id, 'Library.102', 'Fictional room', $f->building(), 40, $before['revision']);
         self::assertSame(40, $rooms->view($id)['capacity']);
         self::assertSame($id->value, $bookings->get($booking->id)->roomId->value);
         try {
-            $rooms->edit($id, 'Stale', 20, $before['revision']);
+            $rooms->edit($id, 'Stale', 'Fictional room', $f->building(), 20, $before['revision']);
             self::fail('Stale room edit was accepted.');
         } catch (ConcurrentModificationException) {
             self::assertSame('Library.102', $rooms->view($id)['code']);
@@ -70,7 +71,7 @@ final class RoomPlanningTest extends TestCase
         $f = new SisFixture();
         $bookings = $this->bookings($f);
         $rooms = $this->rooms($f);
-        $id = $bookings->addRoom('ROOM.1', 20);
+        $id = $f->room('ROOM.1', 20);
         $window = $this->slot('2026-08-11T09:00:00-07:00', '2026-08-11T10:00:00-07:00');
         $one = $bookings->request($id, 'Fictional seminar', [$window]);
         $two = $bookings->request($id, 'Fictional competing request', [$window]);
@@ -99,7 +100,7 @@ final class RoomPlanningTest extends TestCase
         $f = new SisFixture();
         $bookings = $this->bookings($f);
         $rooms = $this->rooms($f);
-        $id = $bookings->addRoom('ROOM.1', 20);
+        $id = $f->room('ROOM.1', 20);
         $later = $bookings->request($id, 'Later occurrence', [$this->slot('2026-08-11T18:00:00Z', '2026-08-11T19:00:00Z')]);
         for ($i = 0; $i < 50; ++$i) {
             $bookings->request($id, 'Fictional concurrent request', [$this->slot('2026-08-11T09:00:00Z', '2026-08-11T10:00:00Z')]);
@@ -116,7 +117,7 @@ final class RoomPlanningTest extends TestCase
         self::assertSame($later->id->value, $second['items'][0]['booking_id']);
         self::assertNull($second['next_after']);
         self::assertCount(50, $rooms->agenda($id, $window)['items']);
-        $different = $bookings->addRoom('OTHER.1', 10);
+        $different = $f->room('OTHER.1', 10);
         $this->expectException(RecordNotFoundException::class);
         $rooms->agenda($different, $window, $cursor);
     }
@@ -126,13 +127,13 @@ final class RoomPlanningTest extends TestCase
         $f = new SisFixture();
         $bookings = $this->bookings($f);
         $rooms = $this->rooms($f);
-        $id = $bookings->addRoom('ROOM.1', 20);
+        $id = $f->room('ROOM.1', 20);
         $window = $this->slot('2026-08-11T09:00:00Z', '2026-08-11T10:00:00Z');
         $bookings->request($id, 'Fictional seminar', [$window]);
         $revision = $rooms->view($id)['revision'];
         $f->access->staff = false;
         foreach (
-            [fn () => $rooms->view($id), fn () => $rooms->edit($id, 'Changed', 10, $revision),
+            [fn () => $rooms->view($id), fn () => $rooms->edit($id, 'Changed', 'Fictional room', $f->building(), 10, $revision),
             fn () => $rooms->agenda($id, $window), fn () => $rooms->availability($id, $window)] as $readOrWrite
         ) {
             try {
@@ -149,11 +150,11 @@ final class RoomPlanningTest extends TestCase
         $f = new SisFixture();
         $bookings = $this->bookings($f);
         $rooms = $this->rooms($f);
-        $id = $bookings->addRoom('ROOM.1', 20);
+        $id = $f->room('ROOM.1', 20);
         $revision = $rooms->view($id)['revision'];
         foreach (
-            [fn () => $rooms->edit($id, "Room\nName", 20, $revision),
-            fn () => $rooms->edit($id, 'ROOM.1', 0, $revision),
+            [fn () => $rooms->edit($id, "Room\nName", 'Fictional room', $f->building(), 20, $revision),
+            fn () => $rooms->edit($id, 'ROOM.1', 'Fictional room', $f->building(), 0, $revision),
             fn () => $rooms->availability($id, $this->slot('2026-08-01T00:00:00Z', '2026-09-02T00:00:00Z')),
             fn () => $rooms->agenda($id, $this->slot('2026-08-01T00:00:00Z', '2026-09-02T00:00:00Z'))] as $invalid
         ) {
@@ -169,12 +170,12 @@ final class RoomPlanningTest extends TestCase
     public function testRoomEditRollsBackIfMetadataAuditFails(): void
     {
         $f = new SisFixture();
-        $id = $this->bookings($f)->addRoom('ROOM.1', 20);
+        $id = $f->room('ROOM.1', 20);
         $audit = $this->createStub(AuditTrail::class);
         $audit->method('record')->willThrowException(new RuntimeException('fictional audit failure'));
         $rooms = $this->rooms($f, $audit);
         try {
-            $rooms->edit($id, 'Changed', 10, $rooms->view($id)['revision']);
+            $rooms->edit($id, 'Changed', 'Fictional room', $f->building(), 10, $rooms->view($id)['revision']);
             self::fail('An unaudited edit committed.');
         } catch (RuntimeException) {
             self::assertSame('ROOM.1', $rooms->view($id)['code']);
@@ -186,12 +187,12 @@ final class RoomPlanningTest extends TestCase
         $f = new SisFixture();
         $bookings = $this->bookings($f);
         $rooms = $this->rooms($f);
-        $one = $bookings->addRoom('ROOM.1', 20);
-        $two = $bookings->addRoom('ROOM.2', 30);
+        $one = $f->room('ROOM.1', 20);
+        $two = $f->room('ROOM.2', 30);
         $revision = $rooms->view($two)['revision'];
         foreach (
-            [fn () => $bookings->addRoom('ROOM.1', 10),
-            fn () => $rooms->edit($two, 'ROOM.1', 10, $revision)] as $duplicate
+            [fn () => $f->room('ROOM.1', 10),
+            fn () => $rooms->edit($two, 'ROOM.1', 'Fictional room', $f->building(), 10, $revision)] as $duplicate
         ) {
             try {
                 $duplicate();

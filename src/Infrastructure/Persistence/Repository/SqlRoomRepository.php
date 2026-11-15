@@ -25,17 +25,35 @@ final readonly class SqlRoomRepository implements RoomRepository
     {
         $row = $this->sql->one('sis_rooms', ['id' => $id->value]);
 
-        return new Room($id, $row['code'], (int) $row['capacity']);
+        return new Room(
+            $id,
+            $row['code'],
+            (int) $row['capacity'],
+            $row['name'],
+            $row['building_id'] === null ? null : new EntityId($row['building_id'])
+        );
+    }
+
+    public function add(Room $room): void
+    {
+        $this->write($room, true);
     }
 
     public function save(Room $room): void
     {
+        $this->write($room, false);
+    }
+
+    private function write(Room $room, bool $new): void
+    {
+        $data = ['code' => $room->code, 'name' => $room->name,
+            'building_id' => $room->buildingId?->value, 'capacity' => $room->capacity];
         try {
-            $this->sql->update(
-                'sis_rooms',
-                ['code' => $room->code, 'capacity' => $room->capacity],
-                ['id' => $room->id->value]
-            );
+            if ($new) {
+                $this->sql->insert('sis_rooms', ['id' => $room->id->value] + $data);
+            } else {
+                $this->sql->update('sis_rooms', $data, ['id' => $room->id->value]);
+            }
         } catch (PDOException $error) {
             if (in_array((string) $error->getCode(), ['23000', '23505'], true)) {
                 throw new ValidationException([['field' => 'code', 'message' => 'This room code is already in use.']]);
