@@ -73,10 +73,10 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                 <div class="collapse navbar-collapse" id="campus-navigation">
                     <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-3">
                         <li class="nav-item">
-                            <a class="nav-link" href="/portal/courses/">Explore courses</a>
+                            <a class="nav-link" href="/portal/courses/">Courses</a>
                         </li>
-                        <li class="nav-item"><a class="nav-link" href="/portal/news/">Around campus</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/portal/events/">Campus events</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/portal/news/">Updates</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/portal/events/">Events</a></li>
                         <?php if ($staffAccess): ?>
                             <li class="nav-item"><a class="nav-link" href="/admin/">Staff workspace</a></li>
                         <?php endif; ?>

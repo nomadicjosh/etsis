@@ -46,6 +46,11 @@ return static function (Psr7Router $router): void {
     $router->map(['GET'], '/portal/events/', [$events, 'page'])->name('portal.events');
     $router->map(['GET'], '/portal/api/events/', [$events, 'calendar'])->name('portal.events.calendar');
     $router->map(['GET'], '/portal/timetable/', [Portal::class, 'timetable'])->name('portal.timetable');
+    $router->get('/portal/bookings/', [Portal::class, 'bookings'])->name('portal.bookings');
+    $bookingUpdates = \Application\Http\Controller\PortalBookingUpdatesController::class;
+    $router->post('/portal/api/booking-updates/page/', [$bookingUpdates, 'page'])->name('portal.bookings.page');
+    $router->get('/portal/api/booking-updates/{id}/', [$bookingUpdates, 'detail'])->name('portal.bookings.detail');
+    $router->post('/portal/api/booking-updates/{id}/read/', [$bookingUpdates, 'read'])->name('portal.bookings.read');
     $timetable = \Application\Http\Controller\PortalTimetableController::class;
     $router->map(['GET'], '/portal/api/timetable/context/', [$timetable, 'context'])->name('portal.timetable.context');
     $router->map(['POST'], '/portal/api/timetable/terms/', [$timetable, 'terms'])->name('portal.timetable.terms');

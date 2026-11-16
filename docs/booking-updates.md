@@ -1,0 +1,17 @@
+# Booking updates for requesters
+
+Open **Booking updates** in the portal's Campus services sidebar, or **My booking updates** from the staff workspace. The direct address is `/portal/bookings/`. Any signed-in account can read its own updates, whether that person is a student, employee, faculty member or holds several capabilities. Scheduling or administrator permission does not grant access to somebody else's requester inbox.
+
+Approvals, whole-booking cancellations, individual meeting cancellations and rescheduling now record an update for the original requester as part of the same booking transaction. A failed decision, audit or authorization check leaves both the booking and its update unchanged. Actions people take on their own requests are already marked as read, so they do not create unread alerts for themselves. Changing only a booking category does not create a new alert.
+
+The page shows **unread updates** by default. **Include read updates** brings back acknowledged entries, and **Refresh booking updates** checks for new changes. Each booking contributes its latest update; repeated changes are consolidated into that entry. This is a current update list, with the original booking, cancellation and rescheduling records retained separately. Pages contain at most twenty entries, with an owner-scoped cursor and a separate unread count.
+
+Choose **Read update** to review the affected meeting. A reschedule shows the previous meeting and its linked replacement together, including physical room names/codes or **Online**, current approval/cancellation state and times in the institution's time zone. Long meeting series have pages of twenty dates. This page does not replace a student's or instructor's published academic timetable.
+
+Opening a detail does not mark it as read. **Mark update as read** acknowledges the displayed update revision. If a newer change arrives first, refresh the detail and review that change before acknowledging it. Repeating the same accepted acknowledgement adds no duplicate audit entry and cannot clear a newer update. Read tracking records the owner's acknowledgement choice; it does not alter the booking's business revision or invalidate a scheduler's otherwise-current review.
+
+The inbox and details always use the signed-in owner, with no account selector or administrative bypass. Related rescheduled bookings must belong to that same owner and match the recorded replacement link. Reads are private/no-store, browser mutations retain framework CSRF protection, and debug collectors remain suppressed. An expired login returns the browser to sign-in. Private booking text stays in page memory and is not stored in browser storage or copied into email jobs.
+
+Apply migration `20261115000019_AddSisBookingUpdates.php`. It adds nullable latest-update/read-tracking fields and an owner/date/identity index to the existing booking table. Earlier bookings retain their fields and receive no invented historical updates. New updates reuse ordinary audited booking CRUD; they create no new message queue, event journal, copied message body or background process. Existing booking retention controls also govern this working metadata.
+
+These are in-application requester updates. They do not send email, notify all class members, subscribe public-event visitors or publish private booking purposes. Deliberate email announcements continue through [Communications](communications.md). Optional automatic email/subscription policy and broader scheduling alerts remain roadmap work.

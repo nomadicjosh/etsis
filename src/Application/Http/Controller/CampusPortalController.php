@@ -80,6 +80,9 @@ final readonly class CampusPortalController
         if ($section === 'timetable') {
             return $this->timetable();
         }
+        if ($section === 'bookings') {
+            return $this->bookings();
+        }
         if (
             !in_array(
                 $section,
@@ -105,6 +108,15 @@ final readonly class CampusPortalController
             return new RedirectResponse($this->renderer->loginUrl());
         }
         return $this->renderer->render('workspace', 'My timetable', ['section' => 'timetable',
+            'public' => ['programs' => [], 'terms' => []], 'applicationPage' => false]);
+    }
+
+    public function bookings(): ResponseInterface
+    {
+        if (!$this->gate->isLoggedIn()) {
+            return new RedirectResponse($this->renderer->loginUrl());
+        }
+        return $this->renderer->render('workspace', 'Booking updates', ['section' => 'bookings',
             'public' => ['programs' => [], 'terms' => []], 'applicationPage' => false]);
     }
 

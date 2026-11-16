@@ -73,6 +73,13 @@
                           _workspace_json: JSON.stringify(data || {}),
                       }).toString(),
         });
+        if (response.status === 401) {
+            if (!pageLeaving) {
+                pageLeaving = true;
+                window.location.assign(config.loginUrl || '/login/');
+            }
+            throw new Error('Sign in again to continue.');
+        }
         let result;
         try {
             result = await response.json();
@@ -2188,6 +2195,85 @@
         container.append(more);
     }
 
+    async function bookingUpdates(container) {
+        const showRead = el('input', { type: 'checkbox', id: 'booking-updates-show-read', class: 'form-check-input' });
+        const scope = el('div', { class: 'd-flex flex-wrap align-items-center gap-3 mb-4' },
+            el('div', { class: 'form-check' }, showRead,
+                el('label', { class: 'form-check-label', for: showRead.id }, 'Include read updates')));
+        const status = el('p', { role: 'status', class: 'campus-muted' });
+        const list = el('section', { 'aria-label': 'Your booking updates' });
+        const detail = el('section', { hidden: true, 'aria-label': 'Booking update details' });
+        const wrapper = el('div', {}, scope, status, list, detail);
+        const refresh = button('Refresh booking updates', () => load(null));
+        scope.append(refresh);
+        container.append(el('p', { class: 'campus-muted' },
+            'See the latest approval, rescheduling or cancellation for each of your requests. Class timetables remain in My timetable.'), wrapper);
+        let generation = 0, cursors = [], unreadCount = 0, timezone = '';
+        async function load(cursor, previous = []) {
+            const serial = ++generation;
+            const result = await request('/portal/api/booking-updates/page/', 'POST', {
+                unread_only: !showRead.checked, after_at: cursor?.at || null, after_id: cursor?.id || null,
+            });
+            if (pageLeaving || serial !== generation) return;
+            cursors = previous;
+            detail.hidden = true;
+            list.hidden = false;
+            unreadCount = result.unread_count;
+            timezone = result.timezone;
+            status.textContent = `${unreadCount} unread booking updates · ${timezone}`;
+            list.replaceChildren(...result.items.map(item => surface(item.label,
+                el('h3', { class: 'h5 private-text' }, item.title),
+                el('p', { class: 'campus-muted' }, `${item.updated_local} · ${item.unread ? 'Unread' : 'Read'}`),
+                button('Read update', () => open(item.id, cursor)))));
+            if (!result.items.length) list.append(empty('You’re all caught up', showRead.checked
+                ? 'No booking updates are available yet.' : 'There are no unread booking updates.'));
+            const controls = el('nav', { class: 'd-flex flex-wrap gap-2 mt-4', 'aria-label': 'Booking update pages' });
+            if (cursors.length) controls.append(button('Previous updates', () => {
+                const stack = [...cursors]; return load(stack.pop(), stack);
+            }));
+            if (result.next) controls.append(button('Next updates', () => load(result.next, [...cursors, cursor])));
+            list.append(controls);
+        }
+        function meetings(packet, title) {
+            const holder = surface(title, el('p', {}, `${packet.location}${packet.room_code ? ` · ${packet.room_code}` : ''}`),
+                el('p', { class: 'campus-muted' }, `${packet.timezone} · ${packet.status}`));
+            let page = 0;
+            const dates = el('div');
+            function draw() {
+                dates.replaceChildren(...packet.meetings.slice(page * 20, (page + 1) * 20).map(meeting =>
+                    el('p', {}, `${meeting.local_start} to ${meeting.local_end}${meeting.cancelled ? ' · Cancelled' : ''}`)));
+                if (page) dates.append(button('Previous meeting dates', () => { page--; draw(); }));
+                if ((page + 1) * 20 < packet.meetings.length)
+                    dates.append(button('More meeting dates', () => { page++; draw(); }));
+            }
+            draw(); holder.append(dates); return holder;
+        }
+        async function open(id, cursor) {
+            const serial = ++generation;
+            const data = await request(`/portal/api/booking-updates/${id}/`);
+            if (pageLeaving || serial !== generation) return;
+            const heading = el('h2', { class: 'h4', tabindex: '-1' }, data.label);
+            detail.replaceChildren(button('Back to booking updates', () => load(cursor, cursors)), heading,
+                el('h3', { class: 'h5 private-text' }, data.title), el('p', { class: 'campus-muted' }, data.updated_local),
+                meetings(data.booking, data.replacement ? 'Previous meeting' : 'Meeting details'));
+            if (data.replacement) detail.append(meetings(data.replacement, 'Replacement meeting'));
+            const readStatus = el('p', { role: 'status', class: 'campus-muted' }, data.unread ? 'Unread update' : 'Read update');
+            const mark = button('Mark update as read', async () => {
+                await request(`/portal/api/booking-updates/${id}/read/`, 'POST', { version: data.version });
+                if (pageLeaving || serial !== generation) return;
+                readStatus.textContent = 'Marked as read. Newer changes will appear as unread updates.';
+                unreadCount = Math.max(0, unreadCount - 1);
+                status.textContent = `${unreadCount} unread booking updates · ${timezone}`;
+                mark.hidden = true;
+            }, true);
+            mark.hidden = !data.unread;
+            detail.append(readStatus, mark, button('Refresh this booking update', () => open(id, cursor)));
+            list.hidden = true; detail.hidden = false; heading.focus();
+        }
+        showRead.addEventListener('change', () => task(() => load(null), refresh));
+        await load(null);
+    }
+
     async function renderService() {
         const container = one('#campus-service-content');
         if (!container || pageLeaving) return;
@@ -2196,7 +2282,7 @@
             applications(container);
             return;
         }
-        if (config.section !== 'timetable') await refreshMe();
+        if (!['timetable', 'bookings'].includes(config.section)) await refreshMe();
         const restoreFocus = container.contains(document.activeElement);
         const content = document.createDocumentFragment();
         const actions = {
@@ -2209,6 +2295,7 @@
             transcripts,
             accounts,
             updates,
+            bookings: bookingUpdates,
             timetable: async content => {
                 const context = await request('/portal/api/timetable/context/');
                 const selected = context.recommended_term || context.terms[0];

@@ -9,6 +9,7 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Scheduling\Booking;
 use Domain\Scheduling\BookingPattern;
 use Domain\Scheduling\BookingSeries;
+use Domain\Scheduling\BookingUpdateKind;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Scheduling\Repository\BookingRepository;
 use Domain\Scheduling\Repository\BookingCategoryRepository;
@@ -408,6 +409,7 @@ final readonly class BookingService
             $approved = $booking->transition('approved');
             $this->repository->save($approved, $booking->version);
             $this->audit->record($actor, 'booking.approved', $id);
+            $this->repository->recordUpdate($approved, $actor, BookingUpdateKind::Approved, $this->clock->now());
             $this->manager($actor);
 
             return $approved;
@@ -428,8 +430,10 @@ final readonly class BookingService
             if ($expectedVersion !== null && $latest->version !== $expectedVersion) {
                 throw new ConcurrentModificationException('Reload the booking before cancelling.');
             }
-            $this->repository->save($latest->transition('cancelled'), $latest->version);
+            $cancelled = $latest->transition('cancelled');
+            $this->repository->save($cancelled, $latest->version);
             $this->audit->record($actor, 'booking.cancelled', $booking->id);
+            $this->repository->recordUpdate($cancelled, $actor, BookingUpdateKind::Cancelled, $this->clock->now());
             $this->actor($actor);
             $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
         });
@@ -465,6 +469,13 @@ final readonly class BookingService
             $changed = $latest->cancelOccurrence($occurrence, $actor, $this->clock->now());
             $this->repository->cancelOccurrence($changed, $occurrence, $latest->version);
             $this->audit->record($actor, 'booking.occurrence_cancelled', $latest->id);
+            $this->repository->recordUpdate(
+                $changed,
+                $actor,
+                BookingUpdateKind::MeetingCancelled,
+                $this->clock->now(),
+                $occurrence
+            );
             $this->actor($actor);
             $this->access->requireOwnerOrPermission($latest->ownerUserId, 'sis:scheduling:manage');
             return $changed;
@@ -583,6 +594,14 @@ final readonly class BookingService
             $this->repository->replaceOccurrence($changed, $occurrence, $replacement, $current->version);
             $this->audit->record($actor, 'booking.occurrence_rescheduled', $current->id);
             $this->audit->record($actor, 'booking.replacement_created', $replacement->id);
+            $this->repository->recordUpdate(
+                $changed,
+                $actor,
+                BookingUpdateKind::Rescheduled,
+                $this->clock->now(),
+                $occurrence,
+                $replacementId
+            );
             $this->manager($actor);
             return $replacement;
         });

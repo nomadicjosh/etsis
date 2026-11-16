@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Scheduling\Booking;
 use Domain\Scheduling\BookingOccurrence;
+use Domain\Scheduling\BookingUpdateKind;
 use LogicException;
 use Domain\Scheduling\Repository\BookingRepository;
 use Domain\Scheduling\TimeSlot;
@@ -102,6 +103,98 @@ final readonly class SqlBookingRepository implements BookingRepository
         ) {
             throw new ConcurrentModificationException('The booking changed.');
         }
+    }
+
+    public function recordUpdate(
+        Booking $booking,
+        EntityId $actor,
+        BookingUpdateKind $kind,
+        DateTimeImmutable $at,
+        ?EntityId $occurrence = null,
+        ?EntityId $related = null
+    ): void {
+        $q = $this->sql->quote(...);
+        $changed = $this->sql->execute('UPDATE ' . $q('sis_bookings') . ' SET '
+            . $q('notice_version') . ' = ?, ' . $q('notice_kind') . ' = ?, ' . $q('notice_at') . ' = ?, '
+            . $q('notice_occurrence_id') . ' = ?, ' . $q('notice_related_id') . ' = ?, '
+            . $q('seen_notice_version') . ' = CASE WHEN ' . $q('owner_user_id') . ' = ? THEN ? ELSE '
+            . $q('seen_notice_version') . ' END WHERE ' . $q('id') . ' = ? AND ' . $q('version') . ' = ? AND '
+            . $q('owner_user_id') . ' = ?', [
+                $booking->version, $kind->value, $at->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z'),
+                $occurrence?->value, $related?->value, $actor->value, $booking->version,
+                $booking->id->value, $booking->version, $booking->ownerUserId->value,
+            ]);
+        if ($changed !== 1) {
+            throw new ConcurrentModificationException('The booking changed before its update could be recorded.');
+        }
+    }
+
+    private function noticeSelect(): string
+    {
+        $q = $this->sql->quote(...);
+        return 'SELECT ' . implode(', ', array_map($q, [
+            'id', 'title', 'status', 'notice_version', 'notice_kind', 'notice_at',
+            'notice_occurrence_id', 'notice_related_id', 'seen_notice_version',
+        ])) . ' FROM ' . $q('sis_bookings') . ' WHERE ' . $q('owner_user_id') . ' = ? AND '
+        . $q('notice_version') . ' IS NOT NULL';
+    }
+
+    public function ownerUpdates(EntityId $owner, bool $unreadOnly, ?string $afterAt, ?EntityId $after): array
+    {
+        $q = $this->sql->quote(...);
+        $query = $this->noticeSelect();
+        $params = [$owner->value];
+        if ($unreadOnly) {
+            $query .= ' AND (' . $q('seen_notice_version') . ' IS NULL OR ' . $q('seen_notice_version')
+            . ' < ' . $q('notice_version') . ')';
+        }
+        if ($afterAt !== null && $after !== null) {
+            $query .= ' AND (' . $q('notice_at') . ' < ? OR (' . $q('notice_at') . ' = ? AND '
+            . $q('id') . ' < ?))';
+            array_push($params, $afterAt, $afterAt, $after->value);
+        }
+        return $this->sql->fetch($query . ' ORDER BY ' . $q('notice_at') . ' DESC, ' . $q('id') . ' DESC', $params, 21);
+    }
+
+    public function ownerUpdate(EntityId $owner, EntityId $id): array
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch(
+            $this->noticeSelect() . ' AND ' . $q('id') . ' = ?',
+            [$owner->value, $id->value],
+            1
+        )[0]
+        ?? throw new \Domain\Shared\Exception\RecordNotFoundException('Booking update not found.');
+    }
+
+    public function unreadUpdates(EntityId $owner): int
+    {
+        $q = $this->sql->quote(...);
+        $row = $this->sql->fetch('SELECT COUNT(*) AS ' . $q('total') . ' FROM ' . $q('sis_bookings')
+            . ' WHERE ' . $q('owner_user_id') . ' = ? AND ' . $q('notice_version') . ' IS NOT NULL AND ('
+            . $q('seen_notice_version') . ' IS NULL OR ' . $q('seen_notice_version') . ' < '
+            . $q('notice_version') . ')', [$owner->value], 1)[0];
+        return (int) $row['total'];
+    }
+
+    public function acknowledgeUpdate(EntityId $owner, EntityId $id, int $noticeVersion): bool
+    {
+        $q = $this->sql->quote(...);
+        $changed = $this->sql->execute('UPDATE ' . $q('sis_bookings') . ' SET ' . $q('seen_notice_version')
+            . ' = ? WHERE ' . $q('id') . ' = ? AND ' . $q('owner_user_id') . ' = ? AND '
+            . $q('notice_version') . ' = ? AND (' . $q('seen_notice_version') . ' IS NULL OR '
+            . $q('seen_notice_version') . ' < ?)', [$noticeVersion, $id->value, $owner->value,
+                $noticeVersion, $noticeVersion]);
+        if ($changed === 1) {
+            return true;
+        }
+        $row = $this->ownerUpdate($owner, $id);
+        if ((int) $row['notice_version'] === $noticeVersion && (int) $row['seen_notice_version'] === $noticeVersion) {
+            return false;
+        }
+        throw new ConcurrentModificationException(
+            'There is a newer booking update. Read it before marking it as read.'
+        );
     }
 
     public function conflicts(EntityId $room, TimeSlot $slot, ?EntityId $excluding = null): bool

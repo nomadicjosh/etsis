@@ -4290,3 +4290,41 @@ if ($teachingPost($virtualBase . '/occurrences/' . $virtualRecord['id'] . '/canc
     'Fictional virtual gathering') || $sis->sql->rows('sis_history_events') !== $publicEventEvents) {
     throw new RuntimeException('Cancelling a virtual occurrence left public times or changed academic history.');
 }
+
+// Requester updates are private reads with separate, version-checked acknowledgement state.
+$bookingUpdatesOwner = $sis->access->actor;
+$bookingUpdatesService = $app->make(\Domain\Scheduling\Service\BookingService::class);
+$bookingUpdate = $bookingUpdatesService->request(null, 'Fictional requester update', [
+    new \Domain\Scheduling\TimeSlot(new DateTimeImmutable('2026-08-28T09:00:00-07:00'),
+        new DateTimeImmutable('2026-08-28T10:00:00-07:00')),
+]);
+$sis->access->actor = $sis->user();
+$bookingUpdatesService->approve($bookingUpdate->id, 0);
+$bookingUpdatePath = '/portal/api/booking-updates/' . $bookingUpdate->id->value;
+$otherRequester = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $bookingUpdatePath . '/'
+)));
+if ($otherRequester->getStatusCode() !== 404) {
+    throw new RuntimeException('A scheduler bypassed the requester-only update boundary.');
+}
+$sis->access->actor = $bookingUpdatesOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$ownerUpdates = $teachingPost('/portal/api/booking-updates/page/', ['unread_only' => true]);
+$ownerUpdate = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $bookingUpdatePath . '/'
+)));
+$ownerDetail = json_decode((string) $ownerUpdate->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$ownerReadNoCsrf = $communicationNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $bookingUpdatePath . '/read/'
+))->withParsedBody(['version' => 1]);
+if ($ownerUpdates->getStatusCode() !== 200 || $ownerUpdate->getStatusCode() !== 200
+    || ($ownerDetail['unread'] ?? null) !== true || $ownerUpdate->hasHeader('phpdebugbar-id')
+    || !str_contains($ownerUpdate->getHeaderLine('Cache-Control'), 'no-store')
+    || $app->router->match($ownerReadNoCsrf)->getStatusCode() !== 403
+    || $teachingPost($bookingUpdatePath . '/read/', ['version' => 1])->getStatusCode() !== 200
+    || $teachingPost($bookingUpdatePath . '/read/', ['version' => 1])->getStatusCode() !== 200
+    || $sis->sql->one('sis_bookings', ['id' => $bookingUpdate->id->value])['version'] !== 1
+    || $sis->sql->rows('sis_history_events') !== $publicEventEvents) {
+    throw new RuntimeException('Requester updates lost owner access, CSRF, privacy or independent read tracking.');
+}

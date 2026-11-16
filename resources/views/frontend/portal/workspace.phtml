@@ -8,6 +8,7 @@ $sections = [
     'progress' => ['Degree progress', 'signpost-split'],
     'registration' => ['Course registration', 'calendar2-plus'],
     'timetable' => ['My timetable', 'calendar3-week'],
+    'bookings' => ['Booking updates', 'bell'],
     'accounts' => ['Student accounts', 'wallet2'],
     'transcripts' => ['Transcripts', 'file-earmark-text'],
     'updates' => ['Campus updates', 'chat-square-heart'],
@@ -31,9 +32,11 @@ $client = [
             <nav aria-label="Campus services">
                 <?php foreach ($sections as $key => [$label, $icon]): ?>
                     <?php
-                    $serviceUrl = $key === 'timetable'
-                        ? '/portal/timetable/'
-                        : '/portal/student/' . ($key === 'overview' ? '' : $key . '/');
+                    $serviceUrl = match ($key) {
+                        'timetable' => '/portal/timetable/',
+                        'bookings' => '/portal/bookings/',
+                        default => '/portal/student/' . ($key === 'overview' ? '' : $key . '/'),
+                    };
                     ?>
                     <a
                         href="<?= $this->esc($serviceUrl); ?>"

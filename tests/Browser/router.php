@@ -107,10 +107,14 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
         $template = 'auth'; $data += ['mode' => $path === '/login/' ? 'login' : 'register',
             'continue' => true, 'signInFailed' => ($_GET['notice'] ?? '') === 'credentials',
             'url' => $path === '/login/' ? '/auth/' : '/create/'];
-    } elseif ($path === '/portal/apply/' || $path === '/portal/timetable/' || str_starts_with($path, '/portal/student/')) {
+    } elseif (in_array($path, ['/portal/apply/', '/portal/timetable/', '/portal/bookings/'], true)
+        || str_starts_with($path, '/portal/student/')) {
         $template = 'workspace';
         $section = trim(substr($path, strlen('/portal/student/')), '/') ?: 'overview';
-        $data += ['section' => $path === '/portal/apply/' ? 'applications' : ($path === '/portal/timetable/' ? 'timetable' : $section),
+        $data += ['section' => match ($path) {
+            '/portal/apply/' => 'applications', '/portal/timetable/' => 'timetable', '/portal/bookings/' => 'bookings',
+            default => $section,
+        },
             'public' => $public, 'applicationPage' => $path === '/portal/apply/'];
     }
     $response = $renderer->render($template, $title, $data);
