@@ -26,6 +26,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         private SqlRecords $sql,
         private Clock $clock,
         private \Domain\Shared\Persistence\UnitOfWork $transactions,
+        private \Domain\Student\Service\RestrictionLedger $restrictions,
     ) {
     }
 
@@ -243,6 +244,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
 
     public function blockingRestriction(EntityId $person, DateTimeImmutable $on, bool $byStaff): ?Restriction
     {
+        $this->restrictions->verify($person);
         $q = $this->sql->quote(...);
         $date = $on->format("Y-m-d");
         $rows = $this->sql->fetch(

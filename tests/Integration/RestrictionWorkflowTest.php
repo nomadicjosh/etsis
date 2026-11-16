@@ -36,6 +36,7 @@ final class RestrictionWorkflowTest extends TestCase
             $audit ?? $f->audit,
             $cipher ?? new DefuseMessageCipher($config),
             $f->clock,
+            $f->restrictionLedger(),
         );
     }
 
@@ -137,27 +138,57 @@ final class RestrictionWorkflowTest extends TestCase
         $hold = $this->hold($f->student()->personId, "2026-08-20");
         $service->create($hold, "Fictional reason");
         $before = $service->view($hold->id);
-        $service->end($hold->id, new DateTimeImmutable("2026-08-15"), $before["revision"]);
+        $service->end(
+            $hold->id,
+            new DateTimeImmutable("2026-08-15"),
+            $before["revision"],
+            EntityId::generate(),
+            "Fictional reviewed resolution",
+        );
         try {
-            $service->end($hold->id, new DateTimeImmutable("2026-08-12"), $before["revision"]);
+            $service->end(
+                $hold->id,
+                new DateTimeImmutable("2026-08-12"),
+                $before["revision"],
+                EntityId::generate(),
+                "Fictional reviewed resolution",
+            );
             self::fail("A stale ending replaced a more recent decision.");
         } catch (ConcurrentModificationException) {
             self::assertSame("2026-08-15", $service->view($hold->id)["ends_on"]);
         }
         $fresh = $service->view($hold->id);
         try {
-            $service->end($hold->id, new DateTimeImmutable("2026-08-16"), $fresh["revision"]);
+            $service->end(
+                $hold->id,
+                new DateTimeImmutable("2026-08-16"),
+                $fresh["revision"],
+                EntityId::generate(),
+                "Fictional reviewed resolution",
+            );
             self::fail("A scheduled end was silently extended.");
         } catch (ValidationException $error) {
             self::assertSame("ends_on", $error->errors[0]["field"]);
         }
-        $service->end($hold->id, new DateTimeImmutable("2026-08-09"), $fresh["revision"]);
+        $service->end(
+            $hold->id,
+            new DateTimeImmutable("2026-08-09"),
+            $fresh["revision"],
+            EntityId::generate(),
+            "Fictional reviewed resolution",
+        );
         $ended = $service->view($hold->id);
         self::assertSame("ended", $ended["state"]);
         $service->appendNote($hold->id, EntityId::generate(), "Fictional historical follow-up");
-        self::assertCount(2, $service->notes($hold->id)["items"]);
+        self::assertCount(4, $service->notes($hold->id)["items"]);
         $this->expectException(DomainException::class);
-        $service->end($hold->id, new DateTimeImmutable("2026-08-08"), $ended["revision"]);
+        $service->end(
+            $hold->id,
+            new DateTimeImmutable("2026-08-08"),
+            $ended["revision"],
+            EntityId::generate(),
+            "Fictional reviewed resolution",
+        );
     }
 
     public function testOwnersWithoutRegistrarAuthorityCannotReadOrWriteInternalNotes(): void
@@ -174,7 +205,13 @@ final class RestrictionWorkflowTest extends TestCase
                 fn() => $service->page($student->personId),
                 fn() => $service->notes($hold->id),
                 fn() => $service->appendNote($hold->id, EntityId::generate(), "Not allowed"),
-                fn() => $service->end($hold->id, new DateTimeImmutable("2026-08-09"), $revision),
+                fn() => $service->end(
+                    $hold->id,
+                    new DateTimeImmutable("2026-08-09"),
+                    $revision,
+                    EntityId::generate(),
+                    "Not allowed"
+                ),
                 fn() => $service->create($this->hold($student->personId), "Not allowed"),
             ];
         foreach ($historyCases1 as $operation) {

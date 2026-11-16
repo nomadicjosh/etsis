@@ -781,10 +781,14 @@ if (
     $teachingPost("/sis/restrictions/" . $holdId . "/end/", [
         "ends_on" => "2026-08-15",
         "revision" => $hold["revision"],
+        "operation_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+        "reason" => "Fictional hold resolution.",
     ])->getStatusCode() !== 200 ||
     $teachingPost("/sis/restrictions/" . $holdId . "/end/", [
         "ends_on" => "2026-08-12",
         "revision" => $hold["revision"],
+        "operation_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+        "reason" => "Fictional hold resolution.",
     ])->getStatusCode() !== 409
 ) {
     throw new RuntimeException("Restriction reads or stale-save protection failed.");
@@ -800,10 +804,21 @@ if (
     throw new RuntimeException("A staff note could not be appended repeatably.");
 }
 $notesResponse = $teachingPost("/sis/restrictions/" . $holdId . "/notes/", []);
+$holdHistory = $teachingPost('/sis/restrictions/' . $holdId . '/history/', ['cursor' => '']);
+$holdHistoryBody = json_decode((string) $holdHistory->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $holdHistory->getStatusCode() !== 200
+    || array_column($holdHistoryBody['items'] ?? [], 'action') !== ['placed', 'ended']
+    || !str_contains($holdHistory->getHeaderLine('Cache-Control'), 'no-store')
+    || $holdHistory->hasHeader('phpdebugbar-id')
+    || str_contains((string) $holdHistory->getBody(), 'Fictional hold resolution.')
+) {
+    throw new RuntimeException('Private, curated restriction history failed.');
+}
 $notes = json_decode((string) $notesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $notesResponse->getStatusCode() !== 200 ||
-    count($notes["items"] ?? []) !== 2 ||
+    count($notes["items"] ?? []) !== 3 ||
     str_contains(
         json_encode($sis->sql->rows("sis_restriction_notes"), JSON_THROW_ON_ERROR),
         "Fictional follow-up",
@@ -814,6 +829,7 @@ if (
 $sis->access->staff = false;
 if (
     $app->router->match($holdGet)->getStatusCode() !== 403 ||
+    $teachingPost('/sis/restrictions/' . $holdId . '/history/', [])->getStatusCode() !== 403 ||
     $teachingPost("/sis/restrictions/" . $holdId . "/notes/", [])->getStatusCode() !== 403
 ) {
     throw new RuntimeException("Student ownership exposed internal restriction notes.");

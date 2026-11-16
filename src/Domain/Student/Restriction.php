@@ -36,6 +36,32 @@ final readonly class Restriction
         && ($byStaff ? $this->blocksStaffRegistration : $this->severity >= self::REGISTRATION_BLOCKING_SEVERITY);
     }
 
+    /** @return array{id:string,person_id:string,code:string,severity:int,starts_on:string,ends_on:?string,blocks_staff:bool} */
+    public function facts(): array
+    {
+        return ['id' => $this->id->value, 'person_id' => $this->personId->value,
+            'code' => $this->code, 'severity' => $this->severity,
+            'starts_on' => $this->dates->start->format('Y-m-d'),
+            'ends_on' => $this->dates->end?->format('Y-m-d'),
+            'blocks_staff' => $this->blocksStaffRegistration];
+    }
+
+    /** @param array<string,mixed> $facts */
+    public static function fromFacts(array $facts): self
+    {
+        return new self(
+            new EntityId($facts['id']),
+            new EntityId($facts['person_id']),
+            $facts['code'],
+            $facts['severity'],
+            new DateRange(
+                new DateTimeImmutable($facts['starts_on']),
+                $facts['ends_on'] === null ? null : new DateTimeImmutable($facts['ends_on'])
+            ),
+            $facts['blocks_staff']
+        );
+    }
+
     public function state(DateTimeImmutable $on): string
     {
         $date = $on->format('Y-m-d');

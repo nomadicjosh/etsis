@@ -51,7 +51,13 @@ final readonly class SisRestrictionController
     public function end(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->end(new EntityId($id), $f->date('ends_on'), $f->text('revision', 64));
+        $this->service->end(
+            new EntityId($id),
+            $f->date('ends_on'),
+            $f->text('revision', 64),
+            $f->id('operation_id'),
+            $f->bodyText('reason')
+        );
 
         return new JsonResponse(['status' => 'saved']);
     }
@@ -70,5 +76,14 @@ final readonly class SisRestrictionController
         $this->service->appendNote(new EntityId($id), $f->id('operation_id'), $f->bodyText('note'));
 
         return new JsonResponse(['status' => 'saved']);
+    }
+
+    public function history(ServerRequest $request, string $id): ResponseInterface
+    {
+        $cursor = FormInput::from($request)->search('cursor', 2000);
+        return new JsonResponse($this->service->history(
+            new EntityId($id),
+            $cursor === '' ? null : $cursor
+        ));
     }
 }

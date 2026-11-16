@@ -48,7 +48,8 @@ test('registrars review paged holds, retry notes safely and end a restriction wi
             } else if (path.endsWith('/notes/')) {
                 const rows = notes.get(holdId) || [];
                 result = { items: data.after ? rows.slice(50) : rows.slice(0, 50), next_after: !data.after && rows.length > 50 ? rows[49].id : null };
-            } else if (path.endsWith('/end/')) { hold.ends_on = data.ends_on; hold.version++; }
+            } else if (path.endsWith('/history/')) result = { items: [{ action: 'placed', facts: hold, effective_on: hold.starts_on, recorded_at: '2026-08-10T12:00:00+00:00' }], next_cursor: null };
+            else if (path.endsWith('/end/')) { hold.ends_on = data.ends_on; hold.version++; }
             else result = describe(hold);
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -100,12 +101,16 @@ test('registrars review paged holds, retry notes safely and end a restriction wi
     expect(created.data.operation_id).toMatch(/^[0-9]{26}$/);
     await page.getByRole('button', { name: 'Set or shorten end date' }).click();
     await page.getByLabel(/^Ends on/).fill('2026-08-09');
+    await page.getByRole('textbox', { name: /^Reason for ending the hold/ }).fill('Fictional reviewed resolution');
     await accessible();
     await page.getByRole('button', { name: 'Save restriction end date' }).click();
     await expect(page.locator('#drawer-body .status-badge')).toHaveText('ended');
-    expect(calls.find(call => call.path.endsWith('/end/'))?.data).toEqual({ ends_on: '2026-08-09', revision: 'hold-0' });
+    expect(calls.find(call => call.path.endsWith('/end/'))?.data).toMatchObject({ ends_on: '2026-08-09', revision: 'hold-0', reason: 'Fictional reviewed resolution', operation_id: expect.stringMatching(/^[0-9]{26}$/) });
     await expect(page.getByRole('button', { name: 'Set or shorten end date' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add staff note', exact: true })).toBeVisible();
+    await accessible();
+    await page.getByRole('button', { name: 'Review hold history' }).click();
+    await expect(page.getByRole('table', { name: 'Retained hold decisions' })).toContainText('Hold placed');
     await accessible();
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

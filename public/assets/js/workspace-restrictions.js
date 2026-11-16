@@ -91,7 +91,9 @@ window.createWorkspaceRestrictions = function (ui) {
                 request(
                     `/sis/persons/${student.person_id}/restrictions/`,
                     "POST",
-                    { after },
+                    {
+                        after,
+                    },
                 ),
             (rows) =>
                 rows.length
@@ -174,6 +176,7 @@ window.createWorkspaceRestrictions = function (ui) {
                 `When active: student registration ${record.severity >= 99 ? "blocked" : "not blocked"}; staff registration ${record.blocks_staff ? "blocked" : "not blocked"}.`,
             ),
             button("Back to student", () => openRecord("students", student)),
+            button("Review hold history", () => history(id, student)),
         );
         if (can("sis:audit:read"))
             body.append(
@@ -184,11 +187,23 @@ window.createWorkspaceRestrictions = function (ui) {
         if (record.state !== "ended")
             body.append(
                 button("Set or shorten end date", async () => {
+                    const operation = await request("/sis/ui/operation-id/");
                     const form = await flow(
                         "Save restriction end date",
-                        [["ends_on", "Ends on", "date"]],
+                        [
+                            ["ends_on", "Ends on", "date"],
+                            [
+                                "reason",
+                                "Reason for ending the hold",
+                                "textarea",
+                            ],
+                        ],
                         `/sis/restrictions/${id}/end/`,
-                        (data) => ({ ...data, revision: record.revision }),
+                        (data) => ({
+                            ...data,
+                            revision: record.revision,
+                            operation_id: operation.id,
+                        }),
                         () => view(id, student),
                         {
                             ends_on:
@@ -197,8 +212,9 @@ window.createWorkspaceRestrictions = function (ui) {
                                     ? record.starts_on
                                     : record.today),
                         },
-                        "The end date is inclusive. Scheduled ends can be shortened. Historical ended restrictions stay unchanged; this does not delete the restriction or its notes.",
+                        "The end date is inclusive. Explain why the hold is ending. Your decision and reason are retained; earlier decisions and notes remain available. This form safely reuses its operation ID when retried.",
                     );
+                    form.elements.reason.autocomplete = "off";
                     form.elements.ends_on.min = record.starts_on;
                     if (record.ends_on)
                         form.elements.ends_on.max = record.ends_on;
@@ -261,6 +277,57 @@ window.createWorkspaceRestrictions = function (ui) {
                           ),
                       )
                     : node("p", {}, "No staff notes have been recorded."),
+        );
+    }
+    async function history(id, student) {
+        const body = openDrawer("Hold history", "RETAINED DECISIONS");
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "Earlier decisions remain unchanged. An observed record describes the setup found at that time; it does not identify when or by whom an older hold was placed.",
+            ),
+            button("Back to restriction", () => view(id, student)),
+        );
+        await pages(
+            body,
+            "history",
+            async (cursor) => {
+                const result = await request(
+                    `/sis/restrictions/${id}/history/`,
+                    "POST",
+                    { cursor },
+                );
+                return { items: result.items, next_after: result.next_cursor };
+            },
+            (rows) =>
+                rows.length
+                    ? grid(
+                          [
+                              "Decision",
+                              "Effective",
+                              "Starts",
+                              "Ends",
+                              "Recorded",
+                          ],
+                          rows.map((row) => [
+                              {
+                                  observed: "Existing record observed",
+                                  placed: "Hold placed",
+                                  ended: "End date changed",
+                              }[row.action],
+                              row.effective_on,
+                              row.facts.starts_on,
+                              row.facts.ends_on || "Open",
+                              new Date(row.recorded_at).toLocaleString(),
+                          ]),
+                          "Retained hold decisions",
+                      )
+                    : node(
+                          "p",
+                          {},
+                          "No changes for this hold on this page. Other holds share the person's history; use Next history page if available.",
+                      ),
         );
     }
     return { list };

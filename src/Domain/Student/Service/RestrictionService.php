@@ -10,6 +10,7 @@ use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -31,6 +32,7 @@ final readonly class RestrictionService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private RestrictionLedger $ledger,
     ) {
     }
 
@@ -40,33 +42,41 @@ final readonly class RestrictionService
         $content = $this->content($note);
         $this->transactions->run(function () use ($restriction, $content, $actor): void {
             $this->repository->lockPerson($restriction->personId);
-            $existing = $this->repository->find($restriction->id);
-            if ($existing !== null) {
-                $this->check($this->revision($existing), $this->revision($restriction));
-                if (!$this->sameNote($restriction->id, $restriction->id, $actor, $content)) {
-                    throw new ConcurrentModificationException('The operation ID belongs to another request.');
-                }
+            $this->admissions->person($restriction->personId);
+            $intent = $this->intent(['placed', $restriction->facts(), $content]);
+            $opened = $this->ledger->open($restriction->personId, $restriction->id, $actor, $intent);
+            $this->authorize($actor);
+            if ($opened['repeat']) {
                 return;
             }
+            if ($this->repository->find($restriction->id) !== null) {
+                throw new ConcurrentModificationException('The restriction ID already exists.');
+            }
+            $this->ledger->record($opened['root'], $restriction->id, $actor, 'placed', $restriction, $intent, $content);
             $this->repository->add($restriction);
             $this->storeNote($restriction->id, $restriction->id, $actor, $content);
             $this->audit->record($actor, 'restriction.created', $restriction->id);
+            $this->authorize($actor);
         });
     }
 
     /** @return array<string, mixed> */
     public function view(EntityId $id): array
     {
-        $this->access->requirePermission('sis:registration:manage');
+        $actor = $this->access->requirePermission('sis:registration:manage');
 
-        return $this->describe($this->get($id));
+        $hold = $this->get($id);
+        $this->ledger->verify($hold->personId);
+        $this->authorize($actor);
+        return $this->describe($hold);
     }
 
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
     public function page(EntityId $person, ?EntityId $after = null): array
     {
-        $this->access->requirePermission('sis:registration:manage');
+        $actor = $this->access->requirePermission('sis:registration:manage');
         $this->admissions->person($person);
+        $this->ledger->verify($person);
         $rows = $this->repository->page($person, $after, 51);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
@@ -82,22 +92,36 @@ final readonly class RestrictionService
             (bool) $row['blocks_staff']
         )), $rows);
 
+        $this->authorize($actor);
         return ['items' => $items, 'next_after' => $more ? (string) $rows[49]['id'] : null];
     }
 
-    public function end(EntityId $id, DateTimeImmutable $on, string $revision): void
-    {
+    public function end(
+        EntityId $id,
+        DateTimeImmutable $on,
+        string $revision,
+        EntityId $operation,
+        #[\SensitiveParameter] string $reason,
+    ): void {
         $actor = $this->access->requirePermission('sis:registration:manage');
+        $content = $this->content($reason, 'reason');
         $initial = $this->get($id);
-        $this->transactions->run(function () use ($id, $initial, $on, $revision, $actor): void {
+        $this->transactions->run(function () use ($id, $initial, $on, $revision, $actor, $operation, $content): void {
             $this->repository->lockPerson($initial->personId);
             $this->repository->lock($id);
+            $intent = $this->intent(['ended', $id->value, $on->format('Y-m-d'), $revision, $content]);
+            $opened = $this->ledger->open($initial->personId, $operation, $actor, $intent);
+            $this->authorize($actor);
+            if ($opened['repeat']) {
+                return;
+            }
             $current = $this->get($id);
             $this->check($this->revision($current), $revision);
             $date = $on->format('Y-m-d');
             $end = $current->dates->end?->format('Y-m-d');
             if ($end === $date) {
-                return;
+                throw new ValidationException([['field' => 'ends_on',
+                    'message' => 'Choose an earlier end date; this date is already recorded.']]);
             }
             if ($current->state($this->clock->now()) === 'ended') {
                 throw new DomainException('An ended restriction is historical.');
@@ -106,8 +130,19 @@ final readonly class RestrictionService
                 throw new ValidationException([['field' => 'ends_on',
                     'message' => 'Use an end date on/after the start and no later than the scheduled end.']]);
             }
+            $updated = new Restriction(
+                $current->id,
+                $current->personId,
+                $current->code,
+                $current->severity,
+                new DateRange($current->dates->start, $on),
+                $current->blocksStaffRegistration
+            );
+            $this->ledger->record($opened['root'], $operation, $actor, 'ended', $updated, $intent, $content);
             $this->repository->setEnd($id, $date);
+            $this->storeNote($operation, $id, $actor, $content);
             $this->audit->record($actor, 'restriction.end_changed', $id);
+            $this->authorize($actor);
         });
     }
 
@@ -120,6 +155,8 @@ final readonly class RestrictionService
             $this->repository->lockPerson($initial->personId);
             $this->repository->lock($id);
             $this->get($id);
+            $this->ledger->verify($initial->personId);
+            $this->authorize($actor);
             if ($this->repository->note($noteId) !== null) {
                 if (!$this->sameNote($noteId, $id, $actor, $content)) {
                     throw new ConcurrentModificationException('The operation ID belongs to another note.');
@@ -128,6 +165,7 @@ final readonly class RestrictionService
             }
             $this->storeNote($noteId, $id, $actor, $content);
             $this->audit->record($actor, 'restriction.note_added', $id);
+            $this->authorize($actor);
         });
     }
 
@@ -135,7 +173,7 @@ final readonly class RestrictionService
     public function notes(EntityId $id, ?EntityId $after = null): array
     {
         $actor = $this->access->requirePermission('sis:registration:manage');
-        $this->get($id);
+        $this->ledger->verify($this->get($id)->personId);
         $rows = $this->repository->notes($id, $after, 51);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
@@ -145,8 +183,20 @@ final readonly class RestrictionService
             'content' => $this->cipher->open($row['encrypted_content'])], $rows);
 
         $this->audit->record($actor, 'restriction.notes_read', $id);
+        $this->authorize($actor);
 
         return ['items' => $items, 'next_after' => $more ? (string) $rows[49]['id'] : null];
+    }
+
+    /** @return array<string,mixed> */
+    public function history(EntityId $id, ?string $cursor = null): array
+    {
+        $actor = $this->access->requirePermission('sis:registration:manage');
+        $hold = $this->get($id);
+        $result = $this->ledger->timeline($hold->personId, $id, $cursor);
+        $this->audit->record($actor, 'restriction.history_read', $id);
+        $this->authorize($actor);
+        return $result;
     }
 
     private function get(EntityId $id): Restriction
@@ -171,9 +221,7 @@ final readonly class RestrictionService
 
     private function revision(Restriction $restriction): string
     {
-        return hash('sha256', json_encode([$restriction->id->value, $restriction->personId->value,
-            $restriction->code, $restriction->severity, $restriction->dates->start->format('Y-m-d'),
-            $restriction->dates->end?->format('Y-m-d'), $restriction->blocksStaffRegistration], JSON_THROW_ON_ERROR));
+        return $this->intent($restriction->facts());
     }
 
     private function check(string $current, string $expected): void
@@ -183,18 +231,31 @@ final readonly class RestrictionService
         }
     }
 
-    private function content(#[\SensitiveParameter] string $note): string
+    private function content(#[\SensitiveParameter] string $note, string $field = 'note'): string
     {
         $content = trim($note);
         if (
             !mb_check_encoding($content, 'UTF-8') || $content === '' || mb_strlen($content) > 10000
             || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $content)
         ) {
-            throw new ValidationException([['field' => 'note',
+            throw new ValidationException([['field' => $field,
                 'message' => 'Enter a staff note of up to 10,000 characters.']]);
         }
 
         return $content;
+    }
+
+    /** @param array<mixed> $data */
+    private function intent(#[\SensitiveParameter] array $data): string
+    {
+        return hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+    }
+
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->access->requirePermission('sis:registration:manage')->value !== $actor->value) {
+            throw new AccessDeniedException('The restriction actor changed.');
+        }
     }
 
     private function storeNote(

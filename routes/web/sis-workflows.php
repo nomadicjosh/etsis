@@ -683,6 +683,9 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/sis/restrictions/{id}/", [SisRestrictionController::class, "show"])
         ->name("sis.restriction.show");
     $router
+        ->map(["POST"], "/sis/restrictions/{id}/history/", [SisRestrictionController::class, "history"])
+        ->name("sis.restriction.history");
+    $router
         ->map(["POST"], "/sis/persons/{id}/restrictions/", [SisRestrictionController::class, "page"])
         ->name("sis.restriction.page");
     $router

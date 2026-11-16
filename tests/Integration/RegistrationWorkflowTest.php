@@ -277,11 +277,14 @@ final class RegistrationWorkflowTest extends TestCase
             $f->audit,
             $cipher,
             $f->clock,
+            $f->restrictionLedger(),
         );
         $holds->end(
             $restriction->id,
             new DateTimeImmutable("2026-08-09"),
             $holds->view($restriction->id)["revision"],
+            EntityId::generate(),
+            'Fictional resolution reviewed.',
         );
         $section = $f->section();
         self::assertSame("A", $f->service->register($student->id, $section->id, true)->status->value);

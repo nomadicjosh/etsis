@@ -161,7 +161,12 @@ final class SisFixture
         $this->clock = new FixtureClock();
         $this->audit = new SqlAuditTrail($this->sql);
         $this->admissions = new PdoAdmissionsRepository($db);
-        $this->registration = new SqlRegistrationRepository($this->sql, $this->clock, $this->transactions);
+        $this->registration = new SqlRegistrationRepository(
+            $this->sql,
+            $this->clock,
+            $this->transactions,
+            $this->restrictionLedger()
+        );
         $this->accounts = new EventSourcedAccountRepository(EventStoreFixture::framework($db), $db);
         $rules = new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
             $this->sql,
@@ -859,6 +864,22 @@ final class SisFixture
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
         ), $this->clock);
+    }
+    public function restrictionLedger(): \Domain\Student\Service\RestrictionLedger
+    {
+        return new \Domain\Student\Service\RestrictionLedger(
+            new \Infrastructure\Persistence\Repository\SqlRestrictionRepository($this->sql),
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql,
+                $this->transactions,
+                $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder())
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            ),
+            $this->clock
+        );
     }
     public function positions(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
