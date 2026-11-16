@@ -219,7 +219,7 @@ final class CampaignRecipientReviewTest extends TestCase
                 ['user_id' => $recipient->value]
             );
             try {
-                $service->dispatch($delivery);
+                $service->dispatch($delivery, $campaign->id, 1, 0);
                 self::fail('An unavailable recipient was sent a message.');
             } catch (DomainException) {
                 self::assertSame('queued', $f->sql->one('sis_deliveries', ['id' => $delivery->value])['status']);

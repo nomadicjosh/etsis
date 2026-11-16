@@ -752,6 +752,98 @@ window.createWorkspaceOperations = function (ui) {
         if (result.next_after) body.append(button("Next templates", () =>
             campaignTemplates(scope, result.next_after, [...stack, after])));
     }
+    async function campaignDeliveryReview(row, back) {
+        const body = openDrawer("Review background delivery", "COMMUNICATIONS");
+        const reviewed = await request(`/sis/campaigns/${row.id}/delivery-review/`, "POST", {});
+        if (!body.isConnected) return;
+        let page = 0;
+        const people = node("section", { "aria-label": "Reviewed delivery recipients" });
+        function draw() {
+            people.replaceChildren(node("p", { role: "status" },
+                `Recipients ${page * 25 + 1}–${Math.min((page + 1) * 25, reviewed.recipients.length)} of ${reviewed.recipients.length}`),
+                node("ul", {}, ...reviewed.recipients.slice(page * 25, (page + 1) * 25).map(person =>
+                    node("li", { class: "private-text" }, person.name + (person.institutional_id ? ` · ${person.institutional_id}` : "")))));
+            if (page) people.append(button("Previous delivery recipients", () => { page--; draw(); }));
+            if ((page + 1) * 25 < reviewed.recipients.length)
+                people.append(button("Next delivery recipients", () => { page++; draw(); }));
+        }
+        body.append(node("h2", { class: "h4 private-text" }, reviewed.subject),
+            node("p", { class: "message-preview" }, reviewed.body), people,
+            node("p", { class: "alert alert-info" },
+                "Confirm once to send these queued messages in the background. You can leave this screen immediately. Pausing or cancelling stops new sends; a message already being sent may finish. Uncertain sends are held for review."),
+            button("Back to message", back), button("Confirm background delivery", async () => {
+                await request(`/sis/campaigns/${row.id}/delivery-confirm/`, "POST", { review_token: reviewed.review_token });
+                if (!body.isConnected) return;
+                notify("Background delivery confirmed. You can leave this screen.");
+                await back();
+            }, "btn-primary"));
+        draw();
+    }
+    async function campaignProgress(body, row, data, back) {
+        const progress = section("Sending progress");
+        const label = node("p", { role: "status", class: "mb-2" });
+        const bar = node("div", { class: "progress-bar", role: "progressbar", "aria-label": "Confirmed sends",
+            "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0" });
+        const summary = node("p", { class: "form-text mt-2" });
+        const explanation = node("p", { class: "form-text" });
+        let latest, signature = "";
+        const review = button("Review background delivery", () => campaignDeliveryReview(row, back), "btn-primary");
+        review.hidden = true;
+        const cancel = button("Cancel background delivery", () => flow("Confirm delivery cancellation", [],
+            `/sis/campaigns/${row.id}/delivery-cancel/`, () => ({ version: latest.version }), back, {},
+            "Stop new sends under this authorization. A send already claimed may finish. Sent and uncertain delivery records are retained."));
+        cancel.hidden = true;
+        const refresh = button("Refresh sending progress", () => load(false));
+        progress.append(label, node("div", { class: "progress" }, bar), summary, explanation,
+            node("div", { class: "d-flex flex-wrap gap-2" }, review, cancel, refresh));
+        body.append(progress);
+        const explanations = {
+            unconfirmed: "Recipients are queued. Review and confirm background delivery to start sending.",
+            active: "Sending in the background when the server worker runs. You can leave this screen and return later.",
+            completed: "Background delivery has finished. Confirmed sends are retained below.",
+            held: "Sending stopped because a delivery could not be confirmed. Held messages will not be retried automatically.",
+            blocked: "Sending stopped before a new send could be claimed. Check current permissions, recipient accounts and institutional mail settings before reviewing the remaining queue.",
+            cancelled: "Background delivery was cancelled. Remaining queued recipients require a new review and confirmation.",
+        };
+        async function load(automatic) {
+            if (!body.isConnected) return;
+            if (automatic && document.hidden) {
+                window.setTimeout(() => poll(), 6000);
+                return;
+            }
+            const state = await request(`/sis/campaigns/${row.id}/delivery-progress/`);
+            if (!body.isConnected) return;
+            latest = state;
+            const next = JSON.stringify(state);
+            if (next !== signature) {
+                signature = next;
+                const counts = state.counts;
+                const percent = state.total ? Math.floor(counts.sent * 100 / state.total) : 0;
+                label.textContent = `${counts.sent} of ${state.total} messages sent · ${percent}%`;
+                bar.style.width = `${percent}%`;
+                bar.setAttribute("aria-valuenow", String(percent));
+                bar.setAttribute("aria-valuetext", `${counts.sent} of ${state.total} messages confirmed sent`);
+                summary.textContent = `${counts.queued} queued · ${counts.sending} sending · ${counts.needs_review} need review`;
+                explanation.textContent = state.campaign_status === "paused" ? "Campaign paused. No new messages will be sent until it is resumed."
+                    : explanations[state.status] || "Refresh to check delivery status.";
+                cancel.hidden = state.status !== "active";
+                review.hidden = state.status === "active" || state.campaign_status !== "queued" || !counts.queued
+                    || !data.can_dispatch || !can("sis:person:manage");
+            }
+        }
+        async function poll() {
+            if (!body.isConnected) return;
+            try {
+                await load(true);
+                if (body.isConnected && !document.hidden && latest?.status === "active")
+                    window.setTimeout(() => poll(), 6000);
+            } catch (_) {
+                if (body.isConnected) explanation.textContent = "Progress is temporarily unavailable. Refresh to check again; background delivery does not depend on this screen.";
+            }
+        }
+        await load(false);
+        if (latest.status === "active") window.setTimeout(() => poll(), 6000);
+    }
     async function campaign(body, row) {
         const data = await request(`/sis/campaigns/${row.id}/`);
         if (!body.isConnected) return;
@@ -848,6 +940,8 @@ window.createWorkspaceOperations = function (ui) {
                 ),
             );
         const deliveries = section("Delivery queue");
+        if (data.status !== "draft") await campaignProgress(body, row, data, back);
+        if (!body.isConnected) return;
         body.append(deliveries);
         deliveries.append(
             node(
@@ -858,28 +952,13 @@ window.createWorkspaceOperations = function (ui) {
         );
         await paged(deliveries, "deliveries", row.id, (rows) =>
             scrollTable(
-                ["Recipient account", "Status", "Action"],
+                ["Recipient account", "Status"],
                 rows.map((item) => [
                     [item.given_name, item.family_name]
                         .filter(Boolean)
                         .join(" ") ||
                         `Account …${item.recipient_user_id.slice(-8)}`,
                     badge(item.status),
-                    item.status === "queued" &&
-                    data.status === "queued" &&
-                    data.can_dispatch
-                        ? button("Review and send", () =>
-                              flow(
-                                  "Confirm send to this recipient",
-                                  [],
-                                  `/sis/deliveries/${item.id}/dispatch/`,
-                                  null,
-                                  back,
-                                  {},
-                                  "This sends the saved campaign to the selected account through the configured mail transport. Verify the content and recipient before confirming.",
-                              ),
-                          )
-                        : "—",
                 ]),
                 "Campaign deliveries",
             ),

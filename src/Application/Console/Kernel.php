@@ -29,6 +29,7 @@ final class Kernel extends ConsoleKernel
     {
         if ($this->codefy->configContainer->getConfigKey('sis.mail_enabled', false) === true) {
             $schedule->command('sis:accounts:send-setup --apply')->everyMinute()->onlyOneInstance();
+            $schedule->command('sis:communications:send --apply --limit=10')->everyMinute()->onlyOneInstance();
         }
         $schedule->command('sis:reports:prune --apply --limit=50')->hourly()->onlyOneInstance();
         // Register existing scripts using absolute paths and explicit arguments.

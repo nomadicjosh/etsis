@@ -174,6 +174,7 @@ return [
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
         \Application\Console\Commands\PruneReportsCommand::class,
         \Application\Console\Commands\SendAccountSetupCommand::class,
+        \Application\Console\Commands\SendCampaignMessagesCommand::class,
         \Application\Console\Commands\BootstrapAccessCommand::class,
         \Application\Console\Commands\MoodleCheckCommand::class,
         \Application\Console\Commands\MoodleInspectCommand::class,

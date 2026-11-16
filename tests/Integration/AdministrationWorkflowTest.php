@@ -86,14 +86,14 @@ final class AdministrationWorkflowTest extends TestCase
         self::assertSame(['id', 'campaign_id', 'recipient_user_id', 'status', 'version'], array_keys($queued));
         $service->pause($campaign->id, true);
         try {
-            $service->dispatch($deliveries[0]);
+            $service->dispatch($deliveries[0], $campaign->id, 2, 0);
             self::fail('Paused campaign sent a message.');
         } catch (DomainException) {
             self::assertSame(0, $transport->calls);
         }
         $service->pause($campaign->id, false);
-        $service->dispatch($deliveries[0]);
-        $service->dispatch($deliveries[0]);
+        $service->dispatch($deliveries[0], $campaign->id, 3, 0);
+        $service->dispatch($deliveries[0], $campaign->id, 3, 0);
         self::assertSame(1, $transport->calls);
         self::assertSame('completed', $f->sql->one('sis_campaigns', ['id' => $campaign->id->value])['status']);
         self::assertStringNotContainsString('confidential', json_encode($f->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
@@ -109,14 +109,14 @@ final class AdministrationWorkflowTest extends TestCase
         $campaign = $service->create('Example notice', 'Fictional body.');
         $id = $service->queue($campaign->id, [$f->access->actor], 0)[0];
         try {
-            $service->dispatch($id);
+            $service->dispatch($id, $campaign->id, 1, 0);
             self::fail('Transport failure was not reported.');
         } catch (DomainException $e) {
             self::assertStringNotContainsString('upstream', $e->getMessage());
             self::assertNull($e->getPrevious());
         }
         self::assertSame('needs_review', $f->sql->one('sis_deliveries', ['id' => $id->value])['status']);
-        $service->dispatch($id);
+        $service->dispatch($id, $campaign->id, 1, 0);
         self::assertSame(1, $transport->calls);
     }
 
@@ -177,7 +177,7 @@ final class AdministrationWorkflowTest extends TestCase
                 }
             };
             try {
-                $service->dispatch($delivery);
+                $service->dispatch($delivery, $campaign->id, 1, 0);
                 self::fail('A delivery was claimed after its authorization changed.');
             } catch (AccessDeniedException) {
                 self::assertSame(0, $transport->calls);
@@ -210,7 +210,7 @@ final class AdministrationWorkflowTest extends TestCase
         $transport->afterSend = static function () use ($f): void {
             $f->access->staff = false;
         };
-        $service->dispatch($delivery);
+        $service->dispatch($delivery, $campaign->id, 1, 0);
         self::assertSame(1, $transport->calls);
         self::assertSame('sent', $f->sql->one('sis_deliveries', ['id' => $delivery->value])['status']);
         self::assertSame('completed', $f->sql->one('sis_campaigns', ['id' => $campaign->id->value])['status']);

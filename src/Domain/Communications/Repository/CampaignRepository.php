@@ -25,6 +25,14 @@ interface CampaignRepository
     public function enqueue(EntityId $campaign, array $recipients): array;
     /** @return array{campaign_id: string, recipient_user_id: string, status: string, version: int} */
     public function delivery(EntityId $id): array;
+    /** Complete bounded delivery set with minimized current person labels; 501 probes the 500-recipient bound.
+     * @return list<array<string,mixed>>
+     */
+    public function deliveries(EntityId $campaign): array;
+    /** Indexed aggregate counts; no recipient profiles or message content.
+     * @return array<string,int>
+     */
+    public function deliveryCounts(EntityId $campaign): array;
     public function transitionDelivery(EntityId $id, string $status, int $expectedVersion): void;
     public function allSent(EntityId $campaign): bool;
     public function recipient(EntityId $id): string;

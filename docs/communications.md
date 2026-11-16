@@ -34,12 +34,34 @@ Choose **Draft a message**, or start from a reusable template or a [published pu
 
 **Review message and recipients** shows the saved message and complete selected audience, twenty recipients per page. **Confirm recipient queue** requires that exact draft revision and rechecks all selected person/account links and delivery addresses. A changed message requires a fresh review; an unavailable recipient stops the whole queue operation. Duplicate selections create one delivery per account. The audience is limited to 500 people. Validation uses a bounded batch; inserts store only delivery identities, campaign/account references, status and revision.
 
-## Deliberate delivery
+## Background delivery and progress
 
-Queueing does not send. Review the saved message and a selected queued delivery, then use **Review and send → Confirm send to this recipient**. Live delivery requires `sis.mail_enabled`, a valid institutional sender and mail debugging disabled. Pause/resume controls prevent new claims while paused; completed campaigns retain their delivery records.
+Queueing does not send. Choose **Review background delivery**, review the saved message and the queued audience, then choose **Confirm background delivery** once. Confirmation saves an authorization and returns immediately; it never contacts the mail server. You can navigate away, close the browser or sign out. The server worker continues independently, checking that the authorizing account still has current Communications and person-directory permission and ownership or Communications administration access.
 
-The service rechecks the same actor's permission and ownership after locks and before committing changes or claiming delivery. A denied claim or a known unavailable account/address leaves the delivery queued before any mail attempt. An attempted send with an uncertain outcome stays held for institutional reconciliation and is never automatically retried. A successful external send retains its receipt even if access changes during transport.
+**Sending progress** shows confirmed sends out of the complete audience, a percentage bar and separate queued, sending and needs-review counts. It refreshes every six seconds while this screen is visible and the authorization is active. **Refresh sending progress** checks immediately. Reopening the campaign reads its current database status; it does not resume a browser sending loop. “Sent” means the configured mail transport accepted the message, not proof that the recipient read it or that their mail server delivered it to an inbox.
+
+Reviews expire after twenty minutes and belong to the current account, message revision and queued recipient set. Confirmation checks these again under the campaign lock. Repeating the same accepted confirmation returns its existing status and cannot reactivate completed or cancelled work or replace a later authorization. The encrypted authorization contains only references, revisions and a composition fingerprint; bodies and addresses remain outside jobs. Existing queued campaigns are not automatically authorized by installing this update.
+
+**Pause campaign** stops new claims; **Resume campaign** allows an existing active authorization to continue. **Cancel background delivery** ends that authorization. A send already claimed may finish after pause/cancel. Sent and uncertain records remain intact. A new review can authorize only recipients still queued, after resolving any blocking account, permission or mail configuration issue. It never retries sent or uncertain deliveries.
+
+An unavailable account/address, revoked authority or disabled mail transport blocks new sends before a claim. An interrupted or uncertain send holds the authorization for institutional review and is never automatically retried. Progress retains these distinct outcomes. The successful-send receipt is recorded even if the authorizer loses access during transport.
+
+### Server setup
+
+Apply migration `20261115000016_CreateSisCampaignDispatches.php`. It adds one reference-only authorization table beside the existing campaign and recipient queue, without changing recorded messages or academic events. Live delivery requires `sis.mail_enabled`, a valid institutional sender and mail debugging disabled.
+
+Configure the server to run Codefy's scheduler once a minute using the institution's PHP 8.4+ executable, for example:
+
+```cron
+* * * * * cd /path/to/etsis && /path/to/php84 codex schedule:run >> /dev/null 2>&1
+```
+
+The application registers `sis:communications:send --apply --limit=10` every minute when institutional mail is enabled. Codefy's `onlyOneInstance()` prevents overlapping scheduled runs. Each invocation examines at most ten active authorizations, attempts at most ten deliveries by default (configurable from one through twenty) and stops starting new work after thirty seconds. Paused campaigns are excluded from the indexed pending-job query. Transport connection timeouts still apply to an individual in-progress send.
+
+For a deliberate manual worker invocation, use `php84 codex sis:communications:send --apply --limit=10`, or `ddev codex sis:communications:send --apply --limit=10` in the existing DDEV environment. Omitting `--apply` shows usage without sending or inspecting institutional messages. Worker output contains aggregate counts only. The browser progress bar does not run this command; a missing server scheduler leaves confirmed messages queued.
+
+The service rechecks current authority, the active authorization and expected revisions after locks and before claiming delivery. The existing delivery engine and per-recipient claim are shared by the worker; no second sender, event journal or login session is created.
 
 Private responses use no-store caching, browser mutations preserve framework CSRF and debug collectors stay suppressed. Message content, addresses, credentials and upstream responses do not enter audit metadata, browser storage or delivery-job payloads. Metadata audits identify the actor, action and affected composition/delivery only. Template operations are ordinary authorized, revision-checked CRUD and add no historical academic or financial events.
 
-Scheduled dispatch and automatic schedule-change/cancellation alerts remain roadmap work. This workflow does not add attachments, tracking pixels or automatic resend/recovery actions.
+Future dated campaigns, reconciliation decisions and automatic schedule-change/cancellation alerts remain roadmap work. This workflow does not add attachments, tracking pixels or automatic resend/recovery actions.

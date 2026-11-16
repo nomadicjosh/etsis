@@ -1080,9 +1080,10 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/campaigns/{id}/pause/", [SisCampaignController::class, "pause"])
         ->name("sis.campaign.pause");
-    $router
-        ->map(["POST"], "/sis/deliveries/{id}/dispatch/", [SisCampaignController::class, "dispatch"])
-        ->name("sis.campaign.dispatch");
+    $router->post('/sis/campaigns/{id}/delivery-review/', [SisCampaignController::class, 'deliveryReview']);
+    $router->post('/sis/campaigns/{id}/delivery-confirm/', [SisCampaignController::class, 'deliveryConfirm']);
+    $router->get('/sis/campaigns/{id}/delivery-progress/', [SisCampaignController::class, 'deliveryProgress']);
+    $router->post('/sis/campaigns/{id}/delivery-cancel/', [SisCampaignController::class, 'deliveryCancel']);
     $router
         ->map(["POST"], "/sis/portal/posts/", [SisPortalController::class, "create"])
         ->name("sis.portal.create");

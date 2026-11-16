@@ -42,6 +42,20 @@ $app->delegate(\Domain\Admissions\Repository\AdmissionsRepository::class, static
 $app->delegate(\Domain\Shared\Persistence\UnitOfWork::class, static fn() => $sis->transactions);
 $app->delegate(\Domain\Shared\Security\StudentAccess::class, static fn() => $sis->access);
 $app->delegate(\Domain\Communications\Service\MessageCipher::class, static fn() => $campus->cipher);
+$app->delegate(\Domain\Communications\Service\MailTransport::class, static fn() =>
+    new class implements \Domain\Communications\Service\MailTransport {
+        public function assertReady(): void
+        {
+        }
+        public function send(
+            \Domain\Shared\ValueObject\EntityId $delivery,
+            #[\SensitiveParameter] string $recipient,
+            #[\SensitiveParameter] string $subject,
+            #[\SensitiveParameter] string $body
+        ): void {
+            throw new RuntimeException('A browser request attempted fictional mail delivery.');
+        }
+    });
 $app->delegate(
     \Domain\Transcript\ValueObject\TranscriptIssuer::class,
     static fn() => new \Domain\Transcript\ValueObject\TranscriptIssuer(
@@ -4072,6 +4086,32 @@ if (
     || $teachingPost($communicationBase . 'queue/', $communicationPayload)->getStatusCode() !== 200
 ) {
     throw new RuntimeException('Communications lost its private, version-checked recipient review.');
+}
+// Browser confirmation authorizes references only; no SMTP or login-session worker is invoked.
+$backgroundReview = $teachingPost($communicationBase . 'delivery-review/', []);
+$backgroundToken = json_decode((string) $backgroundReview->getBody(), true, flags: JSON_THROW_ON_ERROR)['review_token'] ?? '';
+$backgroundNoCsrf = $communicationNoCsrf->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $communicationBase . 'delivery-confirm/')
+)->withParsedBody(['review_token' => $backgroundToken]);
+$backgroundConfirmation = $teachingPost($communicationBase . 'delivery-confirm/', ['review_token' => $backgroundToken]);
+$backgroundProgress = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $communicationBase . 'delivery-progress/')
+));
+$backgroundState = json_decode((string) $backgroundProgress->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($backgroundReview->getStatusCode() !== 200 || $backgroundConfirmation->getStatusCode() !== 202
+    || $app->router->match($backgroundNoCsrf)->getStatusCode() !== 403
+    || $backgroundProgress->getStatusCode() !== 200 || $backgroundProgress->hasHeader('phpdebugbar-id')
+    || !str_contains($backgroundProgress->getHeaderLine('Cache-Control'), 'no-store')
+    || ($backgroundState['counts']['sent'] ?? null) !== 0 || ($backgroundState['status'] ?? null) !== 'active'
+    || str_contains((string) $backgroundProgress->getBody(), $backgroundToken)
+    || $teachingPost($communicationBase . 'delivery-cancel/', ['version' => $backgroundState['version']])->getStatusCode() !== 200
+    || $teachingPost($communicationBase . 'delivery-confirm/', ['review_token' => $backgroundToken])->getStatusCode() !== 202) {
+    throw new RuntimeException('Background delivery lost private progress, CSRF or reference-only confirmation.');
+}
+$backgroundCommand = new \Symfony\Component\Console\Tester\CommandTester($kernel->all()['sis:communications:send']);
+if ($backgroundCommand->execute([]) !== 0 || !str_contains($backgroundCommand->getDisplay(), '--apply')
+    || $backgroundCommand->execute(['--limit' => '21']) !== 2) {
+    throw new RuntimeException('Background delivery command lost its native registration or explicit apply boundary.');
 }
 // Reusable compositions share the same private, CSRF-protected campaign boundary.
 $templateCreated = $teachingPost('/sis/campaigns/templates/create/', $announcement);

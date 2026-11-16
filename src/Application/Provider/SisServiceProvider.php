@@ -229,6 +229,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlCatalogImportRepository::class,
             \Domain\Communications\Repository\CampaignRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlCampaignRepository::class,
+            \Domain\Communications\Repository\CampaignDispatchRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCampaignDispatchRepository::class,
+            \Domain\Communications\Service\CampaignDeliveryExecutor::class =>
+                \Infrastructure\Communications\AuthorizedCampaignExecutor::class,
             \Domain\Communications\Service\MessageCipher::class =>
                 \Infrastructure\Communications\DefuseMessageCipher::class,
             \Domain\Communications\Service\MailTransport::class =>

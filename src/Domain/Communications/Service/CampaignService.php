@@ -322,25 +322,46 @@ final readonly class CampaignService
         });
     }
 
-    /**
-     * The queue stores references only. An uncertain send remains held for reconciliation, never
-     * automatically retried.
-     */
-    public function dispatch(EntityId $deliveryId): void
+    /** Protected queue state for connected workflows; never exposed as a browser payload. */
+    public function deliveryState(EntityId $id, EntityId $actor): Campaign
     {
+        return $this->owned($id, $actor);
+    }
+
+    /** Claim only the specified parent and delivery revisions. Uncertain sends are never retried. */
+    public function dispatch(
+        EntityId $deliveryId,
+        EntityId $expectedCampaign,
+        int $campaignVersion,
+        int $deliveryVersion
+    ): void {
         $actor = $this->authorize();
         $delivery = $this->repository->delivery($deliveryId);
         $campaignId = new EntityId($delivery['campaign_id']);
+        if ($expectedCampaign->value !== $campaignId->value) {
+            throw new ConcurrentModificationException('The reviewed delivery belongs to another message.');
+        }
         $this->owned($campaignId, $actor);
         if ($delivery['status'] === 'queued') {
             $this->transport->assertReady();
         }
-        $claimed = $this->transactions->run(function () use ($campaignId, $deliveryId, $actor): ?array {
+        $claimed = $this->transactions->run(function () use (
+            $campaignId,
+            $deliveryId,
+            $actor,
+            $campaignVersion,
+            $deliveryVersion
+        ): ?array {
             $this->repository->lock($campaignId);
             $campaign = $this->owned($campaignId, $actor);
             $delivery = $this->repository->delivery($deliveryId);
             if ($delivery['status'] !== 'queued') {
                 return null;
+            }
+            if (
+                $campaign->version !== $campaignVersion || $delivery['version'] !== $deliveryVersion
+            ) {
+                throw new ConcurrentModificationException('Review the message batch again before sending.');
             }
             if ($campaign->status !== 'queued') {
                 throw new DomainException('The campaign is not queued.');

@@ -6,6 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\Communications\Service\CampaignService;
+use Domain\Communications\Service\CampaignBackgroundService;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use InvalidArgumentException;
 use Domain\Shared\ValueObject\EntityId;
@@ -15,7 +16,7 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisCampaignController
 {
-    public function __construct(private CampaignService $service)
+    public function __construct(private CampaignService $service, private CampaignBackgroundService $background)
     {
     }
 
@@ -115,10 +116,27 @@ final readonly class SisCampaignController
         return new JsonResponse(['status' => 'changed']);
     }
 
-    public function dispatch(string $id): ResponseInterface
+    public function deliveryReview(string $id): ResponseInterface
     {
-        $this->service->dispatch(new EntityId($id));
+        return new JsonResponse($this->background->review(new EntityId($id)));
+    }
 
-        return new JsonResponse(['status' => 'processed']);
+    public function deliveryConfirm(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->background->confirm(
+            new EntityId($id),
+            FormInput::from($request)->text('review_token', 262144)
+        ), 202);
+    }
+
+    public function deliveryProgress(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->background->status(new EntityId($id)));
+    }
+
+    public function deliveryCancel(ServerRequest $request, string $id): ResponseInterface
+    {
+        $this->background->cancel(new EntityId($id), FormInput::from($request)->integer('version'));
+        return new JsonResponse(['status' => 'cancelled']);
     }
 }

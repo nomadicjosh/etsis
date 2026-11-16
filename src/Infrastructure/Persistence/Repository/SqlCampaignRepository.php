@@ -102,6 +102,21 @@ final readonly class SqlCampaignRepository implements CampaignRepository
             'status' => $r['status'], 'version' => (int) $r['version']];
     }
 
+    public function deliveries(EntityId $campaign): array
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch(
+            'SELECT d.' . $q('id') . ', d.' . $q('recipient_user_id') . ', d.' . $q('version') . ', d.' . $q('status')
+            . ', p.' . $q('given_name') . ', p.' . $q('family_name') . ', i.' . $q('institutional_id')
+            . ' FROM ' . $q('sis_deliveries') . ' d LEFT JOIN ' . $q('sis_persons') . ' p ON p.'
+            . $q('owner_user_id') . ' = d.' . $q('recipient_user_id') . ' LEFT JOIN '
+            . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = p.' . $q('id')
+            . ' WHERE d.' . $q('campaign_id') . ' = ? ORDER BY d.' . $q('id'),
+            [$campaign->value],
+            501
+        );
+    }
+
     public function transitionDelivery(EntityId $id, string $status, int $expectedVersion): void
     {
         if (
@@ -115,11 +130,23 @@ final readonly class SqlCampaignRepository implements CampaignRepository
         }
     }
 
+    public function deliveryCounts(EntityId $campaign): array
+    {
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch('SELECT ' . $q('status') . ', COUNT(*) AS ' . $q('delivery_count')
+            . ' FROM ' . $q('sis_deliveries') . ' WHERE ' . $q('campaign_id') . ' = ? GROUP BY '
+            . $q('status'), [$campaign->value], 5);
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row['status']] = (int) $row['delivery_count'];
+        }
+        return $counts;
+    }
+
     public function allSent(EntityId $campaign): bool
     {
-        $rows = $this->sql->rows('sis_deliveries', ['campaign_id' => $campaign->value]);
-
-        return $rows !== [] && array_all($rows, static fn (array $r): bool => $r['status'] === 'sent');
+        $counts = $this->deliveryCounts($campaign);
+        return count($counts) === 1 && isset($counts['sent']);
     }
 
     public function recipient(EntityId $id): string

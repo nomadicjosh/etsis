@@ -95,7 +95,7 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
 test('balanced journals, billing batches, transfer awards and deliberate campaign dispatch', async ({ page }) => {
     const id = suffix => `01K000000000000000000000${suffix}`;
     const ledger = id('11'); const term = id('12'); const student = id('13'); const institution = id('14'); const equivalency = id('15'); const campaign = id('16'); const delivery = id('17'); const person = id('18'); const user = id('19'); const journal = id('20');
-    const sent = []; const errors = []; let campaignStatus = 'draft';
+    const sent = []; const errors = []; let campaignStatus = 'draft'; let authorized = false; let confirmedSent = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -132,6 +132,15 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
         else if (path === '/sis/campaigns/recipients/search/') result = { items: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = { subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', version: 0, recipients: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }] };
         else if (path === `/sis/campaigns/${campaign}/queue/`) { campaignStatus = 'queued'; result = { delivery_ids: [delivery] }; }
+        else if (path === `/sis/campaigns/${campaign}/delivery-review/`) result = {
+            review_token: 'fictional-background-review', subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.',
+            recipients: [{ name: 'Alex Example', institutional_id: 'S-FICTIONAL' }],
+        };
+        else if (path === `/sis/campaigns/${campaign}/delivery-confirm/`) { authorized = true; result = { status: 'active' }; }
+        else if (path === `/sis/campaigns/${campaign}/delivery-progress/`) result = {
+            status: confirmedSent ? 'completed' : authorized ? 'active' : 'unconfirmed', version: authorized ? 1 : 0,
+            campaign_status: campaignStatus, total: 1, counts: { sent: confirmedSent, queued: 1 - confirmedSent, sending: 0, needs_review: 0 },
+        };
         else if (path === `/sis/ui/people/${person}/`) result = { person: { givenName: 'Alex', familyName: 'Example', ownerUserId: { value: user } } };
         else if (path === `/sis/ui/context/deliveries/${campaign}/`) result = { items: campaignStatus === 'draft' ? [] : [{ id: delivery, recipient_user_id: user, status: 'queued' }], next_after: null };
         await route.fulfill({ json: result });
@@ -182,9 +191,62 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await page.getByRole('button', { name: 'Confirm recipient queue', exact: true }).click();
     await expect.poll(() => sent.find(item => item.path.endsWith('/queue/'))?.payload).toEqual({ version: 0, recipients: [{ user_id: user }] });
     expect(sent.some(item => item.path.endsWith('/dispatch/'))).toBe(false);
-    await page.getByRole('button', { name: 'Review and send', exact: true }).click();
-    await page.getByRole('button', { name: 'Confirm send to this recipient', exact: true }).click();
-    await expect.poll(() => sent.filter(item => item.path === `/sis/deliveries/${delivery}/dispatch/`).length).toBe(1);
+    await expect(page.getByRole('progressbar', { name: 'Confirmed sends', exact: true })).toHaveAttribute('aria-valuenow', '0');
+    await page.getByRole('button', { name: 'Review background delivery', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reviewed delivery recipients' })).toContainText('Alex Example');
+    expect(sent.some(item => item.path.endsWith('/delivery-confirm/'))).toBe(false);
+    await page.getByRole('button', { name: 'Confirm background delivery', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('You can leave this screen');
+    expect(sent.filter(item => item.path.endsWith('/delivery-confirm/'))).toEqual([
+        expect.objectContaining({ payload: { review_token: 'fictional-background-review' } }),
+    ]);
+    await close();
+    confirmedSent = 1; // Fictional server worker finishes while the drawer is closed.
+    await page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
+    await expect(page.getByRole('progressbar', { name: 'Confirmed sends', exact: true })).toHaveAttribute('aria-valuenow', '100');
+    await expect(page.locator('#drawer-body')).toContainText('1 of 1 messages sent');
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => item.id)).toEqual([]);
+    expect(sent.some(item => item.path.endsWith('/dispatch/'))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+test('background campaign progress updates independently and preserves held counts', async ({ page }) => {
+    const campaign = '01K00000000000000000000016';
+    const calls = []; const errors = [];
+    let checked = 0;
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname;
+        calls.push({ path, method: route.request().method() });
+        let result = {};
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/campaigns/') ? [{ id: campaign, status: 'queued' }] : [], next_after: null };
+        else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional notice', body: 'Fictional message.', status: 'queued', version: 1, can_dispatch: true };
+        else if (path === `/sis/campaigns/${campaign}/delivery-progress/`) result = {
+            status: checked++ ? 'held' : 'active', campaign_status: 'queued', version: checked, total: 4,
+            counts: { sent: 2, sending: 0, queued: checked === 1 ? 2 : 1, needs_review: checked === 1 ? 0 : 1 },
+        };
+        else if (path.includes('/context/')) result = { items: [], next_after: null };
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.clock.install();
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="campaigns"]').click();
+    await page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
+    const progress = page.getByRole('progressbar', { name: 'Confirmed sends', exact: true });
+    await expect(progress).toHaveAttribute('aria-valuenow', '50');
+    await expect(progress).toHaveAttribute('aria-valuetext', '2 of 4 messages confirmed sent');
+    await page.clock.fastForward(6500);
+    await expect(page.locator('#drawer-body')).toContainText('1 queued · 0 sending · 1 need review');
+    await expect(page.getByRole('button', { name: 'Cancel background delivery', exact: true })).not.toBeVisible();
+    await expect(progress).toHaveAttribute('aria-valuenow', '50');
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => item.id)).toEqual([]);
+    expect(calls.filter(item => item.method !== 'GET' && !item.path.startsWith('/sis/ui/'))).toEqual([]);
     expect(errors).toEqual([]);
 });
 
