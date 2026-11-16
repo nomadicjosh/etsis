@@ -34,6 +34,9 @@ async function fixture(page, options = {}) {
         term_code: { label: 'Billing term', type: 'string', relation: 'term' },
         currency: { label: 'Currency', type: 'string', relation: 'account' },
         balance: { label: 'Account balance', type: 'double', relation: 'balance' },
+        charges: { label: 'Charges', type: 'double', relation: 'balance' },
+        payments: { label: 'Payments', type: 'double', relation: 'balance' },
+        refunds: { label: 'Refunds', type: 'double', relation: 'balance' },
     } : options.applications ? {
         application_id: { label: 'Application reference', type: 'string', relation: 'application' },
         status: { label: 'Application status', type: 'string', relation: 'application',
@@ -126,7 +129,7 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
@@ -709,6 +712,10 @@ for (const startingPoint of ['Outstanding student balances', 'Available student 
         expect(query.columns).toContainEqual({ field: 'currency', label: 'Currency', aggregate: 'none' });
         if (startingPoint === 'Balances by billing term') {
             expect(query.columns).toContainEqual({ field: 'balance', label: 'Net balance', aggregate: 'sum' });
+            expect(query.columns.map(column => column.field)).toEqual(['term_code', 'currency', 'charges', 'payments', 'refunds', 'balance', 'account_id']);
+            for (const field of ['charges', 'payments', 'refunds']) {
+                expect(query.columns.find(column => column.field === field).aggregate).toBe('sum');
+            }
         } else {
             expect(query.filters.rules).toEqual([{ id: 'balance', operator: startingPoint.startsWith('Outstanding') ? 'greater' : 'less', value: 0 }]);
             expect(query.columns.map(column => column.field)).toEqual(['institutional_id', 'full_name', 'term_code', 'currency', 'balance']);

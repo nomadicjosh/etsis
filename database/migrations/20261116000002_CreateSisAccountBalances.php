@@ -19,6 +19,10 @@ final class CreateSisAccountBalances extends Migration
                 $table->string('id', 26)->primary()->notNull();
                 $table->integer('balance_minor')->notNull();
                 $table->integer('position')->notNull();
+                foreach (\Infrastructure\Projection\SqlAccountBalanceProjection::ENTRY_TOTALS as $column) {
+                    // NULL is explicitly unverified during upgrade, never an assumed zero.
+                    $table->integer($column)->size('big');
+                }
                 $table->foreign('id', 'sis_account_balance_fk')->references('sis_student_accounts', 'id');
             });
         }

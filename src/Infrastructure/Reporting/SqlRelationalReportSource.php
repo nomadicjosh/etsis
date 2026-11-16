@@ -36,7 +36,12 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
             . ' LEFT JOIN ' . $q('sis_account_balances') . ' b ON ' . $c('b', 'id') . ' = ' . $c('a', 'id')
             . ' LEFT JOIN ' . $q('sis_history_streams') . ' h ON ' . $c('h', 'aggregate_id') . ' = ' . $c('a', 'id')
             . ' AND ' . $c('h', 'stream_type') . ' = ? WHERE ' . $c('b', 'id') . ' IS NULL OR '
-            . $c('h', 'id') . ' IS NULL OR ' . $c('b', 'position') . ' <> ' . $c('h', 'version'),
+            . $c('h', 'id') . ' IS NULL OR ' . $c('b', 'position') . ' <> ' . $c('h', 'version')
+            . ' OR ' . $c('b', 'charges_minor') . ' IS NULL OR ' . $c('b', 'payments_minor') . ' IS NULL'
+            . ' OR ' . $c('b', 'refunds_minor') . ' IS NULL OR ' . $c('b', 'charges_minor') . ' < 0'
+            . ' OR ' . $c('b', 'payments_minor') . ' < 0 OR ' . $c('b', 'refunds_minor') . ' < 0'
+            . ' OR ' . $c('b', 'balance_minor') . ' <> (' . $c('b', 'charges_minor') . ' - '
+            . $c('b', 'payments_minor') . ' + ' . $c('b', 'refunds_minor') . ')',
             ['student_account'],
             1
         );

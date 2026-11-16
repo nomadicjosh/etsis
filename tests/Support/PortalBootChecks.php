@@ -2628,6 +2628,9 @@ $sis->access->grants = [];
 $balanceReportDefinition = ['dataset' => 'accounts', 'columns' => [
     ['field' => 'term_code', 'label' => 'Billing term', 'aggregate' => 'none'],
     ['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none'],
+    ['field' => 'charges', 'label' => 'Charges', 'aggregate' => 'sum'],
+    ['field' => 'payments', 'label' => 'Payments', 'aggregate' => 'sum'],
+    ['field' => 'refunds', 'label' => 'Refunds', 'aggregate' => 'sum'],
     ['field' => 'balance', 'label' => 'Balance', 'aggregate' => 'sum'],
 ]];
 $balanceReportEvents = $sis->sql->rows('sis_history_events');

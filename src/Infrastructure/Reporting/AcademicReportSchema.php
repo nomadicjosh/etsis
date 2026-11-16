@@ -497,7 +497,7 @@ final class AcademicReportSchema
             'table' => 'sis_student_accounts', 'root' => 'account',
             'label' => 'Student account balances',
             'description' => 'One row per student and billing term. Positive balances are owed; negative balances '
-                . 'are available credit. Currency stays with every amount.',
+                . 'are available credit. Totals exclude reversed postings; currency stays with every amount.',
             'permissions' => ['sis:finance:read', ...$studentRead],
             'financial_balances' => true,
             'relationships' => [
@@ -522,6 +522,16 @@ final class AcademicReportSchema
                     + ['currency_field' => 'currency'],
             ],
         ];
+        foreach (['charges' => 'Charges', 'payments' => 'Payments', 'refunds' => 'Refunds'] as $id => $label) {
+            $accounts['fields'][$id] = $field($label, 'double', 'balance', $id . '_minor')
+            + ['expression' => 'account_money', 'currency_field' => 'currency', 'currency_relation' => 'account'];
+            $accounts['fields'][$id . '_minor'] = $field(
+                $label . ' in minor units',
+                'integer',
+                'balance',
+                $id . '_minor'
+            ) + ['currency_field' => 'currency'];
+        }
         $accounts['relationships']['balance']['label'] = 'Current balance';
         $registrationChoices = [
             'A' => 'Registered by staff', 'N' => 'Self-registered', 'D' => 'Dropped',

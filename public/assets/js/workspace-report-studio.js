@@ -201,6 +201,9 @@ window.createWorkspaceReportStudio = function (ui) {
                 columns: [
                     { field: "term_code", label: "Billing term", aggregate: "none" },
                     { field: "currency", label: "Currency", aggregate: "none" },
+                    ...["charges", "payments", "refunds"]
+                        .filter(field => accounts.fields[field])
+                        .map(field => ({ field, label: accounts.fields[field].label, aggregate: "sum" })),
                     { field: "balance", label: "Net balance", aggregate: "sum" },
                     { field: "account_id", label: "Accounts", aggregate: "count_distinct" },
                 ],
