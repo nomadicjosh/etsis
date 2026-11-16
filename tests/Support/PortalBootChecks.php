@@ -5471,3 +5471,79 @@ foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"
         throw new RuntimeException("Private receipt activity bypassed independent finance permissions.");
     }
 }
+// Reviewed reversals share the native account editor boundary and preserve their original result.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$reversalBase = $postingReviewBase . $receiptPosting["operation_id"] . "/reverse/";
+$reversalBefore = $sis->sql->rows("sis_history_events");
+$reversalReviewResponse = $teachingPost($reversalBase . "review/", [
+    "position" => 5,
+    "reason" => "Native fictional reversal review.",
+    "amount_minor" => 999999,
+    "currency" => "EUR",
+    "actor_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+]);
+$reversalReview = json_decode((string) $reversalReviewResponse->getBody(), true);
+if (
+    $reversalReviewResponse->getStatusCode() !== 200 ||
+    ($reversalReview["amount_minor"] ?? null) !== 100 ||
+    ($reversalReview["resulting_balance_minor"] ?? null) !== -1000 ||
+    ($reversalReview["payment_details"]["reference"] ?? null) !== "FICT-GRANT-PRIVATE" ||
+    $sis->sql->rows("sis_history_events") !== $reversalBefore ||
+    $reversalReviewResponse->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException(
+        "The native reversal review changed money, lost privacy or accepted browser monetary values.",
+    );
+}
+$reversalCommitResponse = $teachingPost($reversalBase . "commit/", [
+    "review_token" => $reversalReview["review_token"],
+    "reason" => "FORGED",
+    "amount_minor" => 999999,
+]);
+$reversalCommitted = json_decode((string) $reversalCommitResponse->getBody(), true);
+$reversalAfter = $sis->sql->rows("sis_history_events");
+if (
+    $reversalCommitResponse->getStatusCode() !== 200 ||
+    ($reversalCommitted["balance_minor"] ?? null) !== -1000 ||
+    ($reversalCommitted["position"] ?? null) !== 6 ||
+    count($reversalAfter) !== count($reversalBefore) + 1 ||
+    json_decode(
+        (string) $teachingPost($reversalBase . "commit/", [
+            "review_token" => $reversalReview["review_token"],
+        ])->getBody(),
+        true,
+    ) !== $reversalCommitted ||
+    $sis->sql->rows("sis_history_events") !== $reversalAfter
+) {
+    throw new RuntimeException(
+        "The native reversal confirmation failed or duplicated the original accepted result.",
+    );
+}
+$reversalHistoryResponse = $teachingPost(
+    $postingReviewBase . $receiptPosting["operation_id"] . "/history/",
+    [],
+);
+$reversalHistoryItems = json_decode((string) $reversalHistoryResponse->getBody(), true)["items"] ?? [];
+if (
+    array_column($reversalHistoryItems, "action") !== ["reversed", "receipt_corrected", "posted"] ||
+    ($reversalHistoryItems[0]["reason"] ?? null) !== "Native fictional reversal review." ||
+    isset($reversalHistoryItems[0]["review_hash"])
+) {
+    throw new RuntimeException("The native reversal history did not preserve the accepted reason privately.");
+}
+$sis->access->staff = false;
+foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"]] as $reversalGrants) {
+    $sis->access->grants = $reversalGrants;
+    if (
+        $teachingPost($reversalBase . "review/", [
+            "position" => 6,
+            "reason" => "Fictional denied review.",
+        ])->getStatusCode() !== 403 ||
+        $teachingPost($reversalBase . "commit/", [
+            "review_token" => $reversalReview["review_token"],
+        ])->getStatusCode() !== 403
+    ) {
+        throw new RuntimeException("A native reversal bypassed independent current finance authority.");
+    }
+}

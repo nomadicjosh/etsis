@@ -33,7 +33,9 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
             currency: payload.currency, balance_minor: 10000, resulting_balance_minor: 8750, reason: payload.reason,
         };
         else if (path === `/sis/accounts/${account}/entries/commit/`) { posted = true; result = { status: 'posted' }; }
-        else if (path.endsWith('/reverse/')) { reversed = true; result = { status: 'reversed' }; }
+        else if (path.endsWith('/reverse/review/')) result = { review_token: 'fictional-reversal-review', type: 'payment',
+            amount_minor: 1250, currency: 'USD', balance_minor: 8750, resulting_balance_minor: 10000, reason: payload.reason };
+        else if (path.endsWith('/reverse/commit/')) { reversed = true; result = { status: 'reversed' }; }
         else if (path === `/sis/ui/context/roster/${section}/`) result = { can_grade: true, items: [{ id: id('08'), student_id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', status: 'A', grade_version: 2, grade_code: null }], next_after: null };
         else if (path === `/sis/ui/context/assignments/${section}/`) result = { items: [], next_after: null };
         else if (path === `/sis/sections/${section}/students/${student}/grade-choices/`) result = { items:[{id:grade,code:'A',points_milli:4000}], pursuits:[], needs_assignment:false, current_version:2, effective_on_default:'2026-08-10' };
@@ -69,9 +71,14 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/commit/`).payload).toEqual({ review_token: 'fictional-posting-review' });
     await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
     await page.getByRole('textbox', { name: /^Reason for reversal/ }).fill('Fictional posting correction.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reviewed entry reversal' })).toContainText('$87.50 → $100.00');
     await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Reversed');
-    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/${operation}/reverse/`).payload).toEqual({ position: 2, reason: 'Fictional posting correction.' });
+    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/${operation}/reverse/review/`).payload)
+        .toEqual({ currency: 'USD', position: 2, reason: 'Fictional posting correction.' });
+    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/${operation}/reverse/commit/`).payload)
+        .toEqual({ review_token: 'fictional-reversal-review' });
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="teaching"]').click();
     await page.getByRole('button', { name: 'MATH.101.A', exact: true }).click();

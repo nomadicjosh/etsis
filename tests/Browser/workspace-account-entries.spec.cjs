@@ -4,8 +4,8 @@ const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null;
-    const postingReviews = new Map(), receiptReviews = new Map();
+    let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null, sourceReversed = false, acceptedReversal = null;
+    const postingReviews = new Map(), receiptReviews = new Map(), reversalReviews = new Map();
     let receiptDetails = options.receipt || null;
     let historyHead = 26;
     const currency = options.currency || 'USD';
@@ -21,8 +21,8 @@ async function fixture(page, options = {}) {
         else if (path === `/sis/accounts/${id(1)}/`) result = {
             id: id(1), student_id: id(2), term_id: id(3), institutional_id: 'S-FICTIONAL', currency,
             position, balance_minor: balance,
-            entries: [{ operation_id: id(4), type: 'payment', minor: 1000, currency, reversed: corrected,
-                can_correct_amount: options.eligible !== false && !corrected,
+            entries: [{ operation_id: id(4), type: 'payment', minor: 1000, currency, reversed: corrected || sourceReversed,
+                can_correct_amount: options.eligible !== false && !corrected && !sourceReversed,
                 can_correct_payment_details: options.eligible !== false,
                 ...(corrected ? { corrected_by_operation_id: id(5) } : {}) },
                 ...(corrected ? [{ operation_id: id(5), type: 'payment', minor: 1250, currency, reversed: false,
@@ -69,6 +69,28 @@ async function fixture(page, options = {}) {
                 result = { status: 'posted', operation_id: id(6), balance_minor: balance, position };
                 if (interrupt) {
                     interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted response.' } };
+                }
+            }
+        } else if (path.endsWith('/reverse/review/')) {
+            reviewNumber++;
+            result = { review_token: `fictional-reversal-${reviewNumber}`, type: 'payment', amount_minor: 1000,
+                currency, balance_minor: balance, resulting_balance_minor: balance + 1000,
+                reason: data.reason, position, payment_details: receiptDetails };
+            reversalReviews.set(result.review_token, result);
+            if (options.delayReview) await options.delayReview();
+        } else if (path.endsWith('/reverse/commit/')) {
+            const reviewed = reversalReviews.get(data.review_token);
+            if ((options.staleReversal && data.review_token === 'fictional-reversal-1')
+                || (reviewed.position !== position && acceptedReversal?.token !== data.review_token)) {
+                status = 409; result = { error: { message: 'This financial record changed. Review the account again.' } };
+            } else {
+                if (!acceptedReversal) {
+                    sourceReversed = true; balance = reviewed.resulting_balance_minor; position++;
+                    acceptedReversal = { token: data.review_token, result: { status: 'reversed', operation_id: id(4), balance_minor: balance, position } };
+                }
+                result = acceptedReversal.result;
+                if (interrupt) {
+                    interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted reversal response.' } };
                 }
             }
         } else if (path.endsWith('/receipt/')) {
@@ -419,5 +441,83 @@ test('a delayed private receipt read cannot render into a different drawer', asy
     await expect(page.locator('#drawer-body')).toContainText('Account statement');
     await expect(page.locator('#drawer-body')).not.toContainText('FICT-PRIVATE-DELAY');
     await expect(page.getByLabel('Receipt or check reference')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('staff review a reversal with exact balances and retained private receipt details', async ({ page }) => {
+    const f = await fixture(page, { receipt: { method: 'scholarship', reference: 'FICT-PRIVATE-RECEIPT' } });
+    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    await expect(page.getByLabel('Amount (USD)')).toHaveCount(0);
+    await expect(page.getByLabel('Receipt or check reference')).toHaveCount(0);
+    await page.getByLabel('Reason for reversal').fill('Fictional reversal <script>literal only</script>.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed entry reversal' });
+    await expect(preview).toContainText('Reverse payment: $10.00');
+    await expect(preview).not.toContainText('null');
+    await expect(preview).toContainText('-$10.00 → $0.00');
+    await expect(preview).toContainText('Scholarship');
+    await expect(preview).toContainText('FICT-PRIVATE-RECEIPT');
+    await expect(preview).toContainText('<script>literal only</script>');
+    await expect(preview.locator('script')).toHaveCount(0);
+    expect(f.calls.some(c => c.path.endsWith('/commit/'))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 850 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: $0.00');
+    await expect(page.locator('#drawer-body')).toContainText('Reversed');
+    expect(f.calls.find(c => c.path.endsWith('/reverse/commit/'))).toMatchObject({
+        data: { review_token: 'fictional-reversal-1' }, csrf: 'fictional-test-token',
+    });
+    expect(f.calls.some(c => c.path.endsWith('/reverse/'))).toBe(false);
+    expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length })))
+        .toEqual({ local: 0, session: 0 });
+    expect(f.errors).toEqual([]);
+});
+
+test('stale reversals preserve the reason and accepted retries cannot reverse a later posting', async ({ page }) => {
+    const f = await fixture(page, { staleReversal: true, eligible: false });
+    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    const reason = page.getByLabel('Reason for reversal');
+    await reason.fill('Fictional original reversal reason.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
+    await expect(reason).toHaveValue('Fictional original reversal reason.');
+    f.change();
+    await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm entry reversal', exact: true })).toHaveCount(0);
+    await expect(reason).toHaveValue('Fictional original reversal reason.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reviewed entry reversal' })).toContainText('-$9.00 → $1.00');
+    f.interrupt();
+    await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
+    await expect(reason).toBeEnabled();
+    f.change();
+    await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: $2.00');
+    await expect(page.locator('#drawer-body')).toContainText('Reversed');
+    expect(f.calls.filter(c => c.path.endsWith('/reverse/commit/')).map(c => c.data))
+        .toEqual([{ review_token: 'fictional-reversal-1' }, { review_token: 'fictional-reversal-2' },
+            { review_token: 'fictional-reversal-2' }]);
+    expect(f.errors).toEqual([]);
+});
+
+test('editing a reversal invalidates confirmation and ignores a late review response', async ({ page }) => {
+    let release;
+    const waiting = new Promise(resolve => release = resolve);
+    const f = await fixture(page, { delayReview: () => waiting });
+    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    const reason = page.getByLabel('Reason for reversal');
+    await reason.fill('Fictional original reason.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    await expect.poll(() => f.calls.filter(c => c.path.endsWith('/reverse/review/')).length).toBe(1);
+    await reason.fill('Fictional newer reason.');
+    const delivered = page.waitForResponse(response => response.url().endsWith('/reverse/review/'));
+    release(); await (await delivered).finished();
+    await expect(page.getByRole('button', { name: 'Confirm entry reversal', exact: true })).toHaveCount(0);
+    await expect(reason).toHaveValue('Fictional newer reason.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm entry reversal', exact: true })).toBeVisible();
+    await reason.fill('Fictional final reason.');
+    await expect(page.getByRole('button', { name: 'Confirm entry reversal', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
 });

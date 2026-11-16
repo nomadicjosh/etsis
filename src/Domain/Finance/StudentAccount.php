@@ -24,6 +24,7 @@ use Domain\Shared\Exception\ValidationException;
  *     corrects_operation_id?:string,corrected_by_operation_id?:string}
  * @phpstan-type CorrectionResult array{status:string,operation_id:string,source_operation_id:string,
  *     balance_minor:int,position:int}
+ * @phpstan-type ReversalResult array{status:string,operation_id:string,balance_minor:int,position:int}
  * @phpstan-type PostingResult array{status:string,operation_id:string,balance_minor:int,position:int}
  * @phpstan-type PaymentDetailsResult array{status:string,operation_id:string,entry_operation_id:string,
  *     balance_minor:int,position:int}
@@ -54,6 +55,9 @@ final class StudentAccount extends EventSourcedAggregate
     private array $openingPaymentDetails = [];
     /** @var array<string,array{actor:string,hash:string,result:PaymentDetailsResult}> */
     private array $paymentDetailsReceipts = [];
+
+    /** @var array<string,array{actor:string,hash:string,result:ReversalResult}> */
+    private array $reversalReceipts = [];
 
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
@@ -215,24 +219,69 @@ final class StudentAccount extends EventSourcedAggregate
         return $this->postingReceipts[$operation->value]["result"];
     }
 
-    public function reverse(EntityId $operationId, EntityId $actorId): void
+    /** @return ReversalResult|null */
+    public function reversalResult(EntityId $operation, EntityId $actor, string $hash): ?array
     {
-        $entry =
-        $this->operations[$operationId->value] ??
-        throw new DomainException("The original entry does not exist.");
+        $receipt = $this->reversalReceipts[$operation->value] ?? null;
+        if ($receipt === null) {
+            return null;
+        }
+        if ($receipt["actor"] !== $actor->value || !hash_equals($receipt["hash"], $hash)) {
+            throw new DomainException("This reversal belongs to a different reviewed instruction.");
+        }
+        return $receipt["result"];
+    }
+
+    /** @return ReversalResult */
+    public function reverseReviewed(EntityId $operation, EntityId $actor, string $hash): array
+    {
+        if (($accepted = $this->reversalResult($operation, $actor, $hash)) !== null) {
+            return $accepted;
+        }
+        $this->reversalBalance($operation);
+        $this->reverse($operation, $actor, $hash);
+        return $this->reversalReceipts[$operation->value]["result"];
+    }
+
+    public function reversalBalance(EntityId $operation): Money
+    {
+        $entry = $this->entry($operation);
+        if ($entry === null || $entry["reversed"]) {
+            throw new ValidationException([
+                [
+                    "field" => "source_operation_id",
+                    "message" => "Choose a currently posted entry. A reversed entry remains in history.",
+                ],
+            ]);
+        }
+        $delta = $entry["type"] === EntryType::Payment->value ? $entry["minor"] : -$entry["minor"];
+        $minor = $this->balance->minor + $delta;
+        if ($minor < -Money::MAX_MINOR || $minor > Money::MAX_MINOR) {
+            throw new ValidationException([
+                [
+                    "field" => "source_operation_id",
+                    "message" => "The reversed balance exceeds the supported account limit.",
+                ],
+            ]);
+        }
+        return new Money($minor, $entry["currency"]);
+    }
+
+    public function reverse(EntityId $operationId, EntityId $actorId, ?string $reviewHash = null): void
+    {
         if (isset($this->reversedOperations[$operationId->value])) {
             return;
         }
-        $delta = $entry["type"] === EntryType::Payment->value ? $entry["minor"] : -$entry["minor"];
-        $this->balance->add(new Money($delta, $entry["currency"]));
+        if ($reviewHash !== null && preg_match('/^[a-f0-9]{64}$/D', $reviewHash) !== 1) {
+            throw new DomainException("A reviewed reversal requires a valid instruction hash.");
+        }
+        $this->reversalBalance($operationId);
         $this->recordThat(
             AccountEntryWasReversed::occur(
                 $this->aggregateId(),
-                [
-                    "operation_id" => $operationId->value,
-                    "actor_id" => $actorId->value,
-                ],
-                [Metadata::AGGREGATE_TYPE => "student_account"],
+                ["operation_id" => $operationId->value, "actor_id" => $actorId->value],
+                [Metadata::AGGREGATE_TYPE => "student_account"] +
+                    ($reviewHash === null ? [] : ["review_hash" => $reviewHash]),
             ),
         );
     }
@@ -510,11 +559,22 @@ final class StudentAccount extends EventSourcedAggregate
 
     protected function whenAccountEntryWasReversed(AccountEntryWasReversed $event): void
     {
-        $operation = $event->payload()["operation_id"];
-        $entry = $this->operations[$operation];
-        $delta = $entry["type"] === EntryType::Payment->value ? $entry["minor"] : -$entry["minor"];
-        $this->balance = $this->balance->add(new Money($delta, $entry["currency"]));
-        $this->reversedOperations[$operation] = true;
+        $p = $event->payload();
+        $operation = new EntityId($p["operation_id"]);
+        $this->balance = $this->reversalBalance($operation);
+        $this->reversedOperations[$operation->value] = true;
+        if (isset($event->metadata()["review_hash"])) {
+            $this->reversalReceipts[$operation->value] = [
+                "actor" => $p["actor_id"],
+                "hash" => $event->metadata()["review_hash"],
+                "result" => [
+                    "status" => "reversed",
+                    "operation_id" => $operation->value,
+                    "balance_minor" => $this->balance->minor,
+                    "position" => $event->playhead(),
+                ],
+            ];
+        }
     }
 
     protected function whenStudentAccountWasOpened(StudentAccountWasOpened $event): void

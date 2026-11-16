@@ -9,6 +9,7 @@ use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Finance\Enum\EntryType;
+use Domain\Finance\Enum\AccountEntryAction;
 use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
@@ -34,9 +35,6 @@ use Throwable;
  */
 final readonly class AccountEntryReviewService
 {
-    private const string CORRECTION = "finance.account-correction";
-    private const string PAYMENT_DETAILS = "finance.payment-details";
-    private const string POSTING = "finance.account-posting";
     private const int MAX_TOKEN_BYTES = 65536;
 
     public function __construct(
@@ -58,7 +56,7 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
     ): array {
-        return $this->review($id, $source, null, $amount, $position, $reason);
+        return $this->review(AccountEntryAction::Correction, $id, $source, null, $amount, $position, $reason);
     }
 
     /** @return array<string,mixed> */
@@ -70,7 +68,16 @@ final readonly class AccountEntryReviewService
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
     ): array {
-        return $this->review($id, null, $type, $amount, $position, $reason, $paymentDetails);
+        return $this->review(
+            AccountEntryAction::Posting,
+            $id,
+            null,
+            $type,
+            $amount,
+            $position,
+            $reason,
+            $paymentDetails,
+        );
     }
 
     /** Private receipt information is intentionally separate from owner-visible account entries.
@@ -108,7 +115,16 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
     ): array {
-        return $this->review($id, $entry, null, null, $position, $reason, $details, receiptOnly: true);
+        return $this->review(
+            AccountEntryAction::PaymentDetails,
+            $id,
+            $entry,
+            null,
+            null,
+            $position,
+            $reason,
+            $details,
+        );
     }
 
     /** @return array<string,mixed> */
@@ -117,11 +133,31 @@ final readonly class AccountEntryReviewService
         EntityId $entry,
         #[\SensitiveParameter] string $token,
     ): array {
-        return $this->commit($id, $entry, $token, receiptOnly: true);
+        return $this->commit(AccountEntryAction::PaymentDetails, $id, $entry, $token);
+    }
+
+    /** @return array<string,mixed> */
+    public function reviewReversal(
+        AccountId $id,
+        EntityId $entry,
+        int $position,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        return $this->review(AccountEntryAction::Reversal, $id, $entry, null, null, $position, $reason);
+    }
+
+    /** @return array<string,mixed> */
+    public function commitReversal(
+        AccountId $id,
+        EntityId $entry,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        return $this->commit(AccountEntryAction::Reversal, $id, $entry, $token);
     }
 
     /** @return array<string,mixed> */
     private function review(
+        AccountEntryAction $action,
         AccountId $id,
         ?EntityId $source,
         ?EntryType $type,
@@ -129,7 +165,6 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
-        bool $receiptOnly = false,
     ): array {
         $actor = $this->authorize();
         $reason = $this->commands->reason($reason);
@@ -142,11 +177,11 @@ final readonly class AccountEntryReviewService
             $reason,
             $actor,
             $paymentDetails,
-            $receiptOnly,
+            $action,
         ): array {
             $account = $this->accounts->get($id, new HistoryReadBudget());
             $this->commands->assertPosition($account->playhead(), $position);
-            if ($receiptOnly) {
+            if ($action === AccountEntryAction::PaymentDetails) {
                 $source ??= throw new \LogicException("A receipt correction requires an entry.");
                 $paymentDetails ??= throw new \LogicException("A receipt correction requires details.");
                 $account->assertPaymentDetailsChange($source, $paymentDetails);
@@ -164,8 +199,7 @@ final readonly class AccountEntryReviewService
                     "previous_payment_details" => $account->paymentDetails($source)?->values(),
                     "payment_details" => $paymentDetails->values(),
                 ];
-                $purpose = self::PAYMENT_DETAILS;
-            } elseif ($source === null) {
+            } elseif ($action === AccountEntryAction::Posting) {
                 $amount ??= throw new \LogicException("A posting requires an amount.");
                 if ($paymentDetails !== null && !$paymentDetails->isEmpty() && $type === EntryType::Charge) {
                     throw new ValidationException([
@@ -194,8 +228,21 @@ final readonly class AccountEntryReviewService
                     "amount_minor" => $amount->minor,
                     "payment_details" => $intent["payment_details"] ?? null,
                 ];
-                $purpose = self::POSTING;
+            } elseif ($action === AccountEntryAction::Reversal) {
+                $source ??= throw new \LogicException("A reversal requires an entry.");
+                $balance = $account->reversalBalance($source);
+                $entry =
+                    $account->entry($source) ?? throw new \LogicException("The reversal source is missing.");
+                $amount = new Money($entry["minor"], $entry["currency"]);
+                $intent = ["source_operation_id" => $source->value];
+                $details = [
+                    "source_operation_id" => $source->value,
+                    "type" => $entry["type"],
+                    "amount_minor" => $entry["minor"],
+                    "payment_details" => $account->paymentDetails($source)?->values(),
+                ];
             } else {
+                $source ??= throw new \LogicException("An amount correction requires an entry.");
                 $amount ??= throw new \LogicException("An amount correction requires an amount.");
                 $balance = $account->correctedBalance($source, $amount);
                 $entry =
@@ -209,16 +256,18 @@ final readonly class AccountEntryReviewService
                     "corrected_minor" => $amount->minor,
                     "payment_details" => $account->paymentDetails($source)?->values(),
                 ];
-                $purpose = self::CORRECTION;
             }
             $this->actor($actor);
             $now = $this->clock->now()->setTimezone(new DateTimeZone("UTC"));
             $proof =
                 [
-                    "purpose" => $purpose,
+                    "purpose" => $action->value,
                     "actor_id" => $actor->value,
                     "account_id" => (string) $id,
-                    "operation_id" => EntityId::generate()->value,
+                    "operation_id" =>
+                        $action === AccountEntryAction::Reversal
+                            ? $source->value
+                            : EntityId::generate()->value,
                     "position" => $position,
                     "minor" => $amount->minor,
                     "currency" => $amount->currency,
@@ -227,15 +276,7 @@ final readonly class AccountEntryReviewService
                     "expires_at" => $now->modify("+20 minutes")->format("Y-m-d\TH:i:s.uP"),
                 ] + $intent;
             $token = $this->cipher->seal(json_encode($proof, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
-            $this->audit->record(
-                $actor,
-                $receiptOnly
-                    ? "account.receipt_reviewed"
-                    : ($source === null
-                        ? "account.posting_reviewed"
-                        : "account.correction_reviewed"),
-                new EntityId((string) $id),
-            );
+            $this->audit->record($actor, $action->reviewAudit(), new EntityId((string) $id));
             $this->actor($actor);
             $this->fresh($proof);
             return $details + [
@@ -258,28 +299,24 @@ final readonly class AccountEntryReviewService
         EntityId $source,
         #[\SensitiveParameter] string $token,
     ): array {
-        return $this->commit($id, $source, $token);
+        return $this->commit(AccountEntryAction::Correction, $id, $source, $token);
     }
 
     /** @return array<string,mixed> */
     public function commitPosting(AccountId $id, #[\SensitiveParameter] string $token): array
     {
-        return $this->commit($id, null, $token);
+        return $this->commit(AccountEntryAction::Posting, $id, null, $token);
     }
 
     /** @return array<string,mixed> */
     private function commit(
+        AccountEntryAction $action,
         AccountId $id,
         ?EntityId $source,
         #[\SensitiveParameter] string $token,
-        bool $receiptOnly = false,
     ): array {
         $actor = $this->authorize();
-        $proof = $this->proof(
-            $token,
-            $actor,
-            $receiptOnly ? self::PAYMENT_DETAILS : ($source === null ? self::POSTING : self::CORRECTION),
-        );
+        $proof = $this->proof($token, $actor, $action);
         if (
             $proof["account_id"] !== (string) $id ||
             ($proof["source_operation_id"] ?? null) !== $source?->value
@@ -295,55 +332,59 @@ final readonly class AccountEntryReviewService
             $operation,
             $hash,
             $actor,
-            $receiptOnly,
+            $action,
         ): array {
             $account = $this->accounts->get($id, new HistoryReadBudget());
             $this->actor($actor);
-            $accepted = $receiptOnly
-                ? $account->paymentDetailsResult($operation, $actor, $hash)
-                : ($source === null
-                    ? $account->postingResult($operation, $actor, $hash)
-                    : $account->correctionResult($operation, $actor, $hash));
+            $accepted = match ($action) {
+                AccountEntryAction::Posting => $account->postingResult($operation, $actor, $hash),
+                AccountEntryAction::Correction => $account->correctionResult($operation, $actor, $hash),
+                AccountEntryAction::PaymentDetails => $account->paymentDetailsResult(
+                    $operation,
+                    $actor,
+                    $hash,
+                ),
+                AccountEntryAction::Reversal => $account->reversalResult($operation, $actor, $hash),
+            };
             if ($accepted !== null) {
                 return $accepted;
             }
             $this->fresh($proof);
             $this->commands->assertPosition($account->playhead(), $proof["position"]);
             $amount = new Money($proof["minor"], $proof["currency"]);
-            $result = $receiptOnly
-                ? $account->changePaymentDetails(
+            $result = match ($action) {
+                AccountEntryAction::Posting => $account->postReviewed(
+                    $operation,
+                    EntryType::from($proof["type"] ?? ""),
+                    $amount,
+                    $actor,
+                    $hash,
+                    isset($proof["payment_details"])
+                        ? PaymentDetails::fromRecorded($proof["payment_details"])
+                        : null,
+                ),
+                AccountEntryAction::Correction => $account->correct(
+                    $source ?? throw new \LogicException("An amount correction requires an entry."),
+                    $operation,
+                    $amount,
+                    $actor,
+                    $hash,
+                ),
+                AccountEntryAction::PaymentDetails => $account->changePaymentDetails(
                     $source ?? throw new \LogicException("A receipt correction requires an entry."),
                     $operation,
                     PaymentDetails::fromRecorded($proof["payment_details"] ?? []),
                     $actor,
                     $hash,
-                )
-                : ($source === null
-                    ? $account->postReviewed(
-                        $operation,
-                        EntryType::from($proof["type"] ?? ""),
-                        $amount,
-                        $actor,
-                        $hash,
-                        isset($proof["payment_details"])
-                            ? PaymentDetails::fromRecorded($proof["payment_details"])
-                            : null,
-                    )
-                    : $account->correct($source, $operation, $amount, $actor, $hash));
+                ),
+                AccountEntryAction::Reversal => $account->reverseReviewed($operation, $actor, $hash),
+            };
             $this->actor($actor);
             $this->accounts->save(
                 $account,
                 $this->commands->context($actor, $operation, $proof["reason"], $source),
             );
-            $this->audit->record(
-                $actor,
-                $receiptOnly
-                    ? "account.receipt_corrected"
-                    : ($source === null
-                        ? "account.entry_posted"
-                        : "account.entry_corrected"),
-                $operation,
-            );
+            $this->audit->record($actor, $action->commitAudit(), $operation);
             $this->actor($actor);
             $this->fresh($proof);
             return $result;
@@ -364,8 +405,11 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return EntryProof */
-    private function proof(#[\SensitiveParameter] string $token, EntityId $actor, string $purpose): array
-    {
+    private function proof(
+        #[\SensitiveParameter] string $token,
+        EntityId $actor,
+        AccountEntryAction $action,
+    ): array {
         try {
             if ($token === "" || strlen($token) > self::MAX_TOKEN_BYTES) {
                 throw new InvalidArgumentException();
@@ -373,7 +417,7 @@ final readonly class AccountEntryReviewService
             $p = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($p) ||
-                ($p["purpose"] ?? null) !== $purpose ||
+                ($p["purpose"] ?? null) !== $action->value ||
                 !is_string($p["actor_id"] ?? null) ||
                 !is_string($p["account_id"] ?? null) ||
                 !is_string($p["operation_id"] ?? null) ||
@@ -388,7 +432,7 @@ final readonly class AccountEntryReviewService
             ) {
                 throw new InvalidArgumentException();
             }
-            if ($purpose === self::CORRECTION || $purpose === self::PAYMENT_DETAILS) {
+            if ($action !== AccountEntryAction::Posting) {
                 if (!is_string($p["source_operation_id"] ?? null)) {
                     throw new InvalidArgumentException();
                 }
@@ -401,14 +445,26 @@ final readonly class AccountEntryReviewService
                 throw new InvalidArgumentException();
             }
             if (array_key_exists("payment_details", $p)) {
-                if (!is_array($p["payment_details"]) || $purpose === self::CORRECTION) {
+                if (
+                    !is_array($p["payment_details"]) ||
+                    in_array($action, [AccountEntryAction::Correction, AccountEntryAction::Reversal], true)
+                ) {
                     throw new InvalidArgumentException();
                 }
                 $details = PaymentDetails::fromRecorded($p["payment_details"]);
-                if ($purpose === self::POSTING && ($p["type"] === "charge" || $details->isEmpty())) {
+                if (
+                    $action === AccountEntryAction::Posting &&
+                    ($p["type"] === "charge" || $details->isEmpty())
+                ) {
                     throw new InvalidArgumentException();
                 }
-            } elseif ($purpose === self::PAYMENT_DETAILS) {
+            } elseif ($action === AccountEntryAction::PaymentDetails) {
+                throw new InvalidArgumentException();
+            }
+            if (
+                $action === AccountEntryAction::Reversal &&
+                $p["operation_id"] !== $p["source_operation_id"]
+            ) {
                 throw new InvalidArgumentException();
             }
             new EntityId($p["actor_id"]);

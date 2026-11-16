@@ -863,8 +863,10 @@ final readonly class HistoricalSchemaRegistry
                 }
                 if ($name === 'review_hash') {
                     if (
-                        $class !== \Domain\Finance\Event\AccountEntryWasPosted::class
-                        || ($metadata['staff_recorded'] ?? false) !== true || !is_string($value)
+                        !in_array($class, [\Domain\Finance\Event\AccountEntryWasPosted::class,
+                            \Domain\Finance\Event\AccountEntryWasReversed::class], true)
+                        || ($class === \Domain\Finance\Event\AccountEntryWasPosted::class
+                            && ($metadata['staff_recorded'] ?? false) !== true) || !is_string($value)
                         || preg_match('/^[a-f0-9]{64}$/D', $value) !== 1
                     ) {
                         throw new CorruptHistoryException();

@@ -200,6 +200,30 @@ final class SisFinanceController extends BaseController
         );
     }
 
+    public function reviewReversal(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->reviews->reviewReversal(
+                new AccountId($id),
+                new EntityId($operation),
+                $f->integer("position", 1),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+
+    public function commitReversal(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->reviews->commitReversal(
+                new AccountId($id),
+                new EntityId($operation),
+                FormInput::from($request)->bodyText("review_token"),
+            ),
+        );
+    }
+
     private function paymentDetails(FormInput $f): PaymentDetails
     {
         $method = $f->search("payment_method", 32);
