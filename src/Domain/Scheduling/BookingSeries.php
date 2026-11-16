@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Domain\Scheduling;
 
 use DateTimeImmutable;
-use DateTimeZone;
+use Domain\Shared\ValueObject\LocalDateTime;
 use InvalidArgumentException;
 
 final class BookingSeries
@@ -26,8 +26,8 @@ final class BookingSeries
             }
             $endDate = $pattern->overnight ? $day->modify('+1 day')->format('Y-m-d') : $date;
             $slots[] = new TimeSlot(
-                $this->local($date, $pattern->startsAt, $pattern->timezone, 'start_time'),
-                $this->local($endDate, $pattern->endsAt, $pattern->timezone, 'end_time')
+                LocalDateTime::resolve($date . 'T' . $pattern->startsAt, $pattern->timezone, 'start_time'),
+                LocalDateTime::resolve($endDate . 'T' . $pattern->endsAt, $pattern->timezone, 'end_time')
             );
             if (count($slots) > 366) {
                 BookingPattern::invalid('through', 'Use at most 366 explicit occurrences.');
@@ -37,31 +37,6 @@ final class BookingSeries
             BookingPattern::invalid('weekdays', 'The pattern must include at least one meeting.');
         }
         return $slots;
-    }
-
-    private function local(string $date, string $time, DateTimeZone $zone, string $field): DateTimeImmutable
-    {
-        $text = $date . ' ' . $time;
-        $wall = new DateTimeImmutable($text, new DateTimeZone('UTC'));
-        $stamp = $wall->getTimestamp();
-        $offsets = [$zone->getOffset($wall)];
-        foreach ($zone->getTransitions($stamp - 172800, $stamp + 172800) ?: [] as $transition) {
-            $offsets[] = $transition['offset'];
-        }
-        $matches = [];
-        foreach (array_unique($offsets) as $offset) {
-            $candidate = new DateTimeImmutable('@' . ($stamp - $offset))->setTimezone($zone);
-            if ($candidate->format('Y-m-d H:i') === $text) {
-                $matches[$candidate->getTimestamp()] = $candidate;
-            }
-        }
-        if (count($matches) !== 1) {
-            BookingPattern::invalid($field, $text . ' in ' . $zone->getName()
-                . (count($matches) === 0
-                    ? ' does not exist after a clock change.' : ' occurs twice after a clock change.')
-                . ' Change the time or skip this meeting date.');
-        }
-        return array_values($matches)[0];
     }
 
     /** @return list<TimeSlot> */

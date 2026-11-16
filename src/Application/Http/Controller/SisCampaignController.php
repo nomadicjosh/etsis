@@ -116,9 +116,19 @@ final readonly class SisCampaignController
         return new JsonResponse(['status' => 'changed']);
     }
 
-    public function deliveryReview(string $id): ResponseInterface
+    public function deliverySetup(string $id): ResponseInterface
     {
-        return new JsonResponse($this->background->review(new EntityId($id)));
+        return new JsonResponse($this->background->setup(new EntityId($id)));
+    }
+
+    public function deliveryReview(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->background->review(
+            new EntityId($id),
+            $f->optionalText('send_at', 16),
+            $f->optionalText('timezone', 80)
+        ));
     }
 
     public function deliveryConfirm(ServerRequest $request, string $id): ResponseInterface

@@ -754,10 +754,54 @@ window.createWorkspaceOperations = function (ui) {
     }
     async function campaignDeliveryReview(row, back) {
         const body = openDrawer("Review background delivery", "COMMUNICATIONS");
-        const reviewed = await request(`/sis/campaigns/${row.id}/delivery-review/`, "POST", {});
+        const setup = await request(`/sis/campaigns/${row.id}/delivery-setup/`);
         if (!body.isConnected) return;
-        let page = 0;
+        let page = 0, generation = 0, reviewed = null;
+        const now = node("input", { type: "radio", name: "delivery_timing", value: "now", id: "campaign-send-now",
+            class: "form-check-input", checked: true });
+        const later = node("input", { type: "radio", name: "delivery_timing", value: "later", id: "campaign-send-later",
+            class: "form-check-input" });
+        const date = node("input", { type: "datetime-local", name: "send_at", id: "campaign-send-at", class: "form-control",
+            value: setup.suggested_local, disabled: true, required: true, "aria-describedby": "campaign-send-time-help" });
+        const schedule = node("div", { hidden: true, class: "mt-3" },
+            node("label", { for: date.id, class: "form-label" }, `Send after · ${setup.timezone}`), date,
+            node("p", { id: "campaign-send-time-help", class: "form-text" },
+                "Use the institution's local date and time. Sending begins on the first worker run after this time; it may take several batches."));
+        const timing = node("fieldset", {}, node("legend", { class: "h5" }, "Delivery timing"),
+            node("div", { class: "form-check" }, now, node("label", { for: now.id, class: "form-check-label" }, "Send now")),
+            node("div", { class: "form-check" }, later, node("label", { for: later.id, class: "form-check-label" }, "Schedule for later")), schedule);
+        const update = node("button", { type: "submit", class: "btn btn-outline-primary mt-2", hidden: true }, "Update delivery review");
+        const hint = node("p", { role: "status", class: "form-text" });
+        const form = node("form", {}, timing, hint, update);
+        const preview = node("section", { "aria-label": "Message delivery review", hidden: true });
         const people = node("section", { "aria-label": "Reviewed delivery recipients" });
+        const confirm = button("Confirm background delivery", async () => {
+            if (!reviewed) throw new Error("Update the delivery review before confirming.");
+            const token = reviewed.review_token;
+            timing.disabled = true;
+            try {
+                await request(`/sis/campaigns/${row.id}/delivery-confirm/`, "POST", { review_token: token });
+                if (!body.isConnected) return;
+                notify("Background delivery confirmed. You can leave this screen.");
+                await back();
+            } finally {
+                timing.disabled = false;
+            }
+        }, "btn-primary");
+        confirm.disabled = true;
+        function changed() {
+            generation++;
+            reviewed = null;
+            preview.hidden = true;
+            confirm.disabled = true;
+            update.hidden = false;
+            schedule.hidden = !later.checked;
+            date.disabled = !later.checked;
+            hint.textContent = "Update the review to confirm the selected delivery time.";
+        }
+        now.addEventListener("change", changed);
+        later.addEventListener("change", changed);
+        date.addEventListener("input", changed);
         function draw() {
             people.replaceChildren(node("p", { role: "status" },
                 `Recipients ${page * 25 + 1}–${Math.min((page + 1) * 25, reviewed.recipients.length)} of ${reviewed.recipients.length}`),
@@ -767,17 +811,36 @@ window.createWorkspaceOperations = function (ui) {
             if ((page + 1) * 25 < reviewed.recipients.length)
                 people.append(button("Next delivery recipients", () => { page++; draw(); }));
         }
-        body.append(node("h2", { class: "h4 private-text" }, reviewed.subject),
-            node("p", { class: "message-preview" }, reviewed.body), people,
+        async function review() {
+            const serial = ++generation;
+            date.removeAttribute("aria-invalid");
+            date.classList.remove("is-invalid");
+            const result = await request(`/sis/campaigns/${row.id}/delivery-review/`, "POST", {
+                send_at: later.checked ? date.value : null, timezone: setup.timezone,
+            });
+            if (!body.isConnected || serial !== generation) return;
+            reviewed = result;
+            page = 0;
+            preview.replaceChildren(node("h2", { class: "h4 private-text" }, reviewed.subject),
+                node("p", { class: "message-preview" }, reviewed.body),
+                node("p", { class: "fw-semibold" }, reviewed.send_after
+                    ? `Send after ${reviewed.send_after.display}` : "Send as soon as the background worker runs."), people);
+            draw();
+            preview.hidden = false;
+            confirm.disabled = false;
+            confirm.textContent = reviewed.send_after ? "Confirm scheduled delivery" : "Confirm background delivery";
+            update.hidden = true;
+            hint.textContent = "Message, recipients and delivery timing are ready for your confirmation.";
+        }
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            if (form.reportValidity()) task(review, update);
+        });
+        body.append(form, preview,
             node("p", { class: "alert alert-info" },
                 "Confirm once to send these queued messages in the background. You can leave this screen immediately. Pausing or cancelling stops new sends; a message already being sent may finish. Uncertain sends are held for review."),
-            button("Back to message", back), button("Confirm background delivery", async () => {
-                await request(`/sis/campaigns/${row.id}/delivery-confirm/`, "POST", { review_token: reviewed.review_token });
-                if (!body.isConnected) return;
-                notify("Background delivery confirmed. You can leave this screen.");
-                await back();
-            }, "btn-primary"));
-        draw();
+            button("Back to message", back), confirm);
+        await review();
     }
     async function campaignProgress(body, row, data, back) {
         const progress = section("Sending progress");
@@ -785,6 +848,7 @@ window.createWorkspaceOperations = function (ui) {
         const bar = node("div", { class: "progress-bar", role: "progressbar", "aria-label": "Confirmed sends",
             "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0" });
         const summary = node("p", { class: "form-text mt-2" });
+        const scheduled = node("p", { class: "form-text", hidden: true });
         const explanation = node("p", { class: "form-text" });
         let latest, signature = "";
         const review = button("Review background delivery", () => campaignDeliveryReview(row, back), "btn-primary");
@@ -794,7 +858,7 @@ window.createWorkspaceOperations = function (ui) {
             "Stop new sends under this authorization. A send already claimed may finish. Sent and uncertain delivery records are retained."));
         cancel.hidden = true;
         const refresh = button("Refresh sending progress", () => load(false));
-        progress.append(label, node("div", { class: "progress" }, bar), summary, explanation,
+        progress.append(label, node("div", { class: "progress" }, bar), summary, scheduled, explanation,
             node("div", { class: "d-flex flex-wrap gap-2" }, review, cancel, refresh));
         body.append(progress);
         const explanations = {
@@ -808,7 +872,7 @@ window.createWorkspaceOperations = function (ui) {
         async function load(automatic) {
             if (!body.isConnected) return;
             if (automatic && document.hidden) {
-                window.setTimeout(() => poll(), 6000);
+                window.setTimeout(() => poll(), latest?.waiting ? 60000 : 6000);
                 return;
             }
             const state = await request(`/sis/campaigns/${row.id}/delivery-progress/`);
@@ -824,8 +888,11 @@ window.createWorkspaceOperations = function (ui) {
                 bar.setAttribute("aria-valuenow", String(percent));
                 bar.setAttribute("aria-valuetext", `${counts.sent} of ${state.total} messages confirmed sent`);
                 summary.textContent = `${counts.queued} queued · ${counts.sending} sending · ${counts.needs_review} need review`;
+                scheduled.hidden = !state.send_after;
+                scheduled.textContent = state.send_after ? `Scheduled start: ${state.send_after.display}` : "";
                 explanation.textContent = state.campaign_status === "paused" ? "Campaign paused. No new messages will be sent until it is resumed."
-                    : explanations[state.status] || "Refresh to check delivery status.";
+                    : state.waiting ? "Scheduled and waiting. No messages will be sent before the reviewed time. You can leave this screen."
+                        : explanations[state.status] || "Refresh to check delivery status.";
                 cancel.hidden = state.status !== "active";
                 review.hidden = state.status === "active" || state.campaign_status !== "queued" || !counts.queued
                     || !data.can_dispatch || !can("sis:person:manage");
@@ -836,13 +903,13 @@ window.createWorkspaceOperations = function (ui) {
             try {
                 await load(true);
                 if (body.isConnected && !document.hidden && latest?.status === "active")
-                    window.setTimeout(() => poll(), 6000);
+                    window.setTimeout(() => poll(), latest.waiting ? 60000 : 6000);
             } catch (_) {
                 if (body.isConnected) explanation.textContent = "Progress is temporarily unavailable. Refresh to check again; background delivery does not depend on this screen.";
             }
         }
         await load(false);
-        if (latest.status === "active") window.setTimeout(() => poll(), 6000);
+        if (latest.status === "active") window.setTimeout(() => poll(), latest.waiting ? 60000 : 6000);
     }
     async function campaign(body, row) {
         const data = await request(`/sis/campaigns/${row.id}/`);

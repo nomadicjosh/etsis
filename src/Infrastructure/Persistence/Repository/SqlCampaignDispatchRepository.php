@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Infrastructure\Persistence\Repository;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Domain\Communications\Repository\CampaignDispatchRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
@@ -35,12 +37,18 @@ final readonly class SqlCampaignDispatchRepository implements CampaignDispatchRe
         }
     }
 
-    public function pending(): array
+    public function pending(DateTimeImmutable $dueThrough): array
     {
         $q = $this->sql->quote(...);
-        return $this->sql->fetch('SELECT j.* FROM ' . $q('sis_campaign_dispatches') . ' j JOIN '
+        return $this->sql->fetch(
+            'SELECT j.* FROM ' . $q('sis_campaign_dispatches') . ' j JOIN '
             . $q('sis_campaigns') . ' c ON c.' . $q('id') . ' = j.' . $q('id')
             . ' WHERE j.' . $q('status') . ' = ? AND c.' . $q('status') . ' IN (?, ?)'
-            . ' ORDER BY j.' . $q('updated_at') . ', j.' . $q('id'), ['active', 'queued', 'completed'], 10);
+            . ' AND (j.' . $q('not_before_at') . ' IS NULL OR j.' . $q('not_before_at') . ' <= ?)'
+            . ' ORDER BY j.' . $q('updated_at') . ', j.' . $q('id'),
+            ['active', 'queued', 'completed', $dueThrough->setTimezone(new DateTimeZone('UTC'))
+            ->format('Y-m-d\TH:i:s.u\Z')],
+            10
+        );
     }
 }

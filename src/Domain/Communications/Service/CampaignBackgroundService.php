@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace Domain\Communications\Service;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Dto\AuthorizedCampaignDelivery;
 use Domain\Communications\Repository\CampaignDispatchRepository;
 use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Shared\ValueObject\LocalDateTime;
 use DomainException;
 use Throwable;
 
@@ -34,7 +38,17 @@ final readonly class CampaignBackgroundService
     }
 
     /** @return array<string,mixed> */
-    public function review(EntityId $id): array
+    public function setup(EntityId $id): array
+    {
+        $actor = $this->recipientAuthority();
+        $this->campaigns->deliveryState($id, $actor);
+        $now = $this->clock->now();
+        return ['timezone' => $now->getTimezone()->getName(),
+            'suggested_local' => $now->modify('+1 hour')->format('Y-m-d\TH:i')];
+    }
+
+    /** @return array<string,mixed> */
+    public function review(EntityId $id, ?string $sendAt = null, ?string $timezone = null): array
     {
         $actor = $this->recipientAuthority();
         $campaign = $this->campaigns->deliveryState($id, $actor);
@@ -44,6 +58,7 @@ final readonly class CampaignBackgroundService
         if (($this->dispatches->get($id)['status'] ?? null) === 'active') {
             throw new DomainException('Cancel the current background authorization before reviewing a replacement.');
         }
+        $notBefore = $this->scheduledTime($sendAt, $timezone);
         $rows = $this->rows($id);
         $scope = $this->scope($rows);
         if ($scope === []) {
@@ -58,11 +73,14 @@ final readonly class CampaignBackgroundService
             'operation_id' => EntityId::generate()->value, 'campaign_version' => $campaign->version,
             'dispatch_version' => (int) ($this->dispatches->get($id)['version'] ?? 0),
             'message_hash' => hash('sha256', $campaign->encryptedContent),
+            'not_before_at' => $notBefore,
+            'timezone' => $this->clock->now()->getTimezone()->getName(),
             'expires_at' => $this->clock->now()->modify('+20 minutes')->getTimestamp(), 'deliveries' => $scope,
         ], JSON_THROW_ON_ERROR));
         $this->recipientAuthority($actor);
         $this->campaigns->deliveryState($id, $actor);
         return ['review_token' => $token, 'subject' => $message['subject'], 'body' => $message['body'],
+            'send_after' => $this->timing($notBefore),
             'recipients' => array_values(array_map(static fn(array $r): array => [
                 'name' => trim(($r['given_name'] ?? '') . ' ' . ($r['family_name'] ?? ''))
                     ?: 'Account …' . substr($r['recipient_user_id'], -8),
@@ -87,6 +105,7 @@ final readonly class CampaignBackgroundService
             if ($job !== null && hash_equals($job['encrypted_scope'], $token)) {
                 return;
             }
+            $notBefore = $scope['not_before_at'] ?? null;
             if (
                 $scope['expires_at'] <= $this->clock->now()->getTimestamp()
                 || $campaign->status !== 'queued' || $campaign->version !== $scope['campaign_version']
@@ -94,6 +113,8 @@ final readonly class CampaignBackgroundService
                 || (int) ($job['version'] ?? 0) !== $scope['dispatch_version']
                 || !hash_equals($scope['message_hash'], hash('sha256', $campaign->encryptedContent))
                 || $this->scope($this->rows($id)) !== $scope['deliveries']
+                || ($notBefore !== null && (new DateTimeImmutable($notBefore) <= $this->clock->now()
+                    || $scope['timezone'] !== $this->clock->now()->getTimezone()->getName()))
             ) {
                 throw new ConcurrentModificationException('The review changed or expired. Review delivery again.');
             }
@@ -101,6 +122,7 @@ final readonly class CampaignBackgroundService
                 'id' => $id->value, 'actor_id' => $actor->value, 'operation_id' => $scope['operation_id'],
                 'version' => $scope['dispatch_version'] + 1, 'status' => 'active',
                 'encrypted_scope' => $token, 'updated_at' => $this->timestamp(),
+                'not_before_at' => $notBefore,
             ], $scope['dispatch_version']);
             $this->audit->record($actor, 'campaign.background_authorized', $id);
             $this->recipientAuthority($actor);
@@ -127,7 +149,10 @@ final readonly class CampaignBackgroundService
         }
         $this->campaigns->deliveryState($id, $actor);
         return ['status' => $job['status'] ?? 'unconfirmed', 'version' => (int) ($job['version'] ?? 0),
-            'campaign_status' => $campaign->status, 'total' => array_sum($counts), 'counts' => $counts];
+            'campaign_status' => $campaign->status, 'total' => array_sum($counts), 'counts' => $counts,
+            'send_after' => $this->timing($job['not_before_at'] ?? null),
+            'waiting' => ($job['status'] ?? null) === 'active' && ($job['not_before_at'] ?? null) !== null
+                && new DateTimeImmutable($job['not_before_at']) > $this->clock->now()];
     }
 
     public function cancel(EntityId $id, int $expectedVersion): void
@@ -161,7 +186,7 @@ final readonly class CampaignBackgroundService
         }
         $counts = ['examined' => 0, 'sent' => 0, 'held' => 0, 'blocked' => 0];
         $deadline = microtime(true) + 30;
-        foreach ($this->dispatches->pending() as $job) {
+        foreach ($this->dispatches->pending($this->clock->now()) as $job) {
             if ($counts['examined'] >= $limit || microtime(true) >= $deadline) {
                 break;
             }
@@ -172,6 +197,7 @@ final readonly class CampaignBackgroundService
                 if (
                     $scope['campaign_id'] !== $id->value || $scope['actor_id'] !== $job['actor_id']
                     || $scope['operation_id'] !== $job['operation_id']
+                    || ($scope['not_before_at'] ?? null) !== $job['not_before_at']
                     || !hash_equals($scope['message_hash'], hash('sha256', $campaign->encryptedContent))
                 ) {
                     throw new DomainException('Authorization does not match this message.');
@@ -302,6 +328,34 @@ final readonly class CampaignBackgroundService
             throw new AccessDeniedException('Recipient review requires current person-directory access.');
         }
         return $actor;
+    }
+
+    private function scheduledTime(?string $local, ?string $timezone): ?string
+    {
+        if ($local === null) {
+            return null;
+        }
+        $now = $this->clock->now();
+        if ($timezone !== $now->getTimezone()->getName()) {
+            throw new ValidationException([['field' => 'send_at',
+                'message' => 'The institution time zone changed. Reopen delivery review and choose the time again.']]);
+        }
+        $instant = LocalDateTime::resolve($local, $now->getTimezone(), 'send_at');
+        if ($instant <= $now) {
+            throw new ValidationException([['field' => 'send_at', 'message' => 'Choose a future delivery time.']]);
+        }
+        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+    }
+
+    /** @return array{utc:string,display:string,timezone:string}|null */
+    private function timing(?string $utc): ?array
+    {
+        if ($utc === null) {
+            return null;
+        }
+        $zone = $this->clock->now()->getTimezone();
+        return ['utc' => $utc, 'display' => new DateTimeImmutable($utc)->setTimezone($zone)
+            ->format('M j, Y \a\t g:i a T') . ' · ' . $zone->getName(), 'timezone' => $zone->getName()];
     }
 
     private function timestamp(): string

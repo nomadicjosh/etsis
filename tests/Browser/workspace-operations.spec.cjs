@@ -132,6 +132,9 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
         else if (path === '/sis/campaigns/recipients/search/') result = { items: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = { subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', version: 0, recipients: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }] };
         else if (path === `/sis/campaigns/${campaign}/queue/`) { campaignStatus = 'queued'; result = { delivery_ids: [delivery] }; }
+        else if (path === `/sis/campaigns/${campaign}/delivery-setup/`) result = {
+            timezone: 'America/Los_Angeles', suggested_local: '2026-11-16T09:00',
+        };
         else if (path === `/sis/campaigns/${campaign}/delivery-review/`) result = {
             review_token: 'fictional-background-review', subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.',
             recipients: [{ name: 'Alex Example', institutional_id: 'S-FICTIONAL' }],
@@ -208,6 +211,76 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(scan.violations.map(item => item.id)).toEqual([]);
     expect(sent.some(item => item.path.endsWith('/dispatch/'))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+test('scheduled campaign review binds the local time and keeps browser delivery independent', async ({ page }) => {
+    const campaign = '01K00000000000000000000016';
+    const calls = []; const errors = [];
+    let authorized = false, sent = false;
+    let timing = null;
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname;
+        const raw = route.request().postData();
+        const payload = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        calls.push({ path, payload, method: route.request().method(), csrf: route.request().headers()['x-csrf-token'] });
+        let result = {};
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/campaigns/') ? [{ id: campaign, status: 'queued' }] : [], next_after: null };
+        else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional notice', body: 'Fictional message.', status: 'queued', version: 1, can_dispatch: true };
+        else if (path.endsWith('/delivery-setup/')) result = { timezone: 'America/Los_Angeles', suggested_local: '2026-11-16T09:00' };
+        else if (path.endsWith('/delivery-review/')) {
+            const day = payload.send_at?.slice(8, 10);
+            timing = payload.send_at ? { utc: `2026-11-${day}T18:00:00.000000Z`, timezone: 'America/Los_Angeles',
+                display: `Nov ${day}, 2026 at 10:00 am PST · America/Los_Angeles` } : null;
+            result = { review_token: `fictional-review-${payload.send_at || 'now'}`, subject: 'Fictional notice',
+                body: 'Fictional message.', send_after: timing, recipients: [{ name: 'Alex Example', institutional_id: 'F-001' }] };
+        } else if (path.endsWith('/delivery-confirm/')) { authorized = true; result = { status: 'active' }; }
+        else if (path.endsWith('/delivery-progress/')) result = {
+            status: sent ? 'completed' : authorized ? 'active' : 'unconfirmed', waiting: authorized && !sent,
+            campaign_status: 'queued', version: authorized ? 1 : 0, total: 1, send_after: authorized ? timing : null,
+            counts: { sent: sent ? 1 : 0, queued: sent ? 0 : 1, sending: 0, needs_review: 0 },
+        };
+        else if (path.includes('/context/')) result = { items: [], next_after: null };
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="campaigns"]').click();
+    const open = () => page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
+    await open();
+    await page.getByRole('button', { name: 'Review background delivery', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm background delivery', exact: true })).toBeEnabled();
+    await page.getByRole('radio', { name: 'Schedule for later', exact: true }).check();
+    const date = page.getByLabel('Send after · America/Los_Angeles', { exact: true });
+    await date.fill('2026-11-16T10:00');
+    await expect(page.getByRole('button', { name: 'Confirm background delivery', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Update delivery review', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm scheduled delivery', exact: true })).toBeEnabled();
+    await date.fill('2026-11-17T10:00');
+    await expect(page.getByRole('button', { name: 'Confirm scheduled delivery', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Update delivery review', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Message delivery review', exact: true })).toContainText('Nov 17, 2026 at 10:00 am PST');
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => item.id)).toEqual([]);
+    expect(calls.some(item => item.path.endsWith('/delivery-confirm/'))).toBe(false);
+    await page.getByRole('button', { name: 'Confirm scheduled delivery', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Scheduled and waiting.');
+    await expect(page.locator('#drawer-body')).toContainText('Scheduled start: Nov 17, 2026 at 10:00 am PST');
+    expect(calls.find(item => item.path.endsWith('/delivery-confirm/'))).toMatchObject({
+        payload: { review_token: 'fictional-review-2026-11-17T10:00' }, csrf: 'fictional-test-token',
+    });
+    expect(calls.filter(item => item.path.endsWith('/delivery-review/')).at(-1)?.payload).toEqual({
+        send_at: '2026-11-17T10:00', timezone: 'America/Los_Angeles',
+    });
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    sent = true; // Fictional worker runs later without an open browser drawer.
+    await open();
+    await expect(page.getByRole('progressbar', { name: 'Confirmed sends', exact: true })).toHaveAttribute('aria-valuenow', '100');
+    expect(calls.some(item => item.path.endsWith('/dispatch/'))).toBe(false);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(errors).toEqual([]);
 });

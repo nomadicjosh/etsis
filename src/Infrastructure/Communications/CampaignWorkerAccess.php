@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Infrastructure\Communications;
 
+use DateTimeImmutable;
 use Domain\Access\Repository\AccessRepository;
 use Domain\Communications\Dto\AuthorizedCampaignDelivery;
 use Domain\Communications\Repository\CampaignDispatchRepository;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Security\StudentAccess;
+use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 
 /** Restricted worker authority from a confirmed job, without creating or changing a login session. */
@@ -17,7 +19,8 @@ final readonly class CampaignWorkerAccess implements StudentAccess
     public function __construct(
         private AuthorizedCampaignDelivery $delivery,
         private CampaignDispatchRepository $jobs,
-        private AccessRepository $permissions
+        private AccessRepository $permissions,
+        private Clock $clock
     ) {
     }
 
@@ -30,6 +33,7 @@ final readonly class CampaignWorkerAccess implements StudentAccess
             || $job['actor_id'] !== $actor->value
             || $job['operation_id'] !== $this->delivery->operation->value
             || (int) $job['version'] !== $this->delivery->authorizationVersion
+            || ($job['not_before_at'] !== null && new DateTimeImmutable($job['not_before_at']) > $this->clock->now())
             || !$this->permissions->allows($actor->value, 'sis:communications:manage')
             || !$this->permissions->allows($actor->value, 'sis:person:manage')
         ) {

@@ -14,6 +14,7 @@ use Domain\Communications\Service\CampaignService;
 use Domain\Communications\Service\MailTransport;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\Persistence\UnitOfWork;
+use Domain\Shared\Service\Clock;
 
 final readonly class AuthorizedCampaignExecutor implements CampaignDeliveryExecutor
 {
@@ -24,7 +25,8 @@ final readonly class AuthorizedCampaignExecutor implements CampaignDeliveryExecu
         private MessageCipher $cipher,
         private MailTransport $transport,
         private UnitOfWork $transactions,
-        private AuditTrail $audit
+        private AuditTrail $audit,
+        private Clock $clock
     ) {
     }
 
@@ -34,7 +36,7 @@ final readonly class AuthorizedCampaignExecutor implements CampaignDeliveryExecu
             $this->messages,
             $this->cipher,
             $this->transport,
-            new CampaignWorkerAccess($delivery, $this->jobs, $this->permissions),
+            new CampaignWorkerAccess($delivery, $this->jobs, $this->permissions, $this->clock),
             $this->transactions,
             $this->audit
         );

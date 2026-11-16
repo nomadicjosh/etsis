@@ -4088,7 +4088,14 @@ if (
     throw new RuntimeException('Communications lost its private, version-checked recipient review.');
 }
 // Browser confirmation authorizes references only; no SMTP or login-session worker is invoked.
-$backgroundReview = $teachingPost($communicationBase . 'delivery-review/', []);
+$backgroundSetup = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $communicationBase . 'delivery-setup/')
+));
+$backgroundOptions = json_decode((string) $backgroundSetup->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$backgroundReview = $teachingPost($communicationBase . 'delivery-review/', [
+    'send_at' => $sis->clock->now()->modify('+2 hours')->format('Y-m-d\TH:i'),
+    'timezone' => $backgroundOptions['timezone'] ?? null,
+]);
 $backgroundToken = json_decode((string) $backgroundReview->getBody(), true, flags: JSON_THROW_ON_ERROR)['review_token'] ?? '';
 $backgroundNoCsrf = $communicationNoCsrf->withUri(
     new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $communicationBase . 'delivery-confirm/')
@@ -4098,11 +4105,16 @@ $backgroundProgress = $app->router->match($get->withUri(
     new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $communicationBase . 'delivery-progress/')
 ));
 $backgroundState = json_decode((string) $backgroundProgress->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($backgroundReview->getStatusCode() !== 200 || $backgroundConfirmation->getStatusCode() !== 202
+if ($backgroundSetup->getStatusCode() !== 200 || $backgroundSetup->hasHeader('phpdebugbar-id')
+    || !str_contains($backgroundSetup->getHeaderLine('Cache-Control'), 'no-store')
+    || $backgroundReview->getStatusCode() !== 200 || $backgroundConfirmation->getStatusCode() !== 202
     || $app->router->match($backgroundNoCsrf)->getStatusCode() !== 403
     || $backgroundProgress->getStatusCode() !== 200 || $backgroundProgress->hasHeader('phpdebugbar-id')
     || !str_contains($backgroundProgress->getHeaderLine('Cache-Control'), 'no-store')
     || ($backgroundState['counts']['sent'] ?? null) !== 0 || ($backgroundState['status'] ?? null) !== 'active'
+    || ($backgroundState['waiting'] ?? null) !== true
+    || ($backgroundState['send_after']['utc'] ?? null) !== $sis->clock->now()->modify('+2 hours')
+        ->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z')
     || str_contains((string) $backgroundProgress->getBody(), $backgroundToken)
     || $teachingPost($communicationBase . 'delivery-cancel/', ['version' => $backgroundState['version']])->getStatusCode() !== 200
     || $teachingPost($communicationBase . 'delivery-confirm/', ['review_token' => $backgroundToken])->getStatusCode() !== 202) {
@@ -4166,6 +4178,9 @@ $sis->access->grants = ['sis:communications:manage'];
 if (
     $teachingPost('/sis/campaigns/recipients/search/', ['search' => 'Fictional'])->getStatusCode() !== 403
     || $teachingPost($communicationBase . 'recipient-review/', $communicationPayload)->getStatusCode() !== 403
+    || $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid' . $communicationBase . 'delivery-setup/'
+    )))->getStatusCode() !== 403
 ) {
     throw new RuntimeException('Communications bypassed person-directory authority.');
 }
