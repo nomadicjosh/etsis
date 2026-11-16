@@ -319,9 +319,11 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
         if ($dataset === 'billing') {
             $status = "CASE WHEN r." . $q('retired') . " = 0 THEN 'Active' ELSE 'Retired' END";
             $program = "CASE WHEN r." . $q('program_id') . " IS NULL THEN 'All programs' ELSE p." . $q('code') . ' END';
+            $basis = "CASE WHEN r." . $q('pricing_basis')
+            . " = 'registered_credit' THEN 'Per credit' ELSE 'Per term' END";
             return [
                 $columns(['id', 'term_id', 'program_id', 'name', 'kind',
-                    'amount_minor', 'currency', 'retired', 'position'])
+                    'amount_minor', 'currency', 'retired', 'position', 'pricing_basis'])
                 . ', t.' . $q('code') . ' AS ' . $q('term_code')
                 . ', ' . $program . ' AS ' . $q('program_label')
                 . ', p.' . $q('title') . ' AS ' . $q('program_title')
@@ -329,7 +331,7 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
                 $q('sis_billing_rules') . ' r JOIN ' . $q('sis_terms') . ' t ON t.' . $q('id') . ' = r.' . $q('term_id')
                 . ' LEFT JOIN ' . $q('sis_programs') . ' p ON p.' . $q('id') . ' = r.' . $q('program_id'),
                 ['r.' . $q('name'), 'r.' . $q('kind'), 'r.' . $q('currency'), 't.' . $q('code'),
-                    'p.' . $q('code'), 'p.' . $q('title'), $program, $status],
+                    'p.' . $q('code'), 'p.' . $q('title'), $program, $status, $basis],
             ];
         }
         if ($dataset === "accounts") {

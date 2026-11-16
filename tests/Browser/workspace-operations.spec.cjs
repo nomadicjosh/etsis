@@ -131,7 +131,7 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
             const dataset = path.split('/')[4];
             const rows = {
                 ledger: [{ id: ledger, code: '1000', title: 'Cash', currency: 'USD' }],
-                billing: ruleCreated ? [{ id: billingRule, name: 'Fictional fee', term_code: '26/FA', program_label: 'All programs', kind: 'fee', amount_decimal: '2.50', currency: 'USD', status: ruleRetired ? 'Retired' : 'Active' }] : [],
+                billing: ruleCreated ? [{ id: billingRule, name: 'Fictional fee', term_code: '26/FA', program_label: 'All programs', kind: 'fee', amount_decimal: '2.50', currency: 'USD', pricing_basis: 'registered_credit', status: ruleRetired ? 'Retired' : 'Active' }] : [],
                 terms: [{ id: term, code: '26/FA' }],
                 students: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
                 transferstudents: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
@@ -155,7 +155,7 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
         else if (path === `/sis/journals/${journal}/`) result = { reference: 'FICT-J1', currency: 'USD', position: journalReversed ? 2 : 1, reversed: journalReversed, lines: [] };
         else if (path === '/sis/billing-rules/') { ruleCreated = true; result = { id: billingRule }; }
         else if (path === `/sis/billing-rules/${billingRule}/retire/`) { ruleRetired = true; result = { status: 'retired' }; }
-        else if (path === `/sis/billing-rules/${billingRule}/`) result = { name: 'Fictional fee', kind: 'fee', amount_minor: 250, amount_decimal: '2.50', currency: 'USD', position: ruleRetired ? 2 : 1, retired: ruleRetired };
+        else if (path === `/sis/billing-rules/${billingRule}/`) result = { name: 'Fictional fee', kind: 'fee', amount_minor: 250, amount_decimal: '2.50', currency: 'USD', pricing_basis: 'registered_credit', position: ruleRetired ? 2 : 1, retired: ruleRetired };
         else if (path === '/sis/billing-batches/review/') result = {
             term: { id: term, code: '26/FA' },
             rules: [{ id: id('23'), name: 'Fictional new fee', minor: 250, currency: 'USD' }],
@@ -221,12 +221,15 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await page.locator('#drawer-body').getByRole('combobox', { name: /^Term/ }).selectOption(term);
     await page.locator('#drawer-body').getByLabel('Rule name').fill('Fictional fee');
     await page.locator('#drawer-body').getByRole('combobox', { name: /^Type/ }).selectOption('fee');
-    await page.locator('#drawer-body').getByLabel('Amount', { exact: false }).fill('2.50');
+    await expect(page.getByLabel('How to charge')).toHaveValue('term');
+    await page.getByLabel('How to charge').selectOption('registered_credit');
+    await expect(page.locator('#drawer-body')).toContainText('Existing registrations are unchanged.');
+    await page.getByLabel('Rate per credit', { exact: false }).fill('2.50');
     await page.getByRole('textbox', { name: /^Reason for billing rule/ }).fill('Fictional approved fee.');
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
     await page.getByRole('button', { name: /Save and continue/ }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional fee');
-    expect(sent.find(item => item.path === '/sis/billing-rules/').payload).toMatchObject({ operation_id: billingRule, reason: 'Fictional approved fee.', amount_minor: 250 });
+    expect(sent.find(item => item.path === '/sis/billing-rules/').payload).toMatchObject({ operation_id: billingRule, reason: 'Fictional approved fee.', amount_minor: 250, pricing_basis: 'registered_credit' });
     await page.getByRole('button', { name: 'Retire billing rule', exact: true }).click();
     await page.getByRole('textbox', { name: /^Reason for rule retirement/ }).fill('Fictional retired fee.');
     await page.getByRole('button', { name: 'Confirm rule retirement', exact: true }).click();

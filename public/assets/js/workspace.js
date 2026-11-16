@@ -487,7 +487,7 @@
         if (section === 'rooms' && field === 'building_name') return row.building_name || 'Building not assigned';
         if (section === 'terms' && field === 'kind') return row.kind === 'standard' ? 'Standard' : row.kind === 'non_standard' ? 'Non-standard' : 'Classification needed';
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
-        if (field === 'billing_amount') return `${row.amount_decimal === null ? `${row.amount_minor} minor units` : row.amount_decimal} ${row.currency}`;
+        if (field === 'billing_amount') return `${row.amount_decimal === null ? `${row.amount_minor} minor units` : row.amount_decimal} ${row.currency}${row.pricing_basis === 'registered_credit' ? ' per credit' : ''}`;
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
         if (field === 'status') return badge(value);
         if (field === 'account') return badge(row.owner_user_id ? 'Linked' : 'Not linked');
@@ -548,8 +548,22 @@
         if (back) body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
             onclick: () => task(back) }, backLabel));
         if (explanation) body.append(node('p', { class: 'form-text' }, explanation));
-        const form = await buildForm(definition.fields, preset);
+        const form = await buildForm(definition.fields, section === 'billing' ? { pricing_basis: 'term', ...preset } : preset);
         if (!body.isConnected) return;
+        if (section === 'billing') {
+            const basis = form.elements.namedItem('pricing_basis');
+            const label = form.querySelector('label[for="' + form.elements.namedItem('amount_minor').id + '"]');
+            const help = node('p', { class: 'form-text', id: 'billing-pricing-help' });
+            basis.setAttribute('aria-describedby', help.id);
+            basis.after(help);
+            const update = () => {
+                label.childNodes[0].textContent = basis.value === 'registered_credit' ? 'Rate per credit ' : 'Amount per term ';
+                help.textContent = basis.value === 'registered_credit'
+                    ? 'Applies to future accepted registrations in this term and program scope. Credits and rate stay with each charge. Early drop/add reverses it; late drops retain it. Existing registrations are unchanged. Applicable rates and flat fees add together.'
+                    : 'Charged once per student and billing term. Retiring a rule preserves its earlier charges.';
+            };
+            basis.addEventListener('change', update); update();
+        }
         if (section === 'campaigns') {
             form.elements.subject.maxLength = 191;
             form.elements.body.maxLength = 100000;

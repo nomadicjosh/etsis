@@ -6,6 +6,7 @@ namespace Domain\Finance;
 
 use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Codefy\Domain\Metadata;
+use Domain\Finance\Enum\BillingBasis;
 use Domain\Finance\Event\BillingRuleWasDefined;
 use Domain\Finance\Event\BillingRuleWasRetired;
 use Domain\Finance\ValueObject\BillingRuleId;
@@ -20,6 +21,7 @@ final class BillingRule extends EventSourcedAggregate
     private string $name;
     private string $kind;
     private Money $amount;
+    private BillingBasis $basis;
     private bool $retired = false;
 
     public static function define(
@@ -29,19 +31,35 @@ final class BillingRule extends EventSourcedAggregate
         string $name,
         string $kind,
         Money $amount,
-        EntityId $actor
+        EntityId $actor,
+        BillingBasis $basis = BillingBasis::Term,
     ): self {
         if (
-            trim($name) === '' || mb_strlen($name) > 191 || !in_array($kind, ['fee', 'tuition'], true)
-            || $amount->minor <= 0
+            trim($name) === "" ||
+            mb_strlen($name) > 191 ||
+            !in_array($kind, ["fee", "tuition"], true) ||
+            $amount->minor <= 0
         ) {
-            throw new DomainException('A term billing rule requires a name, fee/tuition type and a positive amount.');
+            throw new DomainException(
+                "A term billing rule requires a name, fee/tuition type and a positive amount.",
+            );
         }
         $rule = self::root($id);
-        $rule->recordThat(BillingRuleWasDefined::occur($id, ['term_id' => $term->value,
-            'program_id' => $program?->value,
-            'name' => $name, 'kind' => $kind, 'minor' => $amount->minor, 'currency' => $amount->currency,
-            'actor_id' => $actor->value], [Metadata::AGGREGATE_TYPE => 'billing_rule']));
+        $rule->recordThat(
+            BillingRuleWasDefined::occur(
+                $id,
+                [
+                    "term_id" => $term->value,
+                    "program_id" => $program?->value,
+                    "name" => $name,
+                    "kind" => $kind,
+                    "minor" => $amount->minor,
+                    "currency" => $amount->currency,
+                    "actor_id" => $actor->value,
+                ],
+                [Metadata::AGGREGATE_TYPE => "billing_rule", "pricing_basis" => $basis->value],
+            ),
+        );
 
         return $rule;
     }
@@ -49,12 +67,19 @@ final class BillingRule extends EventSourcedAggregate
     public function retire(EntityId $actor): void
     {
         if (!$this->retired) {
-            $this->recordThat(BillingRuleWasRetired::occur(
-                $this->aggregateId(),
-                ['actor_id' => $actor->value],
-                [Metadata::AGGREGATE_TYPE => 'billing_rule']
-            ));
+            $this->recordThat(
+                BillingRuleWasRetired::occur(
+                    $this->aggregateId(),
+                    ["actor_id" => $actor->value],
+                    [Metadata::AGGREGATE_TYPE => "billing_rule"],
+                ),
+            );
         }
+    }
+
+    public function basis(): BillingBasis
+    {
+        return $this->basis;
     }
 
     public function name(): string
@@ -90,11 +115,13 @@ final class BillingRule extends EventSourcedAggregate
     protected function whenBillingRuleWasDefined(BillingRuleWasDefined $event): void
     {
         $p = $event->payload();
-        $this->termId = new EntityId($p['term_id']);
-        $this->programId = $p['program_id'] === null ? null : new EntityId($p['program_id']);
-        $this->name = $p['name'];
-        $this->kind = $p['kind'];
-        $this->amount = new Money($p['minor'], $p['currency']);
+        // Earlier definitions were explicitly flat term fees; no historical rate is inferred.
+        $this->basis = BillingBasis::from($event->metadata()["pricing_basis"] ?? "term");
+        $this->termId = new EntityId($p["term_id"]);
+        $this->programId = $p["program_id"] === null ? null : new EntityId($p["program_id"]);
+        $this->name = $p["name"];
+        $this->kind = $p["kind"];
+        $this->amount = new Money($p["minor"], $p["currency"]);
     }
 
     protected function whenBillingRuleWasRetired(BillingRuleWasRetired $event): void

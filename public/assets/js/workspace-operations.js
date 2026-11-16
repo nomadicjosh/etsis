@@ -57,6 +57,10 @@ window.createWorkspaceOperations = function (ui) {
             ["program_id", "Program (optional)", "lookup", "programs", false],
             ["name", "Rule name"],
             ["kind", "Type", "choice", ["tuition", "fee"]],
+            ["pricing_basis", "How to charge", "choice", [
+                { value: "term", label: "Once per billing term" },
+                { value: "registered_credit", label: "Per registered credit" },
+            ]],
             ["amount_minor", "Amount", "money"],
             ["currency", "Currency", "currency"],
             ["reason", "Reason for billing rule", "textarea"],
@@ -1022,6 +1026,9 @@ window.createWorkspaceOperations = function (ui) {
                                   ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
                                   : `Reference: ${item.operation_id.slice(-8)}`,
                         ),
+                        item.registration_price
+                            ? node("p", { class: "form-text" }, `${item.registration_price.name} · ${item.registration_price.credits_milli / 1000} credits × ${money(item.registration_price.rate_minor, item.currency)} per credit · Rounded once per registration`)
+                            : null,
                         item.refund_allocations?.length
                             ? node(
                                   "div",
@@ -1121,6 +1128,9 @@ window.createWorkspaceOperations = function (ui) {
                                 "div",
                                 {},
                                 node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
+                                item.registration_price
+                                    ? node("p", { class: "form-text mb-0" }, `${item.registration_price.name} · ${item.registration_price.credits_milli / 1000} credits × ${money(item.registration_price.rate_minor, item.currency)} per credit`)
+                                    : null,
                                 item.refund_allocations?.length
                                     ? node(
                                           "div",
@@ -1351,8 +1361,11 @@ window.createWorkspaceOperations = function (ui) {
                 node(
                     "p",
                     {},
-                    `${rule.kind} · ${rule.amount_decimal === null ? `${rule.amount_minor} minor units` : rule.amount_decimal} ${rule.currency}`,
+                    `${rule.kind} · ${rule.amount_decimal === null ? `${rule.amount_minor} minor units` : rule.amount_decimal} ${rule.currency} ${rule.pricing_basis === "registered_credit" ? "per registered credit" : "per billing term"}`,
                 ),
+                node("p", { class: "form-text" }, rule.pricing_basis === "registered_credit"
+                    ? "Each future registration retains its credits and this rate. Each charge rounds to the nearest currency minor unit, with halves rounded up. Existing registrations are unchanged; applicable rates and flat fees are additive."
+                    : "Charged once per student billing account. Earlier postings and retired definitions remain in history."),
             ),
         );
         if (!rule.retired && can("sis:finance:post"))
@@ -1452,9 +1465,9 @@ window.createWorkspaceOperations = function (ui) {
                         `${row.new_charges} new · ${row.already_posted} posted · ${row.previously_reversed} reversed`));
                     details.append(node("ul", {}, ...row.items.map(item => {
                         const rule = definitions.get(item.rule_id);
-                        const label = item.status === "new" ? "New charge" : item.status === "posted"
+                        const label = item.status === "registration" ? "Applies when a future registration is accepted; not charged by this review" : item.status === "new" ? "New charge" : item.status === "posted"
                             ? "Already posted" : "Previously reversed; not reapplied";
-                        return node("li", {}, `${rule.name} · ${money(rule.minor, rule.currency)} · ${label}`);
+                        return node("li", {}, `${rule.name} · ${money(rule.minor, rule.currency)}${rule.basis === "registered_credit" ? " per credit" : ""} · ${label}`);
                     })));
                     if (row.problems.length) details.append(...row.problems.map(problem => node("p", { class: "text-danger" }, problem)));
                     return [node("div", {}, node("strong", {}, row.name), node("div", { class: "small" }, row.institutional_id)),

@@ -847,6 +847,32 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'pricing_basis') {
+                    if (
+                        $class !== \Domain\Finance\Event\BillingRuleWasDefined::class
+                        || !is_string($value) || \Domain\Finance\Enum\BillingBasis::tryFrom($value) === null
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
+                if ($name === 'registration_price') {
+                    if (
+                        $class !== \Domain\Finance\Event\AccountEntryWasPosted::class || !is_array($value)
+                        || $payload['type'] !== 'charge' || ($metadata['staff_recorded'] ?? false)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $price = \Domain\Finance\ValueObject\RegistrationPrice::fromRecorded($value);
+                    if (
+                        $price->values() != $value || $price->amount->minor < 1
+                        || $price->amount->minor !== $payload['minor']
+                        || $price->amount->currency !== $payload['currency']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'refund_allocations') {
                     if (
                         !is_array($value) || !in_array($class, [

@@ -373,6 +373,7 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
                 $f->term,
                 EntityId::generate(),
                 new \Domain\Finance\ValueObject\Money(1000, "USD"),
+                3000,
                 new \Domain\Shared\EventSourcing\EventContext($f->access->actor, $f->clock->now(),
                     EntityId::generate(), reason: 'Fictional billing.'),
             ),

@@ -5867,3 +5867,77 @@ $splitRefundOversized = $teachingPost($postingReviewBase . "review/", [
 if ($splitRefundOversized->getStatusCode() !== 422 || $sis->sql->rows("sis_history_events") !== $splitRefundFacts) {
     throw new RuntimeException("An oversized refund allocation bypassed bounded HTTP validation.");
 }
+
+// Credit prices use the existing definition and registration routes and retain their original input facts.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$sis->clock->time = new DateTimeImmutable("2026-08-10T12:00:00-07:00");
+$registrationPriceRuleId = \Domain\Shared\ValueObject\EntityId::generate();
+$registrationPriceDefined = $teachingPost("/sis/billing-rules/", [
+    "operation_id" => $registrationPriceRuleId->value,
+    "term_id" => $sis->term->value,
+    "name" => "Fictional registered-credit tuition",
+    "kind" => "tuition",
+    "pricing_basis" => "registered_credit",
+    "amount_minor" => 101,
+    "currency" => "USD",
+    "reason" => "Fictional approved per-credit rate.",
+]);
+if ($registrationPriceDefined->getStatusCode() !== 201) {
+    throw new RuntimeException("The native per-credit definition failed.");
+}
+$registrationPriceStudent = $sis->student();
+$registrationPriceSection = $sis->section(fee: 0);
+$sis->sql->update(
+    "sis_courses",
+    ["credits_milli" => 1500],
+    ["id" => $registrationPriceSection->courseId->value],
+);
+$registrationPriceBefore = $sis->sql->rows("sis_history_events");
+$registrationPriceEnrollment = $sis->service->register(
+    $registrationPriceStudent->id,
+    $registrationPriceSection->id,
+);
+$registrationPriceAccount = $sis->sql->one("sis_student_accounts", [
+    "student_id" => $registrationPriceStudent->id->value,
+]);
+$registrationPriceStatement = $financeEvidenceGet(
+    "/sis/accounts/" . $registrationPriceAccount["id"] . "/",
+);
+$registrationPriceEntries =
+json_decode((string) $registrationPriceStatement->getBody(), true)["entries"] ?? [];
+$registrationPriceLines = array_values(
+    array_filter(
+        $registrationPriceEntries,
+        static fn(array $e): bool => isset($e["registration_price"]),
+    ),
+);
+if (
+    $registrationPriceStatement->getStatusCode() !== 200 ||
+    count($registrationPriceLines) !== 1 ||
+    ($registrationPriceLines[0]["minor"] ?? null) !== 152 ||
+    ($registrationPriceLines[0]["registration_price"]["credits_milli"] ?? null) !== 1500 ||
+    ($registrationPriceLines[0]["registration_price"]["enrollment_id"] ?? null) !==
+        $registrationPriceEnrollment->id->value ||
+    ($registrationPriceLines[0]["can_correct_amount"] ?? true) !== false ||
+    array_slice($sis->sql->rows("sis_history_events"), 0, count($registrationPriceBefore)) !==
+        $registrationPriceBefore
+) {
+    throw new RuntimeException(
+        "The native statement lost original registration pricing or allowed an automatic amount replacement.",
+    );
+}
+$registrationPriceHistory = $teachingPost(
+    "/sis/accounts/" .
+        $registrationPriceAccount["id"] .
+        "/entries/" .
+        $registrationPriceLines[0]["operation_id"] .
+        "/history/",
+    [],
+);
+if (
+    $registrationPriceHistory->getStatusCode() !== 200 ||
+    !str_contains((string) $registrationPriceHistory->getBody(), "registration_price")
+) {
+    throw new RuntimeException("The native private history lost retained registration pricing.");
+}

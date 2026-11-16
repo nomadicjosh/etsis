@@ -2035,7 +2035,10 @@
                                 table(
                                     ['Entry', 'Amount', 'Status'],
                                     statement.entries.map((entry) => [
-                                        entry.refund_allocations?.length
+                                        entry.registration_price
+                                            ? el('span', {}, entry.registration_price.name, el('small', { class: 'd-block text-secondary' },
+                                                `${entry.registration_price.credits_milli / 1000} credits × ${amount(entry.registration_price.rate_minor, entry.currency)} per credit`))
+                                            : entry.refund_allocations?.length
                                             ? el('span', {}, 'refund', ...entry.refund_allocations.map(p =>
                                                 el('small', { class: 'd-block text-secondary' },
                                                     `For payment ${p.payment_operation_id.slice(-8)} · ${amount(p.amount_minor, entry.currency)}`)))

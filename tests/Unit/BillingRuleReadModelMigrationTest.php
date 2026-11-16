@@ -18,52 +18,85 @@ final class BillingRuleReadModelMigrationTest extends TestCase
 {
     public function testActualAdditiveDefinitionsCompileAcrossTheFrameworkDatabaseDialects(): void
     {
-        require_once dirname(__DIR__) . '/Support/SisFixture.php';
+        $this->compile(
+            \AddSisBillingRuleReadModel::class,
+            [
+                "name",
+                "kind",
+                "amount_minor",
+                "currency",
+                "retired",
+                "position",
+                "pricing_basis",
+                "sis_billing_rule_lookup",
+            ],
+            8,
+        );
+        $this->compile(\AddSisBillingPricing::class, ["pricing_basis"], 1);
+    }
+
+    /** @param class-string $migrationClass
+     * @param list<string> $fields */
+    private function compile(string $migrationClass, array $fields, int $count): void
+    {
+        require_once dirname(__DIR__) . "/Support/SisFixture.php";
         $fixture = new SisFixture();
-        foreach (
-            ['mysql' => 'MySQL', 'pgsql' => 'PostgreSQL', 'sqlite' => 'SQLite',
-            'sqlsrv' => 'SQLServer', 'oci' => 'Oracle'] as $driver => $dialect
-        ) {
+        $dialects = [
+            "mysql" => "MySQL",
+            "pgsql" => "PostgreSQL",
+            "sqlite" => "SQLite",
+            "sqlsrv" => "SQLServer",
+            "oci" => "Oracle",
+        ];
+        foreach ($dialects as $driver => $dialect) {
             $definitions = [];
             $schema = $this->createStub(Schema::class);
-            $schema->method('getColumns')->willReturn(['id', 'term_id', 'program_id']);
-            $schema->method('alter')->willReturnCallback(static function (
-                string $name,
-                callable $callback
-            ) use (
-                &$definitions,
-            ): void {
-                $table = new AlterTable($name);
-                $callback($table);
-                $definitions[] = $table;
-            });
+            $schema->method("getColumns")->willReturn(["id", "term_id", "program_id"]);
+            $schema
+                ->method("alter")
+                ->willReturnCallback(static function (
+                    string $name,
+                    callable $callback
+                ) use (
+                    &$definitions,
+                ): void {
+                    $table = new AlterTable($name);
+                    $callback($table);
+                    $definitions[] = $table;
+                });
             $pdo = $this->createStub(PDO::class);
-            $pdo->method('getAttribute')->willReturn($driver);
+            $pdo->method("getAttribute")->willReturn($driver);
             $connection = $this->createStub(Connection::class);
-            $connection->method(PropertyHook::get('pdo'))->willReturn($pdo);
-            $connection->method('getSchema')->willReturn($schema);
-            $connection->method('quoteIdentifier')->willReturnCallback(static fn (string $s): string => '"' . $s . '"');
+            $connection->method(PropertyHook::get("pdo"))->willReturn($pdo);
+            $connection->method("getSchema")->willReturn($schema);
+            $connection
+                ->method("quoteIdentifier")
+                ->willReturnCallback(static fn(string $s): string => '"' . $s . '"');
             // Empty genuine SQLite data keeps the offline data check separate from SQL compilation.
-            $connection->method('queryBuilder')->willReturn($fixture->connection->queryBuilder());
-            $migration = new \AddSisBillingRuleReadModel('billing-rule-lookup');
-            $migration->setObjectMap(new ArrayObject([
-                'phpmig.adapter' => new DbalMigrationAdapter($connection, 'migration'),
-            ]));
+            $connection->method("queryBuilder")->willReturn($fixture->connection->queryBuilder());
+            $migration = new $migrationClass("billing-rule-lookup");
+            $migration->setObjectMap(
+                new ArrayObject([
+                    "phpmig.adapter" => new DbalMigrationAdapter($connection, "migration"),
+                ]),
+            );
             $migration->up();
-            $class = 'Qubus\\Expressive\\Schema\\Compiler\\' . $dialect;
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $dialect;
             $compiler = new $class($connection);
             $commands = [];
             foreach ($definitions as $definition) {
                 array_push($commands, ...$compiler->alter($definition));
             }
             $sql = json_encode($commands, JSON_THROW_ON_ERROR);
-            foreach (
-                ['name', 'kind', 'amount_minor', 'currency', 'retired', 'position', 'sis_billing_rule_lookup'] as $field
-            ) {
+            foreach ($fields as $field) {
                 self::assertStringContainsString($field, $sql, $dialect);
             }
-            self::assertDoesNotMatchRegularExpression('/DROP |DELETE FROM|UPDATE |DEFAULT|NOT NULL/i', $sql, $dialect);
-            self::assertCount(7, $definitions);
+            self::assertDoesNotMatchRegularExpression(
+                "/DROP |DELETE FROM|UPDATE |DEFAULT|NOT NULL/i",
+                $sql,
+                $dialect,
+            );
+            self::assertCount($count, $definitions);
         }
     }
 }

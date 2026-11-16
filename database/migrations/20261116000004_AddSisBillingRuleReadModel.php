@@ -28,6 +28,7 @@ final class AddSisBillingRuleReadModel extends Migration
                 match ($field) {
                     'name' => $table->string($field, 191),
                     'kind' => $table->string($field, 10),
+                    'pricing_basis' => $table->string($field, 24),
                     'currency' => $table->string($field, 3),
                     default => $table->integer($field),
                 };

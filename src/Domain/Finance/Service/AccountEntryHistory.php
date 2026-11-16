@@ -45,26 +45,41 @@ final readonly class AccountEntryHistory
     }
 
     /** @return array<string,mixed> */
-    public function page(AccountId $id, EntityId $operation, int $after = 0, ?int $throughPosition = null): array
-    {
+    public function page(
+        AccountId $id,
+        EntityId $operation,
+        int $after = 0,
+        ?int $throughPosition = null,
+    ): array {
         $actor = $this->authorize();
         if (
             $after < 0 ||
             $after >= self::MAX_EVENTS ||
             $after % self::PAGE_SIZE !== 0 ||
             ($after !== 0 && $throughPosition === null) ||
-            ($throughPosition !== null && ($throughPosition < 1 || $throughPosition > self::MAX_EVENTS))
+            ($throughPosition !== null &&
+                ($throughPosition < 1 || $throughPosition > self::MAX_EVENTS))
         ) {
             throw $this->invalidPage();
         }
-        return $this->transactions->run(function () use ($id, $operation, $after, $throughPosition, $actor): array {
+        return $this->transactions->run(function () use (
+            $id,
+            $operation,
+            $after,
+            $throughPosition,
+            $actor,
+        ): array {
             $budget = new HistoryReadBudget();
             $cursor = null;
             $through = $throughPosition;
             $events = $summaries = [];
             $bytes = 0;
             do {
-                $page = $budget->page($this->history, new StreamReference($id, "student_account"), $cursor);
+                $page = $budget->page(
+                    $this->history,
+                    new StreamReference($id, "student_account"),
+                    $cursor,
+                );
                 if ($page->throughVersion === 0) {
                     throw new RecordNotFoundException("Account not found.");
                 }
@@ -91,7 +106,9 @@ final readonly class AccountEntryHistory
                         strlen($summary["payment_details"]["reference"] ?? "") +
                         strlen($summary["previous_payment_details"]["reference"] ?? "") +
                         count($summary["reversed_credit_ids"] ?? []) * 32 +
-                        count($summary["refund_allocations"] ?? []) * 64;
+                        count($summary["refund_allocations"] ?? []) * 64 +
+                        strlen($summary["registration_price"]["name"] ?? "") +
+                        256;
                     if ($bytes > self::MAX_SUMMARY_BYTES) {
                         throw new HistoryReadLimitException();
                     }
@@ -104,10 +121,14 @@ final readonly class AccountEntryHistory
                 throw new CorruptHistoryException();
             }
             $entry =
-                $root->entry($operation) ?? throw new RecordNotFoundException("Account entry not found.");
+                $root->entry($operation) ??
+                throw new RecordNotFoundException("Account entry not found.");
             $family = $this->family($root, $operation);
             $related = array_values(
-                array_filter($summaries, static fn(array $row): bool => isset($family[$row["operation_id"]])),
+                array_filter(
+                    $summaries,
+                    static fn(array $row): bool => isset($family[$row["operation_id"]]),
+                ),
             );
             if ($related === [] || ($after !== 0 && $after >= count($related))) {
                 throw $this->invalidPage();
@@ -128,7 +149,8 @@ final readonly class AccountEntryHistory
                         : $names[$row["actor_id"]] ?? "Unavailable account";
                 unset($row["actor_id"]);
                 $actual =
-                    $root->entry(new EntityId($row["operation_id"])) ?? throw new CorruptHistoryException();
+                    $root->entry(new EntityId($row["operation_id"])) ??
+                    throw new CorruptHistoryException();
                 $row["type"] = $actual["type"];
                 $row["currency"] = $actual["currency"];
                 $row["amount_minor"] = $actual["minor"];
@@ -147,7 +169,8 @@ final readonly class AccountEntryHistory
                 "entry" => $entry,
                 "through_position" => $through,
                 "items" => $items,
-                "next_after" => count($related) > $after + self::PAGE_SIZE ? $after + self::PAGE_SIZE : null,
+                "next_after" =>
+                    count($related) > $after + self::PAGE_SIZE ? $after + self::PAGE_SIZE : null,
                 "earlier_details_unknown" =>
                     count(
                         array_filter(
@@ -210,6 +233,9 @@ final readonly class AccountEntryHistory
                 ->format("Y-m-d\TH:i:s.u\Z"),
             "reason" => $stored->context->reason,
         ] +
+        (isset($event->metadata()["registration_price"])
+        ? ["registration_price" => $event->metadata()["registration_price"]]
+        : []) +
         (isset($event->metadata()["refund_allocations"])
         ? ["refund_allocations" => $event->metadata()["refund_allocations"]]
         : []) +
@@ -234,9 +260,13 @@ final readonly class AccountEntryHistory
      */
     private function family(StudentAccount $root, EntityId $operation): array
     {
-        $entries = $children = [];
+        $entries = $children = $registrations = [];
         foreach ($root->entries() as $entry) {
             $entries[$entry["operation_id"]] = $entry;
+            if (isset($entry["registration_price"])) {
+                $registrations[$entry["registration_price"]["enrollment_id"]][] =
+                $entry["operation_id"];
+            }
             if (isset($entry["source_operation_id"])) {
                 $children[$entry["source_operation_id"]][] = $entry["operation_id"];
             }
@@ -254,6 +284,13 @@ final readonly class AccountEntryHistory
             }
             $entry = $entries[$id] ?? throw new CorruptHistoryException();
             $family[$id] = true;
+            $registration = $entry["registration_price"]["enrollment_id"] ?? $id;
+            foreach ($registrations[$registration] ?? [] as $charge) {
+                $pending[] = $charge;
+            }
+            if (isset($entries[$registration], $registrations[$registration])) {
+                $pending[] = $registration;
+            }
             foreach ($linkFields as $key) {
                 if (isset($entry[$key])) {
                     $pending[] = $entry[$key];
@@ -271,6 +308,8 @@ final readonly class AccountEntryHistory
 
     private function invalidPage(): ValidationException
     {
-        return new ValidationException([["field" => "history", "message" => "Refresh this entry history."]]);
+        return new ValidationException([
+            ["field" => "history", "message" => "Refresh this entry history."],
+        ]);
     }
 }

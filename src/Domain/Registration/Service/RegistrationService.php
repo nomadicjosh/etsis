@@ -71,7 +71,9 @@ final readonly class RegistrationService
             $this->repository->lockSection($sectionId);
             $student = $this->admissions->student($studentId);
             if ($student->personId->value !== $initialStudent->personId->value) {
-                throw new ConcurrentModificationException('The student identity changed. Reload before registering.');
+                throw new ConcurrentModificationException(
+                    "The student identity changed. Reload before registering.",
+                );
             }
             $person = $this->admissions->person($student->personId);
             $byStaff = $byStaff || $person->ownerUserId?->value !== $actor->value;
@@ -100,13 +102,27 @@ final readonly class RegistrationService
                 throw new DomainException("The section is inactive or full.");
             }
             $assignment = $this->pursuits->activePursuit($studentId, $assignment);
-            $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+            $required =
+                $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
             $coursesBefore = $this->repository->enrolledCount($studentId, $section->termId);
-            $prerequisites = $this->prerequisites->evaluate($studentId, $assignment, $required, $budget);
+            $prerequisites = $this->prerequisites->evaluate(
+                $studentId,
+                $assignment,
+                $required,
+                $budget,
+            );
             $prerequisitesMet = $prerequisites->isMet();
             // History verification may take time. Evaluate dates against the clock after those reads.
             $now = $this->clock->now();
-            $this->assertEligible($student, $section, $window, $byStaff, $coursesBefore, $prerequisitesMet, $now);
+            $this->assertEligible(
+                $student,
+                $section,
+                $window,
+                $byStaff,
+                $coursesBefore,
+                $prerequisitesMet,
+                $now,
+            );
             $enrollment = new Enrollment(
                 EntityId::generate(),
                 $studentId,
@@ -132,25 +148,33 @@ final readonly class RegistrationService
                         $window->dates->start,
                     ),
                     "closes_at" => \Domain\Registration\ValueObject\EnrollmentFacts::utc(
-                        $window->dates->end ?? throw new \LogicException("A registration window must end."),
+                        $window->dates->end ??
+                            throw new \LogicException("A registration window must end."),
                     ),
                 ],
                 $actor,
                 $prerequisites,
             );
-            $this->credits->open($enrollment, $course, $actor, $assignment, $section->publicationVersionId);
+            $this->credits->open(
+                $enrollment,
+                $course,
+                $actor,
+                $assignment,
+                $section->publicationVersionId,
+            );
             $this->billing->charge(
                 $studentId,
                 $section->termId,
                 $enrollment->id,
                 $section->fee,
+                $course->creditsMilli,
                 new EventContext(
                     $actor,
                     $now,
                     $enrollment->id,
                     $enrollment->id,
-                    reason: 'Account charges caused by accepted course registration.'
-                )
+                    reason: "Account charges caused by accepted course registration.",
+                ),
             );
             $this->audit->record($actor, "registration.created", $enrollment->id);
             // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
@@ -161,7 +185,7 @@ final readonly class RegistrationService
                 $byStaff,
                 $coursesBefore,
                 $prerequisitesMet,
-                $this->clock->now()
+                $this->clock->now(),
             );
             $this->verifyAccess($actor, $student, $person->ownerUserId, $byStaff);
             return $enrollment;
@@ -171,22 +195,33 @@ final readonly class RegistrationService
     private function authorize(EntityId $actor, ?EntityId $owner, bool $byStaff): void
     {
         if (
-            $this->access->requireOwnerOrPermission($owner, 'sis:registration:manage')->value !== $actor->value ||
-            ($byStaff && $this->access->requirePermission('sis:registration:manage')->value !== $actor->value)
+            $this->access->requireOwnerOrPermission($owner, "sis:registration:manage")->value !==
+                $actor->value ||
+            ($byStaff &&
+                $this->access->requirePermission("sis:registration:manage")->value !==
+                    $actor->value)
         ) {
-            throw new AccessDeniedException('The registration actor changed.');
+            throw new AccessDeniedException("The registration actor changed.");
         }
     }
 
-    private function verifyAccess(EntityId $actor, Student $student, ?EntityId $owner, bool $byStaff): void
-    {
+    private function verifyAccess(
+        EntityId $actor,
+        Student $student,
+        ?EntityId $owner,
+        bool $byStaff,
+    ): void {
         $current = $this->admissions->student($student->id);
         if ($current->personId->value !== $student->personId->value) {
-            throw new ConcurrentModificationException('The student identity changed. Reload before registering.');
+            throw new ConcurrentModificationException(
+                "The student identity changed. Reload before registering.",
+            );
         }
         $currentOwner = $this->admissions->person($current->personId)->ownerUserId;
         if ($currentOwner?->value !== $owner?->value) {
-            throw new ConcurrentModificationException('The student account link changed. Reload before registering.');
+            throw new ConcurrentModificationException(
+                "The student account link changed. Reload before registering.",
+            );
         }
         $this->authorize($actor, $currentOwner, $byStaff);
     }

@@ -28,6 +28,7 @@ async function fixture(page, options = {}) {
             id: id(1), student_id: id(2), term_id: id(3), institutional_id: 'S-FICTIONAL', currency,
             position, balance_minor: balance,
             entries: [{ operation_id: id(4), type: options.charge ? 'charge' : 'payment', minor: 1000, currency, reversed: corrected || sourceReversed,
+                ...(options.registrationPrice ? { registration_price: options.registrationPrice } : {}),
                 can_correct_amount: options.eligible !== false && !corrected && !sourceReversed && creditedMinor() === 0,
                 can_correct_payment_details: options.eligible !== false && !options.charge,
                 ...(!options.charge ? { can_refund_payment: !corrected && !sourceReversed && balance < 0 && linkedRefundMinor() < 1000,
@@ -884,5 +885,17 @@ test('general refunds use the same allocation editor and exact three-decimal cur
         refund_allocations: [{ payment_operation_id: id(4), amount_minor: 617 }, { payment_operation_id: id(30), amount_minor: 617 }] });
     await page.getByRole('button', { name: 'Confirm transaction', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Refund of payment 00000030');
+    expect(f.errors).toEqual([]);
+});
+
+
+test('registration prices stay readable in statements without enabling amount replacement', async ({ page }) => {
+    const f = await fixture(page, { charge: true, eligible: false, registrationPrice: {
+        enrollment_id: id(30), rule_id: id(31), name: 'Fictional tuition', credits_milli: 4000,
+        rate_minor: 250, currency: 'USD', rounding: 'half_up',
+    } });
+    await expect(page.locator('#drawer-body')).toContainText('Fictional tuition · 4 credits × $2.50 per credit');
+    await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 850 }); await accessible(page);
     expect(f.errors).toEqual([]);
 });

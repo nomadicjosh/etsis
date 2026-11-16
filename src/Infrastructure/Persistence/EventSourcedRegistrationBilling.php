@@ -6,6 +6,8 @@ namespace Infrastructure\Persistence;
 
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Finance\Enum\EntryType;
+use Domain\Finance\Enum\BillingBasis;
+use Domain\Finance\ValueObject\RegistrationPrice;
 use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\Repository\BillingRuleRepository;
 use Domain\Finance\StudentAccount;
@@ -47,14 +49,20 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
             return false;
         }
         $account = $this->accounts->get(new AccountId($row["id"]));
-        $entry = $account->entry($enrollment);
-        if ($entry === null) {
+        $charges = $account->courseCharges($enrollment);
+        if ($charges === []) {
             return false;
         }
-        if ($entry["type"] !== EntryType::Charge->value) {
-            throw new \DomainException("The registration source is not a course charge.");
+        foreach ($charges as $charge) {
+            $entry = $account->entry($charge) ?? throw new CorruptHistoryException();
+            if ($entry["type"] !== EntryType::Charge->value) {
+                throw new \DomainException("The registration source is not a course charge.");
+            }
+            $account->reverse(
+                $charge,
+                $context->actor ?? throw new \LogicException("A billing actor is required."),
+            );
         }
-        $account->reverse($enrollment, $context->actor ?? throw new \LogicException('A billing actor is required.'));
         $this->accounts->save($account, $context);
         return true;
     }
@@ -67,12 +75,13 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         EntityId $term,
         EntityId $operation,
         Money $fee,
+        int $creditsMilli,
         EventContext $context,
     ): void {
         $budget = new HistoryReadBudget();
         $program = $this->admissions->student($student)->programId;
         $quote = $this->quote($student, $term, $this->rules($term, $budget, [$program]), $budget);
-        $this->applyQuote($quote, $context, $operation, $fee);
+        $this->applyQuote($quote, $context, $operation, $fee, $creditsMilli);
     }
 
     public function rules(EntityId $term, HistoryReadBudget $budget, array $programs): array
@@ -80,8 +89,12 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         return $this->rules->forTerm($term, $budget, $programs);
     }
 
-    public function quote(EntityId $student, EntityId $term, array $rules, HistoryReadBudget $budget): TermFeeQuote
-    {
+    public function quote(
+        EntityId $student,
+        EntityId $term,
+        array $rules,
+        HistoryReadBudget $budget,
+    ): TermFeeQuote {
         $studentRecord = $this->admissions->student($student);
         $primaryPosition = $this->primaryPrograms->verify($studentRecord, $budget);
         $rules = array_values(
@@ -91,20 +104,34 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                     $rule->programId()->value === $studentRecord->programId->value,
             ),
         );
-        $existing = $this->sql->rows("sis_student_accounts", [
-            "student_id" => $student->value,
-            "term_id" => $term->value,
-        ], 2);
+        $existing = $this->sql->rows(
+            "sis_student_accounts",
+            [
+                "student_id" => $student->value,
+                "term_id" => $term->value,
+            ],
+            2,
+        );
         if (count($existing) > 1) {
             throw new CorruptHistoryException();
         }
-        $account = $existing === [] ? null : $this->accounts->get(new AccountId($existing[0]['id']), $budget);
-        return new TermFeeQuote($student, $term, $studentRecord->programId, $primaryPosition, $account, $rules);
+        $account =
+        $existing === []
+        ? null
+        : $this->accounts->get(new AccountId($existing[0]["id"]), $budget);
+        return new TermFeeQuote(
+            $student,
+            $term,
+            $studentRecord->programId,
+            $primaryPosition,
+            $account,
+            $rules,
+        );
     }
 
     public function apply(TermFeeQuote $quote, EventContext $context): array
     {
-        return $this->applyQuote($quote, $context, null, null);
+        return $this->applyQuote($quote, $context, null, null, null);
     }
 
     /** @return array{student_id:string,account_id:?string,created:bool,posted:int,position:?int} */
@@ -113,28 +140,67 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         #[\SensitiveParameter] EventContext $context,
         ?EntityId $courseOperation,
         ?Money $courseFee,
+        ?int $creditsMilli,
     ): array {
-        $actor = $context->actor ?? throw new \LogicException('A billing actor is required.');
+        $actor = $context->actor ?? throw new \LogicException("A billing actor is required.");
         $facts = $quote->facts();
-        if ($facts['problems'] !== []) {
-            throw new \Domain\Shared\Exception\ValidationException([['field' => 'students',
-                'message' => 'Resolve the billing configuration shown in the review before confirming.']]);
+        if ($facts["problems"] !== []) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "students",
+                    "message" =>
+                        "Resolve the billing configuration shown in the review before confirming.",
+                ],
+            ]);
+        }
+        $prices = [];
+        if ($courseOperation !== null) {
+            foreach ($quote->rules as $rule) {
+                if ($rule->basis() !== BillingBasis::RegisteredCredit) {
+                    continue;
+                }
+                $price = new RegistrationPrice(
+                    $courseOperation,
+                    new EntityId((string) $rule->aggregateId()),
+                    $rule->name(),
+                    $creditsMilli ??
+                        throw new \LogicException("Registration credits are required."),
+                    $rule->amount(),
+                );
+                if ($price->amount->minor > 0) {
+                    $prices[] = $price;
+                }
+            }
         }
         $hasCourseFee = $courseFee !== null && $courseFee->minor > 0;
         $account = $quote->account;
         $created = false;
-        if ($facts['new_charges'] > 0 || $hasCourseFee) {
+        if ($facts["new_charges"] > 0 || $hasCourseFee || $prices !== []) {
             if ($account === null) {
-                $currency = $hasCourseFee ? $courseFee->currency : $facts['currency'];
-                $account = StudentAccount::open(new AccountId(), $quote->student, $quote->term, $currency);
+                $currency = $hasCourseFee
+                ? $courseFee->currency
+                : ($prices[0] ?? null)?->amount->currency ?? $facts["currency"];
+                $account = StudentAccount::open(
+                    new AccountId(),
+                    $quote->student,
+                    $quote->term,
+                    $currency,
+                );
                 $created = true;
             }
         } else {
-            return ['student_id' => $quote->student->value, 'account_id' => $account === null ? null
-                : (string) $account->aggregateId(), 'created' => false, 'posted' => 0,
-                'position' => $account?->playhead()];
+            return [
+                "student_id" => $quote->student->value,
+                "account_id" => $account === null ? null : (string) $account->aggregateId(),
+                "created" => false,
+                "posted" => 0,
+                "position" => $account?->playhead(),
+            ];
         }
         foreach ($quote->rules as $rule) {
+            if ($rule->basis() !== BillingBasis::Term) {
+                continue;
+            }
             $account->post(
                 new EntityId((string) $rule->aggregateId()),
                 EntryType::Charge,
@@ -144,14 +210,29 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         }
         if ($hasCourseFee) {
             $account->post(
-                $courseOperation ?? throw new \LogicException('A course charge needs its enrollment.'),
+                $courseOperation ??
+                    throw new \LogicException("A course charge needs its enrollment."),
                 EntryType::Charge,
                 $courseFee,
-                $actor
+                $actor,
+            );
+        }
+        foreach ($prices as $price) {
+            $account->post(
+                EntityId::generate(),
+                EntryType::Charge,
+                $price->amount,
+                $actor,
+                registrationPrice: $price,
             );
         }
         $this->accounts->save($account, $context);
-        return ['student_id' => $quote->student->value, 'account_id' => (string) $account->aggregateId(),
-            'created' => $created, 'posted' => $facts['new_charges'], 'position' => $account->playhead()];
+        return [
+            "student_id" => $quote->student->value,
+            "account_id" => (string) $account->aggregateId(),
+            "created" => $created,
+            "posted" => $facts["new_charges"],
+            "position" => $account->playhead(),
+        ];
     }
 }

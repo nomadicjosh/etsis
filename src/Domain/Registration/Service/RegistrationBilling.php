@@ -22,6 +22,7 @@ interface RegistrationBilling
         EntityId $term,
         EntityId $operation,
         Money $fee,
+        int $creditsMilli,
         EventContext $context,
     ): void;
 }

@@ -13,6 +13,7 @@ use Domain\Finance\Event\AccountChargeWasCredited;
 use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
 use Domain\Finance\ValueObject\PaymentDetails;
 use Domain\Finance\ValueObject\RefundAllocation;
+use Domain\Finance\ValueObject\RegistrationPrice;
 use Domain\Finance\Event\AccountEntryWasCorrected;
 use Domain\Finance\Event\AccountEntryWasReversed;
 use Domain\Finance\Event\StudentAccountWasOpened;
@@ -25,6 +26,7 @@ use Domain\Shared\Exception\ValidationException;
  * @phpstan-type AccountEntry array{operation_id:string,type:string,minor:int,currency:string,reversed:bool,
  *     corrects_operation_id?:string,corrected_by_operation_id?:string,source_operation_id?:string,
  *     credited_minor?:int,remaining_charge_minor?:int,linked_credit_count?:int,reversed_with_operation_id?:string,refund_allocations?:list<array{payment_operation_id:string,amount_minor:int}>,
+ *     registration_price?:array{enrollment_id:string,rule_id:string,name:string,credits_milli:int,rate_minor:int,currency:string,rounding:string},
  *     linked_refund_minor?:int,linked_refund_count?:int,remaining_refundable_minor?:int}
  * @phpstan-type LinkedEntryResult array{status:string,operation_id:string,source_operation_id:string,
  *     balance_minor:int,position:int}
@@ -79,6 +81,29 @@ final class StudentAccount extends EventSourcedAggregate
     /** @var array<string,string> The currently posted payment in each original/replacement family. */
     private array $activePaymentByReceipt = [];
 
+    /** @var array<string,RegistrationPrice> */
+    private array $registrationPrices = [];
+    /** @var array<string,list<string>> */
+    private array $registrationCharges = [];
+
+    /** @return list<EntityId> Includes the original section fee and explicitly retained credit-rate charges. */
+    public function courseCharges(EntityId $enrollment): array
+    {
+        $ids = $this->registrationCharges[$enrollment->value] ?? [];
+        if (isset($this->operations[$enrollment->value])) {
+            $ids[] = $enrollment->value;
+        }
+        return array_map(static fn(string $id): EntityId => new EntityId($id), $ids);
+    }
+
+    /** @return array{registration_price?:array{enrollment_id:string,rule_id:string,name:string,credits_milli:int,rate_minor:int,currency:string,rounding:string}} */
+    private function registrationLinks(string $id): array
+    {
+        return isset($this->registrationPrices[$id])
+        ? ['registration_price' => $this->registrationPrices[$id]->values()]
+        : [];
+    }
+
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
         $money = new Money(0, $currency);
@@ -123,7 +148,7 @@ final class StudentAccount extends EventSourcedAggregate
             ["reversed" => isset($this->reversedOperations[$id])] +
             $this->correctionLinks($id) +
             $this->chargeLinks($id) +
-            $this->refundLinks($id);
+            $this->refundLinks($id) + $this->registrationLinks($id);
             $entries[] = ["operation_id" => $id] + $entry + $flags;
         }
 
@@ -141,7 +166,7 @@ final class StudentAccount extends EventSourcedAggregate
         $entry + ["reversed" => isset($this->reversedOperations[$operation->value])] +
         $this->correctionLinks($operation->value) +
         $this->chargeLinks($operation->value) +
-        $this->refundLinks($operation->value);
+        $this->refundLinks($operation->value) + $this->registrationLinks($operation->value);
     }
 
     public function post(
@@ -153,7 +178,14 @@ final class StudentAccount extends EventSourcedAggregate
         ?string $reviewHash = null,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
         ?RefundAllocation $allocation = null,
+        ?RegistrationPrice $registrationPrice = null,
     ): void {
+        if (
+            $registrationPrice !== null && ($type !== EntryType::Charge || $staffRecorded
+            || $registrationPrice->amount != $amount)
+        ) {
+            throw new DomainException('Registration pricing belongs to its exact automatic charge.');
+        }
         if ($type === EntryType::ChargeCredit) {
             throw new DomainException("A charge credit requires its original charge and a reviewed instruction.");
         }
@@ -176,7 +208,8 @@ final class StudentAccount extends EventSourcedAggregate
                 $this->operations[$operationId->value] !== $entry ||
                 ($this->openingPaymentDetails[$operationId->value] ?? null)?->values() !==
                     $paymentDetails?->values() ||
-                ($this->refundAllocations[$operationId->value] ?? null)?->values() !== $allocation?->values()
+                ($this->refundAllocations[$operationId->value] ?? null)?->values() !== $allocation?->values() ||
+                ($this->registrationPrices[$operationId->value] ?? null)?->values() !== $registrationPrice?->values()
             ) {
                 throw new DomainException("The operation identifier has already been used.");
             }
@@ -197,7 +230,8 @@ final class StudentAccount extends EventSourcedAggregate
                     ($staffRecorded ? ["staff_recorded" => true] : []) +
                     ($reviewHash === null ? [] : ["review_hash" => $reviewHash]) +
                     ($paymentDetails === null ? [] : ["payment_details" => $paymentDetails->values()]) +
-                    ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]),
+                    ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]) +
+                    ($registrationPrice === null ? [] : ["registration_price" => $registrationPrice->values()]),
             ),
         );
     }
@@ -979,6 +1013,22 @@ final class StudentAccount extends EventSourcedAggregate
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
+        if (isset($event->metadata()['registration_price'])) {
+            $price = RegistrationPrice::fromRecorded($event->metadata()['registration_price']);
+            if (
+                $payload['type'] !== 'charge' || ($event->metadata()['staff_recorded'] ?? false)
+                || $payload['minor'] !== $price->amount->minor || $payload['currency'] !== $price->amount->currency
+            ) {
+                throw new DomainException('The retained registration charge does not match its price.');
+            }
+            foreach ($this->registrationCharges[$price->enrollment->value] ?? [] as $existing) {
+                if ($this->registrationPrices[$existing]->rule->value === $price->rule->value) {
+                    throw new DomainException('This registration already has a charge for this rate.');
+                }
+            }
+            $this->registrationPrices[$payload['operation_id']] = $price;
+            $this->registrationCharges[$price->enrollment->value][] = $payload['operation_id'];
+        }
         $allocation = isset($event->metadata()["refund_allocations"])
         ? new RefundAllocation($event->metadata()["refund_allocations"])
         : null;
