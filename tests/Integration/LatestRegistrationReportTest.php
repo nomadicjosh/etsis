@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Reporting\Service\RelationalReportService;
 use Domain\Reporting\ValueObject\ReportQuery;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -127,10 +128,18 @@ final class LatestRegistrationReportTest extends TestCase
         $service = $this->service($s);
         $id = EntityId::generate();
         $service->save($id, $id, -1, 'Fictional unregistered students', $query);
-        self::assertSame($student->id->value, $service->population($id, 0)['items'][0]['id']);
+        self::assertSame($student->id->value, $service->population(
+            $id,
+            0,
+            StudentPopulationAction::Registration,
+        )['items'][0]['id']);
         $this->row($s, $student->id, $s->term);
         self::assertSame([], $service->run($id, 0)['items']);
-        self::assertSame([], $service->population($id, 0)['items']);
+        self::assertSame([], $service->population(
+            $id,
+            0,
+            StudentPopulationAction::Registration,
+        )['items']);
     }
     public function testSharedStaticReportKeepsItsTermAndRequiresCurrentSourceAuthority(): void
     {

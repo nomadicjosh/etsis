@@ -238,7 +238,22 @@
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
     const studentStudio = window.createWorkspaceStudents({ node, request, task, can, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
-    relationalStudio = window.createWorkspaceReportStudio({ node, request, requestFile, task, can, table, openDrawer, closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(), registerPopulation: (students, back) => { relationalStudio.cleanup(false); return batchRegistration.start("", students, back); }, sharing: async id => { const body = openDrawer('Report sharing', 'REPORT ACCESS'); await operations.enhance('reports', { id }, body); } });
+    relationalStudio = window.createWorkspaceReportStudio({
+        node, request, requestFile, task, can, table, openDrawer,
+        closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
+        registerPopulation: (students, back) => {
+            relationalStudio.cleanup(false);
+            return batchRegistration.start("", students, back);
+        },
+        billPopulation: (students, back) => {
+            relationalStudio.cleanup(false);
+            return operations.billingBatch(students, back);
+        },
+        sharing: async id => {
+            const body = openDrawer('Report sharing', 'REPORT ACCESS');
+            await operations.enhance('reports', { id }, body);
+        },
+    });
     const reportRequests = window.createWorkspaceReportRequests({ node, request, task, can, table, badge, buildForm, formData, openDrawer, notify, reports: () => reportStudio, builder: () => relationalStudio });
     const reportStudio = window.createWorkspaceReports({ builder: () => relationalStudio, node, request, requestFile, task, can, table, openDrawer, openRecord, flow: operations.flow, enhance: operations.enhance, closeDrawer: () => drawer.hide() });
     const transferStudio = window.createWorkspaceTransfer({ awards: () => transferAwardStudio, node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (kind, id) => operations.audit(kind, { id }) });

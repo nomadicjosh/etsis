@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Reporting\Service\RelationalReportService;
 use Domain\Reporting\ValueObject\ReportQuery;
@@ -24,6 +25,12 @@ final class ReportPopulationTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         require_once dirname(__DIR__) . '/Support/SisFixture.php';
+    }
+    public static function actions(): iterable
+    {
+        foreach (StudentPopulationAction::cases() as $action) {
+            yield $action->value => [$action];
+        }
     }
     private function service(
         SisFixture $s,
@@ -59,14 +66,17 @@ final class ReportPopulationTest extends TestCase
         $facts = [];
         foreach (
             ['sis_history_events', 'sis_history_operations', 'sis_history_streams', 'sis_enrollments',
-            'sis_academic_credits', 'sis_student_accounts', 'sis_report_queries', 'sis_registration_batches'] as $table
+            'sis_academic_credits', 'sis_student_accounts', 'sis_account_balances', 'sis_billing_batches',
+            'sis_report_queries', 'sis_registration_batches'] as $table
         ) {
             $facts[$table] = $s->sql->rows($table);
         }
         return $facts;
     }
-    public function testJoinedCreditsBecomeDistinctStudentsWithoutChangingTheSavedReportOrAcademicFacts(): void
-    {
+    #[DataProvider('actions')]
+    public function testJoinedCreditsBecomeDistinctStudentsWithoutChangingTheSavedReportOrAcademicFacts(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $a = $s->student();
         $b = $s->student();
@@ -76,29 +86,48 @@ final class ReportPopulationTest extends TestCase
         $id = $this->saved($s, $this->definition('credits'));
         $service = $this->service($s);
         $before = $this->facts($s);
-        self::assertTrue($service->view($id)['can_select_students']);
+        self::assertContains($action->value, $service->view($id)['student_actions']);
         self::assertCount(3, $service->run($id, 0)['items']);
-        $page = $service->population($id, 0);
+        $page = $service->population(
+            $id,
+            0,
+            $action,
+        );
         self::assertCount(2, $page['items']);
         $ids = [$a->id->value, $b->id->value];
         sort($ids, SORT_STRING);
         self::assertSame($ids, array_column($page['items'], 'id'));
         self::assertSame(
             $page['items'],
-            $service->selectStudents($id, array_reverse($ids), $page['report_version'])['items']
+            $service->selectStudents(
+                $id,
+                array_reverse($ids),
+                $page['report_version'],
+                $action,
+            )['items']
         );
         self::assertSame($before, $this->facts($s));
         self::assertSame(['id', 'institutional_id', 'name', 'active'], array_keys($page['items'][0]));
     }
-    public function testPopulationPagesAreBoundedAndDoNotLoadTheWholeStudentDirectory(): void
-    {
+    #[DataProvider('actions')]
+    public function testPopulationPagesAreBoundedAndDoNotLoadTheWholeStudentDirectory(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         for ($i = 0; $i < 51; $i++) {
             $s->student();
         }
         $id = $this->saved($s);
-        $first = $this->service($s)->population($id, 0);
-        $second = $this->service($s)->population($id, 50);
+        $first = $this->service($s)->population(
+            $id,
+            0,
+            $action,
+        );
+        $second = $this->service($s)->population(
+            $id,
+            50,
+            $action,
+        );
         self::assertCount(50, $first['items']);
         self::assertSame(50, $first['next_offset']);
         self::assertCount(1, $second['items']);
@@ -108,8 +137,10 @@ final class ReportPopulationTest extends TestCase
             array_column($second['items'], 'id')
         ));
     }
-    public function testOriginalJoinChoicesAndAllFortyDeeplyNestedConditionsSurviveSelection(): void
-    {
+    #[DataProvider('actions')]
+    public function testOriginalJoinChoicesAndAllFortyDeeplyNestedConditionsSurviveSelection(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $student = $s->student();
         $definition = $this->definition();
@@ -130,11 +161,14 @@ final class ReportPopulationTest extends TestCase
         self::assertSame([$student->id->value], array_column($this->service($s)->selectStudents(
             $id,
             [$student->id->value],
-            0
+            0,
+            $action,
         )['items'], 'id'));
     }
-    public function testAChangedDefinitionOrLiveMembershipRequiresANewSelection(): void
-    {
+    #[DataProvider('actions')]
+    public function testAChangedDefinitionOrLiveMembershipRequiresANewSelection(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $student = $s->student();
         $definition = $this->definition();
@@ -145,14 +179,24 @@ final class ReportPopulationTest extends TestCase
         $s->sql->update('sis_students', ['active' => 0], ['id' => $student->id->value]);
         $before = $s->sql->rows('sis_audit');
         try {
-            $service->selectStudents($id, [$student->id->value], 0);
+            $service->selectStudents(
+                $id,
+                [$student->id->value],
+                0,
+                $action,
+            );
             self::fail('An out-of-population student was handed off.');
         } catch (ConcurrentModificationException) {
             self::assertSame($before, $s->sql->rows('sis_audit'));
         }
         $service->save($id, EntityId::generate(), 0, 'Revised fictional report', $definition);
         $this->expectException(ConcurrentModificationException::class);
-        $service->selectStudents($id, [$student->id->value], 0);
+        $service->selectStudents(
+            $id,
+            [$student->id->value],
+            0,
+            $action,
+        );
     }
     public static function insufficientGrants(): iterable
     {
@@ -169,15 +213,21 @@ final class ReportPopulationTest extends TestCase
         $s->access->staff = false;
         $s->access->grants = [...$grants, 'sis:reporting:manage'];
         try {
-            self::assertFalse($this->service($s)->view($id)['can_select_students']);
+            self::assertNotContains('registration', $this->service($s)->view($id)['student_actions']);
         } catch (AccessDeniedException) {
             self::assertTrue(true); // Source restrictions can also prevent viewing the saved definition.
         }
         $this->expectException(AccessDeniedException::class);
-        $this->service($s)->population($id, 0);
+        $this->service($s)->population(
+            $id,
+            0,
+            StudentPopulationAction::Registration,
+        );
     }
-    public function testRevokingAShareStopsPopulationReadsDespiteRegistrationAuthority(): void
-    {
+    #[DataProvider('actions')]
+    public function testRevokingAShareStopsPopulationReadsDespiteRegistrationAuthority(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $student = $s->student();
         $id = $this->saved($s);
@@ -186,67 +236,104 @@ final class ReportPopulationTest extends TestCase
         $reports->share($id, $reader);
         $s->access->actor = $reader;
         $s->access->staff = false;
-        $s->access->grants = ['sis:reporting:run', 'sis:student:read', 'sis:registration:manage'];
-        self::assertSame($student->id->value, $this->service($s)->population($id, 0)['items'][0]['id']);
+        $s->access->grants = ['sis:reporting:run', 'sis:student:read', ...$action->permissions()];
+        self::assertSame($student->id->value, $this->service($s)->population(
+            $id,
+            0,
+            $action,
+        )['items'][0]['id']);
         $reports->unshare($id, $reader);
         $this->expectException(AccessDeniedException::class);
-        $this->service($s)->selectStudents($id, [$student->id->value], 0);
+        $this->service($s)->selectStudents(
+            $id,
+            [$student->id->value],
+            0,
+            $action,
+        );
     }
-    public function testSummariesAndSectionSourcesCannotBeReinterpretedAsStudentPopulations(): void
-    {
+    #[DataProvider('actions')]
+    public function testSummariesAndSectionSourcesCannotBeReinterpretedAsStudentPopulations(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $grouped = $this->definition();
         $grouped['columns'][0]['aggregate'] = 'count_distinct';
         foreach ([$grouped, $this->definition('sections')] as $definition) {
             $id = $this->saved($s, $definition);
-            self::assertFalse($this->service($s)->view($id)['can_select_students']);
+            self::assertNotContains($action->value, $this->service($s)->view($id)['student_actions']);
             try {
-                $this->service($s)->population($id, 0);
+                $this->service($s)->population(
+                    $id,
+                    0,
+                    $action,
+                );
                 self::fail('A summarized or non-student source became a population.');
             } catch (ValidationException) {
                 self::assertTrue(true);
             }
         }
     }
-    public function testSelectionRequiresOneToTwentyFiveDistinctCanonicalStudentReferences(): void
-    {
+    #[DataProvider('actions')]
+    public function testSelectionRequiresOneToTwentyFiveDistinctCanonicalStudentReferences(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $student = $s->student();
         $id = $this->saved($s);
         foreach ([[], [$student->id->value, $student->id->value], array_fill(0, 26, $student->id->value)] as $bad) {
             try {
-                $this->service($s)->selectStudents($id, $bad, 0);
+                $this->service($s)->selectStudents(
+                    $id,
+                    $bad,
+                    0,
+                    $action,
+                );
                 self::fail('An invalid population size or duplicate reference was accepted.');
             } catch (ValidationException) {
                 self::assertTrue(true);
             }
         }
         $this->expectException(\InvalidArgumentException::class);
-        $this->service($s)->selectStudents($id, ["x' OR 1=1 --"], 0);
+        $this->service($s)->selectStudents(
+            $id,
+            ["x' OR 1=1 --"],
+            0,
+            $action,
+        );
     }
-    public function testAuthorityLostDuringTheReadAuditRollsBackItsAuditAndReturnsNoPopulation(): void
-    {
+    #[DataProvider('actions')]
+    public function testAuthorityLostDuringTheReadAuditRollsBackItsAuditAndReturnsNoPopulation(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $s->student();
         $id = $this->saved($s);
         $audit = $this->createMock(AuditTrail::class);
         $audit->expects(self::once())->method('record')->willReturnCallback(
-            static function (EntityId $actor, string $action, EntityId $subject) use ($s): void {
-                $s->audit->record($actor, $action, $subject);
+            static function (EntityId $actor, string $auditAction, EntityId $subject) use ($s, $action): void {
+                $s->audit->record($actor, $auditAction, $subject);
                 $s->access->staff = false;
+                $s->access->grants = ['sis:reporting:run', 'sis:student:read',
+                    ...array_slice($action->permissions(), 0, -1)];
             }
         );
         $before = $s->sql->rows('sis_audit');
         try {
-            $this->service($s, $audit)->population($id, 0);
+            $this->service($s, $audit)->population(
+                $id,
+                0,
+                $action,
+            );
             self::fail('A population was returned after authority was removed.');
         } catch (AccessDeniedException) {
             self::assertSame($before, $s->sql->rows('sis_audit'));
         }
     }
 
-    public function testOriginalOutputFieldPermissionCannotBeBypassedByReplacingPopulationColumns(): void
-    {
+    #[DataProvider('actions')]
+    public function testOriginalOutputFieldPermissionCannotBeBypassedByReplacingPopulationColumns(
+        StudentPopulationAction $action,
+    ): void {
         $s = new SisFixture();
         $schema = AcademicReportSchema::datasets();
         $schema['programs']['fields']['program_code']['permissions'] = ['sis:catalog:manage'];
@@ -259,9 +346,13 @@ final class ReportPopulationTest extends TestCase
         $id = EntityId::generate();
         $service->save($id, $id, -1, 'Fictional restricted report', $definition);
         $s->access->staff = false;
-        $s->access->grants = ['sis:reporting:run', 'sis:student:read', 'sis:registration:manage'];
+        $s->access->grants = ['sis:reporting:run', 'sis:student:read', ...$action->permissions()];
         $this->expectException(AccessDeniedException::class);
-        $service->population($id, 0);
+        $service->population(
+            $id,
+            0,
+            $action,
+        );
     }
 
     public function testPrivateCsrfProtectedRoutesHandOffOnlyToTheExistingReviewedRegistrationCommand(): void
@@ -283,7 +374,7 @@ final class ReportPopulationTest extends TestCase
         $handler = new \Qubus\Routing\Handlers\CallableRequestHandler($router->match(...));
         $privacy = new \Application\Http\Middleware\SisPrivacyMiddleware();
         $request = new \Qubus\Http\ServerRequest([], [], "/sis/report-studio/{$id->value}/population/", 'POST')
-            ->withParsedBody(['offset' => 0]);
+            ->withParsedBody(['offset' => 0, 'action' => 'registration']);
         $csrf = new \Codefy\Framework\Http\Middleware\Csrf\CsrfProtectionMiddleware(
             $this->createStub(\Qubus\Config\ConfigContainer::class),
             $this->createStub(\Qubus\Http\Cookies\Factory\HttpCookieFactory::class)
@@ -299,7 +390,10 @@ final class ReportPopulationTest extends TestCase
         $page = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertCount(2, $page['items']);
         $request = new \Qubus\Http\ServerRequest([], [], "/sis/report-studio/{$id->value}/population/select/", 'POST')
-            ->withParsedBody(['student_ids' => [$first->id->value, $second->id->value], 'report_version' => 0]);
+            ->withParsedBody([
+                'student_ids' => [$first->id->value, $second->id->value],
+                'report_version' => 0, 'action' => 'registration',
+            ]);
         $response = $privacy->process($request, $handler);
         self::assertSame(200, $response->getStatusCode());
         $selection = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
@@ -330,5 +424,154 @@ final class ReportPopulationTest extends TestCase
         $events = $s->sql->rows('sis_history_events');
         self::assertSame($receipt, $batch->commit(new EntityId($review['operation_id']), $group, $review['revision']));
         self::assertSame($events, $s->sql->rows('sis_history_events'));
+    }
+
+    public function testBillingAndRegistrationAreAdvertisedAndAuthorizedIndependently(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $id = $this->saved($s);
+        $service = $this->service($s);
+        $s->access->staff = false;
+        $base = ['sis:reporting:run', 'sis:student:read'];
+        foreach (StudentPopulationAction::cases() as $action) {
+            $s->access->grants = [...$base, ...$action->permissions()];
+            self::assertSame([$action->value], $service->view($id)['student_actions']);
+            $page = $service->population($id, 0, $action);
+            self::assertSame($action->value, $page['action']);
+            self::assertSame([$student->id->value], array_column($page['items'], 'id'));
+            $other = $action === StudentPopulationAction::Billing
+            ? StudentPopulationAction::Registration : StudentPopulationAction::Billing;
+            $before = $this->facts($s);
+            try {
+                $service->selectStudents($id, [$student->id->value], 0, $other);
+                self::fail('One task supplied another task\'s authority.');
+            } catch (AccessDeniedException) {
+                self::assertSame($before, $this->facts($s));
+            }
+        }
+        $s->access->staff = true;
+        self::assertSame(['registration', 'billing'], $service->view($id)['student_actions']);
+        $service->configureReport($id, EntityId::generate(), 0, 'static', null);
+        self::assertSame([], $service->view($id)['student_actions']);
+        foreach (StudentPopulationAction::cases() as $action) {
+            try {
+                $service->population($id, 0, $action);
+                self::fail('A static capture supplied a live task population.');
+            } catch (ValidationException) {
+                self::assertSame([], $s->sql->rows('sis_billing_batches'));
+            }
+        }
+    }
+
+    public static function missingBillingGrants(): iterable
+    {
+        $all = ['sis:reporting:run', 'sis:student:read', 'sis:finance:read', 'sis:finance:post'];
+        foreach ($all as $missing) {
+            yield $missing => [array_values(array_diff($all, [$missing]))];
+        }
+    }
+
+    public function testFinancialDetailReportsKeepBalanceCurrencyAndSourceChecksWhileDeduplicatingStudents(): void
+    {
+        $s = new SisFixture();
+        $first = $s->student();
+        $second = $s->student();
+        $term = EntityId::generate();
+        $s->sql->insert('sis_terms', ['id' => $term->value, 'code' => '27/SP',
+            'starts_on' => '2027-01-04', 'ends_on' => '2027-05-15', 'add_drop_ends_on' => '2027-01-15']);
+        $accountA = $s->finance()->open($first->id, $s->term, 'USD');
+        $accountB = $s->finance()->open($first->id, $term, 'USD');
+        $accountC = $s->finance()->open($second->id, $s->term, 'EUR');
+        $postings = [];
+        foreach ([$accountA, $accountB, $accountC] as $account) {
+            $operation = EntityId::generate();
+            $s->finance()->post(
+                $account->aggregateId(),
+                $operation,
+                \Domain\Finance\Enum\EntryType::Charge,
+                new \Domain\Finance\ValueObject\Money(250, $account->balance()->currency),
+                $account->playhead(),
+                'Fictional report source charge.'
+            );
+            $postings[] = [$account->aggregateId(), $operation];
+        }
+        $definition = $this->definition('accounts');
+        $definition['columns'][] = ['field' => 'balance', 'label' => 'Balance', 'aggregate' => 'none'];
+        $definition['columns'][] = ['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none'];
+        $definition['filters'] = ['condition' => 'AND', 'rules' => [
+            ['id' => 'balance', 'operator' => 'greater', 'value' => 0],
+            ['id' => 'currency', 'operator' => 'equal', 'value' => 'USD'],
+        ]];
+        $id = $this->saved($s, $definition);
+        $service = $this->service($s);
+        $before = $this->facts($s);
+        self::assertCount(2, $service->run($id, 0)['items']);
+        self::assertSame([$first->id->value], array_column(
+            $service->population($id, 0, StudentPopulationAction::Billing)['items'],
+            'id'
+        ));
+        self::assertSame($before, $this->facts($s));
+        $s->access->staff = false;
+        $s->access->grants = ['sis:reporting:run', 'sis:student:read', 'sis:registration:manage'];
+        try {
+            $service->population($id, 0, StudentPopulationAction::Registration);
+            self::fail('Derived student columns bypassed the original financial source permission.');
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $this->facts($s));
+        }
+        $s->access->staff = true;
+        foreach (array_slice($postings, 0, 2) as [$account, $operation]) {
+            $s->finance()->reverse(
+                $account,
+                $operation,
+                $s->accounts->get($account)->playhead(),
+                'Fictional source balance corrected.'
+            );
+        }
+        $before = $this->facts($s);
+        try {
+            $service->selectStudents($id, [$first->id->value], 0, StudentPopulationAction::Billing);
+            self::fail('A changed financial filter handed off an outdated student.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->facts($s));
+        }
+        $definition['columns'][1]['aggregate'] = 'sum';
+        $summary = $this->saved($s, $definition);
+        self::assertSame([], $service->view($summary)['student_actions']);
+        $this->expectException(ValidationException::class);
+        $service->population($summary, 0, StudentPopulationAction::Billing);
+    }
+
+    #[DataProvider('missingBillingGrants')]
+    public function testEveryBillingPopulationPermissionIsRequiredEvenForASharedReport(array $grants): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $id = $this->saved($s);
+        $reader = $s->user();
+        new SqlReportRepository($s->sql, $s->clock)->share($id, $reader);
+        $s->access->actor = $reader;
+        $s->access->staff = false;
+        $s->access->grants = $grants;
+        $before = $this->facts($s);
+        $audit = $s->sql->rows('sis_audit');
+        foreach (
+            [fn () => $this->service($s)->population($id, 0, StudentPopulationAction::Billing),
+            fn () => $this->service($s)->selectStudents(
+                $id,
+                [$student->id->value],
+                0,
+                StudentPopulationAction::Billing
+            )] as $attempt
+        ) {
+            try {
+                $attempt();
+                self::fail('Sharing bypassed a required billing-population permission.');
+            } catch (AccessDeniedException) {
+                self::assertSame($before, $this->facts($s));
+                self::assertSame($audit, $s->sql->rows('sis_audit'));
+            }
+        }
     }
 }

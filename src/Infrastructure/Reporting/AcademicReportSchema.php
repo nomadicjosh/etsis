@@ -494,6 +494,7 @@ final class AcademicReportSchema
             'fields' => $dataset['fields'] + $studentFields,
         ]);
         $accounts = [
+            'student_population' => true,
             'table' => 'sis_student_accounts', 'root' => 'account',
             'label' => 'Student account balances',
             'description' => 'One row per student and billing term. Positive balances are owed; negative balances '

@@ -31,14 +31,14 @@ window.createWorkspaceReportStudio = function (ui) {
         alert.hidden = false;
         alert.focus();
     }
-    const button = (label, callback, style = "btn-outline-primary") =>
+    const button = (label, callback, style = "btn-outline-primary", afterTask = null) =>
         node(
             "button",
             {
                 type: "button",
                 class: `btn ${style}`,
-                onclick: (event) =>
-                    task(async () => {
+                onclick: async (event) => {
+                    await task(async () => {
                         const alert = dialog?.querySelector(".report-local-error");
                         if (alert) alert.hidden = true;
                         try {
@@ -46,7 +46,9 @@ window.createWorkspaceReportStudio = function (ui) {
                         } catch (error) {
                             localError(error);
                         }
-                    }, event.currentTarget),
+                    }, event.currentTarget);
+                    afterTask?.();
+                },
             },
             label,
         );
@@ -1791,42 +1793,54 @@ window.createWorkspaceReportStudio = function (ui) {
             ),
         );
     }
-    async function population(id, state = null) {
+    async function population(id, action, state = null) {
+        if (!["registration", "billing"].includes(action)) throw new Error("Choose a supported student task.");
+        const billing = action === "billing";
         state ||= { selected: new Map(), version: null, offset: 0 };
-        const body = openSpace("Choose students for registration", "SAVED REPORT · STUDENT POPULATION");
-        body.append(node("p", {}, "Choose up to 25 distinct students across this report's live population pages. Repeated program or credit rows count as one student. The selection is checked against the saved report again before opening the existing registration review."),
-            node("p", { class: "form-text" }, "Report access does not grant registration authority. No enrollment or charge is created here. Registration uses each student's current primary pursuit. The group remains editable and checks current eligibility, seats and fees before confirmation."));
+        const body = openSpace(`Choose students for ${action}`, "SAVED REPORT · STUDENT POPULATION");
+        body.append(node("p", {}, `Choose up to 25 distinct students across this report's live population pages. Repeated program or credit rows count as one student. The selection is checked against the saved report again before opening the ${action} review.`),
+            node("p", { class: "form-text" }, billing
+                ? "Report access does not grant billing authority. No charge is created here. The billing group remains editable; choose a term and review current fees, earlier postings and resulting balances before confirmation. Program fees use each student's current primary pursuit."
+                : "Report access does not grant registration authority. No enrollment or charge is created here. Registration uses each student's current primary pursuit. The group remains editable and checks current eligibility, seats and fees before confirmation."));
         const selected = node("section", { class: "record-section", "aria-label": "Selected report students" });
         const status = node("p", { role: "status", "aria-live": "polite" });
         const results = node("div"), navigation = node("div", { class: "inline-actions" });
         let loading = false, requestNumber = 0, checks = new Map(), next = null;
         const forget = () => {
             state.selected.clear();
+            state.version = null;
             checks.clear();
             results.replaceChildren();
+            navigation.replaceChildren();
             next = null;
             renderSelected();
         };
-        const continueButton = button("Review selected students for registration", async () => {
+        const continueButton = button(`Review selected students for ${action}`, async () => {
             if (loading) return;
             loading = true;
             renderSelected();
             const attempt = ++requestNumber;
             try {
                 const result = await request(`/sis/report-studio/${id}/population/select/`, "POST", {
-                    student_ids: [...state.selected.keys()], report_version: state.version,
+                    student_ids: [...state.selected.keys()], report_version: state.version, action,
                 });
                 if (!body.isConnected || attempt !== requestNumber) return;
-                await ui.registerPopulation(result.items, () => population(id, state));
+                const open = billing ? ui.billPopulation : ui.registerPopulation;
+                await open(result.items, () => population(id, action, state));
             } catch (error) {
                 if (!body.isConnected || attempt !== requestNumber) return;
-                if ([403, 404].includes(error.status)) forget();
+                if ([403, 404, 409].includes(error.status)) {
+                    forget();
+                    status.textContent = error.status === 409
+                        ? "The report or matching students changed. Refresh the student population and choose again."
+                        : "Student selection is unavailable. Review access and refresh the student population.";
+                }
                 throw error;
             } finally {
                 loading = false;
                 if (body.isConnected) renderSelected();
             }
-        }, "btn-primary");
+        }, "btn-primary", () => { if (body.isConnected) renderSelected(); });
         function renderSelected() {
             selected.replaceChildren(node("h2", { class: "h5" }, `${state.selected.size} of 25 students selected`),
                 ...[...state.selected.values()].map(student => node("p", {},
@@ -1852,7 +1866,7 @@ window.createWorkspaceReportStudio = function (ui) {
             navigation.replaceChildren();
             status.textContent = "Loading matching students…";
             try {
-                const page = await request(`/sis/report-studio/${id}/population/`, "POST", { offset });
+                const page = await request(`/sis/report-studio/${id}/population/`, "POST", { offset, action });
                 if (!body.isConnected || attempt !== requestNumber) return;
                 const changed = state.version !== null && state.version !== page.report_version;
                 if (changed) state.selected.clear();
@@ -1868,7 +1882,7 @@ window.createWorkspaceReportStudio = function (ui) {
                         if (loading) { check.checked = state.selected.has(student.id); return; }
                         if (check.checked && !state.selected.has(student.id) && state.selected.size >= 25) {
                             check.checked = false;
-                            status.textContent = "Choose at most 25 students for one registration group.";
+                            status.textContent = `Choose at most 25 students for one ${action} group.`;
                             return;
                         }
                         if (check.checked) state.selected.set(student.id, student);
@@ -2001,8 +2015,10 @@ window.createWorkspaceReportStudio = function (ui) {
         }));
         if (can("sis:reporting:manage") && saved.can_manage)
             body.append(button("Manage report sharing", () => ui.sharing(id)));
-        if (saved.can_select_students && can("sis:registration:manage") && can("sis:student:read") && can("sis:reporting:run"))
-            body.append(button("Choose students for registration", () => population(id)));
+        if (saved.student_actions?.includes("registration") && can("sis:registration:manage") && can("sis:student:read") && can("sis:reporting:run"))
+            body.append(button("Choose students for registration", () => population(id, "registration")));
+        if (saved.student_actions?.includes("billing") && can("sis:finance:post") && can("sis:finance:read") && can("sis:student:read") && can("sis:reporting:run"))
+            body.append(button("Choose students for billing", () => population(id, "billing")));
         const panel = node("section", {
             class: "record-section report-saved-results",
             "aria-label": "Saved report results",

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Reporting\Service\RelationalReportService;
 use Domain\Reporting\ValueObject\ReportGraph;
 use Domain\Reporting\ValueObject\ReportQuery;
@@ -86,8 +87,17 @@ final class ReportGraphTest extends TestCase
         self::assertSame([['c0' => $both->id->value]], $service->preview($this->definition(), 0)['items']);
         $id = EntityId::generate();
         $service->save($id, $id, -1, 'Fictional two-term students', $this->definition());
-        self::assertSame($both->id->value, $service->population($id, 0)['items'][0]['id']);
-        self::assertSame($both->id->value, $service->selectStudents($id, [$both->id->value], 0)['items'][0]['id']);
+        self::assertSame($both->id->value, $service->population(
+            $id,
+            0,
+            StudentPopulationAction::Registration,
+        )['items'][0]['id']);
+        self::assertSame($both->id->value, $service->selectStudents(
+            $id,
+            [$both->id->value],
+            0,
+            StudentPopulationAction::Registration,
+        )['items'][0]['id']);
         self::assertSame($events, $s->sql->rows('sis_history_events'));
     }
     public function testRepeatedOutputJoinsExposeTheirTrueGrainAndDistinctStudentCountsRemainAvailable(): void

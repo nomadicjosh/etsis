@@ -7,6 +7,7 @@ namespace Domain\Reporting\Service;
 use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Reporting\Repository\RelationalReportRepository;
 use Domain\Reporting\Repository\RelationalReportSource;
 use Domain\Reporting\Repository\ReportRepository;
@@ -233,28 +234,38 @@ final readonly class RelationalReportService
             "version" => (int) $record["version"],
             "definition" => $data,
             "can_manage" => $manage,
-            "can_select_students" => !$this->lifecycles->isStatic($id) && $this->canSelectStudents($data),
+            "student_actions" => $this->lifecycles->isStatic($id) ? [] : $this->studentActions($data, $actor),
             "lifecycle" => $this->lifecycles->describe($id),
         ];
     }
 
-    /** @param array<string,mixed> $definition */
-    private function canSelectStudents(array $definition): bool
+    /**
+     * @param array<string,mixed> $definition
+     * @return list<string>
+     */
+    private function studentActions(array $definition, EntityId $actor): array
     {
         try {
-            $this->populationActor();
             $query = $this->query($definition)->studentPopulation();
             $this->grants($query->permissions());
-            return true;
         } catch (AccessDeniedException | ValidationException) {
-            return false;
+            return [];
         }
+        $actions = [];
+        foreach (StudentPopulationAction::cases() as $action) {
+            try {
+                $this->populationActor($action, $actor);
+                $actions[] = $action->value;
+            } catch (AccessDeniedException) {
+            }
+        }
+        return $actions;
     }
 
-    private function populationActor(?EntityId $expected = null): EntityId
+    private function populationActor(StudentPopulationAction $action, ?EntityId $expected = null): EntityId
     {
         $actor = $this->access->requirePermission('sis:reporting:run');
-        foreach (['sis:registration:manage', 'sis:student:read'] as $permission) {
+        foreach (['sis:student:read', ...$action->permissions()] as $permission) {
             if ($this->access->requirePermission($permission)->value !== $actor->value) {
                 throw new AccessDeniedException('The report reviewer changed.');
             }
@@ -266,28 +277,33 @@ final readonly class RelationalReportService
     }
 
     /** @return array<string,mixed> */
-    public function population(EntityId $id, int $offset): array
+    public function population(EntityId $id, int $offset, StudentPopulationAction $action): array
     {
-        return $this->populationResults($id, $offset, null, null);
+        return $this->populationResults($id, $action, $offset, null, null);
     }
 
     /** @param array<mixed> $students
      * @return array<string,mixed>
      */
-    public function selectStudents(EntityId $id, array $students, int $version): array
+    public function selectStudents(EntityId $id, array $students, int $version, StudentPopulationAction $action): array
     {
-        return $this->populationResults($id, 0, $students, $version);
+        return $this->populationResults($id, $action, 0, $students, $version);
     }
 
     /** @param array<mixed>|null $students
      * @return array<string,mixed>
      */
-    private function populationResults(EntityId $id, int $offset, ?array $students, ?int $version): array
-    {
-        $actor = $this->populationActor();
-        return $this->transactions->run(function () use ($id, $offset, $students, $version, $actor): array {
+    private function populationResults(
+        EntityId $id,
+        StudentPopulationAction $action,
+        int $offset,
+        ?array $students,
+        ?int $version,
+    ): array {
+        $actor = $this->populationActor($action);
+        return $this->transactions->run(function () use ($id, $action, $offset, $students, $version, $actor): array {
             $this->reports->lock($id);
-            $this->populationActor($actor);
+            $this->populationActor($action, $actor);
             $this->canRun($id, $actor);
             $this->lifecycles->assertEditable($id);
             $record = $this->definitions->get($id) ?? throw new RecordNotFoundException('Saved report not found.');
@@ -310,17 +326,17 @@ final readonly class RelationalReportService
             }
             $this->audit->record(
                 $actor,
-                $students === null ? 'report.population_read' : 'report.population_selected',
+                'report.population_' . $action->value . ($students === null ? '_read' : '_selected'),
                 $id
             );
             $this->canRun($id, $actor);
             $this->grants($original->permissions());
             $this->grants($query->permissions());
-            $this->populationActor($actor);
+            $this->populationActor($action, $actor);
             return ['items' => array_map(static fn(array $row): array => [
                 'id' => $row['c0'], 'institutional_id' => $row['c1'], 'name' => $row['c2'], 'active' => $row['c3'],
             ], $result['items']), 'offset' => $result['offset'], 'next_offset' => $result['next_offset'],
-                'limit' => 50, 'report_version' => (int) $record['version']];
+                'limit' => 50, 'report_version' => (int) $record['version'], 'action' => $action->value];
         });
     }
 

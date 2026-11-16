@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Reporting\Service\RelationalReportService;
 use Domain\Reporting\ValueObject\ReportQuery;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -201,8 +202,17 @@ final class ReportRelatedRecordsTest extends TestCase
         $service = $this->service($s);
         $id = EntityId::generate();
         $service->save($id, $id, -1, 'Fictional matching students', $this->definition());
-        self::assertCount(1, $service->population($id, 0)['items']);
-        $selection = $service->selectStudents($id, [$student->id->value], 0);
+        self::assertCount(1, $service->population(
+            $id,
+            0,
+            StudentPopulationAction::Registration,
+        )['items']);
+        $selection = $service->selectStudents(
+            $id,
+            [$student->id->value],
+            0,
+            StudentPopulationAction::Registration,
+        );
         self::assertSame($student->id->value, $selection['items'][0]['id']);
         $service->configureReport($id, EntityId::generate(), 0, 'static', null);
         $s->sql->execute('DELETE FROM sis_enrollments');
@@ -313,9 +323,18 @@ final class ReportRelatedRecordsTest extends TestCase
         $id = EntityId::generate();
         $service = $this->service($s);
         $service->save($id, $id, -1, 'Fictional reviewed matches', $this->definition());
-        self::assertCount(1, $service->population($id, 0)['items']);
+        self::assertCount(1, $service->population(
+            $id,
+            0,
+            StudentPopulationAction::Registration,
+        )['items']);
         $s->sql->update('sis_enrollments', ['status' => 'W'], ['student_id' => $student->id->value]);
         $this->expectException(\Domain\Shared\Exception\ConcurrentModificationException::class);
-        $service->selectStudents($id, [$student->id->value], 0);
+        $service->selectStudents(
+            $id,
+            [$student->id->value],
+            0,
+            StudentPopulationAction::Registration,
+        );
     }
 }

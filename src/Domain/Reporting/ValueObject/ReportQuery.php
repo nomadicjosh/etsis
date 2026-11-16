@@ -340,7 +340,7 @@ final readonly class ReportQuery
             ) ||
             ($this->definition['having']['rules'] ?? []) !== []
         ) {
-            self::invalid('Use an unsummarized student, student-program or academic-credit report to choose students.');
+            self::invalid('Use an unsummarized report that identifies individual students.');
         }
         $definition = $this->definition;
         // Output fields can introduce joins too. Keep them even when replacing the visible columns.

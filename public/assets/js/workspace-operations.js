@@ -586,8 +586,10 @@ window.createWorkspaceOperations = function (ui) {
                 ),
             );
     }
-    async function billingBatch() {
-        const chosen = new Map();
+    async function billingBatch(presetStudents = [], back = null) {
+        if (presetStudents.length > 25) throw new Error("Select no more than 25 students.");
+        const chosen = new Map(presetStudents.map(student => [student.id,
+            `${student.institutional_id || "ID not assigned"} · ${student.name}`]));
         const descriptors = [
             ["term_id", "Billing term", "lookup", "terms"],
             ["student_id", "Find a student", "lookup", "students", false],
@@ -596,11 +598,13 @@ window.createWorkspaceOperations = function (ui) {
         const body = openDrawer("Review student bills", "TERM BILLING");
         body.append(node("p", { class: "form-text" },
             "Choose up to 25 students. Review current flat fees, earlier postings and resulting balances before confirming."));
+        if (back) body.append(button("Back to report selection", back));
         const form = await buildForm(descriptors);
         form.elements.reason.maxLength = 2000;
         const editor = node("fieldset", {}, node("legend", { class: "h5" }, "Billing selection"));
         editor.append(...form.children);
-        const selected = node("div", { class: "record-section", "aria-live": "polite" });
+        const selected = node("section", { class: "record-section", "aria-live": "polite",
+            "aria-label": "Selected billing students" });
         const reviewArea = node("div");
         let revision = 0;
         const reviewButton = node("button", { type: "submit", class: "btn btn-primary" }, "Review selected bills");

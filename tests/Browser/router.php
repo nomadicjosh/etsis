@@ -172,6 +172,8 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/office-admin-fixture/' => ['admin:access:manage', 'sis:restrictions:manage'],
         '/admin/registration-fixture/' => ['sis:registration:manage'],
         '/admin/report-fixture/' => ['sis:reporting:run'],
+        '/admin/report-billing-fixture/' => ['sis:reporting:run', 'sis:student:read',
+            'sis:finance:read', 'sis:finance:post'],
         '/admin/report-manager-fixture/' => ['sis:reporting:manage'],
         '/admin/communications-fixture/' => ['sis:communications:manage'],
         '/admin/communications-admin-fixture/' => ['sis:communications:manage', 'sis:communications:admin'],

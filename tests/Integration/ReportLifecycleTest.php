@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Reporting\StudentReport;
 use Domain\Reporting\Service\ReportRetention;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -172,10 +173,15 @@ final class ReportLifecycleTest extends TestCase
         );
         self::assertSame('LATEST', $reports->run($dynamic, 0)['items'][0]['c1']);
         self::assertSame('BSCS', $reports->run($id, 0)['items'][0]['c1']);
-        self::assertFalse($reports->view($id)['can_select_students']);
-        self::assertTrue($reports->view($dynamic)['can_select_students']);
+        self::assertNotContains('registration', $reports->view($id)['student_actions']);
+        self::assertContains('registration', $reports->view($dynamic)['student_actions']);
         $this->expectException(ValidationException::class);
-        $reports->selectStudents($id, [EntityId::generate()->value], 0);
+        $reports->selectStudents(
+            $id,
+            [EntityId::generate()->value],
+            0,
+            StudentPopulationAction::Registration,
+        );
     }
 
     public function testRequiredAuditFailureRollsBackCapturePagesConversionAndReceiptTogether(): void

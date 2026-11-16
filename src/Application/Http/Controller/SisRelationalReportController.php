@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
+use Domain\Reporting\Enum\StudentPopulationAction;
 use Domain\Reporting\Service\RelationalReportService;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
@@ -68,7 +69,8 @@ final readonly class SisRelationalReportController
     {
         return new JsonResponse($this->service->population(
             new EntityId($id),
-            FormInput::from($request)->integer('offset')
+            FormInput::from($request)->integer('offset'),
+            $this->populationAction($request)
         ));
     }
     public function settings(string $id): ResponseInterface
@@ -100,8 +102,16 @@ final readonly class SisRelationalReportController
         return new JsonResponse($this->service->selectStudents(
             new EntityId($id),
             $body['student_ids'],
-            FormInput::from($request)->integer('report_version')
+            FormInput::from($request)->integer('report_version'),
+            $this->populationAction($request)
         ));
+    }
+
+    private function populationAction(ServerRequest $request): StudentPopulationAction
+    {
+        return StudentPopulationAction::tryFrom(FormInput::from($request)->text('action', 20))
+        ?? throw new ValidationException([['field' => 'action',
+                'message' => 'Choose registration or billing for this student selection.']]);
     }
     /**
      * @throws InvalidArgument

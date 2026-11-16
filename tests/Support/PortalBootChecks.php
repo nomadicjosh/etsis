@@ -4856,3 +4856,82 @@ if (
 ) {
     throw new RuntimeException('A native billing review or accepted retry bypassed current student-read authority.');
 }
+
+// A saved report supplies a checked shortlist to the existing financial review, without registration authority.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$reportBillingStudent = $sis->student();
+$reportBillingId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$reportBillingSaved = $teachingPost('/sis/report-studio/save/', [
+    'report_id' => $reportBillingId, 'operation_id' => $reportBillingId, 'version' => -1,
+    'name' => 'Native fictional billing population', 'definition' => [
+        'dataset' => 'students', 'columns' => [
+            ['field' => 'institutional_id', 'label' => 'Student', 'aggregate' => 'none'],
+        ], 'joins' => [], 'filters' => null, 'having' => null, 'distinct' => false, 'sort' => [],
+    ],
+]);
+if ($reportBillingSaved->getStatusCode() !== 201) {
+    throw new RuntimeException('The native billing-population report could not be saved.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:reporting:run', 'sis:student:read', 'sis:finance:read', 'sis:finance:post'];
+$reportBillingBase = '/sis/report-studio/' . $reportBillingId . '/population/';
+$reportBillingBefore = $sis->sql->rows('sis_history_events');
+$reportBillingReceipts = $sis->sql->rows('sis_billing_batches');
+foreach ([['offset' => 0], ['offset' => 0, 'action' => 'unsupported']] as $reportBillingInvalid) {
+    if ($teachingPost($reportBillingBase, $reportBillingInvalid)->getStatusCode() !== 422) {
+        throw new RuntimeException('A native population read omitted or guessed its task.');
+    }
+}
+if ($teachingPost($reportBillingBase, ['offset' => 0, 'action' => 'registration'])->getStatusCode() !== 403) {
+    throw new RuntimeException('Financial authority supplied registration-population access.');
+}
+$reportBillingPage = $teachingPost($reportBillingBase, ['offset' => 0, 'action' => 'billing']);
+$reportBillingPageBody = json_decode((string) $reportBillingPage->getBody(), true);
+$reportBillingSelection = $teachingPost($reportBillingBase . 'select/', [
+    'student_ids' => [$reportBillingStudent->id->value], 'report_version' => 0, 'action' => 'billing',
+]);
+$reportBillingSelectionBody = json_decode((string) $reportBillingSelection->getBody(), true);
+if (
+    $reportBillingPage->getStatusCode() !== 200 || ($reportBillingPageBody['action'] ?? null) !== 'billing'
+    || $reportBillingSelection->getStatusCode() !== 200
+    || array_column($reportBillingSelectionBody['items'] ?? [], 'id') !== [$reportBillingStudent->id->value]
+    || $sis->sql->rows('sis_history_events') !== $reportBillingBefore
+    || $sis->sql->rows('sis_billing_batches') !== $reportBillingReceipts
+) {
+    throw new RuntimeException('A native billing shortlist lost independent authority, source checks or read-only behavior.');
+}
+foreach ([$reportBillingPage, $reportBillingSelection] as $reportBillingResponse) {
+    if (
+        $reportBillingResponse->hasHeader('phpdebugbar-id')
+        || !str_contains($reportBillingResponse->getHeaderLine('Cache-Control'), 'no-store')
+    ) {
+        throw new RuntimeException('A native billing population lost its private response envelope.');
+    }
+}
+// The handoff is an editable manual group; report access supplies no later financial authority.
+$sis->access->grants = ['sis:student:read', 'sis:finance:read', 'sis:finance:post'];
+$reportBillingReview = $teachingPost('/sis/billing-batches/review/', [
+    'term_id' => $sis->term->value,
+    'students' => array_map(static fn (array $row): array => ['student_id' => $row['id']], $reportBillingSelectionBody['items']),
+    'reason' => 'Native private report-selected billing reason.',
+]);
+$reportBillingReviewBody = json_decode((string) $reportBillingReview->getBody(), true);
+if ($reportBillingReview->getStatusCode() !== 200 || ($reportBillingReviewBody['new_charges'] ?? null) !== 1) {
+    throw new RuntimeException('The report-selected students bypassed or failed the existing fee review.');
+}
+$sis->access->grants = ['sis:student:read', 'sis:finance:read'];
+$reportBillingConfirm = ['review_token' => $reportBillingReviewBody['review_token']];
+if (
+    $teachingPost('/sis/billing-batches/', $reportBillingConfirm)->getStatusCode() !== 403
+    || $sis->sql->rows('sis_history_events') !== $reportBillingBefore
+    || $sis->sql->rows('sis_billing_batches') !== $reportBillingReceipts
+) {
+    throw new RuntimeException('A report-selected group granted its own financial confirmation authority.');
+}
+$sis->access->grants[] = 'sis:finance:post';
+$reportBillingCompleted = $teachingPost('/sis/billing-batches/', $reportBillingConfirm);
+$reportBillingCompletedBody = json_decode((string) $reportBillingCompleted->getBody(), true);
+if ($reportBillingCompleted->getStatusCode() !== 200 || ($reportBillingCompletedBody['posted'] ?? null) !== 1) {
+    throw new RuntimeException('The existing native billing command failed the report-selected group.');
+}

@@ -19,7 +19,7 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/ui/operation-id/') result = { id: id(80 + ++state.operation) };
         else if (path === `/sis/reports/${report}/`) result = { id: report, relational: true };
         else if (path === base) result = { id: report, name: 'Fictional advising report', version: state.version,
-            can_manage: !options.recipient, can_select_students: false, lifecycle: lifecycle(),
+            can_manage: !options.recipient, student_actions: [], lifecycle: lifecycle(),
             definition: { dataset: 'students', columns: [{ field: 'institutional_id', label: 'Institutional ID', aggregate: 'none' }] } };
         else if (path === `${base}settings/`) {
             if (data) {
