@@ -77,7 +77,7 @@ for (const online of [false, true]) {
         const preview = { room_label: online ? 'Online event' : 'LIB.101 · Fictional room',
             building_label: online ? 'Joining details provided by the organizer' : 'LIB · Fictional library', timezone: 'America/Los_Angeles',
             times: Array.from({ length: 21 }, () => booking.occurrences[0]) };
-        let draft;
+        let draft, campaign;
         await page.route('**/sis/**', async route => {
             const path = new URL(route.request().url()).pathname, raw = route.request().postData();
             const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
@@ -90,7 +90,13 @@ for (const online of [false, true]) {
             else if (path.endsWith('/public-event/setup/')) result = { current, preview };
             else if (path.endsWith('/public-event/review/')) { draft = data; result = { ...data, review_token: 'fictional-encrypted-review', preview }; }
             else if (path.endsWith('/public-event/publish/')) { current = { ...draft, id: id(9), version: 1, published: 1 }; result = { id: id(9), version: 1 }; }
+            else if (path.endsWith('/public-event/announcement/')) result = { subject: current.title,
+                body: `${current.description}\n${preview.room_label}\nFictional published dates <img>` };
             else if (path.endsWith('/public-event/withdraw/')) { current.published = 0; current.version++; result = { status: 'withdrawn' }; }
+            else if (path === '/sis/campaigns/') {
+                campaign = { ...data, id: id(10), version: 0, status: 'draft', can_dispatch: false };
+                result = { id: campaign.id, status: campaign.status };
+            } else if (path === `/sis/campaigns/${id(10)}/`) result = campaign;
             await route.fulfill({ json: result });
         });
         await page.goto('/admin/');
@@ -111,6 +117,28 @@ for (const online of [false, true]) {
         expect(scan.violations).toEqual([]);
         await page.getByRole('button', { name: 'Publish public event', exact: true }).click();
         await expect(body).toContainText('Public event content is published');
+        await page.getByLabel('Public event title').fill('Unsaved event title');
+        await page.getByRole('button', { name: 'Prepare announcement', exact: true }).click();
+        await expect(page.getByRole('textbox', { name: 'Subject', exact: true })).toHaveValue('Open house <img>');
+        await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue(/Fictional published dates <img>/);
+        await expect(body.locator('img')).toHaveCount(0);
+        expect(campaign).toBeUndefined();
+        await expect(body).toContainText('Later event changes are not copied');
+        await page.getByRole('button', { name: 'Back to public event', exact: true }).click();
+        await expect(page.getByLabel('Public event title')).toHaveValue('Open house <img>');
+        await page.getByRole('button', { name: 'Prepare announcement', exact: true }).click();
+        await page.getByRole('textbox', { name: 'Subject', exact: true }).fill('Reviewed fictional announcement');
+        await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Reviewed public invitation and dates.');
+        await page.getByRole('button', { name: 'Save and continue', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Choose recipients', exact: true })).toBeVisible();
+        expect(campaign.subject).toBe('Reviewed fictional announcement');
+        expect(campaign.body).toBe('Reviewed public invitation and dates.');
+        expect(calls.some(call => /\/(queue|dispatch)\/$/.test(call.path))).toBe(false);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#record-drawer')).not.toBeVisible();
+        await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
+        await page.getByRole('button', { name: /Open PRIVATE staff purpose/ }).click();
+        await page.getByRole('button', { name: 'Manage public event', exact: true }).click();
         await page.getByRole('button', { name: 'Withdraw public event', exact: true }).click();
         await page.getByRole('button', { name: 'Confirm withdrawal', exact: true }).click();
         await expect(body).toContainText('This event is not published');

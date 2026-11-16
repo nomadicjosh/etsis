@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Domain\Scheduling\Service;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Scheduling\CalendarPeriod;
@@ -153,6 +155,30 @@ final readonly class PublicEventService
         return ['today' => $now->format('Y-m-d'), 'timezone' => $now->getTimezone()->getName()];
     }
 
+    /** Prepare editable text only; recipients, encrypted persistence and delivery belong to Communications.
+     * @return array{subject:string,body:string}
+     */
+    public function announcement(EntityId $booking): array
+    {
+        $actor = $this->authorizeAnnouncement();
+        $times = $this->events->publishedTimes($booking);
+        if ($times === [] || count($times) > 366) {
+            throw new ValidationException([['field' => 'event',
+                'message' => 'Publish an approved event with between one and 366 active public meetings first.']]);
+        }
+        $event = $times[0];
+        $zone = new DateTimeZone($event['timezone']);
+        $lines = [$event['title'], '', $event['description'], '',
+            $event['room_label'] . ' · ' . $event['building_label'], '', 'Dates · ' . $zone->getName()];
+        foreach ($times as $time) {
+            $starts = new DateTimeImmutable($time['starts_at'])->setTimezone($zone);
+            $ends = new DateTimeImmutable($time['ends_at'])->setTimezone($zone);
+            $lines[] = $starts->format('D, M j, Y H:i P') . ' through ' . $ends->format('D, M j, Y H:i P');
+        }
+        $this->authorizeAnnouncement($actor);
+        return ['subject' => $event['title'], 'body' => implode("\n", $lines)];
+    }
+
     /** A deliberately small teaser, not a partial calendar total.
      * @return list<array<string,mixed>>
      */
@@ -254,6 +280,15 @@ final readonly class PublicEventService
             $this->access->requirePermission('sis:portal:manage')->value !== $actor->value
             || ($expected !== null && $expected->value !== $actor->value)
         ) {
+            throw new AccessDeniedException('Access denied.');
+        }
+        return $actor;
+    }
+
+    private function authorizeAnnouncement(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->authorize($expected);
+        if ($this->access->requirePermission('sis:communications:manage')->value !== $actor->value) {
             throw new AccessDeniedException('Access denied.');
         }
         return $actor;

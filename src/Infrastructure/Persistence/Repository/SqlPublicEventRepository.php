@@ -107,24 +107,7 @@ final readonly class SqlPublicEventRepository implements PublicEventRepository
     public function calendar(TimeSlot $window, string $search, int $limit): array
     {
         $q = $this->sql->quote(...);
-        $columns = ['p.id', 'p.event_id', 'p.starts_at', 'p.ends_at', 'e.title', 'e.description',
-            'e.timezone', 'e.room_label', 'e.building_label'];
-        $columns = array_map(static function (string $column) use ($q): string {
-            [$alias, $field] = explode('.', $column);
-            return $alias . '.' . $q($field);
-        }, $columns);
-        $query = 'SELECT ' . implode(', ', $columns) . ' FROM ' . $q('sis_public_event_times') . ' p JOIN '
-        . $q('sis_public_events') . ' e ON e.' . $q('id') . ' = p.' . $q('event_id') . ' JOIN '
-        . $q('sis_bookings') . ' b ON b.' . $q('id') . ' = e.' . $q('booking_id') . ' AND (b.'
-        . $q('room_id') . ' = e.' . $q('room_id') . ' OR b.' . $q('room_id')
-        . ' IS NULL AND e.' . $q('room_id') . ' IS NULL) JOIN ' . $q('sis_booking_slots') . ' s ON s.'
-        . $q('id') . ' = p.' . $q('occurrence_id') . ' AND s.' . $q('booking_id') . ' = b.' . $q('id')
-        . ' AND s.' . $q('starts_at') . ' = p.' . $q('starts_at') . ' AND s.' . $q('ends_at')
-        . ' = p.' . $q('ends_at') . ' AND (s.' . $q('room_id') . ' = e.' . $q('room_id')
-        . ' OR s.' . $q('room_id') . ' IS NULL AND e.' . $q('room_id') . ' IS NULL)'
-        . ' WHERE e.' . $q('published') . ' = 1 AND b.' . $q('status')
-        . ' = ? AND b.' . $q('section_publication_id') . ' IS NULL AND s.' . $q('cancelled_at')
-        . ' IS NULL AND p.' . $q('starts_at') . ' < ? AND p.' . $q('ends_at') . ' > ?';
+        $query = $this->publishedSelect() . ' AND p.' . $q('starts_at') . ' < ? AND p.' . $q('ends_at') . ' > ?';
         $utc = new \DateTimeZone('UTC');
         $params = ['approved', $window->endsAt->setTimezone($utc)->format('Y-m-d H:i:s'),
             $window->startsAt->setTimezone($utc)->format('Y-m-d H:i:s')];
@@ -137,6 +120,47 @@ final readonly class SqlPublicEventRepository implements PublicEventRepository
             }
             $query .= ' AND (' . implode(' OR ', $parts) . ')';
         }
+        return $this->publicRows($query, $params, $limit);
+    }
+
+    public function publishedTimes(EntityId $booking): array
+    {
+        return $this->publicRows(
+            $this->publishedSelect() . ' AND e.' . $this->sql->quote('booking_id') . ' = ?',
+            ['approved', $booking->value],
+            367
+        );
+    }
+
+    private function publishedSelect(): string
+    {
+        $q = $this->sql->quote(...);
+        $columns = ['p.id', 'p.event_id', 'p.starts_at', 'p.ends_at', 'e.title', 'e.description',
+            'e.timezone', 'e.room_label', 'e.building_label'];
+        $columns = array_map(static function (string $column) use ($q): string {
+            [$alias, $field] = explode('.', $column);
+            return $alias . '.' . $q($field);
+        }, $columns);
+        return 'SELECT ' . implode(', ', $columns) . ' FROM ' . $q('sis_public_event_times') . ' p JOIN '
+        . $q('sis_public_events') . ' e ON e.' . $q('id') . ' = p.' . $q('event_id') . ' JOIN '
+        . $q('sis_bookings') . ' b ON b.' . $q('id') . ' = e.' . $q('booking_id') . ' AND (b.'
+        . $q('room_id') . ' = e.' . $q('room_id') . ' OR b.' . $q('room_id')
+        . ' IS NULL AND e.' . $q('room_id') . ' IS NULL) JOIN ' . $q('sis_booking_slots') . ' s ON s.'
+        . $q('id') . ' = p.' . $q('occurrence_id') . ' AND s.' . $q('booking_id') . ' = b.' . $q('id')
+        . ' AND s.' . $q('starts_at') . ' = p.' . $q('starts_at') . ' AND s.' . $q('ends_at')
+        . ' = p.' . $q('ends_at') . ' AND (s.' . $q('room_id') . ' = e.' . $q('room_id')
+        . ' OR s.' . $q('room_id') . ' IS NULL AND e.' . $q('room_id') . ' IS NULL)'
+        . ' WHERE e.' . $q('published') . ' = 1 AND b.' . $q('status')
+        . ' = ? AND b.' . $q('section_publication_id') . ' IS NULL AND s.' . $q('cancelled_at')
+        . ' IS NULL';
+    }
+
+    /** @param list<string> $params
+     * @return list<array<string,mixed>>
+     */
+    private function publicRows(string $query, array $params, int $limit): array
+    {
+        $q = $this->sql->quote(...);
         $rows = $this->sql->fetch($query . ' ORDER BY p.' . $q('starts_at') . ', p.' . $q('id'), $params, $limit);
         return array_map(static function (array $row): array {
             foreach (['starts_at', 'ends_at'] as $field) {

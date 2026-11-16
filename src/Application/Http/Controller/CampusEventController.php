@@ -53,6 +53,11 @@ final readonly class CampusEventController
         return new JsonResponse($this->events->setup(new EntityId($id)));
     }
 
+    public function announcement(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->events->announcement(new EntityId($id)));
+    }
+
     public function review(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);

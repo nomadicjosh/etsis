@@ -4014,7 +4014,28 @@ if ($publicEventReviewResponse->getStatusCode() !== 200
     || $teachingPost($publicEventBase . 'publish/', ['review_token' => $publicEventReview['review_token']])->getStatusCode() !== 200) {
     throw new RuntimeException('Public event publication lost its explicit safe-content review.');
 }
+$announcementUnverified = $publicEventUnverified->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $publicEventBase . 'announcement/')
+);
+if ($app->router->match($announcementUnverified)->getStatusCode() !== 403) {
+    throw new RuntimeException('Event announcement preparation bypassed framework CSRF.');
+}
+$announcementResponse = $teachingPost($publicEventBase . 'announcement/', []);
+$announcement = json_decode((string) $announcementResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $announcementResponse->getStatusCode() !== 200 || $announcementResponse->hasHeader('phpdebugbar-id')
+    || !str_contains($announcementResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || ($announcement['subject'] ?? null) !== 'Fictional public gathering'
+    || !str_contains($announcement['body'] ?? '', 'Public invitation only.')
+    || str_contains($announcement['body'] ?? '', 'PRIVATE')
+) {
+    throw new RuntimeException('Event announcement preparation lost its private safe-content response.');
+}
 $sis->access->staff = false;
+$sis->access->grants = ['sis:scheduling:manage', 'sis:portal:manage'];
+if ($teachingPost($publicEventBase . 'announcement/', [])->getStatusCode() !== 403) {
+    throw new RuntimeException('Event announcement preparation bypassed Communications authority.');
+}
 $sis->access->grants = [];
 $publicCalendarRequest = $get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/portal/api/events/'))
     ->withQueryParams(['date' => '2026-08-25', 'view' => 'week']);

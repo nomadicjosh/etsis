@@ -9,6 +9,7 @@ use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Scheduling\Booking;
 use Domain\Scheduling\BookingOccurrence;
+use Domain\Scheduling\Repository\PublicEventRepository;
 use Domain\Scheduling\Service\PublicEventService;
 use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -395,5 +396,140 @@ final class PublicCampusEventsTest extends TestCase
         self::assertCount(1, $service->calendar()['items']);
         $f->sql->update('sis_bookings', ['room_id' => $room->value], ['id' => $booking->id->value]);
         self::assertSame([], $service->calendar()['items']);
+    }
+
+    public function testAnnouncementUsesOnlyRetainedPublicContentAndCurrentlyVisibleMeetings(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, count: 3);
+        $service = $this->service($f);
+        $this->publish($service, $booking);
+        $f->sql->update('sis_rooms', ['name' => 'Unreviewed new location'], ['id' => $booking->roomId->value]);
+        $repo = new SqlBookingRepository($f->sql);
+        $repo->cancelOccurrence(
+            $booking->cancelOccurrence($booking->occurrences[0]->id, $f->access->actor, $f->clock->now()),
+            $booking->occurrences[0]->id,
+            0
+        );
+        $f->sql->update(
+            'sis_booking_slots',
+            ['starts_at' => '2026-08-11 20:00:00'],
+            ['id' => $booking->occurrences[1]->id->value]
+        );
+        $before = [];
+        foreach (['sis_campaigns', 'sis_deliveries', 'sis_audit', 'sis_history_events'] as $table) {
+            $before[$table] = $f->sql->rows($table);
+        }
+        $draft = $service->announcement($booking->id);
+        self::assertSame(['subject', 'body'], array_keys($draft));
+        self::assertSame('Fictional open house', $draft['subject']);
+        self::assertStringContainsString('Public invitation <script>example</script>', $draft['body']);
+        self::assertStringContainsString('America/Los_Angeles', $draft['body']);
+        self::assertStringContainsString('Wed, Aug 12, 2026 11:00 -07:00', $draft['body']);
+        foreach (
+            ['Aug 10', 'Aug 11', 'PRIVATE', 'Unreviewed new location', $booking->id->value,
+                $booking->ownerUserId->value, $booking->occurrences[2]->id->value] as $secret
+        ) {
+            self::assertStringNotContainsString($secret, $draft['body']);
+        }
+        foreach ($before as $table => $rows) {
+            self::assertSame($rows, $f->sql->rows($table));
+        }
+    }
+
+    public function testAnnouncementIncludesTheWholePublishedSeriesAcrossMonthsAndTimezoneOffsets(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, count: 100, online: true);
+        $service = $this->service($f);
+        $this->publish($service, $booking, str_repeat('é', 191));
+        $draft = $service->announcement($booking->id);
+        self::assertSame(str_repeat('é', 191), $draft['subject']);
+        self::assertSame(100, substr_count($draft['body'], ' through '));
+        self::assertStringContainsString('Online event · Joining details provided by the organizer', $draft['body']);
+        self::assertStringContainsString('Tue, Nov 17, 2026 10:00 -08:00', $draft['body']);
+        self::assertLessThan(100000, strlen($draft['body']));
+    }
+
+    public function testUnpublishedWithdrawnCancelledAndMismatchedEventsCannotPrepareAnnouncements(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, online: true);
+        $service = $this->service($f);
+        $reject = static function () use ($service, $booking): void {
+            try {
+                $service->announcement($booking->id);
+                self::fail('An event without a current public meeting prepared an announcement.');
+            } catch (ValidationException) {
+                self::assertTrue(true);
+            }
+        };
+        $reject();
+        $this->publish($service, $booking);
+        $service->withdraw($booking->id, 1);
+        $reject();
+        $this->publish($service, $booking);
+        foreach (['requested', 'cancelled'] as $status) {
+            $f->sql->update('sis_bookings', ['status' => $status], ['id' => $booking->id->value]);
+            $reject();
+        }
+        $f->sql->update('sis_bookings', ['status' => 'approved'], ['id' => $booking->id->value]);
+        $f->sql->update(
+            'sis_booking_slots',
+            ['cancelled_at' => '2026-08-01 10:00:00'],
+            ['id' => $booking->occurrences[0]->id->value]
+        );
+        $reject();
+        $f->sql->update('sis_booking_slots', ['cancelled_at' => null,
+            'room_id' => $f->room('PRIVATE new place', 10)->value], ['id' => $booking->occurrences[0]->id->value]);
+        $reject();
+    }
+
+    public function testAnnouncementRequiresSchedulingPublicationAndCommunicationsPermissions(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $this->publish($service, $booking);
+        $f->access->staff = false;
+        $all = ['sis:scheduling:manage', 'sis:portal:manage', 'sis:communications:manage'];
+        foreach ($all as $omitted) {
+            $f->access->grants = array_values(array_diff($all, [$omitted]));
+            try {
+                $service->announcement($booking->id);
+                self::fail('A required announcement permission was bypassed.');
+            } catch (AccessDeniedException) {
+                self::assertSame([], $f->sql->rows('sis_campaigns'));
+            }
+        }
+        $f->access->grants = $all;
+        self::assertSame('Fictional open house', $service->announcement($booking->id)['subject']);
+    }
+
+    public function testAnnouncementRechecksAccessAfterThePublicReadAndRejectsTruncatedSeries(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $this->publish($service, $booking);
+        $row = new SqlPublicEventRepository($f->sql)->publishedTimes($booking->id)[0];
+        $repo = $this->createStub(PublicEventRepository::class);
+        $repo->method('publishedTimes')->willReturnCallback(static function () use ($f, $row): array {
+            $f->access->staff = false;
+            return [$row];
+        });
+        $protected = new PublicEventService($repo, $f->access, $f->transactions, $f->audit, $f->dropCipher, $f->clock);
+        try {
+            $protected->announcement($booking->id);
+            self::fail('A draft was returned after access was removed during its read.');
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows('sis_campaigns'));
+        }
+        $f->access->staff = true;
+        $repo = $this->createStub(PublicEventRepository::class);
+        $repo->method('publishedTimes')->willReturn(array_fill(0, 367, $row));
+        $bounded = new PublicEventService($repo, $f->access, $f->transactions, $f->audit, $f->dropCipher, $f->clock);
+        $this->expectException(ValidationException::class);
+        $bounded->announcement($booking->id);
     }
 }

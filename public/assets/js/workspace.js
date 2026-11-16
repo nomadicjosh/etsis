@@ -205,7 +205,9 @@
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
-    const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
+        composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
+            explanation: 'Review this copy of the published invitation and dates before saving. Later event changes are not copied into this message. Saving creates an encrypted draft; choose recipients and confirm delivery in Communications.' }) });
     const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, historyPanel, positions: () => positionStudio, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
@@ -460,9 +462,14 @@
         relationalStudio?.cleanup();
         $one('#workspace-alert').hidden = true;
         $one('#drawer-title').textContent = title; $one('#drawer-eyebrow').textContent = eyebrow;
-        if (!$one('#record-drawer').matches('.show, .showing')) drawerOpener = document.activeElement;
+        const alreadyOpen = $one('#record-drawer').matches('.show, .showing');
+        if (!alreadyOpen) drawerOpener = document.activeElement;
         const content = node('div');
         $one('#drawer-body').replaceChildren(content); drawer.show();
+        if (alreadyOpen) {
+            $one('#drawer-title').tabIndex = -1;
+            $one('#drawer-title').focus({ preventScroll: true });
+        }
         return content;
     }
     $one('#record-drawer').addEventListener('hidden.bs.offcanvas', () => {
@@ -473,7 +480,7 @@
         else $one('#workspace-main').focus({ preventScroll: true });
         drawerOpener = null;
     });
-    async function createRecord(section, preset = {}) {
+    async function createRecord(section, preset = {}, { back = null, explanation = '' } = {}) {
         if (section === 'grades') return degreeAuditStudio.gradingScale();
         if (section === 'terms') return academicCalendarStudio.newTerm();
         if (section === 'registration') return batchRegistration.start();
@@ -487,7 +494,15 @@
         const definition = datasets[section];
         const operation = section === 'people' ? (await request('/sis/ui/operation-id/')).id : null;
         const body = openDrawer(definition.action, definition.title.toUpperCase());
+        if (back) body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
+            onclick: () => task(back) }, 'Back to public event'));
+        if (explanation) body.append(node('p', { class: 'form-text' }, explanation));
         const form = await buildForm(definition.fields, preset);
+        if (!body.isConnected) return;
+        if (section === 'campaigns') {
+            form.elements.subject.maxLength = 191;
+            form.elements.body.maxLength = 100000;
+        }
         if (section === 'portal') {
             const code = form.elements.namedItem('code');
             code.maxLength = 80; code.pattern = '[a-z0-9][a-z0-9-]{0,79}';
@@ -512,7 +527,9 @@
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
-            if (section === 'people') await openPerson(saved.id); else { drawer.hide(); if (current === section) await loadDirectory(); }
+            if (section === 'people') await openPerson(saved.id);
+            else if (section === 'campaigns') await openRecord('campaigns', { id: saved.id });
+            else { drawer.hide(); if (current === section) await loadDirectory(); }
         }, $one('[type="submit"]', form)); });
         body.append(form);
     }

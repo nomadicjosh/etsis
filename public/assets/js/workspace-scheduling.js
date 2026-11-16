@@ -812,6 +812,16 @@ window.createWorkspaceScheduling = function (ui) {
         let generation = 0;
         form.addEventListener('input', () => { generation++; });
         const editAgain = () => { preview.hidden = true; edit.hidden = false; submit.focus(); };
+        if (setup.current?.published && can('sis:communications:manage')) {
+            edit.append(node('p', { class: 'form-text' },
+                'Prepare a message from the published invitation. Review and publish any changes here first.'),
+            button('Prepare announcement', async () => {
+                const serial = ++generation;
+                const draft = await request(`${base}announcement/`, 'POST', {});
+                if (!body.isConnected || serial !== generation) return;
+                await ui.composeAnnouncement(draft, () => publicEvent(record, back));
+            }));
+        }
         if (setup.current?.published) edit.append(button('Withdraw public event', () => {
             preview.replaceChildren(heading('Remove this event from the public calendar?'),
                 node('p', {}, 'The room reservation and booking history stay in place. This only withdraws the public event content.'),

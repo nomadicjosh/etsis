@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/Support/SisFixture.php';
 
 use Defuse\Crypto\Key;
+use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\CampaignService;
 use Domain\Communications\Service\MailTransport;
 use Domain\Import\Service\CatalogImportService;
@@ -25,9 +26,14 @@ final class FictionalTransport implements MailTransport
 {
     public int $calls = 0;
     public bool $fail = false;
+    public ?Closure $onReady = null;
+    public ?Closure $afterSend = null;
 
     public function assertReady(): void
     {
+        if ($this->onReady !== null) {
+            ($this->onReady)();
+        }
     }
 
     public function send(
@@ -40,12 +46,15 @@ final class FictionalTransport implements MailTransport
         if ($this->fail) {
             throw new RuntimeException('fictional-upstream-secret');
         }
+        if ($this->afterSend !== null) {
+            ($this->afterSend)();
+        }
     }
 }
 
 final class AdministrationWorkflowTest extends TestCase
 {
-    private function campaigns(SisFixture $f, FictionalTransport $transport): CampaignService
+    private function campaigns(SisFixture $f, FictionalTransport $transport, ?AuditTrail $audit = null): CampaignService
     {
         $config = $this->createStub(ConfigContainer::class);
         $config->method('getConfigKey')->willReturn(Key::createNewRandomKey()->saveToAsciiSafeString());
@@ -56,7 +65,7 @@ final class AdministrationWorkflowTest extends TestCase
             $transport,
             $f->access,
             $f->transactions,
-            $f->audit
+            $audit ?? $f->audit
         );
     }
 
@@ -106,6 +115,103 @@ final class AdministrationWorkflowTest extends TestCase
         self::assertSame('needs_review', $f->sql->one('sis_deliveries', ['id' => $id->value])['status']);
         $service->dispatch($id);
         self::assertSame(1, $transport->calls);
+    }
+
+    public function testCampaignMutationsRollBackIfAccessChangesDuringTheirRequiredAudit(): void
+    {
+        foreach (['campaign.created', 'campaign.updated', 'campaign.queued', 'campaign.paused'] as $action) {
+            $f = new SisFixture();
+            $f->sql->update('users', ['email' => 'reader@example.invalid'], ['user_id' => $f->access->actor->value]);
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(
+                static function (EntityId $actor, string $recorded, EntityId $subject) use ($f, $action): void {
+                    $f->audit->record($actor, $recorded, $subject);
+                    if ($recorded === $action) {
+                        $f->access->staff = false;
+                    }
+                }
+            );
+            $service = $this->campaigns($f, new FictionalTransport(), $audit);
+            $campaign = $action === 'campaign.created' ? null : $service->create('Fictional title', 'Fictional body');
+            if ($action === 'campaign.paused') {
+                $service->queue($campaign->id, [$f->access->actor]);
+            }
+            $before = [];
+            foreach (['sis_campaigns', 'sis_deliveries', 'sis_audit'] as $table) {
+                $before[$table] = $f->sql->rows($table);
+            }
+            try {
+                match ($action) {
+                    'campaign.created' => $service->create('Fictional title', 'Fictional body'),
+                    'campaign.updated' => $service->edit($campaign->id, 'Changed title', 'Changed body', 0),
+                    'campaign.queued' => $service->queue($campaign->id, [$f->access->actor]),
+                    'campaign.paused' => $service->pause($campaign->id, true),
+                };
+                self::fail('A campaign change survived removed access.');
+            } catch (AccessDeniedException) {
+                foreach ($before as $table => $rows) {
+                    self::assertSame($rows, $f->sql->rows($table), $action . ': ' . $table);
+                }
+            }
+        }
+    }
+
+    public function testDispatchRechecksTheActorAndPermissionsBeforeClaimingOrSending(): void
+    {
+        foreach (['permission', 'actor'] as $change) {
+            $f = new SisFixture();
+            $f->sql->update('users', ['email' => 'reader@example.invalid'], ['user_id' => $f->access->actor->value]);
+            $other = $f->user();
+            $transport = new FictionalTransport();
+            $service = $this->campaigns($f, $transport);
+            $campaign = $service->create('Fictional title', 'Fictional body');
+            $delivery = $service->queue($campaign->id, [$f->access->actor])[0];
+            $transport->onReady = static function () use ($f, $change, $other): void {
+                if ($change === 'actor') {
+                    $f->access->actor = $other;
+                } else {
+                    $f->access->staff = false;
+                }
+            };
+            try {
+                $service->dispatch($delivery);
+                self::fail('A delivery was claimed after its authorization changed.');
+            } catch (AccessDeniedException) {
+                self::assertSame(0, $transport->calls);
+                self::assertSame('queued', $f->sql->one('sis_deliveries', ['id' => $delivery->value])['status']);
+            }
+        }
+    }
+
+    public function testCampaignContentIsNotReturnedAfterAccessChangesDuringItsRead(): void
+    {
+        $f = new SisFixture();
+        $transport = new FictionalTransport();
+        $service = $this->campaigns($f, $transport);
+        $campaign = $service->create('Fictional title', 'Fictional body');
+        $transport->onReady = static function () use ($f): void {
+            $f->access->staff = false;
+        };
+        $this->expectException(AccessDeniedException::class);
+        $service->show($campaign->id);
+    }
+
+    public function testSuccessfulDeliveryReceiptSurvivesAccessChangingDuringTransport(): void
+    {
+        $f = new SisFixture();
+        $f->sql->update('users', ['email' => 'reader@example.invalid'], ['user_id' => $f->access->actor->value]);
+        $transport = new FictionalTransport();
+        $service = $this->campaigns($f, $transport);
+        $campaign = $service->create('Fictional title', 'Fictional body');
+        $delivery = $service->queue($campaign->id, [$f->access->actor])[0];
+        $transport->afterSend = static function () use ($f): void {
+            $f->access->staff = false;
+        };
+        $service->dispatch($delivery);
+        self::assertSame(1, $transport->calls);
+        self::assertSame('sent', $f->sql->one('sis_deliveries', ['id' => $delivery->value])['status']);
+        self::assertSame('completed', $f->sql->one('sis_campaigns', ['id' => $campaign->id->value])['status']);
+        self::assertSame(1, count($f->sql->rows('sis_audit', ['action' => 'message.sent'])));
     }
 
     public function testReportsRequireExecutionPermissionAndExplicitOwnershipOrSharing(): void

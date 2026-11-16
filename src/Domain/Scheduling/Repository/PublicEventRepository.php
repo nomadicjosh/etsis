@@ -26,4 +26,9 @@ interface PublicEventRepository
      * @return list<array<string,mixed>>
      */
     public function calendar(TimeSlot $window, string $search, int $limit): array;
+
+    /** All matching public times for one booking, probing one beyond its 366-meeting bound.
+     * @return list<array<string,mixed>>
+     */
+    public function publishedTimes(EntityId $booking): array;
 }

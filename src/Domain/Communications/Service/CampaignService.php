@@ -8,6 +8,7 @@ use DomainException;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Campaign;
 use Domain\Communications\Repository\CampaignRepository;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Security\StudentAccess;
@@ -29,7 +30,7 @@ final readonly class CampaignService
 
     public function create(#[\SensitiveParameter] string $subject, #[\SensitiveParameter] string $body): Campaign
     {
-        $actor = $this->access->requirePermission('sis:communications:manage');
+        $actor = $this->authorize();
         $campaign = new Campaign(
             EntityId::generate(),
             $actor,
@@ -38,6 +39,7 @@ final readonly class CampaignService
         $this->transactions->run(function () use ($campaign, $actor): void {
             $this->repository->add($campaign);
             $this->audit->record($actor, 'campaign.created', $campaign->id);
+            $this->owned($campaign->id, $actor);
         });
 
         return $campaign;
@@ -60,12 +62,12 @@ final readonly class CampaignService
         #[\SensitiveParameter] string $body,
         int $expectedVersion
     ): void {
-        $actor = $this->access->requirePermission('sis:communications:manage');
-        $this->owned($id);
+        $actor = $this->authorize();
+        $this->owned($id, $actor);
         $encrypted = $this->encrypted($subject, $body);
         $this->transactions->run(function () use ($id, $encrypted, $expectedVersion, $actor): void {
             $this->repository->lock($id);
-            $campaign = $this->repository->get($id);
+            $campaign = $this->owned($id, $actor);
             if ($campaign->status !== 'draft') {
                 throw new DomainException('Only a draft campaign can be edited.');
             }
@@ -80,6 +82,7 @@ final readonly class CampaignService
                 $expectedVersion + 1
             ), $expectedVersion);
             $this->audit->record($actor, 'campaign.updated', $id);
+            $this->owned($id, $actor);
         });
     }
 
@@ -89,15 +92,15 @@ final readonly class CampaignService
      */
     public function queue(EntityId $id, array $recipients): array
     {
-        $actor = $this->access->requirePermission('sis:communications:manage');
+        $actor = $this->authorize();
         if (count($recipients) < 1 || count($recipients) > 500) {
             throw new InvalidArgumentException('A bounded recipient list is required.');
         }
-        $this->owned($id);
+        $this->owned($id, $actor);
 
         return $this->transactions->run(function () use ($id, $recipients, $actor): array {
             $this->repository->lock($id);
-            $campaign = $this->repository->get($id);
+            $campaign = $this->owned($id, $actor);
             if ($campaign->status !== 'draft') {
                 throw new DomainException('Only a draft campaign can be queued.');
             }
@@ -107,6 +110,7 @@ final readonly class CampaignService
             }
             $this->repository->save($campaign->transition('queued'), $campaign->version);
             $this->audit->record($actor, 'campaign.queued', $id);
+            $this->owned($id, $actor);
 
             return $deliveries;
         });
@@ -114,13 +118,14 @@ final readonly class CampaignService
 
     public function pause(EntityId $id, bool $pause): void
     {
-        $actor = $this->access->requirePermission('sis:communications:manage');
-        $this->owned($id);
+        $actor = $this->authorize();
+        $this->owned($id, $actor);
         $this->transactions->run(function () use ($id, $pause, $actor): void {
             $this->repository->lock($id);
-            $campaign = $this->repository->get($id);
+            $campaign = $this->owned($id, $actor);
             $this->repository->save($campaign->transition($pause ? 'paused' : 'queued'), $campaign->version);
             $this->audit->record($actor, $pause ? 'campaign.paused' : 'campaign.resumed', $id);
+            $this->owned($id, $actor);
         });
     }
 
@@ -130,23 +135,25 @@ final readonly class CampaignService
      */
     public function dispatch(EntityId $deliveryId): void
     {
-        $actor = $this->access->requirePermission('sis:communications:manage');
+        $actor = $this->authorize();
         $delivery = $this->repository->delivery($deliveryId);
         $campaignId = new EntityId($delivery['campaign_id']);
-        $this->owned($campaignId);
+        $this->owned($campaignId, $actor);
         if ($delivery['status'] === 'queued') {
             $this->transport->assertReady();
         }
-        $claimed = $this->transactions->run(function () use ($campaignId, $deliveryId): ?array {
+        $claimed = $this->transactions->run(function () use ($campaignId, $deliveryId, $actor): ?array {
             $this->repository->lock($campaignId);
+            $campaign = $this->owned($campaignId, $actor);
             $delivery = $this->repository->delivery($deliveryId);
             if ($delivery['status'] !== 'queued') {
                 return null;
             }
-            if ($this->repository->get($campaignId)->status !== 'queued') {
+            if ($campaign->status !== 'queued') {
                 throw new DomainException('The campaign is not queued.');
             }
             $this->repository->transitionDelivery($deliveryId, 'sending', $delivery['version']);
+            $this->owned($campaignId, $actor);
 
             return $delivery;
         });
@@ -166,6 +173,7 @@ final readonly class CampaignService
             $this->repository->transitionDelivery($deliveryId, 'needs_review', $claimed['version'] + 1);
             throw new DomainException('Delivery could not be confirmed and requires reconciliation.');
         }
+        // Record an already attempted external effect even if access changes during transport.
         $this->transactions->run(function () use ($campaignId, $deliveryId, $claimed, $actor): void {
             $this->repository->lock($campaignId);
             $this->repository->transitionDelivery($deliveryId, 'sent', $claimed['version'] + 1);
@@ -180,8 +188,8 @@ final readonly class CampaignService
     /** @return array{id: string, status: string, subject: string, body: string, version: int, can_dispatch: bool} */
     public function show(EntityId $id): array
     {
-        $this->access->requirePermission('sis:communications:manage');
-        $campaign = $this->owned($id);
+        $actor = $this->authorize();
+        $campaign = $this->owned($id, $actor);
         /** @var array{subject: string, body: string} $content */
         $content = json_decode($this->cipher->open($campaign->encryptedContent), true, flags: JSON_THROW_ON_ERROR);
 
@@ -191,16 +199,33 @@ final readonly class CampaignService
         } catch (DomainException) {
             $ready = false;
         }
+        $this->owned($id, $actor);
 
         return ['id' => $id->value, 'status' => $campaign->status, 'can_dispatch' => $ready,
             'subject' => $content['subject'], 'body' => $content['body'], 'version' => $campaign->version];
     }
 
-    private function owned(EntityId $id): Campaign
+    private function owned(EntityId $id, EntityId $actor): Campaign
     {
+        $this->authorize($actor);
         $campaign = $this->repository->get($id);
-        $this->access->requireOwnerOrPermission($campaign->ownerUserId, 'sis:communications:admin');
+        if (
+            $this->access->requireOwnerOrPermission($campaign->ownerUserId, 'sis:communications:admin')->value
+            !== $actor->value
+        ) {
+            throw new AccessDeniedException('Access denied.');
+        }
+        $this->authorize($actor);
 
         return $campaign;
+    }
+
+    private function authorize(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->access->requirePermission('sis:communications:manage');
+        if ($expected !== null && $actor->value !== $expected->value) {
+            throw new AccessDeniedException('Access denied.');
+        }
+        return $actor;
     }
 }
