@@ -127,7 +127,10 @@ final readonly class RelationalReportService
         $actor = $this->access->requirePermission("sis:reporting:run");
         $query = $this->query($definition);
         $this->audit->record($actor, "report.draft_previewed", EntityId::generate());
-        return $this->results($query, $offset);
+        $result = $this->results($query, $offset);
+        $this->access->requirePermission('sis:reporting:manage');
+        $this->verifyReader($actor, $query);
+        return $result;
     }
 
     /** @param array<string, mixed> $definition */
@@ -337,8 +340,18 @@ final readonly class RelationalReportService
             );
             $result = $this->results($query, $offset);
             $this->audit->record($actor, "report.relational_executed", $id);
+            $this->canRun($id, $actor);
+            $this->verifyReader($actor, $query);
             return $result;
         });
+    }
+
+    private function verifyReader(EntityId $actor, ReportQuery $query): void
+    {
+        $this->grants($query->permissions());
+        if ($this->access->requirePermission('sis:reporting:run')->value !== $actor->value) {
+            throw new AccessDeniedException('The report reader changed.');
+        }
     }
 
     private function canRun(EntityId $id, EntityId $actor): void

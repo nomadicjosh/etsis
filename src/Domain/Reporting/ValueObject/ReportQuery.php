@@ -137,6 +137,77 @@ final readonly class ReportQuery
                 self::invalid("Choose valid output sorting.");
             }
         }
+        $this->validateMoney($columns);
+    }
+
+    /** Currency is a grouping dimension, never a hidden assumption about the institution's default.
+     * @param list<array<string,mixed>> $columns
+     */
+    private function validateMoney(array $columns): void
+    {
+        foreach ($columns as $column) {
+            $field = $this->schema['fields'][$column['field']];
+            $other = isset($column['calculation'])
+            ? $this->schema['fields'][$column['calculation']['field']] : null;
+            $currency = $field['currency_field'] ?? $other['currency_field'] ?? null;
+            if ($currency === null || in_array($column['aggregate'], ['count', 'count_distinct'], true)) {
+                continue;
+            }
+            if (isset($column['calculation'])) {
+                if (
+                    ($field['currency_field'] ?? null) !== ($other['currency_field'] ?? null)
+                    || !in_array($column['calculation']['operator'], ['+', '-'], true)
+                ) {
+                    self::invalid('Combine monetary amounts only with amounts in the same currency and units.');
+                }
+                if (($field['expression'] ?? null) !== ($other['expression'] ?? null)) {
+                    self::invalid('Do not combine currency amounts with minor-unit amounts.');
+                }
+            }
+            if (
+                !array_any($columns, static fn(array $c): bool =>
+                $c['field'] === $currency && $c['aggregate'] === 'none')
+            ) {
+                self::invalid('Keep Currency as an output column when reporting amounts. Summaries group by currency.');
+            }
+            if ($column['aggregate'] !== 'none') {
+                $relations = array_merge(
+                    array_keys($this->definition['joins'] ?? []),
+                    array_keys($this->definition['join_filters'] ?? [])
+                );
+                foreach ($columns as $c) {
+                    $relations[] = $this->schema['fields'][$c['field']]['relation'];
+                    if (isset($c['calculation'])) {
+                        $relations[] = $this->schema['fields'][$c['calculation']['field']]['relation'];
+                    }
+                }
+                $collect = function (?array $group) use (&$collect, &$relations): void {
+                    foreach ($group['rules'] ?? [] as $rule) {
+                        if (isset($rule['condition'])) {
+                            $collect($rule);
+                        } else {
+                            $relations[] = $this->schema['fields'][$rule['id']]['relation'];
+                        }
+                    }
+                };
+                $collect($this->definition['filters'] ?? null);
+                foreach ($this->definition['join_filters'] ?? [] as $filter) {
+                    $collect($filter);
+                }
+                foreach ($relations as $relation) {
+                    while ($relation !== $this->schema['root']) {
+                        $r = $this->schema['relationships'][$relation];
+                        if ($r['many'] ?? false) {
+                            self::invalid(
+                                'Use matching-record conditions to filter related work before totaling money. '
+                                . 'Joining multiple related rows would repeat an account balance.'
+                            );
+                        }
+                        $relation = $r['parent'];
+                    }
+                }
+            }
+        }
     }
 
     /** Fields within this related record and its descendants, never its parent or a sibling branch.

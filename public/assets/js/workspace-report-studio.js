@@ -170,7 +170,8 @@ window.createWorkspaceReportStudio = function (ui) {
         const students = catalog.datasets.find((item) => item.id === "students");
         const sections = catalog.datasets.find((item) => item.id === "sections");
         const applications = catalog.datasets.find((item) => item.id === "applications");
-        if (students?.fields.latest_term_code || sections?.fields.enrollment_id || applications?.fields.submitted_on)
+        const accounts = catalog.datasets.find((item) => item.id === "accounts");
+        if (students?.fields.latest_term_code || sections?.fields.enrollment_id || applications?.fields.submitted_on || accounts?.fields.balance)
             surface.append(node("h3", {}, "Try a useful starting point"));
         if (applications?.fields.submitted_on)
             surface.append(
@@ -188,6 +189,22 @@ window.createWorkspaceReportStudio = function (ui) {
                 })),
                 node("p", { class: "form-text" }, "Submission dates come from recorded submissions, in their original timezone. Earlier unknown dates stay blank. Use Conditions to choose a date range; the intended entry term is a separate field."),
             );
+        if (accounts?.fields.balance)
+            surface.append(button("Outstanding student balances", () => edit(accounts, {
+                ...initial(accounts),
+                filters: { condition: "AND", rules: [{ id: "balance", operator: "greater", value: 0 }] },
+            })), button("Available student credit", () => edit(accounts, {
+                ...initial(accounts),
+                filters: { condition: "AND", rules: [{ id: "balance", operator: "less", value: 0 }] },
+            })), button("Balances by billing term", () => edit(accounts, {
+                ...initial(accounts),
+                columns: [
+                    { field: "term_code", label: "Billing term", aggregate: "none" },
+                    { field: "currency", label: "Currency", aggregate: "none" },
+                    { field: "balance", label: "Net balance", aggregate: "sum" },
+                    { field: "account_id", label: "Accounts", aggregate: "count_distinct" },
+                ],
+            })));
         if (students?.fields.latest_term_code) {
             const latestDefinition = (neverRegistered) => ({
                 dataset: "students",
@@ -281,6 +298,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            accounts: ["institutional_id", "full_name", "term_code", "currency", "balance"],
             applications: ["institutional_id", "full_name", "program_code", "entry_term", "status", "submitted_on"],
             students: ["institutional_id", "full_name", "program_code", "entry_term"],
             programs: ["institutional_id", "full_name", "program_code", "catalog_year"],
@@ -289,7 +307,7 @@ window.createWorkspaceReportStudio = function (ui) {
         };
         return {
             dataset: dataset.id,
-            columns: choices[dataset.id]
+            columns: (choices[dataset.id] || Object.keys(dataset.fields).slice(0, 4))
                 .filter((id) => dataset.fields[id])
                 .map((field) => ({
                     field,
@@ -490,7 +508,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 .map((r) => r.parent)
                 .find((id) => !dataset.relationships[id]) || Object.values(dataset.fields)[0]?.relation;
         const rootLabel =
-            { application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
+            { account: "Student accounts", application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
         const fieldsFor = (id) => Object.entries(dataset.fields).filter(([, f]) => f.relation === id);
@@ -598,7 +616,9 @@ window.createWorkspaceReportStudio = function (ui) {
         const mapTools = node(
             "div",
             { class: "report-map-toolbar" },
-            node("div", {}, node("h2", {}, "Connect your records"), node("p", {}, dataset.description)),
+            node("div", {}, node("h2", {}, "Connect your records"), node("p", {}, dataset.description),
+                ...(dataset.id === "accounts" ? [node("p", { class: "form-text" },
+                    "Keep Currency in the results. To total balances for students with matching registrations or coursework, use matching-record conditions so each account is counted once.")] : [])),
             button("Arrange cards", () => {
                 positions.clear();
                 renderMap();

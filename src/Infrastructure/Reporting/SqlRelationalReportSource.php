@@ -17,6 +17,35 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
     {
         return AcademicReportSchema::datasets();
     }
+    /** A capture calls this once inside its consistent read transaction, before paging.
+     * Ordinary live pages call it independently. */
+    public function assertReady(ReportQuery $query): void
+    {
+        if ($query->schema['financial_balances'] ?? false) {
+            $this->requireCurrentBalances();
+        }
+    }
+
+    /** One bounded indexed consistency probe, with no payload decryption, replay or write locks. */
+    private function requireCurrentBalances(): void
+    {
+        $q = $this->sql->quote(...);
+        $c = static fn(string $alias, string $column): string => $q($alias) . '.' . $q($column);
+        $missing = $this->sql->fetch(
+            'SELECT ' . $c('a', 'id') . ' FROM ' . $q('sis_student_accounts') . ' a'
+            . ' LEFT JOIN ' . $q('sis_account_balances') . ' b ON ' . $c('b', 'id') . ' = ' . $c('a', 'id')
+            . ' LEFT JOIN ' . $q('sis_history_streams') . ' h ON ' . $c('h', 'aggregate_id') . ' = ' . $c('a', 'id')
+            . ' AND ' . $c('h', 'stream_type') . ' = ? WHERE ' . $c('b', 'id') . ' IS NULL OR '
+            . $c('h', 'id') . ' IS NULL OR ' . $c('b', 'position') . ' <> ' . $c('h', 'version'),
+            ['student_account'],
+            1
+        );
+        if ($missing !== []) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'report',
+                'message' => 'Financial report balances need verification. No partial report was returned. '
+                    . 'Ask a system administrator to review the account reporting projection.']]);
+        }
+    }
     public function execute(#[\SensitiveParameter] ReportQuery $query, int $offset): array
     {
         return $this->boundedPage($query, $offset, 51);
@@ -24,10 +53,17 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
     /** Internal capture reader; smaller batches keep wide text rows bounded in buffered PDO drivers.
      * @return list<array<string,mixed>>
      */
-    public function boundedPage(#[\SensitiveParameter] ReportQuery $query, int $offset, int $limit): array
-    {
+    public function boundedPage(
+        #[\SensitiveParameter] ReportQuery $query,
+        int $offset,
+        int $limit,
+        bool $checkSource = true,
+    ): array {
         if ($limit < 1 || $limit > 51) {
             throw new \InvalidArgumentException('Use a bounded report page.');
+        }
+        if ($checkSource) {
+            $this->assertReady($query);
         }
         $plan = new ReportSelectCompiler($this->sql)->compile($query);
         $rows = $this->sql->fetchPage($plan["sql"], $plan["parameters"], $limit, $offset);

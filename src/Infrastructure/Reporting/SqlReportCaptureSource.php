@@ -56,6 +56,7 @@ final readonly class SqlReportCaptureSource implements ReportCaptureSource
                 $pdo->exec('SET TRANSACTION READ ONLY');
             }
             $started = hrtime(true);
+            $this->source->assertReady($query);
             $rows = [];
             $bytes = 0;
             for ($offset = 0;; $offset += 10) {
@@ -64,7 +65,7 @@ final readonly class SqlReportCaptureSource implements ReportCaptureSource
                         'This static capture reached its work limit. '
                         . 'Narrow the report; no partial capture was saved.']]);
                 }
-                $page = $this->source->boundedPage($query, $offset, 11);
+                $page = $this->source->boundedPage($query, $offset, 11, checkSource: false);
                 if (
                     $offset + min(10, count($page)) > ReportCapture::MAX_ROWS ||
                     ($offset + 10 >= ReportCapture::MAX_ROWS && count($page) > 10)

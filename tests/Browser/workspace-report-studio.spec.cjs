@@ -27,7 +27,14 @@ async function accessible(page) {
 }
 async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
-    const fields = options.applications ? {
+    const fields = options.accounts ? {
+        account_id: { label: 'Account reference', type: 'string', relation: 'account' },
+        institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
+        full_name: { label: 'Student full name', type: 'string', relation: 'person' },
+        term_code: { label: 'Billing term', type: 'string', relation: 'term' },
+        currency: { label: 'Currency', type: 'string', relation: 'account' },
+        balance: { label: 'Account balance', type: 'double', relation: 'balance' },
+    } : options.applications ? {
         application_id: { label: 'Application reference', type: 'string', relation: 'application' },
         status: { label: 'Application status', type: 'string', relation: 'application',
             choices: { submitted: 'Submitted', accepted: 'Accepted', rejected: 'Rejected', matriculated: 'Matriculated' } },
@@ -60,7 +67,17 @@ async function fixture(page, options = {}) {
         enrollment_status: { label: 'Enrollment status', type: 'string', relation: 'enrollment' },
         course_title: { label: 'Course title', type: 'string', relation: 'course' },
     };
-    const dataset = options.applications ? {
+    const dataset = options.accounts ? {
+        id: 'accounts', label: 'Student account balances',
+        description: 'One row per student and billing term. Currency stays with every amount.', fields,
+        relationships: {
+            balance: { label: 'Current balance', parent: 'account', many: false },
+            student: { label: 'Student records', parent: 'account', many: false },
+            person: { label: 'Student names', parent: 'student', many: false },
+            identity: { label: 'Institutional IDs', parent: 'person', many: false },
+            term: { label: 'Academic terms', parent: 'account', many: false },
+        },
+    } : options.applications ? {
         id: 'applications', label: 'Applications & admissions', description: 'One row per application.', fields,
         relationships: {
             person: { label: 'Applicant', parent: 'application', many: false },
@@ -109,15 +126,15 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
-            const rows = options.students || options.applications ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
+            const rows = options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
-                next_offset: options.students || options.applications || data.offset ? null : 50, limit: 50,
-                grouped: !options.students && !options.applications };
+                next_offset: options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
+                grouped: options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
         else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -676,3 +693,34 @@ test('a late page response cannot restore private results after a newer refresh 
     await expect(viewer).not.toContainText('CHEM.101.A');
     expect(f.errors).toEqual([]);
 });
+
+for (const startingPoint of ['Outstanding student balances', 'Available student credit', 'Balances by billing term']) {
+    test(`account balances open ${startingPoint} in the shared visual builder`, async ({ page }) => {
+        const f = await fixture(page, { accounts: true });
+        await expect(page.getByRole('button', { name: 'Applications with recorded submission dates', exact: true })).toHaveCount(0);
+        await page.getByRole('button', { name: startingPoint, exact: true }).click();
+        const studio = page.locator('dialog.report-studio');
+        await expect(studio.locator('.report-local-error')).toBeHidden();
+        await expect(studio).toContainText('Keep Currency in the results.');
+        await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+        await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('USD');
+        const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
+        expect(query.dataset).toBe('accounts');
+        expect(query.columns).toContainEqual({ field: 'currency', label: 'Currency', aggregate: 'none' });
+        if (startingPoint === 'Balances by billing term') {
+            expect(query.columns).toContainEqual({ field: 'balance', label: 'Net balance', aggregate: 'sum' });
+        } else {
+            expect(query.filters.rules).toEqual([{ id: 'balance', operator: startingPoint.startsWith('Outstanding') ? 'greater' : 'less', value: 0 }]);
+            expect(query.columns.map(column => column.field)).toEqual(['institutional_id', 'full_name', 'term_code', 'currency', 'balance']);
+        }
+        await studio.getByLabel('Report name', { exact: true }).fill('Fictional account report');
+        await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+        await expect(studio).toContainText('Definition revision 1');
+        await page.setViewportSize({ width: 320, height: 812 });
+        await accessible(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+        expect(f.errors).toEqual([]);
+    });
+}

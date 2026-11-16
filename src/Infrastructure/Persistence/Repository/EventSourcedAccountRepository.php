@@ -38,7 +38,16 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
             return;
         }
         // The event-store unique stream/playhead constraint rejects concurrent writes.
-        $events = iterator_to_array($account->getRecordedEvents());
+        $events = [];
+        foreach ($account->getRecordedEvents() as $event) {
+            if (!$event instanceof \Codefy\Domain\EventSourcing\DomainEvent) {
+                throw new \LogicException('Invalid financial event.');
+            }
+            $events[] = $event;
+        }
+        if ($events === []) {
+            return;
+        }
         \Infrastructure\Persistence\PortableTransactions::run($this->db, function () use ($account, $events): void {
             if ($events[0] instanceof StudentAccountWasOpened) {
                 $this->db->table('sis_student_accounts')->insert([
@@ -49,6 +58,9 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
                 ]);
             }
             $this->eventStore->commit(...$events);
+            new \Infrastructure\Projection\SqlAccountBalanceProjection(
+                new \Infrastructure\Persistence\SqlRecords($this->db)
+            )->advance($account, $events);
         });
         $account->clearRecordedEvents();
     }

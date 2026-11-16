@@ -31,6 +31,9 @@ final readonly class ReportSelectCompiler
         $expression = function (string $id) use ($s, &$used): string {
             $field = $s["fields"][$id];
             $used[$field["relation"]] = true;
+            if (isset($field['currency_relation'])) {
+                $used[$field['currency_relation']] = true;
+            }
             return $this->fieldExpression($field, $field['relation']);
         };
         $aggregate = false;
@@ -53,6 +56,19 @@ final readonly class ReportSelectCompiler
                 $term = ($mode === "count_distinct" ? "COUNT(DISTINCT " : strtoupper($mode) . "(") . $term . ")";
             } else {
                 $groups[] = $term;
+            }
+            $metadata = $s['fields'][$column['field']];
+            if (($metadata['expression'] ?? null) === 'account_money') {
+                foreach ($d['columns'] as $currencyIndex => $currencyColumn) {
+                    if (
+                        $currencyColumn['field'] === $metadata['currency_field']
+                        && $currencyColumn['aggregate'] === 'none'
+                    ) {
+                        $currencyValue = $q('data') . '.' . $q('v' . $currencyIndex);
+                        $term = 'ROUND(' . $term . ', ' . $this->currencyPrecision($currencyValue) . ')';
+                        break;
+                    }
+                }
             }
             $selected[] = $term . " AS " . $q("c" . $i);
         }
@@ -185,11 +201,31 @@ final readonly class ReportSelectCompiler
                 default => $given . " || ' ' || " . $family,
             };
         }
+        if (($field['expression'] ?? '') === 'account_money') {
+            $currency = $q($field['currency_relation']) . '.' . $q('currency');
+            // Unknown currency precision is not silently treated as cents.
+            $name = '(' . $name . ' * 1.0 / (' . $this->currencyPrecision($currency, divisor: true) . '))';
+        }
         if (($field['expression'] ?? '') === 'registration_label') {
             $name = "CASE " . $name . " WHEN 'A' THEN 'Registered' WHEN 'N' THEN 'Registered'"
             . " WHEN 'D' THEN 'Dropped' WHEN 'W' THEN 'Withdrawn' WHEN 'V' THEN 'Voided' ELSE 'Other' END";
         }
         return isset($field['scale']) ? '(' . $name . ' / ' . (int) $field['scale'] . '.0)' : $name;
+    }
+
+    private function currencyPrecision(string $currency, bool $divisor = false): string
+    {
+        $groups = [];
+        $iso = new \Money\Currencies\ISOCurrencies();
+        foreach ($iso as $unit) {
+            $groups[$iso->subunitFor($unit)][] = "'" . $unit->getCode() . "'";
+        }
+        $expression = 'CASE';
+        foreach ($groups as $digits => $codes) {
+            $expression .= ' WHEN ' . $currency . ' IN (' . implode(', ', $codes) . ') THEN '
+            . ($divisor ? 10 ** $digits : $digits);
+        }
+        return $expression . ' ELSE NULL END';
     }
 
     /** A correlated condition filters the outer row without adding related rows to its result grain.

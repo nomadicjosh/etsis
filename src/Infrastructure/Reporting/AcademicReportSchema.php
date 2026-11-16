@@ -493,11 +493,42 @@ final class AcademicReportSchema
             'relationships' => $dataset['relationships'] + $studentRelations,
             'fields' => $dataset['fields'] + $studentFields,
         ]);
+        $accounts = [
+            'table' => 'sis_student_accounts', 'root' => 'account',
+            'label' => 'Student account balances',
+            'description' => 'One row per student and billing term. Positive balances are owed; negative balances '
+                . 'are available credit. Currency stays with every amount.',
+            'permissions' => ['sis:finance:read', ...$studentRead],
+            'financial_balances' => true,
+            'relationships' => [
+                'balance' => $join('sis_account_balances', 'account', 'id', 'id'),
+                'student' => $join('sis_students', 'account', 'student_id', 'id'),
+                ...$personJoins,
+                'term' => $join('sis_terms', 'account', 'term_id', 'id'),
+                'program' => $join('sis_programs', 'student', 'primary_program_id', 'id'),
+            ],
+            'fields' => $personFields + [
+                'account_id' => $field('Account reference', 'string', 'account', 'id'),
+                'term_code' => $field('Billing term', 'string', 'term', 'code'),
+                'term_starts_on' => $field('Billing term starts', 'date', 'term', 'starts_on'),
+                'term_ends_on' => $field('Billing term ends', 'date', 'term', 'ends_on'),
+                'program_code' => $field('Current primary program code', 'string', 'program', 'code'),
+                'program_title' => $field('Current primary program title', 'string', 'program', 'title'),
+                'currency' => $field('Currency', 'string', 'account', 'currency'),
+                'balance' => $field('Account balance', 'double', 'balance', 'balance_minor')
+                    + ['expression' => 'account_money', 'currency_field' => 'currency',
+                        'currency_relation' => 'account'],
+                'balance_minor' => $field('Balance in minor units', 'integer', 'balance', 'balance_minor')
+                    + ['currency_field' => 'currency'],
+            ],
+        ];
+        $accounts['relationships']['balance']['label'] = 'Current balance';
         $registrationChoices = [
             'A' => 'Registered by staff', 'N' => 'Self-registered', 'D' => 'Dropped',
             'W' => 'Withdrawn', 'C' => 'Cancelled',
         ];
         $datasets = [
+            'accounts' => ['id' => 'accounts'] + $withStudentWork($accounts),
             'applications' => ['id' => 'applications'] + $withStudentWork($applications),
             'students' => ['id' => 'students'] + $withStudentWork($students),
             "programs" => ["id" => "programs"] + $withStudentWork($program),

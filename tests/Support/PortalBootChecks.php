@@ -2624,6 +2624,41 @@ if (
 $sis->access->staff = true;
 $sis->access->grants = [];
 
+// Financial reports use the same protected routes, without replay or financial writes.
+$balanceReportDefinition = ['dataset' => 'accounts', 'columns' => [
+    ['field' => 'term_code', 'label' => 'Billing term', 'aggregate' => 'none'],
+    ['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none'],
+    ['field' => 'balance', 'label' => 'Balance', 'aggregate' => 'sum'],
+]];
+$balanceReportEvents = $sis->sql->rows('sis_history_events');
+$balanceReportRequest = $get->withMethod('POST')->withHeader('Accept', 'application/json')->withUri(
+    new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid/sis/report-studio/preview/'
+    )
+)->withParsedBody(['definition' => $balanceReportDefinition, 'offset' => 0]);
+if ($app->router->match($balanceReportRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException('A financial report bypassed browser CSRF protection.');
+}
+$balanceReportPreview = $teachingPost('/sis/report-studio/preview/', [
+    'definition' => $balanceReportDefinition, 'offset' => 0,
+]);
+if (
+    $balanceReportPreview->getStatusCode() !== 200 || $balanceReportPreview->hasHeader('phpdebugbar-id')
+    || !str_contains($balanceReportPreview->getHeaderLine('Cache-Control'), 'no-store')
+    || $sis->sql->rows('sis_history_events') !== $balanceReportEvents
+) {
+    throw new RuntimeException('Financial report preview lost its private, read-only boundary.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:reporting:manage', 'sis:reporting:run', 'sis:student:read'];
+if (
+    $teachingPost('/sis/report-studio/preview/', ['definition' => $balanceReportDefinition,
+    'offset' => 0])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Student access alone disclosed account balances.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 // Staff person and access directories use the same real provider, JSON envelope and CSRF pipeline.
 $personRow = $sis->sql->rows("sis_persons")[0];
 $profileRequest = $get->withUri(
