@@ -13,6 +13,7 @@ use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Service\RegistrationBilling;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Shared\EventSourcing\EventContext;
 use Qubus\Exception\Data\TypeException;
 
 final readonly class EventSourcedRegistrationBilling implements RegistrationBilling
@@ -30,7 +31,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         EntityId $student,
         EntityId $term,
         EntityId $enrollment,
-        EntityId $actor,
+        EventContext $context,
     ): bool {
         $row =
         $this->sql->rows(
@@ -49,8 +50,8 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         if ($entry["type"] !== EntryType::Charge->value) {
             throw new \DomainException("The registration source is not a course charge.");
         }
-        $account->reverse($enrollment, $actor);
-        $this->accounts->save($account);
+        $account->reverse($enrollment, $context->actor ?? throw new \LogicException('A billing actor is required.'));
+        $this->accounts->save($account, $context);
         return true;
     }
 
@@ -62,8 +63,9 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         EntityId $term,
         EntityId $operation,
         Money $fee,
-        EntityId $actor,
+        EventContext $context,
     ): void {
+        $actor = $context->actor ?? throw new \LogicException('A billing actor is required.');
         $studentRecord = $this->admissions->student($student);
         $this->primaryPrograms->verify($studentRecord);
         $rules = array_values(
@@ -96,6 +98,6 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         if ($fee->minor > 0) {
             $account->post($operation, EntryType::Charge, $fee, $actor);
         }
-        $this->accounts->save($account);
+        $this->accounts->save($account, $context);
     }
 }

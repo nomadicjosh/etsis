@@ -6,9 +6,22 @@ namespace Domain\Registration\Service;
 
 use Domain\Finance\ValueObject\Money;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Shared\EventSourcing\EventContext;
 
 interface RegistrationBilling
 {
-    public function reverseCourseCharge(EntityId $student, EntityId $term, EntityId $enrollment, EntityId $actor): bool;
-    public function charge(EntityId $student, EntityId $term, EntityId $operation, Money $fee, EntityId $actor): void;
+    public function reverseCourseCharge(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        EventContext $context,
+    ): bool;
+
+    public function charge(
+        EntityId $student,
+        EntityId $term,
+        EntityId $operation,
+        Money $fee,
+        EventContext $context,
+    ): void;
 }

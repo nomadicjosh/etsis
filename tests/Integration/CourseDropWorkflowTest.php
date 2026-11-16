@@ -67,6 +67,16 @@ final class CourseDropWorkflowTest extends TestCase
         self::assertTrue($receipt["academic_records_removed"]);
         self::assertSame("reversed", $receipt["course_charge"]);
         self::assertFalse($receipt["cash_refund_issued"]);
+        $financialEvents = EventStoreFixture::history($f->connection->queryBuilder())->page(
+            new \Domain\Shared\EventSourcing\StreamReference($account, 'student_account')
+        )->events;
+        self::assertSame($enrollment->id->value, $financialEvents[0]->context->correlation->value);
+        $financialContext = $financialEvents[count($financialEvents) - 1]->context;
+        self::assertSame('command', $financialContext->origin);
+        self::assertSame($receipt['operation_id'], $financialContext->correlation->value);
+        self::assertSame($enrollment->id->value, $financialContext->causation->value);
+        self::assertSame('Course charge reversed by an accepted early drop.', $financialContext->reason);
+
         self::assertNull($f->registration->enrollment($student->id, $section->id));
         self::assertSame([], $f->sql->rows("sis_academic_credits"));
         $balance = $f->accounts->get($account);
@@ -115,7 +125,7 @@ final class CourseDropWorkflowTest extends TestCase
                     $f->access->actor,
                 );
             }
-            $f->accounts->save($account);
+            $f->saveAccount($account);
             $this->commit($f, $f->drops->review($student->id, $section->id));
             $after = $f->accounts->get($id);
             self::assertSame($expected, $after->balance()->minor);

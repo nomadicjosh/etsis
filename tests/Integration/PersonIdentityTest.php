@@ -91,7 +91,7 @@ final class PersonIdentityTest extends TestCase
         $hr = $f->timesheetService();
         $employee = $hr->addEmployee($student->personId, 'Teaching Assistant');
         $locator = $f->sql->one('sis_student_accounts', ['student_id' => $student->id->value]);
-        $finance = new StudentAccountService($f->accounts, $f->admissions, $f->access);
+        $finance = $f->finance();
         $events = $f->sql->rows('sis_history_events');
         $enrollment = $f->sql->rows('sis_enrollments');
         $person = $service->updateInstitutionalId($student->personId, '00009001', 0);

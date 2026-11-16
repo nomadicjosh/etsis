@@ -124,6 +124,15 @@ final class PortalPaymentsTest extends TestCase
         self::assertCount(2, $statement['entries']);
         self::assertSame($id->value, $statement['entries'][1]['operation_id']);
         self::assertNull($c->payments->find($id)['encrypted_url']);
+        $events = EventStoreFixture::history($c->sis->connection->queryBuilder())->page(
+            new \Domain\Shared\EventSourcing\StreamReference(new AccountId($account->value), 'student_account')
+        )->events;
+        $context = $events[count($events) - 1]->context;
+        self::assertSame('command', $context->origin);
+        self::assertSame($c->payments->find($id)['owner_user_id'], $context->actor->value);
+        self::assertSame($id->value, $context->causation->value);
+        self::assertStringContainsString('Provider-authenticated', $context->reason);
+
     }
 
     public function testStripeVerifiesRawSignedBodyModeAndPaymentStateWithoutNetworkCalls(): void

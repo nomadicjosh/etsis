@@ -11,8 +11,11 @@ use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Registration\Service\RegistrationBilling;
+use Domain\Shared\EventSourcing\EventContext;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
+use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
@@ -24,7 +27,8 @@ final readonly class TermBillingService
         private RegistrationRepository $registration,
         private StudentAccess $access,
         private UnitOfWork $transactions,
-        private AuditTrail $audit
+        private AuditTrail $audit,
+        private Clock $clock,
     ) {
     }
 
@@ -61,13 +65,34 @@ final readonly class TermBillingService
         }
         usort($students, static fn (EntityId $a, EntityId $b): int => strcmp($a->value, $b->value));
         $this->transactions->run(function () use ($term, $students, $actor): void {
+            $batch = EntityId::generate();
             foreach ($students as $student) {
                 $this->registration->lockStudent($student);
             }
             // Read program eligibility only after acquiring the entire ordered lock set.
             foreach ($students as $student) {
-                $this->billing->charge($student, $term, EntityId::generate(), new Money(0, 'USD'), $actor);
+                $this->access->requirePermission('sis:finance:post');
+                if ($this->access->authenticatedUserId()->value !== $actor->value) {
+                    throw new AccessDeniedException('The billing actor changed.');
+                }
+                $this->billing->charge(
+                    $student,
+                    $term,
+                    EntityId::generate(),
+                    new Money(0, 'USD'),
+                    new EventContext(
+                        $actor,
+                        $this->clock->now(),
+                        $batch,
+                        $term,
+                        reason: 'Account charges applied by an authorized term billing batch.'
+                    )
+                );
                 $this->audit->record($actor, 'billing.generated', $student);
+            }
+            $current = $this->access->requirePermission('sis:finance:post');
+            if ($current->value !== $actor->value) {
+                throw new AccessDeniedException('The billing actor changed.');
             }
         });
     }

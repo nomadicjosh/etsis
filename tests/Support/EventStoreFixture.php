@@ -42,6 +42,17 @@ final class EventStoreFixture
         self::$configs[$db->getConnection()->pdo] = $config;
     }
 
+    public static function history(Database $db): SqlHistoricalEventStore
+    {
+        return new SqlHistoricalEventStore(
+            new SqlRecords($db),
+            new DatabaseUnitOfWork($db),
+            new SystemClock(),
+            new ProtectedEventCodec(self::config($db)),
+            new HistoricalSchemaRegistry()
+        );
+    }
+
     public static function framework(Database $db): PdoTransactionalEventStore
     {
         $transactions = new DatabaseUnitOfWork($db);

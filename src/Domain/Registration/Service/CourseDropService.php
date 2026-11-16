@@ -14,6 +14,7 @@ use Domain\Registration\Enum\RegistrationStatus;
 use Domain\Registration\Repository\CourseDropRepository;
 use Domain\Registration\Repository\DropPolicyRepository;
 use Domain\Registration\Repository\RegistrationRepository;
+use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
@@ -159,7 +160,18 @@ final readonly class CourseDropService
             );
             $reversed =
                 $context["outcome"]["delete_records"] &&
-                $this->billing->reverseCourseCharge($student, $current->termId, $current->id, $actor);
+                $this->billing->reverseCourseCharge(
+                    $student,
+                    $current->termId,
+                    $current->id,
+                    new EventContext(
+                        $actor,
+                        $when,
+                        $operation,
+                        $current->id,
+                        reason: 'Course charge reversed by an accepted early drop.'
+                    )
+                );
             $result = [
                 "operation_id" => $operation->value,
                 "student_id" => $student->value,

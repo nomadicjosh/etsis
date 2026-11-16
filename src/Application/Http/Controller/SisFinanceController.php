@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Application\Http\Controller;
 
+use Application\Http\FormInput;
 use Codefy\Framework\Http\BaseController;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Service\StudentAccountService;
@@ -48,6 +49,7 @@ final class SisFinanceController extends BaseController
             'term_id' => $account->termId()->value,
             'balance_minor' => $account->balance()->minor,
             'entries' => $account->entries(),
+            'position' => $account->playhead(),
             'currency' => $account->balance()->currency,
         ]);
     }
@@ -63,14 +65,16 @@ final class SisFinanceController extends BaseController
         if ($type === null || preg_match('/^[1-9][0-9]{0,9}$/D', $minor) !== 1) {
             throw new InvalidArgumentException('A supported entry type and positive minor-unit amount are required.');
         }
-        $this->service->post(
+        $result = $this->service->post(
             new AccountId($id),
             new EntityId($this->text($data, 'operation_id')),
             $type,
             new Money((int) $minor, $this->text($data, 'currency')),
+            FormInput::from($request)->integer('position', 1),
+            FormInput::from($request)->bodyText('reason'),
         );
 
-        return new JsonResponse(['status' => 'posted']);
+        return new JsonResponse($result);
     }
 
     /** @param array<string, mixed> $data */

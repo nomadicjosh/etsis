@@ -217,10 +217,14 @@ window.createWorkspaceOperations = function (ui) {
                 const data = transform
                     ? await transform(formData(form, descriptors))
                     : formData(form, descriptors);
-                await request(path, "POST", data);
+                const result = await request(path, "POST", data);
                 await ui.refreshDirectory();
                 form.reset();
-                notify("Saved. The connected record has been updated.");
+                notify(
+                    result?.status === "already_recorded"
+                        ? "Already recorded. The original details and later changes are preserved."
+                        : "Saved. The connected record has been updated.",
+                );
                 if (done) await done();
             }, save);
         });
@@ -323,6 +327,40 @@ window.createWorkspaceOperations = function (ui) {
                 node("p", {}, `Institutional ID: ${data.institutional_id}`),
             ),
         );
+        async function accountFlow(
+            title,
+            descriptors,
+            path,
+            transform,
+            explanation,
+        ) {
+            const form = await flow(
+                title,
+                descriptors,
+                path,
+                (values) => ({
+                    ...(transform ? transform(values) : values),
+                    position: data.position,
+                }),
+                back,
+                {},
+                explanation,
+            );
+            const balance = node(
+                "p",
+                { role: "status", class: "fw-semibold" },
+                `Current balance: ${money(data.balance_minor, data.currency)}`,
+            );
+            const refresh = button("Refresh account balance", async () => {
+                const latest = await request(`/sis/accounts/${row.id}/`);
+                if (!form.isConnected) return;
+                data.position = latest.position;
+                data.balance_minor = latest.balance_minor;
+                balance.textContent = `Current balance: ${money(latest.balance_minor, latest.currency)}`;
+            });
+            form.prepend(balance, refresh);
+            return form;
+        }
         const actions = section("Transactions");
         body.append(actions);
         if (can("sis:finance:post"))
@@ -333,7 +371,7 @@ window.createWorkspaceOperations = function (ui) {
                         const operation = await request(
                             "/sis/ui/operation-id/",
                         );
-                        await flow(
+                        await accountFlow(
                             "Post transaction",
                             [
                                 [
@@ -347,6 +385,7 @@ window.createWorkspaceOperations = function (ui) {
                                     `Amount (${data.currency})`,
                                     "money",
                                 ],
+                                ["reason", "Reason for transaction", "textarea"],
                             ],
                             `/sis/accounts/${row.id}/entries/`,
                             (values) => ({
@@ -355,9 +394,7 @@ window.createWorkspaceOperations = function (ui) {
                                 currency: data.currency,
                                 operation_id: operation.id,
                             }),
-                            back,
-                            {},
-                            "Review the amount and transaction type before posting. A payment reduces the amount owed. Refunds require available credit. Retrying this form reuses its operation ID to prevent duplicate entries.",
+                            "Review the amount and transaction type and enter a reason before posting. A payment reduces the amount owed. Refunds require available credit. Retrying this form reuses its operation ID to prevent duplicate entries.",
                         );
                     },
                     "btn-primary",
@@ -372,14 +409,12 @@ window.createWorkspaceOperations = function (ui) {
                     item.reversed ? "Reversed" : "Posted",
                     !item.reversed && can("sis:finance:post")
                         ? button("Reverse entry", () =>
-                              flow(
+                              accountFlow(
                                   "Confirm entry reversal",
-                                  [],
+                                  [["reason", "Reason for reversal", "textarea"]],
                                   `/sis/accounts/${row.id}/entries/${item.operation_id}/reverse/`,
                                   null,
-                                  back,
-                                  {},
-                                  "This records a compensating event. The original entry remains in the financial history.",
+                                  "Enter why this posting must be reversed. The original entry remains in the financial history. Reload the statement if another transaction changes this account.",
                               ),
                           )
                         : "—",

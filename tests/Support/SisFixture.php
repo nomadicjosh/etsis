@@ -99,6 +99,35 @@ final class SisFixture
     public EntityId $term;
     public EntityId $program;
 
+    public function saveAccount(\Domain\Finance\StudentAccount $account): void
+    {
+        $actor = $this->access->actor;
+        foreach ($account->getRecordedEvents() as $event) {
+            if (isset($event->payload()['actor_id'])) {
+                $actor = new EntityId($event->payload()['actor_id']);
+                break;
+            }
+        }
+        $this->accounts->save($account, new \Domain\Shared\EventSourcing\EventContext(
+            $actor,
+            $this->clock->now(),
+            EntityId::generate(),
+            reason: 'Fictional attributed account command.'
+        ));
+    }
+
+    public function finance(): \Domain\Finance\Service\StudentAccountService
+    {
+        return new \Domain\Finance\Service\StudentAccountService(
+            $this->accounts,
+            $this->admissions,
+            $this->access,
+            $this->transactions,
+            $this->clock,
+            $this->audit
+        );
+    }
+
     private ?EntityId $fixtureBuilding = null;
 
     public function building(): EntityId
@@ -160,10 +189,20 @@ final class SisFixture
         $this->transactions = new DatabaseUnitOfWork($db);
         $this->access = new FixtureAccess($actor ?? $this->user());
         $this->clock = new FixtureClock();
-        $this->office = EntityId::generate();
-        new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql)->saveOffice([
-            'id' => $this->office->value, 'code' => 'REG', 'name' => 'Fictional Registrar', 'active' => 1, 'revision' => 0,
-        ], true);
+        if ($initialize) {
+            $this->office = EntityId::generate();
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql)->saveOffice([
+                'id' => $this->office->value,
+                'code' => 'REG',
+                'name' => 'Fictional Registrar',
+                'active' => 1,
+                'revision' => 0,
+            ], true);
+        } else {
+            $office = $this->sql->rows('sis_offices', ['code' => 'REG'], 1)[0]
+                ?? throw new RuntimeException('The shared fictional registrar office is missing.');
+            $this->office = new EntityId($office['id']);
+        }
         $this->audit = new SqlAuditTrail($this->sql);
         $this->admissions = new PdoAdmissionsRepository($db);
         $this->registration = new SqlRegistrationRepository(
@@ -172,7 +211,11 @@ final class SisFixture
             $this->transactions,
             $this->restrictionLedger()
         );
-        $this->accounts = new EventSourcedAccountRepository(EventStoreFixture::framework($db), $db);
+        $this->accounts = new EventSourcedAccountRepository(
+            EventStoreFixture::framework($db),
+            $db,
+            EventStoreFixture::history($db)
+        );
         $rules = new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
             $this->sql,
             EventStoreFixture::framework($db),

@@ -150,7 +150,7 @@ final class CampusFixture
             $f->service,
             $transfers,
             $this->gradebook,
-            new StudentAccountService($f->accounts, $f->admissions, $f->access),
+            $f->finance(),
             $this->cipher,
             $f->transactions,
             $f->audit,
@@ -185,6 +185,7 @@ final class CampusFixture
             $f->accounts,
             $f->transactions,
             $f->audit,
+            $f->clock,
         );
     }
 }

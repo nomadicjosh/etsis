@@ -57,7 +57,7 @@ final class AccountReportingTest extends TestCase
                 $s->access->actor
             );
         }
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         return $account;
     }
 
@@ -87,7 +87,7 @@ final class AccountReportingTest extends TestCase
         $account->post($charge, EntryType::Charge, new Money(10000, 'USD'), $s->access->actor);
         $account->post($payment, EntryType::Payment, new Money(15000, 'USD'), $s->access->actor);
         $account->post($refund, EntryType::Refund, new Money(2000, 'USD'), $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         self::assertSame(-3000, (int) $s->sql->one('sis_account_balances', ['id' => $id])['balance_minor']);
         $totals = $s->sql->one('sis_account_balances', ['id' => $id]);
         self::assertSame([10000, 15000, 2000], array_map(
@@ -95,14 +95,14 @@ final class AccountReportingTest extends TestCase
             ['charges_minor', 'payments_minor', 'refunds_minor']
         ));
         $account->reverse($charge, $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         $before = $this->journal($s);
         $balance = $s->sql->one('sis_account_balances', ['id' => $id]);
         self::assertSame(-13000, (int) $balance['balance_minor']);
         self::assertSame(0, (int) $balance['charges_minor']);
         self::assertSame($account->playhead(), (int) $balance['position']);
         $account->reverse($charge, $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         self::assertSame($before, $this->journal($s));
         self::assertSame($balance, $s->sql->one('sis_account_balances', ['id' => $id]));
         self::assertSame(-13000, $s->accounts->get(new AccountId($id))->balance()->minor);
@@ -118,23 +118,23 @@ final class AccountReportingTest extends TestCase
         $account->post($charge, EntryType::Charge, new Money(10000, 'USD'), $s->access->actor);
         $account->post($payment, EntryType::Payment, new Money(15000, 'USD'), $s->access->actor);
         $account->post($refund, EntryType::Refund, new Money(2000, 'USD'), $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         $account->reverse($refund, $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         $row = $s->sql->one('sis_account_balances', ['id' => (string) $account->aggregateId()]);
         self::assertSame([10000, 15000, 0, -5000], array_map(
             static fn(string $column): int => (int) $row[$column],
             ['charges_minor', 'payments_minor', 'refunds_minor', 'balance_minor']
         ));
         $account->reverse($payment, $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         $row = $s->sql->one('sis_account_balances', ['id' => (string) $account->aggregateId()]);
         self::assertSame([10000, 0, 0, 10000], array_map(
             static fn(string $column): int => (int) $row[$column],
             ['charges_minor', 'payments_minor', 'refunds_minor', 'balance_minor']
         ));
         $account->reverse($charge, $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         $row = $s->sql->one('sis_account_balances', ['id' => (string) $account->aggregateId()]);
         self::assertSame(0, (int) $row['charges_minor']);
         self::assertSame(0, (int) $row['balance_minor']);
@@ -158,7 +158,7 @@ final class AccountReportingTest extends TestCase
                 $s->access->actor
             );
         }
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         $row = $s->sql->one('sis_account_balances', ['id' => (string) $account->aggregateId()]);
         self::assertSame(6000000000, (int) $row['charges_minor']);
         self::assertSame(6000000000, (int) $row['payments_minor']);
@@ -192,7 +192,7 @@ final class AccountReportingTest extends TestCase
             $this->invalid($s, $this->definition());
             $account->post(EntityId::generate(), EntryType::Charge, new Money(1, 'USD'), $s->access->actor);
             try {
-                $s->accounts->save($account);
+                $s->saveAccount($account);
                 self::fail('An ordinary write repaired an unverified total.');
             } catch (CorruptHistoryException) {
                 self::assertSame($before, $this->journal($s));
@@ -231,7 +231,7 @@ final class AccountReportingTest extends TestCase
             }
             $account->post(EntityId::generate(), EntryType::Charge, new Money(1, 'USD'), $s->access->actor);
             try {
-                $s->accounts->save($account);
+                $s->saveAccount($account);
                 self::fail('A financial write silently repaired an inconsistent balance.');
             } catch (CorruptHistoryException) {
                 self::assertSame($before, $this->journal($s));
@@ -253,7 +253,7 @@ final class AccountReportingTest extends TestCase
         $a = $this->account($s);
         $b = $this->account($s, 'JPY', -1000);
         $a->reverse(new EntityId($a->entries()[0]['operation_id']), $s->access->actor);
-        $s->accounts->save($a);
+        $s->saveAccount($a);
         $balances = $s->sql->rows('sis_account_balances');
         $before = $this->journal($s);
         $s->connection->pdo->exec('DROP TABLE sis_account_balances');
@@ -326,7 +326,7 @@ final class AccountReportingTest extends TestCase
         $a = $this->account($s, minor: 1200);
         $b = $this->account($s, 'JPY', -1000);
         $a->reverse(new EntityId($a->entries()[0]['operation_id']), $s->access->actor);
-        $s->accounts->save($a);
+        $s->saveAccount($a);
         $expected = $s->sql->rows('sis_account_balances');
         $before = $this->journal($s);
         $this->oldBalanceSchema($s);
@@ -397,7 +397,7 @@ final class AccountReportingTest extends TestCase
                     $s->access->actor
                 );
             }
-            $s->accounts->save($account);
+            $s->saveAccount($account);
         }
         $q = $this->definition();
         $q['columns'] = [['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none']];
@@ -437,7 +437,7 @@ final class AccountReportingTest extends TestCase
         $service->configureReport($id, EntityId::generate(), 0, 'static', null);
         $captured = $service->run($id, 0)['items'];
         $account->reverse(new EntityId($account->entries()[0]['operation_id']), $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         self::assertSame($captured, $service->run($id, 0)['items']);
         self::assertSame(12.34, $captured[0]['c5']);
         self::assertSame(0.0, $service->preview($q, 0)['items'][0]['c5']);
@@ -564,7 +564,7 @@ final class AccountReportingTest extends TestCase
         self::assertSame('static', $settings['lifecycle']['mode']);
         $s->access->staff = true;
         $account->post(EntityId::generate(), EntryType::Payment, new Money(34, 'USD'), $s->access->actor);
-        $s->accounts->save($account);
+        $s->saveAccount($account);
         self::assertSame($live, $service->run($id, 0)['items']);
         self::assertSame(12.0, $service->preview($this->definition(), 0)['items'][0]['c4']);
     }

@@ -257,6 +257,25 @@ Reusable groups now choose a required credit total or a distinct-course count, w
 
 Student exceptions now include exact-publication course substitutions, including before either course is taken. Approval is pursuit-scoped and degree-version-specific, with explicit replacement publication selection, conflict checks and retained reasoned revocations. The future evaluator must consume these approved inputs without inventing earned credit or changing other pursuits. [Exception workflow](student-degree-exceptions.md).
 
+### Account postings and corrections
+
+In **Student accounts**, open an account and choose **Post transaction** or **Reverse entry**. Enter a reason of up to 2,000 characters. The form shows the current balance; **Refresh account balance** updates it without clearing the amount, transaction type or reason. A payment reduces the amount owed; a refund requires available credit. These postings record institutional activity and do not themselves send money through a payment gateway.
+
+New postings and reversals must match the account position displayed by the form. If another transaction changes the account, confirmation returns a conflict without applying the new entry. Review the refreshed balance before submitting again. The server also checks the account's expected event position when appending, so competing confirmations cannot silently overwrite one another.
+
+An operation ID identifies its original monetary posting: type, amount and currency must agree on a retry. An accepted retry returns **already recorded**, even if the account has since changed or that entry has been reversed. It creates no new posting, does not replace the original reason and does not undo later account activity. Repeating an already completed reversal likewise preserves its original reason and result. Changing the monetary facts under the original ID is rejected. Current posting permission is still required for every retry; use a new, reasoned correction when the original facts need adjustment.
+
+New account events retain a trusted actor, effective instant, correlation, cause and protected reason. Staff posting time comes from the application clock after the account history has been read; the browser cannot supply the recorder or backdate the decision. Opening an account has a fixed structural reason. Opening, posting and reversal commit their events, receipts, account projection and required metadata audit together, with permission and actor checks before completion. Losing authority or failing the required audit rolls back the whole decision.
+
+The same account repository now requires explicit command context from automated callers:
+
+- Accepted registrations identify the enrollment that caused the charge.
+- Early-drop reversals identify both the drop operation and its enrollment, using a financial explanation without copying private academic narratives.
+- Term billing batches share a correlation and identify their billing term, with current staff authority checked through completion.
+- Verified online-payment notifications identify the retained checkout and its initiating account holder. The authenticated provider confirmation authorizes completion; the recorded initiator does not imply a current browser session.
+
+Reasons remain encrypted historical context, outside ordinary account responses and Report Studio. These changes use the existing journal, event classes, event IDs and per-event receipts. No migration or rewriting of earlier events is needed: missing context on older framework-written facts stays explicitly unknown. Broader pricing policies, reviewed backdated adjustments, settlement and controlled operational reconstruction remain roadmap work.
+
 ### Student account reports
 
 Open **Reports → Open Report Studio** and choose **Student account balances**. The same visual builder, field checkboxes, joins, conditions, previews, saved definitions, private sharing, static captures and expiry settings apply. Useful starting points are **Outstanding student balances**, **Available student credit** and **Balances by billing term**.

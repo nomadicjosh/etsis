@@ -55,11 +55,15 @@ final readonly class SisLedgerController
         return new JsonResponse(['status' => 'reversed']);
     }
 
-    public function reverseEntry(string $id, string $operation): ResponseInterface
+    public function reverseEntry(ServerRequest $request, string $id, string $operation): ResponseInterface
     {
-        $this->students->reverse(new AccountId($id), new EntityId($operation));
-
-        return new JsonResponse(['status' => 'reversed']);
+        $f = FormInput::from($request);
+        return new JsonResponse($this->students->reverse(
+            new AccountId($id),
+            new EntityId($operation),
+            $f->integer('position', 1),
+            $f->bodyText('reason')
+        ));
     }
 
     public function show(string $id): ResponseInterface

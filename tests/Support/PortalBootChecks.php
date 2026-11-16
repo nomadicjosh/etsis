@@ -4563,3 +4563,72 @@ if (
 ) {
     throw new RuntimeException('Import review or an accepted receipt bypassed current permission.');
 }
+
+// Account commands retain trusted attribution, current positions, private responses and CSRF.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$financeNativeStudent = $sis->student();
+$financeNativeOpened = $teachingPost('/sis/accounts/', [
+    'student_id' => $financeNativeStudent->id->value, 'term_id' => $sis->term->value, 'currency' => 'USD',
+]);
+if ($financeNativeOpened->getStatusCode() !== 201) {
+    throw new RuntimeException('An attributed account could not be opened through the native provider.');
+}
+$financeNativeId = json_decode((string) $financeNativeOpened->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$financeNativePath = '/sis/accounts/' . $financeNativeId;
+$financeNativeOperation = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$financeNativePayload = ['operation_id' => $financeNativeOperation, 'type' => 'payment',
+    'amount_minor' => '1250', 'currency' => 'USD', 'position' => 1,
+    'reason' => 'Fictional private payment reason.', 'actor_id' => $sis->user()->value];
+$financeNativeBefore = $sis->sql->rows('sis_history_events');
+$financeNativeMissing = $financeNativePayload;
+unset($financeNativeMissing['reason']);
+if (
+    $teachingPost($financeNativePath . '/entries/', $financeNativeMissing)->getStatusCode() !== 422
+    || $sis->sql->rows('sis_history_events') !== $financeNativeBefore
+) {
+    throw new RuntimeException('A financial posting without a reason changed history.');
+}
+$financeNativePosted = $teachingPost($financeNativePath . '/entries/', $financeNativePayload);
+$financeNativeRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $financeNativePath . '/'
+)));
+$financeNativeBody = json_decode((string) $financeNativeRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$financeNativeHistory = \EventStoreFixture::history($sis->connection->queryBuilder())->page(
+    new \Domain\Shared\EventSourcing\StreamReference(
+        new \Domain\Finance\ValueObject\AccountId($financeNativeId),
+        'student_account'
+    )
+)->events;
+if (
+    $financeNativePosted->getStatusCode() !== 200 || ($financeNativeBody['position'] ?? null) !== 2
+    || $financeNativeHistory[1]->context->actor->value !== $sis->access->actor->value
+    || $financeNativePosted->hasHeader('phpdebugbar-id')
+    || !str_contains($financeNativePosted->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('A financial posting lost its private response or expected stream position.');
+}
+$financeNativeEvents = $sis->sql->rows('sis_history_events');
+$financeNativeStale = $financeNativePayload;
+$financeNativeStale['operation_id'] = \Domain\Shared\ValueObject\EntityId::generate()->value;
+if (
+    $teachingPost($financeNativePath . '/entries/', $financeNativeStale)->getStatusCode() !== 409
+    || $sis->sql->rows('sis_history_events') !== $financeNativeEvents
+) {
+    throw new RuntimeException('A stale financial form changed the account.');
+}
+$financeNativeReverse = $teachingPost($financeNativePath . '/entries/' . $financeNativeOperation . '/reverse/', [
+    'position' => 2, 'reason' => 'Fictional private reversal reason.',
+]);
+$financeNativeRetry = $teachingPost($financeNativePath . '/entries/', $financeNativePayload);
+if (
+    $financeNativeReverse->getStatusCode() !== 200 || $financeNativeRetry->getStatusCode() !== 200
+    || json_decode((string) $financeNativeRetry->getBody(), true)['status'] !== 'already_recorded'
+) {
+    throw new RuntimeException('Financial reversal or original-result retry did not resolve through the provider.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:finance:read'];
+if ($teachingPost($financeNativePath . '/entries/', $financeNativePayload)->getStatusCode() !== 403) {
+    throw new RuntimeException('Financial read access allowed a posting retry.');
+}

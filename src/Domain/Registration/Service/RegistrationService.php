@@ -13,6 +13,7 @@ use Domain\Registration\RegistrationPolicy;
 use Domain\Registration\RegistrationWindow;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Registration\Section;
+use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
@@ -138,7 +139,19 @@ final readonly class RegistrationService
                 $prerequisites,
             );
             $this->credits->open($enrollment, $course, $actor, $assignment, $section->publicationVersionId);
-            $this->billing->charge($studentId, $section->termId, $enrollment->id, $section->fee, $actor);
+            $this->billing->charge(
+                $studentId,
+                $section->termId,
+                $enrollment->id,
+                $section->fee,
+                new EventContext(
+                    $actor,
+                    $now,
+                    $enrollment->id,
+                    $enrollment->id,
+                    reason: 'Account charges caused by accepted course registration.'
+                )
+            );
             $this->audit->record($actor, "registration.created", $enrollment->id);
             // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
             $this->assertEligible(

@@ -26,6 +26,8 @@ The first [course-publication slice](course-publication.md) retains reviewed def
 
 [Student-account balance reports](workflow-review.md#student-account-reports) now read an indexed balance and charge/payment/refund projection updated in the same transaction as account events. The additive migration reconstructs only genuine recorded financial history under a shared replay bound and preserves earlier event/receipt bytes. Reports do not replay account streams or append financial events. Missing or stale projections stop live financial reporting; complete value reconciliation and controlled production rebuilds remain operational acceptance work.
 
+[Student-account commands](workflow-review.md#account-postings-and-corrections) now pass explicit trusted actor, effective time, correlation, cause and protected reason to that same journal. Manual postings/reversals check the displayed account position, current authority and required audit atomically; registration/drop/batch/verified-checkout callers supply their own originating context. Existing Codefy event classes, identities, playheads and receipts remain unchanged. Earlier framework context gaps remain unknown; billing-rule/journal command attribution and broader financial policies still require work.
+
 ## Persistence boundaries
 
 | Context | Target source of truth | Read/edit boundary |

@@ -10,7 +10,9 @@ use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Portal\Repository\PaymentRepository;
+use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Persistence\UnitOfWork;
+use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use DomainException;
 
@@ -23,6 +25,7 @@ final readonly class PaymentConfirmationService
         private AccountRepository $accounts,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private Clock $clock,
     ) {
     }
 
@@ -57,7 +60,14 @@ final readonly class PaymentConfirmationService
                 new Money($confirmation['minor'], $confirmation['currency']),
                 $actor
             );
-            $this->accounts->save($account);
+            // The actor is the retained checkout initiator; provider verification authorizes completion.
+            $this->accounts->save($account, new EventContext(
+                $actor,
+                $this->clock->now(),
+                $id,
+                $id,
+                reason: 'Provider-authenticated payment completing the account holder\'s retained checkout.'
+            ));
             $this->payments->attach($id, $confirmation['session'], '');
             $this->payments->paid($id);
             $this->audit->record($actor, 'payment.confirmed', $id);

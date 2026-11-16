@@ -139,13 +139,14 @@ final class AdmissionsTest extends TestCase
         $student = $this->f->legacyStudent($application->id);
         $db = $this->connection->queryBuilder();
         $store = EventStoreFixture::framework($db);
-        $accounts = new \Infrastructure\Persistence\Repository\EventSourcedAccountRepository($store, $db);
-        $finance = new \Domain\Finance\Service\StudentAccountService($accounts, $this->repository, $this->access);
+        $accounts = new \Infrastructure\Persistence\Repository\EventSourcedAccountRepository($store, $db, EventStoreFixture::history($db));
+        $finance = new \Domain\Finance\Service\StudentAccountService($accounts, $this->repository, $this->access,
+            $this->f->transactions, $this->f->clock, $this->f->audit);
         $account = $finance->open($student->id, $this->term, 'USD');
         $id = $account->aggregateId();
         $operation = EntityId::generate();
-        $finance->post($id, $operation, \Domain\Finance\Enum\EntryType::Payment, new \Domain\Finance\ValueObject\Money(20000, 'USD'));
-        $finance->post($id, $operation, \Domain\Finance\Enum\EntryType::Payment, new \Domain\Finance\ValueObject\Money(20000, 'USD'));
+        $finance->post($id, $operation, \Domain\Finance\Enum\EntryType::Payment, new \Domain\Finance\ValueObject\Money(20000, 'USD'), 1, 'Fictional payment.');
+        $finance->post($id, $operation, \Domain\Finance\Enum\EntryType::Payment, new \Domain\Finance\ValueObject\Money(20000, 'USD'), 1, 'Fictional payment.');
         self::assertSame(-20000, $finance->account($id)->balance()->minor);
         self::assertSame(2, (int) $this->connection->pdo->query('SELECT COUNT(*) FROM sis_history_events')->fetchColumn());
         $first = $accounts->get($id);
@@ -156,7 +157,9 @@ final class AdmissionsTest extends TestCase
             new \Domain\Finance\ValueObject\Money(15000, 'USD'),
             $this->owner
         );
-        $accounts->save($first);
+        $accounts->save($first, new \Domain\Shared\EventSourcing\EventContext(
+            $this->owner, $this->f->clock->now(), EntityId::generate(), reason: 'Fictional refund.'
+        ));
         $stale->post(
             EntityId::generate(),
             \Domain\Finance\Enum\EntryType::Refund,
@@ -165,7 +168,9 @@ final class AdmissionsTest extends TestCase
         );
         $rejected = false;
         try {
-            $accounts->save($stale);
+            $accounts->save($stale, new \Domain\Shared\EventSourcing\EventContext(
+                $this->owner, $this->f->clock->now(), EntityId::generate(), reason: 'Fictional concurrent refund.'
+            ));
         } catch (\Exception) {
             $rejected = true;
             self::assertSame(-5000, $finance->account($id)->balance()->minor);

@@ -315,7 +315,8 @@ final class StudentRecordManagementTest extends TestCase
             $registration,
             $f->access,
             $f->transactions,
-            $f->audit
+            $f->audit,
+            $f->clock
         );
         $service->generate($f->term, [$two, $one]);
         $expected = [$one->value, $two->value];

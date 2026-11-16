@@ -72,7 +72,7 @@ final class RegistrationWorkflowTest extends TestCase
             $f->term,
             "EUR",
         );
-        $f->accounts->save($account);
+        $f->saveAccount($account);
         try {
             $f->service->register($student->id, $section->id, true);
             self::fail("Currency mismatch must reject registration.");

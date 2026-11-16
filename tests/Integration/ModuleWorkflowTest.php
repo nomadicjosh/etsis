@@ -259,11 +259,11 @@ final class ModuleWorkflowTest extends TestCase
         $account = StudentAccount::open(new AccountId(), $student->id, $f->term, "USD");
         $operation = EntityId::generate();
         $account->post($operation, EntryType::Charge, new Money(10000, "USD"), $f->access->actor);
-        $f->accounts->save($account);
+        $f->saveAccount($account);
         $account = $f->accounts->get($account->aggregateId());
         $account->reverse($operation, $f->access->actor);
         $account->reverse($operation, $f->access->actor);
-        $f->accounts->save($account);
+        $f->saveAccount($account);
         self::assertSame(0, $f->accounts->get($account->aggregateId())->balance()->minor);
         self::assertCount(3, $f->sql->rows("sis_history_events"));
     }
@@ -292,6 +292,7 @@ final class ModuleWorkflowTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
+            $f->clock,
         );
         $rule = $service->define($f->term, $f->program, "Registration Fee", "fee", new Money(2500, "USD"));
         $section = $f->section();
@@ -299,6 +300,15 @@ final class ModuleWorkflowTest extends TestCase
         $locator = $f->sql->one("sis_student_accounts", ["student_id" => $student->id->value]);
         $id = new AccountId($locator["id"]);
         self::assertSame(12500, $f->accounts->get($id)->balance()->minor);
+        $third = $f->student();
+        $service->generate($f->term, [$third->id]);
+        $batchAccount = $f->sql->one('sis_student_accounts', ['student_id' => $third->id->value]);
+        $batchContext = EventStoreFixture::history($db)->page(new \Domain\Shared\EventSourcing\StreamReference(
+            new AccountId($batchAccount['id']), 'student_account'
+        ))->events[0]->context;
+        self::assertSame('command', $batchContext->origin);
+        self::assertSame($f->term->value, $batchContext->causation->value);
+        self::assertSame('Account charges applied by an authorized term billing batch.', $batchContext->reason);
         $service->generate($f->term, [$student->id]);
         self::assertSame(12500, $f->accounts->get($id)->balance()->minor);
         self::assertCount(2, $f->accounts->get($id)->entries());

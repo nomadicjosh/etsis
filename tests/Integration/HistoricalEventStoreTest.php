@@ -96,7 +96,7 @@ final class HistoricalEventStoreTest extends TestCase
     public function testProtectedAndFrameworkEventsShareOneTableAndReplayTheirSeparateStreams(): void
     {
         $legacy = StudentAccount::open(new AccountId(), $this->f->student()->id, $this->f->term, "USD");
-        $this->f->accounts->save($legacy);
+        $this->f->saveAccount($legacy);
         $legacyRows = $this->f->sql->rows("sis_history_events");
         $events = [$this->opened(), $this->posted(2)];
         $receipt = $this->store->append($this->stream, EntityId::generate(), 0, $this->context, $events);
@@ -186,7 +186,7 @@ final class HistoricalEventStoreTest extends TestCase
             $this->f->transactions->run(function (): void {
                 $this->store->append($this->stream, EntityId::generate(), 0, $this->context, [$this->opened()]);
                 $legacy = StudentAccount::open(new AccountId(), $this->f->student()->id, $this->f->term, "USD");
-                $this->f->accounts->save($legacy);
+                $this->f->saveAccount($legacy);
                 throw new RuntimeException("Fictional failure after append");
             });
             self::fail("An incomplete academic/financial operation committed.");
@@ -489,7 +489,7 @@ final class HistoricalEventStoreTest extends TestCase
         try {
             $this->f->transactions->run(function (): void {
                 $legacy = StudentAccount::open(new AccountId(), $this->f->student()->id, $this->f->term, "USD");
-                $this->f->accounts->save($legacy);
+                $this->f->saveAccount($legacy);
                 try {
                     $this->store->append($this->stream, EntityId::generate(), 0, $this->context, []);
                 } catch (InvalidArgumentException) {

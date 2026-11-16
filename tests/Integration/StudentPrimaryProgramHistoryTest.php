@@ -372,7 +372,8 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
                 $f->term,
                 EntityId::generate(),
                 new \Domain\Finance\ValueObject\Money(1000, "USD"),
-                $f->access->actor,
+                new \Domain\Shared\EventSourcing\EventContext($f->access->actor, $f->clock->now(),
+                    EntityId::generate(), reason: 'Fictional billing.'),
             ),
         ];
         foreach ($attempts as $attempt) {
@@ -483,6 +484,7 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
+            $f->clock,
         );
         $service->define(
             $f->term,

@@ -24,7 +24,7 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
             };
             result = { items: rows[dataset] || [], next_after: null };
         } else if (path === `/sis/accounts/${account}/`) result = {
-            id: account, institutional_id: 'S-FICTIONAL', currency: 'USD', balance_minor: posted && !reversed ? 8750 : 10000,
+            id: account, institutional_id: 'S-FICTIONAL', currency: 'USD', position: reversed ? 3 : posted ? 2 : 1, balance_minor: posted && !reversed ? 8750 : 10000,
             entries: posted ? [{ operation_id: operation, type: 'payment', minor: 1250, currency: 'USD', reversed }] : [],
         };
         else if (path === '/sis/ui/operation-id/') result = { id: operation };
@@ -52,12 +52,18 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     await page.getByLabel('Transaction type').selectOption('payment');
     await page.getByLabel('Amount (USD)').fill('12.50');
     await accessible();
+    await page.getByRole('textbox', { name: /^Reason for transaction/ }).fill('Fictional payment received.');
+    await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
+    await expect(page.getByLabel('Amount (USD)')).toHaveValue('12.50');
+    await expect(page.getByRole('textbox', { name: /^Reason for transaction/ })).toHaveValue('Fictional payment received.');
     await page.getByRole('button', { name: 'Post transaction', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Balance: $87.50');
-    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/`)).toMatchObject({ payload: { operation_id: operation, type: 'payment', amount_minor: '1250', currency: 'USD' }, csrf: 'fictional-test-token' });
+    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/`)).toMatchObject({ payload: { operation_id: operation, type: 'payment', amount_minor: '1250', currency: 'USD', position: 1, reason: 'Fictional payment received.' }, csrf: 'fictional-test-token' });
     await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    await page.getByRole('textbox', { name: /^Reason for reversal/ }).fill('Fictional posting correction.');
     await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Reversed');
+    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/${operation}/reverse/`).payload).toEqual({ position: 2, reason: 'Fictional posting correction.' });
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="teaching"]').click();
     await page.getByRole('button', { name: 'MATH.101.A', exact: true }).click();

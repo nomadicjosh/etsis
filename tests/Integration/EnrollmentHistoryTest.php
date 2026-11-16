@@ -171,7 +171,7 @@ final class EnrollmentHistoryTest extends TestCase
             $f->term,
             "EUR",
         );
-        $f->accounts->save($account);
+        $f->saveAccount($account);
         $events = $f->sql->rows("sis_history_events");
         try {
             $f->service->register($student->id, $section->id);

@@ -332,7 +332,7 @@ final class RegistrationBatchTest extends TestCase
         $selection = new RegistrationBatchSelection($section->id, ...[$a->id, $b->id]);
         $last = $selection->students[1];
         $account = \Domain\Finance\StudentAccount::open(new AccountId(), $last, $f->term, 'EUR');
-        $f->accounts->save($account);
+        $f->saveAccount($account);
         $before = $f->sql->rows('sis_history_events');
         $service = $this->service($f);
         $review = $service->review($selection);
