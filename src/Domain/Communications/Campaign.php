@@ -16,7 +16,7 @@ final readonly class Campaign
         public string $status = 'draft',
         public int $version = 0,
     ) {
-        if (!in_array($status, ['draft', 'queued', 'paused', 'completed'], true)) {
+        if (!in_array($status, ['draft', 'queued', 'paused', 'completed', 'template', 'template_retired'], true)) {
             throw new DomainException('Invalid campaign state.');
         }
     }
@@ -24,7 +24,7 @@ final readonly class Campaign
     public function transition(string $status): self
     {
         $allowed = ['draft' => ['queued'], 'queued' => ['paused', 'completed'], 'paused' => ['queued'],
-            'completed' => []];
+            'completed' => [], 'template' => ['template_retired'], 'template_retired' => ['template']];
         if (!in_array($status, $allowed[$this->status], true)) {
             throw new DomainException('Invalid campaign transition.');
         }

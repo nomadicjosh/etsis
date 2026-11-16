@@ -30,15 +30,32 @@ final readonly class CampaignService
 
     public function create(#[\SensitiveParameter] string $subject, #[\SensitiveParameter] string $body): Campaign
     {
+        return $this->createMessage($subject, $body, 'draft');
+    }
+
+    public function createTemplate(
+        #[\SensitiveParameter] string $subject,
+        #[\SensitiveParameter] string $body
+    ): Campaign {
+        return $this->createMessage($subject, $body, 'template');
+    }
+
+    private function createMessage(
+        #[\SensitiveParameter] string $subject,
+        #[\SensitiveParameter] string $body,
+        string $status
+    ): Campaign {
         $actor = $this->authorize();
         $campaign = new Campaign(
             EntityId::generate(),
             $actor,
-            $this->encrypted($subject, $body)
+            $this->encrypted($subject, $body),
+            $status
         );
         $this->transactions->run(function () use ($campaign, $actor): void {
             $this->repository->add($campaign);
-            $this->audit->record($actor, 'campaign.created', $campaign->id);
+            $this->audit->record($actor, $campaign->status === 'template'
+                ? 'campaign.template_created' : 'campaign.created', $campaign->id);
             $this->owned($campaign->id, $actor);
         });
 
@@ -68,8 +85,8 @@ final readonly class CampaignService
         $this->transactions->run(function () use ($id, $encrypted, $expectedVersion, $actor): void {
             $this->repository->lock($id);
             $campaign = $this->owned($id, $actor);
-            if ($campaign->status !== 'draft') {
-                throw new DomainException('Only a draft campaign can be edited.');
+            if (!in_array($campaign->status, ['draft', 'template'], true)) {
+                throw new DomainException('Only a draft or active reusable template can be edited.');
             }
             if ($campaign->version !== $expectedVersion) {
                 throw new ConcurrentModificationException('The campaign changed. Reload before editing.');
@@ -78,12 +95,87 @@ final readonly class CampaignService
                 $id,
                 $campaign->ownerUserId,
                 $encrypted,
-                'draft',
+                $campaign->status,
                 $expectedVersion + 1
             ), $expectedVersion);
-            $this->audit->record($actor, 'campaign.updated', $id);
+            $this->audit->record($actor, $campaign->status === 'template'
+                ? 'campaign.template_updated' : 'campaign.updated', $id);
             $this->owned($id, $actor);
         });
+    }
+
+    /** Template subjects are decrypted for the bounded, authorized page; bodies stay out of list responses.
+     * @return array{items:list<array{id:string,subject:string,version:int}>,next_after:?string}
+     */
+    public function templates(bool $retired = false, ?EntityId $after = null): array
+    {
+        $actor = $this->authorize();
+        $rows = $this->repository->templates($actor, $retired, $after);
+        $items = [];
+        foreach (array_slice($rows, 0, 20) as $row) {
+            if (
+                $row->ownerUserId->value !== $actor->value
+                || $row->status !== ($retired ? 'template_retired' : 'template')
+            ) {
+                throw new AccessDeniedException('Access denied.');
+            }
+            $content = json_decode($this->cipher->open($row->encryptedContent), true, flags: JSON_THROW_ON_ERROR);
+            $items[] = ['id' => $row->id->value, 'subject' => $content['subject'], 'version' => $row->version];
+        }
+        $this->authorize($actor);
+        return ['items' => $items, 'next_after' => count($rows) > 20 ? $rows[19]->id->value : null];
+    }
+
+    public function draftFromTemplate(EntityId $id, int $expectedVersion): Campaign
+    {
+        $actor = $this->authorize();
+        $this->owned($id, $actor);
+        return $this->transactions->run(function () use ($id, $expectedVersion, $actor): Campaign {
+            $this->repository->lock($id);
+            $template = $this->owned($id, $actor);
+            $this->templateVersion($template, $expectedVersion);
+            if ($template->status !== 'template') {
+                throw new DomainException('Restore this template before starting a new draft.');
+            }
+            // Copy encrypted composition only. No recipients, deliveries or later source edits follow it.
+            $draft = new Campaign(EntityId::generate(), $actor, $template->encryptedContent);
+            $this->repository->add($draft);
+            $this->audit->record($actor, 'campaign.created_from_template', $draft->id);
+            $this->owned($id, $actor);
+            $this->owned($draft->id, $actor);
+            return $draft;
+        });
+    }
+
+    public function retireTemplate(EntityId $id, int $expectedVersion, bool $retired): void
+    {
+        $actor = $this->authorize();
+        $this->owned($id, $actor);
+        $this->transactions->run(function () use ($id, $expectedVersion, $retired, $actor): void {
+            $this->repository->lock($id);
+            $template = $this->owned($id, $actor);
+            $this->templateVersion($template, $expectedVersion);
+            $next = $retired ? 'template_retired' : 'template';
+            if ($template->status !== $next) {
+                $this->repository->save($template->transition($next), $expectedVersion);
+                $this->audit->record(
+                    $actor,
+                    $retired ? 'campaign.template_retired' : 'campaign.template_restored',
+                    $id
+                );
+            }
+            $this->owned($id, $actor);
+        });
+    }
+
+    private function templateVersion(Campaign $template, int $expectedVersion): void
+    {
+        if (
+            !in_array($template->status, ['template', 'template_retired'], true)
+            || $template->version !== $expectedVersion
+        ) {
+            throw new ConcurrentModificationException('The template changed. Reopen it before continuing.');
+        }
     }
 
     /**
@@ -248,11 +340,13 @@ final readonly class CampaignService
         /** @var array{subject: string, body: string} $content */
         $content = json_decode($this->cipher->open($campaign->encryptedContent), true, flags: JSON_THROW_ON_ERROR);
 
-        $ready = true;
-        try {
-            $this->transport->assertReady();
-        } catch (DomainException) {
-            $ready = false;
+        $ready = !in_array($campaign->status, ['template', 'template_retired'], true);
+        if ($ready) {
+            try {
+                $this->transport->assertReady();
+            } catch (DomainException) {
+                $ready = false;
+            }
         }
         $this->owned($id, $actor);
 

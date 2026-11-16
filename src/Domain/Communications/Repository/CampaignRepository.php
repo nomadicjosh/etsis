@@ -13,6 +13,10 @@ interface CampaignRepository
     public function get(EntityId $id): Campaign;
     public function save(Campaign $campaign, int $expectedVersion): void;
     public function lock(EntityId $campaign): void;
+    /** Owner-scoped reusable messages, one page plus a continuation probe.
+     * @return list<Campaign>
+     */
+    public function templates(EntityId $owner, bool $retired, ?EntityId $after = null): array;
     /** Caller holds the draft campaign lock and has validated the distinct, bounded audience.
      * @param list<EntityId> $recipients
      * @return list<EntityId>

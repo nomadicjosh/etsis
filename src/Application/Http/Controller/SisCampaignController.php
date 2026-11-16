@@ -33,6 +33,32 @@ final readonly class SisCampaignController
         return new JsonResponse(['status' => 'saved']);
     }
 
+    public function createTemplate(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $template = $this->service->createTemplate($f->text('subject'), $f->bodyText('body'));
+        return new JsonResponse(['id' => $template->id->value, 'status' => $template->status], 201);
+    }
+
+    public function templates(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->templates($f->boolean('retired'), $f->optionalId('after')));
+    }
+
+    public function draftFromTemplate(ServerRequest $request, string $id): ResponseInterface
+    {
+        $draft = $this->service->draftFromTemplate(new EntityId($id), FormInput::from($request)->integer('version'));
+        return new JsonResponse(['id' => $draft->id->value, 'status' => $draft->status], 201);
+    }
+
+    public function retireTemplate(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $this->service->retireTemplate(new EntityId($id), $f->integer('version'), $f->requiredBoolean('retired'));
+        return new JsonResponse(['status' => 'saved']);
+    }
+
     public function show(string $id): ResponseInterface
     {
         return new JsonResponse($this->service->show(new EntityId($id)));

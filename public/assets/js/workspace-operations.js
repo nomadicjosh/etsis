@@ -717,35 +717,80 @@ window.createWorkspaceOperations = function (ui) {
         body.append(picker, review);
         renderSelection();
     }
+    const messageFields = [["subject", "Subject"], ["body", "Message", "textarea"]];
+    async function campaignTemplates(retired = false, after = null, stack = []) {
+        const body = openDrawer("My message templates", "COMMUNICATIONS");
+        const result = await request("/sis/campaigns/templates/page/", "POST", { retired, after });
+        if (!body.isConnected) return;
+        body.append(node("p", { class: "form-text" },
+            "Keep reusable wording in your private template library. Starting a message makes an independent draft without recipients. Later template edits leave existing messages unchanged."),
+            button(retired ? "Show active templates" : "Show retired templates", () => campaignTemplates(!retired)),
+            button("Create reusable template", async () => {
+                const form = await flow("Save reusable template", messageFields,
+                    "/sis/campaigns/templates/create/", null, () => campaignTemplates(), {},
+                    "Save plain-text wording for future messages. This creates a private template, not a delivery queue.");
+                form.elements.subject.maxLength = 191;
+                form.elements.body.maxLength = 100000;
+            }, "btn-primary"));
+        body.append(result.items.length ? scrollTable(["Template", "Action"], result.items.map(item => {
+            const open = button("Open template", () => openRecord("campaigns", { id: item.id }));
+            open.setAttribute("aria-label", `Open template ${item.subject}`);
+            return [item.subject, open];
+        }), retired ? "Retired message templates" : "Active message templates")
+            : node("p", { class: "mt-3" }, retired ? "No retired templates." : "No reusable templates yet."));
+        if (stack.length) body.append(button("Previous templates", () => {
+            const previous = [...stack]; return campaignTemplates(retired, previous.pop(), previous);
+        }));
+        if (result.next_after) body.append(button("Next templates", () =>
+            campaignTemplates(retired, result.next_after, [...stack, after])));
+    }
     async function campaign(body, row) {
         const data = await request(`/sis/campaigns/${row.id}/`);
+        if (!body.isConnected) return;
         const back = () => openRecord("campaigns", row);
+        const template = ["template", "template_retired"].includes(data.status);
         body.append(
             section(
                 data.subject,
                 node("p", { class: "message-preview" }, data.body),
-                badge(data.status),
+                badge(template ? (data.status === "template" ? "Reusable template" : "Retired template") : data.status),
             ),
         );
-        if (data.status === "draft")
+        if (["draft", "template"].includes(data.status))
             body.append(
-                button("Edit draft", () =>
-                    flow(
-                        "Save message draft",
-                        [
-                            ["subject", "Subject"],
-                            ["body", "Message", "textarea"],
-                        ],
-                        `/sis/campaigns/${row.id}/draft/`,
+                button(template ? "Edit template" : "Edit draft", async () => {
+                    const form = await flow(
+                        template ? "Save message template" : "Save message draft",
+                        messageFields,
+                        template ? `/sis/campaigns/${row.id}/template/edit/` : `/sis/campaigns/${row.id}/draft/`,
                         (values) => ({
                             ...values,
                             version: Number(data.version),
                         }),
                         back,
                         data,
-                    ),
-                ),
+                    );
+                    form.elements.subject.maxLength = 191;
+                    form.elements.body.maxLength = 100000;
+                }),
             );
+        if (template) {
+            body.append(node("p", { class: "form-text" },
+                "Templates have no recipients and cannot send mail. Each new message keeps its own editable copy."),
+                button("Back to my templates", () => campaignTemplates(data.status === "template_retired")));
+            if (data.status === "template") body.append(button("Start a new message", async () => {
+                const draft = await request(`/sis/campaigns/${row.id}/template/draft/`, "POST", { version: data.version });
+                if (!body.isConnected) return;
+                notify("Independent message draft created. Review it before choosing recipients.");
+                await openRecord("campaigns", { id: draft.id });
+            }, "btn-primary"));
+            body.append(button(data.status === "template" ? "Retire template" : "Restore template", () =>
+                flow(data.status === "template" ? "Confirm template retirement" : "Confirm template restoration", [],
+                    `/sis/campaigns/${row.id}/template/status/`,
+                    () => ({ version: data.version, retired: data.status === "template" }), back, {},
+                    "Retirement stops new messages from using this template. Existing drafts and deliveries keep their own content.")));
+            return;
+        }
         if (data.status === "draft" && can("sis:person:manage"))
             body.append(button("Choose recipients", () => campaignRecipients(row, data, back), "btn-primary"));
         if (["queued", "paused"].includes(data.status))
@@ -1094,6 +1139,7 @@ window.createWorkspaceOperations = function (ui) {
         enhance,
         createJournal,
         billingBatch,
+        campaignTemplates,
         flow,
         audit,
         registration,

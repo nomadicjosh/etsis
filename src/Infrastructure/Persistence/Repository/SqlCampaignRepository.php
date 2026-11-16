@@ -57,6 +57,27 @@ final readonly class SqlCampaignRepository implements CampaignRepository
         $this->sql->lock('sis_campaigns', $campaign->value, 'version');
     }
 
+    public function templates(EntityId $owner, bool $retired, ?EntityId $after = null): array
+    {
+        $q = $this->sql->quote(...);
+        $query = 'SELECT ' . implode(', ', array_map($q, ['id', 'encrypted_content', 'version']))
+        . ' FROM ' . $q('sis_campaigns') . ' WHERE ' . $q('owner_user_id') . ' = ? AND '
+        . $q('status') . ' = ?';
+        $status = $retired ? 'template_retired' : 'template';
+        $params = [$owner->value, $status];
+        if ($after !== null) {
+            $query .= ' AND ' . $q('id') . ' > ?';
+            $params[] = $after->value;
+        }
+        return array_map(static fn(array $row): Campaign => new Campaign(
+            new EntityId($row['id']),
+            $owner,
+            $row['encrypted_content'],
+            $status,
+            (int) $row['version']
+        ), $this->sql->fetch($query . ' ORDER BY ' . $q('id'), $params, 21));
+    }
+
     public function enqueue(EntityId $campaign, array $recipients): array
     {
         $deliveries = [];

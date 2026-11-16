@@ -4073,6 +4073,27 @@ if (
 ) {
     throw new RuntimeException('Communications lost its private, version-checked recipient review.');
 }
+// Reusable compositions share the same private, CSRF-protected campaign boundary.
+$templateCreated = $teachingPost('/sis/campaigns/templates/create/', $announcement);
+$templateId = json_decode((string) $templateCreated->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$templateBase = '/sis/campaigns/' . $templateId . '/template/';
+$templateNoCsrf = $communicationNoCsrf->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $templateBase . 'draft/')
+)->withParsedBody(['version' => 0]);
+$templatePage = $teachingPost('/sis/campaigns/templates/page/', ['retired' => false]);
+if (
+    $templateCreated->getStatusCode() !== 201 || $templatePage->getStatusCode() !== 200
+    || $templatePage->hasHeader('phpdebugbar-id')
+    || !str_contains($templatePage->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $templatePage->getBody(), 'Public invitation only.')
+    || $app->router->match($templateNoCsrf)->getStatusCode() !== 403
+    || $teachingPost($templateBase . 'draft/', ['version' => 0])->getStatusCode() !== 201
+    || $teachingPost($templateBase . 'status/', ['version' => 0, 'retired' => true])->getStatusCode() !== 200
+    || $teachingPost($templateBase . 'draft/', ['version' => 1])->getStatusCode() !== 409
+    || $teachingPost($templateBase . 'status/', ['version' => 1, 'retired' => false])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Reusable templates lost private responses, CSRF or lifecycle checks.');
+}
 $sis->access->staff = false;
 $sis->access->grants = ['sis:communications:manage'];
 if (
