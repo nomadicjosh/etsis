@@ -847,6 +847,19 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'source_payment_operation_id') {
+                    if (
+                        !is_string($value) || !in_array($class, [
+                        \Domain\Finance\Event\AccountEntryWasPosted::class,
+                        \Domain\Finance\Event\AccountEntryWasCorrected::class,
+                        ], true) || ($class === \Domain\Finance\Event\AccountEntryWasPosted::class
+                        && ($payload['type'] !== 'refund' || ($metadata['staff_recorded'] ?? false) !== true))
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    new \Domain\Shared\ValueObject\EntityId($value);
+                    continue;
+                }
                 if ($name === 'reversed_credit_ids') {
                     if (
                         $class !== \Domain\Finance\Event\AccountEntryWasReversed::class

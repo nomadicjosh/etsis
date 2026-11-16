@@ -162,6 +162,8 @@ Download the [connector 0.6.0-alpha ZIP](dist/moodle/local_etsis-0.6.0-alpha.zip
 
 [Credit a charge](docs/workflow-review.md#credit-a-charge) applies a reviewed partial or full deduction to a specific charge while retaining the original bill. Staff and student statements show the linked credit; charge totals reflect the reduction. Reversing the charge also reverses its active credits, including during early course drops. A credit balance and an issued refund remain separate decisions.
 
+[Refund a payment](docs/workflow-review.md#refund-a-payment) records an issued refund against a selected receipt, checking both account credit and its remaining linked-refund allowance. Corrections retain the source, and reversing a payment preserves issued refunds. Incoming and outgoing receipt details stay separate and restricted to finance staff; student statements show the payment link. Recording does not send money through a bank or gateway.
+
 [Correct a recorded amount](docs/workflow-review.md#correct-a-recorded-amount) previews the balance change for an explicitly staff-recorded entry, then retains its original and linked replacement together. Stale reviews preserve form values; accepted retries preserve the original correction after later account activity. Automated charges and gateway payments stay with their source workflows.
 
 [Private entry history](docs/workflow-review.md#entry-history) shows an entry's posting, amount/receipt corrections and reversals with recorded times, attribution, retained receipt values and protected reasons. Captured pages require explicit refresh for newer activity; earlier missing details stay unknown. This staff-only read preserves financial events and balances.

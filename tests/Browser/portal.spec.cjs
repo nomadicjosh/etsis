@@ -247,3 +247,19 @@ test('students see linked charge credits as deductions in their own statement', 
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
 });
+
+test('student statements identify a refund payment link without receipt details or reasons', async ({ page }) => {
+    await mockServices(page);
+    await page.route(`**/portal/api/accounts/${account}/`, route => route.fulfill({
+        json: { id: account, currency: 'USD', balance_minor: -8000, entries: [
+            { operation_id: id(71), type: 'payment', minor: 10000, currency: 'USD', reversed: false },
+            { operation_id: id(72), type: 'refund', minor: 2000, currency: 'USD', reversed: false,
+                source_payment_operation_id: id(71) },
+        ] }, headers: { 'Cache-Control': 'private, no-store' },
+    }));
+    await page.goto('/portal/student/accounts/');
+    await page.getByRole('button', { name: 'View statement' }).click();
+    await expect(page.locator('#campus-dialog')).toContainText(`For payment ${id(71).slice(-8)}`);
+    await expect(page.locator('#campus-dialog')).toContainText('-$80.00');
+    await accessible(page);
+});

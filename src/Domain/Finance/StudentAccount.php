@@ -23,7 +23,8 @@ use Domain\Shared\Exception\ValidationException;
 /**
  * @phpstan-type AccountEntry array{operation_id:string,type:string,minor:int,currency:string,reversed:bool,
  *     corrects_operation_id?:string,corrected_by_operation_id?:string,source_operation_id?:string,
- *     credited_minor?:int,remaining_charge_minor?:int,linked_credit_count?:int,reversed_with_operation_id?:string}
+ *     credited_minor?:int,remaining_charge_minor?:int,linked_credit_count?:int,reversed_with_operation_id?:string,source_payment_operation_id?:string,
+ *     linked_refund_minor?:int,linked_refund_count?:int,remaining_refundable_minor?:int}
  * @phpstan-type LinkedEntryResult array{status:string,operation_id:string,source_operation_id:string,
  *     balance_minor:int,position:int}
  * @phpstan-type ReversalResult array{status:string,operation_id:string,balance_minor:int,position:int}
@@ -70,6 +71,13 @@ final class StudentAccount extends EventSourcedAggregate
     /** @var array<string,array{actor:string,hash:string,result:LinkedEntryResult}> */
     private array $chargeCreditReceipts = [];
 
+    /** @var array<string,string> Refund entry to the payment selected when it was recorded. */
+    private array $refundSources = [];
+    /** @var array<string,array{minor:int,count:int}> Active linked totals by logical payment receipt. */
+    private array $refundTotals = [];
+    /** @var array<string,string> The currently posted payment in each original/replacement family. */
+    private array $activePaymentByReceipt = [];
+
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
         $money = new Money(0, $currency);
@@ -113,7 +121,8 @@ final class StudentAccount extends EventSourcedAggregate
             $flags =
             ["reversed" => isset($this->reversedOperations[$id])] +
             $this->correctionLinks($id) +
-            $this->chargeLinks($id);
+            $this->chargeLinks($id) +
+            $this->refundLinks($id);
             $entries[] = ["operation_id" => $id] + $entry + $flags;
         }
 
@@ -130,7 +139,8 @@ final class StudentAccount extends EventSourcedAggregate
         return ["operation_id" => $operation->value] +
         $entry + ["reversed" => isset($this->reversedOperations[$operation->value])] +
         $this->correctionLinks($operation->value) +
-        $this->chargeLinks($operation->value);
+        $this->chargeLinks($operation->value) +
+        $this->refundLinks($operation->value);
     }
 
     public function post(
@@ -141,6 +151,7 @@ final class StudentAccount extends EventSourcedAggregate
         bool $staffRecorded = false,
         ?string $reviewHash = null,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
+        ?EntityId $sourcePayment = null,
     ): void {
         if ($type === EntryType::ChargeCredit) {
             throw new DomainException(
@@ -149,6 +160,9 @@ final class StudentAccount extends EventSourcedAggregate
         }
         if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
             throw new DomainException("A positive amount in the account currency is required.");
+        }
+        if ($sourcePayment !== null && ($type !== EntryType::Refund || !$staffRecorded)) {
+            throw new DomainException("A payment link belongs to a staff-recorded refund.");
         }
         $paymentDetails = $paymentDetails?->isEmpty() ? null : $paymentDetails;
         if ($paymentDetails !== null && (!$staffRecorded || $type === EntryType::Charge)) {
@@ -162,7 +176,8 @@ final class StudentAccount extends EventSourcedAggregate
             if (
                 $this->operations[$operationId->value] !== $entry ||
                 ($this->openingPaymentDetails[$operationId->value] ?? null)?->values() !==
-                    $paymentDetails?->values()
+                    $paymentDetails?->values() ||
+                ($this->refundSources[$operationId->value] ?? null) !== $sourcePayment?->value
             ) {
                 throw new DomainException("The operation identifier has already been used.");
             }
@@ -171,7 +186,7 @@ final class StudentAccount extends EventSourcedAggregate
         if ($reviewHash !== null && (!$staffRecorded || preg_match('/^[a-f0-9]{64}$/D', $reviewHash) !== 1)) {
             throw new DomainException("A reviewed staff posting requires a valid instruction hash.");
         }
-        $this->postingBalance($type, $amount);
+        $this->postingBalance($type, $amount, $sourcePayment);
         $this->recordThat(
             AccountEntryWasPosted::occur(
                 $this->aggregateId(),
@@ -182,12 +197,13 @@ final class StudentAccount extends EventSourcedAggregate
                 [Metadata::AGGREGATE_TYPE => "student_account"] +
                     ($staffRecorded ? ["staff_recorded" => true] : []) +
                     ($reviewHash === null ? [] : ["review_hash" => $reviewHash]) +
-                    ($paymentDetails === null ? [] : ["payment_details" => $paymentDetails->values()]),
+                    ($paymentDetails === null ? [] : ["payment_details" => $paymentDetails->values()]) +
+                    ($sourcePayment === null ? [] : ["source_payment_operation_id" => $sourcePayment->value]),
             ),
         );
     }
 
-    public function postingBalance(EntryType $type, Money $amount): Money
+    public function postingBalance(EntryType $type, Money $amount, ?EntityId $sourcePayment = null): Money
     {
         if ($type === EntryType::ChargeCredit) {
             throw new DomainException(
@@ -199,6 +215,24 @@ final class StudentAccount extends EventSourcedAggregate
         }
         if ($type === EntryType::Refund && $amount->minor > -$this->balance->minor) {
             throw new DomainException("A refund cannot exceed available credit.");
+        }
+        if ($sourcePayment !== null) {
+            if ($type !== EntryType::Refund || !$this->canRefundPayment($sourcePayment)) {
+                throw new ValidationException([
+                    [
+                        "field" => "source_operation_id",
+                        "message" => "Choose a posted payment with an amount still available to refund.",
+                    ],
+                ]);
+            }
+            if ($amount->minor > $this->paymentRefundSummary($sourcePayment)["remaining_refundable_minor"]) {
+                throw new ValidationException([
+                    [
+                        "field" => "amount_minor",
+                        "message" => "The refund cannot exceed this payment less its linked refunds.",
+                    ],
+                ]);
+            }
         }
         $delta = $type->balanceSign() * $amount->minor;
         return $this->balance->add(new Money($delta, $amount->currency));
@@ -225,6 +259,7 @@ final class StudentAccount extends EventSourcedAggregate
         EntityId $actor,
         string $reviewHash,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
+        ?EntityId $sourcePayment = null,
     ): array {
         if (($accepted = $this->postingResult($operation, $actor, $reviewHash)) !== null) {
             return $accepted;
@@ -240,8 +275,81 @@ final class StudentAccount extends EventSourcedAggregate
             staffRecorded: true,
             reviewHash: $reviewHash,
             paymentDetails: $paymentDetails,
+            sourcePayment: $sourcePayment,
         );
         return $this->postingReceipts[$operation->value]["result"];
+    }
+
+    public function canRefundPayment(EntityId $payment): bool
+    {
+        return ($this->operations[$payment->value]["type"] ?? null) === EntryType::Payment->value &&
+        !isset($this->reversedOperations[$payment->value]) &&
+        $this->balance->minor < 0 &&
+        $this->paymentRefundSummary($payment)["remaining_refundable_minor"] > 0;
+    }
+
+    /** Current totals follow the logical receipt across amount corrections, without changing recorded links.
+     * @return array{linked_refund_minor:int,linked_refund_count:int,remaining_refundable_minor:int}
+     */
+    public function paymentRefundSummary(EntityId $payment): array
+    {
+        if (($this->operations[$payment->value]["type"] ?? null) !== EntryType::Payment->value) {
+            throw new ValidationException([
+                ["field" => "source_operation_id", "message" => "Choose a recorded payment."],
+            ]);
+        }
+        $root = $this->receiptRoots[$payment->value];
+        $totals = $this->refundTotals[$root] ?? ["minor" => 0, "count" => 0];
+        $current = $this->activePaymentByReceipt[$root] ?? null;
+        $received = $current === null ? 0 : $this->operations[$current]["minor"];
+        return [
+            "linked_refund_minor" => $totals["minor"],
+            "linked_refund_count" => $totals["count"],
+            "remaining_refundable_minor" =>
+                $current !== $payment->value ? 0 : max(0, $received - $totals["minor"]),
+        ];
+    }
+
+    public function unlinkedRefundMinor(): int
+    {
+        $minor = 0;
+        foreach ($this->operations as $id => $entry) {
+            if (
+                $entry["type"] === EntryType::Refund->value &&
+                !isset($this->reversedOperations[$id]) &&
+                !isset($this->refundSources[$id])
+            ) {
+                $minor += $entry["minor"];
+            }
+        }
+        return $minor;
+    }
+
+    /** @return array{source_payment_operation_id?:string,linked_refund_minor?:int,
+     *     linked_refund_count?:int,remaining_refundable_minor?:int} */
+    private function refundLinks(string $id): array
+    {
+        if ($this->operations[$id]["type"] === EntryType::Payment->value) {
+            return $this->paymentRefundSummary(new EntityId($id));
+        }
+        return isset($this->refundSources[$id])
+        ? ["source_payment_operation_id" => $this->refundSources[$id]]
+        : [];
+    }
+
+    /** Derive only from accepted refund facts. Caller controls the corresponding active/reversed state. */
+    private function changeRefundTotals(string $refund, int $sign): void
+    {
+        $source = $this->refundSources[$refund] ?? null;
+        if ($source === null) {
+            return;
+        }
+        $root = $this->receiptRoots[$source];
+        $totals = $this->refundTotals[$root] ?? ["minor" => 0, "count" => 0];
+        $this->refundTotals[$root] = [
+            "minor" => $totals["minor"] + $sign * $this->operations[$refund]["minor"],
+            "count" => $totals["count"] + $sign,
+        ];
     }
 
     /** @return ReversalResult|null */
@@ -499,8 +607,8 @@ final class StudentAccount extends EventSourcedAggregate
                 [
                     "field" => "source_operation_id",
                     "message" =>
-                        "Only an unreversed, explicitly staff-recorded entry without active charge credits "
-                        . "can be corrected here.",
+                        "Only an unreversed, explicitly staff-recorded entry without active charge credits " .
+                        "can be corrected here.",
                 ],
             ]);
         }
@@ -528,13 +636,37 @@ final class StudentAccount extends EventSourcedAggregate
             ]);
         }
         $balance = new Money($minor, $amount->currency);
-        if ($entry["type"] === EntryType::Refund->value && $balance->minor > 0) {
+        if (
+            $entry["type"] === EntryType::Refund->value &&
+            $amount->minor > $entry["minor"] &&
+            $balance->minor > 0
+        ) {
             throw new ValidationException([
                 [
                     "field" => "amount_minor",
                     "message" => "The corrected refund cannot exceed available credit.",
                 ],
             ]);
+        }
+        if (
+            $entry["type"] === EntryType::Refund->value &&
+            $amount->minor > $entry["minor"] &&
+            isset($this->refundSources[$source->value])
+        ) {
+            $payment = $this->refundSources[$source->value];
+            $root = $this->receiptRoots[$payment];
+            $current = $this->activePaymentByReceipt[$root] ?? null;
+            $received = $current === null ? 0 : $this->operations[$current]["minor"];
+            $otherRefunds = ($this->refundTotals[$root]["minor"] ?? 0) - $entry["minor"];
+            if ($amount->minor > max(0, $received - $otherRefunds)) {
+                throw new ValidationException([
+                    [
+                        "field" => "amount_minor",
+                        "message" =>
+                            "The corrected refund cannot exceed its payment less other linked refunds.",
+                    ],
+                ]);
+            }
         }
         return $balance;
     }
@@ -583,7 +715,10 @@ final class StudentAccount extends EventSourcedAggregate
                     "review_hash" => $reviewHash,
                 ],
                 [Metadata::AGGREGATE_TYPE => "student_account"] +
-                    ($receiptDetails === null ? [] : ["payment_details" => $receiptDetails->values()]),
+                    ($receiptDetails === null ? [] : ["payment_details" => $receiptDetails->values()]) +
+                    (isset($this->refundSources[$source->value])
+                        ? ["source_payment_operation_id" => $this->refundSources[$source->value]]
+                        : []),
             ),
         );
         return $this->corrections[$operation->value]["result"];
@@ -732,6 +867,18 @@ final class StudentAccount extends EventSourcedAggregate
             "currency" => $amount->currency,
         ];
         $this->receiptRoots[$p["operation_id"]] = $this->receiptRoots[$source->value];
+        $refundSource = $event->metadata()["source_payment_operation_id"] ?? null;
+        if ($refundSource !== ($this->refundSources[$source->value] ?? null)) {
+            throw new DomainException("The refund correction must preserve its recorded payment link.");
+        }
+        if ($refundSource !== null) {
+            $this->refundSources[$p["operation_id"]] = $refundSource;
+            $this->changeRefundTotals($source->value, -1);
+            $this->changeRefundTotals($p["operation_id"], 1);
+        }
+        if ($this->operations[$source->value]["type"] === EntryType::Payment->value) {
+            $this->activePaymentByReceipt[$this->receiptRoots[$source->value]] = $p["operation_id"];
+        }
         $snapshot = $event->metadata()["payment_details"] ?? null;
         if (
             $snapshot !== null &&
@@ -773,6 +920,11 @@ final class StudentAccount extends EventSourcedAggregate
             $this->reversedWith[$credit] = $operation->value;
         }
         $this->reversedOperations[$operation->value] = true;
+        if ($this->operations[$operation->value]["type"] === EntryType::Payment->value) {
+            unset($this->activePaymentByReceipt[$this->receiptRoots[$operation->value]]);
+        } elseif ($this->operations[$operation->value]["type"] === EntryType::Refund->value) {
+            $this->changeRefundTotals($operation->value, -1);
+        }
         if (isset($event->metadata()["review_hash"])) {
             $this->reversalReceipts[$operation->value] = [
                 "actor" => $p["actor_id"],
@@ -797,6 +949,14 @@ final class StudentAccount extends EventSourcedAggregate
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
+        $refundSource = $event->metadata()["source_payment_operation_id"] ?? null;
+        if ($refundSource !== null) {
+            $this->postingBalance(
+                EntryType::from($payload["type"]),
+                new Money($payload["minor"], $payload["currency"]),
+                new EntityId($refundSource),
+            );
+        }
         $this->receiptRoots[$payload["operation_id"]] = $payload["operation_id"];
         if (isset($event->metadata()["payment_details"])) {
             $details = PaymentDetails::fromRecorded($event->metadata()["payment_details"]);
@@ -808,6 +968,13 @@ final class StudentAccount extends EventSourcedAggregate
             "minor" => $payload["minor"],
             "currency" => $payload["currency"],
         ];
+        if ($payload["type"] === EntryType::Payment->value) {
+            $this->activePaymentByReceipt[$payload["operation_id"]] = $payload["operation_id"];
+        }
+        if ($refundSource !== null) {
+            $this->refundSources[$payload["operation_id"]] = $refundSource;
+            $this->changeRefundTotals($payload["operation_id"], 1);
+        }
         if (($event->metadata()["staff_recorded"] ?? false) === true) {
             $this->staffRecorded[$payload["operation_id"]] = true;
         }

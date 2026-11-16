@@ -353,7 +353,8 @@ window.createWorkspaceOperations = function (ui) {
             const correcting = item !== null,
                 receiptOnly = action === "receipt",
                 reversing = action === "reversal",
-                crediting = action === "credit";
+                crediting = action === "credit",
+                refunding = action === "refund";
             const copy = {
                 posting: {
                     title: "Post transaction",
@@ -391,6 +392,18 @@ window.createWorkspaceOperations = function (ui) {
                     explanation:
                         "This changes receipt information only. Earlier values remain in the restricted history. No money moves and the account balance stays the same. Review expires in 20 minutes.",
                 },
+                refund: {
+                    title: "Refund a payment",
+                    reason: "Reason for payment refund",
+                    review: "Review payment refund",
+                    region: "Reviewed payment refund",
+                    confirm: "Confirm payment refund",
+                    path: `${item?.operation_id}/refund/`,
+                    introduction:
+                        "Record a refund against this payment. The amount must fit both the account credit and the payment less its linked refunds. Enter the outgoing refund method/reference if known.",
+                    explanation:
+                        "This records an issued refund and its payment link. It does not send money or verify bank settlement. Earlier unlinked refunds stay unallocated. Review expires in 20 minutes.",
+                },
                 credit: {
                     title: "Credit a charge",
                     reason: "Reason for charge credit",
@@ -423,15 +436,27 @@ window.createWorkspaceOperations = function (ui) {
                     ? [
                           [
                               "amount_minor",
-                              `${crediting ? "Amount to credit" : correcting ? "Corrected amount" : "Amount"} (${data.currency})`,
+                              `${refunding ? "Amount to refund" : crediting ? "Amount to credit" : correcting ? "Corrected amount" : "Amount"} (${data.currency})`,
                               "money",
                           ],
                       ]
                     : []),
-                ...(!correcting || receiptOnly
+                ...(!correcting || receiptOnly || refunding
                     ? [
-                          ["payment_method", "Payment method", "choice", paymentMethods, false],
-                          ["payment_reference", "Receipt or check reference", "text", "", false],
+                          [
+                              "payment_method",
+                              refunding ? "Refund method" : "Payment method",
+                              "choice",
+                              paymentMethods,
+                              false,
+                          ],
+                          [
+                              "payment_reference",
+                              refunding ? "Refund receipt or check reference" : "Receipt or check reference",
+                              "text",
+                              "",
+                              false,
+                          ],
                       ]
                     : []),
                 ["reason", copy.reason, "textarea"],
@@ -542,19 +567,49 @@ window.createWorkspaceOperations = function (ui) {
                                 {},
                                 receiptOnly
                                     ? `${result.type}: ${money(result.amount_minor, result.currency)} · Amount unchanged`
-                                    : crediting
-                                      ? `Charge credit: ${money(-result.amount_minor, result.currency)}`
-                                      : reversing
-                                        ? `Reverse ${result.type}: ${money(result.amount_minor, result.currency)}`
-                                        : correcting
-                                          ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
-                                          : `${result.type}: ${money(result.amount_minor, result.currency)}`,
+                                    : refunding
+                                      ? `Refund: ${money(result.amount_minor, result.currency)}`
+                                      : crediting
+                                        ? `Charge credit: ${money(-result.amount_minor, result.currency)}`
+                                        : reversing
+                                          ? `Reverse ${result.type}: ${money(result.amount_minor, result.currency)}`
+                                          : correcting
+                                            ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
+                                            : `${result.type}: ${money(result.amount_minor, result.currency)}`,
                             ),
                             node(
                                 "p",
                                 {},
                                 `Account balance: ${money(result.balance_minor, result.currency)} → ${money(result.resulting_balance_minor, result.currency)}`,
                             ),
+                            refunding
+                                ? node(
+                                      "p",
+                                      {},
+                                      `Payment: ${money(result.payment_minor, result.currency)} · Linked refunds: ${money(result.linked_refund_minor, result.currency)} · Payment remaining: ${money(result.remaining_payment_minor, result.currency)}`,
+                                  )
+                                : null,
+                            refunding
+                                ? node(
+                                      "p",
+                                      { class: "text-break" },
+                                      `Source receipt: ${receiptText(result.source_payment_details)}`,
+                                  )
+                                : null,
+                            refunding && result.unlinked_refund_minor > 0
+                                ? node(
+                                      "p",
+                                      { class: "alert alert-info" },
+                                      `${money(result.unlinked_refund_minor, result.currency)} in recorded refunds has no payment link. Those sources are unknown; the account-credit limit still applies.`,
+                                  )
+                                : null,
+                            reversing && result.type === "payment" && result.linked_refund_count > 0
+                                ? node(
+                                      "p",
+                                      { class: "fw-semibold" },
+                                      `${result.linked_refund_count} linked refunds totaling ${money(result.linked_refund_minor, result.currency)} remain recorded. This reversal changes the payment received.`,
+                                  )
+                                : null,
                             crediting
                                 ? node(
                                       "p",
@@ -727,6 +782,13 @@ window.createWorkspaceOperations = function (ui) {
                                   ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
                                   : `Reference: ${item.operation_id.slice(-8)}`,
                         ),
+                        item.source_payment_operation_id
+                            ? node(
+                                  "p",
+                                  { class: "form-text" },
+                                  `Refund of payment ${item.source_payment_operation_id.slice(-8)}`,
+                              )
+                            : null,
                         item.action === "receipt_corrected"
                             ? node(
                                   "p",
@@ -789,6 +851,7 @@ window.createWorkspaceOperations = function (ui) {
             if (canRead && canPost && item.can_correct_payment_details)
                 controls.push(button("Correct receipt details", () => reviewEntry(item, "receipt")));
             if (!item.reversed && canPost && canRead) {
+                if (item.can_refund_payment) controls.push(button("Refund payment", () => reviewEntry(item, "refund")));
                 if (item.can_credit_charge) controls.push(button("Credit charge", () => reviewEntry(item, "credit")));
                 if (item.can_correct_amount && canRead)
                     controls.push(button("Correct amount", () => reviewEntry(item)));
@@ -810,6 +873,27 @@ window.createWorkspaceOperations = function (ui) {
                                 "div",
                                 {},
                                 node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
+                                item.source_payment_operation_id
+                                    ? node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Refund of payment ${item.source_payment_operation_id.slice(-8)}`,
+                                      )
+                                    : null,
+                                item.type === "payment" && !item.reversed && item.linked_refund_count > 0
+                                    ? node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Linked refunds ${money(item.linked_refund_minor, item.currency)} · Payment remaining ${money(item.remaining_refundable_minor, item.currency)}`,
+                                      )
+                                    : null,
+                                item.type === "payment" && !item.reversed && item.linked_refund_minor > item.minor
+                                    ? node(
+                                          "p",
+                                          { class: "text-danger mb-0" },
+                                          "Linked refunds exceed this corrected payment. Review its history.",
+                                      )
+                                    : null,
                                 item.source_operation_id
                                     ? node(
                                           "p",

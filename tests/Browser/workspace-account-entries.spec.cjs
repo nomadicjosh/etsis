@@ -4,9 +4,10 @@ const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let position = 2, balance = options.charge ? 1000 : -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null, sourceReversed = false, acceptedReversal = null;
+    let position = 2, balance = options.charge ? 1000 : -1000 + (options.unlinkedRefundMinor || 0), corrected = false, reviewNumber = 0, interrupt = false, posted = null, sourceReversed = false, acceptedReversal = null;
     const postingReviews = new Map(), receiptReviews = new Map(), reversalReviews = new Map(), creditReviews = new Map();
-    const credits = [];
+    const credits = [], linkedRefunds = [], refundReviews = new Map();
+    const linkedRefundMinor = () => linkedRefunds.reduce((total, r) => total + r.minor, 0);
     const creditedMinor = () => credits.filter(c => !c.reversed).reduce((sum, c) => sum + c.minor, 0);
     let receiptDetails = options.receipt || null;
     let historyHead = 26;
@@ -26,6 +27,9 @@ async function fixture(page, options = {}) {
             entries: [{ operation_id: id(4), type: options.charge ? 'charge' : 'payment', minor: 1000, currency, reversed: corrected || sourceReversed,
                 can_correct_amount: options.eligible !== false && !corrected && !sourceReversed && creditedMinor() === 0,
                 can_correct_payment_details: options.eligible !== false && !options.charge,
+                ...(!options.charge ? { can_refund_payment: !corrected && !sourceReversed && balance < 0 && linkedRefundMinor() < 1000,
+                    linked_refund_minor: linkedRefundMinor(), linked_refund_count: linkedRefunds.length,
+                    remaining_refundable_minor: sourceReversed ? 0 : 1000 - linkedRefundMinor() } : {}),
                 ...(options.charge ? { can_credit_charge: !sourceReversed && creditedMinor() < 1000,
                     credited_minor: creditedMinor(), remaining_charge_minor: 1000 - creditedMinor(),
                     linked_credit_count: credits.filter(c => !c.reversed).length } : {}),
@@ -34,7 +38,7 @@ async function fixture(page, options = {}) {
                     can_correct_amount: true, can_correct_payment_details: true, corrects_operation_id: id(4) }] : []),
                 ...(posted ? [{ operation_id: id(6), type: posted.type, minor: posted.amount_minor, currency,
                     reversed: false, can_correct_amount: true, can_correct_payment_details: posted.type !== "charge" }] : []),
-                ...credits],
+                ...credits, ...linkedRefunds.map(({ token, result, ...entry }) => entry)],
         };
         else if (path.endsWith('/correction/review/')) {
             reviewNumber++;
@@ -77,6 +81,43 @@ async function fixture(page, options = {}) {
                     interrupt = false; status = 500; result = { error: 'Fictional interrupted response.' };
                 }
             }
+        } else if (path.endsWith('/refund/review/')) {
+            reviewNumber++;
+            const remaining = 1000 - linkedRefundMinor();
+            if (data.amount_minor > remaining || data.amount_minor > -balance) {
+                status = 422; result = { error: 'Please correct the highlighted fields.', errors: [
+                    { field: 'amount_minor', message: 'The refund must fit the remaining payment and available account credit.' }] };
+            } else {
+                result = { review_token: `fictional-payment-refund-${reviewNumber}`, type: 'refund', amount_minor: data.amount_minor,
+                    currency, payment_minor: 1000, linked_refund_minor: linkedRefundMinor(),
+                    source_payment_operation_id: id(4), source_payment_details: receiptDetails,
+                    unlinked_refund_minor: options.unlinkedRefundMinor || 0,
+                    remaining_payment_minor: remaining - data.amount_minor, balance_minor: balance,
+                    resulting_balance_minor: balance + data.amount_minor,
+                    available_credit_minor: -balance, remaining_credit_minor: -balance - data.amount_minor,
+                    reason: data.reason, position,
+                    payment_details: data.payment_method || data.payment_reference
+                        ? { method: data.payment_method || null, reference: data.payment_reference || null } : null };
+                refundReviews.set(result.review_token, result);
+                if (options.delayReview) await options.delayReview();
+            }
+        } else if (path.endsWith('/refund/commit/')) {
+            const reviewed = refundReviews.get(data.review_token), accepted = linkedRefunds.find(r => r.token === data.review_token);
+            if (!accepted && reviewed.position !== position) {
+                status = 409; result = { error: 'This financial record changed. Review the account again.' };
+            } else {
+                if (!accepted) {
+                    balance = reviewed.resulting_balance_minor; position++;
+                    const operation = id(70 + linkedRefunds.length);
+                    linkedRefunds.push({ operation_id: operation, source_payment_operation_id: id(4), type: 'refund',
+                        minor: reviewed.amount_minor, currency, reversed: false, token: data.review_token,
+                        result: { status: 'posted', operation_id: operation, balance_minor: balance, position } });
+                }
+                result = linkedRefunds.find(r => r.token === data.review_token).result;
+                if (interrupt) {
+                    interrupt = false; status = 500; result = { error: 'Fictional interrupted linked refund response.' };
+                }
+            }
         } else if (path.endsWith('/credit/review/')) {
             reviewNumber++;
             if (data.amount_minor > 1000 - creditedMinor()) {
@@ -112,6 +153,7 @@ async function fixture(page, options = {}) {
             result = { review_token: `fictional-reversal-${reviewNumber}`, type: options.charge ? 'charge' : 'payment', amount_minor: 1000,
                 reversed_credit_count: options.charge ? credits.filter(c => !c.reversed).length : 0,
                 reversed_credit_minor: options.charge ? creditedMinor() : 0,
+                linked_refund_minor: linkedRefundMinor(), linked_refund_count: linkedRefunds.length,
                 currency, balance_minor: balance, resulting_balance_minor: balance + (options.charge ? -(1000 - creditedMinor()) : 1000),
                 reason: data.reason, position, payment_details: receiptDetails };
             reversalReviews.set(result.review_token, result);
@@ -162,6 +204,12 @@ async function fixture(page, options = {}) {
             result = { operation_id: id(4), entry: { operation_id: id(4), type: 'payment', minor: 1000,
                 currency, reversed: true }, through_position: through, earlier_details_unknown: true,
                 items: history.slice(after, after + 20), next_after: after + 20 < history.length ? after + 20 : null };
+            if (linkedRefunds.length) {
+                const original = { ...history.at(-1), operation_id: id(4), type: 'payment', action: 'posted' };
+                result.items = [original, ...linkedRefunds.map(r => ({ ...original, operation_id: r.operation_id,
+                    type: 'refund', amount_minor: r.minor, source_payment_operation_id: id(4), action: 'posted' }))].reverse();
+                result.next_after = null;
+            }
             if (options.charge) {
                 const posted = { ...history.at(-1), operation_id: id(4), action: 'posted', type: 'charge', amount_minor: 1000 };
                 result.entry = { operation_id: id(4), type: 'charge', minor: 1000, currency, reversed: sourceReversed };
@@ -648,5 +696,78 @@ test('excess and stale charge credits preserve inputs while accepted confirmatio
     expect(commits.at(-1).data).toEqual(commits.at(-2).data);
     expect(commits.every(c => c.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('a linked payment refund keeps incoming and outgoing receipts separate in one reviewed editor', async ({ page }) => {
+    const f = await fixture(page, { receipt: { method: 'card', reference: 'FICT-INCOMING' } });
+    await page.getByRole('button', { name: 'Refund payment', exact: true }).click();
+    await page.getByLabel('Amount to refund (USD)').fill('2.50');
+    await page.getByLabel('Refund method', { exact: true }).selectOption('check');
+    await page.getByLabel('Refund receipt or check reference').fill('FICT-OUTGOING');
+    await page.getByLabel('Reason for payment refund').fill('Fictional issued refund <script>literal only</script>.');
+    await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed payment refund' });
+    await expect(preview).toContainText('Refund: $2.50');
+    await expect(preview).toContainText('Payment remaining: $7.50');
+    await expect(preview).toContainText('FICT-INCOMING'); await expect(preview).toContainText('FICT-OUTGOING');
+    await expect(preview).toContainText('Available credit: $10.00 → $7.50');
+    await expect(preview.locator('script')).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 850 }); await accessible(page);
+    await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: -$7.50');
+    await expect(page.locator('#drawer-body')).toContainText('Refund of payment');
+    await expect(page.locator('#drawer-body')).toContainText('Linked refunds $2.50 · Payment remaining $7.50');
+    await expect(page.locator('#drawer-body')).not.toContainText('FICT-OUTGOING');
+    expect(f.calls.find(c => c.path.endsWith('/refund/commit/'))).toMatchObject({
+        data: { review_token: 'fictional-payment-refund-1' }, csrf: 'fictional-test-token',
+    });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('linked refunds explain earlier unallocated refunds and retain inputs after excess or stale requests', async ({ page }) => {
+    const f = await fixture(page, { unlinkedRefundMinor: 300 });
+    await page.getByRole('button', { name: 'Refund payment', exact: true }).click();
+    const amount = page.getByLabel('Amount to refund (USD)'), reason = page.getByLabel('Reason for payment refund');
+    await amount.fill('8'); await reason.fill('Fictional refund reason.');
+    await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
+    await expect(amount).toHaveAttribute('aria-invalid', 'true'); await expect(amount).toHaveValue('8');
+    await amount.fill('2');
+    await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed payment refund' });
+    await expect(preview).toContainText('$3.00 in recorded refunds has no payment link');
+    await expect(preview).toContainText('Payment remaining: $8.00');
+    f.change();
+    await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
+    await expect(reason).toHaveValue('Fictional refund reason.');
+    await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
+    await expect(amount).toHaveValue('2');
+    await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
+    f.interrupt();
+    await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
+    await expect(reason).toBeEnabled();
+    await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: -$4.00');
+    const commits = f.calls.filter(c => c.path.endsWith('/refund/commit/'));
+    expect(commits.at(-1).data).toEqual(commits.at(-2).data);
+    expect(f.errors).toEqual([]);
+});
+
+test('payment reversal keeps linked refunds visible and private history groups their recorded source', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Refund payment', exact: true }).click();
+    await page.getByLabel('Amount to refund (USD)').fill('2');
+    await page.getByLabel('Reason for payment refund').fill('Fictional source-linked refund.');
+    await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
+    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await expect(page.getByRole('region', { name: 'Entry activity' })).toContainText('Refund of payment');
+    await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
+    await page.getByRole('button', { name: 'Reverse entry', exact: true }).first().click();
+    await page.getByLabel('Reason for reversal').fill('Fictional payment amount was not received.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reviewed entry reversal' }))
+        .toContainText('1 linked refunds totaling $2.00 remain recorded');
     expect(f.errors).toEqual([]);
 });

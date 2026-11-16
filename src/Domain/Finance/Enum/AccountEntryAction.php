@@ -7,6 +7,7 @@ namespace Domain\Finance\Enum;
 /** Distinct instructions share one review boundary, without interchangeable confirmations. */
 enum AccountEntryAction: string
 {
+    case Refund = "finance.payment-refund";
     case Posting = "finance.account-posting";
     case Correction = "finance.account-correction";
     case PaymentDetails = "finance.payment-details";
@@ -17,6 +18,7 @@ enum AccountEntryAction: string
     {
         return match ($this) {
             self::Posting => "account.posting_reviewed",
+            self::Refund => "account.payment_refund_reviewed",
             self::ChargeCredit => "account.charge_credit_reviewed",
             self::Correction => "account.correction_reviewed",
             self::PaymentDetails => "account.receipt_reviewed",
@@ -28,6 +30,7 @@ enum AccountEntryAction: string
     {
         return match ($this) {
             self::Posting => "account.entry_posted",
+            self::Refund => "account.payment_refunded",
             self::ChargeCredit => "account.charge_credited",
             self::Correction => "account.entry_corrected",
             self::PaymentDetails => "account.receipt_corrected",

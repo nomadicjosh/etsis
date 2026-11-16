@@ -2035,7 +2035,10 @@
                                 table(
                                     ['Entry', 'Amount', 'Status'],
                                     statement.entries.map((entry) => [
-                                        entry.type.replaceAll('_', ' '),
+                                        entry.source_payment_operation_id
+                                            ? el('span', {}, 'refund', el('small', { class: 'd-block text-secondary' },
+                                                `For payment ${entry.source_payment_operation_id.slice(-8)}`))
+                                            : entry.type.replaceAll('_', ' '),
                                         amount(entry.type === 'charge_credit' ? -entry.minor : entry.minor, entry.currency),
                                         entry.reversed ? 'Reversed' : 'Posted',
                                     ]),

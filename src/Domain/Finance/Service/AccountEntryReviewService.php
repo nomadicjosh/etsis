@@ -184,6 +184,36 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return array<string,mixed> */
+    public function reviewRefund(
+        AccountId $id,
+        EntityId $payment,
+        Money $amount,
+        int $position,
+        #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?PaymentDetails $details = null,
+    ): array {
+        return $this->review(
+            AccountEntryAction::Refund,
+            $id,
+            $payment,
+            null,
+            $amount,
+            $position,
+            $reason,
+            $details,
+        );
+    }
+
+    /** @return array<string,mixed> */
+    public function commitRefund(
+        AccountId $id,
+        EntityId $payment,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        return $this->commit(AccountEntryAction::Refund, $id, $payment, $token);
+    }
+
+    /** @return array<string,mixed> */
     private function review(
         AccountEntryAction $action,
         AccountId $id,
@@ -227,6 +257,35 @@ final readonly class AccountEntryReviewService
                     "previous_payment_details" => $account->paymentDetails($source)?->values(),
                     "payment_details" => $paymentDetails->values(),
                 ];
+            } elseif ($action === AccountEntryAction::Refund) {
+                $source ??= throw new \LogicException("A linked refund requires its payment.");
+                $amount ??= throw new \LogicException("A linked refund requires an amount.");
+                try {
+                    $balance = $account->postingBalance(EntryType::Refund, $amount, $source);
+                } catch (DomainException | InvalidArgumentException $error) {
+                    throw new ValidationException([
+                        ["field" => "amount_minor", "message" => $error->getMessage()],
+                    ]);
+                }
+                $entry =
+                    $account->entry($source) ?? throw new \LogicException("The source payment is missing.");
+                $summary = $account->paymentRefundSummary($source);
+                $intent =
+                    ["source_operation_id" => $source->value] +
+                    ($paymentDetails === null || $paymentDetails->isEmpty()
+                        ? []
+                        : ["payment_details" => $paymentDetails->values()]);
+                $details = [
+                    "type" => EntryType::Refund->value,
+                    "amount_minor" => $amount->minor,
+                    "source_payment_operation_id" => $source->value,
+                    "payment_minor" => $entry["minor"],
+                    "linked_refund_minor" => $summary["linked_refund_minor"],
+                    "remaining_payment_minor" => $summary["remaining_refundable_minor"] - $amount->minor,
+                    "unlinked_refund_minor" => $account->unlinkedRefundMinor(),
+                    "source_payment_details" => $account->paymentDetails($source)?->values(),
+                    "payment_details" => $intent["payment_details"] ?? null,
+                ];
             } elseif ($action === AccountEntryAction::Posting) {
                 $amount ??= throw new \LogicException("A posting requires an amount.");
                 if (
@@ -266,7 +325,7 @@ final readonly class AccountEntryReviewService
                 $entry =
                     $account->entry($source) ?? throw new \LogicException("The reversal source is missing.");
                 $amount = new Money($entry["minor"], $entry["currency"]);
-                $intent = ["source_operation_id" => $source->value];
+                $intent = ["source_operation_id" => $source->value, "operation_id" => $source->value];
                 $details = [
                     "source_operation_id" => $source->value,
                     "type" => $entry["type"],
@@ -274,6 +333,8 @@ final readonly class AccountEntryReviewService
                     "payment_details" => $account->paymentDetails($source)?->values(),
                     "reversed_credit_minor" => $entry["credited_minor"] ?? 0,
                     "reversed_credit_count" => $entry["linked_credit_count"] ?? 0,
+                    "linked_refund_minor" => $entry["linked_refund_minor"] ?? 0,
+                    "linked_refund_count" => $entry["linked_refund_count"] ?? 0,
                 ];
             } elseif ($action === AccountEntryAction::ChargeCredit) {
                 $source ??= throw new \LogicException("A charge credit requires its source.");
@@ -318,10 +379,7 @@ final readonly class AccountEntryReviewService
                     "purpose" => $action->value,
                     "actor_id" => $actor->value,
                     "account_id" => (string) $id,
-                    "operation_id" =>
-                        $action === AccountEntryAction::Reversal
-                            ? $source->value
-                            : EntityId::generate()->value,
+                    "operation_id" => $intent["operation_id"] ?? EntityId::generate()->value,
                     "position" => $position,
                     "minor" => $amount->minor,
                     "currency" => $amount->currency,
@@ -391,7 +449,11 @@ final readonly class AccountEntryReviewService
             $account = $this->accounts->get($id, new HistoryReadBudget());
             $this->actor($actor);
             $accepted = match ($action) {
-                AccountEntryAction::Posting => $account->postingResult($operation, $actor, $hash),
+                AccountEntryAction::Posting, AccountEntryAction::Refund => $account->postingResult(
+                    $operation,
+                    $actor,
+                    $hash,
+                ),
                 AccountEntryAction::Correction => $account->correctionResult($operation, $actor, $hash),
                 AccountEntryAction::PaymentDetails => $account->paymentDetailsResult(
                     $operation,
@@ -408,6 +470,18 @@ final readonly class AccountEntryReviewService
             $this->commands->assertPosition($account->playhead(), $proof["position"]);
             $amount = new Money($proof["minor"], $proof["currency"]);
             $result = match ($action) {
+                AccountEntryAction::Refund => $account->postReviewed(
+                    $operation,
+                    EntryType::Refund,
+                    $amount,
+                    $actor,
+                    $hash,
+                    isset($proof["payment_details"])
+                        ? PaymentDetails::fromRecorded($proof["payment_details"])
+                        : null,
+                    sourcePayment: $source ??
+                        throw new \LogicException("A linked refund requires its payment."),
+                ),
                 AccountEntryAction::Posting => $account->postReviewed(
                     $operation,
                     EntryType::from($proof["type"] ?? ""),
@@ -523,8 +597,9 @@ final readonly class AccountEntryReviewService
                 }
                 $details = PaymentDetails::fromRecorded($p["payment_details"]);
                 if (
-                    $action === AccountEntryAction::Posting &&
-                    ($p["type"] === "charge" || $details->isEmpty())
+                    in_array($action, [AccountEntryAction::Posting, AccountEntryAction::Refund], true) &&
+                    (($action === AccountEntryAction::Posting && $p["type"] === "charge") ||
+                        $details->isEmpty())
                 ) {
                     throw new InvalidArgumentException();
                 }

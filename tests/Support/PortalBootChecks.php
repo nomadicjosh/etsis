@@ -5657,3 +5657,100 @@ foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"
         throw new RuntimeException("A native charge credit bypassed independent finance authority.");
     }
 }
+// Refunds can retain a particular payment without changing or inventing earlier cash-flow sources.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$paymentRefundBase = $postingReviewBase . $postingCommitted["operation_id"] . "/refund/";
+$paymentRefundBefore = $sis->sql->rows("sis_history_events");
+$paymentRefundReviewResponse = $teachingPost($paymentRefundBase . "review/", [
+    "amount_minor" => 200,
+    "currency" => "USD",
+    "position" => 9,
+    "reason" => "Native fictional linked payment refund.",
+    "payment_method" => "check",
+    "payment_reference" => "FICT-LINKED-REFUND-PRIVATE",
+]);
+$paymentRefundReview = json_decode((string) $paymentRefundReviewResponse->getBody(), true);
+if (
+    $paymentRefundReviewResponse->getStatusCode() !== 200 ||
+    ($paymentRefundReview["source_payment_operation_id"] ?? null) !== $postingCommitted["operation_id"] ||
+    ($paymentRefundReview["remaining_payment_minor"] ?? null) !== 1300 ||
+    ($paymentRefundReview["unlinked_refund_minor"] ?? null) !== 500 ||
+    ($paymentRefundReview["resulting_balance_minor"] ?? null) !== -800 ||
+    $sis->sql->rows("sis_history_events") !== $paymentRefundBefore ||
+    $paymentRefundReviewResponse->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException(
+        "The native payment refund review lost its source, privacy or independent balance limits.",
+    );
+}
+$paymentRefundCommitResponse = $teachingPost($paymentRefundBase . "commit/", [
+    "review_token" => $paymentRefundReview["review_token"],
+    "amount_minor" => 99999,
+    "source_operation_id" => "FORGED",
+    "payment_reference" => "FORGED",
+    "type" => "payment",
+]);
+$paymentRefundCommitted = json_decode((string) $paymentRefundCommitResponse->getBody(), true);
+if (
+    $paymentRefundCommitResponse->getStatusCode() !== 200 ||
+    ($paymentRefundCommitted["balance_minor"] ?? null) !== -800
+) {
+    throw new RuntimeException("The native linked refund failed or accepted forged browser replacements.");
+}
+$paymentRefundAfter = $sis->sql->rows("sis_history_events");
+$paymentRefundRetry = $teachingPost($paymentRefundBase . "commit/", [
+    "review_token" => $paymentRefundReview["review_token"],
+]);
+if (
+    json_decode((string) $paymentRefundRetry->getBody(), true) !== $paymentRefundCommitted ||
+    $sis->sql->rows("sis_history_events") !== $paymentRefundAfter
+) {
+    throw new RuntimeException("The native linked refund retry recorded another outflow.");
+}
+$paymentRefundStatement = $financeEvidenceGet("/sis/accounts/" . $postingReviewId . "/");
+$paymentRefundEntries = json_decode((string) $paymentRefundStatement->getBody(), true)["entries"] ?? [];
+$linkedRefundEntry = array_values(
+    array_filter(
+        $paymentRefundEntries,
+        static fn(array $entry): bool => $entry["operation_id"] === $paymentRefundCommitted["operation_id"],
+    ),
+);
+if (
+    ($linkedRefundEntry[0]["source_payment_operation_id"] ?? null) !== $postingCommitted["operation_id"] ||
+    str_contains((string) $paymentRefundStatement->getBody(), "FICT-LINKED-REFUND-PRIVATE")
+) {
+    throw new RuntimeException(
+        "The ordinary statement lost its payment link or exposed a private refund reference.",
+    );
+}
+$paymentRefundHistory = $teachingPost(
+    $postingReviewBase . $paymentRefundCommitted["operation_id"] . "/history/",
+    [],
+);
+$paymentRefundHistoryItems = json_decode((string) $paymentRefundHistory->getBody(), true)["items"] ?? [];
+if (
+    $paymentRefundHistory->getStatusCode() !== 200 ||
+    count($paymentRefundHistoryItems) !== 2 ||
+    ($paymentRefundHistoryItems[0]["source_payment_operation_id"] ?? null) !==
+        $postingCommitted["operation_id"]
+) {
+    throw new RuntimeException("The private refund history lost its original payment.");
+}
+$sis->access->staff = false;
+foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"]] as $paymentRefundGrants) {
+    $sis->access->grants = $paymentRefundGrants;
+    if (
+        $teachingPost($paymentRefundBase . "review/", [
+            "amount_minor" => 1,
+            "currency" => "USD",
+            "position" => 10,
+            "reason" => "Fictional denied refund.",
+        ])->getStatusCode() !== 403 ||
+        $teachingPost($paymentRefundBase . "commit/", [
+            "review_token" => $paymentRefundReview["review_token"],
+        ])->getStatusCode() !== 403
+    ) {
+        throw new RuntimeException("A linked payment refund bypassed independent finance authority.");
+    }
+}

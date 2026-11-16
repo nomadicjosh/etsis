@@ -219,6 +219,9 @@ final readonly class AccountEntryHistory
                 ->format("Y-m-d\TH:i:s.u\Z"),
             "reason" => $stored->context->reason,
         ] +
+        (isset($event->metadata()["source_payment_operation_id"])
+        ? ["source_payment_operation_id" => $event->metadata()["source_payment_operation_id"]]
+        : []) +
         (in_array($action, ["corrected", "credited"], true)
         ? ["source_operation_id" => $payload["source_operation_id"]]
         : []) +
@@ -235,19 +238,27 @@ final readonly class AccountEntryHistory
                     : []));
     }
 
-    /** Original and replacement identities form one retained correction chain, including reversed entries.
+    /** Recorded source links and amount replacements define this family; no relationships are inferred.
      * @return array<string,true>
      */
     private function family(StudentAccount $root, EntityId $operation): array
     {
-        $entries = $credits = [];
+        $entries = $children = [];
         foreach ($root->entries() as $entry) {
             $entries[$entry["operation_id"]] = $entry;
-            if (isset($entry["source_operation_id"])) {
-                $credits[$entry["source_operation_id"]][] = $entry["operation_id"];
+            foreach (["source_operation_id", "source_payment_operation_id"] as $key) {
+                if (isset($entry[$key])) {
+                    $children[$entry[$key]][] = $entry["operation_id"];
+                }
             }
         }
         $family = [];
+        $linkFields = [
+            "corrects_operation_id",
+            "corrected_by_operation_id",
+            "source_operation_id",
+            "source_payment_operation_id",
+        ];
         $pending = [$operation->value];
         while ($pending !== []) {
             $id = array_pop($pending);
@@ -256,13 +267,13 @@ final readonly class AccountEntryHistory
             }
             $entry = $entries[$id] ?? throw new CorruptHistoryException();
             $family[$id] = true;
-            foreach (["corrects_operation_id", "corrected_by_operation_id", "source_operation_id"] as $key) {
+            foreach ($linkFields as $key) {
                 if (isset($entry[$key])) {
                     $pending[] = $entry[$key];
                 }
             }
-            foreach ($credits[$id] ?? [] as $credit) {
-                $pending[] = $credit;
+            foreach ($children[$id] ?? [] as $child) {
+                $pending[] = $child;
             }
         }
         return $family;
