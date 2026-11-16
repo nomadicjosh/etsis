@@ -718,13 +718,21 @@ window.createWorkspaceOperations = function (ui) {
         renderSelection();
     }
     const messageFields = [["subject", "Subject"], ["body", "Message", "textarea"]];
-    async function campaignTemplates(retired = false, after = null, stack = []) {
-        const body = openDrawer("My message templates", "COMMUNICATIONS");
-        const result = await request("/sis/campaigns/templates/page/", "POST", { retired, after });
+    async function campaignTemplates(scope = "mine", after = null, stack = []) {
+        const retired = scope === "retired";
+        const titles = { mine: "My message templates", submitted: "My submitted templates", retired: "My retired templates", institutional: "Institutional templates", review: "Template approvals" };
+        const body = openDrawer(titles[scope], "COMMUNICATIONS");
+        const result = await request("/sis/campaigns/templates/page/", "POST", { scope, after });
         if (!body.isConnected) return;
         body.append(node("p", { class: "form-text" },
-            "Keep reusable wording in your private template library. Starting a message makes an independent draft without recipients. Later template edits leave existing messages unchanged."),
-            button(retired ? "Show active templates" : "Show retired templates", () => campaignTemplates(!retired)),
+            "Private wording becomes available to colleagues only after institutional approval. Each new message is an independent draft; existing drafts and deliveries keep their wording."),
+            node("div", { class: "inline-actions my-3", role: "group", "aria-label": "Template libraries" },
+                ...[["mine", "My private templates"], ["submitted", "My submissions"], ["institutional", "Institutional library"],
+                    ...(can("sis:communications:admin") ? [["review", "Awaiting approval"]] : [])].map(([key, text]) => {
+                    const choice = button(text, () => campaignTemplates(key));
+                    choice.setAttribute("aria-pressed", String(scope === key)); return choice;
+                })),
+            button(retired ? "Show active templates" : "Show retired templates", () => campaignTemplates(retired ? "mine" : "retired")),
             button("Create reusable template", async () => {
                 const form = await flow("Save reusable template", messageFields,
                     "/sis/campaigns/templates/create/", null, () => campaignTemplates(), {},
@@ -736,24 +744,27 @@ window.createWorkspaceOperations = function (ui) {
             const open = button("Open template", () => openRecord("campaigns", { id: item.id }));
             open.setAttribute("aria-label", `Open template ${item.subject}`);
             return [item.subject, open];
-        }), retired ? "Retired message templates" : "Active message templates")
-            : node("p", { class: "mt-3" }, retired ? "No retired templates." : "No reusable templates yet."));
+        }), titles[scope])
+            : node("p", { class: "mt-3" }, retired ? "No retired templates." : scope === "mine" ? "No reusable templates yet." : "No templates in this library."));
         if (stack.length) body.append(button("Previous templates", () => {
-            const previous = [...stack]; return campaignTemplates(retired, previous.pop(), previous);
+            const previous = [...stack]; return campaignTemplates(scope, previous.pop(), previous);
         }));
         if (result.next_after) body.append(button("Next templates", () =>
-            campaignTemplates(retired, result.next_after, [...stack, after])));
+            campaignTemplates(scope, result.next_after, [...stack, after])));
     }
     async function campaign(body, row) {
         const data = await request(`/sis/campaigns/${row.id}/`);
         if (!body.isConnected) return;
         const back = () => openRecord("campaigns", row);
-        const template = ["template", "template_retired"].includes(data.status);
+        const templateLabels = { template: "Private template", template_retired: "Retired template",
+            template_review: "Awaiting institutional approval", template_shared: "Approved institutional template" };
+        const template = Object.hasOwn(templateLabels, data.status);
+        const canManageTemplate = data.status !== "template_shared" || data.is_owner || can("sis:communications:admin");
         body.append(
             section(
                 data.subject,
                 node("p", { class: "message-preview" }, data.body),
-                badge(template ? (data.status === "template" ? "Reusable template" : "Retired template") : data.status),
+                badge(template ? templateLabels[data.status] : data.status),
             ),
         );
         if (["draft", "template"].includes(data.status))
@@ -775,20 +786,37 @@ window.createWorkspaceOperations = function (ui) {
                 }),
             );
         if (template) {
+            const decision = async (action, title, explanation) => {
+                const form = await flow(title, [], `/sis/campaigns/${row.id}/template/review/`,
+                    () => ({ version: data.version, action }), back, {}, explanation);
+                form.prepend(node("h3", { class: "h5 private-text" }, data.subject),
+                    node("p", { class: "message-preview" }, data.body));
+            };
             body.append(node("p", { class: "form-text" },
                 "Templates have no recipients and cannot send mail. Each new message keeps its own editable copy."),
-                button("Back to my templates", () => campaignTemplates(data.status === "template_retired")));
-            if (data.status === "template") body.append(button("Start a new message", async () => {
+                button("Back to my templates", () => campaignTemplates(data.status === "template_retired" ? "retired"
+                    : data.status === "template_shared" ? "institutional" : data.status === "template_review" ? "submitted" : "mine")));
+            if (["template", "template_shared"].includes(data.status)) body.append(button("Start a new message", async () => {
                 const draft = await request(`/sis/campaigns/${row.id}/template/draft/`, "POST", { version: data.version });
                 if (!body.isConnected) return;
                 notify("Independent message draft created. Review it before choosing recipients.");
                 await openRecord("campaigns", { id: draft.id });
             }, "btn-primary"));
-            body.append(button(data.status === "template" ? "Retire template" : "Restore template", () =>
-                flow(data.status === "template" ? "Confirm template retirement" : "Confirm template restoration", [],
+            if (data.status === "template") body.append(button("Submit for institutional approval", () =>
+                decision("submit", "Confirm template submission", "A Communications administrator will review this exact wording. Editing pauses until it is returned or withdrawn.")));
+            if (["template_review", "template_shared"].includes(data.status) && canManageTemplate)
+                body.append(button("Return to private editing", () => decision("withdraw", "Confirm withdrawal to private editing",
+                    "This removes institutional availability or the pending submission. Approval will be required again after edits. Existing message copies stay intact.")));
+            if (data.status === "template_review" && can("sis:communications:admin")) {
+                body.append(button("Approve institutional template", () => decision("approve", "Confirm institutional approval",
+                    "Approve this exact wording for all staff with Communications access to read and copy. This does not send a message."), "btn-primary"),
+                button("Return to author", () => decision("return", "Confirm return to author", "Return this wording to its owner's private editing library.")));
+            }
+            if (canManageTemplate) body.append(button(data.status === "template_retired" ? "Restore template" : "Retire template", () =>
+                flow(data.status === "template_retired" ? "Confirm template restoration" : "Confirm template retirement", [],
                     `/sis/campaigns/${row.id}/template/status/`,
-                    () => ({ version: data.version, retired: data.status === "template" }), back, {},
-                    "Retirement stops new messages from using this template. Existing drafts and deliveries keep their own content.")));
+                    () => ({ version: data.version, retired: data.status !== "template_retired" }), back, {},
+                    "Retirement stops new messages from using this template. Restoration returns it to private editing, requiring new institutional approval. Existing messages keep their content.")));
             return;
         }
         if (data.status === "draft" && can("sis:person:manage"))

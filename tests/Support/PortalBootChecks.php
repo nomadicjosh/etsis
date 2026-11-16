@@ -4080,7 +4080,7 @@ $templateBase = '/sis/campaigns/' . $templateId . '/template/';
 $templateNoCsrf = $communicationNoCsrf->withUri(
     new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $templateBase . 'draft/')
 )->withParsedBody(['version' => 0]);
-$templatePage = $teachingPost('/sis/campaigns/templates/page/', ['retired' => false]);
+$templatePage = $teachingPost('/sis/campaigns/templates/page/', ['scope' => 'mine']);
 if (
     $templateCreated->getStatusCode() !== 201 || $templatePage->getStatusCode() !== 200
     || $templatePage->hasHeader('phpdebugbar-id')
@@ -4093,6 +4093,33 @@ if (
     || $teachingPost($templateBase . 'status/', ['version' => 1, 'retired' => false])->getStatusCode() !== 200
 ) {
     throw new RuntimeException('Reusable templates lost private responses, CSRF or lifecycle checks.');
+}
+if ($teachingPost($templateBase . 'review/', ['version' => 2, 'action' => 'submit'])->getStatusCode() !== 200) {
+    throw new RuntimeException('Template submission failed.');
+}
+$templateApprovalPayload = ['version' => 3, 'action' => 'approve'];
+$templateApprovalNoCsrf = $templateNoCsrf->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $templateBase . 'review/')
+)->withParsedBody($templateApprovalPayload);
+$sis->access->staff = false;
+$sis->access->grants = ['sis:communications:manage'];
+if (
+    $teachingPost($templateBase . 'review/', $templateApprovalPayload)->getStatusCode() !== 403
+    || $teachingPost('/sis/campaigns/templates/page/', ['scope' => 'review'])->getStatusCode() !== 403
+    || $app->router->match($templateApprovalNoCsrf)->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Template ownership bypassed review authority or CSRF.');
+}
+$sis->access->staff = true;
+$institutionalApproval = $teachingPost($templateBase . 'review/', $templateApprovalPayload);
+$institutionalTemplates = $teachingPost('/sis/campaigns/templates/page/', ['scope' => 'institutional']);
+if (
+    $institutionalApproval->getStatusCode() !== 200 || $institutionalTemplates->getStatusCode() !== 200
+    || $institutionalTemplates->hasHeader('phpdebugbar-id')
+    || !str_contains($institutionalTemplates->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $institutionalTemplates->getBody(), 'Public invitation only.')
+) {
+    throw new RuntimeException('Institutional template approval lost private, minimized responses.');
 }
 $sis->access->staff = false;
 $sis->access->grants = ['sis:communications:manage'];

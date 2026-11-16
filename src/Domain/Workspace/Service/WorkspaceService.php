@@ -71,6 +71,7 @@ final readonly class WorkspaceService
         "sis:reporting:manage",
         "sis:reporting:run",
         "sis:communications:manage",
+        "sis:communications:admin",
         "sis:portal:manage",
         "sis:import:manage",
         "sis:forms:manage",

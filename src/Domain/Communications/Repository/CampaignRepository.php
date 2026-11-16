@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Communications\Repository;
 
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Shared\ValueObject\EntityId;
 
 interface CampaignRepository
@@ -13,10 +14,10 @@ interface CampaignRepository
     public function get(EntityId $id): Campaign;
     public function save(Campaign $campaign, int $expectedVersion): void;
     public function lock(EntityId $campaign): void;
-    /** Owner-scoped reusable messages, one page plus a continuation probe.
+    /** Scoped reusable messages, one page plus a continuation probe; callers authorize the scope.
      * @return list<Campaign>
      */
-    public function templates(EntityId $owner, bool $retired, ?EntityId $after = null): array;
+    public function templates(EntityId $actor, TemplateLibraryScope $scope, ?EntityId $after = null): array;
     /** Caller holds the draft campaign lock and has validated the distinct, bounded audience.
      * @param list<EntityId> $recipients
      * @return list<EntityId>

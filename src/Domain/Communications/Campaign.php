@@ -9,6 +9,8 @@ use DomainException;
 
 final readonly class Campaign
 {
+    public const array TEMPLATE_STATES = ['template', 'template_review', 'template_shared', 'template_retired'];
+
     public function __construct(
         public EntityId $id,
         public EntityId $ownerUserId,
@@ -16,7 +18,7 @@ final readonly class Campaign
         public string $status = 'draft',
         public int $version = 0,
     ) {
-        if (!in_array($status, ['draft', 'queued', 'paused', 'completed', 'template', 'template_retired'], true)) {
+        if (!in_array($status, ['draft', 'queued', 'paused', 'completed', ...self::TEMPLATE_STATES], true)) {
             throw new DomainException('Invalid campaign state.');
         }
     }
@@ -24,7 +26,9 @@ final readonly class Campaign
     public function transition(string $status): self
     {
         $allowed = ['draft' => ['queued'], 'queued' => ['paused', 'completed'], 'paused' => ['queued'],
-            'completed' => [], 'template' => ['template_retired'], 'template_retired' => ['template']];
+            'completed' => [], 'template' => ['template_review', 'template_retired'],
+            'template_review' => ['template', 'template_shared', 'template_retired'],
+            'template_shared' => ['template', 'template_retired'], 'template_retired' => ['template']];
         if (!in_array($status, $allowed[$this->status], true)) {
             throw new DomainException('Invalid campaign transition.');
         }

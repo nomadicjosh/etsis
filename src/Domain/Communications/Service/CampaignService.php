@@ -7,6 +7,7 @@ namespace Domain\Communications\Service;
 use DomainException;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -107,15 +108,18 @@ final readonly class CampaignService
     /** Template subjects are decrypted for the bounded, authorized page; bodies stay out of list responses.
      * @return array{items:list<array{id:string,subject:string,version:int}>,next_after:?string}
      */
-    public function templates(bool $retired = false, ?EntityId $after = null): array
+    public function templates(TemplateLibraryScope $scope = TemplateLibraryScope::Mine, ?EntityId $after = null): array
     {
         $actor = $this->authorize();
-        $rows = $this->repository->templates($actor, $retired, $after);
+        if ($scope === TemplateLibraryScope::Review) {
+            $this->authorizeTemplateReview($actor);
+        }
+        $rows = $this->repository->templates($actor, $scope, $after);
         $items = [];
         foreach (array_slice($rows, 0, 20) as $row) {
             if (
-                $row->ownerUserId->value !== $actor->value
-                || $row->status !== ($retired ? 'template_retired' : 'template')
+                ($scope->personal() && $row->ownerUserId->value !== $actor->value)
+                || $row->status !== $scope->status()
             ) {
                 throw new AccessDeniedException('Access denied.');
             }
@@ -123,25 +127,28 @@ final readonly class CampaignService
             $items[] = ['id' => $row->id->value, 'subject' => $content['subject'], 'version' => $row->version];
         }
         $this->authorize($actor);
+        if ($scope === TemplateLibraryScope::Review) {
+            $this->authorizeTemplateReview($actor);
+        }
         return ['items' => $items, 'next_after' => count($rows) > 20 ? $rows[19]->id->value : null];
     }
 
     public function draftFromTemplate(EntityId $id, int $expectedVersion): Campaign
     {
         $actor = $this->authorize();
-        $this->owned($id, $actor);
+        $this->owned($id, $actor, allowShared: true);
         return $this->transactions->run(function () use ($id, $expectedVersion, $actor): Campaign {
             $this->repository->lock($id);
-            $template = $this->owned($id, $actor);
+            $template = $this->owned($id, $actor, allowShared: true);
             $this->templateVersion($template, $expectedVersion);
-            if ($template->status !== 'template') {
-                throw new DomainException('Restore this template before starting a new draft.');
+            if (!in_array($template->status, ['template', 'template_shared'], true)) {
+                throw new DomainException('Use an active private or approved institutional template.');
             }
             // Copy encrypted composition only. No recipients, deliveries or later source edits follow it.
             $draft = new Campaign(EntityId::generate(), $actor, $template->encryptedContent);
             $this->repository->add($draft);
             $this->audit->record($actor, 'campaign.created_from_template', $draft->id);
-            $this->owned($id, $actor);
+            $this->owned($id, $actor, allowShared: true);
             $this->owned($draft->id, $actor);
             return $draft;
         });
@@ -155,6 +162,9 @@ final readonly class CampaignService
             $this->repository->lock($id);
             $template = $this->owned($id, $actor);
             $this->templateVersion($template, $expectedVersion);
+            if (!$retired && in_array($template->status, ['template_review', 'template_shared'], true)) {
+                throw new DomainException('Withdraw the template before returning to private editing.');
+            }
             $next = $retired ? 'template_retired' : 'template';
             if ($template->status !== $next) {
                 $this->repository->save($template->transition($next), $expectedVersion);
@@ -171,11 +181,49 @@ final readonly class CampaignService
     private function templateVersion(Campaign $template, int $expectedVersion): void
     {
         if (
-            !in_array($template->status, ['template', 'template_retired'], true)
+            !in_array($template->status, Campaign::TEMPLATE_STATES, true)
             || $template->version !== $expectedVersion
         ) {
             throw new ConcurrentModificationException('The template changed. Reopen it before continuing.');
         }
+    }
+
+    public function reviewTemplate(EntityId $id, int $expectedVersion, string $action): void
+    {
+        $reviewer = in_array($action, ['approve', 'return'], true);
+        $actor = $this->authorize();
+        if ($reviewer) {
+            $this->authorizeTemplateReview($actor);
+        }
+        $this->owned($id, $actor);
+        $this->transactions->run(function () use ($id, $expectedVersion, $action, $reviewer, $actor): void {
+            $this->repository->lock($id);
+            if ($reviewer) {
+                $this->authorizeTemplateReview($actor);
+            }
+            $template = $this->owned($id, $actor);
+            $this->templateVersion($template, $expectedVersion);
+            $expected = match ($action) {
+                'submit' => ['template'],
+                'withdraw' => ['template_review', 'template_shared'],
+                'approve', 'return' => ['template_review'],
+                default => throw new InvalidArgumentException('Choose a template review action.'),
+            };
+            if (!in_array($template->status, $expected, true)) {
+                throw new ConcurrentModificationException('Reopen the template and review its current status.');
+            }
+            $next = match ($action) {
+                'submit' => 'template_review',
+                'approve' => 'template_shared',
+                default => 'template',
+            };
+            $this->repository->save($template->transition($next), $expectedVersion);
+            $this->audit->record($actor, 'campaign.template_' . $action, $id);
+            $this->owned($id, $actor);
+            if ($reviewer) {
+                $this->authorizeTemplateReview($actor);
+            }
+        });
     }
 
     /**
@@ -332,15 +380,15 @@ final readonly class CampaignService
         });
     }
 
-    /** @return array{id: string, status: string, subject: string, body: string, version: int, can_dispatch: bool} */
+    /** @return array{id:string,status:string,subject:string,body:string,version:int,can_dispatch:bool,is_owner:bool} */
     public function show(EntityId $id): array
     {
         $actor = $this->authorize();
-        $campaign = $this->owned($id, $actor);
+        $campaign = $this->owned($id, $actor, allowShared: true);
         /** @var array{subject: string, body: string} $content */
         $content = json_decode($this->cipher->open($campaign->encryptedContent), true, flags: JSON_THROW_ON_ERROR);
 
-        $ready = !in_array($campaign->status, ['template', 'template_retired'], true);
+        $ready = !in_array($campaign->status, Campaign::TEMPLATE_STATES, true);
         if ($ready) {
             try {
                 $this->transport->assertReady();
@@ -348,25 +396,35 @@ final readonly class CampaignService
                 $ready = false;
             }
         }
-        $this->owned($id, $actor);
+        $this->owned($id, $actor, allowShared: true);
 
         return ['id' => $id->value, 'status' => $campaign->status, 'can_dispatch' => $ready,
-            'subject' => $content['subject'], 'body' => $content['body'], 'version' => $campaign->version];
+            'subject' => $content['subject'], 'body' => $content['body'], 'version' => $campaign->version,
+            'is_owner' => $campaign->ownerUserId->value === $actor->value];
     }
 
-    private function owned(EntityId $id, EntityId $actor): Campaign
+    private function owned(EntityId $id, EntityId $actor, bool $allowShared = false): Campaign
     {
         $this->authorize($actor);
         $campaign = $this->repository->get($id);
         if (
-            $this->access->requireOwnerOrPermission($campaign->ownerUserId, 'sis:communications:admin')->value
-            !== $actor->value
+            !($allowShared && $campaign->status === 'template_shared')
+            && $this->access->requireOwnerOrPermission($campaign->ownerUserId, 'sis:communications:admin')->value
+                !== $actor->value
         ) {
             throw new AccessDeniedException('Access denied.');
         }
         $this->authorize($actor);
 
         return $campaign;
+    }
+
+    private function authorizeTemplateReview(EntityId $actor): void
+    {
+        $this->authorize($actor);
+        if ($this->access->requirePermission('sis:communications:admin')->value !== $actor->value) {
+            throw new AccessDeniedException('Communications administration permission is required.');
+        }
     }
 
     private function authorize(?EntityId $expected = null): EntityId

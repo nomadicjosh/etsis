@@ -6,6 +6,8 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\Communications\Service\CampaignService;
+use Domain\Communications\Enum\TemplateLibraryScope;
+use InvalidArgumentException;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -43,7 +45,16 @@ final readonly class SisCampaignController
     public function templates(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->service->templates($f->boolean('retired'), $f->optionalId('after')));
+        $scope = TemplateLibraryScope::tryFrom($f->optionalText('scope', 20) ?? 'mine')
+        ?? throw new InvalidArgumentException('Choose a template library.');
+        return new JsonResponse($this->service->templates($scope, $f->optionalId('after')));
+    }
+
+    public function reviewTemplate(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $this->service->reviewTemplate(new EntityId($id), $f->integer('version'), $f->text('action', 8));
+        return new JsonResponse(['status' => 'saved']);
     }
 
     public function draftFromTemplate(ServerRequest $request, string $id): ResponseInterface

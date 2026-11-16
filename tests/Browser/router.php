@@ -165,6 +165,8 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/registration-fixture/' => ['sis:registration:manage'],
         '/admin/report-fixture/' => ['sis:reporting:run'],
         '/admin/report-manager-fixture/' => ['sis:reporting:manage'],
+        '/admin/communications-fixture/' => ['sis:communications:manage'],
+        '/admin/communications-admin-fixture/' => ['sis:communications:manage', 'sis:communications:admin'],
         '/admin/transfer-fixture/' => ['sis:transfer:manage', 'sis:student:read'],
         '/admin/transfer-only-fixture/' => ['sis:transfer:manage'],
         default => Domain\Workspace\Service\WorkspaceService::PERMISSIONS,

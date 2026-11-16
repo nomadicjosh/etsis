@@ -6,6 +6,7 @@ namespace Infrastructure\Persistence\Repository;
 
 use DomainException;
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
@@ -57,21 +58,24 @@ final readonly class SqlCampaignRepository implements CampaignRepository
         $this->sql->lock('sis_campaigns', $campaign->value, 'version');
     }
 
-    public function templates(EntityId $owner, bool $retired, ?EntityId $after = null): array
+    public function templates(EntityId $actor, TemplateLibraryScope $scope, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
-        $query = 'SELECT ' . implode(', ', array_map($q, ['id', 'encrypted_content', 'version']))
-        . ' FROM ' . $q('sis_campaigns') . ' WHERE ' . $q('owner_user_id') . ' = ? AND '
-        . $q('status') . ' = ?';
-        $status = $retired ? 'template_retired' : 'template';
-        $params = [$owner->value, $status];
+        $query = 'SELECT ' . implode(', ', array_map($q, ['id', 'owner_user_id', 'encrypted_content', 'version']))
+        . ' FROM ' . $q('sis_campaigns') . ' WHERE ' . $q('status') . ' = ?';
+        $status = $scope->status();
+        $params = [$status];
+        if ($scope->personal()) {
+            $query .= ' AND ' . $q('owner_user_id') . ' = ?';
+            $params[] = $actor->value;
+        }
         if ($after !== null) {
             $query .= ' AND ' . $q('id') . ' > ?';
             $params[] = $after->value;
         }
         return array_map(static fn(array $row): Campaign => new Campaign(
             new EntityId($row['id']),
-            $owner,
+            new EntityId($row['owner_user_id']),
             $row['encrypted_content'],
             $status,
             (int) $row['version']

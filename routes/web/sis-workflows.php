@@ -1071,6 +1071,7 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/campaigns/templates/create/', [SisCampaignController::class, 'createTemplate']);
     $router->post('/sis/campaigns/{id}/template/draft/', [SisCampaignController::class, 'draftFromTemplate']);
     $router->post('/sis/campaigns/{id}/template/status/', [SisCampaignController::class, 'retireTemplate']);
+    $router->post('/sis/campaigns/{id}/template/review/', [SisCampaignController::class, 'reviewTemplate']);
     $router->post('/sis/campaigns/{id}/template/edit/', [SisCampaignController::class, 'edit']);
     $router->post('/sis/campaigns/{id}/recipient-review/', [SisCampaignController::class, 'reviewRecipients']);
     $router

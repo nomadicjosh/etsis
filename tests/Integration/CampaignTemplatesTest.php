@@ -6,6 +6,7 @@ namespace Tests\Integration;
 
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Repository\CampaignRepository;
+use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Service\CampaignService;
 use Domain\Communications\Service\MailTransport;
 use Domain\Communications\Service\MessageCipher;
@@ -61,7 +62,7 @@ final class CampaignTemplatesTest extends TestCase
         self::assertSame('template', $service->show($template->id)['status']);
         $service->retireTemplate($template->id, 1, true);
         self::assertSame([], $service->templates()['items']);
-        self::assertSame($template->id->value, $service->templates(true)['items'][0]['id']);
+        self::assertSame($template->id->value, $service->templates(TemplateLibraryScope::Retired)['items'][0]['id']);
         foreach (['copy', 'edit'] as $operation) {
             try {
                 if ($operation === 'copy') {
@@ -175,7 +176,7 @@ final class CampaignTemplatesTest extends TestCase
         self::assertCount(3, $second['items']);
         self::assertNull($second['next_after']);
         self::assertCount(23, array_unique(array_column([...$first['items'], ...$second['items']], 'id')));
-        self::assertCount(1, $service->templates(true)['items']);
+        self::assertCount(1, $service->templates(TemplateLibraryScope::Retired)['items']);
     }
 
     public function testRequiredAuditFailureRollsBackEveryTemplateMutation(): void
@@ -232,5 +233,190 @@ final class CampaignTemplatesTest extends TestCase
         });
         $this->expectException(AccessDeniedException::class);
         $this->service($f, repository: $repository)->templates();
+    }
+
+    public function testInstitutionalApprovalSharesOnlyReviewedWordingAndCopiesRemainIndependent(): void
+    {
+        $f = new SisFixture();
+        $author = $f->access->actor;
+        $f->access->staff = false;
+        $f->access->grants = ['sis:communications:manage'];
+        $service = $this->service($f);
+        $events = $f->sql->rows('sis_history_events');
+        $template = $service->createTemplate('Fictional shared wording', 'Reviewed fictional body.');
+        $service->reviewTemplate($template->id, 0, 'submit');
+        self::assertSame([], $service->templates()['items']);
+        self::assertCount(1, $service->templates(TemplateLibraryScope::Submitted)['items']);
+        self::assertFalse($service->show($template->id)['can_dispatch']);
+        foreach (['review-list', 'approve'] as $operation) {
+            try {
+                if ($operation === 'review-list') {
+                    $service->templates(TemplateLibraryScope::Review);
+                } else {
+                    $service->reviewTemplate($template->id, 1, 'approve');
+                }
+                self::fail('Ordinary Communications access approved institutional wording.');
+            } catch (AccessDeniedException) {
+                self::assertSame('template_review', $service->show($template->id)['status']);
+            }
+        }
+        $f->access->actor = $f->user();
+        $f->access->grants[] = 'sis:communications:admin';
+        self::assertCount(1, $service->templates(TemplateLibraryScope::Review)['items']);
+        self::assertSame('Reviewed fictional body.', $service->show($template->id)['body']);
+        $service->reviewTemplate($template->id, 1, 'approve');
+        $reader = $f->user();
+        $f->access->actor = $reader;
+        $f->access->grants = ['sis:communications:manage'];
+        self::assertCount(1, $service->templates(TemplateLibraryScope::Institutional)['items']);
+        self::assertFalse($service->show($template->id)['is_owner']);
+        $draft = $service->draftFromTemplate($template->id, 2);
+        self::assertSame($reader->value, $draft->ownerUserId->value);
+        foreach (['edit', 'retire'] as $operation) {
+            try {
+                if ($operation === 'edit') {
+                    $service->edit($template->id, 'Denied', 'Denied text.', 2);
+                } else {
+                    $service->retireTemplate($template->id, 2, true);
+                }
+                self::fail('Shared reading granted template management.');
+            } catch (AccessDeniedException) {
+                self::assertSame(2, $service->show($template->id)['version']);
+            }
+        }
+        $f->access->actor = $author;
+        $service->reviewTemplate($template->id, 2, 'withdraw');
+        $service->edit($template->id, 'New private wording', 'Not approved for sharing.', 3);
+        $f->access->actor = $reader;
+        self::assertSame([], $service->templates(TemplateLibraryScope::Institutional)['items']);
+        self::assertSame('Reviewed fictional body.', $service->show($draft->id)['body']);
+        try {
+            $service->show($template->id);
+            self::fail('Withdrawn wording remained shared.');
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows('sis_deliveries'));
+        }
+        self::assertSame($events, $f->sql->rows('sis_history_events'));
+    }
+
+    public function testStaleApprovalCannotPublishAReplacementSubmissionAndReturnsNeedNewApproval(): void
+    {
+        $f = new SisFixture();
+        $service = $this->service($f);
+        $template = $service->createTemplate('Fictional template', 'First wording.');
+        $service->reviewTemplate($template->id, 0, 'submit');
+        try {
+            $service->edit($template->id, 'Unauthorized edit', 'Unreviewed.', 1);
+            self::fail('Submitted wording was edited in place.');
+        } catch (DomainException) {
+            self::assertSame(1, $service->show($template->id)['version']);
+        }
+        $service->reviewTemplate($template->id, 1, 'withdraw');
+        $service->edit($template->id, 'New wording', 'Second wording.', 2);
+        $service->reviewTemplate($template->id, 3, 'submit');
+        try {
+            $service->reviewTemplate($template->id, 1, 'approve');
+            self::fail('An earlier approval authorized a newer submission.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame('template_review', $service->show($template->id)['status']);
+        }
+        $service->reviewTemplate($template->id, 4, 'return');
+        self::assertSame('template', $service->show($template->id)['status']);
+        self::assertSame([], $service->templates(TemplateLibraryScope::Institutional)['items']);
+        $service->reviewTemplate($template->id, 5, 'submit');
+        $service->reviewTemplate($template->id, 6, 'approve');
+        $service->retireTemplate($template->id, 7, true);
+        $service->retireTemplate($template->id, 8, false);
+        self::assertSame('template', $service->show($template->id)['status']);
+        self::assertSame([], $service->templates(TemplateLibraryScope::Institutional)['items']);
+    }
+
+    public function testApprovalRollsBackWhenReviewerAuthorityChangesDuringItsAudit(): void
+    {
+        $f = new SisFixture();
+        $service = $this->service($f);
+        $template = $service->createTemplate('Fictional template', 'Fictional body.');
+        $service->reviewTemplate($template->id, 0, 'submit');
+        $before = $f->sql->rows('sis_campaigns');
+        $auditBefore = $f->sql->rows('sis_audit');
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willReturnCallback(
+            static function (EntityId $actor, string $action, EntityId $id) use ($f): void {
+                $f->audit->record($actor, $action, $id);
+                $f->access->staff = false;
+                $f->access->grants = ['sis:communications:manage'];
+            }
+        );
+        try {
+            $this->service($f, audit: $audit)->reviewTemplate($template->id, 1, 'approve');
+            self::fail('An approval committed after administration access was lost.');
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $f->sql->rows('sis_campaigns'));
+            self::assertSame($auditBefore, $f->sql->rows('sis_audit'));
+        }
+    }
+
+    public function testReviewerWorklistRechecksItsIndependentPermissionAfterReading(): void
+    {
+        $f = new SisFixture();
+        $service = $this->service($f);
+        $template = $service->createTemplate('Fictional template', 'Fictional body.');
+        $service->reviewTemplate($template->id, 0, 'submit');
+        $real = new SqlCampaignRepository($f->sql);
+        $repo = $this->createStub(CampaignRepository::class);
+        $repo->method('templates')->willReturnCallback(static function () use ($f, $real): array {
+            $rows = $real->templates($f->access->actor, TemplateLibraryScope::Review);
+            $f->access->staff = false;
+            $f->access->grants = ['sis:communications:manage'];
+            return $rows;
+        });
+        $this->expectException(AccessDeniedException::class);
+        $this->service($f, repository: $repo)->templates(TemplateLibraryScope::Review);
+    }
+
+    public function testSharedContentIsNotReturnedWhenVisibilityChangesDuringDecryption(): void
+    {
+        $f = new SisFixture();
+        $service = $this->service($f);
+        $template = $service->createTemplate('Fictional shared template', 'Fictional body.');
+        $service->reviewTemplate($template->id, 0, 'submit');
+        $service->reviewTemplate($template->id, 1, 'approve');
+        $f->access->actor = $f->user();
+        $f->access->staff = false;
+        $f->access->grants = ['sis:communications:manage'];
+        $cipher = $this->createStub(MessageCipher::class);
+        $cipher->method('open')->willReturnCallback(static function (string $value) use ($f, $template): string {
+            $plain = $f->dropCipher->open($value);
+            $f->sql->update('sis_campaigns', ['status' => 'template'], ['id' => $template->id->value]);
+            return $plain;
+        });
+        $this->expectException(AccessDeniedException::class);
+        $this->service($f, cipher: $cipher)->show($template->id);
+    }
+
+    public function testInstitutionalPagesFilterBeforeTheirBoundAndNeverIncludeUnapprovedWording(): void
+    {
+        $f = new SisFixture();
+        $service = $this->service($f);
+        for ($i = 0; $i < 23; ++$i) {
+            $template = $service->createTemplate('Approved wording ' . $i, 'Reviewed fictional body.');
+            $service->reviewTemplate($template->id, 0, 'submit');
+            $service->reviewTemplate($template->id, 1, 'approve');
+        }
+        $service->createTemplate('Private secret', 'Unapproved private text.');
+        $pending = $service->createTemplate('Pending secret', 'Unapproved pending text.');
+        $service->reviewTemplate($pending->id, 0, 'submit');
+        $f->access->actor = $f->user();
+        $f->access->staff = false;
+        $f->access->grants = ['sis:communications:manage'];
+        $first = $service->templates(TemplateLibraryScope::Institutional);
+        self::assertCount(20, $first['items']);
+        self::assertNotNull($first['next_after']);
+        $second = $service->templates(TemplateLibraryScope::Institutional, new EntityId($first['next_after']));
+        self::assertCount(3, $second['items']);
+        self::assertNull($second['next_after']);
+        self::assertCount(23, array_unique(array_column([...$first['items'], ...$second['items']], 'id')));
+        self::assertStringNotContainsString('secret', json_encode([$first, $second], JSON_THROW_ON_ERROR));
+        self::assertSame([], $service->templates(TemplateLibraryScope::Submitted)['items']);
     }
 }
