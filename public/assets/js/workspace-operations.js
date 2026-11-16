@@ -361,19 +361,28 @@ window.createWorkspaceOperations = function (ui) {
             form.prepend(balance, refresh);
             return form;
         }
-        async function correctAmount(item) {
-            const correctionBody = openDrawer("Correct a recorded amount", "STUDENT ACCOUNT");
+        async function reviewEntry(item = null) {
+            const correcting = item !== null;
+            const entryBody = openDrawer(
+                correcting ? "Correct a recorded amount" : "Post transaction",
+                "STUDENT ACCOUNT",
+            );
             const descriptors = [
-                ["amount_minor", `Corrected amount (${data.currency})`, "money"],
-                ["reason", "Reason for amount correction", "textarea"],
+                ...(!correcting ? [["type", "Transaction type", "choice", ["charge", "payment", "refund"]]] : []),
+                ["amount_minor", `${correcting ? "Corrected amount" : "Amount"} (${data.currency})`, "money"],
+                ["reason", correcting ? "Reason for amount correction" : "Reason for transaction", "textarea"],
             ];
             const form = await buildForm(descriptors);
             form.dataset.currency = data.currency;
             form.dispatchEvent(new Event("change"));
-            const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review amount correction");
+            const submit = node(
+                "button",
+                { type: "submit", class: "btn btn-primary" },
+                correcting ? "Review amount correction" : "Review transaction",
+            );
             const preview = node("section", {
                 class: "record-section",
-                "aria-label": "Reviewed amount correction",
+                "aria-label": correcting ? "Reviewed amount correction" : "Reviewed transaction",
                 hidden: true,
             });
             let reviewed = null,
@@ -387,7 +396,9 @@ window.createWorkspaceOperations = function (ui) {
             };
             form.addEventListener("input", clear);
             form.addEventListener("change", clear);
-            const base = `/sis/accounts/${row.id}/entries/${item.operation_id}/correction/`;
+            const base = correcting
+                ? `/sis/accounts/${row.id}/entries/${item.operation_id}/correction/`
+                : `/sis/accounts/${row.id}/entries/`;
             form.append(submit);
             form.addEventListener("submit", (event) => {
                 event.preventDefault();
@@ -415,26 +426,37 @@ window.createWorkspaceOperations = function (ui) {
                         node(
                             "p",
                             {},
-                            `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`,
+                            correcting
+                                ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
+                                : `${result.type}: ${money(result.amount_minor, result.currency)}`,
                         ),
                         node(
                             "p",
                             {},
                             `Account balance: ${money(result.balance_minor, result.currency)} → ${money(result.resulting_balance_minor, result.currency)}`,
                         ),
+                        result.type === "refund"
+                            ? node(
+                                  "p",
+                                  { class: "fw-semibold" },
+                                  `Available credit: ${money(result.available_credit_minor, result.currency)} → ${money(result.remaining_credit_minor, result.currency)}`,
+                              )
+                            : null,
                         node("p", { class: "text-break", style: "white-space: pre-wrap" }, result.reason),
                         node(
                             "p",
                             { class: "form-text" },
-                            "The original entry remains as reversed and links to its replacement. This corrects the account record only; no payment or refund is sent. Review expires in 20 minutes.",
+                            correcting
+                                ? "The original entry remains as reversed and links to its replacement. This corrects the account record only; no payment or refund is sent. Review expires in 20 minutes."
+                                : "This records institutional account activity only. It does not collect a payment or send a refund. Review expires in 20 minutes. Confirm only after checking the actual transaction.",
                         ),
                         button(
-                            "Confirm amount correction",
+                            correcting ? "Confirm amount correction" : "Confirm transaction",
                             async () => {
                                 if (confirming || !reviewed) return;
                                 const accepted = reviewed;
                                 confirming = true;
-                                form.querySelectorAll("input, textarea, button").forEach(
+                                form.querySelectorAll("input, textarea, select, button").forEach(
                                     (control) => (control.disabled = true),
                                 );
                                 try {
@@ -443,7 +465,7 @@ window.createWorkspaceOperations = function (ui) {
                                 } finally {
                                     confirming = false;
                                     if (form.isConnected)
-                                        form.querySelectorAll("input, textarea, button").forEach(
+                                        form.querySelectorAll("input, textarea, select, button").forEach(
                                             (control) => (control.disabled = false),
                                         );
                                 }
@@ -453,17 +475,21 @@ window.createWorkspaceOperations = function (ui) {
                     );
                 }, submit);
             });
-            correctionBody.append(
+            entryBody.append(
                 button("Back to account statement", back, "btn-link"),
                 node(
                     "p",
                     {},
-                    `${data.institutional_id} · ${item.type} · ${money(item.minor, item.currency)} · ${item.operation_id.slice(-8)}`,
+                    correcting
+                        ? `${data.institutional_id} · ${item.type} · ${money(item.minor, item.currency)} · ${item.operation_id.slice(-8)}`
+                        : `${data.institutional_id} · ${data.currency}`,
                 ),
                 node(
                     "p",
                     { class: "form-text" },
-                    "Correct a staff-recorded amount in its original billing account and currency. The transaction type stays the same.",
+                    correcting
+                        ? "Correct a staff-recorded amount in its original billing account and currency. The transaction type stays the same."
+                        : "A payment reduces the amount owed. Refunds require available credit. Review the amount and resulting balance before recording the transaction.",
                 ),
                 button("Refresh account balance", async () => {
                     if (confirming) return;
@@ -477,7 +503,7 @@ window.createWorkspaceOperations = function (ui) {
                         node(
                             "p",
                             { role: "status" },
-                            `Current balance: ${money(latest.balance_minor, latest.currency)}. Review the correction again.`,
+                            `Current balance: ${money(latest.balance_minor, latest.currency)}. Review ${correcting ? "the correction" : "the transaction"} again.`,
                         ),
                     );
                 }),
@@ -487,32 +513,8 @@ window.createWorkspaceOperations = function (ui) {
         }
         const actions = section("Transactions");
         body.append(actions);
-        if (can("sis:finance:post"))
-            actions.append(
-                button(
-                    "Post a transaction",
-                    async () => {
-                        const operation = await request("/sis/ui/operation-id/");
-                        await accountFlow(
-                            "Post transaction",
-                            [
-                                ["type", "Transaction type", "choice", ["charge", "payment", "refund"]],
-                                ["amount_minor", `Amount (${data.currency})`, "money"],
-                                ["reason", "Reason for transaction", "textarea"],
-                            ],
-                            `/sis/accounts/${row.id}/entries/`,
-                            (values) => ({
-                                ...values,
-                                amount_minor: String(values.amount_minor),
-                                currency: data.currency,
-                                operation_id: operation.id,
-                            }),
-                            "Review the amount and transaction type and enter a reason before posting. A payment reduces the amount owed. Refunds require available credit. Retrying this form reuses its operation ID to prevent duplicate entries.",
-                        );
-                    },
-                    "btn-primary",
-                ),
-            );
+        if (can("sis:finance:post") && can("sis:finance:read"))
+            actions.append(button("Post a transaction", () => reviewEntry(), "btn-primary"));
         const entries = node("div");
         let offset = 0;
         function renderEntries() {
@@ -546,7 +548,9 @@ window.createWorkspaceOperations = function (ui) {
                             ? node(
                                   "div",
                                   { class: "d-flex flex-wrap gap-2" },
-                                  item.can_correct_amount ? button("Correct amount", () => correctAmount(item)) : null,
+                                  item.can_correct_amount && can("sis:finance:read")
+                                      ? button("Correct amount", () => reviewEntry(item))
+                                      : null,
                                   button("Reverse entry", () =>
                                       accountFlow(
                                           "Confirm entry reversal",

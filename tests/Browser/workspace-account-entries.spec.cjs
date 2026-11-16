@@ -4,7 +4,8 @@ const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false;
+    let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null;
+    const postingReviews = new Map();
     const currency = options.currency || 'USD';
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/sis/**', async route => {
@@ -22,7 +23,9 @@ async function fixture(page, options = {}) {
                 can_correct_amount: options.eligible !== false && !corrected,
                 ...(corrected ? { corrected_by_operation_id: id(5) } : {}) },
                 ...(corrected ? [{ operation_id: id(5), type: 'payment', minor: 1250, currency, reversed: false,
-                    can_correct_amount: true, corrects_operation_id: id(4) }] : [])],
+                    can_correct_amount: true, corrects_operation_id: id(4) }] : []),
+                ...(posted ? [{ operation_id: id(6), type: posted.type, minor: posted.amount_minor, currency,
+                    reversed: false, can_correct_amount: true }] : [])],
         };
         else if (path.endsWith('/correction/review/')) {
             reviewNumber++;
@@ -38,6 +41,31 @@ async function fixture(page, options = {}) {
             } else {
                 corrected = true; position++; balance = -1250;
                 result = { status: 'corrected', operation_id: id(5), source_operation_id: id(4), balance_minor: balance, position };
+            }
+        } else if (path === `/sis/accounts/${id(1)}/entries/review/`) {
+            reviewNumber++;
+            if (data.type === 'refund' && data.amount_minor > -balance) {
+                status = 422; result = { error: { message: 'Please correct the highlighted fields.',
+                    details: [{ field: 'amount_minor', message: 'A refund cannot exceed available credit.' }] } };
+            } else {
+                const next = balance + (data.type === 'payment' ? -data.amount_minor : data.amount_minor);
+                result = { review_token: `fictional-posting-${reviewNumber}`, type: data.type,
+                    amount_minor: data.amount_minor, currency, balance_minor: balance, resulting_balance_minor: next,
+                    available_credit_minor: Math.max(0, -balance), remaining_credit_minor: Math.max(0, -next),
+                    reason: data.reason, position };
+                postingReviews.set(result.review_token, result);
+                if (options.delayReview) await options.delayReview();
+            }
+        } else if (path === `/sis/accounts/${id(1)}/entries/commit/`) {
+            const reviewed = postingReviews.get(data.review_token);
+            if (reviewed.position !== position && posted?.review_token !== data.review_token) {
+                status = 409; result = { error: { message: 'This financial record changed. Review the account again.' } };
+            } else {
+                if (!posted) { posted = reviewed; position++; balance = reviewed.resulting_balance_minor; }
+                result = { status: 'posted', operation_id: id(6), balance_minor: balance, position };
+                if (interrupt) {
+                    interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted response.' } };
+                }
             }
         }
         await route.fulfill({ status, json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -120,6 +148,57 @@ test('read-only finance access offers statements without correction controls', a
     await expect(page.locator('#drawer-body')).toContainText('Balance: -$10.00');
     await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Reverse entry', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Post a transaction', exact: true })).toHaveCount(0);
+});
+
+test('refund review explains available credit and records only after confirmation', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Post a transaction', exact: true }).click();
+    await page.getByLabel('Transaction type').selectOption('refund');
+    await page.getByLabel('Amount (USD)').fill('4.00');
+    await page.getByLabel('Reason for transaction').fill('Fictional refund recorded after office verification.');
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reviewed transaction' })).toContainText('Available credit: $10.00 → $6.00');
+    expect(f.calls.some(c => c.path.endsWith('/commit/'))).toBe(false);
+    await page.setViewportSize({ width: 375, height: 850 });
+    await accessible(page);
+    f.interrupt();
+    await page.getByRole('button', { name: 'Confirm transaction', exact: true }).click();
+    await expect(page.getByLabel('Transaction type')).toBeEnabled();
+    await expect(page.getByLabel('Amount (USD)')).toHaveValue('4.00');
+    await page.getByRole('button', { name: 'Confirm transaction', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: -$6.00');
+    expect(f.calls.filter(c => c.path.endsWith('/entries/commit/')).map(c => c.data))
+        .toEqual([{ review_token: 'fictional-posting-1' }, { review_token: 'fictional-posting-1' }]);
+    expect(f.calls.filter(c => c.path.endsWith('/entries/commit/')).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.calls.some(c => c.path.endsWith('/entries/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('over-refunds and stale confirmations keep inputs while refreshing requires a new review', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Post a transaction', exact: true }).click();
+    await page.getByLabel('Transaction type').selectOption('refund');
+    const amount = page.getByLabel('Amount (USD)'), reason = page.getByLabel('Reason for transaction');
+    await amount.fill('11.00'); await reason.fill('Fictional retained refund reason.');
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toHaveCount(0);
+    await expect(amount).toHaveValue('11.00');
+    await amount.fill('4.00');
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toBeVisible();
+    f.change();
+    await page.getByRole('button', { name: 'Confirm transaction', exact: true }).click();
+    await expect(reason).toBeEnabled();
+    await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
+    await expect(reason).toHaveValue('Fictional retained refund reason.');
+    await expect(amount).toHaveValue('4.00');
+    await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reviewed transaction' })).toContainText('Available credit: $9.00 → $5.00');
+    await page.getByLabel('Transaction type').selectOption('payment');
+    await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
 });
 
 test('a late review cannot restore a confirmation after the form was edited', async ({ page }) => {

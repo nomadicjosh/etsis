@@ -22,6 +22,7 @@ use Domain\Shared\Exception\ValidationException;
  *     corrects_operation_id?:string,corrected_by_operation_id?:string}
  * @phpstan-type CorrectionResult array{status:string,operation_id:string,source_operation_id:string,
  *     balance_minor:int,position:int}
+ * @phpstan-type PostingResult array{status:string,operation_id:string,balance_minor:int,position:int}
  */
 final class StudentAccount extends EventSourcedAggregate
 {
@@ -38,6 +39,8 @@ final class StudentAccount extends EventSourcedAggregate
     private array $correctedBy = [];
     /** @var array<string, array{actor:string,hash:string,result:CorrectionResult}> */
     private array $corrections = [];
+    /** @var array<string, array{actor:string,hash:string,result:PostingResult}> */
+    private array $postingReceipts = [];
 
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
@@ -93,9 +96,9 @@ final class StudentAccount extends EventSourcedAggregate
         if ($entry === null) {
             return null;
         }
-        return ["operation_id" => $operation->value] + $entry
-        + ["reversed" => isset($this->reversedOperations[$operation->value])]
-        + $this->correctionLinks($operation->value);
+        return ["operation_id" => $operation->value] +
+        $entry + ["reversed" => isset($this->reversedOperations[$operation->value])] +
+        $this->correctionLinks($operation->value);
     }
 
     public function post(
@@ -104,6 +107,7 @@ final class StudentAccount extends EventSourcedAggregate
         Money $amount,
         EntityId $actorId,
         bool $staffRecorded = false,
+        ?string $reviewHash = null,
     ): void {
         if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
             throw new DomainException("A positive amount in the account currency is required.");
@@ -115,11 +119,10 @@ final class StudentAccount extends EventSourcedAggregate
             }
             return;
         }
-        if ($type === EntryType::Refund && $amount->minor > -$this->balance->minor) {
-            throw new DomainException("A refund cannot exceed available credit.");
+        if ($reviewHash !== null && (!$staffRecorded || preg_match('/^[a-f0-9]{64}$/D', $reviewHash) !== 1)) {
+            throw new DomainException("A reviewed staff posting requires a valid instruction hash.");
         }
-        $delta = $type === EntryType::Payment ? -$amount->minor : $amount->minor;
-        $this->balance->add(new Money($delta, $amount->currency));
+        $this->postingBalance($type, $amount);
         $this->recordThat(
             AccountEntryWasPosted::occur(
                 $this->aggregateId(),
@@ -128,9 +131,53 @@ final class StudentAccount extends EventSourcedAggregate
                     "actor_id" => $actorId->value,
                 ],
                 [Metadata::AGGREGATE_TYPE => "student_account"] +
-                    ($staffRecorded ? ["staff_recorded" => true] : []),
+                    ($staffRecorded ? ["staff_recorded" => true] : []) +
+                    ($reviewHash === null ? [] : ["review_hash" => $reviewHash]),
             ),
         );
+    }
+
+    public function postingBalance(EntryType $type, Money $amount): Money
+    {
+        if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
+            throw new DomainException("A positive amount in the account currency is required.");
+        }
+        if ($type === EntryType::Refund && $amount->minor > -$this->balance->minor) {
+            throw new DomainException("A refund cannot exceed available credit.");
+        }
+        $delta = $type === EntryType::Payment ? -$amount->minor : $amount->minor;
+        return $this->balance->add(new Money($delta, $amount->currency));
+    }
+
+    /** @return PostingResult|null */
+    public function postingResult(EntityId $operation, EntityId $actor, string $reviewHash): ?array
+    {
+        $receipt = $this->postingReceipts[$operation->value] ?? null;
+        if ($receipt === null) {
+            return null;
+        }
+        if ($receipt["actor"] !== $actor->value || !hash_equals($receipt["hash"], $reviewHash)) {
+            throw new DomainException("This posting belongs to a different reviewed instruction.");
+        }
+        return $receipt["result"];
+    }
+
+    /** @return PostingResult */
+    public function postReviewed(
+        EntityId $operation,
+        EntryType $type,
+        Money $amount,
+        EntityId $actor,
+        string $reviewHash,
+    ): array {
+        if (($accepted = $this->postingResult($operation, $actor, $reviewHash)) !== null) {
+            return $accepted;
+        }
+        if ($this->entry($operation) !== null) {
+            throw new DomainException("A reviewed posting cannot adopt an existing entry identity.");
+        }
+        $this->post($operation, $type, $amount, $actor, staffRecorded: true, reviewHash: $reviewHash);
+        return $this->postingReceipts[$operation->value]["result"];
     }
 
     public function reverse(EntityId $operationId, EntityId $actorId): void
@@ -163,24 +210,37 @@ final class StudentAccount extends EventSourcedAggregate
     public function correctedBalance(EntityId $source, Money $amount): Money
     {
         if (!$this->canCorrectAmount($source)) {
-            throw new ValidationException([['field' => 'source_operation_id',
-                'message' => 'Only an unreversed, explicitly staff-recorded entry can be corrected here.']]);
+            throw new ValidationException([
+                [
+                    "field" => "source_operation_id",
+                    "message" => "Only an unreversed, explicitly staff-recorded entry can be corrected here.",
+                ],
+            ]);
         }
         $entry = $this->operations[$source->value];
         if ($amount->currency !== $entry["currency"] || $amount->minor < 1 || $amount->minor === $entry["minor"]) {
-            throw new ValidationException([['field' => 'amount_minor',
-                'message' => 'Enter a different positive amount in the original currency.']]);
+            throw new ValidationException([
+                [
+                    "field" => "amount_minor",
+                    "message" => "Enter a different positive amount in the original currency.",
+                ],
+            ]);
         }
         $sign = $entry["type"] === EntryType::Payment->value ? -1 : 1;
         $minor = $this->balance->minor + $sign * ($amount->minor - $entry["minor"]);
         if ($minor < -Money::MAX_MINOR || $minor > Money::MAX_MINOR) {
-            throw new ValidationException([['field' => 'amount_minor',
-                'message' => 'The corrected balance exceeds the supported account limit.']]);
+            throw new ValidationException([
+                [
+                    "field" => "amount_minor",
+                    "message" => "The corrected balance exceeds the supported account limit.",
+                ],
+            ]);
         }
         $balance = new Money($minor, $amount->currency);
         if ($entry["type"] === EntryType::Refund->value && $balance->minor > 0) {
-            throw new ValidationException([['field' => 'amount_minor',
-                'message' => 'The corrected refund cannot exceed available credit.']]);
+            throw new ValidationException([
+                ["field" => "amount_minor", "message" => "The corrected refund cannot exceed available credit."],
+            ]);
         }
         return $balance;
     }
@@ -303,5 +363,17 @@ final class StudentAccount extends EventSourcedAggregate
         }
         $delta = $payload["type"] === EntryType::Payment->value ? -$payload["minor"] : $payload["minor"];
         $this->balance = $this->balance->add(new Money($delta, $payload["currency"]));
+        if (isset($event->metadata()["review_hash"])) {
+            $this->postingReceipts[$payload["operation_id"]] = [
+                "actor" => $payload["actor_id"],
+                "hash" => $event->metadata()["review_hash"],
+                "result" => [
+                    "status" => "posted",
+                    "operation_id" => $payload["operation_id"],
+                    "balance_minor" => $this->balance->minor,
+                    "position" => $event->playhead(),
+                ],
+            ];
+        }
     }
 }

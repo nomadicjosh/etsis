@@ -824,6 +824,16 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'review_hash') {
+                    if (
+                        $class !== \Domain\Finance\Event\AccountEntryWasPosted::class
+                        || ($metadata['staff_recorded'] ?? false) !== true || !is_string($value)
+                        || preg_match('/^[a-f0-9]{64}$/D', $value) !== 1
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'staff_recorded') {
                     if ($class !== \Domain\Finance\Event\AccountEntryWasPosted::class || $value !== true) {
                         throw new CorruptHistoryException();

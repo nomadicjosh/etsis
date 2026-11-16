@@ -5235,3 +5235,94 @@ if (
 ) {
     throw new RuntimeException("A native correction retry bypassed independent financial read authority.");
 }
+// Manual postings share the protected account-entry review/confirmation boundary with corrections.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$postingReviewStudent = $sis->student();
+$postingReviewOpened = $teachingPost("/sis/accounts/", [
+    "student_id" => $postingReviewStudent->id->value,
+    "term_id" => $sis->term->value,
+    "currency" => "USD",
+]);
+$postingReviewId = json_decode((string) $postingReviewOpened->getBody(), true)["id"];
+$postingReviewBase = "/sis/accounts/" . $postingReviewId . "/entries/";
+$postingReviewBefore = $sis->sql->rows("sis_history_events");
+$postingReviewResponse = $teachingPost($postingReviewBase . "review/", [
+    "type" => "payment",
+    "amount_minor" => 1500,
+    "currency" => "USD",
+    "position" => 1,
+    "reason" => "Native fictional reviewed payment.",
+]);
+$postingReviewed = json_decode((string) $postingReviewResponse->getBody(), true);
+if (
+    $postingReviewResponse->getStatusCode() !== 200 ||
+    ($postingReviewed["resulting_balance_minor"] ?? null) !== -1500 ||
+    $sis->sql->rows("sis_history_events") !== $postingReviewBefore ||
+    !str_contains($postingReviewResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $postingReviewResponse->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException("The native posting review changed money or lost its private balance preview.");
+}
+$postingCommittedResponse = $teachingPost($postingReviewBase . "commit/", [
+    "review_token" => $postingReviewed["review_token"],
+    "amount_minor" => 999999,
+    "type" => "refund",
+    "actor_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+]);
+$postingCommitted = json_decode((string) $postingCommittedResponse->getBody(), true);
+if ($postingCommittedResponse->getStatusCode() !== 200 || ($postingCommitted["balance_minor"] ?? null) !== -1500) {
+    throw new RuntimeException("The native posting confirmation did not retain its actual reviewed instruction.");
+}
+$refundReviewResponse = $teachingPost($postingReviewBase . "review/", [
+    "type" => "refund",
+    "amount_minor" => 500,
+    "currency" => "USD",
+    "position" => 2,
+    "reason" => "Native fictional institutional refund record.",
+]);
+$refundReviewed = json_decode((string) $refundReviewResponse->getBody(), true);
+if (
+    $refundReviewResponse->getStatusCode() !== 200 ||
+    ($refundReviewed["available_credit_minor"] ?? null) !== 1500 ||
+    ($refundReviewed["remaining_credit_minor"] ?? null) !== 1000
+) {
+    throw new RuntimeException("The native refund review did not explain available and remaining credit.");
+}
+$refundCommittedResponse = $teachingPost($postingReviewBase . "commit/", [
+    "review_token" => $refundReviewed["review_token"],
+]);
+$refundCommitted = json_decode((string) $refundCommittedResponse->getBody(), true);
+$postingReviewAfter = $sis->sql->rows("sis_history_events");
+$refundRetry = $teachingPost($postingReviewBase . "commit/", ["review_token" => $refundReviewed["review_token"]]);
+if (
+    $refundCommittedResponse->getStatusCode() !== 200 ||
+    ($refundCommitted["balance_minor"] ?? null) !== -1000 ||
+    count($postingReviewAfter) !== count($postingReviewBefore) + 2 ||
+    json_decode((string) $refundRetry->getBody(), true) !== $refundCommitted ||
+    $sis->sql->rows("sis_history_events") !== $postingReviewAfter
+) {
+    throw new RuntimeException("The native refund confirmation lost its original receipt or duplicated a posting.");
+}
+$refundInvalid = $teachingPost($postingReviewBase . "review/", [
+    "type" => "refund",
+    "amount_minor" => 1001,
+    "currency" => "USD",
+    "position" => 3,
+    "reason" => "An over-refund needs a safe field error.",
+]);
+if (
+    $refundInvalid->getStatusCode() !== 422 ||
+    !str_contains((string) $refundInvalid->getBody(), "available credit")
+) {
+    throw new RuntimeException("The native refund review did not reject excess credit clearly.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:finance:post"];
+if (
+    $teachingPost($postingReviewBase . "commit/", [
+        "review_token" => $refundReviewed["review_token"],
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("The native posting retry bypassed independent account-read authority.");
+}

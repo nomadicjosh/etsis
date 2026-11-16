@@ -8,10 +8,11 @@ use Application\Http\FormInput;
 use Codefy\Framework\Http\BaseController;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Service\StudentAccountService;
-use Domain\Finance\Service\AccountCorrectionService;
+use Domain\Finance\Service\AccountEntryReviewService;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Shared\Exception\ValidationException;
 use InvalidArgumentException;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -21,7 +22,7 @@ final class SisFinanceController extends BaseController
 {
     public function __construct(
         private readonly StudentAccountService $service,
-        private readonly AccountCorrectionService $corrections,
+        private readonly AccountEntryReviewService $reviews,
     ) {
     }
 
@@ -91,7 +92,7 @@ final class SisFinanceController extends BaseController
     {
         $f = FormInput::from($request);
         return new JsonResponse(
-            $this->corrections->review(
+            $this->reviews->reviewCorrection(
                 new AccountId($id),
                 new EntityId($operation),
                 new Money($f->integer("amount_minor", 1, Money::MAX_MINOR), $f->text("currency", 3)),
@@ -101,10 +102,34 @@ final class SisFinanceController extends BaseController
         );
     }
 
+    public function reviewPosting(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $type =
+        EntryType::tryFrom($f->text("type", 24)) ??
+        throw new ValidationException([["field" => "type", "message" => "Choose charge, payment or refund."]]);
+        return new JsonResponse(
+            $this->reviews->reviewPosting(
+                new AccountId($id),
+                $type,
+                new Money($f->integer("amount_minor", 1, Money::MAX_MINOR), $f->text("currency", 3)),
+                $f->integer("position", 1),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+
+    public function commitPosting(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->reviews->commitPosting(new AccountId($id), FormInput::from($request)->bodyText("review_token")),
+        );
+    }
+
     public function commitCorrection(ServerRequest $request, string $id, string $operation): ResponseInterface
     {
         return new JsonResponse(
-            $this->corrections->commit(
+            $this->reviews->commitCorrection(
                 new AccountId($id),
                 new EntityId($operation),
                 FormInput::from($request)->bodyText("review_token"),

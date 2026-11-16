@@ -28,7 +28,11 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
             entries: posted ? [{ operation_id: operation, type: 'payment', minor: 1250, currency: 'USD', reversed }] : [],
         };
         else if (path === '/sis/ui/operation-id/') result = { id: operation };
-        else if (path === `/sis/accounts/${account}/entries/`) { posted = true; result = { status: 'posted' }; }
+        else if (path === `/sis/accounts/${account}/entries/review/`) result = {
+            review_token: 'fictional-posting-review', type: payload.type, amount_minor: Number(payload.amount_minor),
+            currency: payload.currency, balance_minor: 10000, resulting_balance_minor: 8750, reason: payload.reason,
+        };
+        else if (path === `/sis/accounts/${account}/entries/commit/`) { posted = true; result = { status: 'posted' }; }
         else if (path.endsWith('/reverse/')) { reversed = true; result = { status: 'reversed' }; }
         else if (path === `/sis/ui/context/roster/${section}/`) result = { can_grade: true, items: [{ id: id('08'), student_id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', status: 'A', grade_version: 2, grade_code: null }], next_after: null };
         else if (path === `/sis/ui/context/assignments/${section}/`) result = { items: [], next_after: null };
@@ -56,9 +60,13 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
     await expect(page.getByLabel('Amount (USD)')).toHaveValue('12.50');
     await expect(page.getByRole('textbox', { name: /^Reason for transaction/ })).toHaveValue('Fictional payment received.');
-    await page.getByRole('button', { name: 'Post transaction', exact: true }).click();
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toBeVisible();
+    expect(requests.some(item => item.path.endsWith('/entries/commit/'))).toBe(false);
+    await page.getByRole('button', { name: 'Confirm transaction', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Balance: $87.50');
-    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/`)).toMatchObject({ payload: { operation_id: operation, type: 'payment', amount_minor: '1250', currency: 'USD', position: 1, reason: 'Fictional payment received.' }, csrf: 'fictional-test-token' });
+    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/review/`)).toMatchObject({ payload: { type: 'payment', amount_minor: 1250, currency: 'USD', position: 1, reason: 'Fictional payment received.' }, csrf: 'fictional-test-token' });
+    expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/commit/`).payload).toEqual({ review_token: 'fictional-posting-review' });
     await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
     await page.getByRole('textbox', { name: /^Reason for reversal/ }).fill('Fictional posting correction.');
     await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
@@ -599,7 +607,7 @@ for (const scenario of [
     test(`account entry preserves ${scenario.currency} minor units and rejects excess precision`, async ({ page }) => {
         const account = '01K00000000000000000000081';
         const operation = '01K00000000000000000000082';
-        const posted = []; let saved = false;
+        const posted = []; let saved = false, reviewed;
         await page.route('**/sis/**', async route => {
             const path = new URL(route.request().url()).pathname;
             const raw = route.request().postData();
@@ -612,7 +620,12 @@ for (const scenario of [
                 id: account, institutional_id: 'S-FICTIONAL', currency: scenario.currency,
                 balance_minor: saved ? -1234 : 0, position: saved ? 2 : 1, entries: [],
             };
-            else if (path === `/sis/accounts/${account}/entries/`) { posted.push(payload); saved = true; result = { status: 'posted' }; }
+            else if (path === `/sis/accounts/${account}/entries/review/`) {
+                reviewed = payload;
+                result = { review_token: 'fictional-currency-review', type: payload.type, amount_minor: payload.amount_minor,
+                    currency: payload.currency, balance_minor: 0, resulting_balance_minor: -1234, reason: payload.reason };
+            }
+            else if (path === `/sis/accounts/${account}/entries/commit/`) { posted.push(reviewed); saved = true; result = { status: 'posted' }; }
             await route.fulfill({ json: result });
         });
         await page.goto('/admin/');
@@ -624,7 +637,7 @@ for (const scenario of [
         await expect(amount).toHaveAttribute('step', scenario.step);
         await amount.fill(scenario.invalid);
         await page.getByRole('textbox', { name: /^Reason for transaction/ }).fill('Fictional currency receipt.');
-        await page.getByRole('button', { name: 'Post transaction', exact: true }).click();
+        await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
         if (scenario.currency === 'USD') {
             await expect(page.getByText('Enter an amount using digits and a decimal point.', { exact: true })).toBeVisible();
         } else {
@@ -632,8 +645,11 @@ for (const scenario of [
         }
         expect(posted).toEqual([]);
         await amount.fill(scenario.amount);
-        await page.getByRole('button', { name: 'Post transaction', exact: true }).click();
+        await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toBeVisible();
+        expect(posted).toEqual([]);
+        await page.getByRole('button', { name: 'Confirm transaction', exact: true }).click();
         await expect.poll(() => posted.length).toBe(1);
-        expect(posted[0]).toMatchObject({ amount_minor: '1234', currency: scenario.currency, position: 1 });
+        expect(posted[0]).toMatchObject({ amount_minor: 1234, currency: scenario.currency, position: 1 });
     });
 }
