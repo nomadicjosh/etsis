@@ -29,7 +29,7 @@ final readonly class SisBookingController
     {
         $f = FormInput::from($request);
         return new JsonResponse($this->service->review(
-            $f->optionalId('room_id'),
+            $f->requiredNullableId('room_id'),
             $f->text('title'),
             $this->pattern($request),
             $f->optionalId('category_id'),
@@ -41,7 +41,7 @@ final readonly class SisBookingController
         $f = FormInput::from($request);
         $booking = $this->service->requestSeries(
             $f->id('id'),
-            $f->optionalId('room_id'),
+            $f->requiredNullableId('room_id'),
             $f->text('title'),
             $this->pattern($request),
             $f->text('revision', 64),
@@ -78,7 +78,7 @@ final readonly class SisBookingController
             $f->items('slots', 366)
         );
         $booking = $this->service->request(
-            $f->optionalId('room_id'),
+            $f->requiredNullableId('room_id'),
             $f->text('title'),
             $slots,
             $f->optionalId('category_id'),
@@ -150,7 +150,7 @@ final readonly class SisBookingController
         return new JsonResponse($this->service->reviewReplacement(
             new EntityId($id),
             new EntityId($occurrence),
-            $f->optionalId('room_id'),
+            $f->requiredNullableId('room_id'),
             new TimeSlot($f->instant('starts_at'), $f->instant('ends_at')),
             $f->integer('version')
         ));
@@ -163,7 +163,7 @@ final readonly class SisBookingController
             new EntityId($id),
             new EntityId($occurrence),
             $f->id('id'),
-            $f->optionalId('room_id'),
+            $f->requiredNullableId('room_id'),
             new TimeSlot($f->instant('starts_at'), $f->instant('ends_at')),
             $f->integer('version'),
             $f->text('revision', 64)

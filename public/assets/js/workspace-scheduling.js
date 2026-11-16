@@ -79,14 +79,9 @@ window.createWorkspaceScheduling = function (ui) {
         : record ? 'Building not assigned' : 'No physical building';
     const onlineField = ['online', 'Online meeting without a room', 'checkbox', '', false];
     function locationControls(form, initialOnline = false) {
-        const online = form.elements.online, room = form.elements.room_id, section = form.elements.section_id;
+        const online = form.elements.online, room = form.elements.room_id;
         if (!online) return;
         const roomMark = room.labels[0]?.querySelector('.required-indicator');
-        let sectionMark = section?.labels[0]?.querySelector('.required-indicator');
-        if (section && !sectionMark) {
-            sectionMark = node('span', { class: 'required-indicator', 'aria-hidden': 'true' }, ' *');
-            section.labels[0]?.append(sectionMark);
-        }
         let previousRoom = room.value;
         online.checked = initialOnline;
         const apply = () => {
@@ -96,14 +91,12 @@ window.createWorkspaceScheduling = function (ui) {
             } else if (!room.value && previousRoom) room.value = previousRoom;
             room.disabled = online.checked;
             room.required = !online.checked;
-            if (section) section.required = online.checked;
             if (roomMark) roomMark.hidden = online.checked;
-            if (sectionMark) sectionMark.hidden = !online.checked;
         };
         online.addEventListener('change', apply);
         apply();
         online.closest('.mb-4').append(node('p', { class: 'form-text' },
-            'Online meetings require a linked published online or hybrid section. They do not reserve a physical room.'));
+            'Online meetings do not reserve a physical room. A course section is optional; linked classes need a published online or hybrid offering.'));
     }
     const grid = (headers, rows, caption) =>
         node(
@@ -518,7 +511,7 @@ window.createWorkspaceScheduling = function (ui) {
             }),
             button("Check availability", async () => {
                 if (form.elements.online.checked) {
-                    status.textContent = 'Online meetings do not reserve a room. Choose a published online or hybrid section.';
+                    status.textContent = 'Online meetings need no room reservation. Approval confirms the schedule; linked classes must match their published offering.';
                     return;
                 }
                 if (
@@ -557,7 +550,7 @@ window.createWorkspaceScheduling = function (ui) {
                         { starts_at: data.starts_at, ends_at: data.ends_at },
                     ],
                 });
-                notify("Space requested. Approval is required to reserve it.");
+                notify('Meeting requested. Approval is required to confirm the schedule.');
                 await ui.refreshDirectory();
                 await booking(saved.id);
             }, form.querySelector('[type="submit"]'));
@@ -693,7 +686,7 @@ window.createWorkspaceScheduling = function (ui) {
                 room(record.room_id, record.occurrences[0].starts_at),
             ) : null,
         );
-        if (place && !record.section && can('sis:scheduling:manage') && can('sis:portal:manage'))
+        if (!record.section && can('sis:scheduling:manage') && can('sis:portal:manage'))
             body.append(button('Manage public event', () => publicEvent(record, back)));
         if (can('sis:scheduling:manage')) body.append(button('Change category', async () => {
             const edit = openDrawer('Change booking category', 'SPACES & SCHEDULING');
@@ -813,7 +806,7 @@ window.createWorkspaceScheduling = function (ui) {
         const close = () => booking(record.id, back);
         form.append(button('Back to booking', close));
         if (!setup.preview) edit.append(node('p', { class: 'alert alert-info' },
-            'Publication requires an approved room booking with active meetings and no course-section link. Existing public content can still be withdrawn.'));
+            'Publication requires an approved standalone booking with active meetings and no course-section link. Existing public content can still be withdrawn.'));
         const submit = node('button', { type: 'submit', class: 'btn btn-primary', disabled: !setup.preview }, 'Review public event');
         form.append(submit);
         let generation = 0;
@@ -867,7 +860,7 @@ window.createWorkspaceScheduling = function (ui) {
     }
     async function reschedule(record, occurrence, place, back) {
         const body = openDrawer('Reschedule one meeting', 'SPACES & SCHEDULING');
-        const fields = [...(['online', 'hybrid'].includes(record.section?.delivery_mode) ? [onlineField] : []),
+        const fields = [...(!record.section || ['online', 'hybrid'].includes(record.section.delivery_mode) ? [onlineField] : []),
             ['room_id', 'New room', 'lookup', 'rooms'], ...dateFields];
         const form = await buildForm(fields, { room_id: record.room_id,
             starts_at: local(new Date(occurrence.starts_at)), ends_at: local(new Date(occurrence.ends_at)) });
@@ -884,7 +877,7 @@ window.createWorkspaceScheduling = function (ui) {
         body.append(node('p', { class: 'private-text' }, record.title),
             node('p', {}, `Current meeting: ${roomLabel(place)} · ${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
             node('p', { class: 'form-text' },
-                'The current meeting stays in place until confirmation. Change its room, time or online location. Online meetings require a retained online or hybrid offering. Times use your browser’s timezone; meetings may last up to 31 days.'),
+                'The current meeting stays in place until confirmation. Choose a room or an online meeting. Linked classes must keep a compatible offering and instructional dates. Times use your browser’s timezone; meetings may last up to 31 days.'),
             form, status, preview);
         form.addEventListener('submit', event => {
             event.preventDefault();

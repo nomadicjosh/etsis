@@ -46,8 +46,12 @@ final class PublicCampusEventsTest extends TestCase
         );
     }
 
-    private function booking(SisFixture $f, string $status = 'approved', int $count = 1): Booking
-    {
+    private function booking(
+        SisFixture $f,
+        string $status = 'approved',
+        int $count = 1,
+        bool $online = false
+    ): Booking {
         $slots = [];
         for ($i = 0; $i < $count; ++$i) {
             $start = new DateTimeImmutable('2026-08-10T11:00:00-07:00')->modify('+' . $i . ' days');
@@ -55,7 +59,7 @@ final class PublicCampusEventsTest extends TestCase
         }
         $booking = new Booking(
             EntityId::generate(),
-            $f->room('PUBLIC.' . substr(EntityId::generate()->value, -6), 40),
+            $online ? null : $f->room('PUBLIC.' . substr(EntityId::generate()->value, -6), 40),
             $f->access->actor,
             'PRIVATE STAFF PURPOSE: never public',
             $slots,
@@ -252,7 +256,8 @@ final class PublicCampusEventsTest extends TestCase
         for ($i = 0; $i < 500; ++$i) {
             $occurrence = EntityId::generate()->value;
             $f->sql->insert('sis_booking_slots', ['id' => $occurrence, 'booking_id' => $booking->id->value,
-                'starts_at' => '2026-08-10 18:00:00', 'ends_at' => '2026-08-10 19:00:00']);
+                'starts_at' => '2026-08-10 18:00:00', 'ends_at' => '2026-08-10 19:00:00',
+                'room_id' => $booking->roomId->value]);
             $f->sql->insert('sis_public_event_times', ['id' => EntityId::generate()->value, 'event_id' => $event['id'],
                 'occurrence_id' => $occurrence, 'starts_at' => '2026-08-10 18:00:00',
                 'ends_at' => '2026-08-10 19:00:00']);
@@ -333,5 +338,62 @@ final class PublicCampusEventsTest extends TestCase
         self::assertSame('2026-08-11T11:00:00-07:00', $rows[0]['starts_at']);
         self::assertNull($service->setup($replacement->id)['current']);
         self::assertCount(2, $f->sql->rows('sis_public_event_times'));
+    }
+
+    public function testOnlinePublicEventsNeedNoRoomAndKeepSourcePurposeAndIdentitiesPrivate(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, count: 2, online: true);
+        $service = $this->service($f);
+        $events = $f->sql->rows('sis_history_events');
+        $review = $this->publish($service, $booking, 'Fictional online gathering');
+        self::assertNull($f->sql->one('sis_public_events', ['booking_id' => $booking->id->value])['room_id']);
+        self::assertSame('Online event', $review['preview']['room_label']);
+        self::assertSame('Joining details provided by the organizer', $review['preview']['building_label']);
+        self::assertSame([], $f->sql->rows('sis_rooms'));
+        $f->access->staff = false;
+        $result = $service->calendar();
+        self::assertCount(2, $result['items']);
+        self::assertSame('Online event', $result['items'][0]['room_label']);
+        $json = json_encode($result, JSON_THROW_ON_ERROR);
+        foreach (['PRIVATE', 'booking_id', 'occurrence_id', 'owner_user_id', $booking->id->value] as $secret) {
+            self::assertStringNotContainsString($secret, $json);
+        }
+        self::assertCount(2, $service->upcoming());
+        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        $f->access->staff = true;
+        $repo = new SqlBookingRepository($f->sql);
+        $changed = $booking->cancelOccurrence($booking->occurrences[0]->id, $f->access->actor, $f->clock->now());
+        $repo->cancelOccurrence($changed, $booking->occurrences[0]->id, 0);
+        self::assertCount(1, $service->calendar()['items']);
+        $service->withdraw($booking->id, 1);
+        self::assertSame([], $service->calendar()['items']);
+        $service->publish($booking->id, $review['review_token']);
+        self::assertSame([], $service->calendar()['items']);
+    }
+
+    public function testOnlineSourceLocationMismatchCannotBeReviewedOrReturnedAsPublicContent(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, online: true);
+        $service = $this->service($f);
+        $this->publish($service, $booking);
+        $room = $f->room('Fictional changed place', 40);
+        $f->sql->update(
+            'sis_booking_slots',
+            ['room_id' => $room->value],
+            ['id' => $booking->occurrences[0]->id->value]
+        );
+        self::assertSame([], $service->calendar()['items']);
+        try {
+            $service->review($booking->id, 'New public title', 'Public description');
+            self::fail('A mismatched occurrence location was published.');
+        } catch (ValidationException) {
+            self::assertSame(1, $f->sql->rows('sis_public_events')[0]['version']);
+        }
+        $f->sql->update('sis_booking_slots', ['room_id' => null], ['id' => $booking->occurrences[0]->id->value]);
+        self::assertCount(1, $service->calendar()['items']);
+        $f->sql->update('sis_bookings', ['room_id' => $room->value], ['id' => $booking->id->value]);
+        self::assertSame([], $service->calendar()['items']);
     }
 }

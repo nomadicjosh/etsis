@@ -50,7 +50,7 @@ final readonly class BookingService
     ): Booking {
         $actor = $this->access->authenticatedUserId();
         return $this->transactions->run(function () use ($room, $title, $slots, $category, $section, $actor): Booking {
-            $this->lockRequest($room, $section);
+            $this->lockRequest($room, $section, $actor);
             $this->category($category, true);
             $selected = $this->section($section, $slots, true);
             $this->location($room, $selected);
@@ -66,7 +66,7 @@ final readonly class BookingService
             $this->repository->add($booking);
             $this->audit->record($actor, 'booking.requested', $booking->id);
             $this->actor($actor);
-            if ($section !== null) {
+            if ($section !== null || $room === null) {
                 $this->manager($actor);
             }
             return $booking;
@@ -121,7 +121,7 @@ final readonly class BookingService
             $section,
             $category
         ): Booking {
-            $this->lockRequest($room, $section);
+            $this->lockRequest($room, $section, $actor);
             $this->manager($actor);
             try {
                 $existing = $this->repository->get($id);
@@ -173,16 +173,16 @@ final readonly class BookingService
         });
     }
 
-    private function lockRequest(?EntityId $room, ?EntityId $section): void
+    private function lockRequest(?EntityId $room, ?EntityId $section, EntityId $actor): void
     {
         if ($room !== null) {
             $this->repository->lockRoom($room);
         } elseif ($section !== null) {
-            $this->access->requirePermission('sis:scheduling:manage');
+            $this->manager($actor);
             $this->sections->lock($section);
         } else {
-            throw new ValidationException([['field' => 'room_id',
-                'message' => 'Choose a room, or link an online meeting to a published online/hybrid section.']]);
+            $this->manager($actor);
+            $this->repository->lockRequester($actor);
         }
     }
 
@@ -200,11 +200,11 @@ final readonly class BookingService
     {
         if (
             $room === null
-            && ($selected === null || !in_array($selected['delivery_mode'], ['online', 'hybrid'], true))
+            && $selected !== null && !in_array($selected['delivery_mode'], ['online', 'hybrid'], true)
         ) {
             throw new ValidationException([['field' => 'room_id',
-                'message' => 'An online meeting needs a published online or hybrid section.'
-                    . ' Otherwise choose a room.']]);
+                'message' => 'This section requires a room. Online class meetings need'
+                    . ' a published online or hybrid offering.']]);
         }
     }
 

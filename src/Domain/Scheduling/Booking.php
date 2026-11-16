@@ -28,7 +28,6 @@ final readonly class Booking
             trim($title) === '' || !mb_check_encoding($title, 'UTF-8') || mb_strlen($title) > 191
             || preg_match('/[\x00-\x1f\x7f]/', $title) || count($occurrences) < 1 || count($occurrences) > 366
             || !in_array($status, ['requested', 'approved', 'cancelled'], true)
-            || ($roomId === null && $sectionPublicationId === null)
         ) {
             throw new InvalidArgumentException('A booking requires a title, bounded occurrences and a valid state.');
         }

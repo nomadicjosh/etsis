@@ -24,6 +24,12 @@ for (const theme of ['campus-harbor', 'campus-quad', 'campus-horizon']) {
         await calendar.getByLabel('Find an event or location').fill('No match');
         await calendar.getByRole('button', { name: 'Explore events', exact: true }).click();
         await expect(calendar).toContainText('0 public event times');
+        await calendar.getByLabel('Find an event or location').fill('Online');
+        await calendar.getByRole('button', { name: 'Explore events', exact: true }).click();
+        await calendar.getByRole('link', { name: /Wednesday, Aug 12, 2026: 1/ }).click();
+        await expect(calendar.getByRole('article')).toHaveCount(1);
+        await expect(calendar.getByRole('article')).toContainText('Online event');
+        await expect(calendar.getByRole('article')).toContainText('Joining details provided by the organizer');
         const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
         expect(result.violations).toEqual([]);
         await page.setViewportSize({ width: 320, height: 900 });
@@ -61,52 +67,57 @@ test('a delayed calendar response cannot replace a newer search draft', async ({
     await expect(page.locator('[data-event-heading]')).toContainText('Aug 1');
 });
 
-test('staff deliberately review public text and dates, then publish or withdraw from the same workflow', async ({ page }) => {
-    const calls = [], errors = [];
-    page.on('pageerror', error => errors.push(error.message));
-    const booking = { id: id(1), room_id: id(2), title: 'PRIVATE staff purpose', status: 'approved', version: 1,
-        section: null, occurrences: [{ id: id(3), starts_at: '2026-08-10T18:00:00Z', ends_at: '2026-08-10T19:00:00Z', status: 'approved' }] };
-    let current = null;
-    const preview = { room_label: 'LIB.101 · Fictional room', building_label: 'LIB · Fictional library', timezone: 'America/Los_Angeles',
-        times: Array.from({ length: 21 }, () => booking.occurrences[0]) };
-    let draft;
-    await page.route('**/sis/**', async route => {
-        const path = new URL(route.request().url()).pathname, raw = route.request().postData();
-        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
-        calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
-        let result = { items: [], next_after: null };
-        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
-        else if (path === '/sis/ui/data/bookings/') result.items = [booking];
-        else if (path === `/sis/bookings/${booking.id}/`) result = booking;
-        else if (path === `/sis/rooms/${booking.room_id}/`) result = { id: booking.room_id, code: 'LIB.101', name: 'Fictional room', capacity: 40 };
-        else if (path.endsWith('/public-event/setup/')) result = { current, preview };
-        else if (path.endsWith('/public-event/review/')) { draft = data; result = { ...data, review_token: 'fictional-encrypted-review', preview }; }
-        else if (path.endsWith('/public-event/publish/')) { current = { ...draft, id: id(9), version: 1, published: 1 }; result = { id: id(9), version: 1 }; }
-        else if (path.endsWith('/public-event/withdraw/')) { current.published = 0; current.version++; result = { status: 'withdrawn' }; }
-        await route.fulfill({ json: result });
+for (const online of [false, true]) {
+    test(`staff review, publish and withdraw an ${online ? 'online' : 'in-person'} public invitation`, async ({ page }) => {
+        const calls = [], errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        const booking = { id: id(1), room_id: online ? null : id(2), title: 'PRIVATE staff purpose', status: 'approved', version: 1,
+            section: null, occurrences: [{ id: id(3), starts_at: '2026-08-10T18:00:00Z', ends_at: '2026-08-10T19:00:00Z', status: 'approved' }] };
+        let current = null;
+        const preview = { room_label: online ? 'Online event' : 'LIB.101 · Fictional room',
+            building_label: online ? 'Joining details provided by the organizer' : 'LIB · Fictional library', timezone: 'America/Los_Angeles',
+            times: Array.from({ length: 21 }, () => booking.occurrences[0]) };
+        let draft;
+        await page.route('**/sis/**', async route => {
+            const path = new URL(route.request().url()).pathname, raw = route.request().postData();
+            const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+            calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
+            let result = { items: [], next_after: null };
+            if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+            else if (path === '/sis/ui/data/bookings/') result.items = [booking];
+            else if (path === `/sis/bookings/${booking.id}/`) result = booking;
+            else if (path === `/sis/rooms/${booking.room_id}/`) result = { id: booking.room_id, code: 'LIB.101', name: 'Fictional room', capacity: 40 };
+            else if (path.endsWith('/public-event/setup/')) result = { current, preview };
+            else if (path.endsWith('/public-event/review/')) { draft = data; result = { ...data, review_token: 'fictional-encrypted-review', preview }; }
+            else if (path.endsWith('/public-event/publish/')) { current = { ...draft, id: id(9), version: 1, published: 1 }; result = { id: id(9), version: 1 }; }
+            else if (path.endsWith('/public-event/withdraw/')) { current.published = 0; current.version++; result = { status: 'withdrawn' }; }
+            await route.fulfill({ json: result });
+        });
+        await page.goto('/admin/');
+        await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
+        await page.getByRole('button', { name: /Open PRIVATE staff purpose/ }).click();
+        await page.getByRole('button', { name: 'Manage public event', exact: true }).click();
+        const body = page.locator('#drawer-body');
+        await expect(page.getByLabel('Public event title')).toHaveValue('');
+        await page.getByLabel('Public event title').fill('Open house <img>');
+        await page.getByLabel('Public event description').fill('A fictional public invitation.');
+        await page.getByRole('button', { name: 'Review public event', exact: true }).click();
+        await expect(body).not.toContainText('PRIVATE staff purpose');
+        await expect(body.locator('img')).toHaveCount(0);
+        if (online) await expect(body).toContainText('Joining details provided by the organizer');
+        await page.getByRole('button', { name: 'Next event dates', exact: true }).click();
+        await expect(body.locator('[aria-label="Public event review"] tbody tr')).toHaveCount(1);
+        const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(scan.violations).toEqual([]);
+        await page.getByRole('button', { name: 'Publish public event', exact: true }).click();
+        await expect(body).toContainText('Public event content is published');
+        await page.getByRole('button', { name: 'Withdraw public event', exact: true }).click();
+        await page.getByRole('button', { name: 'Confirm withdrawal', exact: true }).click();
+        await expect(body).toContainText('This event is not published');
+        expect(calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+        expect(calls.find(call => call.path.endsWith('/public-event/publish/')).data)
+            .toEqual({ review_token: 'fictional-encrypted-review' });
+        expect(errors).toEqual([]);
+        expect(calls.some(call => /\/sis\/rooms\/(null|undefined)\//.test(call.path))).toBe(false);
     });
-    await page.goto('/admin/');
-    await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
-    await page.getByRole('button', { name: /Open PRIVATE staff purpose/ }).click();
-    await page.getByRole('button', { name: 'Manage public event', exact: true }).click();
-    const body = page.locator('#drawer-body');
-    await expect(page.getByLabel('Public event title')).toHaveValue('');
-    await page.getByLabel('Public event title').fill('Open house <img>');
-    await page.getByLabel('Public event description').fill('A fictional public invitation.');
-    await page.getByRole('button', { name: 'Review public event', exact: true }).click();
-    await expect(body).not.toContainText('PRIVATE staff purpose');
-    await expect(body.locator('img')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Next event dates', exact: true }).click();
-    await expect(body.locator('[aria-label="Public event review"] tbody tr')).toHaveCount(1);
-    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
-    expect(scan.violations).toEqual([]);
-    await page.getByRole('button', { name: 'Publish public event', exact: true }).click();
-    await expect(body).toContainText('Public event content is published');
-    await page.getByRole('button', { name: 'Withdraw public event', exact: true }).click();
-    await page.getByRole('button', { name: 'Confirm withdrawal', exact: true }).click();
-    await expect(body).toContainText('This event is not published');
-    expect(calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
-    expect(calls.find(call => call.path.endsWith('/public-event/publish/')).data)
-        .toEqual({ review_token: 'fictional-encrypted-review' });
-    expect(errors).toEqual([]);
-});
+}

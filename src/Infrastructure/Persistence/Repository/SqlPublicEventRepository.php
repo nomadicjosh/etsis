@@ -21,34 +21,44 @@ final readonly class SqlPublicEventRepository implements PublicEventRepository
     {
         $q = $this->sql->quote(...);
         $row = $this->sql->one('sis_bookings', ['id' => $booking->value]);
-        if ($row['status'] !== 'approved' || $row['section_publication_id'] !== null || $row['room_id'] === null) {
+        if ($row['status'] !== 'approved' || $row['section_publication_id'] !== null) {
             throw new ValidationException([['field' => 'booking',
-                'message' => 'Choose an approved room booking without a course-section link.']]);
+                'message' => 'Choose an approved standalone booking without a course-section link.']]);
         }
-        $room = $this->sql->one('sis_rooms', ['id' => $row['room_id']]);
-        $building = $room['building_id'] === null ? null
+        $room = $row['room_id'] === null ? null : $this->sql->one('sis_rooms', ['id' => $row['room_id']]);
+        $building = ($room['building_id'] ?? null) === null ? null
         : $this->sql->one('sis_buildings', ['id' => $room['building_id']]);
         $times = $this->sql->fetch('SELECT ' . $q('id') . ' AS ' . $q('occurrence_id') . ', '
-            . $q('starts_at') . ', ' . $q('ends_at') . ' FROM ' . $q('sis_booking_slots')
+            . $q('starts_at') . ', ' . $q('ends_at') . ', ' . $q('room_id') . ' FROM ' . $q('sis_booking_slots')
             . ' WHERE ' . $q('booking_id') . ' = ? AND ' . $q('cancelled_at') . ' IS NULL ORDER BY '
             . $q('starts_at') . ', ' . $q('id'), [$booking->value], 367);
         if ($times === [] || count($times) > 366) {
             throw new ValidationException([['field' => 'booking',
                 'message' => 'Publish a booking with between one and 366 active meetings.']]);
         }
+        foreach ($times as &$time) {
+            if ($time['room_id'] !== $row['room_id']) {
+                throw new ValidationException([['field' => 'booking',
+                    'message' => 'A meeting location does not match its booking. Review the booking first.']]);
+            }
+            unset($time['room_id']);
+        }
+        unset($time);
         // Deliberately exclude the booking title, owner, internal category and academic references.
-        return ['booking_version' => (int) $row['version'], 'room_id' => $room['id'],
+        return ['booking_version' => (int) $row['version'], 'room_id' => $room['id'] ?? null,
             'building_id' => $building['id'] ?? null,
-            'room_label' => $room['code'] . ' · ' . $room['name'],
-            'building_label' => $building === null ? 'Building not assigned'
-                : $building['code'] . ' · ' . $building['name'],
+            'room_label' => $room === null ? 'Online event' : $room['code'] . ' · ' . $room['name'],
+            'building_label' => $room === null ? 'Joining details provided by the organizer'
+                : ($building === null ? 'Building not assigned' : $building['code'] . ' · ' . $building['name']),
             'times' => $times];
     }
 
     public function lock(EntityId $booking, array $source): void
     {
         // Same order as room booking and meeting-plan decisions.
-        $this->sql->lock('sis_rooms', $source['room_id'], 'capacity');
+        if ($source['room_id'] !== null) {
+            $this->sql->lock('sis_rooms', $source['room_id'], 'capacity');
+        }
         $this->sql->lock('sis_bookings', $booking->value, 'version');
         if ($source['building_id'] !== null) {
             $this->sql->lock('sis_buildings', $source['building_id'], 'code');
@@ -105,11 +115,14 @@ final readonly class SqlPublicEventRepository implements PublicEventRepository
         }, $columns);
         $query = 'SELECT ' . implode(', ', $columns) . ' FROM ' . $q('sis_public_event_times') . ' p JOIN '
         . $q('sis_public_events') . ' e ON e.' . $q('id') . ' = p.' . $q('event_id') . ' JOIN '
-        . $q('sis_bookings') . ' b ON b.' . $q('id') . ' = e.' . $q('booking_id') . ' AND b.'
-        . $q('room_id') . ' = e.' . $q('room_id') . ' JOIN ' . $q('sis_booking_slots') . ' s ON s.'
+        . $q('sis_bookings') . ' b ON b.' . $q('id') . ' = e.' . $q('booking_id') . ' AND (b.'
+        . $q('room_id') . ' = e.' . $q('room_id') . ' OR b.' . $q('room_id')
+        . ' IS NULL AND e.' . $q('room_id') . ' IS NULL) JOIN ' . $q('sis_booking_slots') . ' s ON s.'
         . $q('id') . ' = p.' . $q('occurrence_id') . ' AND s.' . $q('booking_id') . ' = b.' . $q('id')
         . ' AND s.' . $q('starts_at') . ' = p.' . $q('starts_at') . ' AND s.' . $q('ends_at')
-        . ' = p.' . $q('ends_at') . ' WHERE e.' . $q('published') . ' = 1 AND b.' . $q('status')
+        . ' = p.' . $q('ends_at') . ' AND (s.' . $q('room_id') . ' = e.' . $q('room_id')
+        . ' OR s.' . $q('room_id') . ' IS NULL AND e.' . $q('room_id') . ' IS NULL)'
+        . ' WHERE e.' . $q('published') . ' = 1 AND b.' . $q('status')
         . ' = ? AND b.' . $q('section_publication_id') . ' IS NULL AND s.' . $q('cancelled_at')
         . ' IS NULL AND p.' . $q('starts_at') . ' < ? AND p.' . $q('ends_at') . ' > ?';
         $utc = new \DateTimeZone('UTC');

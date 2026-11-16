@@ -12,6 +12,8 @@ interface BookingRepository
 {
     public function lockRoom(EntityId $id): void;
     public function lockBooking(EntityId $id): void;
+    /** Serialize standalone online request identities for this authenticated requester. */
+    public function lockRequester(EntityId $owner): void;
     public function add(Booking $booking): void;
     public function get(EntityId $id): Booking;
     public function matchesRequest(Booking $request): bool;

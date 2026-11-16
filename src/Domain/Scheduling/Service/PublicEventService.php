@@ -234,7 +234,9 @@ final readonly class PublicEventService
             foreach (['event_id', 'actor_id', 'operation_id'] as $field) {
                 new EntityId($r[$field]);
             }
-            new EntityId($r['source']['room_id']);
+            if ($r['source']['room_id'] !== null) {
+                new EntityId($r['source']['room_id']);
+            }
             if ($r['source']['building_id'] !== null) {
                 new EntityId($r['source']['building_id']);
             }

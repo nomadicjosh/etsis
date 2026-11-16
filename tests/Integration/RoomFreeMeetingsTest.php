@@ -222,13 +222,12 @@ final class RoomFreeMeetingsTest extends TestCase
         self::assertSame($events, $f->sql->rows('sis_history_events'));
     }
 
-    public function testUnlinkedInPersonOutOfDatesAndUnauthorizedOnlineRequestsAreRejected(): void
+    public function testInPersonSectionsAndUnauthorizedOnlineRequestsAreRejected(): void
     {
         [$f, $section] = $this->school(DeliveryMode::InPerson);
         $service = $this->service($f);
         foreach (
-            [fn() => $service->request(null, 'Unlinked', [$this->time()]),
-            fn() => $service->request(null, 'In person', [$this->time()], section: $section)] as $request
+            [fn() => $service->request(null, 'In person', [$this->time()], section: $section)] as $request
         ) {
             try {
                 $request();
@@ -288,5 +287,129 @@ final class RoomFreeMeetingsTest extends TestCase
             $result = $this->calendar($f)->timetable('2026-08-10', location: 'online');
             self::assertSame([$online->id->value], array_column($result['items'], 'booking_id'));
         }
+    }
+
+    public function testStandaloneOnlineMeetingsUseTheSameApprovalCalendarAndCancellationWithoutAcademicFacts(): void
+    {
+        $f = new SisFixture();
+        $f->clock->time = $f->clock->time->setTimezone(new DateTimeZone('America/Los_Angeles'));
+        $events = $f->sql->rows('sis_history_events');
+        $users = $f->sql->rows('users');
+        $service = $this->service($f);
+        $booking = $service->request(null, 'Private online event purpose', [$this->time(), $this->time(12)]);
+        self::assertNull($booking->roomId);
+        self::assertNull($booking->sectionPublicationId);
+        self::assertSame('requested', $booking->status);
+        $service->approve($booking->id, 0);
+        $calendar = $this->calendar($f)->timetable('2026-08-10', location: 'online');
+        self::assertSame(['approved' => 2, 'requested' => 0], $calendar['totals']);
+        self::assertNull($calendar['items'][0]['section_id']);
+        $service->cancelOccurrence($booking->id, $booking->occurrences[0]->id, 1);
+        self::assertCount(1, $this->calendar($f)->timetable('2026-08-10', location: 'online')['items']);
+        $service->cancel($booking->id, 2);
+        self::assertSame([], $this->calendar($f)->timetable('2026-08-10')['items']);
+        self::assertCount(2, $f->sql->rows('sis_booking_slots'));
+        self::assertSame([], $f->sql->rows('sis_rooms'));
+        self::assertSame([], $f->sql->rows('sis_sections'));
+        self::assertSame([], $f->sql->rows('sis_student_accounts'));
+        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        self::assertSame($users, $f->sql->rows('users'));
+    }
+
+    public function testStandaloneOnlineSeriesRetriesKeepAcceptedChangesAndRejectAnotherRequester(): void
+    {
+        $f = new SisFixture();
+        $f->clock->time = $f->clock->time->setTimezone(new DateTimeZone('America/Los_Angeles'));
+        $service = $this->service($f);
+        $pattern = new BookingPattern(
+            '2026-08-10',
+            '2026-08-12',
+            '10:00',
+            '11:00',
+            [1, 3],
+            1,
+            [],
+            false,
+            'America/Los_Angeles'
+        );
+        $review = $service->review(null, 'Private online series', $pattern);
+        self::assertNull($review['room']);
+        self::assertNull($review['section']);
+        self::assertSame(0, $review['conflicts']);
+        $id = EntityId::generate();
+        $booking = $service->requestSeries($id, null, 'Private online series', $pattern, $review['revision']);
+        $service->approve($id, 0);
+        $service->cancelOccurrence($id, $booking->occurrences[0]->id, 1);
+        $audit = $f->sql->rows('sis_audit');
+        $retry = $service->requestSeries($id, null, 'Private online series', $pattern, $review['revision']);
+        self::assertSame(2, $retry->version);
+        self::assertNotNull($retry->occurrences[0]->cancelledAt);
+        self::assertCount(1, $f->sql->rows('sis_bookings'));
+        self::assertCount(2, $f->sql->rows('sis_booking_slots'));
+        self::assertSame($audit, $f->sql->rows('sis_audit'));
+        $f->access->actor = $f->user();
+        $this->expectException(ConcurrentModificationException::class);
+        $service->requestSeries($id, null, 'Private online series', $pattern, $review['revision']);
+    }
+
+    public function testStandaloneRequestsRequireSchedulingAuthorityThroughCompletion(): void
+    {
+        $f = new SisFixture();
+        $f->access->staff = false;
+        try {
+            $this->service($f)->request(null, 'Denied standalone meeting', [$this->time()]);
+            self::fail('A regular owner created an online event without scheduling authority.');
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows('sis_bookings'));
+        }
+        $f->access->staff = true;
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willReturnCallback(static function () use ($f): void {
+            $f->access->staff = false;
+        });
+        try {
+            $this->service($f, $audit)->request(null, 'Revoked standalone meeting', [$this->time()]);
+            self::fail('The final authority check did not roll back the request.');
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows('sis_bookings'));
+            self::assertSame([], $f->sql->rows('sis_booking_slots'));
+        }
+    }
+
+    public function testStandaloneOnlineReschedulingPreservesOwnershipAndChecksPhysicalAvailability(): void
+    {
+        $f = new SisFixture();
+        $service = $this->service($f);
+        $booking = $service->request(null, 'Private standalone online meeting', [$this->time()]);
+        $service->approve($booking->id, 0);
+        $room = $f->room('Fictional event room', 40);
+        $review = $service->reviewReplacement($booking->id, $booking->occurrences[0]->id, $room, $this->time(), 1);
+        $replacement = $service->replaceOccurrence(
+            $booking->id,
+            $booking->occurrences[0]->id,
+            new EntityId($review['new_id']),
+            $room,
+            $this->time(),
+            1,
+            $review['revision']
+        );
+        self::assertSame('approved', $replacement->status);
+        self::assertSame($booking->ownerUserId->value, $replacement->ownerUserId->value);
+        self::assertNull($replacement->sectionPublicationId);
+        self::assertNotNull($service->get($booking->id)->occurrences[0]->cancelledAt);
+        $unlinked = $service->request(null, 'Another private online event', [$this->time()]);
+        $service->approve($unlinked->id, 0);
+        $conflict = $service->reviewReplacement($unlinked->id, $unlinked->occurrences[0]->id, $room, $this->time(), 1);
+        self::assertFalse($conflict['available']);
+        $this->expectException(ValidationException::class);
+        $service->replaceOccurrence(
+            $unlinked->id,
+            $unlinked->occurrences[0]->id,
+            new EntityId($conflict['new_id']),
+            $room,
+            $this->time(),
+            1,
+            $conflict['revision']
+        );
     }
 }

@@ -29,6 +29,11 @@ async function fixture(page) {
             const record = state.categories.find(item => path.includes(item.id));
             if (data) Object.assign(record, data, { version: record.version + 1 });
             result = data ? { status: 'saved' } : record;
+        } else if (path === '/sis/bookings/') {
+            state.booking = { id: id(10), room_id: data.room_id || null, title: data.title, category_id: data.category_id || null,
+                category: null, section: data.section_id ? section : null, status: 'requested', version: 0,
+                occurrences: data.slots.map((slot, n) => ({ id: id(11 + n), ...slot, status: 'requested' })) };
+            result = { id: state.booking.id, status: 'requested' };
         } else if (path === '/sis/bookings/planning/') result = { new_id: id(10), today: '2026-08-10', timezone: 'America/Los_Angeles' };
         else if (path === '/sis/bookings/planning/review/') result = { room: data.room_id ? room : null,
             category: state.categories[0], section,
@@ -102,7 +107,7 @@ test('online class planning needs no room and can move an approved meeting into 
     await page.getByLabel('Online meeting without a room').check();
     await expect(page.getByRole('combobox', { name: 'Room', exact: true })).toBeDisabled();
     await expect(page.getByRole('combobox', { name: 'Room', exact: true })).toHaveValue('');
-    await expect(page.getByRole('combobox', { name: 'Course section', exact: true })).toHaveAttribute('required', '');
+    await expect(page.getByRole('combobox', { name: 'Course section', exact: true })).not.toHaveAttribute('required');
     await page.getByLabel('Online meeting without a room').uncheck();
     await expect(page.getByRole('combobox', { name: 'Room', exact: true })).toHaveValue(id(2));
     await page.getByLabel('Online meeting without a room').check();
@@ -135,6 +140,33 @@ test('online class planning needs no room and can move an approved meeting into 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
+    expect(state.errors).toEqual([]);
+});
+
+test('standalone online meetings need no section and retain the connected approval and move workflow', async ({ page }) => {
+    const state = await fixture(page);
+    await page.getByRole('button', { name: 'Plan a meeting', exact: true }).click();
+    await page.getByLabel('Online meeting without a room').check();
+    await expect(page.getByRole('combobox', { name: 'Course section', exact: true })).toHaveValue('');
+    await expect(page.getByRole('combobox', { name: 'Course section', exact: true })).not.toHaveAttribute('required');
+    await expect(page.getByRole('combobox', { name: 'Room', exact: true })).toBeDisabled();
+    await page.getByLabel('Meeting purpose').fill('Fictional standalone online event');
+    await page.getByLabel(/^Starts/).fill('2026-08-10T10:00');
+    await page.getByLabel(/^Ends/).fill('2026-08-10T11:00');
+    await page.getByRole('button', { name: 'Submit meeting request', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve online meetings', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm online meeting approval', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Manage public event', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /^Reschedule meeting on/ }).click();
+    await expect(page.getByLabel('Online meeting without a room')).toBeChecked();
+    await page.getByLabel('Online meeting without a room').uncheck();
+    await page.getByRole('combobox', { name: 'New room', exact: true }).selectOption(id(2));
+    await page.getByRole('button', { name: 'Review new meeting', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm reschedule', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'View room agenda', exact: true })).toBeVisible();
+    expect(state.booking.section).toBeNull();
+    expect(state.calls.some(call => /\/sis\/rooms\/(null|undefined)\//.test(call.path))).toBe(false);
+    expect(state.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(state.errors).toEqual([]);
 });
 

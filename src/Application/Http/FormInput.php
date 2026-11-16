@@ -95,6 +95,15 @@ final readonly class FormInput
         return !isset($this->data[$key]) || $this->data[$key] === '' ? null : $this->id($key);
     }
 
+    /** Require a deliberate value or clear; omission is a different input contract. */
+    public function requiredNullableId(string $key): ?EntityId
+    {
+        if (!array_key_exists($key, $this->data)) {
+            throw new InvalidArgumentException('An explicit identifier or empty selection is required.');
+        }
+        return $this->optionalId($key);
+    }
+
     public function integer(string $key, int $minimum = 0, int $maximum = 2_000_000_000): int
     {
         $value = $this->data[$key] ?? null;

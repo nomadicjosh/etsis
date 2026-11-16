@@ -4031,3 +4031,47 @@ if ($publicCalendarResponse->getStatusCode() !== 200 || $publicCalendarResponse-
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+
+// A standalone online invitation shares the same protected staff workflow and safe guest read.
+$virtualBookingsBefore = $sis->sql->rows('sis_bookings');
+if ($teachingPost('/sis/bookings/', ['title' => 'Missing location choice',
+    'slots' => [['starts_at' => '2026-08-25T16:00:00Z', 'ends_at' => '2026-08-25T17:00:00Z']],
+])->getStatusCode() !== 422 || $sis->sql->rows('sis_bookings') !== $virtualBookingsBefore) {
+    throw new RuntimeException('An omitted location became an unintended online booking.');
+}
+$virtualBookingResponse = $teachingPost('/sis/bookings/', ['room_id' => null,
+    'title' => 'PRIVATE fictional online joining instructions',
+    'slots' => [['starts_at' => '2026-08-25T16:00:00Z', 'ends_at' => '2026-08-25T17:00:00Z']]]);
+$virtualBookingId = json_decode((string) $virtualBookingResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$virtualBase = '/sis/bookings/' . $virtualBookingId;
+if ($virtualBookingResponse->getStatusCode() !== 201
+    || $teachingPost($virtualBase . '/approve/', ['version' => 0])->getStatusCode() !== 200) {
+    throw new RuntimeException('Standalone online booking did not use the existing approval boundary.');
+}
+$virtualReviewResponse = $teachingPost($virtualBase . '/public-event/review/', [
+    'title' => 'Fictional virtual gathering', 'description' => 'A public online invitation.',
+]);
+$virtualReview = json_decode((string) $virtualReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($virtualReviewResponse->getStatusCode() !== 200 || ($virtualReview['preview']['room_label'] ?? null) !== 'Online event'
+    || $teachingPost($virtualBase . '/public-event/publish/', [
+        'review_token' => $virtualReview['review_token'],
+    ])->getStatusCode() !== 200) {
+    throw new RuntimeException('Virtual public publication failed its existing reviewed workflow.');
+}
+$sis->access->staff = false;
+$virtualPublic = $app->router->match($publicCalendarRequest);
+if ($virtualPublic->getStatusCode() !== 200 || $virtualPublic->hasHeader('phpdebugbar-id')
+    || !str_contains($virtualPublic->getHeaderLine('Cache-Control'), 'no-store')
+    || !str_contains((string) $virtualPublic->getBody(), 'Fictional virtual gathering')
+    || str_contains((string) $virtualPublic->getBody(), 'PRIVATE fictional online joining instructions')
+    || str_contains((string) $virtualPublic->getBody(), $virtualBookingId)) {
+    throw new RuntimeException('Guest virtual event reads lost the public/private boundary.');
+}
+$sis->access->staff = true;
+$virtualRecord = $sis->sql->one('sis_booking_slots', ['booking_id' => $virtualBookingId]);
+if ($teachingPost($virtualBase . '/occurrences/' . $virtualRecord['id'] . '/cancel/', [
+    'version' => 1,
+])->getStatusCode() !== 200 || str_contains((string) $app->router->match($publicCalendarRequest)->getBody(),
+    'Fictional virtual gathering') || $sis->sql->rows('sis_history_events') !== $publicEventEvents) {
+    throw new RuntimeException('Cancelling a virtual occurrence left public times or changed academic history.');
+}

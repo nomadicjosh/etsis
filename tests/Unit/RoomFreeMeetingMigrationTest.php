@@ -17,6 +17,7 @@ final class RoomFreeMeetingMigrationTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000011_CreateSisRoomFreeMeetings.php';
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000015_AddSisVirtualPublicEvents.php';
     }
 
     public function testNativeNullableStatementsKeepTheFrameworkColumnTypes(): void
@@ -27,28 +28,39 @@ final class RoomFreeMeetingMigrationTest extends TestCase
             'sqlsrv' => 'ALTER COLUMN "room_id" NVARCHAR(26) NULL',
             'oci' => 'MODIFY ("room_id" NULL)'] as $driver => $statement
         ) {
-            $pdo = $this->createStub(PDO::class);
-            $pdo->method('getAttribute')->willReturn($driver);
-            if ($driver === 'oci') {
-                $query = $this->createStub(\PDOStatement::class);
-                $query->method('fetchColumn')->willReturn('N');
-                $pdo->method('prepare')->willReturn($query);
-            }
-            $connection = $this->createMock(Connection::class);
-            $connection->method(PropertyHook::get('pdo'))->willReturn($pdo);
-            $connection->method('quoteIdentifier')->willReturnCallback(static fn(string $s): string => '"' . $s . '"');
-            $connection->expects(self::exactly(2))->method('command')->willReturnCallback(
-                static function (string $sql) use ($statement): bool {
-                    self::assertStringContainsString($statement, $sql);
-                    self::assertStringStartsWith('ALTER TABLE "sis_booking', $sql);
-                    self::assertDoesNotMatchRegularExpression('/DROP TABLE|DELETE FROM|INSERT INTO|UPDATE /', $sql);
-                    return true;
+            foreach (
+                [\CreateSisRoomFreeMeetings::class => ['sis_bookings', 'sis_booking_slots'],
+                \AddSisVirtualPublicEvents::class => ['sis_public_events']] as $class => $tables
+            ) {
+                $pdo = $this->createStub(PDO::class);
+                $pdo->method('getAttribute')->willReturn($driver);
+                if ($driver === 'oci') {
+                    $query = $this->createStub(\PDOStatement::class);
+                    $query->method('fetchColumn')->willReturn('N');
+                    $pdo->method('prepare')->willReturn($query);
                 }
-            );
-            $migration = new \CreateSisRoomFreeMeetings('room-free-meetings');
-            $migration->setObjectMap(new ArrayObject(['phpmig.adapter' =>
-                new DbalMigrationAdapter($connection, 'migration')]));
-            $migration->up();
+                $connection = $this->createMock(Connection::class);
+                $connection->method(PropertyHook::get('pdo'))->willReturn($pdo);
+                $connection->method('quoteIdentifier')->willReturnCallback(
+                    static fn(string $s): string => '"' . $s . '"'
+                );
+                $seen = [];
+                $connection->expects(self::exactly(count($tables)))->method('command')->willReturnCallback(
+                    static function (string $sql) use ($statement, &$seen): bool {
+                        self::assertStringContainsString($statement, $sql);
+                        self::assertDoesNotMatchRegularExpression('/DROP TABLE|DELETE FROM|INSERT INTO|UPDATE /', $sql);
+                        $seen[] = $sql;
+                        return true;
+                    }
+                );
+                $migration = new $class('room-free-meetings');
+                $migration->setObjectMap(new ArrayObject(['phpmig.adapter' =>
+                    new DbalMigrationAdapter($connection, 'migration')]));
+                $migration->up();
+                foreach ($tables as $index => $table) {
+                    self::assertStringStartsWith('ALTER TABLE "' . $table . '" ', $seen[$index]);
+                }
+            }
         }
     }
 
@@ -135,5 +147,60 @@ final class RoomFreeMeetingMigrationTest extends TestCase
             self::assertSame(0, $pdo->query('PRAGMA legacy_alter_table')->fetchColumn());
             self::assertSame([], $pdo->query('PRAGMA foreign_key_check')->fetchAll());
         }
+    }
+
+    public function testPublicRoomConversionPreservesContentInboundReferencesViewsIndexesAndTriggers(): void
+    {
+        $connection = new Sqlite(['driver' => 'pdo_sqlite', 'dsn' => 'sqlite::memory:']);
+        $pdo = $connection->pdo;
+        $pdo->exec('CREATE TABLE sis_rooms (id VARCHAR(26) PRIMARY KEY)');
+        $pdo->exec("INSERT INTO sis_rooms VALUES ('fictional-room')");
+        $pdo->exec('CREATE TABLE sis_public_events (id VARCHAR(26) PRIMARY KEY,'
+            . ' room_id VARCHAR(26) NOT NULL REFERENCES sis_rooms(id), title TEXT NOT NULL, custom_field TEXT)');
+        $pdo->exec('CREATE TABLE sis_public_event_times (id VARCHAR(26) PRIMARY KEY,'
+            . ' event_id VARCHAR(26) NOT NULL REFERENCES sis_public_events(id), starts_at TEXT NOT NULL)');
+        $pdo->exec("INSERT INTO sis_public_events VALUES"
+            . " ('fictional-event', 'fictional-room', 'Public title', 'Keep me')");
+        $pdo->exec("INSERT INTO sis_public_event_times VALUES ('fictional-time', 'fictional-event', '2026-08-10')");
+        $pdo->exec('CREATE INDEX fixture_public_place ON sis_public_events (room_id, id)');
+        $pdo->exec('CREATE VIEW public_places AS SELECT id, room_id, title FROM sis_public_events');
+        $pdo->exec('CREATE TABLE fixture_calls (message TEXT)');
+        $pdo->exec("CREATE TRIGGER public_content_updated AFTER UPDATE OF title ON sis_public_events "
+            . "BEGIN INSERT INTO fixture_calls VALUES ('changed'); END");
+        $before = [];
+        foreach (['sis_public_events', 'sis_public_event_times', 'public_places'] as $table) {
+            $before[$table] = $pdo->query('SELECT * FROM ' . $table)->fetchAll(PDO::FETCH_ASSOC);
+        }
+        $migration = new \AddSisVirtualPublicEvents('virtual-public-events');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' =>
+            new DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        foreach ($before as $table => $rows) {
+            self::assertSame($rows, $pdo->query('SELECT * FROM ' . $table)->fetchAll(PDO::FETCH_ASSOC));
+        }
+        self::assertSame(1, $pdo->query('PRAGMA foreign_keys')->fetchColumn());
+        self::assertSame(0, $pdo->query('PRAGMA legacy_alter_table')->fetchColumn());
+        self::assertSame([], $pdo->query('PRAGMA foreign_key_check')->fetchAll());
+        self::assertSame([], $pdo->query('SELECT * FROM fixture_calls')->fetchAll());
+        self::assertSame(['room_id', 'id'], array_column(
+            $pdo->query('PRAGMA index_info(fixture_public_place)')->fetchAll(PDO::FETCH_ASSOC),
+            'name'
+        ));
+        $pdo->exec("INSERT INTO sis_public_events VALUES ('online-event', NULL, 'Online invitation', NULL)");
+        $pdo->exec("INSERT INTO sis_public_event_times VALUES ('online-time', 'online-event', '2026-08-11')");
+        $migration->up();
+        self::assertSame([], $pdo->query('SELECT * FROM fixture_calls')->fetchAll());
+        $pdo->exec("UPDATE sis_public_events SET title = 'Updated title' WHERE id = 'fictional-event'");
+        self::assertCount(1, $pdo->query('SELECT * FROM fixture_calls')->fetchAll());
+    }
+
+    public function testMissingPublicSourceSchemaCannotBeMarkedSuccessfullyConverted(): void
+    {
+        $connection = new Sqlite(['driver' => 'pdo_sqlite', 'dsn' => 'sqlite::memory:']);
+        $migration = new \AddSisVirtualPublicEvents('virtual-public-events');
+        $migration->setObjectMap(new ArrayObject(['phpmig.adapter' =>
+            new DbalMigrationAdapter($connection, 'migration')]));
+        $this->expectException(\LogicException::class);
+        $migration->up();
     }
 }

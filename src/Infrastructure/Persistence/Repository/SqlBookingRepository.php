@@ -31,6 +31,11 @@ final readonly class SqlBookingRepository implements BookingRepository
         $this->sql->lock('sis_bookings', $id->value, 'version');
     }
 
+    public function lockRequester(EntityId $owner): void
+    {
+        $this->sql->lock('users', $owner->value, 'user_id', 'user_id');
+    }
+
     public function add(Booking $booking): void
     {
         $this->sql->insert('sis_bookings', ['id' => $booking->id->value, 'room_id' => $booking->roomId?->value,

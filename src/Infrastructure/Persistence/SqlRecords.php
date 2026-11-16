@@ -86,12 +86,12 @@ final readonly class SqlRecords
     }
 
     /** Acquire a current row lock within the caller's transaction, without a premature snapshot read. */
-    public function lock(string $table, string $id, string $column): void
+    public function lock(string $table, string $id, string $column, string $identityColumn = 'id'): void
     {
         $field = $this->quote($column);
         $driver = (string) $this->db->getConnection()->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
         $quoted = $this->quote($table);
-        $key = $this->quote('id');
+        $key = $this->quote($identityColumn);
         if ($driver === 'sqlite') {
             // SQLite needs a write before the read; the other engines supply row locking reads.
             $this->execute("UPDATE $quoted SET $field = $field WHERE $key = ?", [$id]);
