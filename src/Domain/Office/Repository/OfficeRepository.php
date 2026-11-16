@@ -29,4 +29,16 @@ interface OfficeRepository
     public function owner(EntityId $restriction): ?array;
     public function bind(EntityId $restriction, EntityId $office): void;
     public function move(EntityId $restriction, EntityId $from, EntityId $to): void;
+    /** @return array<string,mixed>|null */
+    public function followUp(EntityId $restriction): ?array;
+    public function saveFollowUp(
+        EntityId $restriction,
+        EntityId $office,
+        ?EntityId $assignee,
+        ?string $on,
+        int $revision,
+    ): void;
+    public function userCanManageHolds(EntityId $user): bool;
+    /** @return list<array<string,mixed>> */
+    public function workers(EntityId $office, string $on, string $search, ?EntityId $after, int $limit): array;
 }

@@ -81,17 +81,41 @@ final readonly class SqlRestrictionRepository implements RestrictionRepository
         );
     }
 
-    public function queue(?array $offices, ?EntityId $after, string $search, int $limit): array
-    {
+    public function queue(
+        ?array $offices,
+        ?EntityId $after,
+        string $search,
+        int $limit,
+        string $assignment = 'all',
+        ?EntityId $actor = null,
+        ?string $dueOn = null,
+    ): array {
         $q = $this->sql->quote(...);
         [$scope, $parameters] = $this->scope($offices);
         $sql = 'SELECT r.*, p.' . $q('given_name') . ', p.' . $q('family_name') . ', i.' . $q('institutional_id')
         . ', x.' . $q('office_id') . ', o.' . $q('name') . ' AS ' . $q('office_name')
+        . ', x.' . $q('assigned_user_id') . ', x.' . $q('follow_up_on')
+        . ', a.' . $q('first_name') . ' AS ' . $q('assignee_first_name')
+        . ', a.' . $q('last_name') . ' AS ' . $q('assignee_last_name')
         . ' FROM ' . $q('sis_restrictions') . ' r JOIN ' . $q('sis_persons') . ' p ON p.' . $q('id')
         . ' = r.' . $q('person_id') . ' LEFT JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id')
         . ' = p.' . $q('id') . ' LEFT JOIN ' . $q('sis_restriction_offices') . ' x ON x.' . $q('id')
         . ' = r.' . $q('id') . ' LEFT JOIN ' . $q('sis_offices') . ' o ON o.' . $q('id')
-        . ' = x.' . $q('office_id') . ' WHERE 1 = 1' . $scope;
+        . ' = x.' . $q('office_id') . ' LEFT JOIN ' . $q('users') . ' a ON a.' . $q('user_id')
+        . ' = x.' . $q('assigned_user_id') . ' WHERE 1 = 1' . $scope;
+        if ($assignment === 'mine') {
+            if ($actor === null) {
+                throw new \InvalidArgumentException('The current actor is required for assigned work.');
+            }
+            $sql .= ' AND x.' . $q('assigned_user_id') . ' = ?';
+            $parameters[] = $actor->value;
+        } elseif ($assignment === 'unassigned') {
+            $sql .= ' AND x.' . $q('assigned_user_id') . ' IS NULL';
+        }
+        if ($dueOn !== null) {
+            $sql .= ' AND x.' . $q('follow_up_on') . ' <= ?';
+            $parameters[] = $dueOn;
+        }
         if ($search !== '') {
             $like = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
             $sql .= ' AND (LOWER(p.' . $q('given_name') . ") LIKE ? ESCAPE '!' OR LOWER(p." . $q('family_name')

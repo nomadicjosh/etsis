@@ -892,6 +892,16 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql), $this->access, $this->clock
         );
     }
+    public function restrictions(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Student\Service\RestrictionService {
+        return new \Domain\Student\Service\RestrictionService(
+            new \Infrastructure\Persistence\Repository\SqlRestrictionRepository($this->sql),
+            $this->admissions, $this->access, $this->transactions, $audit ?? $this->audit,
+            $this->dropCipher, $this->clock, $this->restrictionLedger(), $this->officeScope(),
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql),
+        );
+    }
     public function positions(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\HumanResources\Repository\PositionRepository $rows = null,

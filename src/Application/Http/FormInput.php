@@ -160,6 +160,15 @@ final readonly class FormInput
         return !isset($this->data[$key]) || $this->data[$key] === '' ? null : $this->date($key);
     }
 
+    /** Require a deliberate date or clear; omission must not erase saved scheduling metadata. */
+    public function requiredNullableDate(string $key): ?DateTimeImmutable
+    {
+        if (!array_key_exists($key, $this->data)) {
+            throw new InvalidArgumentException('An explicit date or empty selection is required.');
+        }
+        return $this->optionalDate($key);
+    }
+
     public function instant(string $key): DateTimeImmutable
     {
         $value = $this->text($key, 25);

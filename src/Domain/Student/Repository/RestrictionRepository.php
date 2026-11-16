@@ -19,7 +19,15 @@ interface RestrictionRepository
     public function page(EntityId $person, ?EntityId $after, int $limit, ?array $offices = null): array;
     /** @param list<string>|null $offices
      * @return list<array<string,mixed>> */
-    public function queue(?array $offices, ?EntityId $after, string $search, int $limit): array;
+    public function queue(
+        ?array $offices,
+        ?EntityId $after,
+        string $search,
+        int $limit,
+        string $assignment = 'all',
+        ?EntityId $actor = null,
+        ?string $dueOn = null,
+    ): array;
     /** @return array<string, mixed>|null */
     public function note(EntityId $id): ?array;
     public function noteCount(EntityId $restriction): int;

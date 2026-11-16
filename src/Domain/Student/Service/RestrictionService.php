@@ -88,9 +88,12 @@ final readonly class RestrictionService
         $hold = $this->get($id);
         $this->ledger->verify($hold->personId);
         $office = $this->offices->owner($id);
+        $work = $this->offices->followUp($id);
         $this->authorize($actor, $id);
         return $this->describe($hold) + ['office_id' => $office['id'] ?? null,
-            'office_name' => $office['name'] ?? null];
+            'office_name' => $office['name'] ?? null, 'follow_up' => $work === null ? null : [
+                'assigned_user_id' => $work['assigned_user_id'], 'assignee_name' => $work['assignee_name'],
+                'follow_up_on' => $work['follow_up_on']]];
     }
 
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
@@ -248,8 +251,12 @@ final readonly class RestrictionService
     }
 
     /** @return array<string,mixed> */
-    public function queue(string $search = '', ?EntityId $after = null): array
-    {
+    public function queue(
+        string $search = '',
+        ?EntityId $after = null,
+        string $assignment = 'all',
+        bool $due = false,
+    ): array {
         $actor = $this->scope->actor();
         if (
             mb_strlen($search) > 80 || !mb_check_encoding($search, 'UTF-8')
@@ -257,20 +264,149 @@ final readonly class RestrictionService
         ) {
             throw new ValidationException([['field' => 'search', 'message' => 'Use up to 80 search characters.']]);
         }
+        if (!in_array($assignment, ['all', 'mine', 'unassigned'], true)) {
+            throw new ValidationException([['field' => 'assignment', 'message' => 'Choose a worklist filter.']]);
+        }
         $visible = $this->scope->visibleIds();
-        $rows = $this->repository->queue($visible, $after, trim($search), 51);
+        $rows = $this->repository->queue(
+            $visible,
+            $after,
+            trim($search),
+            51,
+            $assignment,
+            $actor,
+            $due ? $this->clock->now()->format('Y-m-d') : null
+        );
         $more = count($rows) > 50;
         $items = array_slice($rows, 0, 50);
         $items = array_map(fn (array $row): array => $this->describe($this->fromRow($row)) + [
             'office_id' => $row['office_id'], 'office_name' => $row['office_name'],
             'person_name' => trim($row['given_name'] . ' ' . $row['family_name']),
             'institutional_id' => $row['institutional_id'],
+            'assigned_user_id' => $row['assigned_user_id'],
+            'assignee_name' => trim(($row['assignee_first_name'] ?? '') . ' ' . ($row['assignee_last_name'] ?? '')),
+            'follow_up_on' => $row['follow_up_on'],
         ], $items);
         $this->authorize($actor);
         if ($visible !== $this->scope->visibleIds()) {
             throw new AccessDeniedException('Office access changed during this read.');
         }
         return ['items' => $items, 'next_after' => $more ? $items[49]['id'] : null];
+    }
+
+    /** Current operational work, separate from the hold's retained academic effects.
+     * @return array<string,mixed> */
+    public function followUp(EntityId $id): array
+    {
+        $actor = $this->scope->actor();
+        $office = $this->scope->owner($id);
+        $this->ledger->verify($this->get($id)->personId);
+        $work = $this->offices->followUp($id);
+        if ($office === null || $work === null) {
+            throw new ValidationException([['field' => 'office_id', 'message' => 'Set the owning office first.']]);
+        }
+        if ($work['office_id'] !== $office->value) {
+            throw new ConcurrentModificationException('The owning office changed. Reload this follow-up.');
+        }
+        $assigned = $work['assigned_user_id'] === null ? null : new EntityId($work['assigned_user_id']);
+        $result = $work + ['assignee_eligible' => $assigned === null || $this->eligibleWorker($office, $assigned),
+            'can_assign_self' => $this->eligibleWorker($office, $actor),
+            'self_user_id' => $actor->value,
+            'today' => $this->clock->now()->format('Y-m-d')];
+        $this->authorize($actor, $id);
+        return $result;
+    }
+
+    /** @return array<string,mixed> */
+    public function followUpPeople(EntityId $id, string $search = '', ?EntityId $after = null): array
+    {
+        $actor = $this->scope->actor();
+        $office = $this->scope->owner($id);
+        if ($office === null) {
+            throw new ValidationException([['field' => 'office_id', 'message' => 'Set the owning office first.']]);
+        }
+        if (
+            mb_strlen($search) > 80 || !mb_check_encoding($search, 'UTF-8')
+            || preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            throw new ValidationException([['field' => 'search', 'message' => 'Use up to 80 search characters.']]);
+        }
+        $rows = $this->offices->workers($office, $this->clock->now()->format('Y-m-d'), trim($search), $after, 26);
+        $more = count($rows) > 25;
+        $items = [];
+        foreach (array_slice($rows, 0, 25) as $row) {
+            if ($this->offices->userCanManageHolds(new EntityId($row['user_id']))) {
+                $items[] = ['id' => $row['user_id'], 'name' => trim($row['first_name'] . ' ' . $row['last_name'])];
+            }
+        }
+        $this->authorize($actor, $id);
+        if ($this->scope->owner($id)?->value !== $office->value) {
+            throw new ConcurrentModificationException('The hold moved to another office.');
+        }
+        return ['items' => $items, 'next_after' => $more ? $rows[24]['id'] : null];
+    }
+
+    public function saveFollowUp(
+        EntityId $id,
+        EntityId $office,
+        int $revision,
+        ?EntityId $assignee,
+        ?DateTimeImmutable $on,
+    ): void {
+        $actor = $this->scope->actor();
+        $this->scope->owner($id);
+        $hold = $this->get($id);
+        $date = $on?->format('Y-m-d');
+        if ($date !== null && !\Domain\Student\ValueObject\StudentActivitySchema::date($date)) {
+            throw new ValidationException([['field' => 'follow_up_on', 'message' => 'Choose a valid follow-up date.']]);
+        }
+        if ($revision < 0 || $revision >= 2_000_000_000) {
+            throw new ValidationException([['field' => 'work_revision', 'message' => 'Reload this follow-up.']]);
+        }
+        $this->transactions->run(function () use ($id, $office, $revision, $assignee, $date, $actor, $hold): void {
+            $this->repository->lockPerson($hold->personId);
+            $this->repository->lock($id);
+            if (($this->offices->owner($id)['id'] ?? null) !== $office->value) {
+                throw new ConcurrentModificationException('The owning office changed. Reload this follow-up.');
+            }
+            $this->offices->lock($office);
+            $this->authorize($actor, $id);
+            $work = $this->offices->followUp($id);
+            if ($work === null || $work['office_id'] !== $office->value) {
+                throw new ConcurrentModificationException('The owning office changed. Reload this follow-up.');
+            }
+            $this->ledger->verify($hold->personId);
+            $same = $work['assigned_user_id'] === $assignee?->value && $work['follow_up_on'] === $date;
+            if ((int) $work['work_revision'] !== $revision) {
+                if (!$same || (int) $work['work_revision'] !== $revision + 1) {
+                    throw new ConcurrentModificationException('Another colleague changed this follow-up. Reload it.');
+                }
+                $this->authorize($actor, $id);
+                return;
+            }
+            if ($assignee !== null && !$this->eligibleWorker($office, $assignee)) {
+                throw new ValidationException([['field' => 'assigned_user_id',
+                    'message' => 'Choose a current office delegate with hold-management permission.']]);
+            }
+            if (!$same) {
+                $this->offices->saveFollowUp($id, $office, $assignee, $date, $revision);
+                $this->audit->record($actor, 'restriction.follow_up_saved', $id);
+            }
+            $this->authorize($actor, $id);
+            if ($assignee !== null && !$this->eligibleWorker($office, $assignee)) {
+                throw new AccessDeniedException('The assigned colleague no longer has current office access.');
+            }
+        });
+    }
+
+    private function eligibleWorker(EntityId $office, EntityId $user): bool
+    {
+        $delegate = $this->offices->delegation($office, $user);
+        $today = $this->clock->now()->format('Y-m-d');
+        return (bool) ($this->offices->office($office)['active'] ?? false)
+        && $this->offices->userCanManageHolds($user) && $delegate !== null
+        && (int) $delegate['active'] === 1 && $delegate['starts_on'] <= $today
+        && ($delegate['ends_on'] === null || $delegate['ends_on'] >= $today);
     }
 
     /** Administrative routing for genuinely earlier unassigned records, without inventing their original office. */
@@ -331,7 +467,7 @@ final readonly class RestrictionService
         return ['review_token' => $sealed, 'operation_id' => $operation->value,
             'from_office' => $context['from']['office_name'], 'to_office' => $context['to']['office_name'],
             'hold' => $context['hold'], 'person' => $context['person'], 'notes_count' => $context['notes_count'],
-            'review_minutes' => (int) (self::HANDOFF_REVIEW_SECONDS / 60)];
+            'review_minutes' => (int) (self::HANDOFF_REVIEW_SECONDS / 60), 'follow_up' => $context['follow_up']];
     }
 
     /** @return array{id:string,operation_id:string,from_office_id:string,to_office_id:string} */
@@ -416,10 +552,16 @@ final readonly class RestrictionService
             ]]);
         }
         $person = $this->admissions->person($hold->personId);
+        $work = $this->offices->followUp($hold->id);
+        if ($work === null) {
+            throw new ConcurrentModificationException('The office routing changed during review.');
+        }
         return ['hold' => $hold->facts(), 'version' => $verifiedVersion ?? $this->ledger->verify($hold->personId),
             'person' => ['id' => $person->id->value, 'name' => trim($person->givenName . ' ' . $person->familyName),
                 'institutional_id' => $person->institutionalId->value],
-            'from' => $fromAuthority, 'to' => $toAuthority, 'notes_count' => $this->repository->noteCount($hold->id)];
+            'from' => $fromAuthority, 'to' => $toAuthority, 'notes_count' => $this->repository->noteCount($hold->id),
+            'follow_up' => ['assigned_user_id' => $work['assigned_user_id'], 'assignee_name' => $work['assignee_name'],
+                'follow_up_on' => $work['follow_up_on'], 'work_revision' => (int) $work['work_revision']]];
     }
 
     private function handoffActor(?EntityId $expected = null): EntityId

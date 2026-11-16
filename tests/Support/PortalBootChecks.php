@@ -882,6 +882,71 @@ if ($holdReturnReview->getStatusCode() !== 200 || $teachingPost($holdHandoffPath
     throw new RuntimeException('The recorded return handoff or office retirement failed.');
 }
 
+// Follow-up stays in the existing office record and private browser transport.
+$holdWorkPath = "/sis/restrictions/" . $holdId . "/follow-up/";
+$holdWorkRequest = new \Qubus\Http\ServerRequest([], [], $holdWorkPath, "GET");
+$holdWorkResponse = $app->router->match($holdWorkRequest);
+$holdWork = json_decode(
+    (string) $holdWorkResponse->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    $holdWorkResponse->getStatusCode() !== 200 ||
+    !str_contains(
+        $holdWorkResponse->getHeaderLine("Cache-Control"),
+        "no-store",
+    ) ||
+    $holdWorkResponse->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException(
+        "The private office follow-up could not be read.",
+    );
+}
+$holdWorkPayload = [
+    "office_id" => $holdWork["office_id"],
+    "work_revision" => $holdWork["work_revision"],
+    "assigned_user_id" => null,
+    "follow_up_on" => "2026-08-12",
+];
+if (
+    $teachingPost(
+        $holdWorkPath . "save/",
+        $holdWorkPayload,
+    )->getStatusCode() !== 200 ||
+    $teachingPost(
+        $holdWorkPath . "save/",
+        $holdWorkPayload,
+    )->getStatusCode() !== 200 ||
+    $teachingPost($holdWorkPath . "people/", [
+        "search" => "",
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException(
+        "The private follow-up paths did not preserve repeat saves.",
+    );
+}
+$holdMissingDate = $holdWorkPayload;
+unset($holdMissingDate["follow_up_on"]);
+if (
+    $teachingPost(
+        $holdWorkPath . "save/",
+        $holdMissingDate,
+    )->getStatusCode() !== 422
+) {
+    throw new RuntimeException(
+        "An omitted follow-up date silently cleared saved work.",
+    );
+}
+$holdWorkAfter = json_decode(
+    (string) $app->router->match($holdWorkRequest)->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if ($holdWorkAfter["follow_up_on"] !== "2026-08-12") {
+    throw new RuntimeException("The saved follow-up date was lost.");
+}
+
 // Transfer catalog maintenance and reviewed awards use the same provider and protected browser transport.
 $institutionResponse = $teachingPost("/sis/external-institutions/", [
     "code" => "EXT.1",

@@ -229,6 +229,16 @@ window.createWorkspaceRestrictions = function (ui) {
                     handoff(id, student, record),
                 ),
             );
+        if (record.office_id) {
+            body.append(
+                node(
+                    "p",
+                    {},
+                    `Follow-up: ${record.follow_up?.assignee_name || "Unassigned"} · ${record.follow_up?.follow_up_on || "No date set"}`,
+                ),
+                button("Follow-up & assignment", () => followUp(id, student)),
+            );
+        }
         if (!record.office_id && can("admin:access:manage"))
             body.append(
                 button("Set owning office", async () => {
@@ -406,6 +416,149 @@ window.createWorkspaceRestrictions = function (ui) {
                       ),
         );
     }
+    async function followUp(id, student) {
+        const work = await request(`/sis/restrictions/${id}/follow-up/`);
+        const body = openDrawer("Follow-up & assignment", "OFFICE WORK");
+        let assignee = work.assigned_user_id,
+            name = work.assignee_name;
+        const selected = node("p", { role: "status", class: "fw-semibold" });
+        const show = () => {
+            selected.textContent = `Responsible colleague: ${name || "Unassigned"}`;
+        };
+        const choose = (value, label) => {
+            assignee = value;
+            name = label;
+            show();
+        };
+        const actions = node(
+            "div",
+            { class: "inline-actions mb-3" },
+            button("Leave unassigned", () => choose(null, null)),
+        );
+        if (work.can_assign_self)
+            actions.append(
+                button("Assign to me", () => choose(work.self_user_id, "You")),
+            );
+        body.append(
+            button("Back to restriction", () => view(id, student)),
+            node(
+                "p",
+                { class: "form-text" },
+                "Choose a current office colleague and an optional follow-up date. Assignments never grant access or change registration effects. Clear the date when follow-up is finished.",
+            ),
+            selected,
+            actions,
+        );
+        if (!work.assignee_eligible)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning", role: "status" },
+                    "The assigned colleague no longer has current office access. Choose another colleague or leave this work unassigned.",
+                ),
+            );
+        show();
+        const search = node("input", {
+            type: "search",
+            class: "form-control",
+            maxlength: 80,
+            "aria-label": "Find a responsible colleague",
+        });
+        const searchForm = node(
+            "form",
+            { class: "inline-actions mb-3" },
+            search,
+            node(
+                "button",
+                { type: "submit", class: "btn btn-outline-primary" },
+                "Find colleagues",
+            ),
+        );
+        const results = node("div"),
+            lookupStatus = node("p", { class: "form-text", role: "status" });
+        body.append(searchForm, lookupStatus, results);
+        let query = "",
+            serial = 0;
+        const find = async () => {
+            const token = ++serial;
+            const list = node("div");
+            results.replaceChildren(list);
+            await pages(
+                list,
+                "colleague",
+                async (after) => {
+                    const page = await request(
+                        `/sis/restrictions/${id}/follow-up/people/`,
+                        "POST",
+                        { search: query, after },
+                    );
+                    if (!body.isConnected || token !== serial)
+                        return { items: [], next_after: null };
+                    return page;
+                },
+                (rows) =>
+                    grid(
+                        ["Colleague", "Action"],
+                        rows.map((row) => [
+                            row.name,
+                            button(`Choose ${row.name}`, () =>
+                                choose(row.id, row.name),
+                            ),
+                        ]),
+                        "Responsible colleague choices",
+                    ),
+            );
+            if (body.isConnected && token === serial)
+                lookupStatus.textContent =
+                    "Only current delegates with hold-management permission are listed. Use the next page if no eligible colleague appears here.";
+        };
+        searchForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            query = search.value.trim();
+            task(find, searchForm.querySelector("button"));
+        });
+        const fields = [["follow_up_on", "Follow-up date", "date", "", false]];
+        const form = await buildForm(fields, {
+            follow_up_on: work.follow_up_on || "",
+        });
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save follow-up",
+        );
+        const clear = button("Clear follow-up", () => {
+            choose(null, null);
+            form.elements.follow_up_on.value = "";
+        });
+        form.append(
+            node(
+                "p",
+                { class: "form-text" },
+                `Dates follow the institution calendar. Today is ${work.today}.`,
+            ),
+            node("div", { class: "inline-actions" }, save, clear),
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request(
+                    `/sis/restrictions/${id}/follow-up/save/`,
+                    "POST",
+                    {
+                        office_id: work.office_id,
+                        work_revision: Number(work.work_revision),
+                        assigned_user_id: assignee,
+                        follow_up_on: formData(form, fields).follow_up_on,
+                    },
+                );
+                notify("Office follow-up saved.");
+                await view(id, student);
+            }, save);
+        });
+        body.append(form);
+        await find();
+    }
     async function handoff(id, student, record, preset = {}) {
         const setup = await request("/sis/offices/", "POST", {});
         const choices = setup.items
@@ -499,6 +652,11 @@ window.createWorkspaceRestrictions = function (ui) {
                 {},
                 "The receiving office’s authorized delegates will be able to read this hold, its existing notes and its history. The earlier office and handoff decision remain in history.",
             ),
+            node(
+                "p",
+                { class: "form-text" },
+                `Current follow-up: ${review.follow_up?.assignee_name || "Unassigned"} · ${review.follow_up?.follow_up_on || "No date set"}. Confirming this handoff clears the individual assignment and follow-up date so the receiving office can plan its own work.`,
+            ),
         );
         const fields = [
             [
@@ -534,7 +692,9 @@ window.createWorkspaceRestrictions = function (ui) {
             }, save);
         });
     }
-    let query = "";
+    let query = "",
+        assignment = "all",
+        due = false;
     async function load() {
         const container = document.getElementById("hold-queue");
         container.replaceChildren();
@@ -570,10 +730,38 @@ window.createWorkspaceRestrictions = function (ui) {
             "aria-label": "Find office holds",
             value: query,
         });
+        const assigned = node(
+            "select",
+            { class: "form-select", "aria-label": "Assignment filter" },
+            ...[
+                ["all", "All office work"],
+                ["mine", "Assigned to me"],
+                ["unassigned", "Unassigned"],
+            ].map(([value, label]) => node("option", { value }, label)),
+        );
+        assigned.value = assignment;
+        const dueInput = node("input", {
+            type: "checkbox",
+            class: "form-check-input",
+            id: "holds-due",
+            checked: due,
+        });
+        const dueField = node(
+            "div",
+            { class: "form-check" },
+            dueInput,
+            node(
+                "label",
+                { for: "holds-due", class: "form-check-label" },
+                "Due today or earlier",
+            ),
+        );
         const form = node(
             "form",
             { class: "inline-actions mb-3" },
             search,
+            assigned,
+            dueField,
             node(
                 "button",
                 { type: "submit", class: "btn btn-outline-primary" },
@@ -584,6 +772,8 @@ window.createWorkspaceRestrictions = function (ui) {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             query = search.value.trim();
+            assignment = assigned.value;
+            due = dueInput.checked;
             task(render, form.querySelector("button"));
         });
         container.append(form, results);
@@ -596,6 +786,8 @@ window.createWorkspaceRestrictions = function (ui) {
                     request("/sis/restrictions/queue/", "POST", {
                         search: query,
                         after,
+                        assignment,
+                        due,
                     }),
                 (rows) =>
                     rows.length
@@ -605,6 +797,7 @@ window.createWorkspaceRestrictions = function (ui) {
                                   "Institutional ID",
                                   "Hold",
                                   "Office",
+                                  "Follow-up",
                                   "State",
                                   "Action",
                               ],
@@ -613,6 +806,7 @@ window.createWorkspaceRestrictions = function (ui) {
                                   row.institutional_id || "—",
                                   row.code,
                                   row.office_name || "Not assigned",
+                                  `${row.assignee_name || "Unassigned"} · ${row.follow_up_on || "No date set"}`,
                                   badge(row.state),
                                   button("Review hold", () => view(row.id)),
                               ]),

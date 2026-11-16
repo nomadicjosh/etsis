@@ -90,7 +90,40 @@ final readonly class SisRestrictionController
     public function queue(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->service->queue($f->search(), $f->optionalId('after')));
+        return new JsonResponse($this->service->queue(
+            $f->search(),
+            $f->optionalId('after'),
+            $f->search('assignment', 16) ?: 'all',
+            $f->boolean('due')
+        ));
+    }
+
+    public function followUp(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->followUp(new EntityId($id)));
+    }
+
+    public function followUpPeople(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->followUpPeople(
+            new EntityId($id),
+            $f->search(),
+            $f->optionalId('after')
+        ));
+    }
+
+    public function saveFollowUp(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $this->service->saveFollowUp(
+            new EntityId($id),
+            $f->id('office_id'),
+            $f->integer('work_revision'),
+            $f->requiredNullableId('assigned_user_id'),
+            $f->requiredNullableDate('follow_up_on')
+        );
+        return new JsonResponse(['status' => 'saved']);
     }
 
     public function bind(ServerRequest $request, string $id): ResponseInterface
