@@ -33,9 +33,16 @@ final readonly class LeagueCourseCsvMapper implements CourseCsvMapper
             }
         }
         $targets = ['external_id', 'code', 'title', 'credits'];
+        $optional = array_map(
+            static fn(string $kind): string => $kind . '_code',
+            array_keys(CourseImportRow::REFERENCE_LABELS)
+        );
         $errors = [];
         if ($mapping !== []) {
-            if (array_diff(array_keys($mapping), $targets) !== [] || count(array_unique($mapping)) !== 4) {
+            if (
+                array_diff(array_keys($mapping), [...$targets, ...$optional]) !== []
+                || count(array_unique(array_intersect_key($mapping, array_flip($targets)))) !== 4
+            ) {
                 throw new InvalidArgumentException('Map each destination to a different source column.');
             }
             foreach ($targets as $target) {
@@ -43,7 +50,13 @@ final readonly class LeagueCourseCsvMapper implements CourseCsvMapper
                     $errors[] = ['field' => $target, 'message' => 'Choose a source column.'];
                 }
             }
+            foreach ($optional as $target) {
+                if (isset($mapping[$target]) && !isset($header[$mapping[$target]])) {
+                    $errors[] = ['field' => $target, 'message' => 'Choose an existing column or leave it unmapped.'];
+                }
+            }
         }
+        $mappingValid = $errors === [];
         $rows = [];
         $samples = [];
         $count = 0;
@@ -64,7 +77,10 @@ final readonly class LeagueCourseCsvMapper implements CourseCsvMapper
                     'message' => 'Row ' . ($offset + 1) . ' has the wrong number of columns.'];
                 continue;
             }
-            if ($mapping === [] || count($mapping) !== 4 || count($errors) > 30) {
+            if (
+                !$mappingValid || $mapping === [] || array_diff($targets, array_keys($mapping)) !== []
+                || count($errors) > 30
+            ) {
                 continue;
             }
             try {
@@ -79,13 +95,20 @@ final readonly class LeagueCourseCsvMapper implements CourseCsvMapper
                     throw new InvalidArgumentException('Invalid external ID or credit value.');
                 }
                 $milli = (int) $parts[1] * 1000 + (int) str_pad($parts[2] ?? '', 3, '0');
-                $course = new CourseImportRow($offset + 1, $external, $code, $title, $milli);
+                $references = [];
+                foreach (CourseImportRow::REFERENCE_LABELS as $kind => $label) {
+                    if (isset($mapping[$kind . '_code'])) {
+                        $references[$kind] = $row[$mapping[$kind . '_code']];
+                    }
+                }
+                $course = new CourseImportRow($offset + 1, $external, $code, $title, $milli, $references);
                 $seen[strtolower($external)] = true;
                 $rows[] = $course;
             } catch (InvalidArgumentException) {
                 $errors[] = ['field' => 'row_' . ($offset + 1),
                     'message' => 'Row ' . ($offset + 1) . ': check the unique external ID, course code, title '
-                        . 'and numeric credits (up to three decimal places).'];
+                        . 'and numeric credits (up to three decimal places). '
+                        . 'Use classification codes of up to 40 characters.'];
             }
         }
         if ($count === 0) {

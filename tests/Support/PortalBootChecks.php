@@ -4459,9 +4459,30 @@ if ($ownerUpdates->getStatusCode() !== 200 || $ownerUpdate->getStatusCode() !== 
 // Course import uses one reviewed workflow with the native provider, CSRF and private response boundary.
 $sis->access->staff = false;
 $sis->access->grants = ['sis:import:manage'];
-$courseImportCsv = "External ID,Code,Title,Credits\nnative-import,IMPORT.NATIVE,Fictional imported draft,3.125\n";
+$courseImportSubject = new \Domain\Catalog\ValueObject\SubjectSnapshot(
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    'IMP.SUBJ',
+    'Fictional import subject'
+);
+new \Infrastructure\Persistence\Repository\SqlSubjectRepository($sis->sql)->save($courseImportSubject, true, true);
+foreach (\Domain\Catalog\Enum\ClassificationKind::courseKinds() as $courseImportKind) {
+    new \Infrastructure\Persistence\Repository\SqlClassificationRepository($sis->sql)->save(
+        $courseImportKind,
+        new \Domain\Catalog\ValueObject\ClassificationSnapshot(
+            \Domain\Shared\ValueObject\EntityId::generate(),
+            'IMP.' . strtoupper($courseImportKind->value),
+            'Fictional ' . $courseImportKind->value
+        ),
+        true,
+        true
+    );
+}
+$courseImportCsv = "External ID,Code,Title,Credits,Subject code,Department code,Academic level code,Course level code\n"
+. "native-import,IMPORT.NATIVE,Fictional imported draft,3.125,IMP.SUBJ,"
+. "IMP.DEPARTMENT,IMP.ACADEMIC_LEVEL,IMP.COURSE_LEVEL\n";
 $courseImportPayload = ['source' => 'native-import', 'csv' => $courseImportCsv,
-    'mapping' => ['external_id' => 0, 'code' => 1, 'title' => 2, 'credits' => 3], 'choices' => []];
+    'mapping' => ['external_id' => 0, 'code' => 1, 'title' => 2, 'credits' => 3, 'subject_code' => 4,
+        'department_code' => 5, 'academic_level_code' => 6, 'course_level_code' => 7], 'choices' => []];
 $courseImportEvents = $sis->sql->rows('sis_history_events');
 $courseImportNoCsrf = $communicationNoCsrf->withUri(new \Laminas\Diactoros\Uri(
     'https://campus.example.invalid/sis/imports/preview/'
@@ -4488,6 +4509,14 @@ if (
     || $sis->sql->rows('sis_history_events') !== $courseImportEvents
 ) {
     throw new RuntimeException('Import confirmation lost its draft, original receipt or historical boundary.');
+}
+$courseImportedId = $sis->sql->one('sis_courses', ['code' => 'IMPORT.NATIVE'])['id'];
+if (
+    $sis->sql->one('sis_course_subjects', ['id' => $courseImportedId])['subject_id']
+    !== $courseImportSubject->id->value
+    || $sis->sql->one('sis_course_classifications', ['id' => $courseImportedId])['academic_level_id'] === null
+) {
+    throw new RuntimeException('Import confirmation did not retain the reviewed draft classifications.');
 }
 $sis->access->grants = [];
 if (

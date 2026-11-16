@@ -2,7 +2,7 @@
 
 For department, academic-level and course-level setup, see [Departments & levels](course-classifications.md). These classifications are independent of the subject and course code.
 
-Subjects classify courses independently of their full course codes. `MATH.101` does not automatically create or select a MATH subject. Departments, academic levels and course levels remain separate future classifications.
+Subjects classify courses independently of their full course codes. `MATH.101` does not automatically create or select a MATH subject. Departments, academic levels and course levels use their own separate reference libraries.
 
 Apply **`20261110000003_CreateSisCourseSubjects`** through the normal migration runner after the existing course/section reference migrations. It creates three ULID-keyed tables, without changing recorded events or assigning guessed subjects to existing courses:
 
@@ -18,7 +18,7 @@ Apply **`20261110000003_CreateSisCourseSubjects`** through the normal migration 
 4. Choose **Review course publication**. Inspect the subject alongside the course's other reviewed facts, then explicitly confirm publication. A subject edit or reassignment during an unconfirmed review requires a fresh review.
 5. Select the published course definition through the existing empty-section binding or offering-plan workflow. New student attempts retain that course version. Staff do not duplicate a subject field on each enrollment or credit award.
 
-A retired subject can remain on an already assigned course and be preserved in an explicitly reviewed publication. Editing its name does not change earlier publications. A clone or CSV import does not infer classification from a course code; assign its draft subject before publishing.
+A retired subject can remain on an already assigned course and be preserved in an explicitly reviewed publication. Editing its name does not change earlier publications. Clones and CSV imports do not infer a subject from the course code. [Reviewed course imports](course-publication.md#reviewed-course-imports) can explicitly map a subject-code column to an active library entry and assign it to a new inactive draft. Missing or retired codes require correction or exclusion. Existing course subjects are never overwritten by an import. Review the draft subject before publishing.
 
 ## Historical and security behavior
 

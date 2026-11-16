@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-16**, after consolidating course imports into one reviewed workflow: catalog/source reconciliation, explicit existing-course links and exclusions, inactive new drafts, bounded row review and original operation receipts. No historical catalog facts, journal schema or additional import queue changed.
+Last reviewed: **2026-11-16**, after extending the reviewed course import with optional subject, department, academic-level and course-level code mappings, connected reference setup, locked dependency checks and atomic draft assignments. No schema migration, historical publication or journal change is required.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -191,6 +191,7 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] [Saved report modes and expiry](workflow-review.md#saved-report-results-and-automatic-removal): dynamic live results, encrypted immutable complete static captures (up to 5,000 rows/8 MiB), optional automatic removal for either mode, immediate expiry enforcement and bounded scheduled cleanup preserving linked case/academic history.
 - [ ] Add larger bounded background full-result export jobs, cancellation and protected output archival. Static capture currently rejects oversized results without saving a partial extract.
 - [x] Complete [reviewed course-import reconciliation](course-publication.md#reviewed-course-imports): bulk catalog/source checks, explicit matched-course links and exclusions, inactive drafts, searchable twenty-five-row review, protected expiring confirmations and original retries. Reuse catalog receipts, preserve existing courses/publications and roll back the whole batch on concurrent collisions or required-audit/authority failures.
+- [x] Add [optional course-import classifications](course-publication.md#reviewed-course-imports): resolve active subject/department/academic-level/course-level codes, show actionable dependency conflicts and open existing reference editors without losing the file. Recheck current references/assignments after locking, preserve existing course links and source receipts, and roll back the complete draft relationship set on failure.
 - [ ] Expand mapped imports to additional entities, with their own identity/dependency reconciliation and historical/privacy rules. The reviewed course workflow provides the shared interaction; complete institutional conversion and larger restartable background imports remain open.
 - [ ] Build and exercise legacy-data conversion/reconciliation, preserving verified recorded history and explicitly identifying unknown earlier facts.
 

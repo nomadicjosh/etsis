@@ -20,6 +20,10 @@ Departments, academic levels and course levels are independent reference definit
 
 Draft changes do not change an earlier publication or an already bound section. A department rename or course reassignment becomes part of a later publication only when staff explicitly review and publish it. Earlier student records retain the course publication originally selected for them.
 
+## Import classified course drafts
+
+[Reviewed course imports](course-publication.md#reviewed-course-imports) optionally map department, academic-level and course-level codes from a CSV. Each code must resolve to an active entry of the correct category. The review shows the resolved names; authorized catalog staff can open the existing library editor without losing the import file or choices. Confirmation assigns reviewed references only to new inactive drafts. Linking a source row to an existing course requires its explicitly requested classifications to match; it never replaces an existing assignment. Unmapped and blank fields do not infer or clear values. Reference changes after review require a fresh review, and all assignments roll back with a failed batch.
+
 ## Historical and security behavior
 
 The current `CourseDefinition` includes a `CourseClassifications` value with three explicitly nullable snapshots. Each specified classification retains its identity, code and name once per course publication in the existing protected journal. No numbered course-definition class, additional event type or parallel journal is introduced.

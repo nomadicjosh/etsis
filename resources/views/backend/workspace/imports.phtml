@@ -5,7 +5,9 @@
             <h1 id="imports-heading">Bring your data along<span class="brand-dot">.</span></h1>
             <p>Match your columns, check the details, and import with confidence.</p>
         </div>
-        <a class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download><i class="bi bi-download" aria-hidden="true"></i> Sample CSV</a>
+        <a class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download>
+            <i class="bi bi-download" aria-hidden="true"></i> Sample CSV
+        </a>
     </div>
     <ol class="import-steps" aria-label="Import progress">
         <li class="active" data-import-step="1"><span>1</span> Choose a file</li>
@@ -72,6 +74,18 @@
             </div>
             <div id="import-review-errors" role="alert"></div>
             <p id="import-plan-summary" class="fw-semibold mt-3" role="status"></p>
+            <div class="mb-3" data-requires="sis:catalog:manage">
+                <p class="form-text">Missing or retired classifications? Update the catalog here, close its drawer,
+                    then select Review choices. Your file and row choices stay in place.</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button id="import-reference-subjects" class="btn btn-outline-secondary" type="button">
+                        Set up subjects
+                    </button>
+                    <button id="import-reference-classes" class="btn btn-outline-secondary" type="button">
+                        Set up departments &amp; levels
+                    </button>
+                </div>
+            </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-6">
                     <label for="import-plan-filter" class="form-label">Review rows</label>
@@ -90,7 +104,13 @@
                     <input id="import-plan-search" class="form-control" type="search" maxlength="191" />
                 </div>
             </div>
-            <div id="import-plan-table" class="table-responsive" tabindex="0" role="region" aria-label="Import row review"></div>
+            <div
+                id="import-plan-table"
+                class="table-responsive"
+                tabindex="0"
+                role="region"
+                aria-label="Import row review"
+            ></div>
             <p id="import-plan-status" class="form-text" role="status"></p>
             <div class="d-flex flex-wrap gap-2 mb-3">
                 <button id="import-plan-previous" class="btn btn-outline-secondary" type="button">Previous rows</button>

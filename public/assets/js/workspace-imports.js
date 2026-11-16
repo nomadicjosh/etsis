@@ -1,7 +1,17 @@
 /* One reviewed course-import workflow. CSV and approvals remain only in page memory. */
 window.createWorkspaceImports = function (ui) {
     "use strict";
-    const { node, table, request, notify, number, task } = ui;
+    const {
+        node,
+        table,
+        request,
+        notify,
+        number,
+        task,
+        can,
+        subjects,
+        classifications,
+    } = ui;
     const one = (selector) => document.querySelector(selector);
     const all = (selector) => [...document.querySelectorAll(selector)];
     let state,
@@ -63,7 +73,7 @@ window.createWorkspaceImports = function (ui) {
         JSON.stringify([...state.reviewedChoices].sort());
     function synchronize() {
         all(
-            "[data-import-back], #import-inspect, #import-review, #import-refresh, #import-again, .import-choice-action",
+            "[data-import-back], #import-inspect, #import-review, #import-refresh, #import-again, #import-reference-subjects, #import-reference-classes, .import-choice-action",
         ).forEach((button) => {
             button.disabled = busy;
         });
@@ -184,15 +194,45 @@ window.createWorkspaceImports = function (ui) {
                         `Existing: ${row.matched_course.code} · ${row.matched_course.title} · ${number(row.matched_course.credits_milli / 1000)} credits · ${row.matched_course.active ? "Active" : "Inactive"}`,
                     ),
                 );
+            const course = node(
+                "div",
+                {},
+                node("strong", {}, row.code),
+                node("div", {}, row.title),
+                node("small", {}, `Source ID: ${row.external_id}`),
+            );
+            if (Object.keys(row.source_references || {}).length) {
+                const names = {
+                    subject: "Subject",
+                    department: "Department",
+                    academic_level: "Academic level",
+                    course_level: "Course level",
+                };
+                const list = node("ul", { class: "mb-0 mt-2" });
+                for (const [kind, code] of Object.entries(
+                    row.source_references,
+                )) {
+                    const resolved = row.references?.[kind];
+                    list.append(
+                        node(
+                            "li",
+                            {},
+                            `${names[kind]}: ${code}${resolved ? " · " + resolved.title : ""}`,
+                        ),
+                    );
+                }
+                course.append(
+                    node(
+                        "details",
+                        { class: "mt-2" },
+                        node("summary", {}, "Catalog classifications"),
+                        list,
+                    ),
+                );
+            }
             return [
                 String(row.row),
-                node(
-                    "div",
-                    {},
-                    node("strong", {}, row.code),
-                    node("div", {}, row.title),
-                    node("small", {}, `Source ID: ${row.external_id}`),
-                ),
+                course,
                 number(row.credits_milli / 1000),
                 review,
                 controls(row),
@@ -278,7 +318,27 @@ window.createWorkspaceImports = function (ui) {
         );
         const mapping = one("#import-mapping");
         mapping.replaceChildren();
-        for (const [target, label, help] of [
+        const optionalFields = node("div", { class: "mapping-list mt-3" });
+        const optional = node(
+            "details",
+            { class: "mt-4", id: "import-optional-fields" },
+            node("summary", {}, "Add catalog classifications"),
+            node(
+                "p",
+                { class: "form-text mt-2" },
+                "Map existing catalog codes when available. Blank or unmapped values stay unspecified; they never clear existing course classifications.",
+            ),
+            node(
+                "a",
+                {
+                    href: "/assets/examples/courses-classifications.csv",
+                    download: true,
+                },
+                "Example CSV with classifications",
+            ),
+            optionalFields,
+        );
+        const core = [
             [
                 "external_id",
                 "External ID",
@@ -287,16 +347,44 @@ window.createWorkspaceImports = function (ui) {
             ["code", "Course code", "For example MATH.101"],
             ["title", "Course title", "The course name"],
             ["credits", "Credits", "Decimal credits, such as 3 or 3.5"],
-        ]) {
+        ];
+        const references = [
+            [
+                "subject_code",
+                "Subject code",
+                "For example ENG; use an active subject from the catalog",
+            ],
+            [
+                "department_code",
+                "Department code",
+                "Use an active department code",
+            ],
+            [
+                "academic_level_code",
+                "Academic level code",
+                "For example UG or GR; use the academic level library",
+            ],
+            [
+                "course_level_code",
+                "Course level code",
+                "Use an active course-level code",
+            ],
+        ];
+        for (const [target, label, help] of [...core, ...references]) {
+            const required = core.some((field) => field[0] === target);
             const select = node(
                 "select",
                 {
                     class: "form-select",
                     id: `map-${target}`,
                     name: target,
-                    required: true,
+                    required,
                 },
-                node("option", { value: "" }, "Choose a source column"),
+                node(
+                    "option",
+                    { value: "" },
+                    required ? "Choose a source column" : "Leave unspecified",
+                ),
                 ...preview.headers.map((header, index) =>
                     node("option", { value: String(index) }, header),
                 ),
@@ -308,8 +396,11 @@ window.createWorkspaceImports = function (ui) {
                     normalized(header) === normalized(target) ||
                     normalized(header) === normalized(label),
             );
-            if (index >= 0) select.value = String(index);
-            mapping.append(
+            if (index >= 0) {
+                select.value = String(index);
+                if (!required) optional.open = true;
+            }
+            (required ? mapping : optionalFields).append(
                 node(
                     "div",
                     { class: "mapping-row" },
@@ -327,6 +418,7 @@ window.createWorkspaceImports = function (ui) {
                 ),
             );
         }
+        mapping.append(optional);
         step(2);
     });
     action("#import-review", async () => {
@@ -335,16 +427,29 @@ window.createWorkspaceImports = function (ui) {
             "select",
         )) {
             if (!select.reportValidity()) return;
-            mapping[select.name] = Number(select.value);
+            if (select.value !== "")
+                mapping[select.name] = Number(select.value);
         }
-        if (new Set(Object.values(mapping)).size !== 4)
+        if (
+            new Set(
+                ["external_id", "code", "title", "credits"].map(
+                    (field) => mapping[field],
+                ),
+            ).size !== 4
+        )
             throw new Error(
-                "Choose a different source column for each destination.",
+                "Choose distinct columns for the four required fields.",
             );
         state.mapping = mapping;
         await review();
     });
     action("#import-refresh", review);
+    action("#import-reference-subjects", async () => {
+        if (can("sis:catalog:manage")) await subjects();
+    });
+    action("#import-reference-classes", async () => {
+        if (can("sis:catalog:manage")) await classifications();
+    });
     action("#import-commit", async () => {
         if (!state.preview?.review_token || pending()) return;
         try {

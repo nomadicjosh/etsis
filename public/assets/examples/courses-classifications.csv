@@ -1,0 +1,3 @@
+external_id,code,title,credits,subject_code,department_code,academic_level_code,course_level_code
+example.english.101,ENG.101,English Composition,3,ENG,HUMANITIES,UG,100
+example.math.101,MATH.101,Algebra,3,MATH,SCIENCES,UG,100

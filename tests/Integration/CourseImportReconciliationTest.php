@@ -506,6 +506,7 @@ final class CourseImportReconciliationTest extends TestCase
             ->willReturnCallback(static function (
                 string $source,
                 CourseImportRow $row,
+                array $references,
             ) use (
                 $f,
                 $inner
@@ -520,7 +521,7 @@ final class CourseImportReconciliationTest extends TestCase
                         ),
                     );
                 }
-                return $inner->create($source, $row);
+                return $inner->create($source, $row, $references);
             });
         $service = $f->imports(repository: $repository);
         $csv = $this->csv("a,ENG.101,Writing,3", "b,MATH.101,Algebra,3");

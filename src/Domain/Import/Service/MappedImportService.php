@@ -7,6 +7,8 @@ namespace Domain\Import\Service;
 use Domain\Import\ValueObject\CourseImportRow;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogWorkflowRepository;
+use Domain\Catalog\ValueObject\SubjectSnapshot;
+use Domain\Catalog\ValueObject\ClassificationSnapshot;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Import\Repository\CatalogImportRepository;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -125,9 +127,26 @@ final readonly class MappedImportService
                 }
             }
             // A locking reread sees catalog edits committed during a wait, even under repeatable-read isolation.
+            $withReferences = false;
+            foreach ($rows as $row) {
+                $withReferences = $withReferences || $row->references !== [];
+            }
             $snapshot['courses'] = [];
-            foreach ($this->repository->lockCourses($ids) as $course) {
+            foreach ($this->repository->lockCourses($ids, $withReferences) as $course) {
                 $snapshot['courses'][mb_strtolower($course['code'])][] = $course;
+            }
+            $references = [];
+            foreach ($snapshot['references'] as $matches) {
+                foreach ($matches as $reference) {
+                    $references[] = $reference;
+                }
+            }
+            if ($references !== []) {
+                $snapshot['references'] = [];
+                foreach ($this->repository->lockReferences($references) as $reference) {
+                    $key = $reference['kind'] . ':' . strtoupper($reference['code']);
+                    $snapshot['references'][$key][] = $reference;
+                }
             }
             $plan = $this->plan($rows, $snapshot, $selected);
             if (!hash_equals($ticket['plan_hash'], $this->hash($plan))) {
@@ -142,7 +161,7 @@ final readonly class MappedImportService
                 $action = $plan['plan'][$index];
                 try {
                     if ($action['action'] === 'create') {
-                        $id = $this->repository->create($source, $row);
+                        $id = $this->repository->create($source, $row, $action['references']);
                         $this->audit->record($actor, 'course.imported', $id);
                     } elseif ($action['action'] === 'link') {
                         $id = new EntityId($action['course_id']);
@@ -174,7 +193,8 @@ final readonly class MappedImportService
 
     /** @param list<CourseImportRow> $rows
      * @param array{
-     *     mappings:array<string,array<string,mixed>>,courses:array<string,list<array<string,mixed>>>
+     *     mappings:array<string,array<string,mixed>>,courses:array<string,list<array<string,mixed>>>,
+     *     references:array<string,list<array<string,mixed>>>
      * } $snapshot
      * @param array<string,array{action:string,course_id:?string}> $choices
      * @return array{plan:list<array<string,mixed>>,summary:array<string,int>} */
@@ -189,8 +209,16 @@ final readonly class MappedImportService
             $mapping = $snapshot['mappings']['external:' . strtolower($row->externalId)] ?? null;
             $matches = $snapshot['courses'][mb_strtolower($row->code)] ?? [];
             $course = count($matches) === 1 ? $matches[0] : null;
-            $same = $course !== null && $course['title'] === $row->title
+            $resolved = ['references' => [], 'errors' => []];
+            if ($mapping === null && ($choice['action'] ?? null) !== 'skip') {
+                $resolved = $this->resolveReferences($row, $snapshot['references']);
+            }
+            $sameCore = $course !== null && $course['title'] === $row->title
             && (int) $course['credits_milli'] === $row->creditsMilli;
+            $same = $sameCore && $resolved['errors'] === [];
+            foreach ($resolved['references'] as $kind => $reference) {
+                $same = $same && ($course[$kind . '_id'] ?? null) === $reference['id'];
+            }
             $courseId = null;
             $matched = null;
             if (($choice['action'] ?? null) === 'skip') {
@@ -221,7 +249,9 @@ final readonly class MappedImportService
                     'credits_milli' => (int) $course['credits_milli'], 'active' => (bool) $course['active']];
                 $action = $same ? ($choice === null ? 'match' : 'link') : 'conflict';
                 $message = $same ? 'An existing course matches. Approve linking its source ID, or leave this row out.'
-                : 'This code already has a different title or credits. Existing details will not be overwritten.';
+                : ($sameCore
+                    ? 'The existing course has different classifications. Use the catalog editor or leave it out.'
+                    : 'This code already has a different title or credits. Existing details will not be overwritten.');
                 if (
                     $choice !== null && ($choice['action'] !== 'link' || $choice['course_id'] !== $courseId || !$same)
                 ) {
@@ -239,12 +269,54 @@ final readonly class MappedImportService
                 $newCodes[mb_strtolower($row->code)] = true;
                 $message = 'Create an inactive course draft; publication and activation remain separate.';
             }
+            if ($resolved['errors'] !== []) {
+                $action = 'conflict';
+                $message = 'Resolve the catalog classifications or leave this row out. '
+                . implode(' ', $resolved['errors']);
+            }
             ++$counts[$action];
             $plan[] = ['row' => $row->row, 'external_id' => $row->externalId, 'code' => $row->code,
                 'title' => $row->title, 'credits_milli' => $row->creditsMilli, 'action' => $action,
-                'course_id' => $courseId, 'matched_course' => $matched, 'message' => $message];
+                'course_id' => $courseId, 'matched_course' => $matched, 'message' => $message,
+                'source_references' => $row->references, 'references' => $resolved['references'],
+                'reference_errors' => $resolved['errors']];
         }
         return ['plan' => $plan, 'summary' => $counts];
+    }
+
+    /** @param array<string,list<array<string,mixed>>> $available
+     * @return array{references:array<string,array{id:string,code:string,title:string}>,errors:list<string>} */
+    private function resolveReferences(CourseImportRow $row, array $available): array
+    {
+        $references = [];
+        $errors = [];
+        foreach ($row->references as $kind => $code) {
+            $matches = $available[$kind . ':' . $code] ?? [];
+            $label = CourseImportRow::REFERENCE_LABELS[$kind];
+            if (count($matches) !== 1) {
+                $errors[] = $label . ' ' . $code . (count($matches) > 1 ? ' is ambiguous.' : ' was not found.');
+                continue;
+            }
+            $reference = $matches[0];
+            if (!(bool) $reference['active']) {
+                $errors[] = $label . ' ' . $code . ' is retired.';
+                continue;
+            }
+            try {
+                if (
+                    ($reference['kind'] ?? null) !== $kind || !is_string($reference['id'] ?? null)
+                    || !is_string($reference['code'] ?? null) || !is_string($reference['title'] ?? null)
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                $data = ['id' => $reference['id'], 'code' => $reference['code'], 'title' => $reference['title']];
+                $references[$kind] = ($kind === 'subject' ? SubjectSnapshot::fromArray($data)
+                    : ClassificationSnapshot::fromArray($data))->describe();
+            } catch (InvalidArgumentException) {
+                $errors[] = $label . ' ' . $code . ' needs catalog review.';
+            }
+        }
+        return ['references' => $references, 'errors' => $errors];
     }
 
     /** @param list<CourseImportRow> $rows
