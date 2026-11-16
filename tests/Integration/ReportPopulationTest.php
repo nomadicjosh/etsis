@@ -67,7 +67,8 @@ final class ReportPopulationTest extends TestCase
         foreach (
             ['sis_history_events', 'sis_history_operations', 'sis_history_streams', 'sis_enrollments',
             'sis_academic_credits', 'sis_student_accounts', 'sis_account_balances', 'sis_billing_batches',
-            'sis_report_queries', 'sis_registration_batches'] as $table
+            'sis_report_queries', 'sis_registration_batches', 'sis_campaigns', 'sis_deliveries',
+            'sis_campaign_dispatches'] as $table
         ) {
             $facts[$table] = $s->sql->rows($table);
         }
@@ -426,7 +427,7 @@ final class ReportPopulationTest extends TestCase
         self::assertSame($events, $s->sql->rows('sis_history_events'));
     }
 
-    public function testBillingAndRegistrationAreAdvertisedAndAuthorizedIndependently(): void
+    public function testPopulationTasksAreAdvertisedAndAuthorizedIndependently(): void
     {
         $s = new SisFixture();
         $student = $s->student();
@@ -440,18 +441,21 @@ final class ReportPopulationTest extends TestCase
             $page = $service->population($id, 0, $action);
             self::assertSame($action->value, $page['action']);
             self::assertSame([$student->id->value], array_column($page['items'], 'id'));
-            $other = $action === StudentPopulationAction::Billing
-            ? StudentPopulationAction::Registration : StudentPopulationAction::Billing;
-            $before = $this->facts($s);
-            try {
-                $service->selectStudents($id, [$student->id->value], 0, $other);
-                self::fail('One task supplied another task\'s authority.');
-            } catch (AccessDeniedException) {
-                self::assertSame($before, $this->facts($s));
+            foreach (StudentPopulationAction::cases() as $other) {
+                if ($other === $action) {
+                    continue;
+                }
+                $before = $this->facts($s);
+                try {
+                    $service->selectStudents($id, [$student->id->value], 0, $other);
+                    self::fail('One task supplied another task authority.');
+                } catch (AccessDeniedException) {
+                    self::assertSame($before, $this->facts($s));
+                }
             }
         }
         $s->access->staff = true;
-        self::assertSame(['registration', 'billing'], $service->view($id)['student_actions']);
+        self::assertSame(['registration', 'billing', 'messaging'], $service->view($id)['student_actions']);
         $service->configureReport($id, EntityId::generate(), 0, 'static', null);
         self::assertSame([], $service->view($id)['student_actions']);
         foreach (StudentPopulationAction::cases() as $action) {
@@ -464,11 +468,13 @@ final class ReportPopulationTest extends TestCase
         }
     }
 
-    public static function missingBillingGrants(): iterable
+    public static function missingTaskGrants(): iterable
     {
-        $all = ['sis:reporting:run', 'sis:student:read', 'sis:finance:read', 'sis:finance:post'];
-        foreach ($all as $missing) {
-            yield $missing => [array_values(array_diff($all, [$missing]))];
+        foreach (StudentPopulationAction::cases() as $action) {
+            $all = ['sis:reporting:run', 'sis:student:read', ...$action->permissions()];
+            foreach ($all as $missing) {
+                yield $action->value . '/' . $missing => [$action, array_values(array_diff($all, [$missing]))];
+            }
         }
     }
 
@@ -543,9 +549,11 @@ final class ReportPopulationTest extends TestCase
         $service->population($summary, 0, StudentPopulationAction::Billing);
     }
 
-    #[DataProvider('missingBillingGrants')]
-    public function testEveryBillingPopulationPermissionIsRequiredEvenForASharedReport(array $grants): void
-    {
+    #[DataProvider('missingTaskGrants')]
+    public function testEveryTaskPermissionIsRequiredEvenForASharedReport(
+        StudentPopulationAction $action,
+        array $grants,
+    ): void {
         $s = new SisFixture();
         $student = $s->student();
         $id = $this->saved($s);
@@ -557,12 +565,12 @@ final class ReportPopulationTest extends TestCase
         $before = $this->facts($s);
         $audit = $s->sql->rows('sis_audit');
         foreach (
-            [fn () => $this->service($s)->population($id, 0, StudentPopulationAction::Billing),
+            [fn () => $this->service($s)->population($id, 0, $action),
             fn () => $this->service($s)->selectStudents(
                 $id,
                 [$student->id->value],
                 0,
-                StudentPopulationAction::Billing
+                $action
             )] as $attempt
         ) {
             try {

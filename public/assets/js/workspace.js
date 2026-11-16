@@ -249,6 +249,13 @@
             relationalStudio.cleanup(false);
             return operations.billingBatch(students, back);
         },
+        messagePopulation: async (students, back) => {
+            const recipients = await request('/sis/campaigns/recipients/students/', 'POST', {
+                students: students.map(student => ({ student_id: student.id })),
+            });
+            relationalStudio.cleanup(false);
+            return operations.composeMessage(recipients.items, back);
+        },
         sharing: async id => {
             const body = openDrawer('Report sharing', 'REPORT ACCESS');
             await operations.enhance('reports', { id }, body);
@@ -521,7 +528,9 @@
         else $one('#workspace-main').focus({ preventScroll: true });
         drawerOpener = null;
     });
-    async function createRecord(section, preset = {}, { back = null, explanation = '' } = {}) {
+    async function createRecord(section, preset = {}, {
+        back = null, backLabel = 'Back to public event', explanation = '', afterSave = null,
+    } = {}) {
         if (section === 'grades') return degreeAuditStudio.gradingScale();
         if (section === 'terms') return academicCalendarStudio.newTerm();
         if (section === 'registration') return batchRegistration.start();
@@ -536,7 +545,7 @@
         const operation = ['people', 'billing'].includes(section) ? (await request('/sis/ui/operation-id/')).id : null;
         const body = openDrawer(definition.action, definition.title.toUpperCase());
         if (back) body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
-            onclick: () => task(back) }, 'Back to public event'));
+            onclick: () => task(back) }, backLabel));
         if (explanation) body.append(node('p', { class: 'form-text' }, explanation));
         const form = await buildForm(definition.fields, preset);
         if (!body.isConnected) return;
@@ -568,11 +577,13 @@
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
-            if (section === 'people') await openPerson(saved.id);
+            if (afterSave) await afterSave(saved);
+            else if (section === 'people') await openPerson(saved.id);
             else if (['campaigns', 'billing'].includes(section)) await openRecord(section, { id: saved.id });
             else { drawer.hide(); if (current === section) await loadDirectory(); }
         }, $one('[type="submit"]', form)); });
         body.append(form);
+        return form;
     }
 
     // Shared private change-review paging. Each domain supplies only its approved card content.

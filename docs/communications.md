@@ -34,6 +34,14 @@ Choose **Draft a message**, or start from a reusable template or a [published pu
 
 **Review message and recipients** shows the saved message and complete selected audience, twenty recipients per page. **Confirm recipient queue** requires that exact draft revision and rechecks all selected person/account links and delivery addresses. A changed message requires a fresh review; an unavailable recipient stops the whole queue operation. Duplicate selections create one delivery per account. The audience is limited to 500 people. Validation uses a bounded batch; inserts store only delivery identities, campaign/account references, status and revision.
 
+### Start from a saved student report
+
+In Report Studio, **Choose students for messaging** selects up to 25 distinct students from a saved dynamic detail report. It uses the existing report shortlist, current membership/version checks and independent data permissions. Report-run/student-read and Communications/person-directory duties are all required. Student-account report sources retain their independent financial read permission. Summaries and static captures cannot become live audiences. [Full handoff workflow](workflow-review.md#message-students-selected-from-a-saved-report).
+
+Before opening the normal composer, etSIS resolves every student through the canonical person to an enabled account with a valid delivery address. One unavailable account stops the handoff; students are not silently skipped, created or relinked. Labels exclude email addresses and private profile payloads. Account lookup creates no draft or delivery, and rechecks current actor and authority after reading.
+
+Save the message, then use the existing recipient picker with those accounts preselected. You can remove/add recipients and review the complete wording/audience before queueing. Report values are not inserted or attached. Queueing and background-delivery authorization remain separate confirmations; the existing worker and progress bar apply. After handoff, normal campaign ownership and recipient permissions govern the editable message. No schema, queue or domain-event change is required.
+
 ## Background delivery and progress
 
 Queueing does not send. Choose **Review background delivery**, review the saved message and the queued audience, then choose **Confirm background delivery** once. Confirmation saves an authorization and returns immediately; it never contacts the mail server. You can navigate away, close the browser or sign out. The server worker continues independently, checking that the authorizing account still has current Communications and person-directory permission and ownership or Communications administration access.

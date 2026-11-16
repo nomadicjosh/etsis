@@ -4935,3 +4935,112 @@ $reportBillingCompletedBody = json_decode((string) $reportBillingCompleted->getB
 if ($reportBillingCompleted->getStatusCode() !== 200 || ($reportBillingCompletedBody['posted'] ?? null) !== 1) {
     throw new RuntimeException('The existing native billing command failed the report-selected group.');
 }
+
+// Report messaging selects current person accounts, then uses the existing private composition and queue controls.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$reportMessagePerson = $sis->admissions->person($reportBillingStudent->personId);
+$sis->sql->update(
+    'users',
+    ['email' => 'native-report-recipient@example.invalid'],
+    ['user_id' => $reportMessagePerson->ownerUserId->value]
+);
+$reportMessageHistory = $sis->sql->rows('sis_history_events');
+$reportMessageCampaigns = $sis->sql->rows('sis_campaigns');
+$reportMessageDeliveries = $sis->sql->rows('sis_deliveries');
+$reportMessageDispatches = $sis->sql->rows('sis_campaign_dispatches');
+$sis->access->staff = false;
+$sis->access->grants = ['sis:reporting:run', 'sis:student:read', 'sis:communications:manage', 'sis:person:manage'];
+$reportMessageSelection = $teachingPost($reportBillingBase . 'select/', [
+    'student_ids' => [$reportBillingStudent->id->value], 'report_version' => 0, 'action' => 'messaging',
+]);
+$reportMessageSelectionBody = json_decode((string) $reportMessageSelection->getBody(), true);
+$reportMessageStudents = ['students' => array_map(
+    static fn (array $row): array => ['student_id' => $row['id']],
+    $reportMessageSelectionBody['items'] ?? []
+)];
+$reportMessageResolution = $teachingPost('/sis/campaigns/recipients/students/', $reportMessageStudents);
+$reportMessagePeople = json_decode((string) $reportMessageResolution->getBody(), true)['items'] ?? [];
+if (
+    $reportMessageSelection->getStatusCode() !== 200 || $reportMessageResolution->getStatusCode() !== 200
+    || array_column($reportMessagePeople, 'user_id') !== [$reportMessagePerson->ownerUserId->value]
+    || str_contains((string) $reportMessageResolution->getBody(), '@example.invalid')
+    || $sis->sql->rows('sis_campaigns') !== $reportMessageCampaigns
+    || $sis->sql->rows('sis_deliveries') !== $reportMessageDeliveries
+    || $sis->sql->rows('sis_campaign_dispatches') !== $reportMessageDispatches
+    || $sis->sql->rows('sis_history_events') !== $reportMessageHistory
+) {
+    throw new RuntimeException('A report messaging handoff lost canonical accounts, privacy or read-only behavior.');
+}
+foreach ([$reportMessageSelection, $reportMessageResolution] as $reportMessageResponse) {
+    if (
+        $reportMessageResponse->hasHeader('phpdebugbar-id')
+        || !str_contains($reportMessageResponse->getHeaderLine('Cache-Control'), 'no-store')
+    ) {
+        throw new RuntimeException('A report messaging response lost its private envelope.');
+    }
+}
+$sis->sql->update('users', ['sign_in_enabled' => 0], ['user_id' => $reportMessagePerson->ownerUserId->value]);
+$reportMessageUnavailable = $teachingPost('/sis/campaigns/recipients/students/', $reportMessageStudents);
+$reportMessageUnavailableBody = json_decode((string) $reportMessageUnavailable->getBody(), true);
+if (
+    $reportMessageUnavailable->getStatusCode() !== 422
+    || ($reportMessageUnavailableBody['errors'][0]['field'] ?? null) !== 'students'
+    || !str_contains($reportMessageUnavailableBody['errors'][0]['message'] ?? '', 'Review their person records')
+    || isset($reportMessageUnavailableBody['items'])
+    || str_contains((string) $reportMessageUnavailable->getBody(), '@example.invalid')
+    || $sis->sql->rows('sis_campaigns') !== $reportMessageCampaigns
+) {
+    throw new RuntimeException('An unavailable student account lost its actionable private validation response.');
+}
+$sis->sql->update('users', ['sign_in_enabled' => 1], ['user_id' => $reportMessagePerson->ownerUserId->value]);
+if (
+    $teachingPost('/sis/campaigns/recipients/students/', ['students' => array_merge(
+        $reportMessageStudents['students'],
+        $reportMessageStudents['students']
+    )])->getStatusCode() !== 422
+) {
+    throw new RuntimeException('A native student-recipient resolver accepted duplicate references.');
+}
+$sis->access->grants = ['sis:reporting:run', 'sis:student:read', 'sis:communications:manage'];
+if ($teachingPost('/sis/campaigns/recipients/students/', $reportMessageStudents)->getStatusCode() !== 403) {
+    throw new RuntimeException('Student recipient resolution bypassed person-directory authority.');
+}
+// After handoff, normal message ownership and recipient permissions remain the controlling authority.
+$sis->access->grants = ['sis:communications:manage', 'sis:person:manage'];
+$reportMessageDraft = $teachingPost('/sis/campaigns/', [
+    'subject' => 'Native fictional report notice', 'body' => 'Native private fictional wording; never sent.',
+]);
+$reportMessageDraftBody = json_decode((string) $reportMessageDraft->getBody(), true);
+if ($reportMessageDraft->getStatusCode() !== 201 || ($reportMessageDraftBody['version'] ?? null) !== 0) {
+    throw new RuntimeException('Report messaging did not create an ordinary revisioned draft.');
+}
+$reportMessagePath = '/sis/campaigns/' . $reportMessageDraftBody['id'];
+$reportMessageQueuePayload = ['version' => $reportMessageDraftBody['version'], 'recipients' => array_map(
+    static fn (array $p): array => ['user_id' => $p['user_id']],
+    $reportMessagePeople
+)];
+if (
+    $teachingPost($reportMessagePath . '/recipient-review/', $reportMessageQueuePayload)->getStatusCode() !== 200
+    || $sis->sql->rows('sis_deliveries') !== $reportMessageDeliveries
+) {
+    throw new RuntimeException('Report messaging bypassed the existing read-only recipient review.');
+}
+$sis->access->grants = ['sis:communications:manage'];
+if (
+    $teachingPost($reportMessagePath . '/queue/', $reportMessageQueuePayload)->getStatusCode() !== 403
+    || $sis->sql->rows('sis_deliveries') !== $reportMessageDeliveries
+) {
+    throw new RuntimeException('A report-derived audience granted its own queue authority.');
+}
+$sis->access->grants[] = 'sis:person:manage';
+$reportMessageQueued = $teachingPost($reportMessagePath . '/queue/', $reportMessageQueuePayload);
+if (
+    $reportMessageQueued->getStatusCode() !== 200
+    || count($sis->sql->rows('sis_deliveries')) !== count($reportMessageDeliveries) + 1
+    || $sis->sql->rows('sis_campaign_dispatches') !== $reportMessageDispatches
+    || $sis->sql->rows('sis_history_events') !== $reportMessageHistory
+    || str_contains(json_encode($sis->sql->rows('sis_campaigns')), 'Native private fictional wording')
+) {
+    throw new RuntimeException('A report-selected queue sent, exposed wording or created academic history.');
+}

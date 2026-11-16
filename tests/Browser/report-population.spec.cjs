@@ -10,6 +10,10 @@ async function fixture(page, options = {}) {
     const students = Array.from({ length: options.many ? 26 : 3 }, (_, i) => ({ id: id(10 + i),
         institutional_id: `S-${i + 1}`, name: `Fictional <b>Student ${i + 1}</b>`, active: true }));
     const state = { version: 0, denied: false, conflict: false, calls: [], errors: [], report, section, term, students, base };
+    const campaign = id(95);
+    const people = students.map((student, i) => ({ id: id(300 + i), user_id: id(200 + i),
+        given_name: student.name, family_name: '', institutional_id: student.institutional_id }));
+    Object.assign(state, { resolutionFailure: 0, campaignStatus: 'draft', message: {}, authorized: false, sent: 0 });
     page.on('pageerror', error => state.errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname, raw = route.request().postData();
@@ -24,7 +28,7 @@ async function fixture(page, options = {}) {
                 : ['reports', 'sharedreports'].includes(dataset) ? [{ id: report, name: 'Fictional advising population' }] : [], next_after: null };
         } else if (path === `/sis/reports/${report}/`) result = { id: report, relational: true };
         else if (path === base) result = { id: report, name: 'Fictional advising population', version: state.version,
-            can_manage: false, student_actions: ['registration', 'billing'], definition: { dataset: 'programs' } };
+            can_manage: false, student_actions: ['registration', 'billing', 'messaging'], definition: { dataset: 'programs' } };
         else if (path === `${base}run/`) result = { columns: ['Institutional ID'], items: [{ c0: 'S-1' }],
             offset: 0, next_offset: null, grouped: false };
         else if (path === `${base}population/`) result = { items: options.many ? students : data.offset ? students.slice(2) : students.slice(0, 2),
@@ -33,6 +37,35 @@ async function fixture(page, options = {}) {
             if (state.denied) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
             if (state.conflict) return route.fulfill({ status: 409, json: { error: 'The report membership changed.' } });
             result = { items: students.filter(s => data.student_ids.includes(s.id)), report_version: state.version };
+        } else if (path === '/sis/campaigns/recipients/students/') {
+            if (state.resolutionFailure) return route.fulfill({ status: state.resolutionFailure,
+                json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'students',
+                    message: 'Every selected student needs an enabled linked account and a valid delivery address. Review their person records before continuing.' }] } });
+            result = { items: people.filter((p, i) => data.students.some(s => s.student_id === students[i].id)) };
+        } else if (path === '/sis/campaigns/') {
+            state.message = data;
+            result = { id: campaign, status: 'draft', version: 0 };
+        } else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = {
+            ...state.message, version: 0, recipients: people.filter(p => data.recipients.some(r => r.user_id === p.user_id)),
+        };
+        else if (path === `/sis/campaigns/${campaign}/queue/`) {
+            state.campaignStatus = 'queued'; result = { delivery_ids: [id(96), id(97)] };
+        } else if (path === `/sis/campaigns/${campaign}/`) result = {
+            id: campaign, status: state.campaignStatus, version: 1, can_dispatch: true, ...state.message,
+        };
+        else if (path === `/sis/ui/context/deliveries/${campaign}/`) result = { items: [], next_after: null };
+        else if (path === `/sis/campaigns/${campaign}/delivery-progress/`) result = {
+            status: state.sent ? 'completed' : state.authorized ? 'active' : 'unconfirmed', version: state.authorized ? 1 : 0,
+            campaign_status: state.campaignStatus, total: 2,
+            counts: { sent: state.sent, queued: 2 - state.sent, sending: 0, needs_review: 0 },
+        };
+        else if (path === `/sis/campaigns/${campaign}/delivery-setup/`) result = { timezone: 'UTC', suggested_local: '2026-11-16T14:00' };
+        else if (path === `/sis/campaigns/${campaign}/delivery-review/`) result = {
+            ...state.message, review_token: 'fictional-report-message-delivery',
+            recipients: [students[0], students[2]].map(s => ({ name: s.name, institutional_id: s.institutional_id })),
+        };
+        else if (path === `/sis/campaigns/${campaign}/delivery-confirm/`) {
+            state.authorized = true; result = { status: 'active' };
         } else if (path === '/sis/billing-batches/review/') result = {
             term: { id: term, code: '26/FA' }, rules: [{ id: id(91), name: 'Fictional term fee', minor: 250, currency: 'USD' }],
             students: data.students.map(({ student_id }) => ({ student_id, name: students.find(s => s.id === student_id).name,
@@ -58,8 +91,9 @@ async function fixture(page, options = {}) {
             created: data.student_ids.length, existing: 0, registrations: [] };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    await page.goto(options.recipient ? '/admin/report-fixture/' : options.billingOnly ? '/admin/report-billing-fixture/' : '/admin/');
-    await page.locator(`.workspace-nav-link[data-workspace="${options.recipient || options.billingOnly ? 'sharedreports' : 'reports'}"]`).click();
+    await page.goto(options.recipient ? '/admin/report-fixture/' : options.billingOnly ? '/admin/report-billing-fixture/'
+        : options.messagingOnly ? '/admin/report-messaging-fixture/' : '/admin/');
+    await page.locator(`.workspace-nav-link[data-workspace="${options.recipient || options.billingOnly || options.messagingOnly ? 'sharedreports' : 'reports'}"]`).click();
     await page.getByRole('button', { name: 'Fictional advising population', exact: true }).click();
     return state;
 }
@@ -105,7 +139,7 @@ test('a report shortlist opens the existing registration review with paging, bac
     expect(f.errors).toEqual([]);
 });
 
-for (const action of ['registration', 'billing']) {
+for (const action of ['registration', 'billing', 'messaging']) {
     test(`${action}: a changed definition clears the old shortlist and denied handoff removes cached students`, async ({ page }) => {
         const f = await fixture(page);
         await page.getByRole('button', { name: `Choose students for ${action}`, exact: true }).click();
@@ -124,6 +158,7 @@ for (const action of ['registration', 'billing']) {
         await expect(studio).not.toContainText('Fictional <b>Student');
         expect(f.calls.some(c => c.path.includes('registration-batches'))).toBe(false);
         expect(f.calls.some(c => c.path.includes('billing-batches'))).toBe(false);
+        expect(f.calls.some(c => c.path.includes('/sis/campaigns/'))).toBe(false);
         expect(f.errors).toEqual([]);
     });
 }
@@ -142,6 +177,7 @@ test('the population selector stops at 25 and a report-only recipient has no reg
     await fixture(page, { recipient: true });
     await expect(page.getByRole('button', { name: 'Choose students for registration', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Choose students for billing', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Choose students for messaging', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
 });
 
@@ -199,5 +235,72 @@ test('changed live billing membership clears the shortlist before any financial 
     f.conflict = false;
     await studio.getByRole('button', { name: 'Refresh student population', exact: true }).click();
     await expect(studio.getByRole('checkbox').first()).not.toBeChecked();
+    expect(f.errors).toEqual([]);
+});
+
+test('a messaging recipient uses the shared composer, explicit recipient queue and background authorization', async ({ page }) => {
+    const f = await fixture(page, { messagingOnly: true });
+    for (const action of ['registration', 'billing'])
+        await expect(page.getByRole('button', { name: `Choose students for ${action}`, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Choose students for messaging', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('checkbox', { name: /^Select S-1 / }).check();
+    await studio.getByRole('button', { name: 'Next population page', exact: true }).click();
+    await studio.getByRole('checkbox', { name: /^Select S-3 / }).check();
+    await studio.getByRole('button', { name: 'Review selected students for messaging', exact: true }).click();
+    const drawer = page.locator('#record-drawer');
+    await expect(drawer).toContainText('2 recipients selected.');
+    await drawer.getByRole('button', { name: 'Back to report selection', exact: true }).click();
+    await expect(studio.getByRole('checkbox', { name: /^Select S-3 / })).toBeChecked();
+    await expect(studio.getByRole('region', { name: 'Selected report students' })).toContainText('2 of 25');
+    await studio.getByRole('button', { name: 'Review selected students for messaging', exact: true }).click();
+    await drawer.getByRole('textbox', { name: 'Subject', exact: true }).fill('Fictional campus notice');
+    await drawer.getByRole('textbox', { name: 'Message', exact: true }).fill('Fictional wording; never sent to a real mailbox.');
+    expect(f.calls.some(c => c.path === '/sis/campaigns/')).toBe(false);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await drawer.getByRole('button', { name: /Save and continue/ }).click();
+    await expect(drawer.getByRole('region', { name: 'Selected recipients', exact: true })).toContainText('2 selected recipients');
+    await expect(drawer.locator('b')).toHaveCount(0);
+    await drawer.getByRole('button', { name: 'Review message and recipients', exact: true }).click();
+    await expect(drawer.getByRole('region', { name: 'Message and recipient review' })).toContainText('Fictional campus notice');
+    await expect(drawer.getByRole('region', { name: 'Message and recipient review' })).toContainText('S-3');
+    await accessible(page);
+    expect(f.calls.some(c => c.path.endsWith('/queue/'))).toBe(false);
+    await drawer.getByRole('button', { name: 'Confirm recipient queue', exact: true }).click();
+    await expect(drawer.getByRole('progressbar', { name: 'Confirmed sends' })).toHaveAttribute('aria-valuenow', '0');
+    expect(f.calls.find(c => c.path.endsWith('/queue/')).data).toEqual({
+        version: 0, recipients: [{ user_id: id(200) }, { user_id: id(202) }],
+    });
+    expect(f.calls.some(c => c.path.endsWith('/delivery-confirm/'))).toBe(false);
+    await drawer.getByRole('button', { name: 'Review background delivery', exact: true }).click();
+    await expect(drawer.getByRole('region', { name: 'Reviewed delivery recipients' })).toContainText('S-1');
+    await drawer.getByRole('button', { name: 'Confirm background delivery', exact: true }).click();
+    await expect(drawer).toContainText('You can leave this screen');
+    expect(f.calls.find(c => c.path.endsWith('/delivery-confirm/')).data).toEqual({ review_token: 'fictional-report-message-delivery' });
+    f.sent = 2;
+    await drawer.getByRole('button', { name: 'Refresh sending progress', exact: true }).click();
+    await expect(drawer.getByRole('progressbar', { name: 'Confirmed sends' })).toHaveAttribute('aria-valuenow', '100');
+    expect(f.calls.filter(c => c.path.endsWith('/population/select/')).every(c => c.data.action === 'messaging')).toBe(true);
+    expect(f.calls.filter(c => c.path === '/sis/campaigns/recipients/students/').every(c =>
+        JSON.stringify(c.data) === JSON.stringify({ students: [{ student_id: f.students[0].id }, { student_id: f.students[2].id }] }))).toBe(true);
+    expect(f.calls.some(c => c.path.endsWith('/dispatch/'))).toBe(false);
+    expect(f.calls.filter(c => c.data).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('an unavailable student account stops messaging before any draft is created', async ({ page }) => {
+    const f = await fixture(page, { messagingOnly: true });
+    await page.getByRole('button', { name: 'Choose students for messaging', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('checkbox').first().check();
+    f.resolutionFailure = 422;
+    await studio.getByRole('button', { name: 'Review selected students for messaging', exact: true }).click();
+    await expect(studio).toContainText('Review their person records before continuing.');
+    await expect(studio.getByRole('region', { name: 'Selected report students' })).toContainText('1 of 25');
+    expect(f.calls.some(c => c.path === '/sis/campaigns/')).toBe(false);
+    expect(f.calls.some(c => c.path.endsWith('/queue/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });

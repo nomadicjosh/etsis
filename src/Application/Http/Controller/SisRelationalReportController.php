@@ -111,7 +111,7 @@ final readonly class SisRelationalReportController
     {
         return StudentPopulationAction::tryFrom(FormInput::from($request)->text('action', 20))
         ?? throw new ValidationException([['field' => 'action',
-                'message' => 'Choose registration or billing for this student selection.']]);
+                'message' => 'Choose registration, billing or messaging for this student selection.']]);
     }
     /**
      * @throws InvalidArgument

@@ -245,7 +245,31 @@ final readonly class SqlCampaignRepository implements CampaignRepository
             array_map(static fn(EntityId $user): string => $user->value, $users),
             501
         );
-        if (count($rows) !== count($users)) {
+        return $this->validatedAudience($rows, count($users));
+    }
+
+    public function studentAudience(array $students): array
+    {
+        if ($students === [] || count($students) > 25) {
+            throw new DomainException('Choose between one and 25 students.');
+        }
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch(
+            $this->recipientSelect() . ' AND p.' . $q('id') . ' IN (SELECT s.' . $q('person_id')
+            . ' FROM ' . $q('sis_students') . ' s WHERE s.' . $q('id') . ' IN ('
+            . implode(', ', array_fill(0, count($students), '?')) . ')) ORDER BY p.' . $q('id'),
+            array_map(static fn (EntityId $student): string => $student->value, $students),
+            26
+        );
+        return $this->validatedAudience($rows, count($students));
+    }
+
+    /** @param list<array<string,mixed>> $rows
+     * @return list<array<string,string|null>>
+     */
+    private function validatedAudience(#[\SensitiveParameter] array $rows, int $expected): array
+    {
+        if (count($rows) !== $expected) {
             throw new DomainException(
                 'A selected person no longer has an available linked sign-in account. Review recipients again.'
             );

@@ -718,9 +718,10 @@ window.createWorkspaceOperations = function (ui) {
         renderSelection();
         body.append(form, reviewArea);
     }
-    async function campaignRecipients(row, draft, back) {
+    async function campaignRecipients(row, draft, back, presetRecipients = []) {
+        if (presetRecipients.length > 500) throw new Error("Choose no more than 500 recipients.");
         const body = openDrawer("Choose recipients", "COMMUNICATIONS");
-        const selected = new Map();
+        const selected = new Map(presetRecipients.map(person => [person.user_id, person]));
         let generation = 0, after = null, query = "", selectedPage = 0, timer;
         const search = node("input", { type: "search", class: "form-control", id: "campaign-recipient-search",
             maxlength: 80, autocomplete: "off", placeholder: "Name or institutional ID" });
@@ -827,6 +828,14 @@ window.createWorkspaceOperations = function (ui) {
         renderSelection();
     }
     const messageFields = [["subject", "Subject"], ["body", "Message", "textarea"]];
+    async function composeMessage(recipients, back) {
+        await createRecord("campaigns", {}, {
+            back, backLabel: "Back to report selection",
+            explanation: `${recipients.length} recipients selected. Save your message, then review the complete audience before queueing. Sending requires a separate background-delivery confirmation.`,
+            afterSave: saved => campaignRecipients({ id: saved.id }, saved,
+                () => openRecord("campaigns", { id: saved.id }), recipients),
+        });
+    }
     async function campaignTemplates(scope = "mine", after = null, stack = []) {
         const retired = scope === "retired";
         const titles = { mine: "My message templates", submitted: "My submitted templates", retired: "My retired templates", institutional: "Institutional templates", review: "Template approvals" };
@@ -1500,6 +1509,7 @@ window.createWorkspaceOperations = function (ui) {
         createJournal,
         billingBatch,
         campaignTemplates,
+        composeMessage,
         flow,
         audit,
         registration,

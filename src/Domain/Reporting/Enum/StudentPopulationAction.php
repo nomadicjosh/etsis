@@ -9,6 +9,7 @@ enum StudentPopulationAction: string
 {
     case Registration = 'registration';
     case Billing = 'billing';
+    case Messaging = 'messaging';
 
     /** @return list<string> */
     public function permissions(): array
@@ -16,6 +17,7 @@ enum StudentPopulationAction: string
         return match ($this) {
             self::Registration => ['sis:registration:manage'],
             self::Billing => ['sis:finance:read', 'sis:finance:post'],
+            self::Messaging => ['sis:communications:manage', 'sis:person:manage'],
         };
     }
 }

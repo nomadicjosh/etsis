@@ -12,6 +12,7 @@ use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
@@ -266,6 +267,42 @@ final readonly class CampaignService
         $rows = array_slice($rows, 0, 50);
         $this->authorizeRecipients($actor);
         return ['items' => $rows, 'next_after' => $more ? $rows[49]['id'] : null];
+    }
+
+    /** Read-only resolution of a bounded student shortlist to current canonical person accounts.
+     * @param list<EntityId> $students
+     * @return array{items:list<array<string,string|null>>}
+     */
+    public function studentRecipients(array $students): array
+    {
+        $actor = $this->authorizeStudents();
+        if (count($students) < 1 || count($students) > 25) {
+            throw new ValidationException([['field' => 'students',
+                'message' => 'Choose between one and 25 distinct students.']]);
+        }
+        $ids = array_map(static fn (EntityId $id): string => $id->value, $students);
+        if (count(array_unique($ids)) !== count($ids)) {
+            throw new ValidationException([['field' => 'students', 'message' => 'Choose each student only once.']]);
+        }
+        try {
+            $people = $this->repository->studentAudience($students);
+        } catch (DomainException) {
+            $this->authorizeStudents($actor);
+            throw new ValidationException([['field' => 'students',
+                'message' => 'Every selected student needs an enabled linked account and a valid delivery address. '
+                    . 'Review their person records before continuing.']]);
+        }
+        $this->authorizeStudents($actor);
+        return ['items' => $people];
+    }
+
+    private function authorizeStudents(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->authorizeRecipients($expected);
+        if ($this->access->requirePermission('sis:student:read')->value !== $actor->value) {
+            throw new AccessDeniedException('Access denied.');
+        }
+        return $actor;
     }
 
     /** Read-only review of the exact draft revision and complete selected audience.

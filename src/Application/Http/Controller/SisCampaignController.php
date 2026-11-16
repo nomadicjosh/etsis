@@ -26,7 +26,9 @@ final readonly class SisCampaignController
         $f = FormInput::from($request);
         $campaign = $this->service->create($f->text('subject'), $f->bodyText('body'));
 
-        return new JsonResponse(['id' => $campaign->id->value, 'status' => $campaign->status], 201);
+        return new JsonResponse([
+            'id' => $campaign->id->value, 'status' => $campaign->status, 'version' => $campaign->version,
+        ], 201);
     }
 
     public function edit(ServerRequest $request, string $id): ResponseInterface
@@ -92,6 +94,15 @@ final readonly class SisCampaignController
     {
         $f = FormInput::from($request);
         return new JsonResponse($this->service->recipientChoices($f->search('search', 80), $f->optionalId('after')));
+    }
+
+    public function studentRecipients(ServerRequest $request): ResponseInterface
+    {
+        $students = array_map(
+            static fn (FormInput $student): EntityId => $student->id('student_id'),
+            FormInput::from($request)->items('students', 25)
+        );
+        return new JsonResponse($this->service->studentRecipients($students));
     }
 
     public function reviewRecipients(ServerRequest $request, string $id): ResponseInterface

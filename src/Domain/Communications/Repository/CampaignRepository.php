@@ -63,4 +63,10 @@ interface CampaignRepository
      * @return list<array<string,string|null>>
      */
     public function audience(array $users): array;
+
+    /** Current canonical person/account labels for a complete, distinct shortlist of at most 25 students.
+     * @param list<EntityId> $students
+     * @return list<array<string,string|null>>
+     */
+    public function studentAudience(array $students): array;
 }

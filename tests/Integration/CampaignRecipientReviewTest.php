@@ -226,4 +226,141 @@ final class CampaignRecipientReviewTest extends TestCase
             }
         }
     }
+
+    private function student(SisFixture $f): \Domain\Student\Student
+    {
+        $student = $f->student();
+        $person = $f->admissions->person($student->personId);
+        $f->sql->update(
+            'users',
+            ['email' => 'fictional-' . strtolower($student->id->value) . '@example.invalid'],
+            ['user_id' => $person->ownerUserId->value]
+        );
+        return $student;
+    }
+
+    private function facts(SisFixture $f): array
+    {
+        return array_map($f->sql->rows(...), ['sis_campaigns', 'sis_deliveries', 'sis_campaign_dispatches',
+            'sis_history_events', 'sis_history_streams', 'sis_history_operations', 'sis_audit']);
+    }
+
+    public function testStudentShortlistResolvesCanonicalAccountsWithoutCreatingOrSendingMessages(): void
+    {
+        $f = new SisFixture();
+        $first = $this->student($f);
+        $second = $this->student($f);
+        $before = $this->facts($f);
+        $service = $this->service($f);
+        $people = $service->studentRecipients([$second->id, $first->id])['items'];
+        self::assertCount(2, $people);
+        foreach ([$first, $second] as $student) {
+            $person = $f->admissions->person($student->personId);
+            $row = array_values(array_filter(
+                $people,
+                static fn (array $p): bool => $p['id'] === $person->id->value
+            ))[0];
+            self::assertSame($person->ownerUserId->value, $row['user_id']);
+            self::assertSame(['id', 'user_id', 'given_name', 'family_name', 'institutional_id'], array_keys($row));
+        }
+        self::assertStringNotContainsString('@example.invalid', json_encode($people));
+        self::assertSame($before, $this->facts($f));
+        $draft = $service->create('Fictional report-selected notice', 'Fictional wording only.');
+        $users = array_map(static fn (array $p): EntityId => new EntityId($p['user_id']), $people);
+        $review = $service->reviewRecipients($draft->id, $users, 0);
+        self::assertCount(2, $review['recipients']);
+        self::assertSame([], $f->sql->rows('sis_deliveries'));
+        $service->queue($draft->id, $users, $review['version']);
+        self::assertCount(2, $f->sql->rows('sis_deliveries'));
+        self::assertSame([], $f->sql->rows('sis_campaign_dispatches'));
+    }
+
+    public function testAStudentResolutionNeverSilentlySkipsUnavailableAccounts(): void
+    {
+        foreach (['missing', 'disabled', 'invalid-email', 'unlinked'] as $problem) {
+            $f = new SisFixture();
+            $first = $this->student($f);
+            $other = $this->student($f);
+            $person = $f->admissions->person($other->personId);
+            if ($problem === 'disabled' || $problem === 'invalid-email') {
+                $f->sql->update(
+                    'users',
+                    $problem === 'disabled' ? ['sign_in_enabled' => 0] : ['email' => 'invalid'],
+                    ['user_id' => $person->ownerUserId->value]
+                );
+            } elseif ($problem === 'unlinked') {
+                $f->sql->update('sis_persons', ['owner_user_id' => null], ['id' => $person->id->value]);
+            }
+            $before = $this->facts($f);
+            try {
+                $this->service($f)->studentRecipients([
+                    $first->id, $problem === 'missing' ? EntityId::generate() : $other->id,
+                ]);
+                self::fail('An incomplete student audience was silently accepted.');
+            } catch (\Domain\Shared\Exception\ValidationException $error) {
+                self::assertSame('students', $error->errors[0]['field']);
+                self::assertSame($before, $this->facts($f));
+            }
+        }
+    }
+
+    public function testStudentShortlistsRequireDistinctBoundedReferences(): void
+    {
+        $f = new SisFixture();
+        $student = $this->student($f);
+        $before = $this->facts($f);
+        foreach ([[], [$student->id, $student->id], array_fill(0, 26, $student->id)] as $selection) {
+            try {
+                $this->service($f)->studentRecipients($selection);
+                self::fail('An invalid student shortlist was resolved.');
+            } catch (InvalidArgumentException) {
+                self::assertSame($before, $this->facts($f));
+            }
+        }
+    }
+
+    public function testStudentAccountResolutionRequiresAllCurrentDutiesAndRechecksTheActorAfterReading(): void
+    {
+        foreach (['sis:communications:manage', 'sis:person:manage', 'sis:student:read', 'actor'] as $missing) {
+            $f = new SisFixture();
+            $student = $this->student($f);
+            $other = $f->user();
+            $real = new SqlCampaignRepository($f->sql);
+            $repository = $this->createStub(CampaignRepository::class);
+            $repository->method('studentAudience')->willReturnCallback(static function (array $ids) use (
+                $f,
+                $real,
+                $missing,
+                $other,
+            ): array {
+                $rows = $real->studentAudience($ids);
+                $f->access->staff = false;
+                $f->access->grants = array_values(array_diff(
+                    ['sis:communications:manage', 'sis:person:manage', 'sis:student:read'],
+                    [$missing]
+                ));
+                if ($missing === 'actor') {
+                    $f->access->actor = $other;
+                }
+                return $rows;
+            });
+            $before = $this->facts($f);
+            try {
+                $this->service($f, $repository)->studentRecipients([$student->id]);
+                self::fail('A resolved audience survived lost authority or a changed actor.');
+            } catch (AccessDeniedException) {
+                self::assertSame($before, $this->facts($f));
+            }
+            if ($missing !== 'actor') {
+                $repository = $this->createMock(CampaignRepository::class);
+                $repository->expects(self::never())->method('studentAudience');
+                try {
+                    $this->service($f, $repository)->studentRecipients([$student->id]);
+                    self::fail('Student accounts were read without the required duty.');
+                } catch (AccessDeniedException) {
+                    self::assertSame($before, $this->facts($f));
+                }
+            }
+        }
+    }
 }

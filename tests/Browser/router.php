@@ -174,6 +174,8 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/report-fixture/' => ['sis:reporting:run'],
         '/admin/report-billing-fixture/' => ['sis:reporting:run', 'sis:student:read',
             'sis:finance:read', 'sis:finance:post'],
+        '/admin/report-messaging-fixture/' => ['sis:reporting:run', 'sis:student:read',
+            'sis:communications:manage', 'sis:person:manage'],
         '/admin/report-manager-fixture/' => ['sis:reporting:manage'],
         '/admin/communications-fixture/' => ['sis:communications:manage'],
         '/admin/communications-admin-fixture/' => ['sis:communications:manage', 'sis:communications:admin'],

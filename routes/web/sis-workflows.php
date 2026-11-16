@@ -1112,6 +1112,7 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/campaigns/", [SisCampaignController::class, "create"])
         ->name("sis.campaign.create");
     $router->post('/sis/campaigns/recipients/search/', [SisCampaignController::class, 'recipientChoices']);
+    $router->post('/sis/campaigns/recipients/students/', [SisCampaignController::class, 'studentRecipients']);
     $router->post('/sis/campaigns/templates/page/', [SisCampaignController::class, 'templates']);
     $router->post('/sis/campaigns/templates/create/', [SisCampaignController::class, 'createTemplate']);
     $router->post('/sis/campaigns/{id}/template/draft/', [SisCampaignController::class, 'draftFromTemplate']);

@@ -1793,15 +1793,30 @@ window.createWorkspaceReportStudio = function (ui) {
             ),
         );
     }
+    const populationTasks = {
+        registration: {
+            permissions: ["sis:registration:manage"], stage: "registration review",
+            explanation: "Report access does not grant registration authority. No enrollment or charge is created here. Registration uses each student's current primary pursuit. The group remains editable and checks current eligibility, seats and fees before confirmation.",
+            open: (students, back) => ui.registerPopulation(students, back),
+        },
+        billing: {
+            permissions: ["sis:finance:post", "sis:finance:read"], stage: "billing review",
+            explanation: "Report access does not grant billing authority. No charge is created here. The billing group remains editable; choose a term and review current fees, earlier postings and resulting balances before confirmation. Program fees use each student's current primary pursuit.",
+            open: (students, back) => ui.billPopulation(students, back),
+        },
+        messaging: {
+            permissions: ["sis:communications:manage", "sis:person:manage"], stage: "message composer",
+            explanation: "Report access does not grant messaging authority. Current person accounts are checked before composing. Save and review your wording and recipients before queueing; sending uses a separate background-delivery confirmation. Report values are not copied into the message.",
+            open: (students, back) => ui.messagePopulation(students, back),
+        },
+    };
     async function population(id, action, state = null) {
-        if (!["registration", "billing"].includes(action)) throw new Error("Choose a supported student task.");
-        const billing = action === "billing";
+        if (!Object.hasOwn(populationTasks, action)) throw new Error("Choose a supported student task.");
+        const workflow = populationTasks[action];
         state ||= { selected: new Map(), version: null, offset: 0 };
         const body = openSpace(`Choose students for ${action}`, "SAVED REPORT · STUDENT POPULATION");
-        body.append(node("p", {}, `Choose up to 25 distinct students across this report's live population pages. Repeated program or credit rows count as one student. The selection is checked against the saved report again before opening the ${action} review.`),
-            node("p", { class: "form-text" }, billing
-                ? "Report access does not grant billing authority. No charge is created here. The billing group remains editable; choose a term and review current fees, earlier postings and resulting balances before confirmation. Program fees use each student's current primary pursuit."
-                : "Report access does not grant registration authority. No enrollment or charge is created here. Registration uses each student's current primary pursuit. The group remains editable and checks current eligibility, seats and fees before confirmation."));
+        body.append(node("p", {}, `Choose up to 25 distinct students across this report's live population pages. Repeated program or credit rows count as one student. The selection is checked against the saved report again before opening the ${workflow.stage}.`),
+            node("p", { class: "form-text" }, workflow.explanation));
         const selected = node("section", { class: "record-section", "aria-label": "Selected report students" });
         const status = node("p", { role: "status", "aria-live": "polite" });
         const results = node("div"), navigation = node("div", { class: "inline-actions" });
@@ -1825,8 +1840,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     student_ids: [...state.selected.keys()], report_version: state.version, action,
                 });
                 if (!body.isConnected || attempt !== requestNumber) return;
-                const open = billing ? ui.billPopulation : ui.registerPopulation;
-                await open(result.items, () => population(id, action, state));
+                await workflow.open(result.items, () => population(id, action, state));
             } catch (error) {
                 if (!body.isConnected || attempt !== requestNumber) return;
                 if ([403, 404, 409].includes(error.status)) {
@@ -2015,10 +2029,12 @@ window.createWorkspaceReportStudio = function (ui) {
         }));
         if (can("sis:reporting:manage") && saved.can_manage)
             body.append(button("Manage report sharing", () => ui.sharing(id)));
-        if (saved.student_actions?.includes("registration") && can("sis:registration:manage") && can("sis:student:read") && can("sis:reporting:run"))
-            body.append(button("Choose students for registration", () => population(id, "registration")));
-        if (saved.student_actions?.includes("billing") && can("sis:finance:post") && can("sis:finance:read") && can("sis:student:read") && can("sis:reporting:run"))
-            body.append(button("Choose students for billing", () => population(id, "billing")));
+        if (can("sis:student:read") && can("sis:reporting:run")) {
+            for (const [action, workflow] of Object.entries(populationTasks)) {
+                if (saved.student_actions?.includes(action) && workflow.permissions.every(permission => can(permission)))
+                    body.append(button(`Choose students for ${action}`, () => population(id, action)));
+            }
+        }
         const panel = node("section", {
             class: "record-section report-saved-results",
             "aria-label": "Saved report results",
