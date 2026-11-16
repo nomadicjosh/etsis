@@ -288,6 +288,7 @@ if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+
 $sectionPath = "/sis/sections/" . $teachingSection->id->value;
 $created = $teachingPost($sectionPath . "/assignments/", [
     "title" => "Fictional assignment",
@@ -2566,6 +2567,7 @@ foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $slug) {
         "campus-pathways",
         "campus-courses",
         "campus-news",
+        "campus-events",
         "campus-programs",
         "campus-invitation",
     ];
@@ -3980,6 +3982,52 @@ if (
     $teachingPost($studentSpecializationBase . 'history/', [])->getStatusCode() !== 403
 ) {
     throw new RuntimeException('Catalog maintenance bypassed student privacy.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+
+// Public facilities content is deliberately separate from private purposes and academic history.
+$publicBooking = $teachingPost('/sis/bookings/', ['room_id' => $roomId,
+    'title' => 'PRIVATE public-event fixture purpose', 'slots' => [
+        ['starts_at' => '2026-08-25T14:00:00Z', 'ends_at' => '2026-08-25T15:00:00Z'],
+    ]]);
+$publicBookingId = json_decode((string) $publicBooking->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$publicEventBase = '/sis/bookings/' . $publicBookingId . '/public-event/';
+if ($publicBooking->getStatusCode() !== 201
+    || $teachingPost('/sis/bookings/' . $publicBookingId . '/approve/', ['version' => 0])->getStatusCode() !== 200) {
+    throw new RuntimeException('Public-event fixture booking approval failed.');
+}
+$publicEventEvents = $sis->sql->rows('sis_history_events');
+$publicEventUnverified = $get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $publicEventBase . 'review/'))
+    ->withMethod('POST')->withHeader('Accept', 'application/json')
+    ->withParsedBody(['title' => 'Fictional invitation', 'description' => 'Public event details']);
+if ($app->router->match($publicEventUnverified)->getStatusCode() !== 403) {
+    throw new RuntimeException('Public event review bypassed framework CSRF.');
+}
+$publicEventReviewResponse = $teachingPost($publicEventBase . 'review/', [
+    'title' => 'Fictional public gathering', 'description' => 'Public invitation only.',
+]);
+$publicEventReview = json_decode((string) $publicEventReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($publicEventReviewResponse->getStatusCode() !== 200
+    || str_contains((string) $publicEventReviewResponse->getBody(), 'PRIVATE public-event fixture purpose')
+    || $publicEventReviewResponse->hasHeader('phpdebugbar-id')
+    || $teachingPost($publicEventBase . 'publish/', ['review_token' => $publicEventReview['review_token']])->getStatusCode() !== 200) {
+    throw new RuntimeException('Public event publication lost its explicit safe-content review.');
+}
+$sis->access->staff = false;
+$sis->access->grants = [];
+$publicCalendarRequest = $get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/portal/api/events/'))
+    ->withQueryParams(['date' => '2026-08-25', 'view' => 'week']);
+$publicCalendarResponse = $app->router->match($publicCalendarRequest);
+$publicCalendarBody = (string) $publicCalendarResponse->getBody();
+if ($publicCalendarResponse->getStatusCode() !== 200 || $publicCalendarResponse->hasHeader('phpdebugbar-id')
+    || !str_contains($publicCalendarResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || !str_contains($publicCalendarBody, 'Fictional public gathering')
+    || str_contains($publicCalendarBody, 'PRIVATE public-event fixture purpose')
+    || str_contains($publicCalendarBody, $publicBookingId)
+    || $teachingPost($publicEventBase . 'setup/', [])->getStatusCode() !== 403
+    || $sis->sql->rows('sis_history_events') !== $publicEventEvents) {
+    throw new RuntimeException('Guest calendar reads exposed private facilities data or academic decisions.');
 }
 $sis->access->staff = true;
 $sis->access->grants = [];

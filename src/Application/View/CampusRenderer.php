@@ -27,7 +27,7 @@ final readonly class CampusRenderer
         if (
             !in_array(
                 $template,
-                ["home", "catalog", "news", "article", "workspace", "not-found", "auth", "moodle", "account-setup"],
+                ["home", "catalog", "news", "article", "workspace", "not-found", "auth", "moodle", "account-setup", "events"],
                 true,
             )
         ) {

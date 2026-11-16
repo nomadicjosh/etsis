@@ -11,7 +11,7 @@ final class CampusPageTemplate
     public static function data(): array
     {
         $slugs = ['campus-hero', 'campus-pathways', 'campus-courses', 'campus-news',
-            'campus-programs', 'campus-invitation'];
+            'campus-programs', 'campus-events', 'campus-invitation'];
         $html = [];
         $blocks = [];
         foreach ($slugs as $slug) {

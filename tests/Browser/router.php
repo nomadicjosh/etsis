@@ -16,6 +16,16 @@ if (is_string($path) && (str_starts_with($path, '/assets/') || str_starts_with($
 
 require $root . '/vendor/autoload.php';
 
+if ($path === '/portal/api/events/') {
+    require __DIR__ . '/public-events-fixture.php';
+    $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
+    header('Cache-Control: private, no-store');
+    header('Content-Type: application/json');
+    echo json_encode(['html' => $loader->render('framework::frontend/portal/components/event-calendar',
+        publicEventsFixture($_GET))], JSON_THROW_ON_ERROR);
+    return;
+}
+
 if ($path === '/fixture/transcript-document/') {
     header('Cache-Control: private, no-store');
     echo new \Infrastructure\Documents\ProtectedTranscriptRenderer()->html([
@@ -79,6 +89,11 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     if ($path === '/portal/courses/') {
         $template = 'catalog';
         $title = 'Explore courses';
+    } elseif ($path === '/portal/events/') {
+        require __DIR__ . '/public-events-fixture.php';
+        $template = 'events';
+        $title = 'Find your place on campus';
+        $data += publicEventsFixture($_GET);
     } elseif ($path === '/portal/news/') {
         $template = 'news';
         $title = 'Around campus';

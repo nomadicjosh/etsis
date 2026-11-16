@@ -693,6 +693,8 @@ window.createWorkspaceScheduling = function (ui) {
                 room(record.room_id, record.occurrences[0].starts_at),
             ) : null,
         );
+        if (place && !record.section && can('sis:scheduling:manage') && can('sis:portal:manage'))
+            body.append(button('Manage public event', () => publicEvent(record, back)));
         if (can('sis:scheduling:manage')) body.append(button('Change category', async () => {
             const edit = openDrawer('Change booking category', 'SPACES & SCHEDULING');
             const fields = [classificationFields[0]];
@@ -792,6 +794,76 @@ window.createWorkspaceScheduling = function (ui) {
                     ),
                 ),
             );
+    }
+    async function publicEvent(record, back) {
+        const body = openDrawer('Public campus event', 'SPACES & SCHEDULING');
+        const base = `/sis/bookings/${record.id}/public-event/`;
+        const setup = await request(`${base}setup/`, 'POST', {});
+        if (!body.isConnected) return;
+        const fields = [['title', 'Public event title'], ['description', 'Public event description', 'textarea']];
+        const form = await buildForm(fields, setup.current || {});
+        if (!body.isConnected) return;
+        form.elements.description.maxLength = 4000;
+        const heading = text => node('h2', { class: 'h4', tabindex: '-1' }, text);
+        const preview = node('section', { hidden: true, 'aria-label': 'Public event review' });
+        const edit = node('section', {}, heading('Invite your campus community'),
+            node('p', { class: 'form-text' },
+                'Only these public words and reviewed dates and locations appear in the portal. The internal booking purpose stays private. Cancelled meetings disappear; replacement bookings need their own publication.'),
+            node('p', { role: 'status' }, setup.current?.published ? 'Public event content is published.' : 'This event is not published.'), form);
+        const close = () => booking(record.id, back);
+        form.append(button('Back to booking', close));
+        if (!setup.preview) edit.append(node('p', { class: 'alert alert-info' },
+            'Publication requires an approved room booking with active meetings and no course-section link. Existing public content can still be withdrawn.'));
+        const submit = node('button', { type: 'submit', class: 'btn btn-primary', disabled: !setup.preview }, 'Review public event');
+        form.append(submit);
+        let generation = 0;
+        form.addEventListener('input', () => { generation++; });
+        const editAgain = () => { preview.hidden = true; edit.hidden = false; submit.focus(); };
+        if (setup.current?.published) edit.append(button('Withdraw public event', () => {
+            preview.replaceChildren(heading('Remove this event from the public calendar?'),
+                node('p', {}, 'The room reservation and booking history stay in place. This only withdraws the public event content.'),
+                button('Back to event details', editAgain), button('Confirm withdrawal', async () => {
+                    await request(`${base}withdraw/`, 'POST', { version: setup.current.version });
+                    if (!body.isConnected) return;
+                    notify('Public event withdrawn.'); await publicEvent(record, back);
+                }, 'btn-primary'));
+            edit.hidden = true; preview.hidden = false; preview.querySelector('h2').focus();
+        }));
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const serial = ++generation;
+                const review = await request(`${base}review/`, 'POST', formData(form, fields));
+                if (!body.isConnected || serial !== generation) return;
+                const content = node('div'), paging = node('nav', { class: 'inline-actions mt-3', 'aria-label': 'Public event review pages' });
+                let page = 0;
+                const draw = () => {
+                    content.replaceChildren(grid(['Starts', 'Ends'], review.preview.times.slice(page * 20, (page + 1) * 20)
+                        .map(time => [new Date(time.starts_at).toLocaleString(undefined, { timeZone: review.preview.timezone, timeZoneName: 'shortOffset' }),
+                            new Date(time.ends_at).toLocaleString(undefined, { timeZone: review.preview.timezone, timeZoneName: 'shortOffset' })]), 'Public event dates'));
+                    paging.replaceChildren();
+                    if (page) paging.append(button('Previous event dates', () => { page--; draw(); }));
+                    const status = node('p', { role: 'status', tabindex: '-1' },
+                        `Dates ${page * 20 + 1}–${Math.min((page + 1) * 20, review.preview.times.length)} of ${review.preview.times.length}`);
+                    paging.append(status);
+                    if ((page + 1) * 20 < review.preview.times.length)
+                        paging.append(button('Next event dates', () => { page++; draw(); }));
+                    if (paging.isConnected) status.focus();
+                };
+                preview.replaceChildren(heading('Review the public invitation'), node('h3', { class: 'h5' }, review.title),
+                    node('p', { class: 'campus-event-description' }, review.description),
+                    node('p', {}, `${review.preview.room_label} · ${review.preview.building_label}`),
+                    node('p', { class: 'form-text' }, `Public dates use ${review.preview.timezone}. Review expires in 20 minutes. Anyone can read published content.`),
+                    content, paging, button('Back to event details', editAgain), button('Publish public event', async () => {
+                        await request(`${base}publish/`, 'POST', { review_token: review.review_token });
+                        if (!body.isConnected) return;
+                        notify('Public event published.'); await publicEvent(record, back);
+                    }, 'btn-primary'));
+                draw(); edit.hidden = true; preview.hidden = false; preview.querySelector('h2').focus();
+            }, submit);
+        });
+        body.append(edit, preview, node('a', { href: '/portal/events/', class: 'd-inline-block mt-3' }, 'Open the public campus calendar'));
     }
     async function reschedule(record, occurrence, place, back) {
         const body = openDrawer('Reschedule one meeting', 'SPACES & SCHEDULING');

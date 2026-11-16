@@ -1283,6 +1283,10 @@
     color: #3e321e;
 }
 .academic-overlap-note { margin-top: .25rem; font-weight: 600; color: #6a4b0f; }
+.campus-event-calendar .academic-timetable-day { text-decoration: none; color: inherit; }
+.campus-event-calendar .academic-timetable-day[aria-current="date"] { border-color: var(--campus-primary, #154b7d); background: #edf4fa; }
+.campus-public-event { padding: 1.25rem; border: 1px solid var(--campus-line, #d8e1e9); border-radius: .85rem; overflow-wrap: anywhere; }
+.campus-event-description { white-space: pre-line; }
 @media (min-width: 576px) {
     .academic-timetable-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }

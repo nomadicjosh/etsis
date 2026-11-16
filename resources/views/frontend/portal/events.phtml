@@ -1,0 +1,14 @@
+<section class="campus-section campus-container">
+    <p class="campus-eyebrow">CONNECTIONS BEYOND THE CLASSROOM</p>
+    <h1>Find your place on campus.</h1>
+    <p class="campus-lead">Discover public gatherings, conversations and moments worth making time for.</p>
+    <div data-public-events>
+        <?php $this->insert('framework::frontend/portal/components/event-calendar', [
+            'calendar' => $calendar, 'calendarDate' => $calendarDate, 'search' => $search,
+            'selectedDay' => $selectedDay, 'dailyPage' => $dailyPage,
+        ]); ?>
+    </div>
+    <p class="campus-muted mt-4">
+        This calendar includes explicitly published public events. Your classes appear in My timetable.
+    </p>
+</section>

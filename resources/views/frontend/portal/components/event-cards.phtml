@@ -1,0 +1,43 @@
+<section class="campus-section campus-container" aria-label="Upcoming public campus events">
+    <div class="campus-section-heading">
+        <div>
+            <p class="campus-eyebrow">COME BE PART OF IT</p>
+            <h2><?= $this->esc($eventsHeading ?? 'Make time for something wonderful.'); ?></h2>
+        </div>
+        <a class="campus-text-link" href="/portal/events/">
+            Explore the campus calendar <i class="bi bi-arrow-right" aria-hidden="true"></i>
+        </a>
+    </div>
+    <div class="campus-news-grid">
+        <?php foreach (array_slice($events ?? [], 0, 3) as $event) : ?>
+            <?php
+            $date = new \DateTimeImmutable($event['starts_at'])->setTimezone(new \DateTimeZone($event['timezone']));
+            $dayUrl = '/portal/events/?' . http_build_query([
+                'date' => $date->format('Y-m-d'), 'day' => $date->format('Y-m-d'),
+            ]);
+            ?>
+            <article class="campus-public-event">
+                <p class="campus-eyebrow">
+                    <time datetime="<?= $this->esc($event['starts_at']); ?>">
+            <?= $this->esc($date->format('M j · g:i a T')); ?>
+                    </time>
+                </p>
+                <h3 class="h5"><?= $this->esc($event['title']); ?></h3>
+                <p>
+            <?= $this->esc($event['room_label']); ?>
+                    <span class="d-block"><?= $this->esc($event['building_label']); ?></span>
+                </p>
+                <p><?= $this->esc(mb_strimwidth($event['description'], 0, 170, '…')); ?></p>
+                <a class="campus-text-link" href="<?= $this->esc($dayUrl); ?>">
+                    View event day<span class="visually-hidden">: <?= $this->esc($event['title']); ?></span>
+                </a>
+            </article>
+        <?php endforeach; ?>
+        <?php if (($events ?? []) === []) : ?>
+            <div class="campus-empty">
+                <h3 class="h5">There’s more ahead.</h3>
+                <p>Public events in the next month will appear here. Explore the calendar for other dates.</p>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>

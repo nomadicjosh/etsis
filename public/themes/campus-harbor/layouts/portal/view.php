@@ -36,6 +36,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <script defer src="/assets/js/person-emergency-contacts.js"></script>
         <script defer src="/assets/js/person-addresses.js"></script>
         <script defer src="/assets/js/academic-timetable.js"></script>
+        <script defer src="/assets/js/public-events.js"></script>
         <script defer src="/assets/js/portal.js"></script>
     </head>
     <body class="campus-site">
@@ -75,6 +76,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                             <a class="nav-link" href="/portal/courses/">Explore courses</a>
                         </li>
                         <li class="nav-item"><a class="nav-link" href="/portal/news/">Around campus</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/portal/events/">Campus events</a></li>
                         <?php if ($staffAccess): ?>
                             <li class="nav-item"><a class="nav-link" href="/admin/">Staff workspace</a></li>
                         <?php endif; ?>

@@ -1,0 +1,337 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use Domain\Audit\Repository\AuditTrail;
+use Domain\Scheduling\Booking;
+use Domain\Scheduling\BookingOccurrence;
+use Domain\Scheduling\Service\PublicEventService;
+use Domain\Scheduling\TimeSlot;
+use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
+use Domain\Shared\ValueObject\EntityId;
+use Infrastructure\Persistence\Repository\SqlBookingRepository;
+use Infrastructure\Persistence\Repository\SqlPublicEventRepository;
+use PHPUnit\Framework\TestCase;
+use SisFixture;
+
+final class PublicCampusEventsTest extends TestCase
+{
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . '/Support/SisFixture.php';
+    }
+
+    private function fixture(): SisFixture
+    {
+        $f = new SisFixture();
+        $f->clock->time = new DateTimeImmutable('2026-08-10T10:00:00', new DateTimeZone('America/Los_Angeles'));
+        return $f;
+    }
+
+    private function service(SisFixture $f, ?AuditTrail $audit = null): PublicEventService
+    {
+        return new PublicEventService(
+            new SqlPublicEventRepository($f->sql),
+            $f->access,
+            $f->transactions,
+            $audit ?? $f->audit,
+            $f->dropCipher,
+            $f->clock
+        );
+    }
+
+    private function booking(SisFixture $f, string $status = 'approved', int $count = 1): Booking
+    {
+        $slots = [];
+        for ($i = 0; $i < $count; ++$i) {
+            $start = new DateTimeImmutable('2026-08-10T11:00:00-07:00')->modify('+' . $i . ' days');
+            $slots[] = BookingOccurrence::plan(new TimeSlot($start, $start->modify('+1 hour')));
+        }
+        $booking = new Booking(
+            EntityId::generate(),
+            $f->room('PUBLIC.' . substr(EntityId::generate()->value, -6), 40),
+            $f->access->actor,
+            'PRIVATE STAFF PURPOSE: never public',
+            $slots,
+            $status
+        );
+        new SqlBookingRepository($f->sql)->add($booking);
+        return $booking;
+    }
+
+    /** @return array<string,mixed> */
+    private function publish(
+        PublicEventService $service,
+        Booking $booking,
+        string $title = 'Fictional open house'
+    ): array {
+        $review = $service->review(
+            $booking->id,
+            $title,
+            "Public invitation <script>example</script>\nEveryone is welcome."
+        );
+        $service->publish($booking->id, $review['review_token']);
+        return $review;
+    }
+
+    public function testExplicitPublicationAndGuestReadsNeverExposeBookingPeopleOrPrivateDetails(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $before = $f->sql->rows('sis_history_events');
+        self::assertSame([], $service->calendar()['items']);
+        $setup = $service->setup($booking->id);
+        self::assertNull($setup['current']);
+        self::assertArrayNotHasKey('occurrence_id', $setup['preview']['times'][0]);
+        $review = $this->publish($service, $booking);
+        self::assertStringNotContainsString('PRIVATE', json_encode($review, JSON_THROW_ON_ERROR));
+        $f->access->staff = false;
+        $result = $service->calendar();
+        self::assertCount(1, $result['items']);
+        self::assertSame(1, $result['days'][9]['counts']['published']);
+        self::assertSame('Fictional open house', $result['items'][0]['title']);
+        self::assertNotSame($booking->id->value, $result['items'][0]['event_id']);
+        self::assertNotSame($booking->occurrences[0]->id->value, $result['items'][0]['id']);
+        $json = json_encode($result, JSON_THROW_ON_ERROR);
+        foreach (
+            ['PRIVATE', 'booking_id', 'occurrence_id', 'actor_id', 'request_hash', 'operation_id',
+            'review_token', $booking->id->value, $booking->ownerUserId->value] as $secret
+        ) {
+            self::assertStringNotContainsString($secret, $json);
+        }
+        self::assertSame($before, $f->sql->rows('sis_history_events'));
+        self::assertCount(1, $service->upcoming());
+    }
+
+    public function testBothPermissionsAreRequiredEvenForTheBookingsOwner(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $f->access->staff = false;
+        foreach ([[], ['sis:scheduling:manage'], ['sis:portal:manage']] as $grants) {
+            $f->access->grants = $grants;
+            try {
+                $this->service($f)->review($booking->id, 'Public title', 'Public description');
+                self::fail('Both grants are necessary.');
+            } catch (AccessDeniedException) {
+                self::assertSame([], $f->sql->rows('sis_public_events'));
+            }
+        }
+        $f->access->grants = ['sis:scheduling:manage', 'sis:portal:manage'];
+        self::assertNotEmpty($this->service($f)->setup($booking->id)['preview']);
+    }
+
+    public function testRequestedCancelledAndClassLinkedBookingsCannotBePublished(): void
+    {
+        $f = $this->fixture();
+        $service = $this->service($f);
+        foreach (['requested', 'cancelled'] as $status) {
+            $booking = $this->booking($f, $status);
+            self::assertNull($service->setup($booking->id)['preview']);
+            try {
+                $service->review($booking->id, 'Public title', 'Public description');
+                self::fail('Only approved meetings can be published.');
+            } catch (ValidationException) {
+                self::assertSame([], $f->sql->rows('sis_public_events'));
+            }
+        }
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $school = new \Tests\Support\AcademicTimetableFixture();
+        $booking = $school->bookings->request(null, 'Private online class', [
+            new TimeSlot(
+                new DateTimeImmutable('2026-08-10T10:00:00-07:00'),
+                new DateTimeImmutable('2026-08-10T11:00:00-07:00')
+            ),
+        ], section: $school->section->id);
+        $school->bookings->approve($booking->id, 0);
+        $this->expectException(ValidationException::class);
+        $this->service($school->sis)->review($booking->id, 'Public title', 'Public description');
+    }
+
+    public function testActorBoundReviewsExpireAndChangedRoomMetadataRequiresAnotherReview(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $review = $service->review($booking->id, 'Public title', 'Public description');
+        $actor = $f->access->actor;
+        $f->access->actor = $f->user();
+        try {
+            $service->publish($booking->id, $review['review_token']);
+            self::fail('Another actor cannot confirm the review.');
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows('sis_public_events'));
+        }
+        $f->access->actor = $actor;
+        $f->sql->update('sis_rooms', ['name' => 'Changed room label'], ['id' => $booking->roomId->value]);
+        try {
+            $service->publish($booking->id, $review['review_token']);
+            self::fail('Location changes must be reviewed.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $f->sql->rows('sis_public_events'));
+        }
+        $review = $service->review($booking->id, 'Public title', 'Public description');
+        $f->clock->time = $f->clock->time->modify('+20 minutes');
+        $this->expectException(ConcurrentModificationException::class);
+        $service->publish($booking->id, $review['review_token']);
+    }
+
+    public function testCancellationHidesOnlyThatPublishedOccurrenceAndKeepsOriginalFacts(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, count: 2);
+        $service = $this->service($f);
+        $this->publish($service, $booking);
+        $repo = new SqlBookingRepository($f->sql);
+        $cancelled = $booking->cancelOccurrence($booking->occurrences[0]->id, $f->access->actor, $f->clock->now());
+        $repo->cancelOccurrence($cancelled, $booking->occurrences[0]->id, 0);
+        self::assertCount(2, $f->sql->rows('sis_public_event_times'));
+        self::assertCount(1, $service->calendar()['items']);
+        self::assertSame('2026-08-11T11:00:00-07:00', $service->calendar()['items'][0]['starts_at']);
+        $repo->save($cancelled->transition('cancelled'), 1);
+        self::assertSame([], $service->calendar()['items']);
+        self::assertNull($service->setup($booking->id)['preview']);
+        $service->withdraw($booking->id, 1);
+        self::assertSame(0, $f->sql->one('sis_public_events', ['booking_id' => $booking->id->value])['published']);
+    }
+
+    public function testRetriesNeverRepublishWithdrawnContentOrOverwriteLaterEditorialChanges(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $review = $this->publish($service, $booking);
+        $first = $service->publish($booking->id, $review['review_token']);
+        $service->withdraw($booking->id, 1);
+        $service->withdraw($booking->id, 1);
+        self::assertSame($first, $service->publish($booking->id, $review['review_token']));
+        self::assertSame([], $service->calendar()['items']);
+        self::assertFalse($service->setup($booking->id)['current']['published']);
+        $this->publish($service, $booking, 'Revised public title');
+        self::assertSame('Revised public title', $service->calendar()['items'][0]['title']);
+        self::assertSame($first['id'], $service->calendar()['items'][0]['event_id']);
+        $this->expectException(ConcurrentModificationException::class);
+        $service->publish($booking->id, $review['review_token']);
+    }
+
+    public function testAuditFailureRollsBackContentTimesAndPublication(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willThrowException(new \RuntimeException('Fictional audit failure'));
+        $service = $this->service($f, $audit);
+        $review = $service->review($booking->id, 'Public title', 'Public description');
+        try {
+            $service->publish($booking->id, $review['review_token']);
+            self::fail('Required audit must commit with publication.');
+        } catch (\RuntimeException) {
+            self::assertSame([], $f->sql->rows('sis_public_events'));
+            self::assertSame([], $f->sql->rows('sis_public_event_times'));
+        }
+    }
+
+    public function testPublicCalendarFiltersBeforeItsBoundAndTreatsSearchWildcardsLiterally(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $this->publish($service, $booking, 'Open_100% house');
+        self::assertCount(1, $service->calendar(search: '_100%')['items']);
+        self::assertSame([], $service->calendar(search: 'Open!')['items']);
+        self::assertSame([], $service->calendar('2026-09-01')['items']);
+        // Build a dense public read model without inventing academic decisions or bypassing public source checks.
+        $event = $f->sql->rows('sis_public_events')[0];
+        for ($i = 0; $i < 500; ++$i) {
+            $occurrence = EntityId::generate()->value;
+            $f->sql->insert('sis_booking_slots', ['id' => $occurrence, 'booking_id' => $booking->id->value,
+                'starts_at' => '2026-08-10 18:00:00', 'ends_at' => '2026-08-10 19:00:00']);
+            $f->sql->insert('sis_public_event_times', ['id' => EntityId::generate()->value, 'event_id' => $event['id'],
+                'occurrence_id' => $occurrence, 'starts_at' => '2026-08-10 18:00:00',
+                'ends_at' => '2026-08-10 19:00:00']);
+        }
+        self::assertSame([], $service->calendar(search: 'No matching event')['items']);
+        self::assertCount(3, $service->upcoming());
+        $this->expectException(ValidationException::class);
+        $service->calendar();
+    }
+
+    public function testAnEarlierEditorialReviewCannotReplaceAnAcceptedNewerOne(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $service = $this->service($f);
+        $earlier = $service->review($booking->id, 'Earlier title', 'Earlier public details.');
+        $this->publish($service, $booking, 'Accepted new title');
+        try {
+            $service->publish($booking->id, $earlier['review_token']);
+            self::fail('A stale review must not overwrite the current event.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame('Accepted new title', $service->calendar()['items'][0]['title']);
+        }
+    }
+
+    public function testRevokedPermissionAtCompletionRollsBackThePublicProjection(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f);
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willReturnCallback(static function () use ($f): void {
+            $f->access->staff = false;
+            $f->access->grants = ['sis:scheduling:manage'];
+        });
+        $service = $this->service($f, $audit);
+        $review = $service->review($booking->id, 'Public title', 'Public description');
+        try {
+            $service->publish($booking->id, $review['review_token']);
+            self::fail('The content permission is required through completion.');
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows('sis_public_events'));
+            self::assertSame([], $f->sql->rows('sis_public_event_times'));
+        }
+    }
+
+    public function testReschedulingCannotSilentlyPublishTheReplacementOrRemoveOtherDates(): void
+    {
+        $f = $this->fixture();
+        $booking = $this->booking($f, count: 2);
+        $service = $this->service($f);
+        $this->publish($service, $booking);
+        $bookings = new \Domain\Scheduling\Service\BookingService(
+            new SqlBookingRepository($f->sql),
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlRoomRepository($f->sql),
+            $f->clock,
+            new \Infrastructure\Persistence\Repository\SqlBookingCategoryRepository($f->sql),
+            $f->bookingSections()
+        );
+        $time = new TimeSlot(
+            new DateTimeImmutable('2026-08-10T13:00:00-07:00'),
+            new DateTimeImmutable('2026-08-10T14:00:00-07:00')
+        );
+        $review = $bookings->reviewReplacement($booking->id, $booking->occurrences[0]->id, $booking->roomId, $time, 0);
+        $replacement = $bookings->replaceOccurrence(
+            $booking->id,
+            $booking->occurrences[0]->id,
+            new EntityId($review['new_id']),
+            $booking->roomId,
+            $time,
+            0,
+            $review['revision']
+        );
+        $rows = $service->calendar()['items'];
+        self::assertCount(1, $rows);
+        self::assertSame('2026-08-11T11:00:00-07:00', $rows[0]['starts_at']);
+        self::assertNull($service->setup($replacement->id)['current']);
+        self::assertCount(2, $f->sql->rows('sis_public_event_times'));
+    }
+}

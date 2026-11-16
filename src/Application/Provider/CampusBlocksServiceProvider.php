@@ -12,7 +12,7 @@ final class CampusBlocksServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $slugs = ['campus-hero', 'campus-pathways', 'campus-courses', 'campus-news',
-            'campus-programs', 'campus-invitation'];
+            'campus-programs', 'campus-events', 'campus-invitation'];
         foreach ($slugs as $slug) {
             Extensions::registerBlock($slug, $this->codefy->resourcePath() . '/blocks/' . $slug);
         }

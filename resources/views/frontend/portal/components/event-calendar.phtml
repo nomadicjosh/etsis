@@ -1,0 +1,158 @@
+<?php
+
+$zone = new \DateTimeZone($calendar['timezone']);
+$dateLabel = static fn(string $date): string => new \DateTimeImmutable($date, $zone)->format('l, M j, Y');
+$timeLabel = static fn(string $instant): string =>
+    new \DateTimeImmutable($instant)->setTimezone($zone)->format('M j, g:i a P');
+$days = array_column($calendar['days'], null, 'date');
+$selected = $days[$selectedDay ?? ''] ?? $days[$calendarDate] ?? $days[$calendar['today']] ?? $calendar['days'][0];
+$byId = array_column($calendar['items'], null, 'id');
+$entries = $selected['items'];
+$page = min($dailyPage ?? 0, max(0, (int) ceil(count($entries) / 20) - 1));
+$query = ['date' => $calendarDate, 'view' => $calendar['view'], 'search' => $search ?? '', 'day' => $selected['date']];
+$url = static fn(array $changes): string => '/portal/events/?' . http_build_query(array_replace($query, $changes));
+$leading = (int) new \DateTimeImmutable($calendar['from'], $zone)->format('N') - 1;
+?>
+<div id="campus-event-calendar" class="campus-event-calendar">
+    <form action="/portal/events/" method="get" class="academic-timetable-controls" data-event-filter>
+        <div>
+            <label class="form-label" for="public-event-date">Calendar date</label>
+            <input
+                class="form-control"
+                type="date"
+                id="public-event-date"
+                name="date"
+                value="<?= $this->esc($calendarDate); ?>"
+                min="1000-01-06"
+                max="9998-12-27"
+                required
+            />
+        </div>
+        <div>
+            <label class="form-label" for="public-event-view">Calendar view</label>
+            <select class="form-select" id="public-event-view" name="view">
+                <option value="month" <?= $calendar['view'] === 'month' ? 'selected' : ''; ?>>Month</option>
+                <option value="week" <?= $calendar['view'] === 'week' ? 'selected' : ''; ?>>Week</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label" for="public-event-search">Find an event or location</label>
+            <input
+                class="form-control"
+                type="search"
+                id="public-event-search"
+                name="search"
+                value="<?= $this->esc($search ?? ''); ?>"
+                maxlength="80"
+            />
+        </div>
+        <button class="btn campus-button" type="submit">Explore events</button>
+    </form>
+    <h2 class="h4 mt-4" tabindex="-1" data-event-heading>
+        <?= $this->esc($dateLabel($calendar['from'])); ?> through
+        <?= $this->esc($dateLabel($calendar['through'])); ?>
+    </h2>
+    <p class="campus-muted">
+        <?= count($calendar['items']); ?> public event times · <?= $this->esc($calendar['timezone']); ?>
+    </p>
+    <nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Event calendar dates">
+        <a
+            class="btn campus-button-outline"
+            data-event-link
+            href="<?= $this->esc($url(['date' => $calendar['previous'], 'day' => null])); ?>"
+        >Previous</a>
+        <a
+            class="btn campus-button-outline"
+            data-event-link
+            href="<?= $this->esc($url(['date' => $calendar['today'], 'day' => $calendar['today']])); ?>"
+        >Today</a>
+        <a
+            class="btn campus-button-outline"
+            data-event-link
+            href="<?= $this->esc($url(['date' => $calendar['next'], 'day' => null])); ?>"
+        >Next</a>
+    </nav>
+    <nav
+        class="academic-timetable-days"
+        data-view="<?= $this->esc($calendar['view']); ?>"
+        aria-label="Choose an event day"
+    >
+        <?php if ($calendar['view'] === 'month') : ?>
+            <?php foreach (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as $weekday) : ?>
+                <span class="academic-timetable-weekday" aria-hidden="true"><?= $weekday; ?></span>
+            <?php endforeach; ?>
+            <?php for ($i = 0; $i < $leading; ++$i) : ?>
+                <span class="academic-timetable-spacer" aria-hidden="true"></span>
+            <?php endfor; ?>
+        <?php endif; ?>
+        <?php foreach ($calendar['days'] as $day) : ?>
+            <?php $dayLabel = $dateLabel($day['date']) . ': ' . $day['counts']['published'] . ' public event times'; ?>
+            <a
+                class="academic-timetable-day"
+                data-event-link
+                href="<?= $this->esc($url(['day' => $day['date']])); ?>"
+            <?= $day['date'] === $selected['date'] ? 'aria-current="date"' : ''; ?>
+                aria-label="<?= $this->esc($dayLabel); ?>"
+            >
+                <span class="d-block">
+            <?= $this->esc(new \DateTimeImmutable($day['date'], $zone)->format('M j')); ?>
+                </span>
+                <strong><?= $day['counts']['published']; ?> events</strong>
+            </a>
+        <?php endforeach; ?>
+    </nav>
+    <section class="mt-4" aria-label="Public events on the selected day">
+        <h3 class="h4" tabindex="-1" data-event-day-heading><?= $this->esc($dateLabel($selected['date'])); ?></h3>
+        <?php foreach (array_slice($entries, $page * 20, 20) as $reference) : ?>
+            <?php $event = $byId[$reference['id']]; ?>
+            <article class="campus-public-event my-3">
+                <p class="campus-eyebrow">COME BE PART OF IT</p>
+                <h4 class="h5"><?= $this->esc($event['title']); ?></h4>
+                <p>
+                    <time datetime="<?= $this->esc($event['starts_at']); ?>">
+            <?= $this->esc($timeLabel($event['starts_at'])); ?>
+                    </time>
+                    through
+                    <time datetime="<?= $this->esc($event['ends_at']); ?>">
+            <?= $this->esc($timeLabel($event['ends_at'])); ?>
+                    </time>
+            <?php if ($reference['continues_before'] || $reference['continues_after']) : ?>
+                        <span class="d-block campus-muted">Continues across days</span>
+            <?php endif; ?>
+                </p>
+                <p>
+                    <strong><?= $this->esc($event['room_label']); ?></strong>
+                    <span class="d-block"><?= $this->esc($event['building_label']); ?></span>
+                </p>
+                <p class="campus-event-description"><?= $this->esc($event['description']); ?></p>
+            </article>
+        <?php endforeach; ?>
+        <?php if ($entries === []) : ?>
+            <div class="campus-empty">
+                <h4 class="h5">A little room for possibility.</h4>
+                <p>No public events match this day. Choose another day or change your search.</p>
+            </div>
+        <?php else : ?>
+            <nav class="d-flex flex-wrap gap-2 align-items-center" aria-label="Daily public event pages">
+            <?php if ($page > 0) : ?>
+                    <a
+                        class="btn campus-button-outline"
+                        data-event-link
+                        href="<?= $this->esc($url(['page' => $page - 1])); ?>"
+                    >Previous events</a>
+            <?php endif; ?>
+                <span role="status">
+                    Events <?= $page * 20 + 1; ?>–<?= min(($page + 1) * 20, count($entries)); ?>
+                    of <?= count($entries); ?>
+                </span>
+            <?php if (($page + 1) * 20 < count($entries)) : ?>
+                    <a
+                        class="btn campus-button-outline"
+                        data-event-link
+                        href="<?= $this->esc($url(['page' => $page + 1])); ?>"
+                    >Next events</a>
+            <?php endif; ?>
+            </nav>
+        <?php endif; ?>
+    </section>
+</div>

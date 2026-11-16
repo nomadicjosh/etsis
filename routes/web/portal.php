@@ -42,6 +42,9 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/moodle/session-channel/", [$moodle, "channel"])
         ->name("moodle.session.channel");
     $router->map(["GET"], "/portal/", [Portal::class, "home"])->name("portal.home");
+    $events = \Application\Http\Controller\CampusEventController::class;
+    $router->map(['GET'], '/portal/events/', [$events, 'page'])->name('portal.events');
+    $router->map(['GET'], '/portal/api/events/', [$events, 'calendar'])->name('portal.events.calendar');
     $router->map(['GET'], '/portal/timetable/', [Portal::class, 'timetable'])->name('portal.timetable');
     $timetable = \Application\Http\Controller\PortalTimetableController::class;
     $router->map(['GET'], '/portal/api/timetable/context/', [$timetable, 'context'])->name('portal.timetable.context');
