@@ -53,6 +53,11 @@ final class EventStoreFixture
         );
     }
 
+    public static function financialWriter(Database $db): \Infrastructure\EventSourcing\FinancialEventWriter
+    {
+        return new \Infrastructure\EventSourcing\FinancialEventWriter(self::history($db), new HistoricalSchemaRegistry());
+    }
+
     public static function framework(Database $db): PdoTransactionalEventStore
     {
         $transactions = new DatabaseUnitOfWork($db);

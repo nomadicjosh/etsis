@@ -42,7 +42,8 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             new EventSourcedBillingRuleRepository(
                 $s->sql,
                 \EventStoreFixture::framework($s->connection->queryBuilder()),
-                $s->transactions
+                $s->transactions,
+                \EventStoreFixture::financialWriter($s->connection->queryBuilder()),
             ),
             $s->admissions,
             $s->primaryProgramLedger()

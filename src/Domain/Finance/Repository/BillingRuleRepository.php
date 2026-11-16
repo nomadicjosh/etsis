@@ -6,11 +6,12 @@ namespace Domain\Finance\Repository;
 
 use Domain\Finance\BillingRule;
 use Domain\Finance\ValueObject\BillingRuleId;
+use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\ValueObject\EntityId;
 
 interface BillingRuleRepository
 {
-    public function save(BillingRule $rule): void;
+    public function save(BillingRule $rule, EventContext $context): void;
     public function get(BillingRuleId $id): BillingRule;
     /** @return list<BillingRule> */
     public function forTerm(EntityId $term): array;

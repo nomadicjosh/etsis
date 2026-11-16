@@ -58,6 +58,7 @@ window.createWorkspaceOperations = function (ui) {
             ["kind", "Type", "choice", ["tuition", "fee"]],
             ["amount_minor", "Amount", "money"],
             ["currency", "Currency", "currency"],
+            ["reason", "Reason for billing rule", "textarea"],
         ],
         ledger: [
             ["code", "Ledger account code"],
@@ -444,22 +445,24 @@ window.createWorkspaceOperations = function (ui) {
                 button("Reverse journal", () =>
                     flow(
                         "Confirm journal reversal",
-                        [],
+                        [["reason", "Reason for journal reversal", "textarea"]],
                         `/sis/journals/${row.id}/reverse/`,
-                        null,
+                        (values) => ({ ...values, position: data.position }),
                         () => openRecord("journals", row),
                         {},
-                        "The original journal is retained. Reversal posts compensating ledger events.",
+                        "Enter why this journal must be reversed. The original journal remains in the financial history.",
                     ),
                 ),
             );
     }
     async function createJournal() {
+        const operation = await request("/sis/ui/operation-id/");
         const body = openDrawer("Post a balanced journal", "GENERAL LEDGER");
         const base = [
             ["reference", "Unique journal reference"],
             ["posted_on", "Posting date", "date"],
             ["currency", "Currency", "currency"],
+            ["reason", "Reason for journal", "textarea"],
         ];
         const form = await buildForm(base);
         const lines = node("div");
@@ -518,7 +521,7 @@ window.createWorkspaceOperations = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                const data = formData(form, base);
+                const data = { ...formData(form, base), operation_id: operation.id };
                 data.lines = [...lines.children].map((wrapper) => {
                     const serial = wrapper.dataset.serial;
                     return {
@@ -567,9 +570,9 @@ window.createWorkspaceOperations = function (ui) {
                 button("Retire billing rule", () =>
                     flow(
                         "Confirm rule retirement",
-                        [],
+                        [["reason", "Reason for rule retirement", "textarea"]],
                         `/sis/billing-rules/${row.id}/retire/`,
-                        null,
+                        (values) => ({ ...values, position: rule.position }),
                         () => openRecord("billing", row),
                         {},
                         "Existing charges remain unchanged. New billing will skip this rule.",

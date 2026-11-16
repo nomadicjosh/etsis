@@ -12,13 +12,9 @@ use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\StudentAccount;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
-use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Exception\AccessDeniedException;
-use Domain\Shared\Exception\ConcurrentModificationException;
-use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
-use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 
 final readonly class StudentAccountService
@@ -28,7 +24,7 @@ final readonly class StudentAccountService
         private AdmissionsRepository $admissions,
         private StudentAccess $access,
         private UnitOfWork $transactions,
-        private Clock $clock,
+        private FinancialCommandPolicy $commands,
         private AuditTrail $audit,
     ) {
     }
@@ -40,10 +36,14 @@ final readonly class StudentAccountService
             $this->admissions->student($studentId);
             $account = StudentAccount::open(new AccountId(), $studentId, $termId, $currency);
             $id = new EntityId((string) $account->aggregateId());
-            $this->actor($actor);
-            $this->accounts->save($account, $this->context($actor, $id, 'Student billing account opened by staff.'));
+            $this->commands->assertActor($actor, 'sis:finance:post');
+            $this->accounts->save($account, $this->commands->context(
+                $actor,
+                $id,
+                'Student billing account opened by staff.'
+            ));
             $this->audit->record($actor, 'account.opened', $id);
-            $this->actor($actor);
+            $this->commands->assertActor($actor, 'sis:finance:post');
             return $account;
         });
     }
@@ -62,7 +62,7 @@ final readonly class StudentAccountService
         #[\SensitiveParameter] string $reason,
     ): array {
         $actor = $this->access->requirePermission('sis:finance:post');
-        $reason = $this->reason($reason);
+        $reason = $this->commands->reason($reason);
         return $this->transactions->run(function () use (
             $id,
             $operationId,
@@ -75,15 +75,15 @@ final readonly class StudentAccountService
             $account = $this->accounts->get($id);
             $existing = $account->entry($operationId) !== null;
             if (!$existing) {
-                $this->version($account, $position);
+                $this->commands->assertPosition($account->playhead(), $position);
             }
-            $this->actor($actor);
+            $this->commands->assertActor($actor, 'sis:finance:post');
             $account->post($operationId, $type, $amount, $actor);
             if (!$existing) {
-                $this->accounts->save($account, $this->context($actor, $operationId, $reason));
+                $this->accounts->save($account, $this->commands->context($actor, $operationId, $reason));
                 $this->audit->record($actor, 'account.entry_posted', $operationId);
             }
-            $this->actor($actor);
+            $this->commands->assertActor($actor, 'sis:finance:post');
             return ['status' => $existing ? 'already_recorded' : 'posted'];
         });
     }
@@ -96,66 +96,22 @@ final readonly class StudentAccountService
         #[\SensitiveParameter] string $reason,
     ): array {
         $actor = $this->access->requirePermission('sis:finance:post');
-        $reason = $this->reason($reason);
+        $reason = $this->commands->reason($reason);
         return $this->transactions->run(function () use ($id, $operationId, $position, $reason, $actor): array {
             $account = $this->accounts->get($id);
             $existing = $account->entry($operationId)['reversed'] ?? false;
             if (!$existing) {
-                $this->version($account, $position);
+                $this->commands->assertPosition($account->playhead(), $position);
             }
-            $this->actor($actor);
+            $this->commands->assertActor($actor, 'sis:finance:post');
             $account->reverse($operationId, $actor);
             if (!$existing) {
-                $this->accounts->save($account, $this->context($actor, $operationId, $reason));
+                $this->accounts->save($account, $this->commands->context($actor, $operationId, $reason));
                 $this->audit->record($actor, 'account.entry_reversed', $operationId);
             }
-            $this->actor($actor);
+            $this->commands->assertActor($actor, 'sis:finance:post');
             return ['status' => $existing ? 'already_recorded' : 'reversed'];
         });
-    }
-
-    private function context(
-        EntityId $actor,
-        EntityId $operation,
-        #[\SensitiveParameter] string $reason,
-    ): EventContext {
-        return new EventContext(
-            $actor,
-            $this->clock->now(),
-            $operation,
-            $operation,
-            reason: $reason
-        );
-    }
-
-    private function actor(EntityId $actor): void
-    {
-        if ($this->access->requirePermission('sis:finance:post')->value !== $actor->value) {
-            throw new AccessDeniedException('The financial actor changed.');
-        }
-    }
-
-    private function version(StudentAccount $account, int $position): void
-    {
-        if ($position < 1 || $account->playhead() !== $position) {
-            throw new ConcurrentModificationException(
-                'This account changed. Reload its statement before posting or reversing an entry.'
-            );
-        }
-    }
-
-    private function reason(#[\SensitiveParameter] string $reason): string
-    {
-        $reason = trim($reason);
-        if (
-            $reason === '' || !mb_check_encoding($reason, 'UTF-8') || mb_strlen($reason) > 2000
-            || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $reason)
-        ) {
-            throw new ValidationException([
-                ['field' => 'reason', 'message' => 'Enter a reason of up to 2,000 characters.'],
-            ]);
-        }
-        return $reason;
     }
 
     public function account(AccountId $id): StudentAccount

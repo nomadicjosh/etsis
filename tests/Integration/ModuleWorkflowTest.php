@@ -228,26 +228,45 @@ final class ModuleWorkflowTest extends TestCase
             $f->sql,
             EventStoreFixture::framework($f->connection->queryBuilder()),
             $f->transactions,
+            \EventStoreFixture::financialWriter($f->connection->queryBuilder()),
         );
-        $service = new LedgerService($repository, $f->access);
+        $service = new LedgerService(
+            $repository,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            $f->financialCommands(),
+        );
         $receivable = $service->addAccount("AR", "Student Receivable", "USD");
         $revenue = $service->addAccount("REV", "Tuition Revenue", "USD");
         try {
-            $service->post("BAD-1", new DateTimeImmutable("2026-08-10"), [
+            $service->post(
+                EntityId::generate(),
+                "BAD-1",
+                new DateTimeImmutable("2026-08-10"),
+                [
                 new LedgerLine($receivable, new Money(1000, "USD")),
                 new LedgerLine($revenue, new Money(-900, "USD")),
-            ]);
+            ],
+                'Fictional authorized financial decision.',
+            );
             self::fail("An unbalanced journal was accepted.");
         } catch (DomainException) {
             self::assertCount(0, $f->sql->rows("sis_journals"));
         }
-        $journal = $service->post("J-1", new DateTimeImmutable("2026-08-10"), [
+        $journal = $service->post(
+            EntityId::generate(),
+            "J-1",
+            new DateTimeImmutable("2026-08-10"),
+            [
             new LedgerLine($receivable, new Money(1000, "USD")),
             new LedgerLine($revenue, new Money(-1000, "USD")),
-        ]);
+        ],
+            'Fictional authorized financial decision.',
+        );
         self::assertSame(2, count($service->get($journal->aggregateId())->lines()));
-        $service->reverse($journal->aggregateId());
-        $service->reverse($journal->aggregateId());
+        $service->reverse($journal->aggregateId(), 1, 'Fictional reversal.');
+        $service->reverse($journal->aggregateId(), 1, 'Fictional reversal.');
         self::assertTrue($service->get($journal->aggregateId())->isReversed());
         self::assertCount(2, $f->sql->rows("sis_history_events"));
     }
@@ -277,6 +296,7 @@ final class ModuleWorkflowTest extends TestCase
             $f->sql,
             EventStoreFixture::framework($db),
             $f->transactions,
+            \EventStoreFixture::financialWriter($db),
         );
         $billing = new \Infrastructure\Persistence\EventSourcedRegistrationBilling(
             $f->accounts,
@@ -292,9 +312,17 @@ final class ModuleWorkflowTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
-            $f->clock,
+            $f->financialCommands(),
         );
-        $rule = $service->define($f->term, $f->program, "Registration Fee", "fee", new Money(2500, "USD"));
+        $rule = $service->define(
+            EntityId::generate(),
+            $f->term,
+            $f->program,
+            "Registration Fee",
+            "fee",
+            new Money(2500, "USD"),
+            'Fictional authorized financial decision.',
+        );
         $section = $f->section();
         $f->service->register($student->id, $section->id);
         $locator = $f->sql->one("sis_student_accounts", ["student_id" => $student->id->value]);
@@ -312,7 +340,7 @@ final class ModuleWorkflowTest extends TestCase
         $service->generate($f->term, [$student->id]);
         self::assertSame(12500, $f->accounts->get($id)->balance()->minor);
         self::assertCount(2, $f->accounts->get($id)->entries());
-        $service->retire($rule->aggregateId());
+        $service->retire($rule->aggregateId(), 1, 'Fictional retirement.');
         $other = $f->student();
         $freeSection = $f->section(fee: 0);
         $f->service->register($other->id, $freeSection->id);

@@ -102,6 +102,7 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     const id = suffix => `01K000000000000000000000${suffix}`;
     const ledger = id('11'); const term = id('12'); const student = id('13'); const institution = id('14'); const equivalency = id('15'); const campaign = id('16'); const delivery = id('17'); const person = id('18'); const user = id('19'); const journal = id('20');
     const sent = []; const errors = []; let campaignStatus = 'draft'; let authorized = false; let confirmedSent = 0;
+    const billingRule = id('22'); let ruleCreated = false; let ruleRetired = false; let journalReversed = false; let operationCount = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -110,10 +111,12 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
         if (payload) sent.push({ path, payload });
         let result = {};
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === '/sis/ui/operation-id/') result = { id: operationCount++ ? billingRule : journal };
         else if (path.startsWith('/sis/ui/data/')) {
             const dataset = path.split('/')[4];
             const rows = {
                 ledger: [{ id: ledger, code: '1000', title: 'Cash', currency: 'USD' }],
+                billing: ruleCreated ? [{ id: billingRule, short_id: 'Fictional fee' }] : [],
                 terms: [{ id: term, code: '26/FA' }],
                 students: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
                 transferstudents: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
@@ -133,7 +136,11 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
             items: [{ version_id: id('21'), version: 1, code: 'CS.101', transcript_title: 'Computing', credits_milli: 3000 }], next_cursor: null };
         else if (path.endsWith('/awards/')) result = { items: [], next_after: null };
         else if (path === '/sis/journals/') result = { id: journal };
-        else if (path === `/sis/journals/${journal}/`) result = { reference: 'FICT-J1', currency: 'USD', reversed: false, lines: [] };
+        else if (path === `/sis/journals/${journal}/reverse/`) { journalReversed = true; result = { status: 'reversed' }; }
+        else if (path === `/sis/journals/${journal}/`) result = { reference: 'FICT-J1', currency: 'USD', position: journalReversed ? 2 : 1, reversed: journalReversed, lines: [] };
+        else if (path === '/sis/billing-rules/') { ruleCreated = true; result = { id: billingRule }; }
+        else if (path === `/sis/billing-rules/${billingRule}/retire/`) { ruleRetired = true; result = { status: 'retired' }; }
+        else if (path === `/sis/billing-rules/${billingRule}/`) result = { name: 'Fictional fee', kind: 'fee', amount_minor: 250, currency: 'USD', position: ruleRetired ? 2 : 1, retired: ruleRetired };
         else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', status: campaignStatus, version: 0, can_dispatch: true };
         else if (path === '/sis/campaigns/recipients/search/') result = { items: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = { subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', version: 0, recipients: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }] };
@@ -162,15 +169,39 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await page.getByRole('button', { name: 'Post a journal', exact: true }).click();
     await page.getByLabel('Unique journal reference').fill('FICT-J1');
     await page.getByLabel('Posting date').fill('2026-11-07');
+    await page.getByRole('textbox', { name: /^Reason for journal/ }).fill('Fictional approved posting.');
     const accounts = page.getByLabel('Ledger account', { exact: false });
     await accounts.nth(0).selectOption(ledger); await accounts.nth(1).selectOption(ledger);
     const amounts = page.getByLabel('Amount (positive debit, negative credit)');
     await amounts.nth(0).fill('1.25'); await amounts.nth(1).fill('-1.25');
     await expect(page.locator('#drawer-body')).toContainText('Balanced.');
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
     await page.getByRole('button', { name: 'Post balanced journal', exact: true }).click();
     await expect.poll(() => sent.find(item => item.path === '/sis/journals/')?.payload.lines).toEqual([{ account_id: ledger, amount_minor: 125 }, { account_id: ledger, amount_minor: -125 }]);
+    expect(sent.find(item => item.path === '/sis/journals/').payload).toMatchObject({ operation_id: journal, reason: 'Fictional approved posting.' });
+    await page.getByRole('button', { name: 'Reverse journal', exact: true }).click();
+    await page.getByRole('textbox', { name: /^Reason for journal reversal/ }).fill('Fictional journal correction.');
+    await page.getByRole('button', { name: 'Confirm journal reversal', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Reversed');
+    expect(sent.find(item => item.path === `/sis/journals/${journal}/reverse/`).payload).toEqual({ position: 1, reason: 'Fictional journal correction.' });
     await close();
     await page.locator('#directory-tabs [data-workspace="billing"]').click();
+    await page.getByRole('button', { name: 'Define a billing rule', exact: true }).click();
+    await page.locator('#drawer-body').getByRole('combobox', { name: /^Term/ }).selectOption(term);
+    await page.locator('#drawer-body').getByLabel('Rule name').fill('Fictional fee');
+    await page.locator('#drawer-body').getByRole('combobox', { name: /^Type/ }).selectOption('fee');
+    await page.locator('#drawer-body').getByLabel('Amount', { exact: false }).fill('2.50');
+    await page.getByRole('textbox', { name: /^Reason for billing rule/ }).fill('Fictional approved fee.');
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+    await page.getByRole('button', { name: /Save and continue/ }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional fee');
+    expect(sent.find(item => item.path === '/sis/billing-rules/').payload).toMatchObject({ operation_id: billingRule, reason: 'Fictional approved fee.', amount_minor: 250 });
+    await page.getByRole('button', { name: 'Retire billing rule', exact: true }).click();
+    await page.getByRole('textbox', { name: /^Reason for rule retirement/ }).fill('Fictional retired fee.');
+    await page.getByRole('button', { name: 'Confirm rule retirement', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Retired');
+    expect(sent.find(item => item.path === `/sis/billing-rules/${billingRule}/retire/`).payload).toEqual({ position: 1, reason: 'Fictional retired fee.' });
+    await close();
     await page.getByRole('button', { name: 'Generate student bills', exact: true }).click();
     await page.getByLabel('Billing term').selectOption(term);
     await page.getByLabel('Find a student', { exact: false }).selectOption(student);

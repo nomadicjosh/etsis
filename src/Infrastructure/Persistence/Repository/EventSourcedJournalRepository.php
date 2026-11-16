@@ -9,17 +9,20 @@ use Domain\Finance\Event\JournalWasPosted;
 use Domain\Finance\Journal;
 use Domain\Finance\Repository\JournalRepository;
 use Domain\Finance\ValueObject\JournalId;
+use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
+use Infrastructure\EventSourcing\FinancialEventWriter;
 
 final readonly class EventSourcedJournalRepository implements JournalRepository
 {
     public function __construct(
         private SqlRecords $sql,
         private TransactionalEventStore $events,
-        private UnitOfWork $transactions
+        private UnitOfWork $transactions,
+        private FinancialEventWriter $writer,
     ) {
     }
 
@@ -48,19 +51,19 @@ final readonly class EventSourcedJournalRepository implements JournalRepository
         return $journal;
     }
 
-    public function save(Journal $journal): void
+    public function save(Journal $journal, #[\SensitiveParameter] EventContext $context): void
     {
         $events = iterator_to_array($journal->getRecordedEvents());
         if ($events === []) {
             return;
         }
-        $this->transactions->run(function () use ($journal, $events): void {
+        $this->transactions->run(function () use ($journal, $events, $context): void {
             if ($events[0] instanceof JournalWasPosted) {
                 $this->sql->insert('sis_journals', ['id' => (string) $journal->aggregateId(),
                     'reference' => $journal->reference(), 'currency' => $journal->currency(),
                         'posted_on' => $journal->postedOn()]);
             }
-            $this->events->commit(...$events);
+            $this->writer->append($journal, $context);
         });
         $journal->clearRecordedEvents();
     }

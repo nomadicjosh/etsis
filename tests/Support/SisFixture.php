@@ -123,9 +123,14 @@ final class SisFixture
             $this->admissions,
             $this->access,
             $this->transactions,
-            $this->clock,
+            $this->financialCommands(),
             $this->audit
         );
+    }
+
+    public function financialCommands(): \Domain\Finance\Service\FinancialCommandPolicy
+    {
+        return new \Domain\Finance\Service\FinancialCommandPolicy($this->access, $this->clock);
     }
 
     private ?EntityId $fixtureBuilding = null;
@@ -214,12 +219,13 @@ final class SisFixture
         $this->accounts = new EventSourcedAccountRepository(
             EventStoreFixture::framework($db),
             $db,
-            EventStoreFixture::history($db)
+            EventStoreFixture::financialWriter($db),
         );
         $rules = new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
             $this->sql,
             EventStoreFixture::framework($db),
             $this->transactions,
+            \EventStoreFixture::financialWriter($db),
         );
         $billing = new EventSourcedRegistrationBilling(
             $this->accounts,
@@ -744,6 +750,7 @@ final class SisFixture
                 $this->sql,
                 EventStoreFixture::framework($this->connection->queryBuilder()),
                 $this->transactions,
+                \EventStoreFixture::financialWriter($this->connection->queryBuilder()),
             ),
             $this->admissions,
             $this->primaryProgramLedger(),

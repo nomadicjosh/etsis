@@ -497,7 +497,7 @@
         if (section === 'bookingcategories') return schedulingStudio.categoryForm();
         if (section === 'journals') return operations.createJournal();
         const definition = datasets[section];
-        const operation = section === 'people' ? (await request('/sis/ui/operation-id/')).id : null;
+        const operation = ['people', 'billing'].includes(section) ? (await request('/sis/ui/operation-id/')).id : null;
         const body = openDrawer(definition.action, definition.title.toUpperCase());
         if (back) body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
             onclick: () => task(back) }, 'Back to public event'));
@@ -533,7 +533,7 @@
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
             if (section === 'people') await openPerson(saved.id);
-            else if (section === 'campaigns') await openRecord('campaigns', { id: saved.id });
+            else if (['campaigns', 'billing'].includes(section)) await openRecord(section, { id: saved.id });
             else { drawer.hide(); if (current === section) await loadDirectory(); }
         }, $one('[type="submit"]', form)); });
         body.append(form);

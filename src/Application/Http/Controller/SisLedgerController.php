@@ -43,16 +43,25 @@ final readonly class SisLedgerController
             $l->id('account_id'),
             new Money($l->integer('amount_minor', -Money::MAX_MINOR, Money::MAX_MINOR), $currency)
         ), $f->items('lines'));
-        $journal = $this->service->post($f->text('reference', 80), $f->date('posted_on'), $lines);
+        $journal = $this->service->post(
+            $f->id('operation_id'),
+            $f->text('reference', 80),
+            $f->date('posted_on'),
+            $lines,
+            $f->bodyText('reason')
+        );
 
         return new JsonResponse(['id' => (string) $journal->aggregateId()], 201);
     }
 
-    public function reverse(string $id): ResponseInterface
+    public function reverse(ServerRequest $request, string $id): ResponseInterface
     {
-        $this->service->reverse(new JournalId($id));
-
-        return new JsonResponse(['status' => 'reversed']);
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reverse(
+            new JournalId($id),
+            $f->integer('position', 1),
+            $f->bodyText('reason')
+        ));
     }
 
     public function reverseEntry(ServerRequest $request, string $id, string $operation): ResponseInterface
@@ -71,6 +80,7 @@ final readonly class SisLedgerController
         $journal = $this->service->get(new JournalId($id));
 
         return new JsonResponse(['id' => (string) $journal->aggregateId(), 'reference' => $journal->reference(),
+            'position' => $journal->playhead(),
             'currency' => $journal->currency(), 'reversed' => $journal->isReversed(),
                 'posted_on' => $journal->postedOn(),
             'lines' => array_map(static fn (LedgerLine $l): array => ['account_id' => $l->accountId->value,
@@ -81,11 +91,13 @@ final readonly class SisLedgerController
     {
         $f = FormInput::from($request);
         $rule = $this->billing->define(
+            $f->id('operation_id'),
             $f->id('term_id'),
             $f->optionalId('program_id'),
             $f->text('name'),
             $f->text('kind', 12),
-            new Money($f->integer('amount_minor', 1), $f->text('currency', 3))
+            new Money($f->integer('amount_minor', 1), $f->text('currency', 3)),
+            $f->bodyText('reason')
         );
 
         return new JsonResponse(['id' => (string) $rule->aggregateId()], 201);
@@ -99,14 +111,17 @@ final readonly class SisLedgerController
             'kind' => $rule->kind(),
             'term_id' => $rule->termId()->value, 'program_id' => $rule->programId()?->value,
             'amount_minor' => $rule->amount()->minor, 'currency' => $rule->amount()->currency,
-            'retired' => $rule->isRetired()]);
+            'retired' => $rule->isRetired(), 'position' => $rule->playhead()]);
     }
 
-    public function retireBillingRule(string $id): ResponseInterface
+    public function retireBillingRule(ServerRequest $request, string $id): ResponseInterface
     {
-        $this->billing->retire(new BillingRuleId($id));
-
-        return new JsonResponse(['status' => 'retired']);
+        $f = FormInput::from($request);
+        return new JsonResponse($this->billing->retire(
+            new BillingRuleId($id),
+            $f->integer('position', 1),
+            $f->bodyText('reason')
+        ));
     }
 
     public function generateBills(ServerRequest $request): ResponseInterface

@@ -298,7 +298,8 @@ final class RegistrationBatchTest extends TestCase
         $rules = new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
             $f->sql,
             EventStoreFixture::framework($f->connection->queryBuilder()),
-            $f->transactions
+            $f->transactions,
+            \EventStoreFixture::financialWriter($f->connection->queryBuilder()),
         );
         $rules->save(\Domain\Finance\BillingRule::define(
             new \Domain\Finance\ValueObject\BillingRuleId(),
@@ -308,7 +309,7 @@ final class RegistrationBatchTest extends TestCase
             'fee',
             new \Domain\Finance\ValueObject\Money(500, 'USD'),
             $f->access->actor
-        ));
+        ), $f->financialCommands()->context($f->access->actor, EntityId::generate(), 'Fictional fee setup.'));
         $service = $this->service($f);
         foreach ([[$a->id, $b->id], [$a->id]] as $students) {
             $section = $f->section(20, 1250);

@@ -139,9 +139,19 @@ final class AdmissionsTest extends TestCase
         $student = $this->f->legacyStudent($application->id);
         $db = $this->connection->queryBuilder();
         $store = EventStoreFixture::framework($db);
-        $accounts = new \Infrastructure\Persistence\Repository\EventSourcedAccountRepository($store, $db, EventStoreFixture::history($db));
-        $finance = new \Domain\Finance\Service\StudentAccountService($accounts, $this->repository, $this->access,
-            $this->f->transactions, $this->f->clock, $this->f->audit);
+        $accounts = new \Infrastructure\Persistence\Repository\EventSourcedAccountRepository(
+            $store,
+            $db,
+            EventStoreFixture::financialWriter($db),
+        );
+        $finance = new \Domain\Finance\Service\StudentAccountService(
+            $accounts,
+            $this->repository,
+            $this->access,
+            $this->f->transactions,
+            $this->f->financialCommands(),
+            $this->f->audit,
+        );
         $account = $finance->open($student->id, $this->term, 'USD');
         $id = $account->aggregateId();
         $operation = EntityId::generate();

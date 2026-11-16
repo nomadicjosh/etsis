@@ -358,6 +358,7 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
                 $f->sql,
                 EventStoreFixture::framework($db),
                 $f->transactions,
+                \EventStoreFixture::financialWriter($db),
             ),
             $f->admissions,
             $f->primaryProgramLedger(),
@@ -469,6 +470,7 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             $f->sql,
             EventStoreFixture::framework($db),
             $f->transactions,
+            \EventStoreFixture::financialWriter($db),
         );
         $billing = new \Infrastructure\Persistence\EventSourcedRegistrationBilling(
             $f->accounts,
@@ -484,14 +486,16 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
-            $f->clock,
+            $f->financialCommands(),
         );
         $service->define(
+            EntityId::generate(),
             $f->term,
             $original->programId,
             "Original program fee",
             "fee",
             new \Domain\Finance\ValueObject\Money(1000, "USD"),
+            'Fictional authorized financial decision.',
         );
         $service->generate($f->term, [$p->studentId]);
         $first = $f->sql->one("sis_student_accounts", [
@@ -510,18 +514,22 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             "add_drop_ends_on" => "2027-08-15",
         ]);
         $service->define(
+            EntityId::generate(),
             $term,
             $original->programId,
             "Earlier program fee",
             "fee",
             new \Domain\Finance\ValueObject\Money(3000, "USD"),
+            'Fictional authorized financial decision.',
         );
         $service->define(
+            EntityId::generate(),
             $term,
             $p->programId,
             "Current program fee",
             "fee",
             new \Domain\Finance\ValueObject\Money(2000, "USD"),
+            'Fictional authorized financial decision.',
         );
         $service->generate($term, [$p->studentId]);
         $next = $f->sql->one("sis_student_accounts", [

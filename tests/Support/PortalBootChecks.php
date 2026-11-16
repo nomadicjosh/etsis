@@ -4632,3 +4632,116 @@ $sis->access->grants = ['sis:finance:read'];
 if ($teachingPost($financeNativePath . '/entries/', $financeNativePayload)->getStatusCode() !== 403) {
     throw new RuntimeException('Financial read access allowed a posting retry.');
 }
+
+// Billing and ledger commands use the native providers, private responses and existing CSRF middleware.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$financeDefinitionRuleId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$financeDefinitionRulePayload = ['operation_id' => $financeDefinitionRuleId, 'term_id' => $sis->term->value,
+    'name' => 'Native fictional fee', 'kind' => 'fee', 'amount_minor' => 250, 'currency' => 'USD',
+    'reason' => 'Native private fee reason.'];
+$financeDefinitionRule = $teachingPost('/sis/billing-rules/', $financeDefinitionRulePayload);
+if (
+    $financeDefinitionRule->getStatusCode() !== 201
+    || json_decode((string) $financeDefinitionRule->getBody(), true)['id'] !== $financeDefinitionRuleId
+) {
+    throw new RuntimeException('A native billing-rule creation lost its stable identity.');
+}
+$financeDefinitionRulePath = '/sis/billing-rules/' . $financeDefinitionRuleId;
+$financeDefinitionBefore = $sis->sql->rows('sis_history_events');
+if (
+    $teachingPost(
+        $financeDefinitionRulePath . '/retire/',
+        ['position' => 2, 'reason' => 'Stale.']
+    )->getStatusCode() !== 409
+    || $sis->sql->rows('sis_history_events') !== $financeDefinitionBefore
+) {
+    throw new RuntimeException('A native stale rule retirement changed history.');
+}
+$financeDefinitionRetire = $teachingPost($financeDefinitionRulePath . '/retire/', [
+    'position' => 1, 'reason' => 'Native private retirement reason.',
+]);
+$financeDefinitionBefore = $sis->sql->rows('sis_history_events');
+$financeDefinitionRetry = $teachingPost('/sis/billing-rules/', $financeDefinitionRulePayload);
+$financeDefinitionRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $financeDefinitionRulePath . '/'
+)));
+$financeDefinitionBody = json_decode((string) $financeDefinitionRead->getBody(), true);
+if (
+    $financeDefinitionRetire->getStatusCode() !== 200 || $financeDefinitionRetry->getStatusCode() !== 201
+    || $sis->sql->rows('sis_history_events') !== $financeDefinitionBefore
+    || ($financeDefinitionBody['position'] ?? null) !== 2 || !($financeDefinitionBody['retired'] ?? false)
+    || $financeDefinitionRead->hasHeader('phpdebugbar-id')
+    || !str_contains($financeDefinitionRead->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $financeDefinitionRead->getBody(), 'Native private')
+) {
+    throw new RuntimeException('Native billing-rule reads or retries changed history or disclosed protected context.');
+}
+$financeDefinitionLines = [];
+foreach ([['NATIVE.AR', 100], ['NATIVE.REV', -100]] as [$code, $minor]) {
+    $response = $teachingPost('/sis/ledger-accounts/', ['code' => $code, 'title' => 'Native fictional account',
+        'currency' => 'USD']);
+    if ($response->getStatusCode() !== 201) {
+        throw new RuntimeException('A native ledger account could not be added.');
+    }
+    $financeDefinitionLines[] = ['account_id' => json_decode((string) $response->getBody(), true)['id'],
+        'amount_minor' => $minor];
+}
+$financeDefinitionJournalId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$financeDefinitionJournalPayload = ['operation_id' => $financeDefinitionJournalId, 'reference' => 'NATIVE.FICT.1',
+    'posted_on' => '2026-08-01', 'currency' => 'USD', 'lines' => $financeDefinitionLines,
+    'reason' => 'Native private journal reason.'];
+$financeDefinitionMissing = $financeDefinitionJournalPayload;
+unset($financeDefinitionMissing['reason']);
+$financeDefinitionBefore = $sis->sql->rows('sis_history_events');
+if (
+    $teachingPost('/sis/journals/', $financeDefinitionMissing)->getStatusCode() !== 422
+    || $sis->sql->rows('sis_history_events') !== $financeDefinitionBefore
+) {
+    throw new RuntimeException('A native journal without a reason changed history.');
+}
+$financeDefinitionJournal = $teachingPost('/sis/journals/', $financeDefinitionJournalPayload);
+if (
+    $financeDefinitionJournal->getStatusCode() !== 201
+    || json_decode((string) $financeDefinitionJournal->getBody(), true)['id'] !== $financeDefinitionJournalId
+) {
+    throw new RuntimeException('A native journal lost its stable creation identity.');
+}
+$financeDefinitionJournalPath = '/sis/journals/' . $financeDefinitionJournalId;
+$financeDefinitionBefore = $sis->sql->rows('sis_history_events');
+if (
+    $teachingPost(
+        $financeDefinitionJournalPath . '/reverse/',
+        ['position' => 2, 'reason' => 'Stale.']
+    )->getStatusCode() !== 409
+    || $sis->sql->rows('sis_history_events') !== $financeDefinitionBefore
+) {
+    throw new RuntimeException('A native stale journal reversal changed history.');
+}
+$financeDefinitionReverse = $teachingPost($financeDefinitionJournalPath . '/reverse/', [
+    'position' => 1, 'reason' => 'Native private reversal reason.',
+]);
+$financeDefinitionBefore = $sis->sql->rows('sis_history_events');
+$financeDefinitionRetry = $teachingPost('/sis/journals/', $financeDefinitionJournalPayload);
+$financeDefinitionRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $financeDefinitionJournalPath . '/'
+)));
+$financeDefinitionBody = json_decode((string) $financeDefinitionRead->getBody(), true);
+if (
+    $financeDefinitionReverse->getStatusCode() !== 200 || $financeDefinitionRetry->getStatusCode() !== 201
+    || $sis->sql->rows('sis_history_events') !== $financeDefinitionBefore
+    || ($financeDefinitionBody['position'] ?? null) !== 2 || !($financeDefinitionBody['reversed'] ?? false)
+    || $financeDefinitionRead->hasHeader('phpdebugbar-id')
+    || !str_contains($financeDefinitionRead->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $financeDefinitionRead->getBody(), 'Native private')
+) {
+    throw new RuntimeException('Native journal reads or retries changed history or disclosed protected context.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:finance:read'];
+if (
+    $teachingPost('/sis/journals/', $financeDefinitionJournalPayload)->getStatusCode() !== 403
+    || $teachingPost('/sis/billing-rules/', $financeDefinitionRulePayload)->getStatusCode() !== 403
+) {
+    throw new RuntimeException('A native financial creation retry bypassed current posting authority.');
+}

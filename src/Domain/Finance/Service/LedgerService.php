@@ -5,62 +5,130 @@ declare(strict_types=1);
 namespace Domain\Finance\Service;
 
 use DateTimeImmutable;
+use Domain\Audit\Repository\AuditTrail;
 use DomainException;
 use Domain\Finance\Journal;
 use Domain\Finance\LedgerLine;
 use Domain\Finance\Repository\JournalRepository;
 use Domain\Finance\ValueObject\JournalId;
 use Domain\Finance\ValueObject\Money;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\RecordNotFoundException;
+use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
 final readonly class LedgerService
 {
-    public function __construct(private JournalRepository $repository, private StudentAccess $access)
-    {
+    public function __construct(
+        private JournalRepository $repository,
+        private StudentAccess $access,
+        private UnitOfWork $transactions,
+        private AuditTrail $audit,
+        private FinancialCommandPolicy $commands,
+    ) {
     }
 
     public function addAccount(string $code, string $title, string $currency): EntityId
     {
-        $this->access->requirePermission('sis:finance:ledger');
+        $actor = $this->access->requirePermission('sis:finance:ledger');
         new Money(0, $currency);
         if (trim($code) === '' || strlen($code) > 80 || trim($title) === '' || mb_strlen($title) > 191) {
             throw new InvalidArgumentException('A ledger account requires a code and title.');
         }
         $id = EntityId::generate();
-        $this->repository->addLedgerAccount($id, $code, $title, $currency);
+        $this->transactions->run(function () use ($id, $code, $title, $currency, $actor): void {
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+            $this->repository->addLedgerAccount($id, $code, $title, $currency);
+            $this->audit->record($actor, 'ledger.account_added', $id);
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+        });
 
         return $id;
     }
 
     /** @param list<LedgerLine> $lines */
-    public function post(string $reference, DateTimeImmutable $on, array $lines): Journal
-    {
+    public function post(
+        EntityId $operation,
+        string $reference,
+        DateTimeImmutable $on,
+        array $lines,
+        #[\SensitiveParameter] string $reason,
+    ): Journal {
         $actor = $this->access->requirePermission('sis:finance:ledger');
-        foreach ($lines as $line) {
-            if ($this->repository->ledgerCurrency($line->accountId) !== $line->amount->currency) {
-                throw new DomainException('The ledger account currency does not match.');
+        $reason = $this->commands->reason($reason);
+        $id = new JournalId($operation->value);
+        $candidate = Journal::post($id, $reference, $on, $lines, $actor);
+        return $this->transactions->run(function () use ($id, $operation, $candidate, $reason, $actor): Journal {
+            try {
+                $existing = $this->repository->get($id);
+            } catch (RecordNotFoundException) {
+                $existing = null;
             }
-        }
-        $journal = Journal::post(new JournalId(), $reference, $on, $lines, $actor);
-        $this->repository->save($journal);
-
-        return $journal;
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+            if ($existing !== null) {
+                if (
+                    $existing->reference() !== $candidate->reference()
+                    || $existing->postedOn() !== $candidate->postedOn()
+                    || $existing->currency() !== $candidate->currency()
+                    || $this->lineFacts($existing) !== $this->lineFacts($candidate)
+                ) {
+                    throw new ConcurrentModificationException(
+                        'This operation already posted a different journal.'
+                    );
+                }
+                return $existing;
+            }
+            foreach ($candidate->lines() as $line) {
+                if ($this->repository->ledgerCurrency($line->accountId) !== $line->amount->currency) {
+                    throw new DomainException('The ledger account currency does not match.');
+                }
+            }
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+            $this->repository->save($candidate, $this->commands->context($actor, $operation, $reason));
+            $this->audit->record($actor, 'ledger.journal_posted', $operation);
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+            return $candidate;
+        });
     }
 
-    public function reverse(JournalId $id): void
+    /** @return array{status:string} */
+    public function reverse(JournalId $id, int $position, #[\SensitiveParameter] string $reason): array
     {
         $actor = $this->access->requirePermission('sis:finance:ledger');
-        $journal = $this->repository->get($id);
-        $journal->reverse($actor);
-        $this->repository->save($journal);
+        $reason = $this->commands->reason($reason);
+        return $this->transactions->run(function () use ($id, $position, $reason, $actor): array {
+            $journal = $this->repository->get($id);
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+            if ($journal->isReversed()) {
+                return ['status' => 'already_recorded'];
+            }
+            $this->commands->assertPosition($journal->playhead(), $position);
+            $journal->reverse($actor);
+            $operation = new EntityId((string) $id);
+            $this->repository->save($journal, $this->commands->context($actor, $operation, $reason));
+            $this->audit->record($actor, 'ledger.journal_reversed', $operation);
+            $this->commands->assertActor($actor, 'sis:finance:ledger');
+            return ['status' => 'reversed'];
+        });
     }
 
     public function get(JournalId $id): Journal
     {
-        $this->access->requirePermission('sis:finance:ledger');
+        $actor = $this->access->requirePermission('sis:finance:ledger');
+        $journal = $this->repository->get($id);
+        $this->commands->assertActor($actor, 'sis:finance:ledger');
+        return $journal;
+    }
 
-        return $this->repository->get($id);
+    /** @return list<array{account:string, minor:int, currency:string}> */
+    private function lineFacts(Journal $journal): array
+    {
+        return array_map(static fn (LedgerLine $line): array => [
+            'account' => $line->accountId->value,
+            'minor' => $line->amount->minor,
+            'currency' => $line->amount->currency,
+        ], $journal->lines());
     }
 }

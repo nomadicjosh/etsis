@@ -169,8 +169,8 @@ final class FinancialCommandContextTest extends TestCase
                 $s->admissions,
                 $s->access,
                 $s->transactions,
-                $s->clock,
-                $audit
+                $s->financialCommands(),
+                $audit,
             );
             try {
                 $service->post($id, EntityId::generate(), EntryType::Payment, new Money(100, 'USD'), 1, 'Receipt.');
@@ -201,8 +201,8 @@ final class FinancialCommandContextTest extends TestCase
             $s->admissions,
             $s->access,
             $s->transactions,
-            $s->clock,
-            $s->audit
+            $s->financialCommands(),
+            $s->audit,
         );
         $service->post($id, EntityId::generate(), EntryType::Payment, new Money(100, 'USD'), 1, 'Receipt.');
         self::assertSame(

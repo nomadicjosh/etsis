@@ -11,11 +11,10 @@ use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Registration\Service\RegistrationBilling;
-use Domain\Shared\EventSourcing\EventContext;
-use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
-use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
@@ -28,32 +27,86 @@ final readonly class TermBillingService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
-        private Clock $clock,
+        private FinancialCommandPolicy $commands,
     ) {
     }
 
-    public function define(EntityId $term, ?EntityId $program, string $name, string $kind, Money $amount): BillingRule
-    {
+    public function define(
+        EntityId $operation,
+        EntityId $term,
+        ?EntityId $program,
+        string $name,
+        string $kind,
+        Money $amount,
+        #[\SensitiveParameter] string $reason,
+    ): BillingRule {
         $actor = $this->access->requirePermission('sis:finance:post');
-        $rule = BillingRule::define(new BillingRuleId(), $term, $program, $name, $kind, $amount, $actor);
-        $this->rules->save($rule);
-
-        return $rule;
+        $reason = $this->commands->reason($reason);
+        $id = new BillingRuleId($operation->value);
+        $candidate = BillingRule::define(
+            $id,
+            $term,
+            $program,
+            $name,
+            $kind,
+            $amount,
+            $actor
+        );
+        return $this->transactions->run(function () use ($id, $operation, $candidate, $reason, $actor): BillingRule {
+            try {
+                $existing = $this->rules->get($id);
+            } catch (RecordNotFoundException) {
+                $existing = null;
+            }
+            $this->commands->assertActor($actor, 'sis:finance:post');
+            if ($existing !== null) {
+                if (
+                    $existing->termId()->value !== $candidate->termId()->value
+                    || $existing->programId()?->value !== $candidate->programId()?->value
+                    || $existing->name() !== $candidate->name() || $existing->kind() !== $candidate->kind()
+                    || $existing->amount()->minor !== $candidate->amount()->minor
+                    || $existing->amount()->currency !== $candidate->amount()->currency
+                ) {
+                    throw new ConcurrentModificationException(
+                        'This operation already defined a different billing rule.'
+                    );
+                }
+                return $existing;
+            }
+            $this->rules->save($candidate, $this->commands->context($actor, $operation, $reason));
+            $this->audit->record($actor, 'billing.rule_defined', $operation);
+            $this->commands->assertActor($actor, 'sis:finance:post');
+            return $candidate;
+        });
     }
 
     public function get(BillingRuleId $id): BillingRule
     {
-        $this->access->requirePermission('sis:finance:read');
-
-        return $this->rules->get($id);
+        $actor = $this->access->requirePermission('sis:finance:read');
+        $rule = $this->rules->get($id);
+        $this->commands->assertActor($actor, 'sis:finance:read');
+        return $rule;
     }
 
-    public function retire(BillingRuleId $id): void
+    /** @return array{status:string} */
+    public function retire(BillingRuleId $id, int $position, #[\SensitiveParameter] string $reason): array
     {
         $actor = $this->access->requirePermission('sis:finance:post');
-        $rule = $this->rules->get($id);
-        $rule->retire($actor);
-        $this->rules->save($rule);
+        $reason = $this->commands->reason($reason);
+        return $this->transactions->run(function () use ($id, $position, $reason, $actor): array {
+            $rule = $this->rules->get($id);
+            $this->commands->assertActor($actor, 'sis:finance:post');
+            if ($rule->isRetired()) {
+                return ['status' => 'already_recorded'];
+            }
+            $this->commands->assertPosition($rule->playhead(), $position);
+            $rule->retire($actor);
+            $operation = new EntityId((string) $id);
+            $this->rules->save($rule, $this->commands->context($actor, $operation, $reason));
+            $this->audit->record($actor, 'billing.rule_retired', $operation);
+            $this->commands->assertActor($actor, 'sis:finance:post');
+            return ['status' => 'retired'];
+        });
     }
 
     /** @param list<EntityId> $students */
@@ -71,29 +124,22 @@ final readonly class TermBillingService
             }
             // Read program eligibility only after acquiring the entire ordered lock set.
             foreach ($students as $student) {
-                $this->access->requirePermission('sis:finance:post');
-                if ($this->access->authenticatedUserId()->value !== $actor->value) {
-                    throw new AccessDeniedException('The billing actor changed.');
-                }
+                $this->commands->assertActor($actor, 'sis:finance:post');
                 $this->billing->charge(
                     $student,
                     $term,
                     EntityId::generate(),
                     new Money(0, 'USD'),
-                    new EventContext(
+                    $this->commands->context(
                         $actor,
-                        $this->clock->now(),
                         $batch,
-                        $term,
-                        reason: 'Account charges applied by an authorized term billing batch.'
+                        'Account charges applied by an authorized term billing batch.',
+                        $term
                     )
                 );
                 $this->audit->record($actor, 'billing.generated', $student);
             }
-            $current = $this->access->requirePermission('sis:finance:post');
-            if ($current->value !== $actor->value) {
-                throw new AccessDeniedException('The billing actor changed.');
-            }
+            $this->commands->assertActor($actor, 'sis:finance:post');
         });
     }
 }

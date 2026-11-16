@@ -9,32 +9,35 @@ use Domain\Finance\BillingRule;
 use Domain\Finance\Event\BillingRuleWasDefined;
 use Domain\Finance\Repository\BillingRuleRepository;
 use Domain\Finance\ValueObject\BillingRuleId;
+use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
+use Infrastructure\EventSourcing\FinancialEventWriter;
 
 final readonly class EventSourcedBillingRuleRepository implements BillingRuleRepository
 {
     public function __construct(
         private SqlRecords $sql,
         private TransactionalEventStore $events,
-        private UnitOfWork $transactions
+        private UnitOfWork $transactions,
+        private FinancialEventWriter $writer,
     ) {
     }
 
-    public function save(BillingRule $rule): void
+    public function save(BillingRule $rule, #[\SensitiveParameter] EventContext $context): void
     {
         $events = iterator_to_array($rule->getRecordedEvents());
         if ($events === []) {
             return;
         }
-        $this->transactions->run(function () use ($rule, $events): void {
+        $this->transactions->run(function () use ($rule, $events, $context): void {
             if ($events[0] instanceof BillingRuleWasDefined) {
                 $this->sql->insert('sis_billing_rules', ['id' => (string) $rule->aggregateId(),
                     'term_id' => $rule->termId()->value, 'program_id' => $rule->programId()?->value]);
             }
-            $this->events->commit(...$events);
+            $this->writer->append($rule, $context);
         });
         $rule->clearRecordedEvents();
     }

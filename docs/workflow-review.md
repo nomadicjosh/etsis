@@ -276,6 +276,18 @@ The same account repository now requires explicit command context from automated
 
 Reasons remain encrypted historical context, outside ordinary account responses and Report Studio. These changes use the existing journal, event classes, event IDs and per-event receipts. No migration or rewriting of earlier events is needed: missing context on older framework-written facts stays explicitly unknown. Broader pricing policies, reviewed backdated adjustments, settlement and controlled operational reconstruction remain roadmap work.
 
+### Billing rules and ledger journals
+
+**Term billing → Define a billing rule** retains one immutable fee or tuition definition for a term and optional program. Enter a reason when defining or retiring it. Saving opens the rule's detail screen so staff can continue directly. Retirement stops future application of that rule; previously charged accounts remain intact. To change a fee, retire its old definition and create the replacement. Broader pricing, effective-date schedules and reviewed billing previews remain separate work.
+
+**General ledger → Post a journal** requires a reason, a unique reference, a posting date and balanced signed lines across distinct ledger accounts in one currency. Reversal requires its own reason and retains the original journal. The posting date is the recorded business date; the trusted command acceptance instant is recorded separately after history and account-currency checks. Period closing and institutional backdating approval policies are not implemented by this change.
+
+The existing creation forms retain one operation ULID for retries; that ULID becomes the new rule or journal identity. Retrying the same ID and original definition returns the existing record, including any later retirement or reversal, without another event or audit. A different definition under that ID is rejected. Rule comparisons include term, optional program, name, kind, amount and currency. Journal comparisons include reference, posting date, currency and the ordered account/amount lines. Reasons supplied on retries do not replace the original reasons. A new form receives a new identity; it is a separate instruction.
+
+Retirement and reversal send the displayed event position. Stale new decisions return a conflict; an already completed retirement or reversal returns **already recorded**, preserving the first reason. Every request still needs current authority: billing-rule writes require `sis:finance:post`, reads require `sis:finance:read`, and ledger reads/writes require the independent `sis:finance:ledger` capability. Record reads recheck the reader after history replay. Events, metadata, receipts and required audit commit together; failing the audit or losing the actor's authority rolls back the whole decision.
+
+Account, billing-rule and journal repositories share one attributed financial event writer, and their services share reason, authority, position and clock checks. The writer retains original Codefy event identities, shapes and per-event receipts in the existing protected journal. Reasons remain encrypted and absent from ordinary responses/reports. Earlier framework events and unknown context stay intact. Adding chart-of-account references remains audited relational setup; it creates no domain event stream. No schema change or migration is required.
+
 ### Student account reports
 
 Open **Reports → Open Report Studio** and choose **Student account balances**. The same visual builder, field checkboxes, joins, conditions, previews, saved definitions, private sharing, static captures and expiry settings apply. Useful starting points are **Outstanding student balances**, **Available student credit** and **Balances by billing term**.
