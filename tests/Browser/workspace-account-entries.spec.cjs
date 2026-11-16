@@ -6,6 +6,7 @@ async function fixture(page, options = {}) {
     const calls = [], errors = [];
     let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null;
     const postingReviews = new Map();
+    let historyHead = 26;
     const currency = options.currency || 'USD';
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/sis/**', async route => {
@@ -67,13 +68,28 @@ async function fixture(page, options = {}) {
                     interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted response.' } };
                 }
             }
+        } else if (path === `/sis/accounts/${id(1)}/entries/${id(4)}/history/`) {
+            const through = data.through_position ?? historyHead, after = data.after || 0;
+            const history = Array.from({ length: through - 1 }, (_, i) => ({
+                sequence: i + 2, operation_id: i ? id(30 + i) : id(4),
+                ...(i ? { source_operation_id: i === 1 ? id(4) : id(29 + i), previous_minor: 999 + i } : {}),
+                action: i ? 'corrected' : 'posted', type: 'payment', currency, amount_minor: 1000 + i,
+                recorded_by: 'Fictional Finance Reviewer', actor_source: i ? 'command' : 'earlier_event',
+                recorded_at: '2026-11-16T12:00:00.000000Z', effective_at: i ? '2026-11-16T11:59:59.000000Z' : null,
+                reason: i ? `Fictional action ${i} <script>literal only</script>` : null,
+            })).reverse();
+            result = { operation_id: id(4), entry: { operation_id: id(4), type: 'payment', minor: 1000,
+                currency, reversed: true }, through_position: through, earlier_details_unknown: true,
+                items: history.slice(after, after + 20), next_after: after + 20 < history.length ? after + 20 : null };
+            if (options.delayHistory) await options.delayHistory();
         }
         await route.fulfill({ status, json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto(options.readOnly ? '/admin/account-read-fixture/' : '/admin/');
     await page.locator('.workspace-nav-link[data-workspace="accounts"]').click();
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
-    return { calls, errors, change: () => { position++; balance += 100; }, interrupt: () => interrupt = true };
+    return { calls, errors, change: () => { position++; balance += 100; }, interrupt: () => interrupt = true,
+        advanceHistory: () => historyHead++ };
 }
 
 async function accessible(page) {
@@ -149,6 +165,57 @@ test('read-only finance access offers statements without correction controls', a
     await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Reverse entry', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Post a transaction', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /entry history$/ })).toHaveCount(0);
+});
+
+test('private entry history pages corrections with captured context and explicit refresh', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    const activity = page.getByRole('region', { name: 'Entry activity', exact: true });
+    await expect(activity.locator('article')).toHaveCount(20);
+    await expect(activity).toContainText('Fictional action 24 <script>literal only</script>');
+    await expect(activity).toContainText('Fictional Finance Reviewer');
+    await page.setViewportSize({ width: 375, height: 850 });
+    await accessible(page);
+    f.advanceHistory();
+    await page.getByRole('button', { name: 'More entry activity', exact: true }).click();
+    await expect(activity.locator('article')).toHaveCount(5);
+    await expect(activity).toContainText('Earlier event attribution');
+    await expect(activity).toContainText('Action time was not recorded.');
+    await expect(activity).toContainText('No reason was recorded.');
+    await expect(page.getByRole('button', { name: 'More entry activity', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Previous entry activity', exact: true }).click();
+    await expect(activity).toContainText('Fictional action 24');
+    await expect(activity).not.toContainText('Fictional action 25');
+    await page.getByRole('button', { name: 'Refresh entry history', exact: true }).click();
+    await expect(activity).toContainText('Fictional action 25');
+    const calls = f.calls.filter(c => c.path.endsWith('/history/'));
+    expect(calls.map(c => c.data)).toEqual([{ after: 0 }, { after: 20, through_position: 26 },
+        { after: 0, through_position: 26 }, { after: 0 }]);
+    expect(calls.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.calls.some(c => c.path.endsWith('/commit/') || c.path.endsWith('/reverse/'))).toBe(false);
+    expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length })))
+        .toEqual({ local: 0, session: 0 });
+    await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Account statement');
+    expect(f.errors).toEqual([]);
+});
+
+test('a late private history response cannot reopen the view after navigation', async ({ page }) => {
+    let release;
+    const waiting = new Promise(resolve => release = resolve);
+    const f = await fixture(page, { delayHistory: () => waiting });
+    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await expect(page.getByText('Loading entry history…', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Account statement');
+    const delivered = page.waitForResponse(response => response.url().endsWith('/history/'));
+    release();
+    await (await delivered).finished();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    await expect.poll(() => f.calls.filter(c => c.path.endsWith('/history/')).length).toBe(1);
+    await expect(page.getByRole('region', { name: 'Entry activity', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
 });
 
 test('refund review explains available credit and records only after confirmation', async ({ page }) => {

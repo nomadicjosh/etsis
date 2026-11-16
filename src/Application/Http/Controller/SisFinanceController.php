@@ -9,6 +9,7 @@ use Codefy\Framework\Http\BaseController;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Service\StudentAccountService;
 use Domain\Finance\Service\AccountEntryReviewService;
+use Domain\Finance\Service\AccountEntryHistory;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Shared\ValueObject\EntityId;
@@ -23,6 +24,7 @@ final class SisFinanceController extends BaseController
     public function __construct(
         private readonly StudentAccountService $service,
         private readonly AccountEntryReviewService $reviews,
+        private readonly AccountEntryHistory $history,
     ) {
     }
 
@@ -135,6 +137,17 @@ final class SisFinanceController extends BaseController
                 FormInput::from($request)->bodyText("review_token"),
             ),
         );
+    }
+
+    public function history(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->history->page(
+            new AccountId($id),
+            new EntityId($operation),
+            $f->optionalInteger('after') ?? 0,
+            $f->optionalInteger('through_position'),
+        ));
     }
 
     /** @param array<string, mixed> $data */

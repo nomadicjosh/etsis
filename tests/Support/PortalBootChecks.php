@@ -5326,3 +5326,49 @@ if (
 ) {
     throw new RuntimeException("The native posting retry bypassed independent account-read authority.");
 }
+// Entry histories are curated, separately authorized reads through the native application pipeline.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$entryHistoryPath =
+"/sis/accounts/" . $postingReviewId . "/entries/" . $postingCommitted["operation_id"] . "/history/";
+$entryHistoryBefore = [
+    $sis->sql->rows("sis_history_events"),
+    $sis->sql->rows("sis_history_operations"),
+    $sis->sql->rows("sis_account_balances"),
+];
+$entryHistoryResponse = $teachingPost($entryHistoryPath, []);
+$entryHistory = json_decode((string) $entryHistoryResponse->getBody(), true);
+if (
+    $entryHistoryResponse->getStatusCode() !== 200 ||
+    count($entryHistory["items"] ?? []) !== 1 ||
+    ($entryHistory["items"][0]["reason"] ?? null) !== "Native fictional reviewed payment." ||
+    ($entryHistory["items"][0]["amount_minor"] ?? null) !== 1500 ||
+    isset($entryHistory["items"][0]["review_hash"]) ||
+    $entryHistoryResponse->hasHeader("phpdebugbar-id") ||
+    !str_contains($entryHistoryResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    [
+        $sis->sql->rows("sis_history_events"),
+        $sis->sql->rows("sis_history_operations"),
+        $sis->sql->rows("sis_account_balances"),
+    ] !== $entryHistoryBefore
+) {
+    throw new RuntimeException("The native entry history lost privacy, selected scope or read-only behavior.");
+}
+$entryCorrectionHistory = $teachingPost(
+    "/sis/accounts/" . $financeEvidenceAccount . "/entries/" . $financeEvidencePosting . "/history/",
+    [],
+);
+$entryCorrectionItems = json_decode((string) $entryCorrectionHistory->getBody(), true)["items"] ?? [];
+if (
+    $entryCorrectionHistory->getStatusCode() !== 200 ||
+    array_column($entryCorrectionItems, "action") !== ["corrected", "posted"]
+) {
+    throw new RuntimeException("The native entry history lost its original and linked correction.");
+}
+$sis->access->staff = false;
+foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"], []] as $entryHistoryGrants) {
+    $sis->access->grants = $entryHistoryGrants;
+    if ($teachingPost($entryHistoryPath, [])->getStatusCode() !== 403) {
+        throw new RuntimeException("A native private history read bypassed independent finance authority.");
+    }
+}

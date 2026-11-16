@@ -26,6 +26,9 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/sis/accounts/{id}/", [SisFinanceController::class, "show"])
         ->name("sis.accounts.show");
     $router
+        ->post('/sis/accounts/{id}/entries/{operation}/history/', [SisFinanceController::class, 'history'])
+        ->name('sis.accounts.entry.history');
+    $router
         ->map(["POST"], "/sis/accounts/{id}/entries/", [SisFinanceController::class, "post"])
         ->name("sis.accounts.post");
     $router

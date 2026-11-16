@@ -513,56 +513,168 @@ window.createWorkspaceOperations = function (ui) {
         }
         const actions = section("Transactions");
         body.append(actions);
+        async function entryHistory(operation, after = 0, through = null, stack = []) {
+            const historyBody = openDrawer("Entry history", "PRIVATE FINANCE HISTORY");
+            const panel = node("div", {}, node("p", { role: "status" }, "Loading entry history…"));
+            historyBody.append(
+                button("Back to account statement", back, "btn-link"),
+                button("Refresh entry history", () => entryHistory(operation)),
+                panel,
+            );
+            const result = await request(`/sis/accounts/${row.id}/entries/${operation}/history/`, "POST", {
+                after,
+                ...(through === null ? {} : { through_position: through }),
+            });
+            if (!panel.isConnected) return;
+            const current = result.entry;
+            panel.replaceChildren(
+                node(
+                    "p",
+                    { class: "fw-semibold" },
+                    `${data.institutional_id} · ${current.type} · ${money(current.minor, current.currency)}`,
+                ),
+                node("p", {}, `Selected entry: ${operation.slice(-8)} · ${current.reversed ? "Reversed" : "Posted"}`),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "This history reflects the activity captured when opened. Refresh to include later changes. Names use current account display names; earlier attribution is labeled separately. Times use your browser’s time zone.",
+                ),
+                result.earlier_details_unknown
+                    ? node(
+                          "p",
+                          { class: "alert alert-info" },
+                          "Some earlier details were not recorded. Missing reasons, action times and attribution remain unknown.",
+                      )
+                    : null,
+            );
+            const timeline = node("section", { "aria-label": "Entry activity" });
+            const dates = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "long" });
+            const timestamp = (value) => {
+                const date = new Date(value);
+                return node("time", { datetime: value }, Number.isFinite(date.getTime()) ? dates.format(date) : value);
+            };
+            result.items.forEach((item) =>
+                timeline.append(
+                    node(
+                        "article",
+                        { class: "record-section" },
+                        node(
+                            "h3",
+                            { class: "h5" },
+                            { posted: "Entry posted", corrected: "Amount corrected", reversed: "Entry reversed" }[
+                                item.action
+                            ],
+                        ),
+                        node(
+                            "p",
+                            {},
+                            item.action === "corrected"
+                                ? `${item.type}: ${money(item.previous_minor, item.currency)} → ${money(item.amount_minor, item.currency)}`
+                                : `${item.type}: ${money(item.amount_minor, item.currency)}`,
+                        ),
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            item.action === "corrected"
+                                ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
+                                : `Reference: ${item.operation_id.slice(-8)}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `Recorded by: ${item.recorded_by}`,
+                            item.actor_source === "earlier_event"
+                                ? " · Earlier event attribution"
+                                : item.actor_source === "unknown"
+                                  ? " · Attribution unavailable"
+                                  : "",
+                        ),
+                        node("p", {}, "Recorded: ", timestamp(item.recorded_at)),
+                        item.effective_at
+                            ? node("p", {}, "Action time: ", timestamp(item.effective_at))
+                            : node("p", { class: "form-text" }, "Action time was not recorded."),
+                        node(
+                            "p",
+                            { class: "text-break", style: "white-space: pre-wrap" },
+                            item.reason || "No reason was recorded.",
+                        ),
+                    ),
+                ),
+            );
+            panel.append(timeline);
+            if (stack.length)
+                panel.append(
+                    button("Previous entry activity", () =>
+                        entryHistory(operation, stack.at(-1), result.through_position, stack.slice(0, -1)),
+                    ),
+                );
+            if (result.next_after !== null)
+                panel.append(
+                    button("More entry activity", () =>
+                        entryHistory(operation, result.next_after, result.through_position, [...stack, after]),
+                    ),
+                );
+        }
         if (can("sis:finance:post") && can("sis:finance:read"))
             actions.append(button("Post a transaction", () => reviewEntry(), "btn-primary"));
+        function entryActions(item) {
+            const controls = [];
+            const canRead = can("sis:finance:read"),
+                canPost = can("sis:finance:post");
+            if (canRead && canPost)
+                controls.push(
+                    button(`View ${item.operation_id.slice(-8)} entry history`, () => entryHistory(item.operation_id)),
+                );
+            if (!item.reversed && canPost) {
+                if (item.can_correct_amount && canRead)
+                    controls.push(button("Correct amount", () => reviewEntry(item)));
+                controls.push(
+                    button("Reverse entry", () =>
+                        accountFlow(
+                            "Confirm entry reversal",
+                            [["reason", "Reason for reversal", "textarea"]],
+                            `/sis/accounts/${row.id}/entries/${item.operation_id}/reverse/`,
+                            null,
+                            "Enter why this posting must be reversed. The original entry remains in the financial history. Reload the statement if another transaction changes this account.",
+                        ),
+                    ),
+                );
+            }
+            return controls.length ? node("div", { class: "d-flex flex-wrap gap-2" }, ...controls) : "—";
+        }
         const entries = node("div");
         let offset = 0;
         function renderEntries() {
             entries.replaceChildren(
                 scrollTable(
-                    ["Entry", "Reference", "Amount", "Status", "Correction"],
-                    data.entries.slice(offset, offset + 25).map((item) => [
-                        item.type,
-                        node(
-                            "div",
-                            {},
-                            node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
-                            item.corrects_operation_id
-                                ? node(
-                                      "p",
-                                      { class: "form-text mb-0" },
-                                      `Corrects ${item.corrects_operation_id.slice(-8)}`,
-                                  )
-                                : null,
-                            item.corrected_by_operation_id
-                                ? node(
-                                      "p",
-                                      { class: "form-text mb-0" },
-                                      `Corrected by ${item.corrected_by_operation_id.slice(-8)}`,
-                                  )
-                                : null,
-                        ),
-                        money(item.minor, item.currency),
-                        item.reversed ? "Reversed" : "Posted",
-                        !item.reversed && can("sis:finance:post")
-                            ? node(
-                                  "div",
-                                  { class: "d-flex flex-wrap gap-2" },
-                                  item.can_correct_amount && can("sis:finance:read")
-                                      ? button("Correct amount", () => reviewEntry(item))
-                                      : null,
-                                  button("Reverse entry", () =>
-                                      accountFlow(
-                                          "Confirm entry reversal",
-                                          [["reason", "Reason for reversal", "textarea"]],
-                                          `/sis/accounts/${row.id}/entries/${item.operation_id}/reverse/`,
-                                          null,
-                                          "Enter why this posting must be reversed. The original entry remains in the financial history. Reload the statement if another transaction changes this account.",
-                                      ),
-                                  ),
-                              )
-                            : "—",
-                    ]),
+                    ["Entry", "Reference", "Amount", "Status", "Actions"],
+                    data.entries
+                        .slice(offset, offset + 25)
+                        .map((item) => [
+                            item.type,
+                            node(
+                                "div",
+                                {},
+                                node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
+                                item.corrects_operation_id
+                                    ? node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Corrects ${item.corrects_operation_id.slice(-8)}`,
+                                      )
+                                    : null,
+                                item.corrected_by_operation_id
+                                    ? node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Corrected by ${item.corrected_by_operation_id.slice(-8)}`,
+                                      )
+                                    : null,
+                            ),
+                            money(item.minor, item.currency),
+                            item.reversed ? "Reversed" : "Posted",
+                            entryActions(item),
+                        ]),
                     "Account entries",
                 ),
                 node(
