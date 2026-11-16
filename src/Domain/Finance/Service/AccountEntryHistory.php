@@ -11,6 +11,7 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Finance\Event\AccountEntryWasCorrected;
 use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
 use Domain\Finance\Event\AccountEntryWasPosted;
+use Domain\Finance\Event\AccountChargeWasCredited;
 use Domain\Finance\Event\AccountEntryWasReversed;
 use Domain\Finance\StudentAccount;
 use Domain\Finance\ValueObject\AccountId;
@@ -44,8 +45,12 @@ final readonly class AccountEntryHistory
     }
 
     /** @return array<string,mixed> */
-    public function page(AccountId $id, EntityId $operation, int $after = 0, ?int $throughPosition = null): array
-    {
+    public function page(
+        AccountId $id,
+        EntityId $operation,
+        int $after = 0,
+        ?int $throughPosition = null,
+    ): array {
         $actor = $this->authorize();
         if (
             $after < 0 ||
@@ -56,7 +61,13 @@ final readonly class AccountEntryHistory
         ) {
             throw $this->invalidPage();
         }
-        return $this->transactions->run(function () use ($id, $operation, $after, $throughPosition, $actor): array {
+        return $this->transactions->run(function () use (
+            $id,
+            $operation,
+            $after,
+            $throughPosition,
+            $actor,
+        ): array {
             $budget = new HistoryReadBudget();
             $cursor = null;
             $through = $throughPosition;
@@ -84,9 +95,12 @@ final readonly class AccountEntryHistory
                         continue;
                     }
                     // Retain only minimized context; discard legacy rows and other envelope metadata per page.
-                    $bytes += strlen($summary["reason"] ?? "") + 512
-                        + strlen($summary['payment_details']['reference'] ?? '')
-                        + strlen($summary['previous_payment_details']['reference'] ?? '');
+                    $bytes +=
+                        strlen($summary["reason"] ?? "") +
+                        512 +
+                        strlen($summary["payment_details"]["reference"] ?? "") +
+                        strlen($summary["previous_payment_details"]["reference"] ?? "") +
+                        count($summary["reversed_credit_ids"] ?? []) * 32;
                     if ($bytes > self::MAX_SUMMARY_BYTES) {
                         throw new HistoryReadLimitException();
                     }
@@ -98,7 +112,8 @@ final readonly class AccountEntryHistory
             if (!($root instanceof StudentAccount) || $root->playhead() !== $through) {
                 throw new CorruptHistoryException();
             }
-            $entry = $root->entry($operation) ?? throw new RecordNotFoundException("Account entry not found.");
+            $entry =
+                $root->entry($operation) ?? throw new RecordNotFoundException("Account entry not found.");
             $family = $this->family($root, $operation);
             $related = array_values(
                 array_filter($summaries, static fn(array $row): bool => isset($family[$row["operation_id"]])),
@@ -117,9 +132,12 @@ final readonly class AccountEntryHistory
             $names = $this->actors->names(array_values($ids));
             foreach ($items as &$row) {
                 $row["recorded_by"] =
-                    $row["actor_id"] === null ? "Not recorded" : $names[$row["actor_id"]] ?? "Unavailable account";
+                    $row["actor_id"] === null
+                        ? "Not recorded"
+                        : $names[$row["actor_id"]] ?? "Unavailable account";
                 unset($row["actor_id"]);
-                $actual = $root->entry(new EntityId($row["operation_id"])) ?? throw new CorruptHistoryException();
+                $actual =
+                    $root->entry(new EntityId($row["operation_id"])) ?? throw new CorruptHistoryException();
                 $row["type"] = $actual["type"];
                 $row["currency"] = $actual["currency"];
                 $row["amount_minor"] = $actual["minor"];
@@ -172,6 +190,7 @@ final readonly class AccountEntryHistory
             $event instanceof AccountEntryWasPosted => "posted",
             $event instanceof AccountEntryWasReversed => "reversed",
             $event instanceof AccountEntryWasCorrected => "corrected",
+            $event instanceof AccountChargeWasCredited => "credited",
             $event instanceof AccountPaymentDetailsWereChanged => "receipt_corrected",
             default => null,
         };
@@ -192,16 +211,28 @@ final readonly class AccountEntryHistory
                     : ($stored->context->origin === "command"
                         ? "command"
                         : "earlier_event"),
-            "recorded_at" => $stored->recordedAt->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d\TH:i:s.u\Z"),
+            "recorded_at" => $stored->recordedAt
+                ->setTimezone(new DateTimeZone("UTC"))
+                ->format("Y-m-d\TH:i:s.u\Z"),
             "effective_at" => $stored->context->effectiveAt
                 ?->setTimezone(new DateTimeZone("UTC"))
                 ->format("Y-m-d\TH:i:s.u\Z"),
             "reason" => $stored->context->reason,
-        ] + ($action === "corrected" ? ["source_operation_id" => $payload["source_operation_id"]] : [])
-        + ($action === 'receipt_corrected' ? ['previous_payment_details' => $payload['previous_details'],
-                'payment_details' => $payload['details']]
-                : (in_array($action, ['posted', 'corrected'], true)
-                    ? ['payment_details' => $event->metadata()['payment_details'] ?? null] : []));
+        ] +
+        (in_array($action, ["corrected", "credited"], true)
+        ? ["source_operation_id" => $payload["source_operation_id"]]
+        : []) +
+        (isset($event->metadata()["reversed_credit_ids"])
+        ? ["reversed_credit_ids" => $event->metadata()["reversed_credit_ids"]]
+        : []) +
+        ($action === "receipt_corrected"
+        ? [
+                    "previous_payment_details" => $payload["previous_details"],
+                    "payment_details" => $payload["details"],
+                ]
+        : (in_array($action, ["posted", "corrected"], true)
+                    ? ["payment_details" => $event->metadata()["payment_details"] ?? null]
+                    : []));
     }
 
     /** Original and replacement identities form one retained correction chain, including reversed entries.
@@ -209,9 +240,12 @@ final readonly class AccountEntryHistory
      */
     private function family(StudentAccount $root, EntityId $operation): array
     {
-        $entries = [];
+        $entries = $credits = [];
         foreach ($root->entries() as $entry) {
             $entries[$entry["operation_id"]] = $entry;
+            if (isset($entry["source_operation_id"])) {
+                $credits[$entry["source_operation_id"]][] = $entry["operation_id"];
+            }
         }
         $family = [];
         $pending = [$operation->value];
@@ -222,10 +256,13 @@ final readonly class AccountEntryHistory
             }
             $entry = $entries[$id] ?? throw new CorruptHistoryException();
             $family[$id] = true;
-            foreach (["corrects_operation_id", "corrected_by_operation_id"] as $key) {
+            foreach (["corrects_operation_id", "corrected_by_operation_id", "source_operation_id"] as $key) {
                 if (isset($entry[$key])) {
                     $pending[] = $entry[$key];
                 }
+            }
+            foreach ($credits[$id] ?? [] as $credit) {
+                $pending[] = $credit;
             }
         }
         return $family;

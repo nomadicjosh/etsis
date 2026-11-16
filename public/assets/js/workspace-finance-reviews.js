@@ -249,7 +249,7 @@ window.createWorkspaceFinanceReviews = function (ui) {
             offset = 0;
         const key = (account, operation) => `${account}/${operation}`;
         const describe = (p) =>
-            `${p.type} · ${money(p.minor, p.currency)} · ${p.reversed ? "Reversed" : "Posted"} · ${p.operation_id.slice(-8)}`;
+            `${p.type.replaceAll("_", " ")} · ${money(p.type === "charge_credit" ? -p.minor : p.minor, p.currency)} · ${p.reversed ? "Reversed" : "Posted"} · ${p.operation_id.slice(-8)}`;
         function disable() {
             panel.querySelectorAll("button, input").forEach((control) => {
                 control.disabled = busy;
@@ -435,7 +435,7 @@ window.createWorkspaceFinanceReviews = function (ui) {
                         node(
                             "p",
                             {},
-                            `${p.type} · ${money(p.minor, p.currency)} · ${p.reversed ? "Reversed when linked" : "Posted when linked"} · ${p.operation_id.slice(-8)} `,
+                            `${p.type.replaceAll("_", " ")} · ${money(p.type === "charge_credit" ? -p.minor : p.minor, p.currency)} · ${p.reversed ? "Reversed when linked" : "Posted when linked"} · ${p.operation_id.slice(-8)} `,
                             button("Open current statement", () => ui.account(p.account_id, () => record(id))),
                         ),
                     ),

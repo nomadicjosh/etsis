@@ -352,7 +352,8 @@ window.createWorkspaceOperations = function (ui) {
         async function reviewEntry(item = null, action = item ? "amount" : "posting") {
             const correcting = item !== null,
                 receiptOnly = action === "receipt",
-                reversing = action === "reversal";
+                reversing = action === "reversal",
+                crediting = action === "credit";
             const copy = {
                 posting: {
                     title: "Post transaction",
@@ -390,6 +391,18 @@ window.createWorkspaceOperations = function (ui) {
                     explanation:
                         "This changes receipt information only. Earlier values remain in the restricted history. No money moves and the account balance stays the same. Review expires in 20 minutes.",
                 },
+                credit: {
+                    title: "Credit a charge",
+                    reason: "Reason for charge credit",
+                    review: "Review charge credit",
+                    region: "Reviewed charge credit",
+                    confirm: "Confirm charge credit",
+                    path: `${item?.operation_id}/credit/`,
+                    introduction:
+                        "Reduce or waive this specific charge. Enter the amount to credit, up to its remaining amount. The original charge and enrollment stay in history.",
+                    explanation:
+                        "This creates a linked account credit. It does not send a refund. Reversing the charge later also reverses its remaining linked credits. Review expires in 20 minutes.",
+                },
                 reversal: {
                     title: "Reverse a recorded entry",
                     reason: "Reason for reversal",
@@ -407,7 +420,13 @@ window.createWorkspaceOperations = function (ui) {
             const descriptors = [
                 ...(!correcting ? [["type", "Transaction type", "choice", ["charge", "payment", "refund"]]] : []),
                 ...(!receiptOnly && !reversing
-                    ? [["amount_minor", `${correcting ? "Corrected amount" : "Amount"} (${data.currency})`, "money"]]
+                    ? [
+                          [
+                              "amount_minor",
+                              `${crediting ? "Amount to credit" : correcting ? "Corrected amount" : "Amount"} (${data.currency})`,
+                              "money",
+                          ],
+                      ]
                     : []),
                 ...(!correcting || receiptOnly
                     ? [
@@ -523,17 +542,33 @@ window.createWorkspaceOperations = function (ui) {
                                 {},
                                 receiptOnly
                                     ? `${result.type}: ${money(result.amount_minor, result.currency)} · Amount unchanged`
-                                    : reversing
-                                      ? `Reverse ${result.type}: ${money(result.amount_minor, result.currency)}`
-                                      : correcting
-                                        ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
-                                        : `${result.type}: ${money(result.amount_minor, result.currency)}`,
+                                    : crediting
+                                      ? `Charge credit: ${money(-result.amount_minor, result.currency)}`
+                                      : reversing
+                                        ? `Reverse ${result.type}: ${money(result.amount_minor, result.currency)}`
+                                        : correcting
+                                          ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
+                                          : `${result.type}: ${money(result.amount_minor, result.currency)}`,
                             ),
                             node(
                                 "p",
                                 {},
                                 `Account balance: ${money(result.balance_minor, result.currency)} → ${money(result.resulting_balance_minor, result.currency)}`,
                             ),
+                            crediting
+                                ? node(
+                                      "p",
+                                      {},
+                                      `Original charge: ${money(result.charge_minor, result.currency)} · Previously credited: ${money(result.credited_minor, result.currency)} · Charge remaining: ${money(result.remaining_charge_minor, result.currency)}`,
+                                  )
+                                : null,
+                            result.reversed_credit_count > 0
+                                ? node(
+                                      "p",
+                                      { class: "fw-semibold" },
+                                      `Also reverses ${result.reversed_credit_count} linked charge credits totaling ${money(result.reversed_credit_minor, result.currency)}.`,
+                                  )
+                                : null,
                             result.type === "refund"
                                 ? node(
                                       "p",
@@ -548,7 +583,7 @@ window.createWorkspaceOperations = function (ui) {
                                       `Previous: ${receiptText(result.previous_payment_details)}`,
                                   )
                                 : null,
-                            result.type === "charge"
+                            ["charge", "charge_credit"].includes(result.type)
                                 ? null
                                 : node("p", { class: "text-break" }, receiptText(result.payment_details)),
                             node("p", { class: "text-break", style: "white-space: pre-wrap" }, result.reason),
@@ -588,7 +623,7 @@ window.createWorkspaceOperations = function (ui) {
                     "p",
                     {},
                     correcting
-                        ? `${data.institutional_id} · ${item.type} · ${money(item.minor, item.currency)} · ${item.operation_id.slice(-8)}`
+                        ? `${data.institutional_id} · ${item.type.replaceAll("_", " ")} · ${money(item.minor, item.currency)} · ${item.operation_id.slice(-8)}`
                         : `${data.institutional_id} · ${data.currency}`,
                 ),
                 node("p", { class: "form-text" }, copy.introduction),
@@ -673,6 +708,7 @@ window.createWorkspaceOperations = function (ui) {
                                 corrected: "Amount corrected",
                                 reversed: "Entry reversed",
                                 receipt_corrected: "Receipt details corrected",
+                                credited: "Charge credited",
                             }[item.action],
                         ),
                         node(
@@ -680,14 +716,16 @@ window.createWorkspaceOperations = function (ui) {
                             {},
                             item.action === "corrected"
                                 ? `${item.type}: ${money(item.previous_minor, item.currency)} → ${money(item.amount_minor, item.currency)}`
-                                : `${item.type}: ${money(item.amount_minor, item.currency)}`,
+                                : `${item.type.replaceAll("_", " ")}: ${money(item.type === "charge_credit" ? -item.amount_minor : item.amount_minor, item.currency)}`,
                         ),
                         node(
                             "p",
                             { class: "form-text" },
-                            item.action === "corrected"
-                                ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
-                                : `Reference: ${item.operation_id.slice(-8)}`,
+                            item.action === "credited"
+                                ? `Credit for charge ${item.source_operation_id.slice(-8)} · Reference: ${item.operation_id.slice(-8)}`
+                                : item.action === "corrected"
+                                  ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
+                                  : `Reference: ${item.operation_id.slice(-8)}`,
                         ),
                         item.action === "receipt_corrected"
                             ? node(
@@ -695,6 +733,9 @@ window.createWorkspaceOperations = function (ui) {
                                   { class: "text-break" },
                                   `Previous: ${receiptText(item.previous_payment_details)}`,
                               )
+                            : null,
+                        item.reversed_credit_ids?.length
+                            ? node("p", {}, `Also reversed ${item.reversed_credit_ids.length} linked charge credits.`)
                             : null,
                         item.type !== "charge" && Object.hasOwn(item, "payment_details")
                             ? node("p", { class: "text-break" }, receiptText(item.payment_details))
@@ -748,6 +789,7 @@ window.createWorkspaceOperations = function (ui) {
             if (canRead && canPost && item.can_correct_payment_details)
                 controls.push(button("Correct receipt details", () => reviewEntry(item, "receipt")));
             if (!item.reversed && canPost && canRead) {
+                if (item.can_credit_charge) controls.push(button("Credit charge", () => reviewEntry(item, "credit")));
                 if (item.can_correct_amount && canRead)
                     controls.push(button("Correct amount", () => reviewEntry(item)));
                 controls.push(button("Reverse entry", () => reviewEntry(item, "reversal")));
@@ -763,11 +805,25 @@ window.createWorkspaceOperations = function (ui) {
                     data.entries
                         .slice(offset, offset + 25)
                         .map((item) => [
-                            item.type,
+                            item.type.replaceAll("_", " "),
                             node(
                                 "div",
                                 {},
                                 node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
+                                item.source_operation_id
+                                    ? node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Credit for ${item.source_operation_id.slice(-8)}`,
+                                      )
+                                    : null,
+                                item.linked_credit_count > 0
+                                    ? node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Credited ${money(item.credited_minor, item.currency)} · Remaining ${money(item.remaining_charge_minor, item.currency)}`,
+                                      )
+                                    : null,
                                 item.corrects_operation_id
                                     ? node(
                                           "p",
@@ -783,8 +839,12 @@ window.createWorkspaceOperations = function (ui) {
                                       )
                                     : null,
                             ),
-                            money(item.minor, item.currency),
-                            item.reversed ? "Reversed" : "Posted",
+                            money(item.type === "charge_credit" ? -item.minor : item.minor, item.currency),
+                            item.reversed
+                                ? item.reversed_with_operation_id
+                                    ? "Reversed with charge"
+                                    : "Reversed"
+                                : "Posted",
                             entryActions(item),
                         ]),
                     "Account entries",

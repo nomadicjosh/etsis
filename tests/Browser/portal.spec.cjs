@@ -229,3 +229,21 @@ test('owners order and clear emergency contacts using the shared accessible edit
     await accessible(page);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
+
+test('students see linked charge credits as deductions in their own statement', async ({ page }) => {
+    await mockServices(page);
+    await page.route(`**/portal/api/accounts/${account}/`, route => route.fulfill({
+        json: { id: account, currency: 'USD', balance_minor: 12500, entries: [
+            { type: 'charge', minor: 15000, currency: 'USD', reversed: false },
+            { type: 'charge_credit', minor: 2500, currency: 'USD', reversed: false },
+        ] }, headers: { 'Cache-Control': 'private, no-store' },
+    }));
+    await page.goto('/portal/student/accounts/');
+    await page.getByRole('button', { name: 'View statement' }).click();
+    const dialog = page.locator('#campus-dialog');
+    await expect(dialog).toContainText('charge credit');
+    await expect(dialog).toContainText('-$25.00');
+    await expect(dialog).toContainText('$125.00');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+});

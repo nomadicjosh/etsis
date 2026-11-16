@@ -2035,8 +2035,8 @@
                                 table(
                                     ['Entry', 'Amount', 'Status'],
                                     statement.entries.map((entry) => [
-                                        entry.type,
-                                        amount(entry.minor, entry.currency),
+                                        entry.type.replaceAll('_', ' '),
+                                        amount(entry.type === 'charge_credit' ? -entry.minor : entry.minor, entry.currency),
                                         entry.reversed ? 'Reversed' : 'Posted',
                                     ]),
                                     'Your student account entries',

@@ -5547,3 +5547,113 @@ foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"
         throw new RuntimeException("A native reversal bypassed independent current finance authority.");
     }
 }
+// Linked charge credits keep original charges and reverse together through the native account boundary.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$creditSourceReviewResponse = $teachingPost($postingReviewBase . "review/", [
+    "type" => "charge",
+    "amount_minor" => 500,
+    "currency" => "USD",
+    "position" => 6,
+    "reason" => "Native fictional charge for a linked credit.",
+]);
+$creditSourceReview = json_decode((string) $creditSourceReviewResponse->getBody(), true);
+$creditSourceCommit = $teachingPost($postingReviewBase . "commit/", [
+    "review_token" => $creditSourceReview["review_token"],
+]);
+$creditSource = json_decode((string) $creditSourceCommit->getBody(), true);
+$creditBase = $postingReviewBase . $creditSource["operation_id"] . "/credit/";
+$chargeCreditBefore = $sis->sql->rows("sis_history_events");
+$chargeCreditReviewResponse = $teachingPost($creditBase . "review/", [
+    "amount_minor" => 200,
+    "currency" => "USD",
+    "position" => 7,
+    "reason" => "Native fictional approved charge credit.",
+]);
+$chargeCreditReview = json_decode((string) $chargeCreditReviewResponse->getBody(), true);
+if (
+    $chargeCreditReviewResponse->getStatusCode() !== 200 ||
+    ($chargeCreditReview["charge_minor"] ?? null) !== 500 ||
+    ($chargeCreditReview["remaining_charge_minor"] ?? null) !== 300 ||
+    ($chargeCreditReview["resulting_balance_minor"] ?? null) !== -700 ||
+    $sis->sql->rows("sis_history_events") !== $chargeCreditBefore ||
+    $chargeCreditReviewResponse->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException(
+        "The native charge credit review changed money or lost its remaining-charge preview.",
+    );
+}
+$chargeCreditCommitResponse = $teachingPost($creditBase . "commit/", [
+    "review_token" => $chargeCreditReview["review_token"],
+    "amount_minor" => 99999,
+    "source_operation_id" => "FORGED",
+]);
+$chargeCreditCommitted = json_decode((string) $chargeCreditCommitResponse->getBody(), true);
+if (
+    $chargeCreditCommitResponse->getStatusCode() !== 200 ||
+    ($chargeCreditCommitted["balance_minor"] ?? null) !== -700
+) {
+    throw new RuntimeException("The native charge credit ignored its reviewed instruction.");
+}
+$creditParentReverseBase = $postingReviewBase . $creditSource["operation_id"] . "/reverse/";
+$creditParentReverseReviewResponse = $teachingPost($creditParentReverseBase . "review/", [
+    "position" => 8,
+    "reason" => "Native fictional source charge reversal.",
+]);
+$creditParentReverseReview = json_decode((string) $creditParentReverseReviewResponse->getBody(), true);
+if (
+    $creditParentReverseReviewResponse->getStatusCode() !== 200 ||
+    ($creditParentReverseReview["reversed_credit_minor"] ?? null) !== 200 ||
+    ($creditParentReverseReview["reversed_credit_count"] ?? null) !== 1 ||
+    ($creditParentReverseReview["resulting_balance_minor"] ?? null) !== -1000
+) {
+    throw new RuntimeException("The native charge reversal lost its linked credit preview.");
+}
+$creditParentReverseCommit = $teachingPost($creditParentReverseBase . "commit/", [
+    "review_token" => $creditParentReverseReview["review_token"],
+]);
+$creditParentResult = json_decode((string) $creditParentReverseCommit->getBody(), true);
+if (
+    $creditParentReverseCommit->getStatusCode() !== 200 ||
+    ($creditParentResult["balance_minor"] ?? null) !== -1000
+) {
+    throw new RuntimeException("The native linked charge reversal left an invalid balance.");
+}
+$chargeCreditAfter = $sis->sql->rows("sis_history_events");
+$chargeCreditRetry = $teachingPost($creditBase . "commit/", [
+    "review_token" => $chargeCreditReview["review_token"],
+]);
+if (
+    json_decode((string) $chargeCreditRetry->getBody(), true) !== $chargeCreditCommitted ||
+    $sis->sql->rows("sis_history_events") !== $chargeCreditAfter
+) {
+    throw new RuntimeException("A native credit retry reapplied a credit after its source was reversed.");
+}
+$creditHistory = $teachingPost($postingReviewBase . $chargeCreditCommitted["operation_id"] . "/history/", []);
+$creditHistoryItems = json_decode((string) $creditHistory->getBody(), true)["items"] ?? [];
+if (
+    $creditHistory->getStatusCode() !== 200 ||
+    array_column($creditHistoryItems, "action") !== ["reversed", "credited", "posted"] ||
+    ($creditHistoryItems[0]["reversed_credit_ids"] ?? null) !== [$chargeCreditCommitted["operation_id"]]
+) {
+    throw new RuntimeException(
+        "The native linked credit history did not retain its source and joint reversal.",
+    );
+}
+$sis->access->staff = false;
+foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"]] as $creditGrants) {
+    $sis->access->grants = $creditGrants;
+    if (
+        $teachingPost($creditBase . "review/", [
+            "amount_minor" => 1,
+            "currency" => "USD",
+            "position" => 9,
+            "reason" => "Fictional denied charge credit.",
+        ])->getStatusCode() !== 403 ||
+        $teachingPost($creditBase . "commit/", [
+            "review_token" => $chargeCreditReview["review_token"],
+        ])->getStatusCode() !== 403
+    ) {
+        throw new RuntimeException("A native charge credit bypassed independent finance authority.");
+    }
+}

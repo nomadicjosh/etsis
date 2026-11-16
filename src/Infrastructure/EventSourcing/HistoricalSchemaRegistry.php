@@ -377,6 +377,10 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Finance\StudentAccount::class,
                 "fields" => ["operation_id", "actor_id"],
             ],
+            \Domain\Finance\Event\AccountChargeWasCredited::class => [
+                'type' => 'student_account', 'root' => \Domain\Finance\StudentAccount::class,
+                'fields' => ['source_operation_id', 'operation_id', 'minor', 'currency', 'actor_id', 'review_hash'],
+            ],
             \Domain\Finance\Event\AccountEntryWasCorrected::class => [
                 'type' => 'student_account', 'root' => \Domain\Finance\StudentAccount::class,
                 'fields' => ['source_operation_id', 'operation_id', 'minor', 'currency', 'actor_id', 'review_hash'],
@@ -462,6 +466,7 @@ final readonly class HistoricalSchemaRegistry
             $definition = $this->definition($class);
             if (
                 in_array($class, [\Domain\Finance\Event\AccountEntryWasCorrected::class,
+                    \Domain\Finance\Event\AccountChargeWasCredited::class,
                     \Domain\Finance\Event\AccountPaymentDetailsWereChanged::class], true)
                 && (!is_string($payload['review_hash'] ?? null)
                     || preg_match('/^[a-f0-9]{64}$/D', $payload['review_hash']) !== 1)
@@ -842,6 +847,24 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'reversed_credit_ids') {
+                    if (
+                        $class !== \Domain\Finance\Event\AccountEntryWasReversed::class
+                        || !is_array($value) || !array_is_list($value) || $value === [] || count($value) > 1999
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    foreach ($value as $credit) {
+                        if (!is_string($credit)) {
+                            throw new CorruptHistoryException();
+                        }
+                        new \Domain\Shared\ValueObject\EntityId($credit);
+                    }
+                    if (count(array_unique($value)) !== count($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'payment_details') {
                     if (
                         !is_array($value) || !in_array($class, [

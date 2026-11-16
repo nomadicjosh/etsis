@@ -10,12 +10,14 @@ enum AccountEntryAction: string
     case Posting = "finance.account-posting";
     case Correction = "finance.account-correction";
     case PaymentDetails = "finance.payment-details";
+    case ChargeCredit = "finance.charge-credit";
     case Reversal = "finance.account-reversal";
 
     public function reviewAudit(): string
     {
         return match ($this) {
             self::Posting => "account.posting_reviewed",
+            self::ChargeCredit => "account.charge_credit_reviewed",
             self::Correction => "account.correction_reviewed",
             self::PaymentDetails => "account.receipt_reviewed",
             self::Reversal => "account.reversal_reviewed",
@@ -26,6 +28,7 @@ enum AccountEntryAction: string
     {
         return match ($this) {
             self::Posting => "account.entry_posted",
+            self::ChargeCredit => "account.charge_credited",
             self::Correction => "account.entry_corrected",
             self::PaymentDetails => "account.receipt_corrected",
             self::Reversal => "account.entry_reversed",

@@ -4,8 +4,10 @@ const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
-    let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null, sourceReversed = false, acceptedReversal = null;
-    const postingReviews = new Map(), receiptReviews = new Map(), reversalReviews = new Map();
+    let position = 2, balance = options.charge ? 1000 : -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null, sourceReversed = false, acceptedReversal = null;
+    const postingReviews = new Map(), receiptReviews = new Map(), reversalReviews = new Map(), creditReviews = new Map();
+    const credits = [];
+    const creditedMinor = () => credits.filter(c => !c.reversed).reduce((sum, c) => sum + c.minor, 0);
     let receiptDetails = options.receipt || null;
     let historyHead = 26;
     const currency = options.currency || 'USD';
@@ -21,14 +23,18 @@ async function fixture(page, options = {}) {
         else if (path === `/sis/accounts/${id(1)}/`) result = {
             id: id(1), student_id: id(2), term_id: id(3), institutional_id: 'S-FICTIONAL', currency,
             position, balance_minor: balance,
-            entries: [{ operation_id: id(4), type: 'payment', minor: 1000, currency, reversed: corrected || sourceReversed,
-                can_correct_amount: options.eligible !== false && !corrected && !sourceReversed,
-                can_correct_payment_details: options.eligible !== false,
+            entries: [{ operation_id: id(4), type: options.charge ? 'charge' : 'payment', minor: 1000, currency, reversed: corrected || sourceReversed,
+                can_correct_amount: options.eligible !== false && !corrected && !sourceReversed && creditedMinor() === 0,
+                can_correct_payment_details: options.eligible !== false && !options.charge,
+                ...(options.charge ? { can_credit_charge: !sourceReversed && creditedMinor() < 1000,
+                    credited_minor: creditedMinor(), remaining_charge_minor: 1000 - creditedMinor(),
+                    linked_credit_count: credits.filter(c => !c.reversed).length } : {}),
                 ...(corrected ? { corrected_by_operation_id: id(5) } : {}) },
                 ...(corrected ? [{ operation_id: id(5), type: 'payment', minor: 1250, currency, reversed: false,
                     can_correct_amount: true, can_correct_payment_details: true, corrects_operation_id: id(4) }] : []),
                 ...(posted ? [{ operation_id: id(6), type: posted.type, minor: posted.amount_minor, currency,
-                    reversed: false, can_correct_amount: true, can_correct_payment_details: posted.type !== "charge" }] : [])],
+                    reversed: false, can_correct_amount: true, can_correct_payment_details: posted.type !== "charge" }] : []),
+                ...credits],
         };
         else if (path.endsWith('/correction/review/')) {
             reviewNumber++;
@@ -38,9 +44,9 @@ async function fixture(page, options = {}) {
             if (options.delayReview) await options.delayReview();
         } else if (path.endsWith('/correction/commit/')) {
             if (data.review_token === 'fictional-correction-1' && options.stale) {
-                status = 409; result = { error: { message: 'This financial record changed. Review the account again.' } };
+                status = 409; result = { error: 'This financial record changed. Review the account again.' };
             } else if (interrupt) {
-                interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted response.' } };
+                interrupt = false; status = 500; result = { error: 'Fictional interrupted response.' };
             } else {
                 corrected = true; position++; balance = -1250;
                 result = { status: 'corrected', operation_id: id(5), source_operation_id: id(4), balance_minor: balance, position };
@@ -48,8 +54,8 @@ async function fixture(page, options = {}) {
         } else if (path === `/sis/accounts/${id(1)}/entries/review/`) {
             reviewNumber++;
             if (data.type === 'refund' && data.amount_minor > -balance) {
-                status = 422; result = { error: { message: 'Please correct the highlighted fields.',
-                    details: [{ field: 'amount_minor', message: 'A refund cannot exceed available credit.' }] } };
+                status = 422; result = { error: 'Please correct the highlighted fields.',
+                    errors: [{ field: 'amount_minor', message: 'A refund cannot exceed available credit.' }] };
             } else {
                 const next = balance + (data.type === 'payment' ? -data.amount_minor : data.amount_minor);
                 result = { review_token: `fictional-posting-${reviewNumber}`, type: data.type,
@@ -63,18 +69,50 @@ async function fixture(page, options = {}) {
         } else if (path === `/sis/accounts/${id(1)}/entries/commit/`) {
             const reviewed = postingReviews.get(data.review_token);
             if (reviewed.position !== position && posted?.review_token !== data.review_token) {
-                status = 409; result = { error: { message: 'This financial record changed. Review the account again.' } };
+                status = 409; result = { error: 'This financial record changed. Review the account again.' };
             } else {
                 if (!posted) { posted = reviewed; position++; balance = reviewed.resulting_balance_minor; }
                 result = { status: 'posted', operation_id: id(6), balance_minor: balance, position };
                 if (interrupt) {
-                    interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted response.' } };
+                    interrupt = false; status = 500; result = { error: 'Fictional interrupted response.' };
+                }
+            }
+        } else if (path.endsWith('/credit/review/')) {
+            reviewNumber++;
+            if (data.amount_minor > 1000 - creditedMinor()) {
+                status = 422; result = { error: 'Please correct the highlighted fields.', errors: [
+                    { field: 'amount_minor', message: 'The credit cannot exceed the remaining charge.' }] };
+            } else {
+                result = { review_token: `fictional-credit-${reviewNumber}`, type: 'charge_credit', amount_minor: data.amount_minor,
+                    charge_minor: 1000, credited_minor: creditedMinor(), remaining_charge_minor: 1000 - creditedMinor() - data.amount_minor,
+                    currency, balance_minor: balance, resulting_balance_minor: balance - data.amount_minor,
+                    reason: data.reason, position };
+                creditReviews.set(result.review_token, result);
+                if (options.delayReview) await options.delayReview();
+            }
+        } else if (path.endsWith('/credit/commit/')) {
+            const reviewed = creditReviews.get(data.review_token), accepted = credits.find(c => c.token === data.review_token);
+            if (!accepted && reviewed.position !== position) {
+                status = 409; result = { error: 'This financial record changed. Review the account again.' };
+            } else {
+                if (!accepted) {
+                    balance = reviewed.resulting_balance_minor; position++;
+                    const op = id(7 + credits.length);
+                    credits.push({ operation_id: op, type: 'charge_credit', minor: reviewed.amount_minor, currency,
+                        reversed: false, source_operation_id: id(4), token: data.review_token,
+                        result: { status: 'credited', operation_id: op, source_operation_id: id(4), balance_minor: balance, position } });
+                }
+                result = credits.find(c => c.token === data.review_token).result;
+                if (interrupt) {
+                    interrupt = false; status = 500; result = { error: 'Fictional interrupted credit response.' };
                 }
             }
         } else if (path.endsWith('/reverse/review/')) {
             reviewNumber++;
-            result = { review_token: `fictional-reversal-${reviewNumber}`, type: 'payment', amount_minor: 1000,
-                currency, balance_minor: balance, resulting_balance_minor: balance + 1000,
+            result = { review_token: `fictional-reversal-${reviewNumber}`, type: options.charge ? 'charge' : 'payment', amount_minor: 1000,
+                reversed_credit_count: options.charge ? credits.filter(c => !c.reversed).length : 0,
+                reversed_credit_minor: options.charge ? creditedMinor() : 0,
+                currency, balance_minor: balance, resulting_balance_minor: balance + (options.charge ? -(1000 - creditedMinor()) : 1000),
                 reason: data.reason, position, payment_details: receiptDetails };
             reversalReviews.set(result.review_token, result);
             if (options.delayReview) await options.delayReview();
@@ -82,15 +120,16 @@ async function fixture(page, options = {}) {
             const reviewed = reversalReviews.get(data.review_token);
             if ((options.staleReversal && data.review_token === 'fictional-reversal-1')
                 || (reviewed.position !== position && acceptedReversal?.token !== data.review_token)) {
-                status = 409; result = { error: { message: 'This financial record changed. Review the account again.' } };
+                status = 409; result = { error: 'This financial record changed. Review the account again.' };
             } else {
                 if (!acceptedReversal) {
                     sourceReversed = true; balance = reviewed.resulting_balance_minor; position++;
+                    credits.filter(c => !c.reversed).forEach(c => { c.reversed = true; c.reversed_with_operation_id = id(4); });
                     acceptedReversal = { token: data.review_token, result: { status: 'reversed', operation_id: id(4), balance_minor: balance, position } };
                 }
                 result = acceptedReversal.result;
                 if (interrupt) {
-                    interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted reversal response.' } };
+                    interrupt = false; status = 500; result = { error: 'Fictional interrupted reversal response.' };
                 }
             }
         } else if (path.endsWith('/receipt/')) {
@@ -108,7 +147,7 @@ async function fixture(page, options = {}) {
             if (position === accepted.position) { receiptDetails = accepted.payment_details; position++; }
             result = { status: 'receipt_corrected', balance_minor: balance, position };
             if (interrupt) {
-                interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted receipt response.' } };
+                interrupt = false; status = 500; result = { error: 'Fictional interrupted receipt response.' };
             }
         } else if (path === `/sis/accounts/${id(1)}/entries/${id(4)}/history/`) {
             const through = data.through_position ?? historyHead, after = data.after || 0;
@@ -123,6 +162,14 @@ async function fixture(page, options = {}) {
             result = { operation_id: id(4), entry: { operation_id: id(4), type: 'payment', minor: 1000,
                 currency, reversed: true }, through_position: through, earlier_details_unknown: true,
                 items: history.slice(after, after + 20), next_after: after + 20 < history.length ? after + 20 : null };
+            if (options.charge) {
+                const posted = { ...history.at(-1), operation_id: id(4), action: 'posted', type: 'charge', amount_minor: 1000 };
+                result.entry = { operation_id: id(4), type: 'charge', minor: 1000, currency, reversed: sourceReversed };
+                result.items = [posted, ...credits.map(c => ({ ...posted, operation_id: c.operation_id,
+                    action: 'credited', type: 'charge_credit', amount_minor: c.minor, source_operation_id: id(4) })),
+                    ...(sourceReversed ? [{ ...posted, action: 'reversed', reversed_credit_ids: credits.map(c => c.operation_id) }] : [])].reverse();
+                result.next_after = null;
+            }
             if (options.receiptHistory) result.items = [
                 { ...result.items[0], operation_id: id(4), action: 'receipt_corrected', source_operation_id: undefined,
                     previous_payment_details: { method: 'check', reference: 'FICT-OLD' },
@@ -519,5 +566,87 @@ test('editing a reversal invalidates confirmation and ignores a late review resp
     await expect(page.getByRole('button', { name: 'Confirm entry reversal', exact: true })).toBeVisible();
     await reason.fill('Fictional final reason.');
     await expect(page.getByRole('button', { name: 'Confirm entry reversal', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('partial and full charge credits retain the original bill and show understandable remaining amounts', async ({ page }) => {
+    const f = await fixture(page, { charge: true });
+    await page.getByRole('button', { name: 'Credit charge', exact: true }).click();
+    await page.getByLabel('Amount to credit (USD)').fill('2');
+    await page.getByLabel('Reason for charge credit').fill('Fictional waiver <script>literal only</script>.');
+    await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed charge credit' });
+    await expect(preview).toContainText('Charge credit: -$2.00');
+    await expect(preview).toContainText('Original charge: $10.00');
+    await expect(preview).toContainText('Charge remaining: $8.00');
+    await expect(preview).toContainText('$10.00 → $8.00');
+    await expect(preview.locator('script')).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 850 }); await accessible(page);
+    await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Credit for');
+    await expect(page.locator('#drawer-body')).toContainText('Credited $2.00 · Remaining $8.00');
+    await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Credit charge', exact: true }).click();
+    await page.getByLabel('Amount to credit (USD)').fill('8');
+    await page.getByLabel('Reason for charge credit').fill('Fictional remaining waiver.');
+    await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
+    await expect(preview).toContainText('Previously credited: $2.00');
+    await expect(preview).toContainText('Charge remaining: $0.00');
+    await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: $0.00');
+    await expect(page.getByRole('button', { name: 'Credit charge', exact: true })).toHaveCount(0);
+    expect(f.calls.filter(c => c.path.endsWith('/credit/commit/')).map(c => Object.keys(c.data)))
+        .toEqual([['review_token'], ['review_token']]);
+    expect(f.errors).toEqual([]);
+});
+
+test('reversing a credited charge previews and retains the linked reversals', async ({ page }) => {
+    const f = await fixture(page, { charge: true });
+    await page.getByRole('button', { name: 'Credit charge', exact: true }).click();
+    await page.getByLabel('Amount to credit (USD)').fill('2');
+    await page.getByLabel('Reason for charge credit').fill('Fictional linked credit.');
+    await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
+    await page.getByRole('button', { name: 'Reverse entry', exact: true }).first().click();
+    await page.getByLabel('Reason for reversal').fill('Fictional charge reversal.');
+    await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed entry reversal' });
+    await expect(preview).toContainText('Also reverses 1 linked charge credits totaling $2.00.');
+    await expect(preview).toContainText('$8.00 → $0.00');
+    await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Reversed with charge');
+    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    const history = page.getByRole('region', { name: 'Entry activity' });
+    await expect(history).toContainText('Charge credited');
+    await expect(history).toContainText('charge credit: -$2.00');
+    await expect(history).toContainText('Also reversed 1 linked charge credits.');
+    expect(f.errors).toEqual([]);
+});
+
+test('excess and stale charge credits preserve inputs while accepted confirmation retries use one proof', async ({ page }) => {
+    const f = await fixture(page, { charge: true });
+    await page.getByRole('button', { name: 'Credit charge', exact: true }).click();
+    const amount = page.getByLabel('Amount to credit (USD)'), reason = page.getByLabel('Reason for charge credit');
+    await amount.fill('11'); await reason.fill('Fictional credit reason.');
+    await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
+    await expect(amount).toHaveValue('11'); await expect(amount).toHaveAttribute('aria-invalid', 'true');
+    await amount.fill('2');
+    await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm charge credit', exact: true })).toBeVisible();
+    f.change();
+    await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
+    await expect(reason).toHaveValue('Fictional credit reason.');
+    await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
+    await expect(amount).toHaveValue('2');
+    await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
+    f.interrupt();
+    await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
+    await expect(reason).toBeEnabled();
+    await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: $9.00');
+    const commits = f.calls.filter(c => c.path.endsWith('/credit/commit/'));
+    expect(commits.at(-1).data).toEqual(commits.at(-2).data);
+    expect(commits.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

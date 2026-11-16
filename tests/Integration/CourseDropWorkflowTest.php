@@ -88,6 +88,9 @@ final class CourseDropWorkflowTest extends TestCase
                 "minor" => 10000,
                 "currency" => "USD",
                 "reversed" => true,
+                "credited_minor" => 0,
+                "remaining_charge_minor" => 0,
+                "linked_credit_count" => 0,
             ],
             $balance->entry($enrollment->id),
         );

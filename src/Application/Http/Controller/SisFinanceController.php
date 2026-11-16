@@ -58,6 +58,7 @@ final class SisFinanceController extends BaseController
             "balance_minor" => $account->balance()->minor,
             "entries" => array_map(
                 static fn(array $entry): array => $entry + [
+                    "can_credit_charge" => $account->canCreditCharge(new EntityId($entry["operation_id"])),
                     "can_correct_amount" => $account->canCorrectAmount(new EntityId($entry["operation_id"])),
                     "can_correct_payment_details" => $account->canCorrectPaymentDetails(
                         new EntityId($entry["operation_id"]),
@@ -217,6 +218,37 @@ final class SisFinanceController extends BaseController
     {
         return new JsonResponse(
             $this->reviews->commitReversal(
+                new AccountId($id),
+                new EntityId($operation),
+                FormInput::from($request)->bodyText("review_token"),
+            ),
+        );
+    }
+
+    public function reviewChargeCredit(
+        ServerRequest $request,
+        string $id,
+        string $operation,
+    ): ResponseInterface {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->reviews->reviewChargeCredit(
+                new AccountId($id),
+                new EntityId($operation),
+                new Money($f->integer("amount_minor", 1, Money::MAX_MINOR), $f->text("currency", 3)),
+                $f->integer("position", 1),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+
+    public function commitChargeCredit(
+        ServerRequest $request,
+        string $id,
+        string $operation,
+    ): ResponseInterface {
+        return new JsonResponse(
+            $this->reviews->commitChargeCredit(
                 new AccountId($id),
                 new EntityId($operation),
                 FormInput::from($request)->bodyText("review_token"),

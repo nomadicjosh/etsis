@@ -156,6 +156,34 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return array<string,mixed> */
+    public function reviewChargeCredit(
+        AccountId $id,
+        EntityId $source,
+        Money $amount,
+        int $position,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        return $this->review(
+            AccountEntryAction::ChargeCredit,
+            $id,
+            $source,
+            null,
+            $amount,
+            $position,
+            $reason,
+        );
+    }
+
+    /** @return array<string,mixed> */
+    public function commitChargeCredit(
+        AccountId $id,
+        EntityId $source,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        return $this->commit(AccountEntryAction::ChargeCredit, $id, $source, $token);
+    }
+
+    /** @return array<string,mixed> */
     private function review(
         AccountEntryAction $action,
         AccountId $id,
@@ -201,7 +229,11 @@ final readonly class AccountEntryReviewService
                 ];
             } elseif ($action === AccountEntryAction::Posting) {
                 $amount ??= throw new \LogicException("A posting requires an amount.");
-                if ($paymentDetails !== null && !$paymentDetails->isEmpty() && $type === EntryType::Charge) {
+                if (
+                    $paymentDetails !== null &&
+                    !$paymentDetails->isEmpty() &&
+                    in_array($type, [EntryType::Charge, EntryType::ChargeCredit], true)
+                ) {
                     throw new ValidationException([
                         [
                             "field" => "payment_method",
@@ -240,6 +272,28 @@ final readonly class AccountEntryReviewService
                     "type" => $entry["type"],
                     "amount_minor" => $entry["minor"],
                     "payment_details" => $account->paymentDetails($source)?->values(),
+                    "reversed_credit_minor" => $entry["credited_minor"] ?? 0,
+                    "reversed_credit_count" => $entry["linked_credit_count"] ?? 0,
+                ];
+            } elseif ($action === AccountEntryAction::ChargeCredit) {
+                $source ??= throw new \LogicException("A charge credit requires its source.");
+                $amount ??= throw new \LogicException("A charge credit requires an amount.");
+                $balance = $account->creditBalance($source, $amount);
+                $entry =
+                    $account->entry($source) ?? throw new \LogicException("The charge source is missing.");
+                $intent = ["source_operation_id" => $source->value];
+                $details = [
+                    "source_operation_id" => $source->value,
+                    "type" => EntryType::ChargeCredit->value,
+                    "amount_minor" => $amount->minor,
+                    "charge_minor" => $entry["minor"],
+                    "credited_minor" =>
+                        $entry["credited_minor"] ??
+                        throw new \LogicException("The charge credit total is missing."),
+                    "remaining_charge_minor" =>
+                        ($entry["remaining_charge_minor"] ??
+                            throw new \LogicException("The remaining charge is missing.")) -
+                        $amount->minor,
                 ];
             } else {
                 $source ??= throw new \LogicException("An amount correction requires an entry.");
@@ -345,6 +399,7 @@ final readonly class AccountEntryReviewService
                     $hash,
                 ),
                 AccountEntryAction::Reversal => $account->reversalResult($operation, $actor, $hash),
+                AccountEntryAction::ChargeCredit => $account->chargeCreditResult($operation, $actor, $hash),
             };
             if ($accepted !== null) {
                 return $accepted;
@@ -378,6 +433,13 @@ final readonly class AccountEntryReviewService
                     $hash,
                 ),
                 AccountEntryAction::Reversal => $account->reverseReviewed($operation, $actor, $hash),
+                AccountEntryAction::ChargeCredit => $account->creditCharge(
+                    $source ?? throw new \LogicException("A charge credit requires its source."),
+                    $operation,
+                    $amount,
+                    $actor,
+                    $hash,
+                ),
             };
             $this->actor($actor);
             $this->accounts->save(
@@ -447,7 +509,15 @@ final readonly class AccountEntryReviewService
             if (array_key_exists("payment_details", $p)) {
                 if (
                     !is_array($p["payment_details"]) ||
-                    in_array($action, [AccountEntryAction::Correction, AccountEntryAction::Reversal], true)
+                    in_array(
+                        $action,
+                        [
+                            AccountEntryAction::Correction,
+                            AccountEntryAction::Reversal,
+                            AccountEntryAction::ChargeCredit,
+                        ],
+                        true,
+                    )
                 ) {
                     throw new InvalidArgumentException();
                 }

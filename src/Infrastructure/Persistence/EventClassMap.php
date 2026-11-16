@@ -82,6 +82,7 @@ final class EventClassMap
             \Domain\Finance\Event\BillingRuleWasRetired::class,
             \Domain\Finance\Event\AccountEntryWasReversed::class,
             \Domain\Finance\Event\AccountEntryWasCorrected::class,
+            \Domain\Finance\Event\AccountChargeWasCredited::class,
             \Domain\Finance\Event\AccountPaymentDetailsWereChanged::class,
             \Domain\Finance\Event\JournalWasPosted::class,
             \Domain\Finance\Event\JournalWasReversed::class,

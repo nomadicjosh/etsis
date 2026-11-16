@@ -9,6 +9,7 @@ use Codefy\Domain\Metadata;
 use DomainException;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Event\AccountEntryWasPosted;
+use Domain\Finance\Event\AccountChargeWasCredited;
 use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
 use Domain\Finance\ValueObject\PaymentDetails;
 use Domain\Finance\Event\AccountEntryWasCorrected;
@@ -21,8 +22,9 @@ use Domain\Shared\Exception\ValidationException;
 
 /**
  * @phpstan-type AccountEntry array{operation_id:string,type:string,minor:int,currency:string,reversed:bool,
- *     corrects_operation_id?:string,corrected_by_operation_id?:string}
- * @phpstan-type CorrectionResult array{status:string,operation_id:string,source_operation_id:string,
+ *     corrects_operation_id?:string,corrected_by_operation_id?:string,source_operation_id?:string,
+ *     credited_minor?:int,remaining_charge_minor?:int,linked_credit_count?:int,reversed_with_operation_id?:string}
+ * @phpstan-type LinkedEntryResult array{status:string,operation_id:string,source_operation_id:string,
  *     balance_minor:int,position:int}
  * @phpstan-type ReversalResult array{status:string,operation_id:string,balance_minor:int,position:int}
  * @phpstan-type PostingResult array{status:string,operation_id:string,balance_minor:int,position:int}
@@ -42,7 +44,7 @@ final class StudentAccount extends EventSourcedAggregate
     private array $staffRecorded = [];
     /** @var array<string, string> */
     private array $correctedBy = [];
-    /** @var array<string, array{actor:string,hash:string,result:CorrectionResult}> */
+    /** @var array<string, array{actor:string,hash:string,result:LinkedEntryResult}> */
     private array $corrections = [];
     /** @var array<string, array{actor:string,hash:string,result:PostingResult}> */
     private array $postingReceipts = [];
@@ -58,6 +60,15 @@ final class StudentAccount extends EventSourcedAggregate
 
     /** @var array<string,array{actor:string,hash:string,result:ReversalResult}> */
     private array $reversalReceipts = [];
+
+    /** @var array<string,string> Credit entry to original charge. */
+    private array $chargeCreditSources = [];
+    /** @var array<string,list<string>> Indexed per charge; statement work stays linear. */
+    private array $creditsByCharge = [];
+    /** @var array<string,string> Credits reversed atomically with their parent charge. */
+    private array $reversedWith = [];
+    /** @var array<string,array{actor:string,hash:string,result:LinkedEntryResult}> */
+    private array $chargeCreditReceipts = [];
 
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
@@ -99,7 +110,10 @@ final class StudentAccount extends EventSourcedAggregate
     {
         $entries = [];
         foreach ($this->operations as $id => $entry) {
-            $flags = ["reversed" => isset($this->reversedOperations[$id])] + $this->correctionLinks($id);
+            $flags =
+            ["reversed" => isset($this->reversedOperations[$id])] +
+            $this->correctionLinks($id) +
+            $this->chargeLinks($id);
             $entries[] = ["operation_id" => $id] + $entry + $flags;
         }
 
@@ -115,7 +129,8 @@ final class StudentAccount extends EventSourcedAggregate
         }
         return ["operation_id" => $operation->value] +
         $entry + ["reversed" => isset($this->reversedOperations[$operation->value])] +
-        $this->correctionLinks($operation->value);
+        $this->correctionLinks($operation->value) +
+        $this->chargeLinks($operation->value);
     }
 
     public function post(
@@ -127,6 +142,11 @@ final class StudentAccount extends EventSourcedAggregate
         ?string $reviewHash = null,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
     ): void {
+        if ($type === EntryType::ChargeCredit) {
+            throw new DomainException(
+                "A charge credit requires its original charge and a reviewed instruction.",
+            );
+        }
         if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
             throw new DomainException("A positive amount in the account currency is required.");
         }
@@ -169,13 +189,18 @@ final class StudentAccount extends EventSourcedAggregate
 
     public function postingBalance(EntryType $type, Money $amount): Money
     {
+        if ($type === EntryType::ChargeCredit) {
+            throw new DomainException(
+                "A charge credit requires its original charge and a reviewed instruction.",
+            );
+        }
         if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
             throw new DomainException("A positive amount in the account currency is required.");
         }
         if ($type === EntryType::Refund && $amount->minor > -$this->balance->minor) {
             throw new DomainException("A refund cannot exceed available credit.");
         }
-        $delta = $type === EntryType::Payment ? -$amount->minor : $amount->minor;
+        $delta = $type->balanceSign() * $amount->minor;
         return $this->balance->add(new Money($delta, $amount->currency));
     }
 
@@ -254,7 +279,9 @@ final class StudentAccount extends EventSourcedAggregate
                 ],
             ]);
         }
-        $delta = $entry["type"] === EntryType::Payment->value ? $entry["minor"] : -$entry["minor"];
+        $delta =
+        -EntryType::from($entry["type"])->balanceSign() * $entry["minor"] +
+        ($entry["credited_minor"] ?? 0);
         $minor = $this->balance->minor + $delta;
         if ($minor < -Money::MAX_MINOR || $minor > Money::MAX_MINOR) {
             throw new ValidationException([
@@ -276,20 +303,193 @@ final class StudentAccount extends EventSourcedAggregate
             throw new DomainException("A reviewed reversal requires a valid instruction hash.");
         }
         $this->reversalBalance($operationId);
+        $credits = $this->activeChargeCredits($operationId->value);
         $this->recordThat(
             AccountEntryWasReversed::occur(
                 $this->aggregateId(),
                 ["operation_id" => $operationId->value, "actor_id" => $actorId->value],
                 [Metadata::AGGREGATE_TYPE => "student_account"] +
-                    ($reviewHash === null ? [] : ["review_hash" => $reviewHash]),
+                    ($reviewHash === null ? [] : ["review_hash" => $reviewHash]) +
+                    ($credits === [] ? [] : ["reversed_credit_ids" => $credits]),
             ),
         );
+    }
+
+    public function canCreditCharge(EntityId $source): bool
+    {
+        return ($this->operations[$source->value]["type"] ?? null) === EntryType::Charge->value &&
+        !isset($this->reversedOperations[$source->value]) &&
+        $this->chargeCreditSummary($source->value)["remaining_charge_minor"] > 0;
+    }
+
+    /** @return array{credited_minor:int,remaining_charge_minor:int,linked_credit_count:int} */
+    private function chargeCreditSummary(string $source): array
+    {
+        $total = 0;
+        $credits = $this->activeChargeCredits($source);
+        foreach ($credits as $id) {
+            $total += $this->operations[$id]["minor"];
+        }
+        return [
+            "credited_minor" => $total,
+            "remaining_charge_minor" => isset($this->reversedOperations[$source])
+                ? 0
+                : $this->operations[$source]["minor"] - $total,
+            "linked_credit_count" => count($credits),
+        ];
+    }
+
+    /** @return list<string> */
+    private function activeChargeCredits(string $source): array
+    {
+        return array_values(
+            array_filter(
+                $this->creditsByCharge[$source] ?? [],
+                fn(string $id): bool => !isset($this->reversedOperations[$id]),
+            ),
+        );
+    }
+
+    /** @return array{source_operation_id?:string,credited_minor?:int,remaining_charge_minor?:int,
+     *     linked_credit_count?:int,reversed_with_operation_id?:string} */
+    private function chargeLinks(string $id): array
+    {
+        $links = [];
+        if (isset($this->chargeCreditSources[$id])) {
+            $links["source_operation_id"] = $this->chargeCreditSources[$id];
+        }
+        if (isset($this->reversedWith[$id])) {
+            $links["reversed_with_operation_id"] = $this->reversedWith[$id];
+        }
+        if ($this->operations[$id]["type"] === EntryType::Charge->value) {
+            $links += $this->chargeCreditSummary($id);
+        }
+        return $links;
+    }
+
+    public function creditBalance(EntityId $source, Money $amount): Money
+    {
+        if (!$this->canCreditCharge($source)) {
+            throw new ValidationException([
+                [
+                    "field" => "source_operation_id",
+                    "message" => "Choose a posted charge with an amount still available to credit.",
+                ],
+            ]);
+        }
+        $entry = $this->operations[$source->value];
+        if (
+            $amount->minor < 1 ||
+            $amount->currency !== $entry["currency"] ||
+            $amount->minor > $this->chargeCreditSummary($source->value)["remaining_charge_minor"]
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "amount_minor",
+                    "message" =>
+                        "Enter a positive credit no greater than the remaining charge, in its original currency.",
+                ],
+            ]);
+        }
+        $minor = $this->balance->minor - $amount->minor;
+        if ($minor < -Money::MAX_MINOR) {
+            throw new ValidationException([
+                [
+                    "field" => "amount_minor",
+                    "message" => "The credited balance exceeds the supported account limit.",
+                ],
+            ]);
+        }
+        return new Money($minor, $amount->currency);
+    }
+
+    /** @return LinkedEntryResult|null */
+    public function chargeCreditResult(EntityId $operation, EntityId $actor, string $hash): ?array
+    {
+        $receipt = $this->chargeCreditReceipts[$operation->value] ?? null;
+        if ($receipt === null) {
+            return null;
+        }
+        if ($receipt["actor"] !== $actor->value || !hash_equals($receipt["hash"], $hash)) {
+            throw new DomainException("This charge credit belongs to a different reviewed instruction.");
+        }
+        return $receipt["result"];
+    }
+
+    /** @return LinkedEntryResult */
+    public function creditCharge(
+        EntityId $source,
+        EntityId $operation,
+        Money $amount,
+        EntityId $actor,
+        string $hash,
+    ): array {
+        if (($accepted = $this->chargeCreditResult($operation, $actor, $hash)) !== null) {
+            return $accepted;
+        }
+        $this->creditBalance($source, $amount);
+        if (
+            isset($this->operations[$operation->value]) ||
+            isset($this->paymentDetailsReceipts[$operation->value]) ||
+            preg_match('/^[a-f0-9]{64}$/D', $hash) !== 1
+        ) {
+            throw new DomainException("A new charge credit identity and reviewed instruction are required.");
+        }
+        $this->recordThat(
+            AccountChargeWasCredited::occur(
+                $this->aggregateId(),
+                [
+                    "source_operation_id" => $source->value,
+                    "operation_id" => $operation->value,
+                    "minor" => $amount->minor,
+                    "currency" => $amount->currency,
+                    "actor_id" => $actor->value,
+                    "review_hash" => $hash,
+                ],
+                [Metadata::AGGREGATE_TYPE => "student_account"],
+            ),
+        );
+        return $this->chargeCreditReceipts[$operation->value]["result"];
+    }
+
+    protected function whenAccountChargeWasCredited(AccountChargeWasCredited $event): void
+    {
+        $p = $event->payload();
+        $source = new EntityId($p["source_operation_id"]);
+        $amount = new Money($p["minor"], $p["currency"]);
+        $balance = $this->creditBalance($source, $amount);
+        if (
+            isset($this->operations[$p["operation_id"]]) ||
+            isset($this->paymentDetailsReceipts[$p["operation_id"]])
+        ) {
+            throw new DomainException("The recorded charge credit reuses an earlier instruction identity.");
+        }
+        $this->operations[$p["operation_id"]] = [
+            "type" => EntryType::ChargeCredit->value,
+            "minor" => $amount->minor,
+            "currency" => $amount->currency,
+        ];
+        $this->chargeCreditSources[$p["operation_id"]] = $source->value;
+        $this->creditsByCharge[$source->value][] = $p["operation_id"];
+        $this->balance = $balance;
+        $this->chargeCreditReceipts[$p["operation_id"]] = [
+            "actor" => $p["actor_id"],
+            "hash" => $p["review_hash"],
+            "result" => [
+                "status" => "credited",
+                "operation_id" => $p["operation_id"],
+                "source_operation_id" => $source->value,
+                "balance_minor" => $balance->minor,
+                "position" => $event->playhead(),
+            ],
+        ];
     }
 
     public function canCorrectAmount(EntityId $source): bool
     {
         return isset($this->staffRecorded[$source->value]) &&
-        !isset($this->reversedOperations[$source->value]);
+        !isset($this->reversedOperations[$source->value]) &&
+        $this->activeChargeCredits($source->value) === [];
     }
 
     public function correctedBalance(EntityId $source, Money $amount): Money
@@ -298,7 +498,9 @@ final class StudentAccount extends EventSourcedAggregate
             throw new ValidationException([
                 [
                     "field" => "source_operation_id",
-                    "message" => "Only an unreversed, explicitly staff-recorded entry can be corrected here.",
+                    "message" =>
+                        "Only an unreversed, explicitly staff-recorded entry without active charge credits "
+                        . "can be corrected here.",
                 ],
             ]);
         }
@@ -337,7 +539,7 @@ final class StudentAccount extends EventSourcedAggregate
         return $balance;
     }
 
-    /** @return CorrectionResult|null */
+    /** @return LinkedEntryResult|null */
     public function correctionResult(EntityId $operation, EntityId $actor, string $reviewHash): ?array
     {
         $receipt = $this->corrections[$operation->value] ?? null;
@@ -350,7 +552,7 @@ final class StudentAccount extends EventSourcedAggregate
         return $receipt["result"];
     }
 
-    /** @return CorrectionResult */
+    /** @return LinkedEntryResult */
     public function correct(
         EntityId $source,
         EntityId $operation,
@@ -561,7 +763,15 @@ final class StudentAccount extends EventSourcedAggregate
     {
         $p = $event->payload();
         $operation = new EntityId($p["operation_id"]);
+        $credits = $this->activeChargeCredits($operation->value);
+        if (($event->metadata()["reversed_credit_ids"] ?? []) !== $credits) {
+            throw new DomainException("The charge reversal does not retain its exact linked credit set.");
+        }
         $this->balance = $this->reversalBalance($operation);
+        foreach ($credits as $credit) {
+            $this->reversedOperations[$credit] = true;
+            $this->reversedWith[$credit] = $operation->value;
+        }
         $this->reversedOperations[$operation->value] = true;
         if (isset($event->metadata()["review_hash"])) {
             $this->reversalReceipts[$operation->value] = [
@@ -601,7 +811,7 @@ final class StudentAccount extends EventSourcedAggregate
         if (($event->metadata()["staff_recorded"] ?? false) === true) {
             $this->staffRecorded[$payload["operation_id"]] = true;
         }
-        $delta = $payload["type"] === EntryType::Payment->value ? -$payload["minor"] : $payload["minor"];
+        $delta = EntryType::from($payload["type"])->balanceSign() * $payload["minor"];
         $this->balance = $this->balance->add(new Money($delta, $payload["currency"]));
         if (isset($event->metadata()["review_hash"])) {
             $this->postingReceipts[$payload["operation_id"]] = [
