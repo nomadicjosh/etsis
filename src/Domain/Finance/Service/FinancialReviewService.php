@@ -9,7 +9,11 @@ use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Finance\FinancialReview;
+use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\Repository\FinancialReviewRepository;
+use Domain\Finance\ValueObject\PostingReference;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Exception\ValidationException;
@@ -31,6 +35,7 @@ final readonly class FinancialReviewService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private AccountRepository $accounts,
     ) {
     }
 
@@ -44,6 +49,7 @@ final readonly class FinancialReviewService
             $source = $this->source($student, $hiatus);
             $existing = $this->reviews->forHiatus($hiatus);
             if ($existing !== null) {
+                $this->authorize("sis:registration:manage", $actor);
                 return $this->metadata($existing);
             }
             if ($source->voided) {
@@ -54,6 +60,7 @@ final readonly class FinancialReviewService
             $review = new FinancialReview(EntityId::generate(), $student, $hiatus, $actor, $this->now());
             $this->reviews->add($review);
             $this->audit->record($actor, "finance.review_requested", $review->id);
+            $this->authorize("sis:registration:manage", $actor);
             return $this->metadata($review);
         });
     }
@@ -63,22 +70,24 @@ final readonly class FinancialReviewService
      */
     public function progress(EntityId $student, EntityId $hiatus): ?array
     {
-        $this->access->requirePermission("sis:registration:manage");
+        $actor = $this->authorize("sis:registration:manage");
         $this->source($student, $hiatus);
         $review = $this->reviews->forHiatus($hiatus);
+        $this->authorize("sis:registration:manage", $actor);
         return $review === null ? null : $this->metadata($review);
     }
 
     /** @return array<string, mixed> */
     public function page(?string $status, ?EntityId $after = null): array
     {
-        $this->access->requirePermission("sis:finance:post");
+        $actor = $this->staff();
         if ($status !== null && !in_array($status, ["open", "in_review", "completed", "cancelled"], true)) {
             throw new ValidationException([["field" => "status", "message" => "Choose a valid review status."]]);
         }
         $rows = $this->reviews->page($status, $after);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
+        $this->staff($actor);
         return [
             "items" => array_map(
                 static fn(array $r): array => [
@@ -98,39 +107,54 @@ final readonly class FinancialReviewService
     /** @return array<string, mixed> */
     public function view(EntityId $id): array
     {
-        $actor = $this->access->requirePermission("sis:finance:post");
-        $review = $this->reviews->get($id);
-        $student = $this->admissions->student($review->student);
-        $person = $this->admissions->person($student->personId);
-        $hiatus = $this->source($student->id, $review->hiatus);
-        $this->audit->record($actor, "finance.review_read", $id);
-        return $this->metadata($review) + [
-            "student" => [
-                "id" => $student->id->value,
-                "given_name" => $person->givenName,
-                "family_name" => $person->familyName,
-                "institutional_id" => $person->institutionalId->value,
-            ],
-            "version" => $review->version,
-            "source" => [
-                "id" => $hiatus->id->value,
-                "starts_on" => $hiatus->dates->start->format("Y-m-d"),
-                "ends_on" => $hiatus->dates->end?->format("Y-m-d"),
-                "voided" => $hiatus->voided,
-            ],
-            "assigned_to_me" => $review->assignedTo?->value === $actor->value,
-        ];
+        $actor = $this->staff();
+        return $this->transactions->run(function () use ($id, $actor): array {
+            $review = $this->reviews->get($id);
+            $student = $this->admissions->student($review->student);
+            $person = $this->admissions->person($student->personId);
+            $hiatus = $this->source($student->id, $review->hiatus);
+            $this->audit->record($actor, "finance.review_read", $id);
+            $readAccounts = $this->canReadAccounts($actor);
+            $this->staff($actor, $readAccounts);
+            return $this->metadata($review) + [
+                "student" => [
+                    "id" => $student->id->value,
+                    "given_name" => $person->givenName,
+                    "family_name" => $person->familyName,
+                    "institutional_id" => $person->institutionalId->value,
+                ],
+                "version" => $review->version,
+                "source" => [
+                    "id" => $hiatus->id->value,
+                    "starts_on" => $hiatus->dates->start->format("Y-m-d"),
+                    "ends_on" => $hiatus->dates->end?->format("Y-m-d"),
+                    "voided" => $hiatus->voided,
+                ],
+                "assigned_to_me" => $review->assignedTo?->value === $actor->value,
+                "can_view_accounts" => $readAccounts,
+            ];
+        });
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @param list<PostingReference> $postings
+     * @return array<string, mixed>
+     */
     public function change(
         EntityId $id,
         EntityId $operation,
         int $version,
         string $action,
         #[\SensitiveParameter] string $reason,
+        array $postings = [],
     ): array {
-        $actor = $this->access->requirePermission("sis:finance:post");
+        $actor = $this->staff(accounts: $postings !== []);
+        $references = $this->references($postings);
+        if ($references !== [] && $action !== "complete") {
+            throw new ValidationException([
+                ["field" => "postings", "message" => "Posting references belong to a completed review outcome."],
+            ]);
+        }
         $note = trim($reason);
         if (
             !mb_check_encoding($note, "UTF-8") ||
@@ -143,7 +167,18 @@ final readonly class FinancialReviewService
             ]);
         }
         $request = ["version" => $version, "action" => $action, "note" => $note];
-        return $this->transactions->run(function () use ($id, $operation, $version, $action, $actor, $request): array {
+        if ($references !== []) {
+            $request["postings"] = array_map(static fn(PostingReference $p): array => $p->values(), $references);
+        }
+        return $this->transactions->run(function () use (
+            $id,
+            $operation,
+            $version,
+            $action,
+            $actor,
+            $request,
+            $references,
+        ): array {
             $this->reviews->lock($id);
             $current = $this->reviews->get($id);
             $previous = $this->reviews->action($operation);
@@ -156,12 +191,15 @@ final readonly class FinancialReviewService
                 ) {
                     throw new ConcurrentModificationException("This operation belongs to another finance change.");
                 }
+                $this->staff($actor, $references !== []);
                 return $data["result"];
             }
             if ($current->version !== $version) {
                 throw new ConcurrentModificationException("The finance review changed. Reload it before saving.");
             }
             $next = $current->change($action, $actor);
+            $linked = $this->verifyPostings($current, $references);
+            $this->staff($actor, $references !== []);
             $this->reviews->save($next, $version);
             $result = $this->metadata($next);
             $this->reviews->record(
@@ -175,6 +213,7 @@ final readonly class FinancialReviewService
                             "previous_status" => $current->status,
                             "previous_assignee" => $current->assignedTo?->value,
                             "result" => $result,
+                            "postings" => $linked,
                         ],
                         JSON_THROW_ON_ERROR,
                     ),
@@ -182,6 +221,7 @@ final readonly class FinancialReviewService
                 $this->now(),
             );
             $this->audit->record($actor, "finance.review_" . $action, $id);
+            $this->staff($actor, $references !== []);
             return $result;
         });
     }
@@ -189,26 +229,133 @@ final readonly class FinancialReviewService
     /** @return array<string, mixed> */
     public function history(EntityId $id, ?EntityId $after = null): array
     {
-        $actor = $this->access->requirePermission("sis:finance:post");
-        $this->reviews->get($id);
-        $rows = $this->reviews->history($id, $after);
-        $more = count($rows) > 50;
-        $rows = array_slice($rows, 0, 50);
-        $items = [];
-        foreach ($rows as $row) {
-            $data = $this->payload($row);
-            $items[] = [
-                "id" => $row["id"],
-                "created_at" => $row["created_at"],
-                "action" => $data["request"]["action"],
-                "note" => $data["request"]["note"],
-                "actor_name" => trim($row["given_name"] . " " . $row["family_name"]),
-                "previous_status" => $data["previous_status"],
-                "status" => $data["result"]["status"],
+        $actor = $this->staff();
+        return $this->transactions->run(function () use ($id, $after, $actor): array {
+            $readAccounts = $this->canReadAccounts($actor);
+            $this->reviews->get($id);
+            $rows = $this->reviews->history($id, $after);
+            $more = count($rows) > 50;
+            $rows = array_slice($rows, 0, 50);
+            $items = [];
+            foreach ($rows as $row) {
+                $data = $this->payload($row);
+                $items[] = [
+                    "id" => $row["id"],
+                    "created_at" => $row["created_at"],
+                    "action" => $data["request"]["action"],
+                    "note" => $data["request"]["note"],
+                    "actor_name" => trim($row["given_name"] . " " . $row["family_name"]),
+                    "previous_status" => $data["previous_status"],
+                    "status" => $data["result"]["status"],
+                    "postings" => $readAccounts ? $data["postings"] ?? [] : [],
+                ];
+            }
+            $this->audit->record($actor, "finance.review_history_read", $id);
+            $this->staff($actor, $readAccounts);
+            return ["items" => $items, "next_after" => $more ? $rows[49]["id"] : null];
+        });
+    }
+
+    /** Labels only; statements still use their existing authorized, bounded selected-account read.
+     * @return array<string,mixed>
+     */
+    public function accounts(EntityId $id, ?EntityId $after = null): array
+    {
+        $actor = $this->staff(accounts: true);
+        return $this->transactions->run(function () use ($id, $after, $actor): array {
+            $review = $this->reviews->get($id);
+            $rows = $this->reviews->accounts($review->student, $after);
+            $more = count($rows) > 25;
+            $rows = array_slice($rows, 0, 25);
+            $this->audit->record($actor, "finance.review_accounts_read", $id);
+            $this->staff($actor, true);
+            return ["items" => $rows, "next_after" => $more ? $rows[24]["id"] : null];
+        });
+    }
+
+    /** @param list<PostingReference> $postings
+     * @return list<PostingReference>
+     */
+    private function references(array $postings): array
+    {
+        if (count($postings) > 10) {
+            throw new ValidationException([
+                ["field" => "postings", "message" => "Link at most ten existing entries."],
+            ]);
+        }
+        $unique = [];
+        foreach ($postings as $reference) {
+            $key = (string) $reference->account . "/" . $reference->operation->value;
+            if (isset($unique[$key])) {
+                throw new ValidationException([["field" => "postings", "message" => "Link each entry only once."]]);
+            }
+            $unique[$key] = $reference;
+        }
+        ksort($unique, SORT_STRING);
+        return array_values($unique);
+    }
+
+    /** Retained operational evidence of existing facts at the verified account position; posts no money.
+     * @param list<PostingReference> $postings
+     * @return list<array<string,mixed>>
+     */
+    private function verifyPostings(FinancialReview $review, array $postings): array
+    {
+        $budget = new HistoryReadBudget();
+        $accounts = $result = [];
+        foreach ($postings as $p) {
+            $account = $accounts[(string) $p->account] ??= $this->accounts->get($p->account, $budget);
+            if ($account->studentId()->value !== $review->student->value) {
+                throw new ValidationException([
+                    ["field" => "postings", "message" => "Choose an account belonging to this student."],
+                ]);
+            }
+            if ($account->playhead() !== $p->position) {
+                throw new ConcurrentModificationException("Refresh linked entries before completing this review.");
+            }
+            $entry = $account->entry($p->operation);
+            if ($entry === null) {
+                throw new ValidationException([
+                    ["field" => "postings", "message" => "Choose an existing entry from the account statement."],
+                ]);
+            }
+            $result[] = $p->values() + [
+                "term_id" => $account->termId()->value,
+                "type" => $entry["type"],
+                "minor" => $entry["minor"],
+                "currency" => $entry["currency"],
+                "reversed" => $entry["reversed"],
             ];
         }
-        $this->audit->record($actor, "finance.review_history_read", $id);
-        return ["items" => $items, "next_after" => $more ? $rows[49]["id"] : null];
+        return $result;
+    }
+
+    private function staff(?EntityId $expected = null, bool $accounts = false): EntityId
+    {
+        $actor = $this->authorize("sis:finance:post", $expected);
+        if ($accounts) {
+            $this->authorize("sis:finance:read", $actor);
+        }
+        return $actor;
+    }
+
+    private function canReadAccounts(EntityId $actor): bool
+    {
+        try {
+            $this->authorize("sis:finance:read", $actor);
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+
+    private function authorize(string $permission, ?EntityId $expected = null): EntityId
+    {
+        $actor = $this->access->requirePermission($permission);
+        if ($expected !== null && $actor->value !== $expected->value) {
+            throw new AccessDeniedException("The finance reviewer changed.");
+        }
+        return $actor;
     }
 
     private function source(EntityId $student, EntityId $hiatus): StudentHiatus

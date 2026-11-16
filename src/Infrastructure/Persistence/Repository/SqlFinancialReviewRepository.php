@@ -160,6 +160,21 @@ final readonly class SqlFinancialReviewRepository implements FinancialReviewRepo
         );
     }
 
+    public function accounts(EntityId $student, ?EntityId $after): array
+    {
+        $q = $this->sql->quote(...);
+        $query = 'SELECT a.' . $q('id') . ', a.' . $q('currency') . ', t.' . $q('code') . ' AS ' . $q('term_code')
+        . ' FROM ' . $q('sis_student_accounts') . ' a JOIN ' . $q('sis_terms')
+        . ' t ON t.' . $q('id') . ' = a.' . $q('term_id')
+        . ' WHERE a.' . $q('student_id') . ' = ?';
+        $parameters = [$student->value];
+        if ($after !== null) {
+            $query .= ' AND a.' . $q('id') . ' < ?';
+            $parameters[] = $after->value;
+        }
+        return $this->sql->fetch($query . ' ORDER BY a.' . $q('id') . ' DESC', $parameters, 26);
+    }
+
     /** @param array<string, mixed> $row */
     private function hydrate(array $row): FinancialReview
     {

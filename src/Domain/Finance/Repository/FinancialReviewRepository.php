@@ -21,4 +21,8 @@ interface FinancialReviewRepository
     public function record(EntityId $operation, EntityId $review, EntityId $actor, string $encrypted, string $on): void;
     /** @return list<array<string, mixed>> */
     public function history(EntityId $review, ?EntityId $after): array;
+    /** Minimal account/term labels for one student; 26 probes a 25-account page.
+     * @return list<array<string,mixed>>
+     */
+    public function accounts(EntityId $student, ?EntityId $after): array;
 }

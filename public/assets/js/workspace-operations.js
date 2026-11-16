@@ -315,27 +315,23 @@ window.createWorkspaceOperations = function (ui) {
     async function roster(body, row, sectionName) {
         return ui.teaching().section(body, row, sectionName);
     }
-    async function account(body, row) {
+    async function openAccount(id, back) {
+        const body = openDrawer("Student account", "FINANCE OFFICE");
+        body.append(button("Back to finance task", back, "btn-link"));
+        await account(body, { id }, () => openAccount(id, back));
+    }
+    async function account(body, row, reopen = null) {
         const data = await request(`/sis/accounts/${row.id}/`);
-        const back = () => openRecord("accounts", row);
+        if (!body.isConnected) return;
+        const back = reopen || (() => openRecord("accounts", row));
         body.append(
             section(
                 "Account statement",
-                node(
-                    "p",
-                    { class: "fs-4" },
-                    `Balance: ${money(data.balance_minor, data.currency)}`,
-                ),
+                node("p", { class: "fs-4" }, `Balance: ${money(data.balance_minor, data.currency)}`),
                 node("p", {}, `Institutional ID: ${data.institutional_id}`),
             ),
         );
-        async function accountFlow(
-            title,
-            descriptors,
-            path,
-            transform,
-            explanation,
-        ) {
+        async function accountFlow(title, descriptors, path, transform, explanation) {
             const form = await flow(
                 title,
                 descriptors,
@@ -349,7 +345,7 @@ window.createWorkspaceOperations = function (ui) {
                 explanation,
             );
             form.dataset.currency = data.currency;
-            form.dispatchEvent(new Event('change'));
+            form.dispatchEvent(new Event("change"));
             const balance = node(
                 "p",
                 { role: "status", class: "fw-semibold" },
@@ -372,23 +368,12 @@ window.createWorkspaceOperations = function (ui) {
                 button(
                     "Post a transaction",
                     async () => {
-                        const operation = await request(
-                            "/sis/ui/operation-id/",
-                        );
+                        const operation = await request("/sis/ui/operation-id/");
                         await accountFlow(
                             "Post transaction",
                             [
-                                [
-                                    "type",
-                                    "Transaction type",
-                                    "choice",
-                                    ["charge", "payment", "refund"],
-                                ],
-                                [
-                                    "amount_minor",
-                                    `Amount (${data.currency})`,
-                                    "money",
-                                ],
+                                ["type", "Transaction type", "choice", ["charge", "payment", "refund"]],
+                                ["amount_minor", `Amount (${data.currency})`, "money"],
                                 ["reason", "Reason for transaction", "textarea"],
                             ],
                             `/sis/accounts/${row.id}/entries/`,
@@ -404,28 +389,56 @@ window.createWorkspaceOperations = function (ui) {
                     "btn-primary",
                 ),
             );
-        actions.append(
-            scrollTable(
-                ["Entry", "Amount", "Status", "Correction"],
-                data.entries.map((item) => [
-                    item.type,
-                    money(item.minor, item.currency),
-                    item.reversed ? "Reversed" : "Posted",
-                    !item.reversed && can("sis:finance:post")
-                        ? button("Reverse entry", () =>
-                              accountFlow(
-                                  "Confirm entry reversal",
-                                  [["reason", "Reason for reversal", "textarea"]],
-                                  `/sis/accounts/${row.id}/entries/${item.operation_id}/reverse/`,
-                                  null,
-                                  "Enter why this posting must be reversed. The original entry remains in the financial history. Reload the statement if another transaction changes this account.",
-                              ),
-                          )
-                        : "—",
-                ]),
-                "Account entries",
-            ),
-        );
+        const entries = node("div");
+        let offset = 0;
+        function renderEntries() {
+            entries.replaceChildren(
+                scrollTable(
+                    ["Entry", "Reference", "Amount", "Status", "Correction"],
+                    data.entries
+                        .slice(offset, offset + 25)
+                        .map((item) => [
+                            item.type,
+                            node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
+                            money(item.minor, item.currency),
+                            item.reversed ? "Reversed" : "Posted",
+                            !item.reversed && can("sis:finance:post")
+                                ? button("Reverse entry", () =>
+                                      accountFlow(
+                                          "Confirm entry reversal",
+                                          [["reason", "Reason for reversal", "textarea"]],
+                                          `/sis/accounts/${row.id}/entries/${item.operation_id}/reverse/`,
+                                          null,
+                                          "Enter why this posting must be reversed. The original entry remains in the financial history. Reload the statement if another transaction changes this account.",
+                                      ),
+                                  )
+                                : "—",
+                        ]),
+                    "Account entries",
+                ),
+                node(
+                    "p",
+                    { role: "status" },
+                    `${data.entries.length ? offset + 1 : 0}–${Math.min(offset + 25, data.entries.length)} of ${data.entries.length} entries`,
+                ),
+            );
+            if (offset)
+                entries.append(
+                    button("Previous account entries", () => {
+                        offset -= 25;
+                        renderEntries();
+                    }),
+                );
+            if (offset + 25 < data.entries.length)
+                entries.append(
+                    button("Next account entries", () => {
+                        offset += 25;
+                        renderEntries();
+                    }),
+                );
+        }
+        actions.append(entries);
+        renderEntries();
     }
     async function journal(body, row) {
         const data = await request(`/sis/journals/${row.id}/`);
@@ -1508,6 +1521,7 @@ window.createWorkspaceOperations = function (ui) {
         enhance,
         createJournal,
         billingBatch,
+        openAccount,
         campaignTemplates,
         composeMessage,
         flow,

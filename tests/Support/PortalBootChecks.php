@@ -5044,3 +5044,118 @@ if (
 ) {
     throw new RuntimeException('A report-selected queue sent, exposed wording or created academic history.');
 }
+
+// Finance completion retains verified evidence in its existing encrypted receipt, without posting money.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$financeEvidenceGet = static fn(string $path) => $app->router->match(
+    $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $path)),
+);
+$financeEvidenceView = json_decode((string) $financeEvidenceGet($financeChangePath . "/")->getBody(), true);
+$financeEvidenceStudent = $financeEvidenceView["student"]["id"];
+$financeEvidenceAccounts = $teachingPost($financeChangePath . "/accounts/", []);
+$financeEvidenceChoices = json_decode((string) $financeEvidenceAccounts->getBody(), true);
+$financeEvidenceAccount = $financeEvidenceChoices["items"][0]["id"] ?? null;
+if ($financeEvidenceAccount === null) {
+    $financeEvidenceOpened = $teachingPost("/sis/accounts/", [
+        "student_id" => $financeEvidenceStudent,
+        "term_id" => $sis->term->value,
+        "currency" => "USD",
+    ]);
+    $financeEvidenceAccount = json_decode((string) $financeEvidenceOpened->getBody(), true)["id"];
+}
+$financeEvidenceStatement = json_decode(
+    (string) $financeEvidenceGet("/sis/accounts/" . $financeEvidenceAccount . "/")->getBody(),
+    true,
+);
+$financeEvidencePosting = \Domain\Shared\ValueObject\EntityId::generate()->value;
+if (
+    $financeEvidenceAccounts->getStatusCode() !== 200 ||
+    $teachingPost("/sis/accounts/" . $financeEvidenceAccount . "/entries/", [
+        "operation_id" => $financeEvidencePosting,
+        "type" => "payment",
+        "amount_minor" => "100",
+        "currency" => $financeEvidenceStatement["currency"],
+        "position" => $financeEvidenceStatement["position"],
+        "reason" => "Native fictional evidence source payment.",
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("The native finance evidence source could not be reviewed or posted.");
+}
+$financeEvidenceClaim = $teachingPost($financeChangePath . "/change/", [
+    "operation_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+    "version" => $financeEvidenceView["version"],
+    "action" => "claim",
+    "note" => "Native evidence follow-up.",
+]);
+if ($financeEvidenceClaim->getStatusCode() !== 200) {
+    throw new RuntimeException("The finance evidence task could not be assigned to its current reviewer.");
+}
+$financeEvidencePosition = $financeEvidenceStatement["position"] + 1;
+$financeEvidenceCompletion = [
+    "operation_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+    "version" => $financeEvidenceView["version"] + 1,
+    "action" => "complete",
+    "note" => "Native private verified posting outcome.",
+    "postings" => [
+        [
+            "account_id" => $financeEvidenceAccount,
+            "operation_id" => $financeEvidencePosting,
+            "position" => $financeEvidencePosition,
+            "minor" => 99999,
+            "currency" => "XXX",
+            "reversed" => true,
+        ],
+    ],
+];
+$financeEvidenceBefore = $sis->sql->rows("sis_history_events");
+$financeEvidenceStale = $financeEvidenceCompletion;
+$financeEvidenceStale["postings"][0]["position"]--;
+if (
+    $teachingPost($financeChangePath . "/change/", $financeEvidenceStale)->getStatusCode() !== 409 ||
+    $sis->sql->rows("sis_history_events") !== $financeEvidenceBefore
+) {
+    throw new RuntimeException("A stale finance evidence selection completed or changed monetary history.");
+}
+$financeEvidenceCompleted = $teachingPost($financeChangePath . "/change/", $financeEvidenceCompletion);
+$financeEvidenceCompletedBody = json_decode((string) $financeEvidenceCompleted->getBody(), true);
+$financeEvidenceHistory = $teachingPost($financeChangePath . "/history/", []);
+$financeEvidenceSnapshot =
+json_decode((string) $financeEvidenceHistory->getBody(), true)["items"][0]["postings"][0] ?? [];
+if (
+    $financeEvidenceCompleted->getStatusCode() !== 200 ||
+    ($financeEvidenceSnapshot["minor"] ?? null) !== 100 ||
+    ($financeEvidenceSnapshot["currency"] ?? null) !== $financeEvidenceStatement["currency"] ||
+    ($financeEvidenceSnapshot["reversed"] ?? null) !== false ||
+    $sis->sql->rows("sis_history_events") !== $financeEvidenceBefore ||
+    $financeEvidenceHistory->hasHeader("phpdebugbar-id") ||
+    !str_contains($financeEvidenceHistory->getHeaderLine("Cache-Control"), "no-store")
+) {
+    throw new RuntimeException("Finance evidence trusted browser amounts, posted money or lost privacy.");
+}
+$financeEvidenceRetry = $teachingPost($financeChangePath . "/change/", $financeEvidenceCompletion);
+if (
+    json_decode((string) $financeEvidenceRetry->getBody(), true) !== $financeEvidenceCompletedBody ||
+    $sis->sql->rows("sis_history_events") !== $financeEvidenceBefore
+) {
+    throw new RuntimeException("An accepted finance evidence retry changed its original outcome.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:finance:post"];
+$financeEvidenceRedacted = $teachingPost($financeChangePath . "/history/", []);
+if (
+    $teachingPost($financeChangePath . "/accounts/", [])->getStatusCode() !== 403 ||
+    $teachingPost($financeChangePath . "/change/", $financeEvidenceCompletion)->getStatusCode() !== 403 ||
+    str_contains((string) $financeEvidenceRedacted->getBody(), $financeEvidenceAccount)
+) {
+    throw new RuntimeException("Finance task access bypassed independent account-read authority.");
+}
+$sis->access->grants = ["sis:registration:manage"];
+$financeEvidenceProgress = $financeEvidenceGet($handoffPath);
+if (
+    $financeEvidenceProgress->getStatusCode() !== 200 ||
+    str_contains((string) $financeEvidenceProgress->getBody(), "postings") ||
+    str_contains((string) $financeEvidenceProgress->getBody(), "Native private verified")
+) {
+    throw new RuntimeException("Registrar progress exposed finance evidence or private outcome wording.");
+}

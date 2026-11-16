@@ -465,6 +465,9 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/sis/finance-reviews/{id}/", [SisFinancialReviewController::class, "show"])
         ->name("sis.finance.review.show");
     $router
+        ->post('/sis/finance-reviews/{id}/accounts/', [SisFinancialReviewController::class, 'accounts'])
+        ->name('sis.finance.review.accounts');
+    $router
         ->map(["POST"], "/sis/finance-reviews/{id}/change/", [SisFinancialReviewController::class, "change"])
         ->name("sis.finance.review.change");
     $router
