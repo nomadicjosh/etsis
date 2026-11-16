@@ -212,12 +212,12 @@
     const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
-    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId) });
+    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, buildForm, formData, openDrawer });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
-    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({ node, request, requestFile, task, can, table, openDrawer, closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(), registerPopulation: (students, back) => { relationalStudio.cleanup(false); return batchRegistration.start("", students, back); }, sharing: async id => { const body = openDrawer('Report sharing', 'REPORT ACCESS'); await operations.enhance('reports', { id }, body); } });
     const reportRequests = window.createWorkspaceReportRequests({ node, request, task, can, table, badge, buildForm, formData, openDrawer, notify, reports: () => reportStudio, builder: () => relationalStudio });
     const reportStudio = window.createWorkspaceReports({ builder: () => relationalStudio, node, request, requestFile, task, can, table, openDrawer, openRecord, flow: operations.flow, enhance: operations.enhance, closeDrawer: () => drawer.hide() });
@@ -229,7 +229,7 @@
     datasets.equivalencies.columns = [['External course', 'external_code'], ['Institutional course', 'course_code'], ['Credits', 'credits_milli'], ['Effective', 'starts_on']];
     datasets.sections.columns = datasets.teaching.columns = [['Section', 'code'], ['Course', 'course_code'], ['Term', 'term_code'], ['Seats', 'capacity']];
     datasets.journals.action = 'Post a journal';
-    const pageNames = { overview: 'Overview', forms: 'Application forms', imports: 'Import data', rules: 'Rules & audiences', access: 'Roles & access', moodle: 'Moodle integration', apply: 'Application', ...Object.fromEntries(Object.entries(datasets).map(([key, value]) => [key, value.title])) };
+    const pageNames = { holds: 'Holds & restrictions', overview: 'Overview', forms: 'Application forms', imports: 'Import data', rules: 'Rules & audiences', access: 'Roles & access', moodle: 'Moodle integration', apply: 'Application', ...Object.fromEntries(Object.entries(datasets).map(([key, value]) => [key, value.title])) };
     const catalogTabs = [['courses', 'Courses'], ['sections', 'Sections'], ['programs', 'Programs'], ['terms', 'Terms'], ['grades', 'Grade definitions']];
 
     async function navigate(section, push = true) {
@@ -255,6 +255,7 @@
         else if (datasets[section]) await loadDirectory();
         else if (section === 'forms') await loadFormStudio();
         else if (section === 'rules') await loadRuleStudio();
+        else if (section === 'holds') await restrictionStudio.load();
         else if (section === 'access') await loadAccess();
         else if (section === 'moodle') await moodleStudio.load();
         else if (section === 'apply') await loadApplicantSelect();
@@ -1093,7 +1094,7 @@
         const record = await request(`/sis/rules/${id}/`); $('#student-rule-builder').queryBuilder('setRules', record.rules); $one('#rule-name').value = record.name; accessibleRules();
     });
 
-    async function loadAccess() { return accessStudio.load(); }
+    async function loadAccess() { await accessStudio.load(); $one('#access-roles').prepend(node('button', { type: 'button', class: 'btn btn-outline-primary mb-3', onclick: event => task(() => restrictionStudio.officeSetup(), event.currentTarget) }, 'Offices & delegation')); }
     async function createAccessDefinition(kind) {
         const body = openDrawer(kind === 'roles' ? 'Create a role' : 'Create a permission', 'A LITTLE MORE FLEXIBILITY');
         const fields = [['name', kind === 'roles' ? 'Role identifier' : 'Permission identifier'], ['description', 'Description', 'text', '', false]];

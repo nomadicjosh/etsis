@@ -122,10 +122,31 @@ window.createWorkspaceRestrictions = function (ui) {
         );
     }
     async function create(student) {
+        const setup = await request("/sis/offices/", "POST", {});
+        const offices = setup.items.filter((row) => Number(row.active) === 1);
+        if (!offices.length) {
+            const body = openDrawer("An owning office is needed", "HOLD SETUP");
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "An administrator must set up an active office and delegate access before a hold can be placed.",
+                ),
+            );
+            if (setup.can_administer)
+                body.append(button("Set up offices", officeSetup));
+            return;
+        }
         const operation = await request("/sis/ui/operation-id/");
         const form = await flow(
             "Place restriction",
             [
+                [
+                    "office_id",
+                    "Owning office",
+                    "choice",
+                    offices.map((row) => ({ value: row.id, label: row.name })),
+                ],
                 ["code", "Restriction code"],
                 [
                     "severity",
@@ -144,7 +165,10 @@ window.createWorkspaceRestrictions = function (ui) {
                 operation_id: operation.id,
             }),
             () => view(operation.id, student),
-            { severity: 99 },
+            {
+                severity: 99,
+                office_id: offices.length === 1 ? offices[0].id : "",
+            },
             "Explain the reason for the restriction in the internal note. The note is not shown to the student. This form reuses its operation ID when retried. End dates include the entire day.",
         );
         form.elements.code.maxLength = 22;
@@ -175,16 +199,54 @@ window.createWorkspaceRestrictions = function (ui) {
                 {},
                 `When active: student registration ${record.severity >= 99 ? "blocked" : "not blocked"}; staff registration ${record.blocks_staff ? "blocked" : "not blocked"}.`,
             ),
-            button("Back to student", () => openRecord("students", student)),
+            student?.id && can("sis:student:read")
+                ? button("Back to student", () =>
+                      openRecord("students", student),
+                  )
+                : button("Back to holds", async () => {
+                      ui.closeDrawer();
+                      await load();
+                  }),
+            node(
+                "p",
+                {},
+                `Owning office: ${record.office_name || "Not assigned"}`,
+            ),
             button("Review hold history", () => history(id, student)),
         );
         if (can("sis:audit:read"))
             body.append(
                 button("View restriction audit", () =>
-                    showAudit(student.id, id),
+                    showAudit(student?.id || record.person_id, id),
                 ),
             );
-        if (record.state !== "ended")
+        if (!record.office_id && can("admin:access:manage"))
+            body.append(
+                button("Set owning office", async () => {
+                    const setup = await request("/sis/offices/", "POST", {});
+                    const choices = setup.items
+                        .filter((row) => Number(row.active) === 1)
+                        .map((row) => ({ value: row.id, label: row.name }));
+                    const operation = await request("/sis/ui/operation-id/");
+                    await flow(
+                        "Assign owning office",
+                        [
+                            ["office_id", "Owning office", "choice", choices],
+                            ["reason", "Routing reason", "textarea"],
+                        ],
+                        `/sis/restrictions/${id}/office/`,
+                        (data) => ({
+                            ...data,
+                            operation_id: operation.id,
+                            revision: record.revision,
+                        }),
+                        () => view(id, student),
+                        {},
+                        "Route this earlier hold to its current responsible office. Its original office remains unknown; this does not change registration rules or rewrite history.",
+                    );
+                }),
+            );
+        if (record.state !== "ended" && record.office_id)
             body.append(
                 button("Set or shorten end date", async () => {
                     const operation = await request("/sis/ui/operation-id/");
@@ -330,5 +392,290 @@ window.createWorkspaceRestrictions = function (ui) {
                       ),
         );
     }
-    return { list };
+    let query = "";
+    async function load() {
+        const container = document.getElementById("hold-queue");
+        container.replaceChildren();
+        const heading = node(
+            "div",
+            { class: "inline-actions mb-3" },
+            button(
+                "Place a hold",
+                () =>
+                    personSearch(
+                        false,
+                        "Find a person for this hold",
+                        (person) => create({ person_id: person.id }),
+                    ),
+                "btn-primary",
+            ),
+        );
+        if (can("admin:access:manage"))
+            heading.append(button("Offices & delegation", officeSetup));
+        container.append(
+            node("h2", {}, "Your office holds"),
+            node(
+                "p",
+                { class: "form-text" },
+                "Work within your delegated offices. Ending a hold retains its decisions and notes. Registration checks all offices independently.",
+            ),
+            heading,
+        );
+        const search = node("input", {
+            type: "search",
+            class: "form-control",
+            maxlength: 80,
+            "aria-label": "Find office holds",
+            value: query,
+        });
+        const form = node(
+            "form",
+            { class: "inline-actions mb-3" },
+            search,
+            node(
+                "button",
+                { type: "submit", class: "btn btn-outline-primary" },
+                "Find holds",
+            ),
+        );
+        const results = node("div");
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            query = search.value.trim();
+            task(render, form.querySelector("button"));
+        });
+        container.append(form, results);
+        async function render() {
+            results.replaceChildren();
+            await pages(
+                results,
+                "hold",
+                (after) =>
+                    request("/sis/restrictions/queue/", "POST", {
+                        search: query,
+                        after,
+                    }),
+                (rows) =>
+                    rows.length
+                        ? grid(
+                              [
+                                  "Person",
+                                  "Institutional ID",
+                                  "Hold",
+                                  "Office",
+                                  "State",
+                                  "Action",
+                              ],
+                              rows.map((row) => [
+                                  row.person_name,
+                                  row.institutional_id || "—",
+                                  row.code,
+                                  row.office_name || "Not assigned",
+                                  badge(row.state),
+                                  button("Review hold", () => view(row.id)),
+                              ]),
+                              "Office hold worklist",
+                          )
+                        : node(
+                              "p",
+                              {},
+                              "No holds match your current office access and search.",
+                          ),
+            );
+        }
+        await render();
+    }
+    async function personSearch(accountsOnly, title, choose) {
+        const body = openDrawer(
+            title,
+            accountsOnly ? "OFFICE DELEGATION" : "PLACE A HOLD",
+        );
+        const search = node("input", {
+            type: "search",
+            class: "form-control",
+            minlength: 2,
+            maxlength: 80,
+            required: true,
+            "aria-label": accountsOnly
+                ? "Find an enabled account"
+                : "Find a person for a hold",
+        });
+        const form = node(
+            "form",
+            { class: "inline-actions mb-3" },
+            search,
+            node(
+                "button",
+                { class: "btn btn-primary", type: "submit" },
+                "Search people",
+            ),
+        );
+        const results = node("div"),
+            status = node(
+                "p",
+                { class: "form-text", role: "status" },
+                "Enter at least two characters of a name or institutional ID.",
+            );
+        body.append(form, status, results);
+        let serial = 0;
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const token = ++serial;
+                const result = await request(
+                    `/sis/offices/${accountsOnly ? "accounts" : "people"}/`,
+                    "POST",
+                    { search: search.value.trim() },
+                );
+                if (!body.isConnected || token !== serial) return;
+                status.textContent = `${result.items.length} matches. Up to 25 are shown; narrow your search to find another person.`;
+                results.replaceChildren(
+                    ...result.items.map((person) =>
+                        node(
+                            "p",
+                            {},
+                            button(
+                                `${person.given_name} ${person.family_name}${person.institutional_id ? ` · ${person.institutional_id}` : ""}`,
+                                () => choose(person),
+                            ),
+                        ),
+                    ),
+                );
+            }, form.querySelector("button"));
+        });
+        search.focus();
+    }
+    async function officeSetup() {
+        const result = await request("/sis/offices/", "POST", {});
+        const body = openDrawer("Offices & delegation", "WORK SCOPE");
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "Office delegation narrows access. Staff also need the separate hold-management permission through Roles & access. It does not grant registration, grades, finance or general student-record access.",
+            ),
+            button("Add office", () => officeForm()),
+            grid(
+                ["Code", "Office", "State", "Actions"],
+                result.items.map((row) => [
+                    row.code,
+                    row.name,
+                    Number(row.active) === 1 ? "Active" : "Retired",
+                    node(
+                        "div",
+                        { class: "inline-actions" },
+                        button("Edit office", () => officeForm(row)),
+                        button("Manage delegates", () => delegates(row.id)),
+                    ),
+                ]),
+                "Institution offices",
+            ),
+        );
+    }
+    async function officeForm(row = null) {
+        const operation = row ? null : await request("/sis/ui/operation-id/");
+        await flow(
+            row ? "Save office" : "Create office",
+            [
+                ["code", "Office code"],
+                ["name", "Office name"],
+                ["active", "Active office", "checkbox"],
+            ],
+            `/sis/offices/${row?.id || operation.id}/save/`,
+            (data) => ({ ...data, revision: row ? Number(row.revision) : -1 }),
+            officeSetup,
+            row
+                ? { ...row, active: Number(row.active) === 1 }
+                : { active: true },
+            "Retirement prevents delegated work and new holds. Existing holds keep their registration effects and remain available to authorized administrators. No records are deleted.",
+        );
+    }
+    async function delegates(officeId) {
+        const body = openDrawer("Office delegates", "DATED ACCESS");
+        const officeLabel = node("p", { class: "fw-semibold" });
+        body.append(
+            officeLabel,
+            button("Back to offices", officeSetup),
+            button("Add delegate", () =>
+                personSearch(true, "Choose a delegate", async (person) => {
+                    const context = await request(
+                        `/sis/offices/${officeId}/delegates/`,
+                        "POST",
+                        {},
+                    );
+                    await delegationForm(officeId, {
+                        user_id: person.owner_user_id,
+                        first_name: person.given_name,
+                        last_name: person.family_name,
+                        starts_on: context.today,
+                        active: true,
+                        revision: -1,
+                    });
+                }),
+            ),
+        );
+        await pages(
+            body,
+            "delegate",
+            async (after) => {
+                const result = await request(
+                    `/sis/offices/${officeId}/delegates/`,
+                    "POST",
+                    {
+                        after,
+                    },
+                );
+                officeLabel.textContent = result.office.name;
+                return result;
+            },
+            (rows) =>
+                rows.length
+                    ? grid(
+                          [
+                              "Staff member",
+                              "Starts",
+                              "Ends",
+                              "Enabled",
+                              "Action",
+                          ],
+                          rows.map((row) => [
+                              `${row.first_name} ${row.last_name}`,
+                              row.starts_on,
+                              row.ends_on || "Open",
+                              Number(row.active) === 1 ? "Yes" : "No",
+                              button("Edit delegation", () =>
+                                  delegationForm(officeId, row),
+                              ),
+                          ]),
+                          "Office delegates",
+                      )
+                    : node("p", {}, "No delegates have been added."),
+        );
+    }
+    async function delegationForm(officeId, row) {
+        const form = await flow(
+            "Save office delegation",
+            [
+                ["starts_on", "Delegation starts", "date"],
+                ["ends_on", "Delegation ends", "date", "", false],
+                ["active", "Enable this delegation", "checkbox"],
+            ],
+            `/sis/offices/${officeId}/delegates/save/`,
+            (data) => ({
+                ...data,
+                user_id: row.user_id,
+                revision: Number(row.revision),
+            }),
+            () => delegates(officeId),
+            { ...row, active: row.active === true || Number(row.active) === 1 },
+            `${row.first_name} ${row.last_name}. Both dates are inclusive and follow the institution calendar. Disable access to revoke it now. This does not add roles or permissions; each action still checks current authority.`,
+        );
+        const dates = () => {
+            form.elements.ends_on.min = form.elements.starts_on.value;
+        };
+        form.elements.starts_on.addEventListener("input", dates);
+        dates();
+    }
+    return { list, load, officeSetup };
 };

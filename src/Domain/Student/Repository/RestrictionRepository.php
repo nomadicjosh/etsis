@@ -14,8 +14,12 @@ interface RestrictionRepository
     public function find(EntityId $restriction): ?Restriction;
     public function add(Restriction $restriction): void;
     public function setEnd(EntityId $restriction, string $on): void;
-    /** @return list<array<string, mixed>> */
-    public function page(EntityId $person, ?EntityId $after, int $limit): array;
+    /** @param list<string>|null $offices
+     * @return list<array<string, mixed>> */
+    public function page(EntityId $person, ?EntityId $after, int $limit, ?array $offices = null): array;
+    /** @param list<string>|null $offices
+     * @return list<array<string,mixed>> */
+    public function queue(?array $offices, ?EntityId $after, string $search, int $limit): array;
     /** @return array<string, mixed>|null */
     public function note(EntityId $id): ?array;
     public function addNote(

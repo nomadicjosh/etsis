@@ -29,7 +29,7 @@ final readonly class SisWorkspaceController
 
     public function page(string $section): ResponseInterface
     {
-        $sections = ['overview', 'people', 'registration', 'students', 'applications', 'courses', 'sections',
+        $sections = ['overview', 'people', 'registration', 'holds', 'students', 'applications', 'courses', 'sections',
             'programs', 'terms',
             'rooms', 'buildings', 'bookings', 'bookingcategories', 'calendar',
             'employees', 'timesheets', 'accounts', 'journals',
@@ -40,6 +40,9 @@ final readonly class SisWorkspaceController
             throw new InvalidArgumentException('Unknown workspace.');
         }
         $permissions = $this->service->capabilities();
+        if ($section === 'holds' && !in_array('sis:restrictions:manage', $permissions, true)) {
+            throw new AccessDeniedException('Hold-management permission is required.');
+        }
         if ($section === 'calendar' && !in_array('sis:scheduling:manage', $permissions, true)) {
             throw new AccessDeniedException('Scheduling permission is required.');
         }

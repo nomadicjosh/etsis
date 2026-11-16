@@ -37,6 +37,8 @@ final class RestrictionWorkflowTest extends TestCase
             $cipher ?? new DefuseMessageCipher($config),
             $f->clock,
             $f->restrictionLedger(),
+            $f->officeScope(),
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql),
         );
     }
 

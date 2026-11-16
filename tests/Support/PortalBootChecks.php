@@ -768,6 +768,17 @@ $holdGet = $get->withUri(
 );
 $holdResponse = $app->router->match($holdGet);
 $hold = json_decode((string) $holdResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$officesResponse = $teachingPost('/sis/offices/', []);
+$officeChoices = json_decode((string) $officesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$holdQueue = $teachingPost('/sis/restrictions/queue/', []);
+if ($officesResponse->getStatusCode() !== 200 || $holdQueue->getStatusCode() !== 200
+    || ($officeChoices['items'][0]['id'] ?? null) !== $sis->office->value
+    || $hold['office_id'] !== $sis->office->value
+    || $teachingPost('/sis/offices/people/', ['search' => 'Example'])->getStatusCode() !== 200
+    || $teachingPost('/sis/offices/accounts/', ['search' => 'Example'])->getStatusCode() !== 200
+    || !str_contains($holdQueue->getHeaderLine('Cache-Control'), 'no-store') || $holdQueue->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('Office-scoped holds or minimal private directories failed to boot.');
+}
 if (
     $holdResponse->getStatusCode() !== 200 ||
     !isset($hold["revision"]) ||

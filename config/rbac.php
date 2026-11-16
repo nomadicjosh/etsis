@@ -42,8 +42,9 @@ return [
                 "sis:portal:manage" => ["description" => "Manage institution portal publications."],
                 "sis:portal:admin" => ["description" => "Administer portal publications."],
                 "sis:registration:manage" => [
-                    "description" => "Manage registration and student restrictions.",
+                    "description" => "Manage registration and enrollment changes.",
                 ],
+                'sis:restrictions:manage' => ['description' => 'Manage holds in explicitly delegated offices.'],
                 "sis:gradebook:manage" => ["description" => "Manage grades across course sections."],
                 "sis:scheduling:manage" => ["description" => "Manage room booking approvals."],
                 "sis:hr:manage" => ["description" => "Manage employment and timesheet approvals."],

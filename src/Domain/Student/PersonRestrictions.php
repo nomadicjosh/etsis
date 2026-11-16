@@ -18,12 +18,14 @@ final class PersonRestrictions extends EventSourcedAggregate
     public const int MAX_EVENTS = 5000;
     /** @var array<string,Restriction> */
     private array $restrictions = [];
+    /** @var array<string,string> Earliest recorded owning office; operational routing cannot silently replace it. */
+    private array $offices = [];
     private ?string $lastOperation = null;
 
     /** @param array<string,mixed> $p */
     public static function validate(array $p): void
     {
-        $keys = ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent'];
+        $keys = ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent', 'authority'];
         if (
             count($p) !== count($keys) || array_diff(array_keys($p), $keys) !== []
             || !is_string($p['operation_id'] ?? null)
@@ -38,6 +40,13 @@ final class PersonRestrictions extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         new EntityId($p['operation_id']);
+        if ($p['action'] === 'observed') {
+            if ($p['authority'] !== null) {
+                throw new CorruptHistoryException();
+            }
+        } else {
+            self::authority($p['authority']);
+        }
         if ($p['previous_operation_id'] !== null) {
             new EntityId($p['previous_operation_id']);
         }
@@ -104,6 +113,13 @@ final class PersonRestrictions extends EventSourcedAggregate
                 }
             }
             $this->restrictions[$hold->id->value] = $hold;
+            if ($p['action'] !== 'observed') {
+                $office = $p['authority']['office_id'];
+                if (isset($this->offices[$hold->id->value]) && $this->offices[$hold->id->value] !== $office) {
+                    throw new CorruptHistoryException();
+                }
+                $this->offices[$hold->id->value] = $office;
+            }
         }
         if (count($this->restrictions) > self::MAX_RESTRICTIONS) {
             throw new CorruptHistoryException();
@@ -120,5 +136,40 @@ final class PersonRestrictions extends EventSourcedAggregate
     public function lastOperation(): ?string
     {
         return $this->lastOperation;
+    }
+
+    /** @return array<string,string> */
+    public function offices(): array
+    {
+        return $this->offices;
+    }
+
+    private static function authority(mixed $a): void
+    {
+        $keys = ['office_id', 'office_code', 'office_name', 'mode', 'delegation_id', 'delegation_revision'];
+        if (
+            !is_array($a) || count($a) !== count($keys) || array_diff(array_keys($a), $keys) !== []
+            || !is_string($a['office_id'] ?? null) || !is_string($a['office_code'] ?? null)
+            || !is_string($a['office_name'] ?? null)
+            || !in_array($a['mode'] ?? null, ['administrative', 'delegated'], true)
+            || ($a['mode'] === 'administrative'
+                ? $a['delegation_id'] !== null || $a['delegation_revision'] !== null
+                : !is_string($a['delegation_id']) || !is_int($a['delegation_revision'])
+                    || $a['delegation_revision'] < 0)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        new EntityId($a['office_id']);
+        if ($a['delegation_id'] !== null) {
+            new EntityId($a['delegation_id']);
+        }
+        foreach (['office_code' => 22, 'office_name' => 120] as $key => $max) {
+            if (
+                trim($a[$key]) === '' || !mb_check_encoding($a[$key], 'UTF-8') || mb_strlen($a[$key]) > $max
+                || preg_match('/[\x00-\x1F\x7F]/', $a[$key])
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
     }
 }

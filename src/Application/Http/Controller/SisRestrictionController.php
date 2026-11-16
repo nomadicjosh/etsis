@@ -30,7 +30,7 @@ final readonly class SisRestrictionController
             new DateRange($f->date('starts_on'), $f->optionalDate('ends_on')),
             $f->requiredBoolean('blocks_staff')
         );
-        $this->service->create($restriction, $f->bodyText('note'));
+        $this->service->create($restriction, $f->bodyText('note'), $f->optionalId('office_id'));
 
         return new JsonResponse(['id' => $restriction->id->value], 201);
     }
@@ -85,5 +85,24 @@ final readonly class SisRestrictionController
             new EntityId($id),
             $cursor === '' ? null : $cursor
         ));
+    }
+
+    public function queue(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->queue($f->search(), $f->optionalId('after')));
+    }
+
+    public function bind(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $this->service->bind(
+            new EntityId($id),
+            $f->id('office_id'),
+            $f->id('operation_id'),
+            $f->text('revision', 64),
+            $f->bodyText('reason')
+        );
+        return new JsonResponse(['status' => 'saved']);
     }
 }

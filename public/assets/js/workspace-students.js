@@ -1020,6 +1020,8 @@ window.createWorkspaceStudents = function (ui) {
                 person_id: record.person_id,
                 active: record.active,
             });
+        if (body.isConnected && can("sis:restrictions:manage"))
+            await ui.restrictions().list(body, { id, person_id: record.person_id, active: record.active });
     }
     function specializationSummary(selection, title, action = null) {
         const section = node(

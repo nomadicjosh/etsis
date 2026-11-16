@@ -41,6 +41,8 @@ final class RestrictionHistoryTest extends TestCase
             $f->dropCipher,
             $f->clock,
             $f->restrictionLedger(),
+            $f->officeScope(),
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql),
         );
     }
 
@@ -168,6 +170,7 @@ final class RestrictionHistoryTest extends TestCase
         $f = new SisFixture();
         $hold = $this->hold($f->student()->personId);
         new SqlRestrictionRepository($f->sql)->add($hold);
+        new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql)->bind($hold->id, $f->office);
         $service = $this->service($f);
         $current = $service->view($hold->id);
         self::assertSame([], $this->events($f));
@@ -202,6 +205,7 @@ final class RestrictionHistoryTest extends TestCase
                     "DELETE FROM sis_restriction_notes WHERE restriction_id = ?",
                     [$hold->id->value],
                 );
+                 $f->sql->execute("DELETE FROM sis_restriction_offices WHERE id = ?", [$hold->id->value]);
                 $f->sql->execute("DELETE FROM sis_restrictions WHERE id = ?", [
                     $hold->id->value,
                 ]);

@@ -101,6 +101,23 @@ final readonly class SqlRecords
         }
     }
 
+    /** Current row for a decision already in a transaction; ordinary reads acquire no write lock.
+     * @return array<string,mixed>|null */
+    public function current(string $table, string $id, string $identityColumn = 'id'): ?array
+    {
+        if (!$this->db->getConnection()->pdo->inTransaction()) {
+            return $this->rows($table, [$identityColumn => $id], 1)[0] ?? null;
+        }
+        $quoted = $this->quote($table);
+        $key = $this->quote($identityColumn);
+        $driver = $this->driver();
+        if ($driver === 'sqlite') {
+            $this->execute("UPDATE $quoted SET $key = $key WHERE $key = ?", [$id]);
+        }
+        // The unique key bounds this result to one row; do not append LIMIT after FOR UPDATE.
+        return $this->fetch(SqlRowLock::select($quoted, $key, $driver, allColumns: true), [$id])[0] ?? null;
+    }
+
     /**
  * @param list<scalar|null> $parameters
  * @return list<array<string, mixed>>

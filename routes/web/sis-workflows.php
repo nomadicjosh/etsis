@@ -23,6 +23,7 @@ use Application\Http\Controller\SisCatalogWorkflowController;
 use Application\Http\Controller\SisFinancialReviewController;
 use Application\Http\Controller\SisTranscriptFulfillmentController;
 use Application\Http\Controller\SisRestrictionController;
+use Application\Http\Controller\SisOfficeController;
 use Application\Http\Controller\SisStudentRecordController;
 use Application\Http\Controller\SisHiatusController;
 use Application\Http\Controller\SisHiatusWorkflowController;
@@ -47,6 +48,14 @@ use Application\Http\Controller\SisStudentCatalogController;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->post('/sis/offices/', [SisOfficeController::class, 'choices']);
+    $router->post('/sis/offices/{id}/save/', [SisOfficeController::class, 'save']);
+    $router->post('/sis/offices/{id}/delegates/', [SisOfficeController::class, 'delegates']);
+    $router->post('/sis/offices/{id}/delegates/save/', [SisOfficeController::class, 'delegate']);
+    $router->post('/sis/offices/accounts/', [SisOfficeController::class, 'accounts']);
+    $router->post('/sis/offices/people/', [SisOfficeController::class, 'people']);
+    $router->post('/sis/restrictions/queue/', [SisRestrictionController::class, 'queue']);
+    $router->post('/sis/restrictions/{id}/office/', [SisRestrictionController::class, 'bind']);
     $router
         ->map(["POST"], "/sis/students/{student}/registration-history/", [
             \Application\Http\Controller\SisEnrollmentHistoryController::class,
@@ -897,22 +906,45 @@ return static function (Psr7Router $router): void {
         "publish",
     ]);
     $router->post("/sis/courses/{id}/publication/page/", [SisCoursePublicationController::class, "page"]);
-    $router->map(['GET'], '/sis/calendar/context/',
-        [\Application\Http\Controller\SisBookingCalendarController::class, 'context'])->name('sis.calendar.context');
-    $router->map(['POST'], '/sis/booking-categories/',
-        [\Application\Http\Controller\SisBookingCategoryController::class, 'create']);
-    $router->map(['GET'], '/sis/booking-categories/{id}/',
-        [\Application\Http\Controller\SisBookingCategoryController::class, 'show']);
-    $router->map(['POST'], '/sis/booking-categories/{id}/edit/',
-        [\Application\Http\Controller\SisBookingCategoryController::class, 'edit']);
+    $router->map(
+        ['GET'],
+        '/sis/calendar/context/',
+        [\Application\Http\Controller\SisBookingCalendarController::class, 'context']
+    )->name('sis.calendar.context');
+    $router->map(
+        ['POST'],
+        '/sis/booking-categories/',
+        [\Application\Http\Controller\SisBookingCategoryController::class, 'create']
+    );
+    $router->map(
+        ['GET'],
+        '/sis/booking-categories/{id}/',
+        [\Application\Http\Controller\SisBookingCategoryController::class, 'show']
+    );
+    $router->map(
+        ['POST'],
+        '/sis/booking-categories/{id}/edit/',
+        [\Application\Http\Controller\SisBookingCategoryController::class, 'edit']
+    );
     $router->map(['GET'], '/sis/booking-sections/{id}/', [SisBookingController::class, 'sectionContext']);
     $router->map(['POST'], '/sis/bookings/{id}/category/', [SisBookingController::class, 'categorize']);
-    $router->map(['POST'], '/sis/calendar/view/',
-        [\Application\Http\Controller\SisBookingCalendarController::class, 'timetable'])->name('sis.calendar.view');
+    $router->map(
+        ['POST'],
+        '/sis/calendar/view/',
+        [\Application\Http\Controller\SisBookingCalendarController::class, 'timetable']
+    )->name('sis.calendar.view');
     $router->map(['POST'], '/sis/rooms/', [SisRoomController::class, 'create'])->name('sis.room.create');
-    $router->map(['POST'], '/sis/buildings/', [SisRoomController::class, 'createBuilding'])->name('sis.building.create');
+    $router->map(
+        ['POST'],
+        '/sis/buildings/',
+        [SisRoomController::class, 'createBuilding']
+    )->name('sis.building.create');
     $router->map(['GET'], '/sis/buildings/{id}/', [SisRoomController::class, 'building'])->name('sis.building.show');
-    $router->map(['POST'], '/sis/buildings/{id}/edit/', [SisRoomController::class, 'editBuilding'])->name('sis.building.edit');
+    $router->map(
+        ['POST'],
+        '/sis/buildings/{id}/edit/',
+        [SisRoomController::class, 'editBuilding']
+    )->name('sis.building.edit');
     $router->map(['GET'], '/sis/bookings/planning/', [SisBookingController::class, 'planning'])
         ->name('sis.booking.planning');
     $router->map(['POST'], '/sis/bookings/planning/review/', [SisBookingController::class, 'review'])
@@ -937,12 +969,21 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/bookings/{id}/approve/", [SisBookingController::class, "approve"])
         ->name("sis.booking.approve");
-    $router->map(['POST'], '/sis/bookings/{id}/occurrences/{occurrence}/cancel/',
-        [SisBookingController::class, 'cancelOccurrence'])->name('sis.booking.occurrence.cancel');
-    $router->map(['POST'], '/sis/bookings/{id}/occurrences/{occurrence}/reschedule/review/',
-        [SisBookingController::class, 'reviewReplacement'])->name('sis.booking.occurrence.reschedule.review');
-    $router->map(['POST'], '/sis/bookings/{id}/occurrences/{occurrence}/reschedule/confirm/',
-        [SisBookingController::class, 'replaceOccurrence'])->name('sis.booking.occurrence.reschedule.confirm');
+    $router->map(
+        ['POST'],
+        '/sis/bookings/{id}/occurrences/{occurrence}/cancel/',
+        [SisBookingController::class, 'cancelOccurrence']
+    )->name('sis.booking.occurrence.cancel');
+    $router->map(
+        ['POST'],
+        '/sis/bookings/{id}/occurrences/{occurrence}/reschedule/review/',
+        [SisBookingController::class, 'reviewReplacement']
+    )->name('sis.booking.occurrence.reschedule.review');
+    $router->map(
+        ['POST'],
+        '/sis/bookings/{id}/occurrences/{occurrence}/reschedule/confirm/',
+        [SisBookingController::class, 'replaceOccurrence']
+    )->name('sis.booking.occurrence.reschedule.confirm');
     $router
         ->map(["POST"], "/sis/bookings/{id}/cancel/", [SisBookingController::class, "cancel"])
         ->name("sis.booking.cancel");
@@ -1088,9 +1129,18 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/campaigns/{id}/delivery-confirm/', [SisCampaignController::class, 'deliveryConfirm']);
     $router->get('/sis/campaigns/{id}/delivery-progress/', [SisCampaignController::class, 'deliveryProgress']);
     $router->post('/sis/campaigns/{id}/delivery-cancel/', [SisCampaignController::class, 'deliveryCancel']);
-    $router->get('/sis/campaigns/{id}/deliveries/{delivery}/review/', [SisCampaignController::class, 'deliveryDecision']);
-    $router->post('/sis/campaigns/{id}/deliveries/{delivery}/review/', [SisCampaignController::class, 'reviewDeliveryDecision']);
-    $router->post('/sis/campaigns/{id}/deliveries/{delivery}/confirm/', [SisCampaignController::class, 'confirmDeliveryDecision']);
+    $router->get(
+        '/sis/campaigns/{id}/deliveries/{delivery}/review/',
+        [SisCampaignController::class, 'deliveryDecision']
+    );
+    $router->post(
+        '/sis/campaigns/{id}/deliveries/{delivery}/review/',
+        [SisCampaignController::class, 'reviewDeliveryDecision']
+    );
+    $router->post(
+        '/sis/campaigns/{id}/deliveries/{delivery}/confirm/',
+        [SisCampaignController::class, 'confirmDeliveryDecision']
+    );
     $router
         ->map(["POST"], "/sis/portal/posts/", [SisPortalController::class, "create"])
         ->name("sis.portal.create");

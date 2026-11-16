@@ -53,7 +53,7 @@ final readonly class HistoricalSchemaRegistry
         return match ($class) {
             \Domain\Student\Event\PersonRestrictionsWereRecorded::class => [
                 'type' => 'person_restrictions', 'root' => \Domain\Student\PersonRestrictions::class,
-                'fields' => ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent'],
+                'fields' => ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent', 'authority'],
             ],
             \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class => [
                 'type' => 'employment_lifecycle', 'root' => \Domain\HumanResources\EmploymentTimeline::class,

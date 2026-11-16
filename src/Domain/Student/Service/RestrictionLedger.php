@@ -51,7 +51,8 @@ final readonly class RestrictionLedger
         $this->load($person);
     }
 
-    /** Called only for an accepted real decision; no history is invented during reads. */
+    /** Called only for an accepted real decision; no history is invented during reads.
+     * @param array<string,mixed> $authority */
     public function record(
         PersonRestrictions $root,
         EntityId $operation,
@@ -60,6 +61,7 @@ final readonly class RestrictionLedger
         Restriction $restriction,
         string $intent,
         #[\SensitiveParameter] string $reason,
+        array $authority,
     ): void {
         $effectiveDate = match ($action) {
             'placed' => $restriction->dates->start,
@@ -77,14 +79,15 @@ final readonly class RestrictionLedger
                 $root,
                 DerivedIdentity::from($operation, 'restriction.observation'),
                 'observed',
-                array_map(static fn (Restriction $r): array => $r->facts(), $this->current($person)),
+                array_map(static fn (Restriction $r): array => $r->facts(), $this->current($person)['holds']),
+                null,
                 null
             );
         }
         if ($action === 'placed' && count($root->restrictions()) >= PersonRestrictions::MAX_RESTRICTIONS) {
             throw new HistoryReadLimitException();
         }
-        $events[] = $this->event($root, $operation, $action, [$restriction->facts()], $intent);
+        $events[] = $this->event($root, $operation, $action, [$restriction->facts()], $intent, $authority);
         // The baseline is today's observation, not a historical placement or a claimed original author.
         // Each event has its own effective context; the shared transaction rolls both back on failure.
         foreach ($events as $event) {
@@ -158,7 +161,7 @@ final readonly class RestrictionLedger
         if ($root->playhead() > 0) {
             $expected = array_map(static fn (Restriction $r): array => $r->facts(), $root->restrictions());
             $observed = [];
-            foreach ($current as $hold) {
+            foreach ($current['holds'] as $hold) {
                 $observed[$hold->id->value] = $hold->facts();
             }
             ksort($expected);
@@ -166,36 +169,48 @@ final readonly class RestrictionLedger
             if ($expected !== $observed) {
                 throw new CorruptHistoryException();
             }
+            foreach ($root->offices() as $hold => $office) {
+                if (($current['offices'][$hold] ?? null) !== $office) {
+                    throw new CorruptHistoryException();
+                }
+            }
         }
         return ['root' => $root, 'receipt' => $receipt];
     }
 
-    /** @return list<Restriction> */
+    /** @return array{holds:list<Restriction>,offices:array<string,?string>} */
     private function current(EntityId $person): array
     {
         $rows = $this->records->page($person, null, PersonRestrictions::MAX_RESTRICTIONS + 1);
         if (count($rows) > PersonRestrictions::MAX_RESTRICTIONS) {
             throw new HistoryReadLimitException();
         }
-        return array_map(static function (array $row): Restriction {
+        $offices = [];
+        foreach ($rows as $row) {
+            $offices[$row['id']] = $row['office_id'];
+        }
+        $holds = array_map(static function (array $row): Restriction {
             return Restriction::fromFacts(['id' => $row['id'], 'person_id' => $row['person_id'],
                 'code' => $row['code'], 'severity' => (int) $row['severity'],
                 'starts_on' => $row['starts_on'], 'ends_on' => $row['ends_on'],
                 'blocks_staff' => (bool) $row['blocks_staff']]);
         }, $rows);
+        return ['holds' => $holds, 'offices' => $offices];
     }
 
-    /** @param list<array<string,mixed>> $facts */
+    /** @param list<array<string,mixed>> $facts
+     * @param array<string,mixed>|null $authority */
     private function event(
         PersonRestrictions $root,
         EntityId $operation,
         string $action,
         array $facts,
         ?string $intent,
+        ?array $authority,
     ): DomainEvent {
         $event = PersonRestrictionsWereRecorded::occur($root->aggregateId(), [
             'operation_id' => $operation->value, 'previous_operation_id' => $root->lastOperation(),
-            'action' => $action, 'facts' => $facts, 'intent' => $intent,
+            'action' => $action, 'facts' => $facts, 'intent' => $intent, 'authority' => $authority,
         ], ['__aggregate_type' => 'person_restrictions'])->withPlayhead($root->playhead() + 1);
         $root->acceptHistorical($event);
         return $event;

@@ -64,9 +64,59 @@ final readonly class SqlRestrictionRepository implements RestrictionRepository
         $this->sql->update('sis_restrictions', ['ends_on' => $on], ['id' => $restriction->value]);
     }
 
-    public function page(EntityId $person, ?EntityId $after, int $limit): array
+    /** @param list<string>|null $offices */
+    public function page(EntityId $person, ?EntityId $after, int $limit, ?array $offices = null): array
     {
-        return $this->paged('sis_restrictions', 'person_id', $person, $after, $limit);
+        $q = $this->sql->quote(...);
+        [$scope, $parameters] = $this->scope($offices);
+        return $this->sql->fetch(
+            'SELECT r.*, x.' . $q('office_id') . ', o.' . $q('name') . ' AS '
+            . $q('office_name') . ' FROM ' . $q('sis_restrictions') . ' r LEFT JOIN '
+            . $q('sis_restriction_offices') . ' x ON x.' . $q('id') . ' = r.' . $q('id')
+            . ' LEFT JOIN ' . $q('sis_offices') . ' o ON o.' . $q('id') . ' = x.' . $q('office_id')
+            . ' WHERE r.' . $q('person_id') . ' = ?' . $scope
+            . ($after === null ? '' : ' AND r.' . $q('id') . ' < ?') . ' ORDER BY r.' . $q('id') . ' DESC',
+            [...[$person->value], ...$parameters, ...($after === null ? [] : [$after->value])],
+            $limit
+        );
+    }
+
+    public function queue(?array $offices, ?EntityId $after, string $search, int $limit): array
+    {
+        $q = $this->sql->quote(...);
+        [$scope, $parameters] = $this->scope($offices);
+        $sql = 'SELECT r.*, p.' . $q('given_name') . ', p.' . $q('family_name') . ', i.' . $q('institutional_id')
+        . ', x.' . $q('office_id') . ', o.' . $q('name') . ' AS ' . $q('office_name')
+        . ' FROM ' . $q('sis_restrictions') . ' r JOIN ' . $q('sis_persons') . ' p ON p.' . $q('id')
+        . ' = r.' . $q('person_id') . ' LEFT JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id')
+        . ' = p.' . $q('id') . ' LEFT JOIN ' . $q('sis_restriction_offices') . ' x ON x.' . $q('id')
+        . ' = r.' . $q('id') . ' LEFT JOIN ' . $q('sis_offices') . ' o ON o.' . $q('id')
+        . ' = x.' . $q('office_id') . ' WHERE 1 = 1' . $scope;
+        if ($search !== '') {
+            $like = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
+            $sql .= ' AND (LOWER(p.' . $q('given_name') . ") LIKE ? ESCAPE '!' OR LOWER(p." . $q('family_name')
+            . ") LIKE ? ESCAPE '!' OR LOWER(i." . $q('institutional_id') . ") LIKE ? ESCAPE '!')";
+            array_push($parameters, $like, $like, $like);
+        }
+        if ($after !== null) {
+            $sql .= ' AND r.' . $q('id') . ' < ?';
+            $parameters[] = $after->value;
+        }
+        return $this->sql->fetch($sql . ' ORDER BY r.' . $q('id') . ' DESC', $parameters, $limit);
+    }
+
+    /** @param list<string>|null $offices
+     * @return array{string,list<string>} */
+    private function scope(?array $offices): array
+    {
+        if ($offices === null) {
+            return ['', []];
+        }
+        if ($offices === []) {
+            return [' AND 1 = 0', []];
+        }
+        return [' AND x.' . $this->sql->quote('office_id') . ' IN ('
+            . implode(',', array_fill(0, count($offices), '?')) . ')', $offices];
     }
 
     public function note(EntityId $id): ?array
@@ -96,18 +146,6 @@ final readonly class SqlRestrictionRepository implements RestrictionRepository
             . ' WHERE n.' . $q('restriction_id') . ' = ?' . ($after === null ? '' : ' AND n.' . $q('id') . ' < ?')
             . ' ORDER BY n.' . $q('id') . ' DESC',
             $after === null ? [$restriction->value] : [$restriction->value, $after->value],
-            $limit
-        );
-    }
-
-    /** @return list<array<string, mixed>> */
-    private function paged(string $table, string $field, EntityId $id, ?EntityId $after, int $limit): array
-    {
-        $q = $this->sql->quote(...);
-        return $this->sql->fetch(
-            'SELECT * FROM ' . $q($table) . ' WHERE ' . $q($field) . ' = ?'
-            . ($after === null ? '' : ' AND ' . $q('id') . ' < ?') . ' ORDER BY ' . $q('id') . ' DESC',
-            $after === null ? [$id->value] : [$id->value, $after->value],
             $limit
         );
     }

@@ -278,7 +278,10 @@ final class RegistrationWorkflowTest extends TestCase
             $cipher,
             $f->clock,
             $f->restrictionLedger(),
+            $f->officeScope(),
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql),
         );
+        new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql)->bind($restriction->id, $f->office);
         $holds->end(
             $restriction->id,
             new DateTimeImmutable("2026-08-09"),

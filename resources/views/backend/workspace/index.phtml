@@ -17,6 +17,7 @@ $navigation = [
     'DAILY OPERATIONS' => [
         ['teaching', 'My teaching', 'easel', ''],
         ['registration', 'Registration', 'person-plus', 'sis:registration:manage'],
+        ['holds', 'Holds & restrictions', 'shield-exclamation', 'sis:restrictions:manage'],
         ['institutions', 'Transfer credit', 'arrow-left-right', 'sis:transfer:manage'],
         ['bookings', 'Spaces & scheduling', 'calendar3', 'sis:scheduling:manage'],
         ['accounts', 'Student accounts', 'wallet2', 'sis:finance:read'],
@@ -317,6 +318,10 @@ $client = [
                     <?php $this->insert('framework::backend/workspace/rules'); ?>
                     <?php $this->insert('framework::backend/workspace/access'); ?>
                     <?php $this->insert('framework::backend/workspace/moodle'); ?>
+                    <section data-panel="holds" hidden aria-labelledby="holds-heading">
+                        <h1 id="holds-heading">Holds &amp; restrictions</h1>
+                        <div id="hold-queue"></div>
+                    </section>
                     <section data-panel="apply" hidden aria-labelledby="apply-heading">
                         <div class="page-heading">
                             <div>

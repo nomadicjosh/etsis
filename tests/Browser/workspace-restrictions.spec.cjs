@@ -9,7 +9,7 @@ test('registrars review paged holds, retry notes safely and end a restriction wi
         code: index ? `HOLD.${index}` : 'ADVISING', severity: 99, starts_on: '2026-08-01', ends_on: '2026-08-20', blocks_staff: true, version: 0 }));
     const notes = new Map([[id(10), Array.from({ length: 51 }, (_, index) => ({ id: id(200 + index), actor_id: id(9),
         actor_name: 'Taylor Example', created_at: '2026-08-10T12:00:00+00:00', content: `Fictional staff note ${index}` }))]]);
-    const describe = hold => ({ ...hold, state: hold.ends_on && hold.ends_on < '2026-08-10' ? 'ended' : 'active',
+    const describe = hold => ({ ...hold, office_id: id(600), office_name: 'Registrar', state: hold.ends_on && hold.ends_on < '2026-08-10' ? 'ended' : 'active',
         revision: `hold-${hold.version}`, today: '2026-08-10', timezone: 'UTC' });
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -18,7 +18,8 @@ test('registrars review paged holds, retry notes safely and end a restriction wi
         const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
         if (data) calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = {};
-        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        if (path === '/sis/offices/') result = { items: [{ id: id(600), name: 'Registrar', active: 1 }], can_administer: false };
+        else if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/operation-id/') result = { id: id(nextOperation++) };
         else if (path === '/sis/ui/data/students/') result = { items: [{ id: student, person_id: person, given_name: 'Alex', family_name: 'Example', active: true }], next_after: null };
         else if (path.startsWith('/sis/ui/')) result = { items: [], next_after: null };

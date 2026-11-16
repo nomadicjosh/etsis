@@ -261,7 +261,7 @@ window.createWorkspaceOperations = function (ui) {
     }
     async function registration(body, row) {
         const back = () => openRecord("students", row);
-        const actions = section("Registration & restrictions");
+        const actions = section("Registration");
         body.append(actions);
         if (row.active !== false && row.active !== 0)
             actions.append(
@@ -303,7 +303,7 @@ window.createWorkspaceOperations = function (ui) {
                 "Student registrations",
             ),
         );
-        if (row.person_id) await ui.restrictions().list(body, row);
+
     }
 
     async function roster(body, row, sectionName) {
@@ -1203,6 +1203,8 @@ window.createWorkspaceOperations = function (ui) {
             );
         if (sectionName === "students" && can("sis:registration:manage"))
             await registration(body, row);
+        if (sectionName === "students" && can("sis:restrictions:manage"))
+            await ui.restrictions().list(body, row);
         if (["sections", "teaching"].includes(sectionName))
             await roster(body, row, sectionName);
         if (

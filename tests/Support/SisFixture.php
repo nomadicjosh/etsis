@@ -87,6 +87,7 @@ final class SisFixture
     public DatabaseUnitOfWork $transactions;
     public FixtureAccess $access;
     public FixtureClock $clock;
+    public EntityId $office;
     public SqlAuditTrail $audit;
     public PdoAdmissionsRepository $admissions;
     public SqlRegistrationRepository $registration;
@@ -159,6 +160,10 @@ final class SisFixture
         $this->transactions = new DatabaseUnitOfWork($db);
         $this->access = new FixtureAccess($actor ?? $this->user());
         $this->clock = new FixtureClock();
+        $this->office = EntityId::generate();
+        new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql)->saveOffice([
+            'id' => $this->office->value, 'code' => 'REG', 'name' => 'Fictional Registrar', 'active' => 1, 'revision' => 0,
+        ], true);
         $this->audit = new SqlAuditTrail($this->sql);
         $this->admissions = new PdoAdmissionsRepository($db);
         $this->registration = new SqlRegistrationRepository(
@@ -879,6 +884,12 @@ final class SisFixture
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
             ),
             $this->clock
+        );
+    }
+    public function officeScope(): \Domain\Office\Service\OfficeScope
+    {
+        return new \Domain\Office\Service\OfficeScope(
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql), $this->access, $this->clock
         );
     }
     public function positions(
