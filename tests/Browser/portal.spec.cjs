@@ -251,15 +251,19 @@ test('students see linked charge credits as deductions in their own statement', 
 test('student statements identify a refund payment link without receipt details or reasons', async ({ page }) => {
     await mockServices(page);
     await page.route(`**/portal/api/accounts/${account}/`, route => route.fulfill({
-        json: { id: account, currency: 'USD', balance_minor: -8000, entries: [
+        json: { id: account, currency: 'USD', balance_minor: -13000, entries: [
             { operation_id: id(71), type: 'payment', minor: 10000, currency: 'USD', reversed: false },
+            { operation_id: id(73), type: 'payment', minor: 5000, currency: 'USD', reversed: false },
             { operation_id: id(72), type: 'refund', minor: 2000, currency: 'USD', reversed: false,
-                source_payment_operation_id: id(71) },
+                refund_allocations: [{ payment_operation_id: id(71), amount_minor: 1250 },
+                    { payment_operation_id: id(73), amount_minor: 750 }] },
         ] }, headers: { 'Cache-Control': 'private, no-store' },
     }));
     await page.goto('/portal/student/accounts/');
     await page.getByRole('button', { name: 'View statement' }).click();
     await expect(page.locator('#campus-dialog')).toContainText(`For payment ${id(71).slice(-8)}`);
-    await expect(page.locator('#campus-dialog')).toContainText('-$80.00');
+    await expect(page.locator('#campus-dialog')).toContainText('-$130.00');
+    await expect(page.locator('#campus-dialog')).toContainText(`For payment ${id(73).slice(-8)} · $7.50`);
+    await expect(page.locator('#campus-dialog').getByRole('row')).toHaveCount(4);
     await accessible(page);
 });

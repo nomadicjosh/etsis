@@ -45,12 +45,8 @@ final readonly class AccountEntryHistory
     }
 
     /** @return array<string,mixed> */
-    public function page(
-        AccountId $id,
-        EntityId $operation,
-        int $after = 0,
-        ?int $throughPosition = null,
-    ): array {
+    public function page(AccountId $id, EntityId $operation, int $after = 0, ?int $throughPosition = null): array
+    {
         $actor = $this->authorize();
         if (
             $after < 0 ||
@@ -61,13 +57,7 @@ final readonly class AccountEntryHistory
         ) {
             throw $this->invalidPage();
         }
-        return $this->transactions->run(function () use (
-            $id,
-            $operation,
-            $after,
-            $throughPosition,
-            $actor,
-        ): array {
+        return $this->transactions->run(function () use ($id, $operation, $after, $throughPosition, $actor): array {
             $budget = new HistoryReadBudget();
             $cursor = null;
             $through = $throughPosition;
@@ -100,7 +90,8 @@ final readonly class AccountEntryHistory
                         512 +
                         strlen($summary["payment_details"]["reference"] ?? "") +
                         strlen($summary["previous_payment_details"]["reference"] ?? "") +
-                        count($summary["reversed_credit_ids"] ?? []) * 32;
+                        count($summary["reversed_credit_ids"] ?? []) * 32 +
+                        count($summary["refund_allocations"] ?? []) * 64;
                     if ($bytes > self::MAX_SUMMARY_BYTES) {
                         throw new HistoryReadLimitException();
                     }
@@ -219,8 +210,8 @@ final readonly class AccountEntryHistory
                 ->format("Y-m-d\TH:i:s.u\Z"),
             "reason" => $stored->context->reason,
         ] +
-        (isset($event->metadata()["source_payment_operation_id"])
-        ? ["source_payment_operation_id" => $event->metadata()["source_payment_operation_id"]]
+        (isset($event->metadata()["refund_allocations"])
+        ? ["refund_allocations" => $event->metadata()["refund_allocations"]]
         : []) +
         (in_array($action, ["corrected", "credited"], true)
         ? ["source_operation_id" => $payload["source_operation_id"]]
@@ -246,19 +237,15 @@ final readonly class AccountEntryHistory
         $entries = $children = [];
         foreach ($root->entries() as $entry) {
             $entries[$entry["operation_id"]] = $entry;
-            foreach (["source_operation_id", "source_payment_operation_id"] as $key) {
-                if (isset($entry[$key])) {
-                    $children[$entry[$key]][] = $entry["operation_id"];
-                }
+            if (isset($entry["source_operation_id"])) {
+                $children[$entry["source_operation_id"]][] = $entry["operation_id"];
+            }
+            foreach ($entry["refund_allocations"] ?? [] as $allocation) {
+                $children[$allocation["payment_operation_id"]][] = $entry["operation_id"];
             }
         }
         $family = [];
-        $linkFields = [
-            "corrects_operation_id",
-            "corrected_by_operation_id",
-            "source_operation_id",
-            "source_payment_operation_id",
-        ];
+        $linkFields = ["corrects_operation_id", "corrected_by_operation_id", "source_operation_id"];
         $pending = [$operation->value];
         while ($pending !== []) {
             $id = array_pop($pending);
@@ -271,6 +258,9 @@ final readonly class AccountEntryHistory
                 if (isset($entry[$key])) {
                     $pending[] = $entry[$key];
                 }
+            }
+            foreach ($entry["refund_allocations"] ?? [] as $allocation) {
+                $pending[] = $allocation["payment_operation_id"];
             }
             foreach ($children[$id] ?? [] as $child) {
                 $pending[] = $child;

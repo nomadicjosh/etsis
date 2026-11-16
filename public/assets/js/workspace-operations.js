@@ -10,6 +10,7 @@ window.createWorkspaceOperations = function (ui) {
         table,
         badge,
         money,
+        moneyInput,
         buildForm,
         formData,
         openDrawer,
@@ -400,9 +401,9 @@ window.createWorkspaceOperations = function (ui) {
                     confirm: "Confirm payment refund",
                     path: `${item?.operation_id}/refund/`,
                     introduction:
-                        "Record a refund against this payment. The amount must fit both the account credit and the payment less its linked refunds. Enter the outgoing refund method/reference if known.",
+                        "Record one issued refund against this payment and any additional selected payments. Each share must fit its payment allowance, and the total must fit the account credit. Enter the outgoing refund method/reference if known.",
                     explanation:
-                        "This records an issued refund and its payment link. It does not send money or verify bank settlement. Earlier unlinked refunds stay unallocated. Review expires in 20 minutes.",
+                        "This records one issued refund and its reviewed payment allocations. It does not send money or verify bank settlement. Earlier unlinked refunds stay unallocated. Review expires in 20 minutes.",
                 },
                 credit: {
                     title: "Credit a charge",
@@ -429,6 +430,15 @@ window.createWorkspaceOperations = function (ui) {
                         "This reverses the account record only. No bank payment, gateway refund or academic registration is changed. Review expires in 20 minutes.",
                 },
             }[action];
+            if (action === "amount" && item?.type === "refund") {
+                copy.title = "Correct a refund";
+                copy.reason = "Reason for refund correction";
+                copy.review = "Review refund correction";
+                copy.region = "Reviewed refund correction";
+                copy.confirm = "Confirm refund correction";
+                copy.introduction =
+                    "Correct the refund amount or its payment allocations together. The original decision remains in history. This does not send money.";
+            }
             const entryBody = openDrawer(copy.title, "STUDENT ACCOUNT");
             const descriptors = [
                 ...(!correcting ? [["type", "Transaction type", "choice", ["charge", "payment", "refund"]]] : []),
@@ -514,8 +524,220 @@ window.createWorkspaceOperations = function (ui) {
             }
             form.addEventListener("change", toggleReceipt);
             toggleReceipt();
+            const splitEligible = refunding || action === "posting" || (action === "amount" && item?.type === "refund");
+            const digits = new Intl.NumberFormat(undefined, {
+                style: "currency",
+                currency: data.currency,
+            }).resolvedOptions().maximumFractionDigits;
+            const decimal = (minor) => (minor / 10 ** digits).toFixed(digits);
+            const chosen = new Map(
+                (item?.refund_allocations || []).map((p) => [p.payment_operation_id, decimal(p.amount_minor)]),
+            );
+            if (refunding) chosen.set(item.operation_id, "");
+            const fixedPayment = refunding ? item.operation_id : null;
+            const requiredAllocation = refunding || !!item?.refund_allocations?.length;
+            let autoShare = chosen.size === 1,
+                paymentPage = 0;
+            const allocationToggle = node("input", {
+                type: "checkbox",
+                class: "form-check-input",
+                id: "refund-allocation-toggle",
+            });
+            allocationToggle.checked = requiredAllocation;
+            const allocationControls = node("div");
+            const allocationStatus = node("p", { role: "status", class: "form-text", "aria-live": "polite" });
+            const selectedPayments = node("div");
+            const paymentSearch = node("input", {
+                type: "search",
+                class: "form-control mb-3",
+                id: "refund-payment-search",
+                placeholder: "Find a payment reference",
+            });
+            const paymentChoices = node("div");
+            const allocationEditor = node(
+                "fieldset",
+                { class: "record-section", hidden: true },
+                node("legend", { class: "h5" }, "Refund allocations"),
+                node(
+                    "div",
+                    { class: "form-check mb-3" },
+                    allocationToggle,
+                    node(
+                        "label",
+                        { for: allocationToggle.id, class: "form-check-label" },
+                        "Allocate refund to payments",
+                    ),
+                ),
+                allocationControls,
+            );
+            allocationControls.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Split one issued refund across up to ten payments. Allocations must equal its total. Earlier unallocated refunds remain unallocated.",
+                ),
+                selectedPayments,
+                allocationStatus,
+                node("label", { for: paymentSearch.id, class: "form-label" }, "Find payments"),
+                paymentSearch,
+                paymentChoices,
+            );
+            if (splitEligible) form.append(allocationEditor);
+            function splitVisible() {
+                return (
+                    splitEligible &&
+                    (refunding || item?.type === "refund" || form.elements.namedItem("type")?.value === "refund")
+                );
+            }
+            function updateAllocationStatus() {
+                try {
+                    const total = [...chosen.values()].reduce(
+                        (sum, value) => sum + moneyInput(value, data.currency),
+                        0,
+                    );
+                    const refund = moneyInput(form.elements.namedItem("amount_minor").value, data.currency);
+                    allocationStatus.textContent = `Allocated ${money(total, data.currency)} of ${money(refund, data.currency)}. ${total === refund ? "Ready to review." : "Adjust allocations to match the refund."}`;
+                } catch {
+                    allocationStatus.textContent = "Enter a positive amount for each selected payment.";
+                }
+            }
+            function renderSelectedPayments() {
+                selectedPayments.replaceChildren(
+                    ...[...chosen].map(([payment, value]) => {
+                        const input = node("input", {
+                            type: "number",
+                            class: "form-control",
+                            id: `allocation-${payment}`,
+                            min: String(10 ** -digits),
+                            step: String(10 ** -digits),
+                            required: true,
+                        });
+                        input.value = value;
+                        input.disabled = !allocationToggle.checked || !splitVisible();
+                        input.addEventListener("input", () => {
+                            autoShare = false;
+                            chosen.set(payment, input.value);
+                            updateAllocationStatus();
+                        });
+                        const source = data.entries.find((e) => e.operation_id === payment);
+                        return node(
+                            "div",
+                            { class: "mb-3" },
+                            node(
+                                "label",
+                                { class: "form-label", for: input.id },
+                                `Allocation for payment ${payment.slice(-8)} (${data.currency})`,
+                            ),
+                            input,
+                            node(
+                                "p",
+                                { class: "form-text" },
+                                source?.reversed
+                                    ? "Earlier payment selection. Increases require a currently posted payment."
+                                    : `Payment remaining: ${money(source?.remaining_refundable_minor || 0, data.currency)}`,
+                            ),
+                            button(
+                                "Remove payment " + payment.slice(-8),
+                                () => {
+                                    chosen.delete(payment);
+                                    autoShare = false;
+                                    renderAllocation();
+                                    paymentSearch.focus();
+                                    form.dispatchEvent(new Event("change"));
+                                },
+                                "btn-link",
+                            ),
+                        );
+                    }),
+                );
+                if (fixedPayment) selectedPayments.querySelector("button")?.setAttribute("disabled", "");
+                updateAllocationStatus();
+            }
+            function renderPaymentChoices() {
+                const search = paymentSearch.value.trim().toLowerCase();
+                const matches = data.entries.filter(
+                    (e) =>
+                        e.type === "payment" &&
+                        !e.reversed &&
+                        e.remaining_refundable_minor > 0 &&
+                        !chosen.has(e.operation_id) &&
+                        e.operation_id.toLowerCase().includes(search),
+                );
+                if (paymentPage >= matches.length) paymentPage = 0;
+                paymentChoices.replaceChildren(
+                    ...matches.slice(paymentPage, paymentPage + 20).map((e) => {
+                        const control = button(
+                            `Add payment ${e.operation_id.slice(-8)} · ${money(e.remaining_refundable_minor, data.currency)} available`,
+                            () => {
+                                if (chosen.size >= 10) throw new Error("Use up to ten payments per refund.");
+                                chosen.set(e.operation_id, "");
+                                autoShare = false;
+                                renderAllocation();
+                                document.getElementById(`allocation-${e.operation_id}`)?.focus();
+                                form.dispatchEvent(new Event("change"));
+                            },
+                            "btn-outline-primary text-start text-wrap mb-2",
+                        );
+                        return node("div", {}, control);
+                    }),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `${matches.length} available payments · Showing ${matches.length ? paymentPage + 1 : 0}–${Math.min(paymentPage + 20, matches.length)}`,
+                    ),
+                );
+                if (paymentPage > 0)
+                    paymentChoices.append(
+                        button("Previous payments", () => {
+                            paymentPage -= 20;
+                            renderPaymentChoices();
+                        }),
+                    );
+                if (paymentPage + 20 < matches.length)
+                    paymentChoices.append(
+                        button("More payments", () => {
+                            paymentPage += 20;
+                            renderPaymentChoices();
+                        }),
+                    );
+            }
+            function renderAllocation() {
+                allocationEditor.hidden = !splitVisible();
+                allocationToggle.disabled = requiredAllocation;
+                allocationControls.hidden = !allocationToggle.checked;
+                renderSelectedPayments();
+                renderPaymentChoices();
+            }
+            paymentSearch.addEventListener("input", () => {
+                paymentPage = 0;
+                renderPaymentChoices();
+            });
+            allocationToggle.addEventListener("change", renderAllocation);
+            form.elements.namedItem("type")?.addEventListener("change", renderAllocation);
+            form.elements.namedItem("amount_minor")?.addEventListener("input", (event) => {
+                if (autoShare && chosen.size === 1) {
+                    const payment = chosen.keys().next().value;
+                    chosen.set(payment, event.target.value);
+                    renderSelectedPayments();
+                } else updateAllocationStatus();
+            });
+            renderAllocation();
             function values() {
                 const result = formData(form, descriptors);
+                if (splitVisible() && allocationToggle.checked) {
+                    if (!chosen.size) throw new Error("Select at least one payment for the refund allocation.");
+                    result.refund_allocations = [...chosen]
+                        .map(([payment, value]) => ({
+                            payment_operation_id: payment,
+                            amount_minor: moneyInput(value, data.currency),
+                        }))
+                        .sort((a, b) => a.payment_operation_id.localeCompare(b.payment_operation_id));
+                    if (
+                        result.refund_allocations.some((p) => p.amount_minor <= 0) ||
+                        result.refund_allocations.reduce((sum, p) => sum + p.amount_minor, 0) !== result.amount_minor
+                    )
+                        throw new Error("Payment allocations must equal the full refund amount.");
+                }
                 if (result.type === "charge") {
                     delete result.payment_method;
                     delete result.payment_reference;
@@ -582,18 +804,33 @@ window.createWorkspaceOperations = function (ui) {
                                 {},
                                 `Account balance: ${money(result.balance_minor, result.currency)} → ${money(result.resulting_balance_minor, result.currency)}`,
                             ),
-                            refunding
+                            result.refund_allocations?.length
                                 ? node(
-                                      "p",
-                                      {},
-                                      `Payment: ${money(result.payment_minor, result.currency)} · Linked refunds: ${money(result.linked_refund_minor, result.currency)} · Payment remaining: ${money(result.remaining_payment_minor, result.currency)}`,
+                                      "div",
+                                      { "aria-label": "Reviewed refund allocations" },
+                                      ...result.refund_allocations.map((p) =>
+                                          node(
+                                              "p",
+                                              { class: "text-break" },
+                                              `Payment ${p.payment_operation_id.slice(-8)}: ${money(p.amount_minor, result.currency)}`,
+                                              ...(result.allocation_receipts || [])
+                                                  .filter((r) => r.payment_operation_id === p.payment_operation_id)
+                                                  .map((r) =>
+                                                      node(
+                                                          "span",
+                                                          { class: "d-block form-text" },
+                                                          receiptText(r.payment_details),
+                                                      ),
+                                                  ),
+                                          ),
+                                      ),
                                   )
                                 : null,
                             refunding
                                 ? node(
                                       "p",
-                                      { class: "text-break" },
-                                      `Source receipt: ${receiptText(result.source_payment_details)}`,
+                                      {},
+                                      `Payment: ${money(result.payment_minor, result.currency)} · Linked refunds: ${money(result.linked_refund_minor, result.currency)} · Payment remaining: ${money(result.remaining_payment_minor, result.currency)}`,
                                   )
                                 : null,
                             refunding && result.unlinked_refund_minor > 0
@@ -664,6 +901,7 @@ window.createWorkspaceOperations = function (ui) {
                                                 (control) => (control.disabled = false),
                                             );
                                             toggleReceipt();
+                                            renderAllocation();
                                         }
                                     }
                                 },
@@ -689,6 +927,8 @@ window.createWorkspaceOperations = function (ui) {
                     if (!form.isConnected) return;
                     data.position = latest.position;
                     data.balance_minor = latest.balance_minor;
+                    data.entries = latest.entries;
+                    renderAllocation();
                     preview.hidden = false;
                     preview.replaceChildren(
                         node(
@@ -782,11 +1022,17 @@ window.createWorkspaceOperations = function (ui) {
                                   ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
                                   : `Reference: ${item.operation_id.slice(-8)}`,
                         ),
-                        item.source_payment_operation_id
+                        item.refund_allocations?.length
                             ? node(
-                                  "p",
-                                  { class: "form-text" },
-                                  `Refund of payment ${item.source_payment_operation_id.slice(-8)}`,
+                                  "div",
+                                  {},
+                                  ...item.refund_allocations.map((p) =>
+                                      node(
+                                          "p",
+                                          { class: "form-text mb-0" },
+                                          `Refund of payment ${p.payment_operation_id.slice(-8)} · ${money(p.amount_minor, item.currency)}`,
+                                      ),
+                                  ),
                               )
                             : null,
                         item.action === "receipt_corrected"
@@ -854,7 +1100,9 @@ window.createWorkspaceOperations = function (ui) {
                 if (item.can_refund_payment) controls.push(button("Refund payment", () => reviewEntry(item, "refund")));
                 if (item.can_credit_charge) controls.push(button("Credit charge", () => reviewEntry(item, "credit")));
                 if (item.can_correct_amount && canRead)
-                    controls.push(button("Correct amount", () => reviewEntry(item)));
+                    controls.push(
+                        button(item.type === "refund" ? "Correct refund" : "Correct amount", () => reviewEntry(item)),
+                    );
                 controls.push(button("Reverse entry", () => reviewEntry(item, "reversal")));
             }
             return controls.length ? node("div", { class: "d-flex flex-wrap gap-2" }, ...controls) : "—";
@@ -873,11 +1121,17 @@ window.createWorkspaceOperations = function (ui) {
                                 "div",
                                 {},
                                 node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
-                                item.source_payment_operation_id
+                                item.refund_allocations?.length
                                     ? node(
-                                          "p",
-                                          { class: "form-text mb-0" },
-                                          `Refund of payment ${item.source_payment_operation_id.slice(-8)}`,
+                                          "div",
+                                          {},
+                                          ...item.refund_allocations.map((p) =>
+                                              node(
+                                                  "p",
+                                                  { class: "form-text mb-0" },
+                                                  `Refund of payment ${p.payment_operation_id.slice(-8)} · ${money(p.amount_minor, item.currency)}`,
+                                              ),
+                                          ),
                                       )
                                     : null,
                                 item.type === "payment" && !item.reversed && item.linked_refund_count > 0

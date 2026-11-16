@@ -9,6 +9,7 @@ use Codefy\Framework\Http\BaseController;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Enum\PaymentMethod;
 use Domain\Finance\ValueObject\PaymentDetails;
+use Domain\Finance\ValueObject\RefundAllocation;
 use Domain\Finance\Service\StudentAccountService;
 use Domain\Finance\Service\AccountEntryReviewService;
 use Domain\Finance\Service\AccountEntryHistory;
@@ -108,6 +109,7 @@ final class SisFinanceController extends BaseController
                 new Money($f->integer("amount_minor", 1, Money::MAX_MINOR), $f->text("currency", 3)),
                 $f->integer("position", 1),
                 $f->bodyText("reason"),
+                $this->refundAllocation($f),
             ),
         );
     }
@@ -117,9 +119,7 @@ final class SisFinanceController extends BaseController
         $f = FormInput::from($request);
         $type =
         EntryType::tryFrom($f->text("type", 24)) ??
-        throw new ValidationException([
-                ["field" => "type", "message" => "Choose charge, payment or refund."],
-            ]);
+        throw new ValidationException([["field" => "type", "message" => "Choose charge, payment or refund."]]);
         return new JsonResponse(
             $this->reviews->reviewPosting(
                 new AccountId($id),
@@ -128,6 +128,7 @@ final class SisFinanceController extends BaseController
                 $f->integer("position", 1),
                 $f->bodyText("reason"),
                 $this->paymentDetails($f),
+                $this->refundAllocation($f),
             ),
         );
     }
@@ -135,10 +136,7 @@ final class SisFinanceController extends BaseController
     public function commitPosting(ServerRequest $request, string $id): ResponseInterface
     {
         return new JsonResponse(
-            $this->reviews->commitPosting(
-                new AccountId($id),
-                FormInput::from($request)->bodyText("review_token"),
-            ),
+            $this->reviews->commitPosting(new AccountId($id), FormInput::from($request)->bodyText("review_token")),
         );
     }
 
@@ -171,11 +169,8 @@ final class SisFinanceController extends BaseController
         return new JsonResponse($this->reviews->receipt(new AccountId($id), new EntityId($operation)));
     }
 
-    public function reviewPaymentDetails(
-        ServerRequest $request,
-        string $id,
-        string $operation,
-    ): ResponseInterface {
+    public function reviewPaymentDetails(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->reviews->reviewPaymentDetails(
@@ -188,11 +183,8 @@ final class SisFinanceController extends BaseController
         );
     }
 
-    public function commitPaymentDetails(
-        ServerRequest $request,
-        string $id,
-        string $operation,
-    ): ResponseInterface {
+    public function commitPaymentDetails(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
         return new JsonResponse(
             $this->reviews->commitPaymentDetails(
                 new AccountId($id),
@@ -226,11 +218,8 @@ final class SisFinanceController extends BaseController
         );
     }
 
-    public function reviewChargeCredit(
-        ServerRequest $request,
-        string $id,
-        string $operation,
-    ): ResponseInterface {
+    public function reviewChargeCredit(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->reviews->reviewChargeCredit(
@@ -243,11 +232,8 @@ final class SisFinanceController extends BaseController
         );
     }
 
-    public function commitChargeCredit(
-        ServerRequest $request,
-        string $id,
-        string $operation,
-    ): ResponseInterface {
+    public function commitChargeCredit(ServerRequest $request, string $id, string $operation): ResponseInterface
+    {
         return new JsonResponse(
             $this->reviews->commitChargeCredit(
                 new AccountId($id),
@@ -268,6 +254,7 @@ final class SisFinanceController extends BaseController
                 $f->integer("position", 1),
                 $f->bodyText("reason"),
                 $this->paymentDetails($f),
+                $this->refundAllocation($f),
             ),
         );
     }
@@ -281,6 +268,23 @@ final class SisFinanceController extends BaseController
                 FormInput::from($request)->bodyText("review_token"),
             ),
         );
+    }
+
+    private function refundAllocation(FormInput $input): ?RefundAllocation
+    {
+        try {
+            $values = $input->values("refund_allocations", RefundAllocation::MAX_PAYMENTS);
+            return $values === [] ? null : new RefundAllocation($values);
+        } catch (ValidationException $error) {
+            throw $error;
+        } catch (InvalidArgumentException) {
+            throw new ValidationException([
+                [
+                    "field" => "refund_allocations",
+                    "message" => "Choose up to ten recorded payments and a positive amount for each share.",
+                ],
+            ]);
+        }
     }
 
     private function paymentDetails(FormInput $f): PaymentDetails

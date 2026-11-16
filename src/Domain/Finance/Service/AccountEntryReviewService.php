@@ -14,6 +14,7 @@ use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
 use Domain\Finance\ValueObject\PaymentDetails;
+use Domain\Finance\ValueObject\RefundAllocation;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -31,7 +32,8 @@ use Throwable;
  *
  * @phpstan-type EntryProof array{purpose:string,actor_id:string,account_id:string,operation_id:string,
  *     position:int,minor:int,currency:string,reason:string,issued_at:string,expires_at:string,
- *     source_operation_id?:string,type?:string,payment_details?:array{method:?string,reference:?string}}
+ *     source_operation_id?:string,type?:string,payment_details?:array{method:?string,reference:?string},
+ *     refund_allocations?:list<array{payment_operation_id:string,amount_minor:int}>}
  */
 final readonly class AccountEntryReviewService
 {
@@ -55,8 +57,18 @@ final readonly class AccountEntryReviewService
         Money $amount,
         int $position,
         #[\SensitiveParameter] string $reason,
+        ?RefundAllocation $allocation = null,
     ): array {
-        return $this->review(AccountEntryAction::Correction, $id, $source, null, $amount, $position, $reason);
+        return $this->review(
+            AccountEntryAction::Correction,
+            $id,
+            $source,
+            null,
+            $amount,
+            $position,
+            $reason,
+            allocation: $allocation,
+        );
     }
 
     /** @return array<string,mixed> */
@@ -67,6 +79,7 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
+        ?RefundAllocation $allocation = null,
     ): array {
         return $this->review(
             AccountEntryAction::Posting,
@@ -77,6 +90,7 @@ final readonly class AccountEntryReviewService
             $position,
             $reason,
             $paymentDetails,
+            $allocation,
         );
     }
 
@@ -147,11 +161,8 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return array<string,mixed> */
-    public function commitReversal(
-        AccountId $id,
-        EntityId $entry,
-        #[\SensitiveParameter] string $token,
-    ): array {
+    public function commitReversal(AccountId $id, EntityId $entry, #[\SensitiveParameter] string $token): array
+    {
         return $this->commit(AccountEntryAction::Reversal, $id, $entry, $token);
     }
 
@@ -163,23 +174,12 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
     ): array {
-        return $this->review(
-            AccountEntryAction::ChargeCredit,
-            $id,
-            $source,
-            null,
-            $amount,
-            $position,
-            $reason,
-        );
+        return $this->review(AccountEntryAction::ChargeCredit, $id, $source, null, $amount, $position, $reason);
     }
 
     /** @return array<string,mixed> */
-    public function commitChargeCredit(
-        AccountId $id,
-        EntityId $source,
-        #[\SensitiveParameter] string $token,
-    ): array {
+    public function commitChargeCredit(AccountId $id, EntityId $source, #[\SensitiveParameter] string $token): array
+    {
         return $this->commit(AccountEntryAction::ChargeCredit, $id, $source, $token);
     }
 
@@ -191,6 +191,7 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] ?PaymentDetails $details = null,
+        ?RefundAllocation $allocation = null,
     ): array {
         return $this->review(
             AccountEntryAction::Refund,
@@ -201,15 +202,13 @@ final readonly class AccountEntryReviewService
             $position,
             $reason,
             $details,
+            $allocation,
         );
     }
 
     /** @return array<string,mixed> */
-    public function commitRefund(
-        AccountId $id,
-        EntityId $payment,
-        #[\SensitiveParameter] string $token,
-    ): array {
+    public function commitRefund(AccountId $id, EntityId $payment, #[\SensitiveParameter] string $token): array
+    {
         return $this->commit(AccountEntryAction::Refund, $id, $payment, $token);
     }
 
@@ -223,6 +222,7 @@ final readonly class AccountEntryReviewService
         int $position,
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
+        ?RefundAllocation $allocation = null,
     ): array {
         $actor = $this->authorize();
         $reason = $this->commands->reason($reason);
@@ -235,6 +235,7 @@ final readonly class AccountEntryReviewService
             $reason,
             $actor,
             $paymentDetails,
+            $allocation,
             $action,
         ): array {
             $account = $this->accounts->get($id, new HistoryReadBudget());
@@ -260,30 +261,47 @@ final readonly class AccountEntryReviewService
             } elseif ($action === AccountEntryAction::Refund) {
                 $source ??= throw new \LogicException("A linked refund requires its payment.");
                 $amount ??= throw new \LogicException("A linked refund requires an amount.");
-                try {
-                    $balance = $account->postingBalance(EntryType::Refund, $amount, $source);
-                } catch (DomainException | InvalidArgumentException $error) {
+                $allocation ??= RefundAllocation::forPayment($source, $amount->minor);
+                if (!in_array($source->value, array_column($allocation->values(), "payment_operation_id"), true)) {
                     throw new ValidationException([
-                        ["field" => "amount_minor", "message" => $error->getMessage()],
+                        [
+                            "field" => "refund_allocations",
+                            "message" => "Include the payment where this refund was started.",
+                        ],
                     ]);
                 }
-                $entry =
-                    $account->entry($source) ?? throw new \LogicException("The source payment is missing.");
+                try {
+                    $balance = $account->postingBalance(EntryType::Refund, $amount, $allocation);
+                } catch (ValidationException $error) {
+                    throw $error;
+                } catch (DomainException | InvalidArgumentException $error) {
+                    throw new ValidationException([["field" => "amount_minor", "message" => $error->getMessage()]]);
+                }
+                $entry = $account->entry($source) ?? throw new \LogicException("The source payment is missing.");
                 $summary = $account->paymentRefundSummary($source);
                 $intent =
-                    ["source_operation_id" => $source->value] +
+                    ["source_operation_id" => $source->value, "refund_allocations" => $allocation->values()] +
                     ($paymentDetails === null || $paymentDetails->isEmpty()
                         ? []
                         : ["payment_details" => $paymentDetails->values()]);
                 $details = [
                     "type" => EntryType::Refund->value,
                     "amount_minor" => $amount->minor,
-                    "source_payment_operation_id" => $source->value,
+                    "refund_allocations" => $allocation->values(),
                     "payment_minor" => $entry["minor"],
                     "linked_refund_minor" => $summary["linked_refund_minor"],
-                    "remaining_payment_minor" => $summary["remaining_refundable_minor"] - $amount->minor,
+                    "remaining_payment_minor" =>
+                        $summary["remaining_refundable_minor"] -
+                        array_sum(
+                            array_column(
+                                array_filter(
+                                    $allocation->values(),
+                                    static fn(array $p): bool => $p["payment_operation_id"] === $source->value,
+                                ),
+                                "amount_minor",
+                            ),
+                        ),
                     "unlinked_refund_minor" => $account->unlinkedRefundMinor(),
-                    "source_payment_details" => $account->paymentDetails($source)?->values(),
                     "payment_details" => $intent["payment_details"] ?? null,
                 ];
             } elseif ($action === AccountEntryAction::Posting) {
@@ -302,15 +320,16 @@ final readonly class AccountEntryReviewService
                 }
                 $type ??= throw new \LogicException("A posting requires a transaction type.");
                 try {
-                    $balance = $account->postingBalance($type, $amount);
+                    $balance = $account->postingBalance($type, $amount, $allocation);
+                } catch (ValidationException $error) {
+                    throw $error;
                 } catch (DomainException | InvalidArgumentException $error) {
                     // These aggregate/Money checks return fixed validation wording, without personal values.
-                    throw new ValidationException([
-                        ["field" => "amount_minor", "message" => $error->getMessage()],
-                    ]);
+                    throw new ValidationException([["field" => "amount_minor", "message" => $error->getMessage()]]);
                 }
                 $intent =
                     ["type" => $type->value] +
+                    ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]) +
                     ($paymentDetails === null || $paymentDetails->isEmpty()
                         ? []
                         : ["payment_details" => $paymentDetails->values()]);
@@ -359,11 +378,29 @@ final readonly class AccountEntryReviewService
             } else {
                 $source ??= throw new \LogicException("An amount correction requires an entry.");
                 $amount ??= throw new \LogicException("An amount correction requires an amount.");
-                $balance = $account->correctedBalance($source, $amount);
-                $entry =
-                    $account->entry($source) ??
-                    throw new \LogicException("The correction source is missing.");
-                $intent = ["source_operation_id" => $source->value];
+                $entry = $account->entry($source) ?? throw new \LogicException("The correction source is missing.");
+                if ($allocation === null && isset($entry["refund_allocations"])) {
+                    $previous = $entry["refund_allocations"];
+                    if (count($previous) === 1) {
+                        $allocation = RefundAllocation::forPayment(
+                            new EntityId($previous[0]["payment_operation_id"]),
+                            $amount->minor,
+                        );
+                    } elseif ($amount->minor === $entry["minor"]) {
+                        $allocation = new RefundAllocation($previous);
+                    } else {
+                        throw new ValidationException([
+                            [
+                                "field" => "refund_allocations",
+                                "message" => "Adjust payment allocations to match the corrected refund amount.",
+                            ],
+                        ]);
+                    }
+                }
+                $balance = $account->correctedBalance($source, $amount, $allocation);
+                $intent =
+                    ["source_operation_id" => $source->value] +
+                    ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]);
                 $details = [
                     "source_operation_id" => $source->value,
                     "type" => $entry["type"],
@@ -371,6 +408,17 @@ final readonly class AccountEntryReviewService
                     "corrected_minor" => $amount->minor,
                     "payment_details" => $account->paymentDetails($source)?->values(),
                 ];
+            }
+            if ($allocation !== null) {
+                $details["refund_allocations"] = $allocation->values();
+                $details["allocation_receipts"] = array_map(
+                    static fn(array $p): array => $p + [
+                        "payment_details" => $account
+                            ->paymentDetails(new EntityId($p["payment_operation_id"]))
+                            ?->values(),
+                    ],
+                    $allocation->values(),
+                );
             }
             $this->actor($actor);
             $now = $this->clock->now()->setTimezone(new DateTimeZone("UTC"));
@@ -406,11 +454,8 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return array<string,mixed> */
-    public function commitCorrection(
-        AccountId $id,
-        EntityId $source,
-        #[\SensitiveParameter] string $token,
-    ): array {
+    public function commitCorrection(AccountId $id, EntityId $source, #[\SensitiveParameter] string $token): array
+    {
         return $this->commit(AccountEntryAction::Correction, $id, $source, $token);
     }
 
@@ -455,11 +500,7 @@ final readonly class AccountEntryReviewService
                     $hash,
                 ),
                 AccountEntryAction::Correction => $account->correctionResult($operation, $actor, $hash),
-                AccountEntryAction::PaymentDetails => $account->paymentDetailsResult(
-                    $operation,
-                    $actor,
-                    $hash,
-                ),
+                AccountEntryAction::PaymentDetails => $account->paymentDetailsResult($operation, $actor, $hash),
                 AccountEntryAction::Reversal => $account->reversalResult($operation, $actor, $hash),
                 AccountEntryAction::ChargeCredit => $account->chargeCreditResult($operation, $actor, $hash),
             };
@@ -469,6 +510,9 @@ final readonly class AccountEntryReviewService
             $this->fresh($proof);
             $this->commands->assertPosition($account->playhead(), $proof["position"]);
             $amount = new Money($proof["minor"], $proof["currency"]);
+            $allocation = isset($proof["refund_allocations"])
+                ? new RefundAllocation($proof["refund_allocations"])
+                : null;
             $result = match ($action) {
                 AccountEntryAction::Refund => $account->postReviewed(
                     $operation,
@@ -479,8 +523,8 @@ final readonly class AccountEntryReviewService
                     isset($proof["payment_details"])
                         ? PaymentDetails::fromRecorded($proof["payment_details"])
                         : null,
-                    sourcePayment: $source ??
-                        throw new \LogicException("A linked refund requires its payment."),
+                    allocation: $allocation ??
+                        throw new \LogicException("A linked refund requires its allocations."),
                 ),
                 AccountEntryAction::Posting => $account->postReviewed(
                     $operation,
@@ -491,6 +535,7 @@ final readonly class AccountEntryReviewService
                     isset($proof["payment_details"])
                         ? PaymentDetails::fromRecorded($proof["payment_details"])
                         : null,
+                    allocation: $allocation,
                 ),
                 AccountEntryAction::Correction => $account->correct(
                     $source ?? throw new \LogicException("An amount correction requires an entry."),
@@ -498,6 +543,7 @@ final readonly class AccountEntryReviewService
                     $amount,
                     $actor,
                     $hash,
+                    $allocation,
                 ),
                 AccountEntryAction::PaymentDetails => $account->changePaymentDetails(
                     $source ?? throw new \LogicException("A receipt correction requires an entry."),
@@ -541,11 +587,8 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return EntryProof */
-    private function proof(
-        #[\SensitiveParameter] string $token,
-        EntityId $actor,
-        AccountEntryAction $action,
-    ): array {
+    private function proof(#[\SensitiveParameter] string $token, EntityId $actor, AccountEntryAction $action): array
+    {
         try {
             if ($token === "" || strlen($token) > self::MAX_TOKEN_BYTES) {
                 throw new InvalidArgumentException();
@@ -578,6 +621,34 @@ final readonly class AccountEntryReviewService
                 EntryType::tryFrom($p["type"]) === null ||
                 array_key_exists("source_operation_id", $p)
             ) {
+                throw new InvalidArgumentException();
+            }
+            if (array_key_exists("refund_allocations", $p)) {
+                if (
+                    !is_array($p["refund_allocations"]) ||
+                    !in_array(
+                        $action,
+                        [AccountEntryAction::Refund, AccountEntryAction::Posting, AccountEntryAction::Correction],
+                        true,
+                    ) ||
+                    ($action === AccountEntryAction::Posting && $p["type"] !== "refund")
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                $allocation = new RefundAllocation($p["refund_allocations"]);
+                if (
+                    $allocation->values() != $p["refund_allocations"] ||
+                    $allocation->totalMinor() !== $p["minor"] ||
+                    ($action === AccountEntryAction::Refund &&
+                        !in_array(
+                            $p["source_operation_id"],
+                            array_column($allocation->values(), "payment_operation_id"),
+                            true,
+                        ))
+                ) {
+                    throw new InvalidArgumentException();
+                }
+            } elseif ($action === AccountEntryAction::Refund) {
                 throw new InvalidArgumentException();
             }
             if (array_key_exists("payment_details", $p)) {
@@ -645,9 +716,7 @@ final readonly class AccountEntryReviewService
                 throw new InvalidArgumentException();
             }
         } catch (Throwable) {
-            throw new ConcurrentModificationException(
-                "This account review expired. Review the account again.",
-            );
+            throw new ConcurrentModificationException("This account review expired. Review the account again.");
         }
     }
 }

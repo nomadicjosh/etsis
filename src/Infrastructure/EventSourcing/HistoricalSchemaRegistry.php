@@ -847,9 +847,9 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
-                if ($name === 'source_payment_operation_id') {
+                if ($name === 'refund_allocations') {
                     if (
-                        !is_string($value) || !in_array($class, [
+                        !is_array($value) || !in_array($class, [
                         \Domain\Finance\Event\AccountEntryWasPosted::class,
                         \Domain\Finance\Event\AccountEntryWasCorrected::class,
                         ], true) || ($class === \Domain\Finance\Event\AccountEntryWasPosted::class
@@ -857,7 +857,10 @@ final readonly class HistoricalSchemaRegistry
                     ) {
                         throw new CorruptHistoryException();
                     }
-                    new \Domain\Shared\ValueObject\EntityId($value);
+                    $allocation = new \Domain\Finance\ValueObject\RefundAllocation($value);
+                    if ($allocation->values() != $value || $allocation->totalMinor() !== $payload['minor']) {
+                        throw new CorruptHistoryException();
+                    }
                     continue;
                 }
                 if ($name === 'reversed_credit_ids') {

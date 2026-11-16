@@ -5673,7 +5673,8 @@ $paymentRefundReviewResponse = $teachingPost($paymentRefundBase . "review/", [
 $paymentRefundReview = json_decode((string) $paymentRefundReviewResponse->getBody(), true);
 if (
     $paymentRefundReviewResponse->getStatusCode() !== 200 ||
-    ($paymentRefundReview["source_payment_operation_id"] ?? null) !== $postingCommitted["operation_id"] ||
+    ($paymentRefundReview["refund_allocations"][0]["payment_operation_id"] ?? null) !==
+        $postingCommitted["operation_id"] ||
     ($paymentRefundReview["remaining_payment_minor"] ?? null) !== 1300 ||
     ($paymentRefundReview["unlinked_refund_minor"] ?? null) !== 500 ||
     ($paymentRefundReview["resulting_balance_minor"] ?? null) !== -800 ||
@@ -5717,7 +5718,8 @@ $linkedRefundEntry = array_values(
     ),
 );
 if (
-    ($linkedRefundEntry[0]["source_payment_operation_id"] ?? null) !== $postingCommitted["operation_id"] ||
+    ($linkedRefundEntry[0]["refund_allocations"][0]["payment_operation_id"] ?? null) !==
+        $postingCommitted["operation_id"] ||
     str_contains((string) $paymentRefundStatement->getBody(), "FICT-LINKED-REFUND-PRIVATE")
 ) {
     throw new RuntimeException(
@@ -5732,7 +5734,7 @@ $paymentRefundHistoryItems = json_decode((string) $paymentRefundHistory->getBody
 if (
     $paymentRefundHistory->getStatusCode() !== 200 ||
     count($paymentRefundHistoryItems) !== 2 ||
-    ($paymentRefundHistoryItems[0]["source_payment_operation_id"] ?? null) !==
+    ($paymentRefundHistoryItems[0]["refund_allocations"][0]["payment_operation_id"] ?? null) !==
         $postingCommitted["operation_id"]
 ) {
     throw new RuntimeException("The private refund history lost its original payment.");
@@ -5753,4 +5755,115 @@ foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"
     ) {
         throw new RuntimeException("A linked payment refund bypassed independent finance authority.");
     }
+}
+
+// One reviewed outflow can be split across payments and corrected without another money movement.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$splitRefundPayment = \Domain\Shared\ValueObject\EntityId::generate();
+$sis->finance()->post(
+    new \Domain\Finance\ValueObject\AccountId($postingReviewId),
+    $splitRefundPayment,
+    \Domain\Finance\Enum\EntryType::Payment,
+    new \Domain\Finance\ValueObject\Money(300, "USD"),
+    10,
+    "Fictional second receipt.",
+);
+$splitRefundPlan = new \Domain\Finance\ValueObject\RefundAllocation([
+    ["payment_operation_id" => $postingCommitted["operation_id"], "amount_minor" => 200],
+    ["payment_operation_id" => $splitRefundPayment->value, "amount_minor" => 200],
+]);
+$splitRefundOriginalEvents = $sis->sql->rows("sis_history_events");
+$splitRefundReviewResponse = $teachingPost($postingReviewBase . "review/", [
+    "type" => "refund",
+    "amount_minor" => 400,
+    "currency" => "USD",
+    "position" => 11,
+    "reason" => "Fictional combined refund.",
+    "refund_allocations" => $splitRefundPlan->values(),
+]);
+$splitRefundReview = json_decode((string) $splitRefundReviewResponse->getBody(), true);
+if (
+    $splitRefundReviewResponse->getStatusCode() !== 200 ||
+    ($splitRefundReview["refund_allocations"] ?? null) !== $splitRefundPlan->values() ||
+    $sis->sql->rows("sis_history_events") !== $splitRefundOriginalEvents
+) {
+    throw new RuntimeException("The native multi-payment review changed history or lost its split.");
+}
+$splitRefundCommitResponse = $teachingPost($postingReviewBase . "commit/", [
+    "review_token" => $splitRefundReview["review_token"],
+    "refund_allocations" => [["payment_operation_id" => "FORGED", "amount_minor" => 999]],
+]);
+$splitRefundAccepted = json_decode((string) $splitRefundCommitResponse->getBody(), true);
+if (
+    $splitRefundCommitResponse->getStatusCode() !== 200 ||
+    ($splitRefundAccepted["balance_minor"] ?? null) !== -700 ||
+    count($sis->sql->rows("sis_history_events")) !== count($splitRefundOriginalEvents) + 1
+) {
+    throw new RuntimeException("The native split refund failed to record exactly one protected outflow.");
+}
+$splitRefundCorrectionBase = $postingReviewBase . $splitRefundAccepted["operation_id"] . "/correction/";
+$splitRefundNewPlan = new \Domain\Finance\ValueObject\RefundAllocation([
+    ["payment_operation_id" => $postingCommitted["operation_id"], "amount_minor" => 100],
+    ["payment_operation_id" => $splitRefundPayment->value, "amount_minor" => 300],
+]);
+$splitRefundCorrectionReviewResponse = $teachingPost($splitRefundCorrectionBase . "review/", [
+    "amount_minor" => 400,
+    "currency" => "USD",
+    "position" => 12,
+    "reason" => "Fictional allocation correction.",
+    "refund_allocations" => $splitRefundNewPlan->values(),
+]);
+$splitRefundCorrectionReview = json_decode((string) $splitRefundCorrectionReviewResponse->getBody(), true);
+if (
+    $splitRefundCorrectionReviewResponse->getStatusCode() !== 200 ||
+    ($splitRefundCorrectionReview["resulting_balance_minor"] ?? null) !== -700
+) {
+    throw new RuntimeException("The native allocation-only correction changed the account balance.");
+}
+$splitRefundCorrectionResponse = $teachingPost($splitRefundCorrectionBase . "commit/", [
+    "review_token" => $splitRefundCorrectionReview["review_token"],
+]);
+$splitRefundCorrected = json_decode((string) $splitRefundCorrectionResponse->getBody(), true);
+$splitRefundRoot = $sis->accounts->get(new \Domain\Finance\ValueObject\AccountId($postingReviewId));
+if (
+    $splitRefundCorrectionResponse->getStatusCode() !== 200 ||
+    $splitRefundRoot->balance()->minor !== -700 ||
+    ($splitRefundCorrected["position"] ?? null) !== 13 ||
+    $splitRefundRoot->entry(new \Domain\Shared\ValueObject\EntityId($splitRefundAccepted["operation_id"]))[
+        "refund_allocations"
+    ] !== $splitRefundPlan->values() ||
+    $splitRefundRoot->entry(new \Domain\Shared\ValueObject\EntityId($splitRefundCorrected["operation_id"]))[
+        "refund_allocations"
+    ] !== $splitRefundNewPlan->values() ||
+    array_slice($sis->sql->rows("sis_history_events"), 0, count($splitRefundOriginalEvents)) !==
+        $splitRefundOriginalEvents
+) {
+    throw new RuntimeException("The native allocation correction lost original protected facts.");
+}
+$splitRefundFacts = $sis->sql->rows("sis_history_events");
+$splitRefundMalformed = $teachingPost($postingReviewBase . "review/", [
+    "type" => "refund",
+    "amount_minor" => 200,
+    "currency" => "USD",
+    "position" => 13,
+    "reason" => "Fictional malformed allocation.",
+    "refund_allocations" => [["payment_operation_id" => $splitRefundPayment->value, "amount_minor" => "200"]],
+]);
+if ($splitRefundMalformed->getStatusCode() !== 422 || $sis->sql->rows("sis_history_events") !== $splitRefundFacts) {
+    throw new RuntimeException("Malformed refund allocations bypassed HTTP validation.");
+}
+$splitRefundOversized = $teachingPost($postingReviewBase . "review/", [
+    "type" => "refund",
+    "amount_minor" => 11,
+    "currency" => "USD",
+    "position" => 13,
+    "reason" => "Fictional oversized allocation.",
+    "refund_allocations" => array_fill(0, 11, [
+        "payment_operation_id" => $splitRefundPayment->value,
+        "amount_minor" => 1,
+    ]),
+]);
+if ($splitRefundOversized->getStatusCode() !== 422 || $sis->sql->rows("sis_history_events") !== $splitRefundFacts) {
+    throw new RuntimeException("An oversized refund allocation bypassed bounded HTTP validation.");
 }
