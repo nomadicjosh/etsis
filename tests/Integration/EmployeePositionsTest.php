@@ -49,6 +49,78 @@ final class EmployeePositionsTest extends TestCase
         $s->hrLibrary()->save($job, null);
         return [$employee, $job, $grade];
     }
+
+    public function testMonthlyAgreementsReplayWithTheirOriginalUnitsAfterJobDefaultsChange(): void
+    {
+        $s = new SisFixture();
+        $employee = $s->timesheetService()->addEmployee($s->student()->personId, 'Fictional employee');
+        $grade = new PayGrade(
+            EntityId::generate(),
+            'M.1',
+            'Fictional monthly grade',
+            'USD',
+            'monthly',
+            300000,
+            800000,
+            true
+        );
+        $s->hrLibrary()->save($grade, null);
+        $job = new JobDefinition(
+            EntityId::generate(),
+            'MONTHLY',
+            'Fictional monthly job',
+            'USD',
+            'monthly',
+            true,
+            $grade->id,
+            450050,
+            2250
+        );
+        $s->hrLibrary()->save($job, null);
+        $id = EntityId::generate();
+        $s->positions()->assign(
+            $employee,
+            $id,
+            $job->id,
+            0,
+            0,
+            '2026-09-01',
+            null,
+            460025,
+            2250,
+            'Fictional monthly agreement'
+        );
+        $events = $s->sql->rows('sis_history_events');
+        $s->hrLibrary()->save(new JobDefinition(
+            $job->id,
+            $job->code,
+            'Future annual default',
+            'USD',
+            'annual',
+            true,
+            rateMinor: 5520300,
+            weeklyMinutes: 2400
+        ), 0);
+        $s->hrLibrary()->save(new PayGrade(
+            $grade->id,
+            'M.1',
+            'Future annual grade',
+            'USD',
+            'annual',
+            3600000,
+            9600000,
+            true
+        ), 0);
+        $detail = $s->positions()->get($employee, $id);
+        self::assertSame('monthly', $detail['job']['basis']);
+        self::assertSame('monthly', $detail['grade']['basis']);
+        self::assertSame(460025, $detail['rate_minor']);
+        self::assertSame(2250, $detail['weekly_minutes']);
+        self::assertSame('monthly', $s->positions()->page($employee)['items'][0]['basis']);
+        self::assertSame($events, $s->sql->rows('sis_history_events'));
+        $s->positions()->end($employee, $id, 1, '2026-12-31', 'Fictional end of monthly agreement');
+        self::assertSame('monthly', $s->positions()->get($employee, $id)['job']['basis']);
+    }
     public function testAssignmentsRetainReviewedTermsInOneProtectedJournalAndLaterSetupChangesCannotRelabelThem(): void
     {
         $s = new SisFixture();

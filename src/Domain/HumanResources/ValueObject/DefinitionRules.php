@@ -12,6 +12,8 @@ use Money\Currency;
 /** Shared validation for editable HR reference definitions, not employee compensation. */
 final class DefinitionRules
 {
+    public const array RATE_BASES = ['hourly', 'monthly', 'annual'];
+
     public static function code(string $value): string
     {
         $value = strtoupper(trim($value));
@@ -34,8 +36,8 @@ final class DefinitionRules
     public static function units(string $currency, string $basis): void
     {
         self::precision($currency);
-        if (!in_array($basis, ['hourly', 'annual'], true)) {
-            self::invalid('basis', 'Choose an hourly or annual rate.');
+        if (!in_array($basis, self::RATE_BASES, true)) {
+            self::invalid('basis', 'Choose an hourly, monthly or annual rate.');
         }
     }
     public static function precision(string $currency): int

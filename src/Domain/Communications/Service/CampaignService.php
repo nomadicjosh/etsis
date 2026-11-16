@@ -90,30 +90,83 @@ final readonly class CampaignService
      * @param list<EntityId> $recipients
      * @return list<EntityId>
      */
-    public function queue(EntityId $id, array $recipients): array
+    public function queue(EntityId $id, array $recipients, int $expectedVersion): array
     {
-        $actor = $this->authorize();
-        if (count($recipients) < 1 || count($recipients) > 500) {
-            throw new InvalidArgumentException('A bounded recipient list is required.');
-        }
+        $actor = $this->authorizeRecipients();
+        $recipients = $this->uniqueRecipients($recipients);
         $this->owned($id, $actor);
 
-        return $this->transactions->run(function () use ($id, $recipients, $actor): array {
+        return $this->transactions->run(function () use ($id, $recipients, $actor, $expectedVersion): array {
             $this->repository->lock($id);
             $campaign = $this->owned($id, $actor);
-            if ($campaign->status !== 'draft') {
-                throw new DomainException('Only a draft campaign can be queued.');
-            }
-            $deliveries = [];
-            foreach ($recipients as $recipient) {
-                $deliveries[] = $this->repository->enqueue($id, $recipient);
-            }
+            $this->reviewable($campaign, $expectedVersion);
+            $this->repository->audience($recipients);
+            $deliveries = $this->repository->enqueue($id, $recipients);
             $this->repository->save($campaign->transition('queued'), $campaign->version);
             $this->audit->record($actor, 'campaign.queued', $id);
             $this->owned($id, $actor);
+            $this->authorizeRecipients($actor);
 
             return $deliveries;
         });
+    }
+
+    /** @return array{items:list<array<string,string|null>>,next_after:?string} */
+    public function recipientChoices(string $search, ?EntityId $after = null): array
+    {
+        $actor = $this->authorizeRecipients();
+        if (
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80
+            || preg_match('/[\x00-\x1f\x7f]/', $search)
+        ) {
+            throw new InvalidArgumentException('Search by name or institutional ID using up to 80 characters.');
+        }
+        $rows = trim($search) === '' ? [] : $this->repository->recipientChoices(trim($search), $after);
+        $more = count($rows) > 50;
+        $rows = array_slice($rows, 0, 50);
+        $this->authorizeRecipients($actor);
+        return ['items' => $rows, 'next_after' => $more ? $rows[49]['id'] : null];
+    }
+
+    /** Read-only review of the exact draft revision and complete selected audience.
+     * @param list<EntityId> $recipients
+     * @return array<string,mixed>
+     */
+    public function reviewRecipients(EntityId $id, array $recipients, int $expectedVersion): array
+    {
+        $actor = $this->authorizeRecipients();
+        $campaign = $this->owned($id, $actor);
+        $this->reviewable($campaign, $expectedVersion);
+        $people = $this->repository->audience($this->uniqueRecipients($recipients));
+        $content = json_decode($this->cipher->open($campaign->encryptedContent), true, flags: JSON_THROW_ON_ERROR);
+        $this->reviewable($this->owned($id, $actor), $expectedVersion);
+        $this->authorizeRecipients($actor);
+        return ['subject' => $content['subject'], 'body' => $content['body'],
+            'version' => $campaign->version, 'recipients' => $people];
+    }
+
+    private function reviewable(Campaign $campaign, int $expectedVersion): void
+    {
+        if ($campaign->status !== 'draft' || $campaign->version !== $expectedVersion) {
+            throw new ConcurrentModificationException(
+                'The message changed. Reopen it and review the current draft and recipients.'
+            );
+        }
+    }
+
+    /** @param list<EntityId> $recipients
+     * @return list<EntityId>
+     */
+    private function uniqueRecipients(array $recipients): array
+    {
+        if (count($recipients) < 1 || count($recipients) > 500) {
+            throw new InvalidArgumentException('Choose between one and 500 recipients.');
+        }
+        $unique = [];
+        foreach ($recipients as $recipient) {
+            $unique[$recipient->value] = $recipient;
+        }
+        return array_values($unique);
     }
 
     public function pause(EntityId $id, bool $pause): void
@@ -152,10 +205,12 @@ final readonly class CampaignService
             if ($campaign->status !== 'queued') {
                 throw new DomainException('The campaign is not queued.');
             }
+            // Known recipient problems stop before a claim, without creating an uncertain-send state.
+            $address = $this->repository->recipient(new EntityId($delivery['recipient_user_id']));
             $this->repository->transitionDelivery($deliveryId, 'sending', $delivery['version']);
             $this->owned($campaignId, $actor);
 
-            return $delivery;
+            return $delivery + ['address' => $address];
         });
         if ($claimed === null) {
             return;
@@ -165,7 +220,7 @@ final readonly class CampaignService
             $content = json_decode($this->cipher->open($campaign->encryptedContent), true, flags: JSON_THROW_ON_ERROR);
             $this->transport->send(
                 $deliveryId,
-                $this->repository->recipient(new EntityId($claimed['recipient_user_id'])),
+                $claimed['address'],
                 $content['subject'],
                 $content['body']
             );
@@ -224,6 +279,15 @@ final readonly class CampaignService
     {
         $actor = $this->access->requirePermission('sis:communications:manage');
         if ($expected !== null && $actor->value !== $expected->value) {
+            throw new AccessDeniedException('Access denied.');
+        }
+        return $actor;
+    }
+
+    private function authorizeRecipients(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->authorize($expected);
+        if ($this->access->requirePermission('sis:person:manage')->value !== $actor->value) {
             throw new AccessDeniedException('Access denied.');
         }
         return $actor;

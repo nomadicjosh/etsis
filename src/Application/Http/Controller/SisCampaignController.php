@@ -40,16 +40,35 @@ final readonly class SisCampaignController
 
     public function queue(ServerRequest $request, string $id): ResponseInterface
     {
-        $recipients = array_map(
-            static fn (FormInput $r): EntityId => $r->id('user_id'),
-            FormInput::from($request)->items('recipients')
-        );
-        $deliveries = $this->service->queue(new EntityId($id), $recipients);
+        $f = FormInput::from($request);
+        $deliveries = $this->service->queue(new EntityId($id), $this->recipients($f), $f->integer('version'));
 
         return new JsonResponse(['delivery_ids' => array_map(
             static fn (EntityId $d): string => $d->value,
             $deliveries
         )]);
+    }
+
+    public function recipientChoices(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->recipientChoices($f->search('search', 80), $f->optionalId('after')));
+    }
+
+    public function reviewRecipients(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reviewRecipients(
+            new EntityId($id),
+            $this->recipients($f),
+            $f->integer('version')
+        ));
+    }
+
+    /** @return list<EntityId> */
+    private function recipients(FormInput $f): array
+    {
+        return array_map(static fn(FormInput $r): EntityId => $r->id('user_id'), $f->items('recipients'));
     }
 
     public function pause(ServerRequest $request, string $id): ResponseInterface

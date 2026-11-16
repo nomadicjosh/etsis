@@ -44,22 +44,24 @@ async function accessible(page) {
     expect(scan.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) }))).toEqual([]);
 }
 
-test('HR can create a pay grade inside an unsaved job draft and retain values after a rejected save', async ({ page }) => {
+test('HR can create a monthly pay grade inside an unsaved job draft and retain values after a rejected save', async ({ page }) => {
     const state = await setup(page);
     await page.getByRole('button', { name: 'Add job definition', exact: true }).click();
     await page.getByLabel('Code', { exact: true }).fill('LIB.ASST');
     await page.getByLabel('Title', { exact: true }).fill('Fictional library assistant');
-    await page.getByLabel('Default rate', { exact: true }).fill('25.50');
+    await page.getByLabel('Rate basis', { exact: true }).selectOption('monthly');
+    await page.getByLabel('Default rate', { exact: true }).fill('3500.50');
     await page.getByLabel('Weekly hours', { exact: true }).fill('37');
     await page.getByLabel('Additional minutes', { exact: true }).fill('30');
     await page.getByRole('button', { name: 'Create pay grade', exact: true }).click();
-    await page.getByLabel('Code', { exact: true }).fill('H.1');
-    await page.getByLabel('Title', { exact: true }).fill('Fictional hourly band');
-    await page.getByLabel('Minimum rate', { exact: true }).fill('15');
-    await page.getByLabel('Maximum rate', { exact: true }).fill('50');
+    await page.getByLabel('Code', { exact: true }).fill('M.1');
+    await page.getByLabel('Title', { exact: true }).fill('Fictional monthly band');
+    await page.getByLabel('Minimum rate', { exact: true }).fill('3000');
+    await page.getByLabel('Maximum rate', { exact: true }).fill('5000');
     await page.getByRole('button', { name: 'Save pay grade', exact: true }).click();
     await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Fictional library assistant');
-    await expect(page.getByLabel('Default rate', { exact: true })).toHaveValue('25.50');
+    await expect(page.getByLabel('Default rate', { exact: true })).toHaveValue('3500.50');
+    await expect(page.getByLabel('Rate basis', { exact: true })).toHaveValue('monthly');
     await expect(page.getByLabel('Weekly hours', { exact: true })).toHaveValue('37');
     await expect(page.getByLabel('Additional minutes', { exact: true })).toHaveValue('30');
     await expect(page.getByLabel('Pay grade', { exact: true })).toHaveValue(state.grades[0].id);
@@ -69,8 +71,9 @@ test('HR can create a pay grade inside an unsaved job draft and retain values af
     await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Fictional library assistant');
     await page.getByRole('button', { name: 'Save job definition', exact: true }).click();
     await expect(page.getByRole('table', { name: 'Job definitions', exact: true })).toContainText('Fictional library assistant');
-    expect(state.jobs[0]).toMatchObject({ rate_minor: 2550, weekly_minutes: 2250, version: 0,
-        pay_grade_id: state.grades[0].id, currency: 'USD', basis: 'hourly' });
+    await expect(page.getByRole('table', { name: 'Job definitions', exact: true })).toContainText('Per month');
+    expect(state.jobs[0]).toMatchObject({ rate_minor: 350050, weekly_minutes: 2250, version: 0,
+        pay_grade_id: state.grades[0].id, currency: 'USD', basis: 'monthly' });
     await page.getByRole('button', { name: 'Edit definition', exact: true }).click();
     await page.getByLabel('Active definition', { exact: true }).uncheck();
     await page.getByRole('button', { name: 'Save job definition', exact: true }).click();

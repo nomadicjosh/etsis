@@ -29,6 +29,9 @@ final class WorkspaceOperationsTest extends TestCase
 {
     private function campaigns(SisFixture $f, ?MailTransport $transport = null): CampaignService
     {
+        if ($f->sql->rows('sis_persons', ['owner_user_id' => $f->access->actor->value], 1) === []) {
+            $f->legacyPerson($f->access->actor, 'Fictional', 'Recipient');
+        }
         $config = $this->createStub(ConfigContainer::class);
         $config->method('getConfigKey')->willReturn(Key::createNewRandomKey()->saveToAsciiSafeString());
         if ($transport === null) {
@@ -193,7 +196,7 @@ final class WorkspaceOperationsTest extends TestCase
         $campaign = $campaigns->create('Fictional campus update', 'Fictional announcement for a test.');
         $actor = $f->access->actor;
         $f->sql->update('users', ['email' => 'reader@example.invalid'], ['user_id' => $actor->value]);
-        $campaigns->queue($campaign->id, [$actor]);
+        $campaigns->queue($campaign->id, [$actor], 0);
         self::assertSame('Fictional campus update', $campaigns->show($campaign->id)['subject']);
         $service = $this->operations($f, $campaigns);
         self::assertCount(1, $service->page('deliveries', $campaign->id)['items']);
@@ -245,7 +248,7 @@ final class WorkspaceOperationsTest extends TestCase
             self::assertSame('Updated fictional subject', $service->show($campaign->id)['subject']);
         }
         $f->sql->update('users', ['email' => 'reader@example.invalid'], ['user_id' => $f->access->actor->value]);
-        $service->queue($campaign->id, [$f->access->actor]);
+        $service->queue($campaign->id, [$f->access->actor], 1);
         $this->expectException(DomainException::class);
         $service->edit($campaign->id, 'Queued edit', 'Must not change queued content.', 2);
     }
@@ -282,7 +285,7 @@ final class WorkspaceOperationsTest extends TestCase
         $service = $this->campaigns($f, $transport);
         $campaign = $service->create('Fictional subject', 'Fictional body.');
         $f->sql->update('users', ['email' => 'reader@example.invalid'], ['user_id' => $f->access->actor->value]);
-        $deliveries = $service->queue($campaign->id, [$f->access->actor]);
+        $deliveries = $service->queue($campaign->id, [$f->access->actor], 0);
         self::assertFalse($service->show($campaign->id)['can_dispatch']);
         try {
             $service->dispatch($deliveries[0]);

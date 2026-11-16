@@ -4031,6 +4031,56 @@ if (
 ) {
     throw new RuntimeException('Event announcement preparation lost its private safe-content response.');
 }
+
+// The shared Communications handoff reviews minimal canonical recipients before queuing the exact draft.
+$communicationActor = $sis->access->actor;
+$communicationPeople = $sis->sql->rows('sis_persons', ['owner_user_id' => $communicationActor->value], 1);
+if ($communicationPeople === []) {
+    $communicationPerson = $sis->legacyPerson($communicationActor, 'Fictional', 'Recipient')->id->value;
+} else {
+    $communicationPerson = $communicationPeople[0]['id'];
+}
+$sis->sql->update(
+    'users',
+    ['email' => 'reader@example.invalid', 'sign_in_enabled' => 1],
+    ['user_id' => $communicationActor->value]
+);
+$communicationIdentity = $sis->sql->one('sis_person_identifiers', ['person_id' => $communicationPerson]);
+$communicationCreated = $teachingPost('/sis/campaigns/', $announcement);
+$communicationId = json_decode((string) $communicationCreated->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];
+$communicationBase = '/sis/campaigns/' . $communicationId . '/';
+$communicationPayload = ['version' => 0, 'recipients' => [['user_id' => $communicationActor->value]]];
+$communicationNoCsrf = $announcementUnverified->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $communicationBase . 'recipient-review/')
+)->withParsedBody($communicationPayload);
+if ($app->router->match($communicationNoCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('Communications review bypassed framework CSRF.');
+}
+$communicationChoices = $teachingPost(
+    '/sis/campaigns/recipients/search/',
+    ['search' => $communicationIdentity['institutional_id']]
+);
+$communicationReview = $teachingPost($communicationBase . 'recipient-review/', $communicationPayload);
+$communicationReviewBody = (string) $communicationReview->getBody();
+if (
+    $communicationChoices->getStatusCode() !== 200 || $communicationReview->getStatusCode() !== 200
+    || $communicationReview->hasHeader('phpdebugbar-id')
+    || !str_contains($communicationReview->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains($communicationReviewBody, 'reader@example.invalid')
+    || !str_contains($communicationReviewBody, $communicationPerson)
+    || $teachingPost($communicationBase . 'queue/', ['version' => 1] + $communicationPayload)->getStatusCode() !== 409
+    || $teachingPost($communicationBase . 'queue/', $communicationPayload)->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Communications lost its private, version-checked recipient review.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:communications:manage'];
+if (
+    $teachingPost('/sis/campaigns/recipients/search/', ['search' => 'Fictional'])->getStatusCode() !== 403
+    || $teachingPost($communicationBase . 'recipient-review/', $communicationPayload)->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Communications bypassed person-directory authority.');
+}
 $sis->access->staff = false;
 $sis->access->grants = ['sis:scheduling:manage', 'sis:portal:manage'];
 if ($teachingPost($publicEventBase . 'announcement/', [])->getStatusCode() !== 403) {

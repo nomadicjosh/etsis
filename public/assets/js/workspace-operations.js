@@ -609,6 +609,114 @@ window.createWorkspaceOperations = function (ui) {
         form.insertBefore(selected, form.lastElementChild);
         render();
     }
+    async function campaignRecipients(row, draft, back) {
+        const body = openDrawer("Choose recipients", "COMMUNICATIONS");
+        const selected = new Map();
+        let generation = 0, after = null, query = "", selectedPage = 0, timer;
+        const search = node("input", { type: "search", class: "form-control", id: "campaign-recipient-search",
+            maxlength: 80, autocomplete: "off", placeholder: "Name or institutional ID" });
+        const find = node("button", { type: "submit", class: "btn btn-outline-primary" }, "Find recipients");
+        const searchForm = node("form", {}, node("label", { for: search.id, class: "form-label" },
+            "Find people"), node("div", { class: "input-group" }, search, find));
+        const status = node("p", { role: "status", class: "form-text" }, "Search to find people. No directory is loaded until you search.");
+        const results = node("fieldset", {}, node("legend", { class: "h6" }, "Search results"));
+        const choices = node("div");
+        results.append(choices);
+        const more = button("More matching people", () => load(true));
+        more.hidden = true;
+        const selection = node("section", { "aria-label": "Selected recipients" });
+        const review = node("section", { hidden: true, "aria-label": "Message and recipient review" });
+        const label = person => [person.given_name, person.family_name].filter(Boolean).join(" ")
+            + (person.institutional_id ? ` · ${person.institutional_id}` : ` · Person …${person.id.slice(-6)}`);
+        const picker = node("section", {}, button("Back to message", back, "btn-link mb-3"),
+            node("p", { class: "form-text" }, "Select up to 500 people with enabled linked accounts. Review the saved message and complete recipient list before queueing. Queueing does not send mail."),
+            searchForm, status, results, more, selection);
+        const reviewButton = button("Review message and recipients", async () => {
+            const serial = ++generation;
+            const reviewed = await request(`/sis/campaigns/${row.id}/recipient-review/`, "POST", {
+                version: Number(draft.version), recipients: [...selected.keys()].map(user_id => ({ user_id })),
+            });
+            if (!body.isConnected || serial !== generation) return;
+            let page = 0;
+            const heading = node("h2", { class: "h4", tabindex: "-1" }, "Review before queueing");
+            const people = node("div");
+            const draw = () => {
+                people.replaceChildren(node("p", { role: "status" },
+                    `Recipients ${page * 20 + 1}–${Math.min((page + 1) * 20, reviewed.recipients.length)} of ${reviewed.recipients.length}`),
+                    node("ul", {}, ...reviewed.recipients.slice(page * 20, (page + 1) * 20)
+                        .map(person => node("li", { class: "private-text" }, label(person)))));
+                if (page) people.append(button("Previous reviewed recipients", () => { page--; draw(); }));
+                if ((page + 1) * 20 < reviewed.recipients.length)
+                    people.append(button("Next reviewed recipients", () => { page++; draw(); }));
+            };
+            review.replaceChildren(heading, node("h3", { class: "h5 private-text" }, reviewed.subject),
+                node("p", { class: "message-preview" }, reviewed.body), people,
+                node("p", { class: "form-text" }, "Confirming queues this exact draft revision. Current linked accounts and delivery addresses are checked again. Sending remains a separate action."),
+                button("Back to recipient selection", () => {
+                    generation++; review.hidden = true; picker.hidden = false; reviewButton.focus();
+                }), button("Confirm recipient queue", async () => {
+                    await request(`/sis/campaigns/${row.id}/queue/`, "POST", {
+                        version: reviewed.version, recipients: reviewed.recipients.map(person => ({ user_id: person.user_id })),
+                    });
+                    if (!body.isConnected) return;
+                    notify("Recipients queued. No messages have been sent.");
+                    await ui.refreshDirectory();
+                    await back();
+                }, "btn-primary"));
+            draw(); picker.hidden = true; review.hidden = false; heading.focus();
+        }, "btn-primary");
+        function renderSelection() {
+            const people = [...selected.values()];
+            selectedPage = Math.min(selectedPage, Math.max(0, Math.ceil(people.length / 20) - 1));
+            selection.replaceChildren(node("h2", { class: "h5", "aria-live": "polite" }, `${people.length} selected recipients`),
+                ...people.slice(selectedPage * 20, (selectedPage + 1) * 20).map(person =>
+                    node("div", { class: "d-flex flex-wrap align-items-center gap-2 mb-2" },
+                        node("span", { class: "private-text" }, label(person)),
+                        button(`Remove ${label(person)}`, () => {
+                            selected.delete(person.user_id); generation++;
+                            const checkbox = choices.querySelector(`[value="${person.user_id}"]`);
+                            if (checkbox) checkbox.checked = false;
+                            renderSelection();
+                        }, "btn-link btn-sm"))));
+            if (selectedPage) selection.append(button("Previous selected recipients", () => { selectedPage--; renderSelection(); }));
+            if ((selectedPage + 1) * 20 < people.length)
+                selection.append(button("Next selected recipients", () => { selectedPage++; renderSelection(); }));
+            reviewButton.disabled = !people.length;
+        }
+        async function load(append = false) {
+            if (!append) { query = search.value.trim(); after = null; }
+            const serial = ++generation;
+            if (!query) { choices.replaceChildren(); more.hidden = true; status.textContent = "Enter a name or institutional ID."; return; }
+            status.textContent = "Finding matching people…";
+            const response = await request("/sis/campaigns/recipients/search/", "POST", { search: query, after });
+            if (!body.isConnected || serial !== generation) return;
+            if (!append) choices.replaceChildren();
+            for (const person of response.items) {
+                const checkbox = node("input", { class: "form-check-input", type: "checkbox",
+                    id: `campaign-recipient-${person.id}`, value: person.user_id, checked: selected.has(person.user_id) });
+                checkbox.addEventListener("change", () => task(async () => {
+                    if (checkbox.checked) {
+                        if (selected.size >= 500) { checkbox.checked = false; throw new Error("Choose no more than 500 recipients."); }
+                        selected.set(person.user_id, person);
+                    } else selected.delete(person.user_id);
+                    generation++; renderSelection();
+                }));
+                choices.append(node("div", { class: "form-check mb-2" }, checkbox,
+                    node("label", { class: "form-check-label private-text", for: checkbox.id }, label(person))));
+            }
+            after = response.next_after;
+            more.hidden = !after;
+            status.textContent = `${response.items.length} ${append ? "more " : ""}matching people.${after ? " More matches are available." : ""}`;
+        }
+        searchForm.addEventListener("submit", event => { event.preventDefault(); clearTimeout(timer); task(() => load(), find); });
+        search.addEventListener("input", () => {
+            generation++; clearTimeout(timer); more.hidden = true;
+            timer = setTimeout(() => { if (body.isConnected && !picker.hidden) task(() => load()); }, 350);
+        });
+        picker.append(reviewButton);
+        body.append(picker, review);
+        renderSelection();
+    }
     async function campaign(body, row) {
         const data = await request(`/sis/campaigns/${row.id}/`);
         const back = () => openRecord("campaigns", row);
@@ -638,93 +746,8 @@ window.createWorkspaceOperations = function (ui) {
                     ),
                 ),
             );
-        if (data.status === "draft")
-            body.append(
-                button(
-                    "Choose recipients",
-                    async () => {
-                        const form = await flow(
-                            "Queue reviewed recipients",
-                            [
-                                [
-                                    "person_id",
-                                    "Person with sign-in access",
-                                    "lookup",
-                                    "people",
-                                ],
-                            ],
-                            `/sis/campaigns/${row.id}/queue/`,
-                            () => {
-                                if (!recipients.size)
-                                    throw new Error(
-                                        "Add at least one recipient.",
-                                    );
-                                return {
-                                    recipients: [...recipients.keys()].map(
-                                        (user_id) => ({
-                                            user_id,
-                                        }),
-                                    ),
-                                };
-                            },
-                            back,
-                            {},
-                            "Queueing stores references only. Sending is a separate deliberate action.",
-                        );
-                        form.elements.person_id.required = false;
-                        const recipients = new Map();
-                        const selected = node("div", {
-                            class: "record-section",
-                            "aria-live": "polite",
-                        });
-                        const add = button("Add recipient", async () => {
-                            const id = form.elements.person_id.value;
-                            if (!id) return;
-                            const person = (
-                                await request(`/sis/ui/people/${id}/`)
-                            ).person;
-                            if (!person.ownerUserId)
-                                throw new Error(
-                                    "Enable sign-in access on this person before adding them.",
-                                );
-                            if (recipients.size >= 500)
-                                throw new Error(
-                                    "Select no more than 500 recipients.",
-                                );
-                            recipients.set(
-                                person.ownerUserId.value,
-                                `${person.givenName} ${person.familyName}`,
-                            );
-                            render();
-                        });
-                        function render() {
-                            selected.replaceChildren(
-                                node("h3", {}, `${recipients.size} recipients`),
-                                ...[...recipients].map(([id, label]) =>
-                                    node(
-                                        "p",
-                                        {},
-                                        label,
-                                        " ",
-                                        button(
-                                            "Remove",
-                                            async () => {
-                                                recipients.delete(id);
-                                                render();
-                                            },
-                                            "btn-link",
-                                        ),
-                                    ),
-                                ),
-                            );
-                        }
-                        form.insertBefore(add, form.lastElementChild);
-                        form.insertBefore(selected, form.lastElementChild);
-                        render();
-                    },
-                    "btn-primary",
-                ),
-            );
+        if (data.status === "draft" && can("sis:person:manage"))
+            body.append(button("Choose recipients", () => campaignRecipients(row, data, back), "btn-primary"));
         if (["queued", "paused"].includes(data.status))
             body.append(
                 button(

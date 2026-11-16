@@ -4,6 +4,10 @@ window.createWorkspaceHrSetup = function (ui) {
     const { node, request, task, openDrawer, table, badge, notify } = ui;
     let currencies = [];
     let serial = 0;
+    const rateBases = [{ value: 'hourly', label: 'Hourly', period: 'Per hour' },
+        { value: 'monthly', label: 'Monthly', period: 'Per month' },
+        { value: 'annual', label: 'Annual', period: 'Per year' }];
+    const basisLabel = value => rateBases.find(item => item.value === value)?.period ?? 'Unknown rate basis';
     const title = kind => kind === 'jobs' ? 'Job definitions' : 'Pay grades';
     const button = (label, callback, style = 'btn-outline-primary') => node('button', {
         type: 'button', class: `btn ${style}`, onclick: event => task(callback, event.currentTarget),
@@ -61,7 +65,7 @@ window.createWorkspaceHrSetup = function (ui) {
         const rows = data.items.map(item => [item.code, item.title,
             kind === 'jobs' ? amount(item.rate_minor, item.currency)
                 : `${amount(item.minimum_minor, item.currency)} – ${amount(item.maximum_minor, item.currency)}`,
-            item.basis === 'hourly' ? 'Per hour' : 'Per year', badge(item.active ? 'Active' : 'Retired'),
+            basisLabel(item.basis), badge(item.active ? 'Active' : 'Retired'),
             button('Edit definition', () => edit(kind, item))]);
         body.append(rows.length ? node('div', { class: 'table-responsive', role: 'region', tabindex: '0',
             'aria-label': `${title(kind)} list` }, table(['Code', 'Title', 'Rate or range', 'Basis', 'Status', 'Action'], rows,
@@ -111,11 +115,10 @@ window.createWorkspaceHrSetup = function (ui) {
         field('active', 'Active definition', 'checkbox', record.active);
         form.append(node('h3', { class: 'h5 mt-4' }, job ? 'Pay defaults' : 'Pay range'),
             node('p', { class: 'form-text' },
-                'Amounts use the selected currency and rate basis. Hourly and annual values are never converted automatically.'));
+                'Amounts use the selected currency and rate basis. Hourly, monthly and annual values are never converted automatically.'));
         field('currency', 'Currency', 'select', record.currency, true,
             currencies.map(item => ({ value: item.code, label: item.code })));
-        field('basis', 'Rate basis', 'select', record.basis, true,
-            [{ value: 'hourly', label: 'Hourly' }, { value: 'annual', label: 'Annual' }]);
+        field('basis', 'Rate basis', 'select', record.basis, true, rateBases);
         if (job) {
             field('rate_minor', 'Default rate', 'text', record.rate_text ?? amountText(record.rate_minor, record.currency), false);
             controls.rate_minor.inputMode = 'decimal';
@@ -175,7 +178,7 @@ window.createWorkspaceHrSetup = function (ui) {
         const help = node('p', { class: 'form-text', role: 'status' });
         const unitHelp = () => {
             const places = digits(controls.currency.value);
-            help.textContent = `${controls.currency.value} uses ${places} decimal places. Changing currency or basis requires reviewing the entered amounts.`;
+            help.textContent = `${controls.currency.value} · ${basisLabel(controls.basis.value)} · ${places} decimal places. Changing currency or basis requires reviewing the entered amounts.`;
             ['rate_minor', 'minimum_minor', 'maximum_minor'].forEach(key => controls[key]?.setCustomValidity(''));
         };
         controls.currency.addEventListener('change', unitHelp);
@@ -220,5 +223,5 @@ window.createWorkspaceHrSetup = function (ui) {
         });
         body.append(form);
     }
-    return { library, amounts: { text: textAmount, format: formatAmount, parse: parseAmount } };
+    return { library, amounts: { text: textAmount, format: formatAmount, parse: parseAmount, basisLabel } };
 };

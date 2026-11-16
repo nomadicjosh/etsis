@@ -1066,6 +1066,8 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/campaigns/", [SisCampaignController::class, "create"])
         ->name("sis.campaign.create");
+    $router->post('/sis/campaigns/recipients/search/', [SisCampaignController::class, 'recipientChoices']);
+    $router->post('/sis/campaigns/{id}/recipient-review/', [SisCampaignController::class, 'reviewRecipients']);
     $router
         ->map(["POST"], "/sis/campaigns/{id}/queue/", [SisCampaignController::class, "queue"])
         ->name("sis.campaign.queue");

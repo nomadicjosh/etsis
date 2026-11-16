@@ -56,6 +56,9 @@ final class AdministrationWorkflowTest extends TestCase
 {
     private function campaigns(SisFixture $f, FictionalTransport $transport, ?AuditTrail $audit = null): CampaignService
     {
+        if ($f->sql->rows('sis_persons', ['owner_user_id' => $f->access->actor->value], 1) === []) {
+            $f->legacyPerson($f->access->actor, 'Fictional', 'Recipient');
+        }
         $config = $this->createStub(ConfigContainer::class);
         $config->method('getConfigKey')->willReturn(Key::createNewRandomKey()->saveToAsciiSafeString());
 
@@ -78,7 +81,7 @@ final class AdministrationWorkflowTest extends TestCase
         $campaign = $service->create('Example notice', 'Fictional confidential message.');
         $stored = $f->sql->one('sis_campaigns', ['id' => $campaign->id->value]);
         self::assertStringNotContainsString('Fictional', $stored['encrypted_content']);
-        $deliveries = $service->queue($campaign->id, [$f->access->actor]);
+        $deliveries = $service->queue($campaign->id, [$f->access->actor], 0);
         $queued = $f->sql->one('sis_deliveries', ['id' => $deliveries[0]->value]);
         self::assertSame(['id', 'campaign_id', 'recipient_user_id', 'status', 'version'], array_keys($queued));
         $service->pause($campaign->id, true);
@@ -104,7 +107,7 @@ final class AdministrationWorkflowTest extends TestCase
         $transport->fail = true;
         $service = $this->campaigns($f, $transport);
         $campaign = $service->create('Example notice', 'Fictional body.');
-        $id = $service->queue($campaign->id, [$f->access->actor])[0];
+        $id = $service->queue($campaign->id, [$f->access->actor], 0)[0];
         try {
             $service->dispatch($id);
             self::fail('Transport failure was not reported.');
@@ -134,7 +137,7 @@ final class AdministrationWorkflowTest extends TestCase
             $service = $this->campaigns($f, new FictionalTransport(), $audit);
             $campaign = $action === 'campaign.created' ? null : $service->create('Fictional title', 'Fictional body');
             if ($action === 'campaign.paused') {
-                $service->queue($campaign->id, [$f->access->actor]);
+                $service->queue($campaign->id, [$f->access->actor], 0);
             }
             $before = [];
             foreach (['sis_campaigns', 'sis_deliveries', 'sis_audit'] as $table) {
@@ -144,7 +147,7 @@ final class AdministrationWorkflowTest extends TestCase
                 match ($action) {
                     'campaign.created' => $service->create('Fictional title', 'Fictional body'),
                     'campaign.updated' => $service->edit($campaign->id, 'Changed title', 'Changed body', 0),
-                    'campaign.queued' => $service->queue($campaign->id, [$f->access->actor]),
+                    'campaign.queued' => $service->queue($campaign->id, [$f->access->actor], 0),
                     'campaign.paused' => $service->pause($campaign->id, true),
                 };
                 self::fail('A campaign change survived removed access.');
@@ -165,7 +168,7 @@ final class AdministrationWorkflowTest extends TestCase
             $transport = new FictionalTransport();
             $service = $this->campaigns($f, $transport);
             $campaign = $service->create('Fictional title', 'Fictional body');
-            $delivery = $service->queue($campaign->id, [$f->access->actor])[0];
+            $delivery = $service->queue($campaign->id, [$f->access->actor], 0)[0];
             $transport->onReady = static function () use ($f, $change, $other): void {
                 if ($change === 'actor') {
                     $f->access->actor = $other;
@@ -203,7 +206,7 @@ final class AdministrationWorkflowTest extends TestCase
         $transport = new FictionalTransport();
         $service = $this->campaigns($f, $transport);
         $campaign = $service->create('Fictional title', 'Fictional body');
-        $delivery = $service->queue($campaign->id, [$f->access->actor])[0];
+        $delivery = $service->queue($campaign->id, [$f->access->actor], 0)[0];
         $transport->afterSend = static function () use ($f): void {
             $f->access->staff = false;
         };

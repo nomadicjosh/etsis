@@ -3,12 +3,13 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 const employee = id(1), jobId = id(4), gradeId = id(5);
 
-async function setup(page) {
+async function setup(page, basis = 'hourly') {
     const state = { positions: [], calls: [], errors: [], reject: true };
     const job = { id: jobId, code: 'LIB.ASST', title: '<script>Fictional library assistant</script>', currency: 'USD',
-        basis: 'hourly', active: true, pay_grade_id: gradeId, rate_minor: 2500, weekly_minutes: 2250, version: 0 };
-    const grade = { id: gradeId, code: 'H.1', title: 'Fictional hourly band', currency: 'USD', basis: 'hourly',
-        minimum_minor: 1500, maximum_minor: 5000, active: true, version: 0 };
+        basis, active: true, pay_grade_id: gradeId, rate_minor: basis === 'monthly' ? 450050 : 2500, weekly_minutes: 2250, version: 0 };
+    const grade = { id: gradeId, code: 'H.1', title: 'Fictional pay band', currency: 'USD', basis,
+        minimum_minor: basis === 'monthly' ? 300000 : 1500,
+        maximum_minor: basis === 'monthly' ? 800000 : 5000, active: true, version: 0 };
     const profile = { id: employee, person_id: id(2), given_name: 'Alex', family_name: 'Example',
         institutional_id: 'S-EXAMPLE', job_title: 'Fictional librarian', active: true, is_self: false,
         revision: 'fictional-employment-revision', earlier_history_unknown: true };
@@ -77,6 +78,27 @@ async function draft(page, from = '2026-09-01') {
     await page.getByLabel('Agreed rate', { exact: true }).fill('27.50');
     await page.getByLabel('Reason for this agreement', { exact: true }).fill('Fictional reviewed HR decision');
 }
+
+test('monthly position agreements retain and display monthly amounts throughout review and history', async ({ page }) => {
+    const state = await setup(page, 'monthly');
+    state.reject = false;
+    await page.getByRole('button', { name: 'Record position assignment', exact: true }).click();
+    await page.getByLabel('Job definition', { exact: true }).selectOption(jobId);
+    await expect(page.getByLabel('Agreed rate', { exact: true })).toHaveValue('4500.50');
+    await expect(page.locator('#drawer-body')).toContainText('Per month');
+    await page.getByLabel('From date', { exact: true }).fill('2026-09-01');
+    await page.getByLabel('Agreed rate', { exact: true }).fill('4600.25');
+    await page.getByLabel('Reason for this agreement', { exact: true }).fill('Fictional monthly agreement');
+    await page.getByRole('button', { name: 'Review assignment', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('per month');
+    await page.getByRole('button', { name: 'Confirm assignment', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('per month');
+    expect(state.positions[0]).toMatchObject({ rate_minor: 460025, weekly_minutes: 2250,
+        job: { basis: 'monthly' }, grade: { basis: 'monthly' } });
+    await accessible(page);
+    expect(state.errors).toEqual([]);
+    expect(state.calls.filter(call => call.path.endsWith('/assign/'))[0].data.rate_minor).toBe(460025);
+});
 
 test('recording, rejected confirmation and later term changes share one private accessible workflow', async ({ page }) => {
     const state = await setup(page);

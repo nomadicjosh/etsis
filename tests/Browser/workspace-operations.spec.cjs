@@ -123,10 +123,14 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
             starts_on: '2026-01-01', ends_on: null, credits_milli: 3000, awarded_grade: 'TR', points_milli: 0,
             counts_gpa: 0, passes: 1, minimum_grade_rank: 2, revision: 'fictional-transfer-revision',
         };
+        else if (path === `/sis/transfer-equivalencies/${equivalency}/course-versions/`) result = {
+            items: [{ version_id: id('21'), version: 1, code: 'CS.101', transcript_title: 'Computing', credits_milli: 3000 }], next_cursor: null };
         else if (path.endsWith('/awards/')) result = { items: [], next_after: null };
         else if (path === '/sis/journals/') result = { id: journal };
         else if (path === `/sis/journals/${journal}/`) result = { reference: 'FICT-J1', currency: 'USD', reversed: false, lines: [] };
-        else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', status: campaignStatus, can_dispatch: true };
+        else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', status: campaignStatus, version: 0, can_dispatch: true };
+        else if (path === '/sis/campaigns/recipients/search/') result = { items: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
+        else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = { subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', version: 0, recipients: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }] };
         else if (path === `/sis/campaigns/${campaign}/queue/`) { campaignStatus = 'queued'; result = { delivery_ids: [delivery] }; }
         else if (path === `/sis/ui/people/${person}/`) result = { person: { givenName: 'Alex', familyName: 'Example', ownerUserId: { value: user } } };
         else if (path === `/sis/ui/context/deliveries/${campaign}/`) result = { items: campaignStatus === 'draft' ? [] : [{ id: delivery, recipient_user_id: user, status: 'queued' }], next_after: null };
@@ -164,20 +168,97 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await page.getByLabel('Posting term').selectOption(term);
     await page.getByLabel('External course completion date').fill('2026-05-10');
     await page.getByLabel('External grade rank').fill('3');
+    await page.getByLabel('Accepted institutional course publication').selectOption(id('21'));
     await page.getByRole('button', { name: 'Confirm transfer award', exact: true }).click();
     await expect.poll(() => sent.find(item => item.path === '/sis/transfer-awards/')?.payload).toMatchObject({ student_id: student, equivalency_id: equivalency, institution_id: institution, term_id: term, grade_rank: 3, revision: 'fictional-transfer-revision' });
     await close(); await nav('campaigns');
     await page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional announcement');
     await page.getByRole('button', { name: 'Choose recipients', exact: true }).click();
-    await page.getByLabel('Person with sign-in access').selectOption(person);
-    await page.getByRole('button', { name: 'Add recipient', exact: true }).click();
-    await page.getByRole('button', { name: 'Queue reviewed recipients', exact: true }).click();
-    await expect.poll(() => sent.find(item => item.path.endsWith('/queue/'))?.payload).toEqual({ recipients: [{ user_id: user }] });
+    await page.getByLabel('Find people', { exact: true }).fill('Alex');
+    await page.getByRole('button', { name: 'Find recipients', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Alex Example · S-FICTIONAL', exact: true }).check();
+    await page.getByRole('button', { name: 'Review message and recipients', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm recipient queue', exact: true }).click();
+    await expect.poll(() => sent.find(item => item.path.endsWith('/queue/'))?.payload).toEqual({ version: 0, recipients: [{ user_id: user }] });
     expect(sent.some(item => item.path.endsWith('/dispatch/'))).toBe(false);
     await page.getByRole('button', { name: 'Review and send', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm send to this recipient', exact: true }).click();
     await expect.poll(() => sent.filter(item => item.path === `/sis/deliveries/${delivery}/dispatch/`).length).toBe(1);
+    expect(errors).toEqual([]);
+});
+
+test('recipient review keeps selections across search pages and ignores superseded responses', async ({ page }) => {
+    const id = n => String(n).padStart(26, '0'), campaign = id(900);
+    const alex = { id: id(1), user_id: id(101), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-001' };
+    const sam = { id: id(2), user_id: id(102), given_name: 'Sam', family_name: 'Example', institutional_id: 'S-002' };
+    const calls = [], errors = [];
+    let releaseSearch, releaseReview, reviewCount = 0, queued = false;
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname, raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
+        let result = { items: [], next_after: null };
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === '/sis/ui/data/campaigns/') result.items = [{ id: campaign, status: queued ? 'queued' : 'draft' }];
+        else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, version: 2, status: queued ? 'queued' : 'draft',
+            subject: 'Fictional <img> invitation', body: 'Fictional reviewed message.', can_dispatch: false };
+        else if (path === '/sis/campaigns/recipients/search/') {
+            if (data.search === 'Delayed') {
+                await new Promise(resolve => { releaseSearch = resolve; });
+                result = { items: [{ ...sam, given_name: 'Stale' }], next_after: null };
+            } else result = data.after ? { items: [sam], next_after: null } : { items: [alex], next_after: alex.id };
+        } else if (path === `/sis/campaigns/${campaign}/recipient-review/`) {
+            if (++reviewCount === 1) await new Promise(resolve => { releaseReview = resolve; });
+            result = { subject: 'Fictional <img> invitation', body: 'Fictional reviewed message.', version: 2,
+                recipients: [alex, sam].filter(person => data.recipients.some(selected => selected.user_id === person.user_id)) };
+        } else if (path === `/sis/campaigns/${campaign}/queue/`) { queued = true; result = { delivery_ids: [id(901)] }; }
+        await route.fulfill({ json: result });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="campaigns"]').click();
+    await page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Choose recipients', exact: true }).click();
+    expect(calls.some(call => call.path === '/sis/campaigns/recipients/search/')).toBe(false);
+    const search = page.getByLabel('Find people', { exact: true });
+    await search.fill('Delayed');
+    await page.getByRole('button', { name: 'Find recipients', exact: true }).click();
+    await expect.poll(() => !!releaseSearch).toBe(true);
+    await search.fill('Alex');
+    await page.getByRole('checkbox', { name: 'Alex Example · S-001', exact: true }).check();
+    releaseSearch();
+    await expect(page.getByRole('checkbox', { name: /Stale/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'More matching people', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Sam Example · S-002', exact: true }).check();
+    await expect(page.getByRole('region', { name: 'Selected recipients' })).toContainText('2 selected recipients');
+    await page.getByRole('button', { name: 'Review message and recipients', exact: true }).click();
+    await expect.poll(() => !!releaseReview).toBe(true);
+    await page.getByRole('checkbox', { name: 'Alex Example · S-001', exact: true }).uncheck();
+    releaseReview();
+    const reviewButton = page.getByRole('button', { name: 'Review message and recipients', exact: true });
+    await expect(reviewButton).toBeEnabled();
+    await expect(page.getByRole('region', { name: 'Message and recipient review' })).not.toBeVisible();
+    await reviewButton.click();
+    const review = page.getByRole('region', { name: 'Message and recipient review' });
+    await expect(review).toContainText('Recipients 1–1 of 1');
+    await expect(review).toContainText('Sam Example · S-002');
+    await expect(review.locator('img')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Review before queueing', exact: true })).toBeFocused();
+    const AxeBuilder = require('@axe-core/playwright').default;
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations).toEqual([]);
+    await page.setViewportSize({ width: 320, height: 900 });
+    // Fractional offcanvas sizing can round its scroll extent up by one CSS pixel.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.getByRole('button', { name: 'Back to recipient selection', exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await reviewButton.click();
+    await page.getByRole('button', { name: 'Confirm recipient queue', exact: true }).click();
+    await expect.poll(() => queued).toBe(true);
+    expect(calls.find(call => call.path.endsWith('/queue/')).data).toEqual({ version: 2, recipients: [{ user_id: sam.user_id }] });
+    expect(calls.some(call => call.path.includes('/sis/ui/people/') || call.path.endsWith('/dispatch/'))).toBe(false);
+    expect(calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(errors).toEqual([]);
 });
 

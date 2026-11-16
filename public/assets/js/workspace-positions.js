@@ -9,7 +9,7 @@ window.createWorkspacePositions = function (ui) {
     const grid = (headers, rows, label) => node('div', { class: 'table-responsive', role: 'region', tabindex: '0',
         'aria-label': label }, table(headers, rows, label));
     const rate = p => `${amounts.format(p.rate_minor, p.currency ?? p.job.currency, p.currency_digits)} ${
-        (p.basis ?? p.job.basis) === 'hourly' ? 'per hour' : 'per year'}`;
+        amounts.basisLabel(p.basis ?? p.job.basis).toLowerCase()}`;
     const workload = minutes => minutes == null ? 'Not set' : `${Math.floor(minutes / 60)}h ${minutes % 60}m per week`;
     const status = (p, today) => p.voided ? 'Voided' : p.valid_from > today ? 'Scheduled'
         : p.valid_through && p.valid_through < today ? 'Ended' : 'Current';
@@ -153,7 +153,7 @@ window.createWorkspacePositions = function (ui) {
             controls.weekly_hours.value = minutes == null ? '' : Math.floor(minutes / 60);
             controls.extra_minutes.value = minutes == null ? '' : minutes % 60;
             source.append(node('h3', { class: 'h5 private-text' }, `${job.code} · ${job.title}`),
-                node('p', {}, `${job.currency} · ${job.basis === 'hourly' ? 'Per hour' : 'Per year'} · ${places} decimal places`),
+                node('p', {}, `${job.currency} · ${amounts.basisLabel(job.basis)} · ${places} decimal places`),
                 node('p', { class: 'form-text' }, grade
                     ? `Pay grade ${grade.code}: ${amounts.format(grade.minimum_minor, job.currency, places)} through ${amounts.format(grade.maximum_minor, job.currency, places)}.`
                     : 'This job has no pay grade.'));
@@ -176,7 +176,8 @@ window.createWorkspacePositions = function (ui) {
                 reason: controls.reason.value, replaces_id: previous?.id ?? null, replaced_version: previous?.version ?? null };
             confirmation.replaceChildren(node('h3', { class: 'h5' }, 'Review position agreement'),
                 grid(['Job', 'From', 'Through', 'Agreed rate', 'Workload'], [[`${selected.job.code} · ${selected.job.title}`, payload.valid_from,
-                    payload.valid_through || 'Open ended', `${amounts.format(rateMinor, selected.job.currency, selected.digits)} ${selected.job.basis}`,
+                    payload.valid_through || 'Open ended', rate({ rate_minor: rateMinor,
+                        job: selected.job, currency_digits: selected.digits }),
                     workload(minutes)]], 'Reviewed position agreement'),
                 node('p', { class: 'form-text' }, previous ? `Previous assignment closes the day before ${payload.valid_from}.`
                     : 'The reviewed job and pay-grade definitions will be retained with this agreement.'),

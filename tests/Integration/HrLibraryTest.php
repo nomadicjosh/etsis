@@ -150,7 +150,7 @@ final class HrLibraryTest extends TestCase
             self::assertSame($digits, $options[$code]);
         }
         foreach (
-            [['USD', 'monthly', 0, 1], ['ZZZ', 'annual', 0, 1], ['USD', 'annual', 5, 1],
+            [['USD', 'weekly', 0, 1], ['ZZZ', 'annual', 0, 1], ['USD', 'annual', 5, 1],
             ['USD', 'annual', -1, 1], ['USD', 'annual', 0, 2000000001]] as [$currency, $basis, $min, $max]
         ) {
             try {
@@ -162,6 +162,68 @@ final class HrLibraryTest extends TestCase
         }
         $this->expectException(ValidationException::class);
         new JobDefinition(EntityId::generate(), 'JOB', 'Fictional job', 'USD', 'hourly', true, weeklyMinutes: 10081);
+    }
+
+    public function testMonthlyGradesAndJobsRetainExactRatesAndRequireMatchingUnits(): void
+    {
+        $s = new SisFixture();
+        $service = $s->hrLibrary();
+        $before = $s->sql->rows('sis_history_events');
+        $grade = new PayGrade(
+            EntityId::generate(),
+            'M.1',
+            'Fictional monthly grade',
+            'USD',
+            'monthly',
+            300000,
+            800000,
+            true
+        );
+        $service->save($grade, null);
+        $job = new JobDefinition(
+            EntityId::generate(),
+            'MONTHLY',
+            'Fictional monthly job',
+            'USD',
+            'monthly',
+            true,
+            $grade->id,
+            450050,
+            2250
+        );
+        $service->save($job, null);
+        self::assertSame('monthly', $service->get(HrLibraryKind::PayGrades, $grade->id)['basis']);
+        self::assertSame('monthly', $service->get(HrLibraryKind::Jobs, $job->id)['basis']);
+        self::assertSame(450050, $service->get(HrLibraryKind::Jobs, $job->id)['rate_minor']);
+        foreach (['hourly', 'annual'] as $basis) {
+            try {
+                $service->save(new JobDefinition(
+                    EntityId::generate(),
+                    strtoupper($basis),
+                    'Mismatched job',
+                    'USD',
+                    $basis,
+                    true,
+                    $grade->id,
+                    450050
+                ), null);
+                self::fail('A job with another rate basis used a monthly grade.');
+            } catch (ValidationException) {
+                self::assertCount(1, $service->page(HrLibraryKind::Jobs)['items']);
+            }
+        }
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
+        $this->expectException(ValidationException::class);
+        $service->save(new PayGrade(
+            $grade->id,
+            'M.1',
+            'Changed grade',
+            'USD',
+            'annual',
+            300000,
+            800000,
+            true
+        ), 0);
     }
     public function testSearchAndKeysetPagesAreBoundedAndNormalizeDuplicateCodes(): void
     {

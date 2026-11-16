@@ -84,7 +84,7 @@ final readonly class EmployeePosition
             || !is_string($snapshot['id']) || !is_string($snapshot['code'])
             || !is_string($snapshot['title']) || !is_string($snapshot['currency'])
             || preg_match('/^[A-Z]{3}$/D', $snapshot['currency']) !== 1
-            || !in_array($snapshot['basis'], ['hourly', 'annual'], true) || !is_bool($snapshot['active'])
+            || !in_array($snapshot['basis'], DefinitionRules::RATE_BASES, true) || !is_bool($snapshot['active'])
         ) {
             throw new CorruptHistoryException();
         }
