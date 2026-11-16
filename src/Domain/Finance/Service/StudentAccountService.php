@@ -78,7 +78,7 @@ final readonly class StudentAccountService
                 $this->commands->assertPosition($account->playhead(), $position);
             }
             $this->commands->assertActor($actor, 'sis:finance:post');
-            $account->post($operationId, $type, $amount, $actor);
+            $account->post($operationId, $type, $amount, $actor, staffRecorded: true);
             if (!$existing) {
                 $this->accounts->save($account, $this->commands->context($actor, $operationId, $reason));
                 $this->audit->record($actor, 'account.entry_posted', $operationId);

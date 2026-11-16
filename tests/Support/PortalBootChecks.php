@@ -5159,3 +5159,79 @@ if (
 ) {
     throw new RuntimeException("Registrar progress exposed finance evidence or private outcome wording.");
 }
+// Staff-recorded account corrections use the actual provider, protected journal and native CSRF.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$correctionStatementPath = "/sis/accounts/" . $financeEvidenceAccount . "/";
+$correctionStatement = json_decode((string) $financeEvidenceGet($correctionStatementPath)->getBody(), true);
+$correctionPath = $correctionStatementPath . "entries/" . $financeEvidencePosting . "/correction/";
+$correctionBefore = $sis->sql->rows("sis_history_events");
+$correctionInvalid = $teachingPost($correctionPath . "review/", [
+    "amount_minor" => 100,
+    "currency" => $correctionStatement["currency"],
+    "position" => $correctionStatement["position"],
+    "reason" => "An unchanged amount needs a useful field error.",
+]);
+if (
+    $correctionInvalid->getStatusCode() !== 422 ||
+    !str_contains((string) $correctionInvalid->getBody(), "different positive amount")
+) {
+    throw new RuntimeException("Correction validation did not explain the unchanged amount safely.");
+}
+
+$correctionReviewResponse = $teachingPost($correctionPath . "review/", [
+    "amount_minor" => 125,
+    "currency" => $correctionStatement["currency"],
+    "position" => $correctionStatement["position"],
+    "reason" => "Native fictional reviewed amount correction.",
+]);
+$correctionReview = json_decode((string) $correctionReviewResponse->getBody(), true);
+if (
+    $correctionReviewResponse->getStatusCode() !== 200 ||
+    !isset($correctionReview["review_token"]) ||
+    $sis->sql->rows("sis_history_events") !== $correctionBefore ||
+    $correctionReviewResponse->hasHeader("phpdebugbar-id") ||
+    !str_contains($correctionReviewResponse->getHeaderLine("Cache-Control"), "no-store")
+) {
+    throw new RuntimeException("Native amount correction review changed money or lost privacy.");
+}
+$correctionCompleted = $teachingPost($correctionPath . "commit/", [
+    "review_token" => $correctionReview["review_token"],
+    "amount_minor" => 999999,
+    "currency" => "XXX",
+    "actor_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
+]);
+$correctionResult = json_decode((string) $correctionCompleted->getBody(), true);
+$correctionStatementAfter = json_decode((string) $financeEvidenceGet($correctionStatementPath)->getBody(), true);
+$correctionAfter = $sis->sql->rows("sis_history_events");
+$correctionReplacement = array_values(
+    array_filter(
+        $correctionStatementAfter["entries"],
+        static fn(array $entry): bool => $entry["operation_id"] === ($correctionResult["operation_id"] ?? null),
+    ),
+);
+if (
+    $correctionCompleted->getStatusCode() !== 200 ||
+    count($correctionAfter) !== count($correctionBefore) + 1 ||
+    ($correctionReplacement[0]["minor"] ?? null) !== 125 ||
+    ($correctionReplacement[0]["corrects_operation_id"] ?? null) !== $financeEvidencePosting ||
+    $correctionStatementAfter["balance_minor"] !== $correctionStatement["balance_minor"] - 25 ||
+    json_decode(
+        (string) $teachingPost($correctionPath . "commit/", [
+            "review_token" => $correctionReview["review_token"],
+        ])->getBody(),
+        true,
+    ) !== $correctionResult ||
+    $sis->sql->rows("sis_history_events") !== $correctionAfter
+) {
+    throw new RuntimeException("Native correction lost its reviewed amount, source link or original retry.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:finance:post"];
+if (
+    $teachingPost($correctionPath . "commit/", [
+        "review_token" => $correctionReview["review_token"],
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("A native correction retry bypassed independent financial read authority.");
+}

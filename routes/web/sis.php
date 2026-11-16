@@ -29,6 +29,16 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/accounts/{id}/entries/", [SisFinanceController::class, "post"])
         ->name("sis.accounts.post");
     $router
+        ->post('/sis/accounts/{id}/entries/{operation}/correction/review/', [
+            SisFinanceController::class, 'reviewCorrection',
+        ])
+        ->name('sis.accounts.correction.review');
+    $router
+        ->post('/sis/accounts/{id}/entries/{operation}/correction/commit/', [
+            SisFinanceController::class, 'commitCorrection',
+        ])
+        ->name('sis.accounts.correction.commit');
+    $router
         ->map(["POST"], "/sis/persons/", [SisAdmissionsController::class, "createPerson"])
         ->name("sis.persons.create");
     $router

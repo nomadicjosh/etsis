@@ -7,6 +7,7 @@ namespace Infrastructure\Projection;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Event\AccountEntryWasPosted;
+use Domain\Finance\Event\AccountEntryWasCorrected;
 use Domain\Finance\Event\AccountEntryWasReversed;
 use Domain\Finance\Event\StudentAccountWasOpened;
 use Domain\Finance\StudentAccount;
@@ -36,6 +37,19 @@ final readonly class SqlAccountBalanceProjection
         $changes = array_fill_keys(array_values(self::ENTRY_TOTALS), 0);
         foreach ($events as $event) {
             if ($event instanceof StudentAccountWasOpened) {
+                continue;
+            }
+            if ($event instanceof AccountEntryWasCorrected) {
+                $p = $event->payload();
+                $source = $account->entry(new \Domain\Shared\ValueObject\EntityId($p['source_operation_id']));
+                $replacement = $account->entry(new \Domain\Shared\ValueObject\EntityId($p['operation_id']));
+                if ($source === null || $replacement === null || $source['type'] !== $replacement['type']) {
+                    throw new CorruptHistoryException();
+                }
+                $difference = $replacement['minor'] - $source['minor'];
+                $delta += $source['type'] === EntryType::Payment->value ? -$difference : $difference;
+                $column = self::ENTRY_TOTALS[$source['type']] ?? throw new CorruptHistoryException();
+                $changes[$column] += $difference;
                 continue;
             }
             if (!$event instanceof AccountEntryWasPosted && !$event instanceof AccountEntryWasReversed) {

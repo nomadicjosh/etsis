@@ -361,6 +361,130 @@ window.createWorkspaceOperations = function (ui) {
             form.prepend(balance, refresh);
             return form;
         }
+        async function correctAmount(item) {
+            const correctionBody = openDrawer("Correct a recorded amount", "STUDENT ACCOUNT");
+            const descriptors = [
+                ["amount_minor", `Corrected amount (${data.currency})`, "money"],
+                ["reason", "Reason for amount correction", "textarea"],
+            ];
+            const form = await buildForm(descriptors);
+            form.dataset.currency = data.currency;
+            form.dispatchEvent(new Event("change"));
+            const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review amount correction");
+            const preview = node("section", {
+                class: "record-section",
+                "aria-label": "Reviewed amount correction",
+                hidden: true,
+            });
+            let reviewed = null,
+                confirming = false,
+                revision = 0;
+            const clear = () => {
+                revision++;
+                reviewed = null;
+                preview.hidden = true;
+                preview.replaceChildren();
+            };
+            form.addEventListener("input", clear);
+            form.addEventListener("change", clear);
+            const base = `/sis/accounts/${row.id}/entries/${item.operation_id}/correction/`;
+            form.append(submit);
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                task(async () => {
+                    if (confirming || !form.reportValidity()) return;
+                    clear();
+                    const values = formData(form, descriptors),
+                        signature = JSON.stringify(values),
+                        epoch = revision;
+                    const result = await request(`${base}review/`, "POST", {
+                        ...values,
+                        currency: data.currency,
+                        position: data.position,
+                    });
+                    if (
+                        !form.isConnected ||
+                        epoch !== revision ||
+                        signature !== JSON.stringify(formData(form, descriptors))
+                    )
+                        return;
+                    reviewed = result;
+                    preview.hidden = false;
+                    preview.replaceChildren(
+                        node("h3", { class: "h5" }, "Review before confirming"),
+                        node(
+                            "p",
+                            {},
+                            `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `Account balance: ${money(result.balance_minor, result.currency)} → ${money(result.resulting_balance_minor, result.currency)}`,
+                        ),
+                        node("p", { class: "text-break", style: "white-space: pre-wrap" }, result.reason),
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            "The original entry remains as reversed and links to its replacement. This corrects the account record only; no payment or refund is sent. Review expires in 20 minutes.",
+                        ),
+                        button(
+                            "Confirm amount correction",
+                            async () => {
+                                if (confirming || !reviewed) return;
+                                const accepted = reviewed;
+                                confirming = true;
+                                form.querySelectorAll("input, textarea, button").forEach(
+                                    (control) => (control.disabled = true),
+                                );
+                                try {
+                                    await request(`${base}commit/`, "POST", { review_token: accepted.review_token });
+                                    await back();
+                                } finally {
+                                    confirming = false;
+                                    if (form.isConnected)
+                                        form.querySelectorAll("input, textarea, button").forEach(
+                                            (control) => (control.disabled = false),
+                                        );
+                                }
+                            },
+                            "btn-primary",
+                        ),
+                    );
+                }, submit);
+            });
+            correctionBody.append(
+                button("Back to account statement", back, "btn-link"),
+                node(
+                    "p",
+                    {},
+                    `${data.institutional_id} · ${item.type} · ${money(item.minor, item.currency)} · ${item.operation_id.slice(-8)}`,
+                ),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Correct a staff-recorded amount in its original billing account and currency. The transaction type stays the same.",
+                ),
+                button("Refresh account balance", async () => {
+                    if (confirming) return;
+                    clear();
+                    const latest = await request(`/sis/accounts/${row.id}/`);
+                    if (!form.isConnected) return;
+                    data.position = latest.position;
+                    data.balance_minor = latest.balance_minor;
+                    preview.hidden = false;
+                    preview.replaceChildren(
+                        node(
+                            "p",
+                            { role: "status" },
+                            `Current balance: ${money(latest.balance_minor, latest.currency)}. Review the correction again.`,
+                        ),
+                    );
+                }),
+                form,
+                preview,
+            );
+        }
         const actions = section("Transactions");
         body.append(actions);
         if (can("sis:finance:post"))
@@ -395,15 +519,35 @@ window.createWorkspaceOperations = function (ui) {
             entries.replaceChildren(
                 scrollTable(
                     ["Entry", "Reference", "Amount", "Status", "Correction"],
-                    data.entries
-                        .slice(offset, offset + 25)
-                        .map((item) => [
-                            item.type,
+                    data.entries.slice(offset, offset + 25).map((item) => [
+                        item.type,
+                        node(
+                            "div",
+                            {},
                             node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
-                            money(item.minor, item.currency),
-                            item.reversed ? "Reversed" : "Posted",
-                            !item.reversed && can("sis:finance:post")
-                                ? button("Reverse entry", () =>
+                            item.corrects_operation_id
+                                ? node(
+                                      "p",
+                                      { class: "form-text mb-0" },
+                                      `Corrects ${item.corrects_operation_id.slice(-8)}`,
+                                  )
+                                : null,
+                            item.corrected_by_operation_id
+                                ? node(
+                                      "p",
+                                      { class: "form-text mb-0" },
+                                      `Corrected by ${item.corrected_by_operation_id.slice(-8)}`,
+                                  )
+                                : null,
+                        ),
+                        money(item.minor, item.currency),
+                        item.reversed ? "Reversed" : "Posted",
+                        !item.reversed && can("sis:finance:post")
+                            ? node(
+                                  "div",
+                                  { class: "d-flex flex-wrap gap-2" },
+                                  item.can_correct_amount ? button("Correct amount", () => correctAmount(item)) : null,
+                                  button("Reverse entry", () =>
                                       accountFlow(
                                           "Confirm entry reversal",
                                           [["reason", "Reason for reversal", "textarea"]],
@@ -411,9 +555,10 @@ window.createWorkspaceOperations = function (ui) {
                                           null,
                                           "Enter why this posting must be reversed. The original entry remains in the financial history. Reload the statement if another transaction changes this account.",
                                       ),
-                                  )
-                                : "—",
-                        ]),
+                                  ),
+                              )
+                            : "—",
+                    ]),
                     "Account entries",
                 ),
                 node(

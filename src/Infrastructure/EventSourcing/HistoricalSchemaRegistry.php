@@ -372,6 +372,10 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Finance\StudentAccount::class,
                 "fields" => ["operation_id", "actor_id"],
             ],
+            \Domain\Finance\Event\AccountEntryWasCorrected::class => [
+                'type' => 'student_account', 'root' => \Domain\Finance\StudentAccount::class,
+                'fields' => ['source_operation_id', 'operation_id', 'minor', 'currency', 'actor_id', 'review_hash'],
+            ],
             \Domain\Finance\Event\BillingRuleWasDefined::class => [
                 "type" => "billing_rule",
                 "root" => \Domain\Finance\BillingRule::class,
@@ -451,6 +455,13 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if (
+                $class === \Domain\Finance\Event\AccountEntryWasCorrected::class
+                && (!is_string($payload['review_hash'] ?? null)
+                    || preg_match('/^[a-f0-9]{64}$/D', $payload['review_hash']) !== 1)
+            ) {
+                throw new CorruptHistoryException();
+            }
             if ($class === \Domain\Student\Event\RestrictionOfficeWasChanged::class) {
                 \Domain\Student\PersonRestrictions::validateHandoff($payload);
             }
@@ -813,6 +824,12 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'staff_recorded') {
+                    if ($class !== \Domain\Finance\Event\AccountEntryWasPosted::class || $value !== true) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === "schema_version" && $value === $version) {
                     continue;
                 }
