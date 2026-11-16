@@ -28,6 +28,8 @@ The first [course-publication slice](course-publication.md) retains reviewed def
 
 [Student-account commands](workflow-review.md#account-postings-and-corrections) now pass explicit trusted actor, effective time, correlation, cause and protected reason to that same journal. Manual postings/reversals check the displayed account position, current authority and required audit atomically; registration/drop/batch/verified-checkout callers supply their own originating context. [Billing-rule and journal commands](workflow-review.md#billing-rules-and-ledger-journals) now share that writer and its command checks, with stable creation IDs and reasoned, position-checked retirement/reversal. Existing Codefy event classes, identities, playheads and receipts remain unchanged. Earlier framework context gaps remain unknown; broader financial policies and operational rebuild acceptance still require work.
 
+Billing-rule lookup now uses reconstructible fields in its existing metadata table, updated with its event and receipt. Ordinary fifty-record searches read labels, amounts and status through SQL, without decryption/replay/locks; current authority and metadata/head consistency are checked. Selected reads and consequential billing work still restore the rule and verify its projected facts. The additive migration shares the bounded financial conversion core with account balances and preserves original events/receipts. This supplies a derived lookup, without another journal or an operational repair/recovery workflow.
+
 ## Persistence boundaries
 
 | Context | Target source of truth | Read/edit boundary |

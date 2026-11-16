@@ -116,7 +116,7 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
             const dataset = path.split('/')[4];
             const rows = {
                 ledger: [{ id: ledger, code: '1000', title: 'Cash', currency: 'USD' }],
-                billing: ruleCreated ? [{ id: billingRule, short_id: 'Fictional fee' }] : [],
+                billing: ruleCreated ? [{ id: billingRule, name: 'Fictional fee', term_code: '26/FA', program_label: 'All programs', kind: 'fee', amount_decimal: '2.50', currency: 'USD', status: ruleRetired ? 'Retired' : 'Active' }] : [],
                 terms: [{ id: term, code: '26/FA' }],
                 students: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
                 transferstudents: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }],
@@ -140,7 +140,7 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
         else if (path === `/sis/journals/${journal}/`) result = { reference: 'FICT-J1', currency: 'USD', position: journalReversed ? 2 : 1, reversed: journalReversed, lines: [] };
         else if (path === '/sis/billing-rules/') { ruleCreated = true; result = { id: billingRule }; }
         else if (path === `/sis/billing-rules/${billingRule}/retire/`) { ruleRetired = true; result = { status: 'retired' }; }
-        else if (path === `/sis/billing-rules/${billingRule}/`) result = { name: 'Fictional fee', kind: 'fee', amount_minor: 250, currency: 'USD', position: ruleRetired ? 2 : 1, retired: ruleRetired };
+        else if (path === `/sis/billing-rules/${billingRule}/`) result = { name: 'Fictional fee', kind: 'fee', amount_minor: 250, amount_decimal: '2.50', currency: 'USD', position: ruleRetired ? 2 : 1, retired: ruleRetired };
         else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', status: campaignStatus, version: 0, can_dispatch: true };
         else if (path === '/sis/campaigns/recipients/search/') result = { items: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = { subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', version: 0, recipients: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }] };
@@ -169,6 +169,7 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await page.getByRole('button', { name: 'Post a journal', exact: true }).click();
     await page.getByLabel('Unique journal reference').fill('FICT-J1');
     await page.getByLabel('Posting date').fill('2026-11-07');
+    await expect(page.locator('#drawer-body').getByRole('combobox', { name: /^Currency/ }).locator('option[value="KWD"]')).toHaveCount(1);
     await page.getByRole('textbox', { name: /^Reason for journal/ }).fill('Fictional approved posting.');
     const accounts = page.getByLabel('Ledger account', { exact: false });
     await accounts.nth(0).selectOption(ledger); await accounts.nth(1).selectOption(ledger);
@@ -202,6 +203,10 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     await expect(page.locator('#drawer-body')).toContainText('Retired');
     expect(sent.find(item => item.path === `/sis/billing-rules/${billingRule}/retire/`).payload).toEqual({ position: 1, reason: 'Fictional retired fee.' });
     await close();
+    const billingDirectory = page.locator('#directory-results');
+    for (const label of ['Fictional fee', '26/FA', 'All programs', '2.50 USD', 'Retired']) {
+        await expect(billingDirectory).toContainText(label);
+    }
     await page.getByRole('button', { name: 'Generate student bills', exact: true }).click();
     await page.getByLabel('Billing term').selectOption(term);
     await page.getByLabel('Find a student', { exact: false }).selectOption(student);
@@ -554,3 +559,50 @@ test('final grade selection asks for the student pursuit when grading scales dif
     expect(calls.some(c=>c.path==='/sis/ui/data/grades/')).toBe(false);
     expect(errors).toEqual([]);
 });
+
+for (const scenario of [
+    { currency: 'USD', amount: '12.34', invalid: '1e3', step: '0.01' },
+    { currency: 'JPY', amount: '1234', invalid: '1.50', step: '1' },
+    { currency: 'KWD', amount: '1.234', invalid: '1.2341', step: '0.001' },
+]) {
+    test(`account entry preserves ${scenario.currency} minor units and rejects excess precision`, async ({ page }) => {
+        const account = '01K00000000000000000000081';
+        const operation = '01K00000000000000000000082';
+        const posted = []; let saved = false;
+        await page.route('**/sis/**', async route => {
+            const path = new URL(route.request().url()).pathname;
+            const raw = route.request().postData();
+            const payload = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+            let result = { items: [], next_after: null };
+            if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+            else if (path === '/sis/ui/data/accounts/') result.items = [{ id: account, given_name: 'Alex', family_name: 'Example', currency: scenario.currency }];
+            else if (path === '/sis/ui/operation-id/') result = { id: operation };
+            else if (path === `/sis/accounts/${account}/`) result = {
+                id: account, institutional_id: 'S-FICTIONAL', currency: scenario.currency,
+                balance_minor: saved ? -1234 : 0, position: saved ? 2 : 1, entries: [],
+            };
+            else if (path === `/sis/accounts/${account}/entries/`) { posted.push(payload); saved = true; result = { status: 'posted' }; }
+            await route.fulfill({ json: result });
+        });
+        await page.goto('/admin/');
+        await page.locator('.workspace-nav-link[data-workspace="accounts"]').click();
+        await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+        await page.getByRole('button', { name: 'Post a transaction', exact: true }).click();
+        await page.getByLabel('Transaction type').selectOption('payment');
+        const amount = page.getByLabel(`Amount (${scenario.currency})`);
+        await expect(amount).toHaveAttribute('step', scenario.step);
+        await amount.fill(scenario.invalid);
+        await page.getByRole('textbox', { name: /^Reason for transaction/ }).fill('Fictional currency receipt.');
+        await page.getByRole('button', { name: 'Post transaction', exact: true }).click();
+        if (scenario.currency === 'USD') {
+            await expect(page.getByText('Enter an amount using digits and a decimal point.', { exact: true })).toBeVisible();
+        } else {
+            expect(await amount.evaluate(input => input.validity.stepMismatch)).toBe(true);
+        }
+        expect(posted).toEqual([]);
+        await amount.fill(scenario.amount);
+        await page.getByRole('button', { name: 'Post transaction', exact: true }).click();
+        await expect.poll(() => posted.length).toBe(1);
+        expect(posted[0]).toMatchObject({ amount_minor: '1234', currency: scenario.currency, position: 1 });
+    });
+}

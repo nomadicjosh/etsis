@@ -26,10 +26,10 @@ final class CreateSisAccountBalances extends Migration
                 $table->foreign('id', 'sis_account_balance_fk')->references('sis_student_accounts', 'id');
             });
         }
-        new \Infrastructure\EventSourcing\AccountBalanceProjectionUpgrade(
+        new \Infrastructure\EventSourcing\FinancialProjectionUpgrade(
             $adapter->connection()->queryBuilder(),
             $this->getObjectMap()['sis.history_codec'] ?? null
-        )->run();
+        )->run('student_account');
     }
 
     public function down(): void

@@ -118,8 +118,9 @@ window.createWorkspaceOperations = function (ui) {
             "sis:finance:post",
             "/sis/billing-rules/",
             "Define a billing rule",
-            [["Rule", "short_id"]],
-            "Review immutable billing rules and generate fees for a selected student batch.",
+            [["Rule", "name"], ["Term", "term_code"], ["Program", "program_label"],
+                ["Type", "kind"], ["Amount", "billing_amount"], ["Status", "status"]],
+            "Find fees by name, term, program, currency or status. Open a rule to review or retire it; earlier charges remain unchanged.",
         ),
         ledger: definition(
             "Chart of accounts",
@@ -347,6 +348,8 @@ window.createWorkspaceOperations = function (ui) {
                 {},
                 explanation,
             );
+            form.dataset.currency = data.currency;
+            form.dispatchEvent(new Event('change'));
             const balance = node(
                 "p",
                 { role: "status", class: "fw-semibold" },
@@ -498,18 +501,21 @@ window.createWorkspaceOperations = function (ui) {
                 ),
             );
             lines.append(wrapper);
+            form.dispatchEvent(new Event('change'));
         }
         function balance() {
-            const sum = [...lines.querySelectorAll('[name^="amount_"]')].reduce(
-                (result, field) =>
-                    result + Math.round(Number(field.value || 0) * 100),
-                0,
-            );
-            total.textContent = `Journal difference: ${money(sum, form.elements.currency.value)}. ${sum === 0 ? "Balanced." : "Adjust the lines before posting."}`;
+            try {
+                const sum = [...lines.querySelectorAll('[name^="amount_"]')].reduce((result, field) =>
+                    result + (field.value ? formData(form, [[field.name, "Amount", "signedmoney"]])[field.name] : 0), 0);
+                total.textContent = `Journal difference: ${money(sum, form.elements.currency.value)}. ${sum === 0 ? "Balanced." : "Adjust the lines before posting."}`;
+            } catch (error) {
+                total.textContent = error.message;
+            }
         }
         await addLine();
         await addLine();
         lines.addEventListener("input", balance);
+        form.elements.currency.addEventListener("change", balance);
         form.append(lines, button("Add journal line", addLine), total);
         const submit = node(
             "button",
@@ -561,7 +567,7 @@ window.createWorkspaceOperations = function (ui) {
                 node(
                     "p",
                     {},
-                    `${rule.kind} · ${money(rule.amount_minor, rule.currency)}`,
+                    `${rule.kind} · ${rule.amount_decimal === null ? `${rule.amount_minor} minor units` : rule.amount_decimal} ${rule.currency}`,
                 ),
             ),
         );

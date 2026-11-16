@@ -156,7 +156,16 @@ final readonly class WorkspaceService
             $owner = null;
         }
 
-        return $this->repository->records($dataset, $owner, trim($search), $after);
+        $result = $this->repository->records($dataset, $owner, trim($search), $after);
+        if ($dataset === 'billing') {
+            if (
+                $this->access->requirePermission('admin:dashboard')->value !== $actor->value
+                || $this->access->requirePermission('sis:finance:read')->value !== $actor->value
+            ) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('The financial reader changed.');
+            }
+        }
+        return $result;
     }
 
     /** @return array<string, mixed> */

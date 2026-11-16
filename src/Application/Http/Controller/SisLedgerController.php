@@ -111,6 +111,7 @@ final readonly class SisLedgerController
             'kind' => $rule->kind(),
             'term_id' => $rule->termId()->value, 'program_id' => $rule->programId()?->value,
             'amount_minor' => $rule->amount()->minor, 'currency' => $rule->amount()->currency,
+            'amount_decimal' => $rule->amount()->decimal(),
             'retired' => $rule->isRetired(), 'position' => $rule->playhead()]);
     }
 

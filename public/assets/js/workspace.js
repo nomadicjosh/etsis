@@ -9,7 +9,27 @@
     const number = value => new Intl.NumberFormat().format(Number(value || 0));
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
     const clear = element => element.replaceChildren();
-    const money = (minor, currency = 'USD') => new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / 100);
+    const currencyCodes = new Set(Intl.supportedValuesOf('currency'));
+    const currencyOptions = [...new Set(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', ...currencyCodes])];
+    const currencyDigits = currency => currencyCodes.has(currency)
+        ? new Intl.NumberFormat(undefined, { style: 'currency', currency }).resolvedOptions().maximumFractionDigits : null;
+    const money = (minor, currency = 'USD') => {
+        const digits = currencyDigits(currency);
+        return digits === null ? `${minor} minor units ${currency}`
+            : new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / 10 ** digits);
+    };
+    function moneyInput(value, currency) {
+        if (value.length > 40) throw new Error('The amount exceeds the supported limit.');
+        const digits = currencyDigits(currency);
+        if (digits === null) throw new Error('This currency needs a verified minor-unit definition before entering an amount.');
+        const parts = /^(-?)([0-9]+)(?:\.([0-9]+))?$/.exec(value);
+        if (!parts) throw new Error('Enter an amount using digits and a decimal point.');
+        const decimal = (parts[3] || '').replace(/0+$/, '');
+        if (decimal.length > digits) throw new Error(`${currency} amounts allow ${digits} decimal places.`);
+        const magnitude = BigInt(parts[2]) * 10n ** BigInt(digits) + BigInt(decimal.padEnd(digits, '0') || '0');
+        if (magnitude > 2000000000n) throw new Error('The amount exceeds the supported limit.');
+        return Number(parts[1] ? -magnitude : magnitude);
+    }
     const text = value => value == null ? '—' : String(value);
     const escapeLabel = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     let relationalStudio = null;
@@ -444,6 +464,7 @@
         if (section === 'rooms' && field === 'building_name') return row.building_name || 'Building not assigned';
         if (section === 'terms' && field === 'kind') return row.kind === 'standard' ? 'Standard' : row.kind === 'non_standard' ? 'Non-standard' : 'Classification needed';
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
+        if (field === 'billing_amount') return `${row.amount_decimal === null ? `${row.amount_minor} minor units` : row.amount_decimal} ${row.currency}`;
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
         if (field === 'status') return badge(value);
         if (field === 'account') return badge(row.owner_user_id ? 'Linked' : 'Not linked');
@@ -591,7 +612,7 @@
             let control;
             if (['lookup', 'currency', 'choice'].includes(type)) {
                 control = node('select', { class: 'form-select', id, name: key, required });
-                const values = type === 'lookup' ? await options(source) : type === 'currency' ? ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(value => ({ value, label: value })) : source.map(value => typeof value === 'object' ? value : ({ value, label: value }));
+                const values = type === 'lookup' ? await options(source) : type === 'currency' ? currencyOptions.map(value => ({ value, label: value })) : source.map(value => typeof value === 'object' ? value : ({ value, label: value }));
                 populate(control, values, required ? 'Choose…' : 'All / not specified');
                 if (type === 'currency') control.value = 'USD';
             } else if (type === 'textarea') control = node('textarea', { class: 'form-control', id, name: key, rows: 5, maxlength: 10000, required });
@@ -599,6 +620,7 @@
             else control = node('input', { class: 'form-control', id, name: key, type: ['credits', 'money', 'hundredths', 'signedmoney'].includes(type) ? 'number' : type === 'signed' ? 'number' : type, required, maxlength: 191, ...(type === 'signed' ? { min: -2000000000, max: 2000000000, step: 1 } : {}), ...(type === 'number' ? { min: 0, max: 100000, step: 1 } : {}), ...(['credits', 'money', 'hundredths', 'signedmoney'].includes(type) ? { min: type === 'signedmoney' ? -1000000 : 0, max: type === 'credits' ? 999 : 1000000, step: type === 'credits' ? '.001' : '.01', value: 0 } : {}) });
             const limits = { points_milli: [0, 10], severity: [0, 1000], course_limit: [1, 1000], minimum_grade_rank: [0, 10000], grade_rank: [0, 10000], possible_hundredths: [0.01, 10000], capacity: [1, 100000], amount_minor: [0.01, 1000000] };
             if (limits[key] && control.type === 'number') [control.min, control.max] = limits[key];
+            if (['money', 'signedmoney'].includes(type)) control.dataset.money = key === 'amount_minor' ? 'positive' : type;
             if (preset[key] !== undefined) {
                 if (type === 'checkbox') control.checked = preset[key] === true || Number(preset[key]) === 1;
                 else {
@@ -611,6 +633,15 @@
             control.addEventListener('input', () => { control.removeAttribute('aria-invalid'); control.classList.remove('is-invalid'); });
             form.append(container);
         }
+        function updateMoneyControls() {
+            const digits = currencyDigits(form.elements.namedItem('currency')?.value || form.dataset.currency || 'USD');
+            for (const input of form.querySelectorAll('[data-money]')) {
+                input.step = digits === null ? 'any' : String(10 ** -digits);
+                if (input.dataset.money === 'positive') input.min = digits === null ? '0' : String(10 ** -digits);
+            }
+        }
+        form.addEventListener('change', updateMoneyControls);
+        updateMoneyControls();
         return form;
     }
 
@@ -622,7 +653,8 @@
             if (!required && !value && type !== 'checkbox') continue;
             if (type === 'checkbox') value = element.checked;
             else if (type === 'number' || type === 'signed') value = Number(value);
-            else if (['credits', 'money', 'hundredths', 'signedmoney'].includes(type)) { const [whole, decimal = ''] = value.split('.'); const places = type === 'credits' ? 3 : 2; value = (Math.abs(Number(whole)) * 10 ** places + Number(decimal.padEnd(places, '0'))) * (whole.startsWith('-') ? -1 : 1); }
+            else if (['money', 'signedmoney'].includes(type)) value = moneyInput(value, form.elements.namedItem('currency')?.value || form.dataset.currency || 'USD');
+            else if (['credits', 'hundredths'].includes(type)) { const [whole, decimal = ''] = value.split('.'); const places = type === 'credits' ? 3 : 2; value = (Math.abs(Number(whole)) * 10 ** places + Number(decimal.padEnd(places, '0'))) * (whole.startsWith('-') ? -1 : 1); }
             else if (type === 'datetime-local') value = new Date(value).toISOString().replace('.000Z', '+00:00');
             result[key] = value;
         }

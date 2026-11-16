@@ -20,6 +20,9 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
 
     public function records(string $dataset, ?EntityId $owner, string $search, ?EntityId $after): array
     {
+        if ($dataset === 'billing') {
+            new \Infrastructure\Projection\SqlBillingRuleProjection($this->sql)->assertCurrent();
+        }
         if ($dataset === "grades") {
             $rows = array_values(
                 array_filter(
@@ -98,6 +101,19 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
         );
         $more = count($rows) === 51;
         $rows = array_slice($rows, 0, 50);
+        if ($dataset === 'billing') {
+            foreach ($rows as &$row) {
+                try {
+                    $row['amount_decimal'] = new \Domain\Finance\ValueObject\Money(
+                        (int) $row['amount_minor'],
+                        $row['currency']
+                    )->decimal();
+                } catch (InvalidArgumentException) {
+                    throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                }
+            }
+            unset($row);
+        }
 
         return ["items" => $rows, "next_after" => $more ? $rows[49]["id"] : null];
     }
@@ -300,6 +316,22 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
                 ],
             ];
         }
+        if ($dataset === 'billing') {
+            $status = "CASE WHEN r." . $q('retired') . " = 0 THEN 'Active' ELSE 'Retired' END";
+            $program = "CASE WHEN r." . $q('program_id') . " IS NULL THEN 'All programs' ELSE p." . $q('code') . ' END';
+            return [
+                $columns(['id', 'term_id', 'program_id', 'name', 'kind',
+                    'amount_minor', 'currency', 'retired', 'position'])
+                . ', t.' . $q('code') . ' AS ' . $q('term_code')
+                . ', ' . $program . ' AS ' . $q('program_label')
+                . ', p.' . $q('title') . ' AS ' . $q('program_title')
+                . ', ' . $status . ' AS ' . $q('status'),
+                $q('sis_billing_rules') . ' r JOIN ' . $q('sis_terms') . ' t ON t.' . $q('id') . ' = r.' . $q('term_id')
+                . ' LEFT JOIN ' . $q('sis_programs') . ' p ON p.' . $q('id') . ' = r.' . $q('program_id'),
+                ['r.' . $q('name'), 'r.' . $q('kind'), 'r.' . $q('currency'), 't.' . $q('code'),
+                    'p.' . $q('code'), 'p.' . $q('title'), $program, $status],
+            ];
+        }
         if ($dataset === "accounts") {
             return [
                 $columns(["id", "student_id", "term_id", "currency"]) .
@@ -446,7 +478,6 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
         ];
         $definitions += [
             "grades" => ["sis_grades", ["id", "code", "points_milli", "passes", "counts_gpa"], ["code"]],
-            "billing" => ["sis_billing_rules", ["id", "term_id", "program_id"], []],
             "ledger" => ["sis_ledger_accounts", ["id", "code", "title", "currency"], ["code", "title"]],
             "institutions" => ["sis_external_institutions", ["id", "code", "name"], ["code", "name"]],
             "external" => [

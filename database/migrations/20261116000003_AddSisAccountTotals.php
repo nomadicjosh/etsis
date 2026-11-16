@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Infrastructure\EventSourcing\AccountBalanceProjectionUpgrade;
+use Infrastructure\EventSourcing\FinancialProjectionUpgrade;
 use Infrastructure\Projection\SqlAccountBalanceProjection;
 use Qubus\Expressive\Migration\Adapter\ConnectionAwareMigrationAdapter;
 use Qubus\Expressive\Migration\Migration;
@@ -27,10 +27,10 @@ final class AddSisAccountTotals extends Migration
                 });
             }
         }
-        new AccountBalanceProjectionUpgrade(
+        new FinancialProjectionUpgrade(
             $adapter->connection()->queryBuilder(),
             $this->getObjectMap()['sis.history_codec'] ?? null
-        )->run();
+        )->run('student_account');
     }
 
     public function down(): void

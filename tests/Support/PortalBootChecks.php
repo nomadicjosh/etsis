@@ -4745,3 +4745,29 @@ if (
 ) {
     throw new RuntimeException('A native financial creation retry bypassed current posting authority.');
 }
+
+// The enriched financial directory remains a private, CSRF-protected, read-only query.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$billingDirectoryBefore = $sis->sql->rows('sis_history_events');
+$billingDirectoryResponse = $teachingPost('/sis/ui/data/billing/', ['search' => 'Native fictional fee', 'after' => '']);
+$billingDirectoryBody = json_decode((string) $billingDirectoryResponse->getBody(), true);
+$billingDirectoryRow = $billingDirectoryBody['items'][0] ?? [];
+if (
+    $billingDirectoryResponse->getStatusCode() !== 200
+    || ($billingDirectoryRow['name'] ?? null) !== 'Native fictional fee'
+    || ($billingDirectoryRow['status'] ?? null) !== 'Retired'
+    || ($billingDirectoryRow['amount_decimal'] ?? null) !== '2.50'
+    || ($billingDirectoryRow['program_label'] ?? null) !== 'All programs'
+    || $billingDirectoryResponse->hasHeader('phpdebugbar-id')
+    || !str_contains($billingDirectoryResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $billingDirectoryResponse->getBody(), 'Native private')
+    || $billingDirectoryBefore !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Billing lookup lost labels, privacy, read-only behavior or native provider wiring.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['admin:dashboard'];
+if ($teachingPost('/sis/ui/data/billing/', ['search' => '', 'after' => ''])->getStatusCode() !== 403) {
+    throw new RuntimeException('The financial directory bypassed its independent read permission.');
+}

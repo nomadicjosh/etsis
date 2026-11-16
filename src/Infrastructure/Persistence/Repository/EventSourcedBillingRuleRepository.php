@@ -38,6 +38,10 @@ final readonly class EventSourcedBillingRuleRepository implements BillingRuleRep
                     'term_id' => $rule->termId()->value, 'program_id' => $rule->programId()?->value]);
             }
             $this->writer->append($rule, $context);
+            new \Infrastructure\Projection\SqlBillingRuleProjection($this->sql)->advance(
+                $rule,
+                $events[0]->playhead() - 1
+            );
         });
         $rule->clearRecordedEvents();
     }
@@ -52,14 +56,23 @@ final readonly class EventSourcedBillingRuleRepository implements BillingRuleRep
         if (!$rule instanceof BillingRule) {
             throw new \LogicException('Invalid billing rule aggregate.');
         }
+        new \Infrastructure\Projection\SqlBillingRuleProjection($this->sql)->verify($rule);
 
         return $rule;
     }
 
     public function forTerm(EntityId $term): array
     {
+        new \Infrastructure\Projection\SqlBillingRuleProjection($this->sql)->assertCurrent();
         $result = [];
-        foreach ($this->sql->rows('sis_billing_rules', ['term_id' => $term->value]) as $row) {
+        $q = $this->sql->quote(...);
+        // Selected verification can lock metadata; every multi-rule decision uses the same identity order.
+        $rows = $this->sql->fetch(
+            'SELECT ' . $q('id') . ' FROM ' . $q('sis_billing_rules')
+            . ' WHERE ' . $q('term_id') . ' = ? ORDER BY ' . $q('id'),
+            [$term->value]
+        );
+        foreach ($rows as $row) {
             $rule = $this->get(new BillingRuleId($row['id']));
             if (!$rule->isRetired()) {
                 $result[] = $rule;

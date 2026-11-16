@@ -358,6 +358,9 @@ final class FinancialDefinitionCommandsTest extends TestCase
             }
             $db = $s->connection->queryBuilder();
             EventStoreFixture::framework($db)->commit(...iterator_to_array($root->getRecordedEvents()));
+            if ($root instanceof BillingRule) {
+                new \Infrastructure\Projection\SqlBillingRuleProjection($s->sql)->initialize($root);
+            }
             $oldEvents = $s->sql->rows('sis_history_events');
             $oldReceipts = $s->sql->rows('sis_history_operations');
             if ($root instanceof BillingRule) {

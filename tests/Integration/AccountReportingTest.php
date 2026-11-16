@@ -14,7 +14,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
-use Infrastructure\EventSourcing\AccountBalanceProjectionUpgrade;
+use Infrastructure\EventSourcing\FinancialProjectionUpgrade;
 use Infrastructure\EventSourcing\ProtectedEventCodec;
 use Infrastructure\Persistence\Repository\SqlRelationalReportRepository;
 use Infrastructure\Persistence\Repository\SqlReportRepository;
@@ -281,10 +281,10 @@ final class AccountReportingTest extends TestCase
         $before = $this->journal($s);
         $s->sql->update('sis_student_accounts', ['currency' => 'EUR'], ['id' => (string) $b->aggregateId()]);
         try {
-            new AccountBalanceProjectionUpgrade(
+            new FinancialProjectionUpgrade(
                 $s->connection->queryBuilder(),
                 new ProtectedEventCodec(\EventStoreFixture::config($s->connection->queryBuilder()))
-            )->run();
+            )->run('student_account');
             self::fail('A projection was invented from metadata inconsistent with the recorded opening.');
         } catch (CorruptHistoryException) {
             self::assertSame([], $s->sql->rows('sis_account_balances'));

@@ -288,9 +288,15 @@ final class WorkspaceOperationsTest extends TestCase
         $deliveries = $service->queue($campaign->id, [$f->access->actor], 0);
         self::assertFalse($service->show($campaign->id)['can_dispatch']);
         try {
-            $service->dispatch($deliveries[0]);
+            $service->dispatch(
+                $deliveries[0],
+                $campaign->id,
+                $service->show($campaign->id)['version'],
+                (int) $f->sql->one('sis_deliveries', ['id' => $deliveries[0]->value])['version']
+            );
             self::fail('Disabled mail was dispatched.');
-        } catch (DomainException) {
+        } catch (DomainException $error) {
+            self::assertSame('Delivery is disabled.', $error->getMessage());
             self::assertSame('queued', $f->sql->one('sis_deliveries', ['id' => $deliveries[0]->value])['status']);
         }
     }

@@ -13,6 +13,13 @@ final class CreateSisBillingRulesTable extends Migration
             $table->string('id', 26)->primary()->notNull();
             $table->string('term_id', 26)->notNull();
             $table->string('program_id', 26);
+            // NULL means the derived value has not been verified against recorded history.
+            $table->string('name', 191);
+            $table->string('kind', 10);
+            $table->integer('amount_minor');
+            $table->string('currency', 3);
+            $table->integer('retired');
+            $table->integer('position');
             $table->foreign('term_id', 'sis_billing_rule_term')->references('sis_terms', 'id');
             $table->foreign('program_id', 'sis_billing_rule_prog')->references('sis_programs', 'id');
         });

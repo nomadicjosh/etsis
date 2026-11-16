@@ -27,4 +27,20 @@ final readonly class Money
 
         return new self($this->minor + $other->minor, $this->currency);
     }
+
+    /** Exact ISO decimal representation; unknown precision remains unknown. */
+    public function decimal(): ?string
+    {
+        if ($this->currency === '') {
+            return null;
+        }
+        $currencies = new \Money\Currencies\ISOCurrencies();
+        $currency = new \Money\Currency($this->currency);
+        if (!$currencies->contains($currency)) {
+            return null;
+        }
+        return new \Money\Formatter\DecimalMoneyFormatter($currencies)->format(
+            new \Money\Money((string) $this->minor, $currency)
+        );
+    }
 }

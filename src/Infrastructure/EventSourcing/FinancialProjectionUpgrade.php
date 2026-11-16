@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Infrastructure\EventSourcing;
 
 use Domain\Finance\StudentAccount;
+use Domain\Finance\BillingRule;
+use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
@@ -12,31 +14,37 @@ use Domain\Shared\EventSourcing\StreamReference;
 use Infrastructure\Persistence\DatabaseUnitOfWork;
 use Infrastructure\Persistence\SqlRecords;
 use Infrastructure\Projection\SqlAccountBalanceProjection;
+use Infrastructure\Projection\SqlBillingRuleProjection;
 use Infrastructure\SystemClock;
 use LogicException;
 use Qubus\Expressive\Database;
 
-/** Offline alpha migration: derive balances from genuine protected events, without business side effects. */
-final readonly class AccountBalanceProjectionUpgrade
+/** Offline alpha migration: derive read models from genuine protected events, without business side effects. */
+final readonly class FinancialProjectionUpgrade
 {
     public function __construct(private Database $db, private ?ProtectedEventCodec $codec = null)
     {
     }
 
-    public function run(): void
+    public function run(string $type): void
     {
         $sql = new SqlRecords($this->db);
-        $accounts = $sql->rows('sis_student_accounts', [], 201);
-        $streams = $sql->rows('sis_history_streams', ['stream_type' => 'student_account'], 201);
-        if (count($accounts) > 200 || count($streams) > 200) {
+        $table = match ($type) {
+            'student_account' => 'sis_student_accounts',
+            'billing_rule' => 'sis_billing_rules',
+            default => throw new LogicException('An explicit supported financial projection is required.'),
+        };
+        $records = $sql->rows($table, [], 201);
+        $streams = $sql->rows('sis_history_streams', ['stream_type' => $type], 201);
+        if (count($records) > 200 || count($streams) > 200) {
             throw new LogicException(
-                'Account reporting migration allows 200 accounts. Plan a bounded offline conversion.'
+                'Financial projection migration allows 200 records. Plan a bounded offline conversion.'
             );
         }
-        if (count($accounts) !== count($streams)) {
+        if (count($records) !== count($streams)) {
             throw new CorruptHistoryException();
         }
-        if ($accounts === []) {
+        if ($records === []) {
             return;
         }
         if ($this->codec === null) {
@@ -50,12 +58,14 @@ final readonly class AccountBalanceProjectionUpgrade
             $this->codec,
             new HistoricalSchemaRegistry()
         );
-        $uow->run(function () use ($sql, $history, $accounts): void {
+        $uow->run(function () use ($sql, $history, $records, $table, $type): void {
             $budget = new HistoryReadBudget();
-            $projection = new SqlAccountBalanceProjection($sql);
-            foreach ($accounts as $row) {
-                $sql->lock('sis_student_accounts', $row['id'], 'id');
-                $stream = new StreamReference(new AccountId($row['id']), 'student_account');
+            foreach ($records as $row) {
+                $sql->lock($table, $row['id'], 'id');
+                $stream = new StreamReference(
+                    $type === 'student_account' ? new AccountId($row['id']) : new BillingRuleId($row['id']),
+                    $type
+                );
                 $events = [];
                 $cursor = null;
                 do {
@@ -65,9 +75,16 @@ final readonly class AccountBalanceProjectionUpgrade
                     }
                     $cursor = $page->nextCursor;
                 } while ($cursor !== null);
-                $root = StudentAccount::reconstituteFromEventStream(
-                    new \Codefy\Domain\EventSourcing\EventStream($stream->aggregateId, $events)
-                );
+                $recorded = new \Codefy\Domain\EventSourcing\EventStream($stream->aggregateId, $events);
+                if ($type === 'billing_rule') {
+                    $root = BillingRule::reconstituteFromEventStream($recorded);
+                    if (!$root instanceof BillingRule) {
+                        throw new CorruptHistoryException();
+                    }
+                    new SqlBillingRuleProjection($sql)->initialize($root);
+                    continue;
+                }
+                $root = StudentAccount::reconstituteFromEventStream($recorded);
                 if (!$root instanceof StudentAccount) {
                     throw new CorruptHistoryException();
                 }
@@ -77,7 +94,7 @@ final readonly class AccountBalanceProjectionUpgrade
                 ) {
                     throw new CorruptHistoryException();
                 }
-                $projection->initialize($root);
+                new SqlAccountBalanceProjection($sql)->initialize($root);
             }
         });
     }
