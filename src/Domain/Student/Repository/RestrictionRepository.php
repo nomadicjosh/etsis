@@ -22,6 +22,7 @@ interface RestrictionRepository
     public function queue(?array $offices, ?EntityId $after, string $search, int $limit): array;
     /** @return array<string, mixed>|null */
     public function note(EntityId $id): ?array;
+    public function noteCount(EntityId $restriction): int;
     public function addNote(
         EntityId $id,
         EntityId $restriction,

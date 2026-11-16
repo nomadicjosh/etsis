@@ -11,6 +11,9 @@ window.createWorkspaceRestrictions = function (ui) {
         table,
         badge,
         flow,
+        buildForm,
+        formData,
+        notify,
         showAudit,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
@@ -220,6 +223,12 @@ window.createWorkspaceRestrictions = function (ui) {
                     showAudit(student?.id || record.person_id, id),
                 ),
             );
+        if (record.office_id && can("sis:restrictions:handoff"))
+            body.append(
+                button("Hand off to another office", () =>
+                    handoff(id, student, record),
+                ),
+            );
         if (!record.office_id && can("admin:access:manage"))
             body.append(
                 button("Set owning office", async () => {
@@ -370,6 +379,7 @@ window.createWorkspaceRestrictions = function (ui) {
                               "Effective",
                               "Starts",
                               "Ends",
+                              "Office",
                               "Recorded",
                           ],
                           rows.map((row) => [
@@ -377,10 +387,14 @@ window.createWorkspaceRestrictions = function (ui) {
                                   observed: "Existing record observed",
                                   placed: "Hold placed",
                                   ended: "End date changed",
+                                  office_changed: "Office handoff",
                               }[row.action],
                               row.effective_on,
-                              row.facts.starts_on,
-                              row.facts.ends_on || "Open",
+                              row.facts?.starts_on || "—",
+                              row.facts ? row.facts.ends_on || "Open" : "—",
+                              row.action === "office_changed"
+                                  ? `${row.from_office} → ${row.to_office}`
+                                  : row.office_name || "—",
                               new Date(row.recorded_at).toLocaleString(),
                           ]),
                           "Retained hold decisions",
@@ -391,6 +405,134 @@ window.createWorkspaceRestrictions = function (ui) {
                           "No changes for this hold on this page. Other holds share the person's history; use Next history page if available.",
                       ),
         );
+    }
+    async function handoff(id, student, record, preset = {}) {
+        const setup = await request("/sis/offices/", "POST", {});
+        const choices = setup.items
+            .filter(
+                (row) =>
+                    Number(row.active) === 1 && row.id !== record.office_id,
+            )
+            .map((row) => ({ value: row.id, label: row.name }));
+        const body = openDrawer("Hand off this hold", "OFFICE RESPONSIBILITY");
+        body.append(
+            button("Back to restriction", () => view(id, student)),
+            node(
+                "p",
+                { class: "form-text" },
+                `Current office: ${record.office_name}. Choose a receiving office you are authorized to work with and explain the handoff.`,
+            ),
+        );
+        if (!choices.length) {
+            body.append(
+                node(
+                    "p",
+                    {},
+                    "No other active office is available within your current access.",
+                ),
+            );
+            return;
+        }
+        const fields = [
+            ["to_office_id", "Receiving office", "choice", choices],
+            ["reason", "Reason for the handoff", "textarea"],
+        ];
+        const form = await buildForm(fields, preset);
+        const reviewButton = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review office handoff",
+        );
+        form.append(reviewButton);
+        body.append(form);
+        form.elements.reason.autocomplete = "off";
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const data = formData(form, fields);
+                const review = await request(
+                    `/sis/restrictions/${id}/handoff/review/`,
+                    "POST",
+                    data,
+                );
+                await confirmHandoff(id, student, record, data, review);
+            }, reviewButton);
+        });
+    }
+    async function confirmHandoff(id, student, record, draft, review) {
+        const body = openDrawer(
+            "Review office handoff",
+            "CONFIRM RESPONSIBILITY",
+        );
+        body.append(
+            button("Change handoff", () => handoff(id, student, record, draft)),
+            node("h3", {}, review.person.name),
+            node(
+                "p",
+                {},
+                `${review.person.institutional_id} · ${review.hold.code}`,
+            ),
+            grid(
+                ["Current office", "Receiving office"],
+                [[review.from_office, review.to_office]],
+                "Office handoff comparison",
+            ),
+            node(
+                "p",
+                {},
+                `${review.hold.starts_on} through ${review.hold.ends_on || "open-ended"} · Severity ${review.hold.severity}`,
+            ),
+            node("h3", {}, "Reason"),
+            node(
+                "p",
+                { class: "text-break", style: "white-space: pre-wrap" },
+                draft.reason,
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                `This review includes ${review.notes_count} internal staff notes and expires in ${review.review_minutes} minutes. Hold dates and registration effects remain in force.`,
+            ),
+            node(
+                "p",
+                {},
+                "The receiving office’s authorized delegates will be able to read this hold, its existing notes and its history. The earlier office and handoff decision remain in history.",
+            ),
+        );
+        const fields = [
+            [
+                "acknowledge_access",
+                "I approve the receiving office’s access to this hold, its notes and its history.",
+                "checkbox",
+            ],
+        ];
+        const form = await buildForm(fields);
+        form.elements.acknowledge_access.required = true;
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Confirm office handoff",
+        );
+        form.append(save);
+        body.append(form);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request(
+                    `/sis/restrictions/${id}/handoff/confirm/`,
+                    "POST",
+                    {
+                        review_token: review.review_token,
+                        acknowledge_access: formData(form, fields)
+                            .acknowledge_access,
+                    },
+                );
+                notify("Office handoff recorded.");
+                await view(id, student);
+            }, save);
+        });
     }
     let query = "";
     async function load() {

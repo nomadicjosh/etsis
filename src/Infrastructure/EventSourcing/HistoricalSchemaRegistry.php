@@ -51,6 +51,11 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\RestrictionOfficeWasChanged::class => [
+                'type' => 'person_restrictions', 'root' => \Domain\Student\PersonRestrictions::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'restriction_id',
+                    'from_authority', 'to_authority', 'intent'],
+            ],
             \Domain\Student\Event\PersonRestrictionsWereRecorded::class => [
                 'type' => 'person_restrictions', 'root' => \Domain\Student\PersonRestrictions::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent', 'authority'],
@@ -446,6 +451,9 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Student\Event\RestrictionOfficeWasChanged::class) {
+                \Domain\Student\PersonRestrictions::validateHandoff($payload);
+            }
             if ($class === \Domain\Student\Event\PersonRestrictionsWereRecorded::class) {
                 \Domain\Student\PersonRestrictions::validate($payload);
                 foreach ($payload['facts'] as $facts) {

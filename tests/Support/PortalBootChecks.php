@@ -301,6 +301,7 @@ if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus
     throw new RuntimeException('Unrelated permissions granted Moodle administration.');
 }
 $sis->access->staff = true;
+
 $sis->access->grants = [];
 
 $sectionPath = "/sis/sections/" . $teachingSection->id->value;
@@ -846,6 +847,40 @@ if (
     throw new RuntimeException("Student ownership exposed internal restriction notes.");
 }
 $sis->access->staff = true;
+
+// A separate capability and the existing protected hold stream govern reviewed office handoffs.
+$holdHandoffOffice = \Domain\Shared\ValueObject\EntityId::generate()->value;
+if ($teachingPost('/sis/offices/' . $holdHandoffOffice . '/save/', [
+    'code' => 'HANDOFF', 'name' => 'Fictional receiving office', 'active' => true, 'revision' => -1,
+])->getStatusCode() !== 200) {
+    throw new RuntimeException('The handoff receiving office could not be set up.');
+}
+$holdHandoffPath = '/sis/restrictions/' . $holdId . '/handoff/';
+$holdHandoffReview = $teachingPost($holdHandoffPath . 'review/', [
+    'to_office_id' => $holdHandoffOffice, 'reason' => 'Fictional reviewed handoff.',
+]);
+$holdHandoffBody = json_decode((string) $holdHandoffReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($holdHandoffReview->getStatusCode() !== 200 || !isset($holdHandoffBody['review_token'])
+    || !str_contains($holdHandoffReview->getHeaderLine('Cache-Control'), 'no-store')
+    || $holdHandoffReview->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('The private handoff review did not boot.');
+}
+$holdHandoffPayload = ['review_token' => $holdHandoffBody['review_token'], 'acknowledge_access' => true];
+if ($teachingPost($holdHandoffPath . 'confirm/', $holdHandoffPayload)->getStatusCode() !== 200
+    || $teachingPost($holdHandoffPath . 'confirm/', $holdHandoffPayload)->getStatusCode() !== 200) {
+    throw new RuntimeException('The reviewed handoff was not safely repeatable.');
+}
+$holdReturnReview = $teachingPost($holdHandoffPath . 'review/', [
+    'to_office_id' => $sis->office->value, 'reason' => 'Fictional return handoff.',
+]);
+$holdReturnBody = json_decode((string) $holdReturnReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($holdReturnReview->getStatusCode() !== 200 || $teachingPost($holdHandoffPath . 'confirm/', [
+    'review_token' => $holdReturnBody['review_token'], 'acknowledge_access' => true,
+])->getStatusCode() !== 200 || $teachingPost('/sis/offices/' . $holdHandoffOffice . '/save/', [
+    'code' => 'HANDOFF', 'name' => 'Fictional receiving office', 'active' => false, 'revision' => 0,
+])->getStatusCode() !== 200) {
+    throw new RuntimeException('The recorded return handoff or office retirement failed.');
+}
 
 // Transfer catalog maintenance and reviewed awards use the same provider and protected browser transport.
 $institutionResponse = $teachingPost("/sis/external-institutions/", [

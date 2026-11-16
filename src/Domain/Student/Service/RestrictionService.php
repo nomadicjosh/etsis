@@ -24,6 +24,7 @@ use DomainException;
 
 final readonly class RestrictionService
 {
+    public const int HANDOFF_REVIEW_SECONDS = 1200;
     public function __construct(
         private RestrictionRepository $repository,
         private AdmissionsRepository $admissions,
@@ -306,6 +307,200 @@ final readonly class RestrictionService
             $this->access->requirePermission(\Domain\Office\Service\OfficeScope::ADMIN);
             $this->authorize($actor, $hold->id);
         });
+    }
+
+    /** A read-only review with a protected, actor-bound ticket kept only in the open form.
+     * @return array<string,mixed> */
+    public function reviewHandoff(EntityId $id, EntityId $to, #[\SensitiveParameter] string $reason): array
+    {
+        $actor = $this->handoffActor();
+        $this->scope->owner($id);
+        $note = $this->content($reason, 'reason');
+        $context = $this->handoffContext($this->get($id), $to);
+        $now = $this->clock->now()->getTimestamp();
+        $operation = EntityId::generate();
+        $ticket = ['purpose' => 'hold.office-handoff', 'actor_id' => $actor->value,
+            'restriction_id' => $id->value, 'operation_id' => $operation->value,
+            'issued_at' => $now, 'expires_at' => $now + self::HANDOFF_REVIEW_SECONDS,
+            'context' => $context, 'reason' => $note];
+        $sealed = $this->cipher->seal(json_encode(
+            $ticket,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ));
+        $this->handoffAuthority($actor, new EntityId($context['from']['office_id']), $to);
+        return ['review_token' => $sealed, 'operation_id' => $operation->value,
+            'from_office' => $context['from']['office_name'], 'to_office' => $context['to']['office_name'],
+            'hold' => $context['hold'], 'person' => $context['person'], 'notes_count' => $context['notes_count'],
+            'review_minutes' => (int) (self::HANDOFF_REVIEW_SECONDS / 60)];
+    }
+
+    /** @return array{id:string,operation_id:string,from_office_id:string,to_office_id:string} */
+    public function confirmHandoff(EntityId $id, #[\SensitiveParameter] string $token, bool $acknowledge): array
+    {
+        $actor = $this->handoffActor();
+        $this->scope->owner($id);
+        if (!$acknowledge) {
+            throw new ValidationException([['field' => 'acknowledge_access',
+                'message' => 'Confirm the receiving office may access this hold, its notes and its history.']]);
+        }
+        $ticket = $this->handoffTicket($token, $actor, $id);
+        $initial = $this->get($id);
+        return $this->transactions->run(function () use ($actor, $ticket, $initial): array {
+            $id = $initial->id;
+            $operation = new EntityId($ticket['operation_id']);
+            $from = new EntityId($ticket['context']['from']['office_id']);
+            $to = new EntityId($ticket['context']['to']['office_id']);
+            $this->repository->lockPerson($initial->personId);
+            $this->repository->lock($id);
+            $current = $this->get($id);
+            $owner = $this->offices->owner($id);
+            if ($current->personId->value !== $initial->personId->value || $owner === null) {
+                throw new ConcurrentModificationException('Review the hold routing again.');
+            }
+            // All involved office rows use one stable order, including an accepted retry after another handoff.
+            $locks = array_unique([$owner['id'], $from->value, $to->value]);
+            sort($locks, SORT_STRING);
+            foreach ($locks as $office) {
+                $this->offices->lock(new EntityId($office));
+            }
+            $this->handoffActor($actor);
+            $this->scope->office(new EntityId($owner['id']));
+            $intent = $this->intent($ticket);
+            $opened = $this->ledger->open($current->personId, $operation, $actor, $intent);
+            $result = ['id' => $id->value, 'operation_id' => $operation->value,
+                'from_office_id' => $from->value, 'to_office_id' => $to->value];
+            if ($opened['repeat']) {
+                $this->handoffActor($actor);
+                $this->scope->owner($id);
+                return $result;
+            }
+            $this->handoffExpiry($ticket);
+            $context = $this->handoffContext($current, $to, $opened['root']->playhead());
+            if (!hash_equals($this->intent($ticket['context']), $this->intent($context))) {
+                throw new ConcurrentModificationException('The reviewed hold, notes or office authority changed.');
+            }
+            $this->ledger->handoff(
+                $opened['root'],
+                $current,
+                $operation,
+                $actor,
+                $context['from'],
+                $context['to'],
+                $intent,
+                $ticket['reason']
+            );
+            $this->offices->move($id, $from, $to);
+            $this->storeNote($operation, $id, $actor, $ticket['reason']);
+            $this->audit->record($actor, 'restriction.office_changed', $id);
+            $this->handoffAuthority($actor, $from, $to);
+            $this->handoffExpiry($ticket);
+            return $result;
+        });
+    }
+
+    /** @return array<string,mixed> */
+    private function handoffContext(Restriction $hold, EntityId $to, ?int $verifiedVersion = null): array
+    {
+        $office = $this->offices->owner($hold->id);
+        if ($office === null) {
+            throw new ValidationException([['field' => 'to_office_id',
+                'message' => 'Route this earlier unassigned hold before requesting a handoff.']]);
+        }
+        $from = new EntityId($office['id']);
+        $fromAuthority = $this->handoffOffice($from);
+        $toAuthority = $this->handoffOffice($to);
+        if ($from->value === $to->value || !(bool) ($this->offices->office($to)['active'] ?? false)) {
+            throw new ValidationException([[
+                'field' => 'to_office_id',
+                'message' => 'Choose a different active office.',
+            ]]);
+        }
+        $person = $this->admissions->person($hold->personId);
+        return ['hold' => $hold->facts(), 'version' => $verifiedVersion ?? $this->ledger->verify($hold->personId),
+            'person' => ['id' => $person->id->value, 'name' => trim($person->givenName . ' ' . $person->familyName),
+                'institutional_id' => $person->institutionalId->value],
+            'from' => $fromAuthority, 'to' => $toAuthority, 'notes_count' => $this->repository->noteCount($hold->id)];
+    }
+
+    private function handoffActor(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->scope->actor();
+        if (
+            $this->access->requirePermission(\Domain\Office\Service\OfficeScope::HANDOFF)->value !== $actor->value
+            || ($expected !== null && $expected->value !== $actor->value)
+        ) {
+            throw new AccessDeniedException('The handoff actor or authority changed.');
+        }
+        return $actor;
+    }
+
+    /**
+     * Retain the actual dated delegation used, without converting reference setup into another journal.
+     *
+     * @return array<string,mixed>
+     */
+    private function handoffOffice(EntityId $office): array
+    {
+        $authority = $this->scope->office($office);
+        $delegation = $authority['mode'] === 'delegated'
+        ? $this->offices->delegation($office, $this->scope->actor()) : null;
+        if (
+            $authority['mode'] === 'delegated' && ($delegation === null
+            || $delegation['id'] !== $authority['delegation_id']
+            || (int) $delegation['revision'] !== $authority['delegation_revision'])
+        ) {
+            throw new ConcurrentModificationException('The office delegation changed during review.');
+        }
+        return $authority + [
+            'starts_on' => $delegation['starts_on'] ?? null,
+            'ends_on' => $delegation['ends_on'] ?? null,
+        ];
+    }
+
+    private function handoffAuthority(EntityId $actor, EntityId $from, EntityId $to): void
+    {
+        $this->handoffActor($actor);
+        $this->scope->office($from);
+        $this->scope->office($to);
+        if (!(bool) ($this->offices->office($to)['active'] ?? false)) {
+            throw new ConcurrentModificationException('The receiving office was retired.');
+        }
+    }
+
+    /** @param array<string,mixed> $ticket */
+    private function handoffExpiry(array $ticket): void
+    {
+        $now = $this->clock->now()->getTimestamp();
+        if ($now < $ticket['issued_at'] || $now > $ticket['expires_at']) {
+            throw new ConcurrentModificationException('The handoff review expired. Review it again.');
+        }
+    }
+
+    /** @return array<string,mixed> */
+    private function handoffTicket(#[\SensitiveParameter] string $token, EntityId $actor, EntityId $id): array
+    {
+        try {
+            if (strlen($token) > 100000) {
+                throw new \InvalidArgumentException();
+            }
+            $p = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
+            if (
+                !is_array($p) || ($p['purpose'] ?? null) !== 'hold.office-handoff'
+                || !is_string($p['operation_id'] ?? null) || !is_string($p['reason'] ?? null)
+                || !is_int($p['issued_at'] ?? null) || !is_int($p['expires_at'] ?? null)
+                || !is_array($p['context'] ?? null) || ($p['restriction_id'] ?? null) !== $id->value
+            ) {
+                throw new \InvalidArgumentException();
+            }
+            new EntityId($p['operation_id']);
+        } catch (\Throwable) {
+            throw new ValidationException([['field' => 'review_token',
+                'message' => 'This handoff review could not be verified. Review the handoff again.']]);
+        }
+        if (($p['actor_id'] ?? null) !== $actor->value) {
+            throw new AccessDeniedException('This handoff review belongs to another account.');
+        }
+        return $p;
     }
 
     private function chooseOffice(?EntityId $office): EntityId

@@ -25,6 +25,7 @@ final class EventClassMap
     {
         return [
             \Domain\Student\Event\PersonRestrictionsWereRecorded::class,
+            \Domain\Student\Event\RestrictionOfficeWasChanged::class,
             \Domain\HumanResources\Event\EmployeePositionWasRecorded::class,
             \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class,
             \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class,

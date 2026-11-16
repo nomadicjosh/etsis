@@ -51,6 +51,7 @@ final readonly class WorkspaceService
     ];
     public const array PERMISSIONS = [
         'sis:restrictions:manage',
+        'sis:restrictions:handoff',
         "sis:moodle:manage",
         "sis:moodle:link-person",
         'sis:moodle:create-person',

@@ -105,4 +105,24 @@ final readonly class SisRestrictionController
         );
         return new JsonResponse(['status' => 'saved']);
     }
+
+    public function reviewHandoff(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reviewHandoff(
+            new EntityId($id),
+            $f->id('to_office_id'),
+            $f->bodyText('reason')
+        ));
+    }
+
+    public function confirmHandoff(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->confirmHandoff(
+            new EntityId($id),
+            $f->bodyText('review_token'),
+            $f->requiredBoolean('acknowledge_access')
+        ));
+    }
 }

@@ -16,6 +16,7 @@ use Domain\Shared\ValueObject\EntityId;
 final readonly class OfficeScope
 {
     public const string HOLD_MANAGE = 'sis:restrictions:manage';
+    public const string HANDOFF = 'sis:restrictions:handoff';
     public const string ADMIN = 'admin:access:manage';
     public const int MAX_OFFICES = 100;
 

@@ -122,4 +122,17 @@ final readonly class SqlOfficeRepository implements OfficeRepository
     {
         $this->sql->insert('sis_restriction_offices', ['id' => $restriction->value, 'office_id' => $office->value]);
     }
+
+    public function move(EntityId $restriction, EntityId $from, EntityId $to): void
+    {
+        if (
+            $this->sql->update(
+                'sis_restriction_offices',
+                ['office_id' => $to->value],
+                ['id' => $restriction->value, 'office_id' => $from->value]
+            ) !== 1
+        ) {
+            throw new \Domain\Shared\Exception\ConcurrentModificationException('The owning office changed.');
+        }
+    }
 }

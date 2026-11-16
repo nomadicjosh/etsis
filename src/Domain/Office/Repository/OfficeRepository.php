@@ -28,4 +28,5 @@ interface OfficeRepository
     /** @return array<string,mixed>|null */
     public function owner(EntityId $restriction): ?array;
     public function bind(EntityId $restriction, EntityId $office): void;
+    public function move(EntityId $restriction, EntityId $from, EntityId $to): void;
 }

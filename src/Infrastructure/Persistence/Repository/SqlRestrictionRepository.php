@@ -124,6 +124,17 @@ final readonly class SqlRestrictionRepository implements RestrictionRepository
         return $this->sql->rows('sis_restriction_notes', ['id' => $id->value], 1)[0] ?? null;
     }
 
+    public function noteCount(EntityId $restriction): int
+    {
+        $q = $this->sql->quote(...);
+        return (int) $this->sql->fetch(
+            'SELECT COUNT(*) AS ' . $q('note_count') . ' FROM '
+            . $q('sis_restriction_notes') . ' WHERE ' . $q('restriction_id') . ' = ?',
+            [$restriction->value],
+            1
+        )[0]['note_count'];
+    }
+
     public function addNote(
         EntityId $id,
         EntityId $restriction,

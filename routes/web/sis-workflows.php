@@ -56,6 +56,8 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/offices/people/', [SisOfficeController::class, 'people']);
     $router->post('/sis/restrictions/queue/', [SisRestrictionController::class, 'queue']);
     $router->post('/sis/restrictions/{id}/office/', [SisRestrictionController::class, 'bind']);
+    $router->post('/sis/restrictions/{id}/handoff/review/', [SisRestrictionController::class, 'reviewHandoff']);
+    $router->post('/sis/restrictions/{id}/handoff/confirm/', [SisRestrictionController::class, 'confirmHandoff']);
     $router
         ->map(["POST"], "/sis/students/{student}/registration-history/", [
             \Application\Http\Controller\SisEnrollmentHistoryController::class,

@@ -16,6 +16,7 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Shared\ValueObject\DerivedIdentity;
 use Domain\Student\Event\PersonRestrictionsWereRecorded;
+use Domain\Student\Event\RestrictionOfficeWasChanged;
 use Domain\Student\PersonRestrictions;
 use Domain\Student\Repository\RestrictionRepository;
 use Domain\Student\Restriction;
@@ -46,9 +47,9 @@ final readonly class RestrictionLedger
         return ['root' => $result['root'], 'repeat' => $receipt !== null];
     }
 
-    public function verify(EntityId $person): void
+    public function verify(EntityId $person): int
     {
-        $this->load($person);
+        return $this->load($person)['root']->playhead();
     }
 
     /** Called only for an accepted real decision; no history is invented during reads.
@@ -68,45 +69,78 @@ final readonly class RestrictionLedger
             'ended' => $restriction->dates->end ?? throw new \InvalidArgumentException('An end date is required.'),
             default => throw new \InvalidArgumentException('A valid hold decision is required.'),
         };
-        $person = $restriction->personId;
-        $expected = $root->playhead();
-        if ($expected + ($expected === 0 ? 2 : 1) > PersonRestrictions::MAX_EVENTS) {
-            throw new HistoryReadLimitException();
-        }
-        $events = [];
-        if ($expected === 0) {
-            $events[] = $this->event(
-                $root,
-                DerivedIdentity::from($operation, 'restriction.observation'),
-                'observed',
-                array_map(static fn (Restriction $r): array => $r->facts(), $this->current($person)['holds']),
-                null,
-                null
-            );
-        }
+        $events = $this->initialEvents($root, $operation, $restriction->personId);
         if ($action === 'placed' && count($root->restrictions()) >= PersonRestrictions::MAX_RESTRICTIONS) {
             throw new HistoryReadLimitException();
         }
         $events[] = $this->event($root, $operation, $action, [$restriction->facts()], $intent, $authority);
-        // The baseline is today's observation, not a historical placement or a claimed original author.
-        // Each event has its own effective context; the shared transaction rolls both back on failure.
+        $effective = new DateTimeImmutable($effectiveDate->format('Y-m-d'), $this->clock->now()->getTimezone());
+        $this->persist($restriction->personId, $operation, $actor, $events, $effective, $reason);
+    }
+
+    /** @param array<string,mixed> $from
+     * @param array<string,mixed> $to */
+    public function handoff(
+        PersonRestrictions $root,
+        Restriction $hold,
+        EntityId $operation,
+        EntityId $actor,
+        array $from,
+        array $to,
+        string $intent,
+        #[\SensitiveParameter] string $reason,
+    ): void {
+        $events = $this->initialEvents($root, $operation, $hold->personId);
+        $event = RestrictionOfficeWasChanged::occur($root->aggregateId(), [
+            'operation_id' => $operation->value, 'previous_operation_id' => $root->lastOperation(),
+            'restriction_id' => $hold->id->value, 'from_authority' => $from, 'to_authority' => $to, 'intent' => $intent,
+        ], ['__aggregate_type' => 'person_restrictions'])->withPlayhead($root->playhead() + 1);
+        $root->acceptHistorical($event);
+        $events[] = $event;
+        $this->persist($hold->personId, $operation, $actor, $events, $this->clock->now(), $reason);
+    }
+
+    /** @return list<DomainEvent> */
+    private function initialEvents(PersonRestrictions $root, EntityId $operation, EntityId $person): array
+    {
+        $expected = $root->playhead();
+        if ($expected + ($expected === 0 ? 2 : 1) > PersonRestrictions::MAX_EVENTS) {
+            throw new HistoryReadLimitException();
+        }
+        if ($expected !== 0) {
+            return [];
+        }
+        return [$this->event(
+            $root,
+            DerivedIdentity::from($operation, 'restriction.observation'),
+            'observed',
+            array_map(static fn (Restriction $r): array => $r->facts(), $this->current($person)['holds']),
+            null,
+            null
+        )];
+    }
+
+    /** @param list<DomainEvent> $events */
+    private function persist(
+        EntityId $person,
+        EntityId $operation,
+        EntityId $actor,
+        array $events,
+        DateTimeImmutable $effective,
+        #[\SensitiveParameter] string $reason,
+    ): void {
         foreach ($events as $event) {
-            $observation = $event->payload()['action'] === 'observed';
-            $effective = $observation ? $this->clock->now()
-            : new DateTimeImmutable(
-                $effectiveDate->format('Y-m-d'),
-                $this->clock->now()->getTimezone()
-            );
+            $p = $event->payload();
+            $observation = $event instanceof PersonRestrictionsWereRecorded && $p['action'] === 'observed';
             $this->history->append(
                 $this->stream($person),
-                new EntityId($event->payload()['operation_id']),
+                new EntityId($p['operation_id']),
                 $event->playhead() - 1,
                 new EventContext(
                     $actor,
-                    $effective,
+                    $observation ? $this->clock->now() : $effective,
                     $operation,
-                    $event->payload()['previous_operation_id'] === null ? null
-                        : new EntityId($event->payload()['previous_operation_id']),
+                    $p['previous_operation_id'] === null ? null : new EntityId($p['previous_operation_id']),
                     $observation ? 'Current restrictions observed before a real decision; earlier history is unknown.'
                     : $reason
                 ),
@@ -124,9 +158,20 @@ final readonly class RestrictionLedger
         $items = [];
         foreach ($page->events as $stored) {
             $p = $stored->event->payload();
+            if ($stored->event instanceof RestrictionOfficeWasChanged) {
+                if ($p['restriction_id'] === $restriction->value) {
+                    $items[] = ['action' => 'office_changed', 'facts' => null,
+                        'from_office' => $p['from_authority']['office_name'],
+                        'to_office' => $p['to_authority']['office_name'],
+                        'recorded_at' => $stored->recordedAt->format(DATE_ATOM),
+                        'effective_on' => $stored->context->effectiveAt?->format('Y-m-d')];
+                }
+                continue;
+            }
             foreach ($p['facts'] as $facts) {
                 if ($facts['id'] === $restriction->value) {
                     $items[] = ['action' => $p['action'], 'facts' => $facts,
+                        'office_name' => $p['authority']['office_name'] ?? null,
                         'recorded_at' => $stored->recordedAt->format(DATE_ATOM),
                         'effective_on' => $stored->context->effectiveAt?->format('Y-m-d')];
                 }

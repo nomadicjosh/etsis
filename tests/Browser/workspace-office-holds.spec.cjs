@@ -84,6 +84,12 @@ test('administrators configure offices and dated delegates without assigning rol
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/office-admin-fixture/');
+    await expect(page.locator('#workspace-navigation a[href="/portal/timetable/"]')).toHaveCount(0);
+    await expect(page.locator('#workspace-navigation a[href="/portal/bookings/"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await expect(page.getByRole('link', { name: 'My timetable', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'My booking updates', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
     await page.locator('.workspace-nav-link[data-workspace="holds"]').click();
     await page.getByRole('button', { name: 'Offices & delegation' }).click();
     await page.getByRole('button', { name: 'Add office', exact: true }).click();

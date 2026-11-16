@@ -212,7 +212,7 @@
     const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
-    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
+    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, buildForm, formData, openDrawer });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });

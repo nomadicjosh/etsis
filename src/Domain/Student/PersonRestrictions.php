@@ -9,6 +9,7 @@ use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Event\PersonRestrictionsWereRecorded;
+use Domain\Student\Event\RestrictionOfficeWasChanged;
 use Domain\Student\ValueObject\StudentActivitySchema;
 
 /** One person's hold decisions, independent of student, employment and account roles. */
@@ -18,7 +19,7 @@ final class PersonRestrictions extends EventSourcedAggregate
     public const int MAX_EVENTS = 5000;
     /** @var array<string,Restriction> */
     private array $restrictions = [];
-    /** @var array<string,string> Earliest recorded owning office; operational routing cannot silently replace it. */
+    /** @var array<string,string> Recorded current office; an explicit handoff preserves preceding ownership. */
     private array $offices = [];
     private ?string $lastOperation = null;
 
@@ -70,13 +71,17 @@ final class PersonRestrictions extends EventSourcedAggregate
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (
-            !$event instanceof PersonRestrictionsWereRecorded
+            !($event instanceof PersonRestrictionsWereRecorded || $event instanceof RestrictionOfficeWasChanged)
             || !$event->aggregateId()->equals($this->aggregateId())
             || $event->playhead() !== $this->playhead() + 1 || $event->playhead() > self::MAX_EVENTS
         ) {
             throw new CorruptHistoryException();
         }
-        self::validate($event->payload());
+        if ($event instanceof RestrictionOfficeWasChanged) {
+            self::validateHandoff($event->payload());
+        } else {
+            self::validate($event->payload());
+        }
         $this->applyThat($event);
         $this->playhead = $event->playhead();
     }
@@ -133,6 +138,46 @@ final class PersonRestrictions extends EventSourcedAggregate
         return $this->restrictions;
     }
 
+    /** @param array<string,mixed> $p */
+    public static function validateHandoff(array $p): void
+    {
+        $keys = ['operation_id', 'previous_operation_id', 'restriction_id', 'from_authority', 'to_authority', 'intent'];
+        if (
+            count($p) !== count($keys) || array_diff(array_keys($p), $keys) !== []
+            || !is_string($p['intent'] ?? null) || preg_match('/^[a-f0-9]{64}$/D', $p['intent']) !== 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        foreach (['operation_id', 'previous_operation_id', 'restriction_id'] as $key) {
+            if (!is_string($p[$key] ?? null)) {
+                throw new CorruptHistoryException();
+            }
+            new EntityId($p[$key]);
+        }
+        self::handoffAuthority($p['from_authority']);
+        self::handoffAuthority($p['to_authority']);
+        if (
+            $p['from_authority']['office_id'] === $p['to_authority']['office_id']
+            || $p['operation_id'] === $p['previous_operation_id']
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
+
+    public function whenRestrictionOfficeWasChanged(RestrictionOfficeWasChanged $event): void
+    {
+        $p = $event->payload();
+        $id = $p['restriction_id'];
+        if (
+            $p['previous_operation_id'] !== $this->lastOperation || !isset($this->restrictions[$id])
+            || (isset($this->offices[$id]) && $this->offices[$id] !== $p['from_authority']['office_id'])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->offices[$id] = $p['to_authority']['office_id'];
+        $this->lastOperation = $p['operation_id'];
+    }
+
     public function lastOperation(): ?string
     {
         return $this->lastOperation;
@@ -170,6 +215,30 @@ final class PersonRestrictions extends EventSourcedAggregate
             ) {
                 throw new CorruptHistoryException();
             }
+        }
+    }
+
+    private static function handoffAuthority(mixed $a): void
+    {
+        if (
+            !is_array($a) || count($a) !== 8 || !array_key_exists('starts_on', $a)
+            || !array_key_exists('ends_on', $a)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        self::authority(array_diff_key($a, ['starts_on' => true, 'ends_on' => true]));
+        if ($a['mode'] === 'administrative') {
+            if ($a['starts_on'] !== null || $a['ends_on'] !== null) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        if (
+            !is_string($a['starts_on']) || !StudentActivitySchema::date($a['starts_on'])
+            || ($a['ends_on'] !== null && (!is_string($a['ends_on']) || !StudentActivitySchema::date($a['ends_on'])
+                || $a['ends_on'] < $a['starts_on']))
+        ) {
+            throw new CorruptHistoryException();
         }
     }
 }
