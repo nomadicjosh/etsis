@@ -9,6 +9,7 @@ use Domain\Finance\LedgerLine;
 use Domain\Finance\Service\LedgerService;
 use Domain\Finance\Service\StudentAccountService;
 use Domain\Finance\Service\TermBillingService;
+use Domain\Finance\Service\BillingBatchService;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\JournalId;
@@ -23,7 +24,8 @@ final readonly class SisLedgerController
     public function __construct(
         private LedgerService $service,
         private StudentAccountService $students,
-        private TermBillingService $billing
+        private TermBillingService $billing,
+        private BillingBatchService $batches,
     ) {
     }
 
@@ -125,12 +127,18 @@ final readonly class SisLedgerController
         ));
     }
 
-    public function generateBills(ServerRequest $request): ResponseInterface
+    public function reviewBills(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        $students = array_map(static fn (FormInput $s): EntityId => $s->id('student_id'), $f->items('students', 100));
-        $this->billing->generate($f->id('term_id'), $students);
+        $students = array_map(
+            static fn (FormInput $s): EntityId => $s->id('student_id'),
+            $f->items('students', BillingBatchService::MAX_STUDENTS)
+        );
+        return new JsonResponse($this->batches->review($f->id('term_id'), $students, $f->bodyText('reason')));
+    }
 
-        return new JsonResponse(['status' => 'generated']);
+    public function confirmBills(ServerRequest $request): ResponseInterface
+    {
+        return new JsonResponse($this->batches->confirm(FormInput::from($request)->text('review_token', 600000)));
     }
 }

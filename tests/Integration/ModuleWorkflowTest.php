@@ -298,17 +298,8 @@ final class ModuleWorkflowTest extends TestCase
             $f->transactions,
             \EventStoreFixture::financialWriter($db),
         );
-        $billing = new \Infrastructure\Persistence\EventSourcedRegistrationBilling(
-            $f->accounts,
-            $f->sql,
-            $rules,
-            $f->admissions,
-            $f->primaryProgramLedger(),
-        );
         $service = new \Domain\Finance\Service\TermBillingService(
             $rules,
-            $billing,
-            $f->registration,
             $f->access,
             $f->transactions,
             $f->audit,
@@ -329,15 +320,15 @@ final class ModuleWorkflowTest extends TestCase
         $id = new AccountId($locator["id"]);
         self::assertSame(12500, $f->accounts->get($id)->balance()->minor);
         $third = $f->student();
-        $service->generate($f->term, [$third->id]);
+        $f->bill($f->term, [$third->id]);
         $batchAccount = $f->sql->one('sis_student_accounts', ['student_id' => $third->id->value]);
         $batchContext = EventStoreFixture::history($db)->page(new \Domain\Shared\EventSourcing\StreamReference(
             new AccountId($batchAccount['id']), 'student_account'
         ))->events[0]->context;
         self::assertSame('command', $batchContext->origin);
         self::assertSame($f->term->value, $batchContext->causation->value);
-        self::assertSame('Account charges applied by an authorized term billing batch.', $batchContext->reason);
-        $service->generate($f->term, [$student->id]);
+        self::assertSame('Fictional reviewed term billing.', $batchContext->reason);
+        $f->bill($f->term, [$student->id]);
         self::assertSame(12500, $f->accounts->get($id)->balance()->minor);
         self::assertCount(2, $f->accounts->get($id)->entries());
         $service->retire($rule->aggregateId(), 1, 'Fictional retirement.');

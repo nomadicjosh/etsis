@@ -590,68 +590,129 @@ window.createWorkspaceOperations = function (ui) {
         const chosen = new Map();
         const descriptors = [
             ["term_id", "Billing term", "lookup", "terms"],
-            ["student_id", "Find a student", "lookup", "students"],
+            ["student_id", "Find a student", "lookup", "students", false],
+            ["reason", "Reason for billing", "textarea"],
         ];
-        const form = await flow(
-            "Generate selected student bills",
-            descriptors,
-            "/sis/billing-batches/",
-            (data) => {
-                if (!chosen.size)
-                    throw new Error(
-                        "Add at least one student to the reviewed batch.",
-                    );
-                return {
-                    term_id: data.term_id,
-                    students: [...chosen.keys()].map((student_id) => ({
-                        student_id,
-                    })),
-                };
-            },
-            async () => {
-                ui.closeDrawer();
-                await ui.navigate("billing");
-            },
-            {},
-            "Only selected students are billed, up to 100 per batch. Active rules for the term and program apply once. Previously posted charges remain unchanged.",
-        );
-        form.elements.student_id.required = false;
-        const selected = node("div", {
-            class: "record-section",
-            "aria-live": "polite",
-        });
-        const add = button("Add student to batch", async () => {
-            const select = form.elements.student_id;
-            if (!select.value) return;
-            if (chosen.size >= 100)
-                throw new Error("A batch supports up to 100 students.");
-            chosen.set(select.value, select.selectedOptions[0].textContent);
-            render();
-        });
-        function render() {
-            selected.replaceChildren(
-                node("h3", {}, `${chosen.size} selected students`),
-                ...[...chosen].map(([id, label]) =>
-                    node(
-                        "p",
-                        {},
-                        label,
-                        " ",
-                        button(
-                            "Remove",
-                            async () => {
-                                chosen.delete(id);
-                                render();
-                            },
-                            "btn-link",
-                        ),
-                    ),
-                ),
-            );
+        const body = openDrawer("Review student bills", "TERM BILLING");
+        body.append(node("p", { class: "form-text" },
+            "Choose up to 25 students. Review current flat fees, earlier postings and resulting balances before confirming."));
+        const form = await buildForm(descriptors);
+        form.elements.reason.maxLength = 2000;
+        const editor = node("fieldset", {}, node("legend", { class: "h5" }, "Billing selection"));
+        editor.append(...form.children);
+        const selected = node("div", { class: "record-section", "aria-live": "polite" });
+        const reviewArea = node("div");
+        let revision = 0;
+        const reviewButton = node("button", { type: "submit", class: "btn btn-primary" }, "Review selected bills");
+        function invalidate() {
+            revision++;
+            reviewArea.replaceChildren();
         }
-        form.insertBefore(add, form.lastElementChild);
-        form.insertBefore(selected, form.lastElementChild);
-        render();
+        function renderSelection() {
+            selected.replaceChildren(node("h3", {}, `${chosen.size} selected students`),
+                ...[...chosen].map(([id, label]) => node("p", {}, label, " ", button(`Remove ${label}`, () => {
+                    chosen.delete(id);
+                    invalidate();
+                    renderSelection();
+                }, "btn-link"))));
+        }
+        const add = button("Add student to batch", () => {
+            const control = form.elements.student_id;
+            if (!control.value) return;
+            if (!chosen.has(control.value) && chosen.size >= 25) throw new Error("A review supports up to 25 students.");
+            chosen.set(control.value, control.selectedOptions[0].textContent);
+            invalidate();
+            renderSelection();
+        });
+        editor.append(add, selected);
+        form.append(editor, reviewButton);
+        form.addEventListener("input", event => {
+            if (event.target.name === "reason") invalidate();
+        });
+        form.elements.term_id.addEventListener("change", invalidate);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                if (!chosen.size) throw new Error("Add at least one student before reviewing.");
+                const epoch = revision;
+                const response = await request("/sis/billing-batches/review/", "POST", {
+                    term_id: form.elements.term_id.value, reason: form.elements.reason.value,
+                    students: [...chosen.keys()].map(student_id => ({ student_id })),
+                });
+                if (!form.isConnected || epoch !== revision) return;
+                showReview(response);
+            }, reviewButton);
+        });
+        function showReview(review) {
+            reviewArea.replaceChildren();
+            const panel = section("Proposed charges",
+                node("p", { class: "fw-semibold" }, `Billing term: ${review.term.code}`),
+                node("p", {}, "Only new fees shown here will be posted. Earlier charges and reversals remain intact."));
+            const status = node("p", { role: "status", class: review.blocked ? "alert alert-warning" : "alert alert-info" },
+                review.blocked ? `${review.blocked} student records need attention before this group can be billed.`
+                    : review.new_charges ? `${review.new_charges} new charge${review.new_charges === 1 ? " is" : "s are"} ready for review.`
+                        : "There are no new charges to post. No confirmation is needed.");
+            panel.append(status, ...review.totals.map(total => node("p", { class: "fw-semibold" },
+                `New charges: ${money(total.minor, total.currency)}`)));
+            const definitions = new Map(review.rules.map(rule => [rule.id, rule]));
+            const page = node("div");
+            let offset = 0;
+            function renderPage() {
+                const rows = review.students.slice(offset, offset + 10).map(row => {
+                    const details = node("details", {}, node("summary", {},
+                        `${row.new_charges} new · ${row.already_posted} posted · ${row.previously_reversed} reversed`));
+                    details.append(node("ul", {}, ...row.items.map(item => {
+                        const rule = definitions.get(item.rule_id);
+                        const label = item.status === "new" ? "New charge" : item.status === "posted"
+                            ? "Already posted" : "Previously reversed; not reapplied";
+                        return node("li", {}, `${rule.name} · ${money(rule.minor, rule.currency)} · ${label}`);
+                    })));
+                    if (row.problems.length) details.append(...row.problems.map(problem => node("p", { class: "text-danger" }, problem)));
+                    return [node("div", {}, node("strong", {}, row.name), node("div", { class: "small" }, row.institutional_id)),
+                        row.program_label, row.problems.length ? "Review required" : row.currency ? money(row.charge_minor, row.currency) : "No new fees",
+                        row.account_id ? money(row.balance_before_minor, row.currency) : "No account yet",
+                        row.balance_after_minor === null ? "Review required" : row.currency
+                            ? money(row.balance_after_minor, row.currency) : "No applicable fees", details];
+                });
+                page.replaceChildren(scrollTable(["Student", "Program", "New charges", "Current balance", "After billing", "Fee details"], rows,
+                    "Reviewed student charges"), node("p", { role: "status" },
+                    `Showing ${offset + 1}–${Math.min(offset + 10, review.students.length)} of ${review.students.length} students.`));
+                const previous = button("Previous students", () => { offset -= 10; renderPage(); });
+                const next = button("Next students", () => { offset += 10; renderPage(); });
+                previous.disabled = offset === 0;
+                next.disabled = offset + 10 >= review.students.length;
+                page.append(previous, next);
+            }
+            renderPage();
+            const confirm = button("Confirm reviewed charges", async () => {
+                editor.disabled = true;
+                reviewButton.disabled = true;
+                try {
+                    const result = await request("/sis/billing-batches/", "POST", { review_token: review.review_token });
+                    await ui.refreshDirectory();
+                    body.replaceChildren(section("Billing completed",
+                        node("p", { role: "status" }, `${result.posted} charge${result.posted === 1 ? "" : "s"} posted. ${result.accounts_created} account${result.accounts_created === 1 ? "" : "s"} opened.`),
+                        ...result.totals.map(total => node("p", {}, `${money(total.minor, total.currency)} in new charges`)),
+                        node("p", {}, "The original confirmation can be retried without billing these fees again."),
+                        ...result.students.filter(item => item.account_id).map(item => button(
+                            `Open account for ${chosen.get(item.student_id) || "selected student"}`,
+                            () => openRecord("accounts", { id: item.account_id }))),
+                        button("Start another review", billingBatch)));
+                } finally {
+                    editor.disabled = false;
+                    reviewButton.disabled = false;
+                }
+            }, "btn-primary");
+            confirm.disabled = Boolean(review.blocked) || review.new_charges === 0;
+            panel.append(page, node("p", { class: "form-text" },
+                "This review is valid for 20 minutes. Changing the selection or reason clears it. Changed fees, programs or account activity require a fresh review."), confirm);
+            reviewArea.append(panel);
+            status.tabIndex = -1;
+            status.focus();
+        }
+        renderSelection();
+        body.append(form, reviewArea);
     }
     async function campaignRecipients(row, draft, back) {
         const body = openDrawer("Choose recipients", "COMMUNICATIONS");

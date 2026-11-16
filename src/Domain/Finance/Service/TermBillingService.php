@@ -9,21 +9,16 @@ use Domain\Finance\BillingRule;
 use Domain\Finance\Repository\BillingRuleRepository;
 use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\Money;
-use Domain\Registration\Repository\RegistrationRepository;
-use Domain\Registration\Service\RegistrationBilling;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
-use InvalidArgumentException;
 
 final readonly class TermBillingService
 {
     public function __construct(
         private BillingRuleRepository $rules,
-        private RegistrationBilling $billing,
-        private RegistrationRepository $registration,
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
@@ -106,40 +101,6 @@ final readonly class TermBillingService
             $this->audit->record($actor, 'billing.rule_retired', $operation);
             $this->commands->assertActor($actor, 'sis:finance:post');
             return ['status' => 'retired'];
-        });
-    }
-
-    /** @param list<EntityId> $students */
-    public function generate(EntityId $term, array $students): void
-    {
-        $actor = $this->access->requirePermission('sis:finance:post');
-        if (count($students) < 1 || count($students) > 100) {
-            throw new InvalidArgumentException('A billing batch must include between one and 100 students.');
-        }
-        usort($students, static fn (EntityId $a, EntityId $b): int => strcmp($a->value, $b->value));
-        $this->transactions->run(function () use ($term, $students, $actor): void {
-            $batch = EntityId::generate();
-            foreach ($students as $student) {
-                $this->registration->lockStudent($student);
-            }
-            // Read program eligibility only after acquiring the entire ordered lock set.
-            foreach ($students as $student) {
-                $this->commands->assertActor($actor, 'sis:finance:post');
-                $this->billing->charge(
-                    $student,
-                    $term,
-                    EntityId::generate(),
-                    new Money(0, 'USD'),
-                    $this->commands->context(
-                        $actor,
-                        $batch,
-                        'Account charges applied by an authorized term billing batch.',
-                        $term
-                    )
-                );
-                $this->audit->record($actor, 'billing.generated', $student);
-            }
-            $this->commands->assertActor($actor, 'sis:finance:post');
         });
     }
 }

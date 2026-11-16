@@ -225,6 +225,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Identity\RandomInstitutionalIdGenerator::class,
             \Domain\Finance\Repository\BillingRuleRepository::class =>
                 \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository::class,
+            \Domain\Finance\Service\TermFeeBilling::class =>
+                \Infrastructure\Persistence\EventSourcedRegistrationBilling::class,
+            \Domain\Finance\Repository\BillingBatchRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlBillingBatchRepository::class,
             \Domain\Reporting\Repository\ReportRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlReportRepository::class,
             \Domain\Import\Repository\CatalogImportRepository::class =>

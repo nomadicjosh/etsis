@@ -141,6 +141,21 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
         else if (path === '/sis/billing-rules/') { ruleCreated = true; result = { id: billingRule }; }
         else if (path === `/sis/billing-rules/${billingRule}/retire/`) { ruleRetired = true; result = { status: 'retired' }; }
         else if (path === `/sis/billing-rules/${billingRule}/`) result = { name: 'Fictional fee', kind: 'fee', amount_minor: 250, amount_decimal: '2.50', currency: 'USD', position: ruleRetired ? 2 : 1, retired: ruleRetired };
+        else if (path === '/sis/billing-batches/review/') result = {
+            term: { id: term, code: '26/FA' },
+            rules: [{ id: id('23'), name: 'Fictional new fee', minor: 250, currency: 'USD' }],
+            students: [{ student_id: student, name: 'Alex Example', institutional_id: 'S-FICTIONAL',
+                program_label: 'BSCS', account_id: null, account_position: null, currency: 'USD',
+                balance_before_minor: 0, balance_after_minor: 250, charge_minor: 250,
+                new_charges: 1, already_posted: 0, previously_reversed: 0,
+                items: [{ rule_id: id('23'), status: 'new' }], problems: [] }],
+            blocked: 0, new_charges: 1, totals: [{ currency: 'USD', minor: 250 }],
+            review_token: 'fictional-billing-review', expires_at: '2026-11-16T09:20:00Z',
+        };
+        else if (path === '/sis/billing-batches/') result = {
+            posted: 1, accounts_created: 1, totals: [{ currency: 'USD', minor: 250 }],
+            students: [{ student_id: student, account_id: id('24') }],
+        };
         else if (path === `/sis/campaigns/${campaign}/`) result = { id: campaign, subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', status: campaignStatus, version: 0, can_dispatch: true };
         else if (path === '/sis/campaigns/recipients/search/') result = { items: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }], next_after: null };
         else if (path === `/sis/campaigns/${campaign}/recipient-review/`) result = { subject: 'Fictional announcement', body: 'Fictional body; never sent to a real mailbox.', version: 0, recipients: [{ id: person, user_id: user, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }] };
@@ -207,13 +222,29 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     for (const label of ['Fictional fee', '26/FA', 'All programs', '2.50 USD', 'Retired']) {
         await expect(billingDirectory).toContainText(label);
     }
-    await page.getByRole('button', { name: 'Generate student bills', exact: true }).click();
+    await page.getByRole('button', { name: 'Review student bills', exact: true }).click();
     await page.getByLabel('Billing term').selectOption(term);
     await page.getByLabel('Find a student', { exact: false }).selectOption(student);
     await page.getByRole('button', { name: 'Add student to batch', exact: true }).click();
-    await page.getByRole('button', { name: 'Generate selected student bills', exact: true }).click();
-    await expect.poll(() => sent.find(item => item.path === '/sis/billing-batches/')?.payload).toEqual({ term_id: term, students: [{ student_id: student }] });
-    await expect(page.locator('#record-drawer')).not.toBeVisible();
+    await page.getByLabel('Reason for billing').fill('Fictional reviewed batch.');
+    await page.getByRole('button', { name: 'Review selected bills', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('1 new charge is ready for review.');
+    await expect.poll(() => sent.find(item => item.path === '/sis/billing-batches/review/')?.payload).toEqual({
+        term_id: term, students: [{ student_id: student }], reason: 'Fictional reviewed batch.',
+    });
+    expect(sent.some(item => item.path === '/sis/billing-batches/')).toBe(false);
+    await page.getByLabel('Reason for billing').fill('Fictional corrected reason.');
+    await expect(page.getByRole('button', { name: 'Confirm reviewed charges', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review selected bills', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Reviewed student charges' })).toContainText('Alex Example');
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Confirm reviewed charges', exact: true }).click();
+    await expect.poll(() => sent.find(item => item.path === '/sis/billing-batches/')?.payload).toEqual({ review_token: 'fictional-billing-review' });
+    await expect(page.locator('#drawer-body')).toContainText('1 charge posted. 1 account opened.');
+    await close();
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await nav('institutions');
     await page.locator('#directory-tabs [data-workspace="equivalencies"]').click();
     await page.getByRole('button', { name: 'Open EXT.101 → CS.101', exact: true }).click();

@@ -6,8 +6,11 @@ namespace Infrastructure\EventSourcing;
 
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Codefy\Domain\Aggregate\EventSourcedAggregate;
+use Codefy\Domain\Aggregate\AggregateId;
+use Codefy\Domain\EventSourcing\EventStream;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 use LogicException;
@@ -46,5 +49,24 @@ final readonly class FinancialEventWriter
                 [$event],
             );
         }
+    }
+
+    /** Selected command/review reads share one allowance through the same protected journal. */
+    public function readForWrite(AggregateId $id, HistoryReadBudget $budget): EventStream
+    {
+        $stream = $this->schemas->streamFor($id);
+        if (!in_array($stream->type, ['student_account', 'billing_rule', 'journal'], true)) {
+            throw new LogicException('A financial event stream is required.');
+        }
+        $events = [];
+        $cursor = null;
+        do {
+            $page = $budget->page($this->history, $stream, $cursor);
+            foreach ($page->events as $stored) {
+                $events[] = $stored->event;
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        return new EventStream($id, $events);
     }
 }

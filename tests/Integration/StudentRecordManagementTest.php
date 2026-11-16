@@ -296,33 +296,34 @@ final class StudentRecordManagementTest extends TestCase
         $one = $f->student()->id;
         $two = $f->student()->id;
         $locked = [];
-        $charged = [];
+        $quoted = [];
         $registration = $this->createMock(\Domain\Registration\Repository\RegistrationRepository::class);
         $registration->expects(self::exactly(2))->method('lockStudent')
-            ->willReturnCallback(function (EntityId $id) use (&$locked): void {
+            ->willReturnCallback(static function (EntityId $id) use (&$locked): void {
                 $locked[] = $id->value;
             });
-        $billing = $this->createMock(\Domain\Registration\Service\RegistrationBilling::class);
-        $billing->expects(self::exactly(2))->method('charge')->willReturnCallback(
-            function (EntityId $id) use (&$locked, &$charged): void {
-                self::assertCount(2, $locked, 'Program eligibility was read before the whole lock set was acquired.');
-                $charged[] = $id->value;
+        $billing = $this->createStub(\Domain\Finance\Service\TermFeeBilling::class);
+        $billing->method('rules')->willReturnCallback(static function () use (&$locked): array {
+            self::assertCount(2, $locked, 'Fees were read before the whole student lock set was acquired.');
+            return [];
+        });
+        $billing->method('quote')->willReturnCallback(
+            static function (EntityId $student, EntityId $term) use (
+                $f,
+                &$locked,
+                &$quoted,
+            ): \Domain\Finance\ValueObject\TermFeeQuote {
+                self::assertCount(2, $locked, 'Eligibility was read before the whole lock set was acquired.');
+                $quoted[] = $student->value;
+                return new \Domain\Finance\ValueObject\TermFeeQuote($student, $term, $f->program, 0, null, []);
             }
         );
-        $service = new \Domain\Finance\Service\TermBillingService(
-            $this->createStub(\Domain\Finance\Repository\BillingRuleRepository::class),
-            $billing,
-            $registration,
-            $f->access,
-            $f->transactions,
-            $f->audit,
-            $f->financialCommands(),
-        );
-        $service->generate($f->term, [$two, $one]);
+        $f->billingBatches(registration: $registration, billing: $billing)
+            ->review($f->term, [$two, $one], 'Fictional locked review.');
         $expected = [$one->value, $two->value];
         sort($expected);
         self::assertSame($expected, $locked);
-        self::assertSame($expected, $charged);
+        self::assertSame($expected, $quoted);
     }
 
     public function testAProgramCannotHaveTwoActiveEntryTermsForOneStudent(): void

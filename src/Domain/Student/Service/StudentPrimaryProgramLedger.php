@@ -81,9 +81,9 @@ final readonly class StudentPrimaryProgramLedger
     /**
      * @throws TypeException
      */
-    public function verify(Student $student): int
+    public function verify(Student $student, ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null): int
     {
-        return $this->load($student)["root"]->playhead();
+        return $this->load($student, budget: $budget)["root"]->playhead();
     }
 
     /**
@@ -240,9 +240,13 @@ final readonly class StudentPrimaryProgramLedger
      * @return array{root:StudentPrimaryProgram,receipt:?array<string,mixed>}
      * @throws TypeException
      */
-    private function load(Student $student, ?EntityId $operation = null, ?EntityId $actor = null): array
-    {
-        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
+    private function load(
+        Student $student,
+        ?EntityId $operation = null,
+        ?EntityId $actor = null,
+        ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
+    ): array {
+        $budget ??= new \Domain\Shared\EventSourcing\HistoryReadBudget();
         $root = StudentPrimaryProgram::root(new StudentPrimaryProgramId($student->id->value));
         $cursor = null;
         $receipt = null;

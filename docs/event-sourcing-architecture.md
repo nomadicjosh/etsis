@@ -30,6 +30,8 @@ The first [course-publication slice](course-publication.md) retains reviewed def
 
 Billing-rule lookup now uses reconstructible fields in its existing metadata table, updated with its event and receipt. Ordinary fifty-record searches read labels, amounts and status through SQL, without decryption/replay/locks; current authority and metadata/head consistency are checked. Selected reads and consequential billing work still restore the rule and verify its projected facts. The additive migration shares the bounded financial conversion core with account balances and preserves original events/receipts. This supplies a derived lookup, without another journal or an operational repair/recovery workflow.
 
+[Reviewed flat-fee batches](workflow-review.md#review-student-bills) reuse registration's fee calculation, with ordered selected-student/person locks, shared bounded rule/account/primary-selection replay, current authority and stale-context checks. Account events/balances, required audit and an encrypted completed-result receipt commit atomically. `sis_billing_batches` is operation support only; monetary authority remains in the same protected journal. A retry returns its original result instead of applying current fees to the earlier selection. The confirmed consistent fee view excludes definitions committed after that view; later billing requires a new review.
+
 ## Persistence boundaries
 
 | Context | Target source of truth | Read/edit boundary |

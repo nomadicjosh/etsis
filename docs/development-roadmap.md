@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-16**, after adding readable, searchable billing-rule lookup through an atomic read model in the existing metadata table. Shared bounded account/rule conversion preserves actual events and receipts; workspace monetary entry now respects currency precision without rounding or rescaling prior postings.
+Last reviewed: **2026-11-16**, after adding reviewed flat-fee billing for selected students: proposed charges and resulting balances, stale-review checks, atomic confirmation and encrypted original-result retries. Registration shares the same fee calculation; bounded history reads preserve existing events and financial facts.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -204,7 +204,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 ## 6. Finance and institutional integrations
 
 - [x] Add [readable term-billing lookup](workflow-review.md#billing-rules-and-ledger-journals): rule/term/program/type/amount/status labels, escaped search before fifty-record keyset bounds, independent current read authority and no list replay or payload decryption. Verify selected rule projections against restored history; reconstruct existing lookup values through the shared bounded financial conversion, preserving events/receipts. Apply the additive schema/index migration and verify currency-aware workspace amount entry.
-- [ ] Add versioned per-credit and richer population-based pricing, with reviewed billing previews and understandable exceptions.
+- [x] Add [reviewed flat-fee billing](workflow-review.md#review-student-bills) for up to 25 selected students: current/resulting balances, new/already-posted/reversed fees, separate currency totals, required reasons, actor-owned expiring reviews, stale-source checks and all-or-nothing account events/balances/audit. Share registration's fee calculation and bounded selected-history reads; retain encrypted completed receipts so retries cannot apply later fees or alter later activity.
+- [ ] Add versioned per-credit and richer population-based pricing, extending reviewed billing previews with understandable exceptions and independently authorized report-population handoffs.
 - [ ] Complete source-linked adjustment/refund cases, institution-defined refund schedules and installment arrangements. Account credit and a cash refund remain separate decisions.
 - [ ] Complete automatic student-account-to-GL mappings, controlled period closing and reconciliation against retained postings.
 - [ ] Verify gateway checkout, uncertain outcomes, duplicate notifications, refunds and settlement reconciliation through selected provider test environments before any live use.

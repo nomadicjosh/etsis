@@ -9,7 +9,6 @@ use Domain\Finance\BillingRule;
 use Domain\Finance\Service\TermBillingService;
 use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\Money;
-use Domain\Registration\Service\RegistrationBilling;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -47,12 +46,10 @@ final class BillingRuleDirectoryTest extends TestCase
     {
         return new TermBillingService(
             $this->repository($s),
-            $this->createStub(RegistrationBilling::class),
-            $s->registration,
             $s->access,
             $s->transactions,
             $s->audit,
-            $s->financialCommands()
+            $s->financialCommands(),
         );
     }
 

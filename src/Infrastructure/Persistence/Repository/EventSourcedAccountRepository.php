@@ -11,6 +11,7 @@ use Domain\Finance\StudentAccount;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\EventSourcing\EventContext;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Infrastructure\EventSourcing\FinancialEventWriter;
 use Qubus\Expressive\Database;
 
@@ -23,9 +24,10 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
     ) {
     }
 
-    public function get(AccountId $id): StudentAccount
+    public function get(AccountId $id, ?HistoryReadBudget $budget = null): StudentAccount
     {
-        $history = $this->eventStore->getAggregateHistoryFor($id);
+        $history = $budget === null ? $this->eventStore->getAggregateHistoryFor($id)
+        : $this->writer->readForWrite($id, $budget);
         if (count($history) === 0) {
             throw new RecordNotFoundException('Account not found.');
         }

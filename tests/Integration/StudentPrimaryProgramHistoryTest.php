@@ -472,17 +472,8 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             $f->transactions,
             \EventStoreFixture::financialWriter($db),
         );
-        $billing = new \Infrastructure\Persistence\EventSourcedRegistrationBilling(
-            $f->accounts,
-            $f->sql,
-            $rules,
-            $f->admissions,
-            $f->primaryProgramLedger(),
-        );
         $service = new \Domain\Finance\Service\TermBillingService(
             $rules,
-            $billing,
-            $f->registration,
             $f->access,
             $f->transactions,
             $f->audit,
@@ -497,7 +488,7 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             new \Domain\Finance\ValueObject\Money(1000, "USD"),
             'Fictional authorized financial decision.',
         );
-        $service->generate($f->term, [$p->studentId]);
+        $f->bill($f->term, [$p->studentId]);
         $first = $f->sql->one("sis_student_accounts", [
             "student_id" => $p->studentId->value,
             "term_id" => $f->term->value,
@@ -531,7 +522,7 @@ final class StudentPrimaryProgramHistoryTest extends TestCase
             new \Domain\Finance\ValueObject\Money(2000, "USD"),
             'Fictional authorized financial decision.',
         );
-        $service->generate($term, [$p->studentId]);
+        $f->bill($term, [$p->studentId]);
         $next = $f->sql->one("sis_student_accounts", [
             "student_id" => $p->studentId->value,
             "term_id" => $term->value,

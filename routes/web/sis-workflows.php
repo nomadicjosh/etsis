@@ -1164,8 +1164,11 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/sis/billing-rules/{id}/retire/", [SisLedgerController::class, "retireBillingRule"])
         ->name("sis.billing.retire");
     $router
-        ->map(["POST"], "/sis/billing-batches/", [SisLedgerController::class, "generateBills"])
-        ->name("sis.billing.generate");
+        ->map(["POST"], "/sis/billing-batches/review/", [SisLedgerController::class, "reviewBills"])
+        ->name("sis.billing.review");
+    $router
+        ->map(["POST"], "/sis/billing-batches/", [SisLedgerController::class, "confirmBills"])
+        ->name("sis.billing.confirm");
     $router
         ->map(["GET"], "/sis/billing-rules/{id}/", [SisLedgerController::class, "billingRule"])
         ->name("sis.billing.show");

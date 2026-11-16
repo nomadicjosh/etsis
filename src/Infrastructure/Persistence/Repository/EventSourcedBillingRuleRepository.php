@@ -10,6 +10,7 @@ use Domain\Finance\Event\BillingRuleWasDefined;
 use Domain\Finance\Repository\BillingRuleRepository;
 use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Shared\EventSourcing\EventContext;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\ValueObject\EntityId;
@@ -46,9 +47,10 @@ final readonly class EventSourcedBillingRuleRepository implements BillingRuleRep
         $rule->clearRecordedEvents();
     }
 
-    public function get(BillingRuleId $id): BillingRule
+    public function get(BillingRuleId $id, ?HistoryReadBudget $budget = null): BillingRule
     {
-        $history = $this->events->getAggregateHistoryFor($id);
+        $history = $budget === null ? $this->events->getAggregateHistoryFor($id)
+        : $this->writer->readForWrite($id, $budget);
         if (count($history) === 0) {
             throw new RecordNotFoundException('Billing rule not found.');
         }
@@ -61,19 +63,40 @@ final readonly class EventSourcedBillingRuleRepository implements BillingRuleRep
         return $rule;
     }
 
-    public function forTerm(EntityId $term): array
+    public function forTerm(EntityId $term, ?HistoryReadBudget $budget = null, ?array $programs = null): array
     {
         new \Infrastructure\Projection\SqlBillingRuleProjection($this->sql)->assertCurrent();
         $result = [];
         $q = $this->sql->quote(...);
+        $scope = '';
+        $parameters = [$term->value];
+        if ($programs !== null) {
+            if (count($programs) > 25) {
+                throw new \InvalidArgumentException('Use at most 25 program scopes per billing read.');
+            }
+            $scope = ' AND (' . $q('program_id') . ' IS NULL';
+            if ($programs !== []) {
+                $placeholders = implode(',', array_fill(0, count($programs), '?'));
+                $scope .= ' OR ' . $q('program_id') . ' IN (' . $placeholders . ')';
+                foreach ($programs as $program) {
+                    $parameters[] = $program->value;
+                }
+            }
+            $scope .= ')';
+        }
         // Selected verification can lock metadata; every multi-rule decision uses the same identity order.
         $rows = $this->sql->fetch(
             'SELECT ' . $q('id') . ' FROM ' . $q('sis_billing_rules')
-            . ' WHERE ' . $q('term_id') . ' = ? ORDER BY ' . $q('id'),
-            [$term->value]
+            . ' WHERE ' . $q('term_id') . ' = ?' . $scope . ' ORDER BY ' . $q('id'),
+            $parameters,
+            501
         );
+        if (count($rows) > 500) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'term_id',
+                'message' => 'This term exceeds the fee-definition limit. Ask finance administration to review it.']]);
+        }
         foreach ($rows as $row) {
-            $rule = $this->get(new BillingRuleId($row['id']));
+            $rule = $this->get(new BillingRuleId($row['id']), $budget);
             if (!$rule->isRetired()) {
                 $result[] = $rule;
             }

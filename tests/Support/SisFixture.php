@@ -133,6 +133,54 @@ final class SisFixture
         return new \Domain\Finance\Service\FinancialCommandPolicy($this->access, $this->clock);
     }
 
+    public function billingBatches(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Registration\Repository\RegistrationRepository $registration = null,
+        ?\Domain\Finance\Service\TermFeeBilling $billing = null,
+    ): \Domain\Finance\Service\BillingBatchService {
+        $billing ??= $this->termFees();
+        return new \Domain\Finance\Service\BillingBatchService(
+            $billing,
+            new \Infrastructure\Persistence\Repository\SqlBillingBatchRepository($this->sql, $this->dropCipher),
+            $this->admissions,
+            $registration ?? $this->registration,
+            new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($this->sql),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            $this->dropCipher,
+            $this->financialCommands()
+        );
+    }
+
+    public function termFees(): \Domain\Finance\Service\TermFeeBilling
+    {
+        $db = $this->connection->queryBuilder();
+        return new \Infrastructure\Persistence\EventSourcedRegistrationBilling(
+            $this->accounts,
+            $this->sql,
+            new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
+                $this->sql,
+                EventStoreFixture::framework($db),
+                $this->transactions,
+                EventStoreFixture::financialWriter($db)
+            ),
+            $this->admissions,
+            $this->primaryProgramLedger()
+        );
+    }
+
+    /**
+     * @param list<EntityId> $students
+     * @return array<string,mixed>
+     */
+    public function bill(EntityId $term, array $students): array
+    {
+        $service = $this->billingBatches();
+        return $service->confirm($service->review($term, $students, 'Fictional reviewed term billing.')['review_token']);
+    }
+
     private ?EntityId $fixtureBuilding = null;
 
     public function building(): EntityId

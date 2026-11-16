@@ -4771,3 +4771,88 @@ $sis->access->grants = ['admin:dashboard'];
 if ($teachingPost('/sis/ui/data/billing/', ['search' => '', 'after' => ''])->getStatusCode() !== 403) {
     throw new RuntimeException('The financial directory bypassed its independent read permission.');
 }
+
+// Term billing requires a private, actor-owned review before any selected student is charged.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$billingReviewStudent = $sis->student();
+$billingReviewRule = $teachingPost('/sis/billing-rules/', [
+    'operation_id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+    'term_id' => $sis->term->value, 'name' => 'Native reviewed fee', 'kind' => 'fee',
+    'amount_minor' => 150, 'currency' => 'USD', 'reason' => 'Native private reviewed fee reason.',
+]);
+if ($billingReviewRule->getStatusCode() !== 201) {
+    throw new RuntimeException('The native reviewed fee could not be defined.');
+}
+$billingReviewPayload = ['term_id' => $sis->term->value,
+    'students' => [['student_id' => $billingReviewStudent->id->value]],
+    'reason' => 'Native private billing batch reason.'];
+$billingReviewBefore = $sis->sql->rows('sis_history_events');
+$billingReviewResponse = $teachingPost('/sis/billing-batches/review/', $billingReviewPayload);
+$billingReviewBody = json_decode((string) $billingReviewResponse->getBody(), true);
+if (
+    $billingReviewResponse->getStatusCode() !== 200
+    || ($billingReviewBody['new_charges'] ?? null) !== 1
+    || ($billingReviewBody['students'][0]['balance_after_minor'] ?? null) !== 150
+    || !is_string($billingReviewBody['review_token'] ?? null)
+    || $billingReviewResponse->hasHeader('phpdebugbar-id')
+    || !str_contains($billingReviewResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $billingReviewResponse->getBody(), 'Native private')
+    || $billingReviewBefore !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Native billing review lost source facts, privacy or read-only behavior.');
+}
+if (
+    $teachingPost('/sis/billing-batches/', $billingReviewPayload)->getStatusCode() !== 422
+    || $sis->sql->rows('sis_history_events') !== $billingReviewBefore
+) {
+    throw new RuntimeException('An unreviewed native billing batch changed financial history.');
+}
+$billingReviewConfirmation = ['review_token' => $billingReviewBody['review_token']];
+$billingReviewResult = $teachingPost('/sis/billing-batches/', $billingReviewConfirmation);
+$billingReviewResultBody = json_decode((string) $billingReviewResult->getBody(), true);
+if (
+    $billingReviewResult->getStatusCode() !== 200 || ($billingReviewResultBody['posted'] ?? null) !== 1
+    || ($billingReviewResultBody['accounts_created'] ?? null) !== 1
+    || $billingReviewResult->hasHeader('phpdebugbar-id')
+    || !str_contains($billingReviewResult->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('The native reviewed billing confirmation lost its result or private headers.');
+}
+$billingReviewBefore = $sis->sql->rows('sis_history_events');
+$billingReviewRetry = $teachingPost('/sis/billing-batches/', $billingReviewConfirmation);
+if (
+    $billingReviewRetry->getStatusCode() !== 200
+    || json_decode((string) $billingReviewRetry->getBody(), true) !== $billingReviewResultBody
+    || $sis->sql->rows('sis_history_events') !== $billingReviewBefore
+    || str_contains(json_encode($sis->sql->rows('sis_billing_batches')), 'Native private')
+) {
+    throw new RuntimeException('A native billing retry changed charges or disclosed protected receipt data.');
+}
+$billingReviewStale = $teachingPost('/sis/billing-batches/review/', $billingReviewPayload);
+$billingReviewStaleBody = json_decode((string) $billingReviewStale->getBody(), true);
+$billingReviewAccount = new \Domain\Finance\ValueObject\AccountId($billingReviewResultBody['students'][0]['account_id']);
+$sis->finance()->post(
+    $billingReviewAccount,
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    \Domain\Finance\Enum\EntryType::Payment,
+    new \Domain\Finance\ValueObject\Money(50, 'USD'),
+    $sis->accounts->get($billingReviewAccount)->playhead(),
+    'Native fictional later payment.'
+);
+$billingReviewBefore = $sis->sql->rows('sis_history_events');
+if (
+    $teachingPost('/sis/billing-batches/', ['review_token' => $billingReviewStaleBody['review_token']])->getStatusCode() !== 409
+    || $sis->sql->rows('sis_history_events') !== $billingReviewBefore
+) {
+    throw new RuntimeException('A stale native billing review changed later financial activity.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:finance:post', 'sis:finance:read'];
+if (
+    $teachingPost('/sis/billing-batches/review/', $billingReviewPayload)->getStatusCode() !== 403
+    || $teachingPost('/sis/billing-batches/', $billingReviewConfirmation)->getStatusCode() !== 403
+    || $sis->sql->rows('sis_history_events') !== $billingReviewBefore
+) {
+    throw new RuntimeException('A native billing review or accepted retry bypassed current student-read authority.');
+}

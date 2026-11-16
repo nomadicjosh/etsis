@@ -15,7 +15,6 @@ use Domain\Finance\Service\TermBillingService;
 use Domain\Finance\ValueObject\BillingRuleId;
 use Domain\Finance\ValueObject\JournalId;
 use Domain\Finance\ValueObject\Money;
-use Domain\Registration\Service\RegistrationBilling;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -40,12 +39,10 @@ final class FinancialDefinitionCommandsTest extends TestCase
     {
         return new TermBillingService(
             $this->ruleRepository($s),
-            $this->createStub(RegistrationBilling::class),
-            $s->registration,
             $s->access,
             $s->transactions,
             $audit ?? $s->audit,
-            $s->financialCommands()
+            $s->financialCommands(),
         );
     }
 
