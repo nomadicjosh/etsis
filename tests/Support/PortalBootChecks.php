@@ -4455,3 +4455,44 @@ if ($ownerUpdates->getStatusCode() !== 200 || $ownerUpdate->getStatusCode() !== 
     || $sis->sql->rows('sis_history_events') !== $publicEventEvents) {
     throw new RuntimeException('Requester updates lost owner access, CSRF, privacy or independent read tracking.');
 }
+
+// Course import uses one reviewed workflow with the native provider, CSRF and private response boundary.
+$sis->access->staff = false;
+$sis->access->grants = ['sis:import:manage'];
+$courseImportCsv = "External ID,Code,Title,Credits\nnative-import,IMPORT.NATIVE,Fictional imported draft,3.125\n";
+$courseImportPayload = ['source' => 'native-import', 'csv' => $courseImportCsv,
+    'mapping' => ['external_id' => 0, 'code' => 1, 'title' => 2, 'credits' => 3], 'choices' => []];
+$courseImportEvents = $sis->sql->rows('sis_history_events');
+$courseImportNoCsrf = $communicationNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/imports/preview/'
+))->withParsedBody($courseImportPayload);
+if ($app->router->match($courseImportNoCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('Import review lost browser CSRF protection.');
+}
+$courseImportReview = $teachingPost('/sis/imports/preview/', $courseImportPayload);
+$courseImportBody = json_decode((string) $courseImportReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $courseImportReview->getStatusCode() !== 200 || !($courseImportBody['ready'] ?? false)
+    || !is_string($courseImportBody['review_token'] ?? null) || $courseImportReview->hasHeader('phpdebugbar-id')
+    || !str_contains($courseImportReview->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('The private course-import review did not boot.');
+}
+$courseImportPayload['review_token'] = $courseImportBody['review_token'];
+$courseImportSaved = $teachingPost('/sis/imports/commit/', $courseImportPayload);
+$courseImportAgain = $teachingPost('/sis/imports/commit/', $courseImportPayload);
+if (
+    $courseImportSaved->getStatusCode() !== 200 || $courseImportAgain->getStatusCode() !== 200
+    || (string) $courseImportSaved->getBody() !== (string) $courseImportAgain->getBody()
+    || (int) $sis->sql->one('sis_courses', ['code' => 'IMPORT.NATIVE'])['active'] !== 0
+    || $sis->sql->rows('sis_history_events') !== $courseImportEvents
+) {
+    throw new RuntimeException('Import confirmation lost its draft, original receipt or historical boundary.');
+}
+$sis->access->grants = [];
+if (
+    $teachingPost('/sis/imports/preview/', $courseImportPayload)->getStatusCode() !== 403
+    || $teachingPost('/sis/imports/commit/', $courseImportPayload)->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Import review or an accepted receipt bypassed current permission.');
+}

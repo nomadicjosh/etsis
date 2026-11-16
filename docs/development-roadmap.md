@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-16**, after adding individual hold follow-up in the existing office worklist: eligible colleague selection, institution-calendar dates, assignment/due filters, stale-save protection and atomic required audit. Reviewed handoffs clear prior individual work while preserving hold history. Follow-up remains operational CRUD; broader shared-case support remains open.
+Last reviewed: **2026-11-16**, after consolidating course imports into one reviewed workflow: catalog/source reconciliation, explicit existing-course links and exclusions, inactive new drafts, bounded row review and original operation receipts. No historical catalog facts, journal schema or additional import queue changed.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -190,7 +190,8 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Extend reviewed population handoffs to further sources and independently authorized billing/messaging actions. Retain explicit selection semantics and bounded work rather than automatically acting on an entire live report.
 - [x] [Saved report modes and expiry](workflow-review.md#saved-report-results-and-automatic-removal): dynamic live results, encrypted immutable complete static captures (up to 5,000 rows/8 MiB), optional automatic removal for either mode, immediate expiry enforcement and bounded scheduled cleanup preserving linked case/academic history.
 - [ ] Add larger bounded background full-result export jobs, cancellation and protected output archival. Static capture currently rejects oversized results without saving a partial extract.
-- [ ] Expand mapped imports beyond courses: identity/dependency reconciliation, useful row errors, explicit conflict review and safe restartable batches.
+- [x] Complete [reviewed course-import reconciliation](course-publication.md#reviewed-course-imports): bulk catalog/source checks, explicit matched-course links and exclusions, inactive drafts, searchable twenty-five-row review, protected expiring confirmations and original retries. Reuse catalog receipts, preserve existing courses/publications and roll back the whole batch on concurrent collisions or required-audit/authority failures.
+- [ ] Expand mapped imports to additional entities, with their own identity/dependency reconciliation and historical/privacy rules. The reviewed course workflow provides the shared interaction; complete institutional conversion and larger restartable background imports remain open.
 - [ ] Build and exercise legacy-data conversion/reconciliation, preserving verified recorded history and explicitly identifying unknown earlier facts.
 
 **Done when:** the visual builder answers the approved legacy questions without a raw SQL screen; field/source permissions apply even to hidden filters; exports are complete and bounded; conversion produces reconciled records with no invented history.

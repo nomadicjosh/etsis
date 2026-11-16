@@ -20,23 +20,30 @@ final readonly class SisMappedImportController
     {
         $data = $this->data($request);
 
-        return new JsonResponse($this->service->preview($data['csv'], $data['mapping'], $data['delimiter'] ?? ','));
+        return new JsonResponse($this->service->preview(
+            $data['source'],
+            $data['csv'],
+            $data['mapping'],
+            $data['delimiter'] ?? ',',
+            $data['choices'] ?? []
+        ));
     }
 
     public function commit(ServerRequest $request): ResponseInterface
     {
         $data = $this->data($request);
-        if (!is_string($data['source'] ?? null) || !is_string($data['fingerprint'] ?? null)) {
+        if (!is_string($data['review_token'] ?? null)) {
             throw new InvalidArgumentException('Review the import before continuing.');
         }
 
-        return new JsonResponse(['imported' => $this->service->commit(
+        return new JsonResponse($this->service->commit(
             $data['source'],
             $data['csv'],
             $data['mapping'],
-            $data['fingerprint'],
-            $data['delimiter'] ?? ','
-        )]);
+            $data['review_token'],
+            $data['delimiter'] ?? ',',
+            $data['choices'] ?? []
+        ));
     }
 
     /** @return array<string, mixed> */
@@ -44,8 +51,10 @@ final readonly class SisMappedImportController
     {
         $data = $request->getParsedBody();
         if (
-            !is_array($data) || !is_string($data['csv'] ?? null) || !is_array($data['mapping'] ?? null)
+            !is_array($data) || !is_string($data['source'] ?? null)
+            || !is_string($data['csv'] ?? null) || !is_array($data['mapping'] ?? null)
             || (isset($data['delimiter']) && !is_string($data['delimiter']))
+            || (isset($data['choices']) && (!is_array($data['choices']) || !array_is_list($data['choices'])))
         ) {
             throw new InvalidArgumentException('CSV and mapping are required.');
         }

@@ -167,6 +167,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/moodle-request-denied-fixture/' => ['sis:person:manage', 'sis:moodle:link-person', 'sis:moodle:manage'],
         '/admin/moodle-recovery-denied-fixture/' => ['sis:person:manage', 'sis:moodle:create-person'],
         '/admin/hold-office-fixture/' => ['sis:restrictions:manage'],
+        '/admin/course-import-fixture/' => ['sis:import:manage'],
         '/admin/hold-handoff-fixture/' => ['sis:restrictions:manage', 'sis:restrictions:handoff'],
         '/admin/office-admin-fixture/' => ['admin:access:manage', 'sis:restrictions:manage'],
         '/admin/registration-fixture/' => ['sis:registration:manage'],

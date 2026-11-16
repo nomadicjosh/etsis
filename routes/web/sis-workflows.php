@@ -37,7 +37,6 @@ use Application\Http\Controller\SisTransferController;
 use Application\Http\Controller\SisTransferCatalogController;
 use Application\Http\Controller\SisLedgerController;
 use Application\Http\Controller\SisReportController;
-use Application\Http\Controller\SisImportController;
 use Application\Http\Controller\SisCampaignController;
 use Application\Http\Controller\SisPortalController;
 use Application\Http\Controller\SisAuditController;
@@ -1109,9 +1108,6 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/reports/{id}/export/", [SisReportController::class, "export"])
         ->name("sis.report.export");
-    $router
-        ->map(["POST"], "/sis/imports/courses/{source}/", [SisImportController::class, "courses"])
-        ->name("sis.import.courses");
     $router
         ->map(["POST"], "/sis/campaigns/", [SisCampaignController::class, "create"])
         ->name("sis.campaign.create");

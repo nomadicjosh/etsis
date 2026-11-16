@@ -7,17 +7,13 @@ require_once dirname(__DIR__) . '/Support/SisFixture.php';
 use Defuse\Crypto\Key;
 use Domain\Admissions\Service\AdmissionsService;
 use Domain\Admissions\Service\ApplicationFormService;
-use Domain\Import\Service\CatalogImportService;
-use Domain\Import\Service\MappedImportService;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Communications\DefuseMessageCipher;
 use Infrastructure\Identity\RandomInstitutionalIdGenerator;
-use Infrastructure\Import\LeagueCourseCsvMapper;
 use Infrastructure\Persistence\Repository\SqlApplicationFormRepository;
-use Infrastructure\Persistence\Repository\SqlCatalogImportRepository;
 use PHPUnit\Framework\TestCase;
 use Qubus\Config\ConfigContainer;
 
@@ -151,36 +147,28 @@ final class WorkspaceWorkflowTest extends TestCase
     public function testMappedImportPreviewDoesNotWriteAndCommitRechecksContent(): void
     {
         $fixture = new SisFixture();
-        $service = new MappedImportService(
-            new LeagueCourseCsvMapper(),
-            new CatalogImportService(
-                new SqlCatalogImportRepository($fixture->sql),
-                $fixture->access,
-                $fixture->transactions,
-                $fixture->audit
-            ),
-            $fixture->access
-        );
+        $service = $fixture->imports();
         $csv = "Name,Credits,Source,Code\nExample Computing,3.125,example-1,CS-101\n";
         $mapping = ['title' => 0, 'credits' => 1, 'external_id' => 2, 'code' => 3];
-        $preview = $service->preview($csv, $mapping);
+        $preview = $service->preview('example', $csv, $mapping);
         self::assertTrue($preview['ready']);
         self::assertArrayNotHasKey('canonical_csv', $preview);
         self::assertCount(0, $fixture->sql->rows('sis_courses'));
         try {
-            $service->commit('example', str_replace('3.125', '4', $csv), $mapping, $preview['fingerprint']);
+            $service->commit('example', str_replace('3.125', '4', $csv), $mapping, $preview['review_token']);
             self::fail('Unreviewed content was imported.');
-        } catch (InvalidArgumentException) {
+        } catch (\Domain\Shared\Exception\ValidationException) {
             self::assertCount(0, $fixture->sql->rows('sis_courses'));
         }
-        self::assertSame(1, $service->commit('example', $csv, $mapping, $preview['fingerprint']));
-        self::assertSame(0, $service->commit('example', $csv, $mapping, $preview['fingerprint']));
+        $accepted = $service->commit('example', $csv, $mapping, $preview['review_token']);
+        self::assertSame(1, $accepted['imported']);
+        self::assertSame($accepted, $service->commit('example', $csv, $mapping, $preview['review_token']));
         self::assertSame(3125, (int) $fixture->sql->rows('sis_courses')[0]['credits_milli']);
         $invalid = str_replace('3.125', 'not-a-number', $csv);
-        $preview = $service->preview($invalid, $mapping);
+        $preview = $service->preview('example', $invalid, $mapping);
         self::assertFalse($preview['ready']);
         $this->expectException(ValidationException::class);
-        $service->commit('example', $invalid, $mapping, $preview['fingerprint']);
+        $service->commit('example', $invalid, $mapping, 'missing-review');
     }
 
     public function testDirectoryPermissionDoesNotExposeOtherPersonAcademicOrFinancialData(): void

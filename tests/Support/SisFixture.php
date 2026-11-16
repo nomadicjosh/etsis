@@ -892,6 +892,17 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql), $this->access, $this->clock
         );
     }
+    public function imports(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Import\Repository\CatalogImportRepository $repository = null,
+    ): \Domain\Import\Service\MappedImportService {
+        return new \Domain\Import\Service\MappedImportService(
+            new \Infrastructure\Import\LeagueCourseCsvMapper(),
+            $repository ?? new \Infrastructure\Persistence\Repository\SqlCatalogImportRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogWorkflowRepository($this->sql),
+            $this->access, $this->transactions, $audit ?? $this->audit, $this->dropCipher, $this->clock,
+        );
+    }
     public function restrictions(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Student\Service\RestrictionService {

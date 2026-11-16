@@ -8,7 +8,6 @@ use Defuse\Crypto\Key;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\CampaignService;
 use Domain\Communications\Service\MailTransport;
-use Domain\Import\Service\CatalogImportService;
 use Domain\Portal\Service\PortalService;
 use Domain\Reporting\Service\ReportService;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -16,7 +15,6 @@ use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Communications\DefuseMessageCipher;
 use Infrastructure\Persistence\Repository\SqlCampaignRepository;
-use Infrastructure\Persistence\Repository\SqlCatalogImportRepository;
 use Infrastructure\Persistence\Repository\SqlPortalRepository;
 use Infrastructure\Persistence\Repository\SqlReportRepository;
 use PHPUnit\Framework\TestCase;
@@ -249,18 +247,19 @@ final class AdministrationWorkflowTest extends TestCase
     public function testCatalogCsvImportIsRepeatableAndBatchFailureRollsBackEverything(): void
     {
         $f = new SisFixture();
-        $service = new CatalogImportService(new SqlCatalogImportRepository($f->sql), $f->access, $f->transactions, $f->audit);
-        $header = "external_id,code,title,credits_milli\n";
-        $csv = $header . "a1,CS101,Introduction,3000\n";
-        self::assertSame(1, $service->courses('old-system', $csv));
-        self::assertSame(0, $service->courses('old-system', $csv));
-        try {
-            $service->courses('old-system', $header . "a2,CS102,Algorithms,3000\na3,CS101,Duplicate,3000\n");
-            self::fail('Duplicate catalog code did not roll back the batch.');
-        } catch (PDOException) {
-            self::assertCount(1, $f->sql->rows('sis_courses'));
-            self::assertCount(1, $f->sql->rows('sis_import_mappings'));
-        }
+        $service = $f->imports();
+        $csv = "external_id,code,title,credits\na1,CS101,Introduction,3\n";
+        $mapping = ['external_id' => 0, 'code' => 1, 'title' => 2, 'credits' => 3];
+        $review = $service->preview('old-system', $csv, $mapping);
+        $first = $service->commit('old-system', $csv, $mapping, $review['review_token']);
+        self::assertSame(1, $first['imported']);
+        self::assertSame($first, $service->commit('old-system', $csv, $mapping, $review['review_token']));
+        $changed = "external_id,code,title,credits\na2,CS102,Algorithms,3\na3,CS101,Duplicate,3\n";
+        $review = $service->preview('old-system', $changed, $mapping);
+        self::assertFalse($review['ready']);
+        self::assertSame('conflict', $review['plan'][1]['action']);
+        self::assertCount(1, $f->sql->rows('sis_courses'));
+        self::assertCount(1, $f->sql->rows('sis_import_mappings'));
     }
 
     public function testPortalDraftCannotBeReadAndPublishingSharesOnlyThePublishedPost(): void

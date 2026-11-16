@@ -26,7 +26,6 @@
     let pendingNavigation = null;
     let signInPending = false;
     let formDraft = { id: null, version: null, status: 'draft', fields: [] };
-    let importState = { csv: '', mapping: {}, preview: null };
     const drawer = bootstrap.Offcanvas.getOrCreateInstance($one('#record-drawer'));
     const searchModal = bootstrap.Modal.getOrCreateInstance($one('#search-modal'));
     const leaveModal = bootstrap.Modal.getOrCreateInstance($one('#leave-modal'));
@@ -213,6 +212,7 @@
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
+    const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, buildForm, formData, openDrawer });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -269,7 +269,7 @@
         task(() => navigate(link.dataset.workspace));
     });
     window.addEventListener('popstate', () => task(() => navigate(location.pathname.match(/workspace\/([^/]+)/)?.[1] || 'overview', false)));
-    window.addEventListener('pagehide', () => { $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importState = { csv: '', mapping: {}, preview: null }; formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
+    window.addEventListener('pagehide', () => { $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
     listen('#discard-draft', 'click', () => { dirty = false; leaveModal.hide(); pendingNavigation?.(); pendingNavigation = null; });
@@ -988,49 +988,7 @@
         container.append(answers);
     }
 
-    function importStep(step) {
-        $all('[data-import-panel]').forEach(panel => { panel.hidden = Number(panel.dataset.importPanel) !== step; });
-        $all('[data-import-step]').forEach(item => { const active = Number(item.dataset.importStep) === step; item.classList.toggle('active', active); if (active) item.setAttribute('aria-current', 'step'); else item.removeAttribute('aria-current'); });
-        $one('[data-import-panel="' + step + '"] h2')?.setAttribute('tabindex', '-1');
-        $one('[data-import-panel="' + step + '"] h2')?.focus({ preventScroll: true });
-    }
-    function importPayload() { return { source: $one('#import-source').value, csv: importState.csv, mapping: importState.mapping, delimiter: $one('#import-delimiter').value === 'tab' ? '\t' : $one('#import-delimiter').value }; }
-    listen('#import-inspect', 'click', async () => {
-        const file = $one('#import-file').files[0];
-        if (!file || file.size > 1048576 || !file.name.toLowerCase().endsWith('.csv')) throw new Error('Choose a CSV file up to 1 MB.');
-        if (!$one('#import-source').reportValidity()) return;
-        importState.csv = await file.text(); importState.mapping = {};
-        const preview = await request('/sis/imports/preview/', 'POST', importPayload());
-        const mapping = $one('#import-mapping'); clear(mapping);
-        for (const [target, label, help] of [['external_id', 'External ID', 'A stable, unique key from your source system'], ['code', 'Course code', 'For example ENG101'], ['title', 'Course title', 'The name people will recognize'], ['credits', 'Credits', 'Decimal credits, such as 3 or 3.5']]) {
-            const select = node('select', { class: 'form-select', id: `map-${target}`, name: target, required: true });
-            populate(select, preview.headers.map((header, index) => ({ value: String(index), label: header })), 'Choose a source column');
-            const normalized = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const index = preview.headers.findIndex(header => normalized(header) === normalized(target) || normalized(header) === normalized(label));
-            if (index >= 0) select.value = String(index);
-            mapping.append(node('div', { class: 'mapping-row' }, node('label', { for: select.id }, label, node('small', {}, help)), icon('arrow-right'), select));
-        }
-        importStep(2);
-    });
-    listen('#import-review', 'click', async () => {
-        const mapping = {}; for (const select of $all('select', $one('#import-mapping'))) { if (!select.reportValidity()) return; mapping[select.name] = Number(select.value); }
-        if (new Set(Object.values(mapping)).size !== 4) throw new Error('Choose a different source column for each destination.');
-        importState.mapping = mapping;
-        const preview = await request('/sis/imports/preview/', 'POST', importPayload()); importState.preview = preview;
-        $one('#import-review-title').textContent = preview.ready ? `${number(preview.row_count)} courses, ready for a new home.` : 'A few details need your attention.';
-        const errors = $one('#import-review-errors'); clear(errors);
-        if (preview.errors.length) errors.append(node('div', { class: 'alert alert-danger mt-4' }, node('strong', {}, 'Please correct these rows in your source file and upload it again.'), node('ul', { class: 'mb-0 mt-2' }, preview.errors.map(error => node('li', {}, error.message)))));
-        $one('#import-preview-table').replaceChildren(table(preview.headers, preview.samples, 'First five rows of the source CSV'));
-        $one('#import-commit').disabled = !preview.ready;
-        importStep(3);
-    });
-    listen('#import-commit', 'click', async () => {
-        const result = await request('/sis/imports/commit/', 'POST', { ...importPayload(), fingerprint: importState.preview.fingerprint });
-        $one('#import-summary').textContent = `${number(result.imported)} courses imported. ${number(importState.preview.row_count - result.imported)} identical existing records skipped.`;
-        importState.csv = ''; importState.preview = null; $one('#import-file').value = ''; importStep(4); notify('Import complete. Welcome to a tidier catalog.');
-    });
-    listen('#import-again', 'click', () => { importState = { csv: '', mapping: {}, preview: null }; importStep(1); });
-    document.addEventListener('click', event => { const button = event.target.closest('[data-import-back]'); if (button) importStep(Number(button.dataset.importBack)); });
+
 
     let ruleInitialized = false;
     let ruleMode = 'students';

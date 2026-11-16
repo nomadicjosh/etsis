@@ -31,7 +31,7 @@
                         pattern="[A-Za-z0-9._-]{1,80}"
                         required
                     />
-                    <div class="form-text">Use the same source name when repeating an import.</div>
+                    <div class="form-text">Use the same source name when repeating an import. Names use lowercase.</div>
                 </div>
                 <div>
                     <label class="form-label" for="import-delimiter">Columns separated by</label>
@@ -71,13 +71,43 @@
                 </div>
             </div>
             <div id="import-review-errors" role="alert"></div>
-            <div id="import-preview-table" class="table-responsive mt-4"></div>
+            <p id="import-plan-summary" class="fw-semibold mt-3" role="status"></p>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label for="import-plan-filter" class="form-label">Review rows</label>
+                    <select id="import-plan-filter" class="form-select">
+                        <option value="all">All rows</option>
+                        <option value="unresolved">Needs attention</option>
+                        <option value="create">New drafts</option>
+                        <option value="link">Approved links</option>
+                        <option value="skip">Previously imported</option>
+                        <option value="omitted">Left out</option>
+                        <option value="conflict">Conflicts</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="import-plan-search" class="form-label">Find an import row</label>
+                    <input id="import-plan-search" class="form-control" type="search" maxlength="191" />
+                </div>
+            </div>
+            <div id="import-plan-table" class="table-responsive" tabindex="0" role="region" aria-label="Import row review"></div>
+            <p id="import-plan-status" class="form-text" role="status"></p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button id="import-plan-previous" class="btn btn-outline-secondary" type="button">Previous rows</button>
+                <button id="import-plan-next" class="btn btn-outline-secondary" type="button">Next rows</button>
+            </div>
+            <details class="mt-3">
+                <summary>Original CSV sample</summary>
+                <div id="import-preview-table" class="table-responsive mt-3"></div>
+            </details>
             <p class="muted-text mt-3">
-                Preview shows the first five source rows. Every row is validated before any data is saved. Repeated
-                identical rows from a previous import are skipped.
+                Every row is checked against the catalog. New courses are inactive drafts. Approve matching course links
+                explicitly, or leave rows out. Existing courses and historical publications are preserved.
             </p>
-            <div class="d-flex gap-2">
+            <p id="import-choice-status" class="form-text" role="status"></p>
+            <div class="d-flex flex-wrap gap-2">
                 <button class="btn btn-outline-secondary" type="button" data-import-back="2">Adjust mapping</button>
+                <button class="btn btn-outline-primary" type="button" id="import-refresh">Review choices</button>
                 <button class="btn btn-primary" type="button" id="import-commit">
                     Import courses <i class="bi bi-arrow-up-square" aria-hidden="true"></i>
                 </button>
@@ -89,7 +119,14 @@
             <h2>Your catalog is a little more complete.</h2>
             <p id="import-summary"></p>
             <div class="d-flex gap-2 justify-content-center">
-                <button class="btn btn-outline-secondary" type="button" id="import-again">Import another file</button><a class="btn btn-primary" href="/admin/workspace/courses/" data-workspace="courses">See your courses <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                <button class="btn btn-outline-secondary" type="button" id="import-again">Import another file</button>
+                <a
+                    class="btn btn-primary"
+                    href="/admin/workspace/courses/"
+                    data-workspace="courses"
+                    data-requires="sis:catalog:manage">
+                    Review course drafts <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </a>
             </div>
         </div>
     </div>
