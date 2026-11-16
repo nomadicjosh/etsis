@@ -25,7 +25,7 @@ final readonly class Campaign
 
     public function transition(string $status): self
     {
-        $allowed = ['draft' => ['queued'], 'queued' => ['paused', 'completed'], 'paused' => ['queued'],
+        $allowed = ['draft' => ['queued'], 'queued' => ['paused', 'completed'], 'paused' => ['queued', 'completed'],
             'completed' => [], 'template' => ['template_review', 'template_retired'],
             'template_review' => ['template', 'template_shared', 'template_retired'],
             'template_shared' => ['template', 'template_retired'], 'template_retired' => ['template']];

@@ -842,6 +842,75 @@ window.createWorkspaceOperations = function (ui) {
             button("Back to message", back), confirm);
         await review();
     }
+    async function campaignDeliveryDecision(row, item, back) {
+        const body = openDrawer("Review delivery", "COMMUNICATIONS");
+        const base = `/sis/campaigns/${row.id}/deliveries/${item.id}`;
+        const state = await request(`${base}/review/`);
+        if (!body.isConnected) return;
+        const label = [item.given_name, item.family_name].filter(Boolean).join(" ") || "Selected recipient";
+        const transportLabels = { queued: "Queued", sending: "In progress or interrupted", needs_review: "Unconfirmed", sent: "Confirmed sent" };
+        body.append(button("Back to campaign", back, "btn-link mb-3"), node("h2", { class: "h4 private-text" }, label),
+            node("p", { class: "text-break" }, `Delivery reference: ${state.delivery_id}`),
+            node("p", {}, `Mail-service result: ${transportLabels[state.transport_status] || state.transport_status}`));
+        if (state.decision) {
+            const saved = state.decision;
+            body.append(node("h3", { class: "h5" }, saved.decision === "confirmed_sent" ? "Staff confirmed sending" : "Closed without resending"),
+                node("p", { class: "private-text message-preview" }, saved.reason),
+                node("p", { class: "private-text" }, saved.evidence ? `Evidence reference: ${saved.evidence}` : "No evidence reference recorded."),
+                node("p", { class: "form-text" }, `Recorded ${saved.decided_at} by account …${saved.actor_id.slice(-8)}.`));
+            return;
+        }
+        if (state.worker_active) {
+            body.append(node("p", { class: "alert alert-info" },
+                "Return to the campaign and cancel background delivery before recording a decision. A send already in progress may finish."));
+            return;
+        }
+        if (!["sending", "needs_review"].includes(state.transport_status)) {
+            body.append(node("p", { class: "alert alert-info" }, "This delivery has no uncertain result to review."));
+            return;
+        }
+        const options = [{ value: "closed", label: "Close without resending" }];
+        if (state.transport_status === "needs_review") options.push({ value: "confirmed_sent", label: "Confirm sent using evidence" });
+        const decisionFields = [
+            ["decision", "Decision", "choice", options], ["reason", "Reason for this decision", "textarea"],
+            ["evidence", "Mail-service receipt or institutional case reference", "text", "", false],
+        ];
+        const form = await buildForm(decisionFields, { decision: "closed" });
+        if (!body.isConnected) return;
+        form.elements.reason.maxLength = 1000;
+        const evidence = form.elements.evidence;
+        form.elements.decision.addEventListener("change", () => { evidence.required = form.elements.decision.value === "confirmed_sent"; });
+        const preview = node("section", { hidden: true, "aria-label": "Delivery decision review" });
+        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review decision");
+        form.append(submit);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            if (!form.reportValidity()) return;
+            task(async () => {
+                const values = formData(form, decisionFields);
+                const reviewed = await request(`${base}/review/`, "POST", {
+                    decision: values.decision, reason: values.reason, evidence: values.evidence?.trim() || null,
+                });
+                if (!body.isConnected) return;
+                preview.replaceChildren(node("h3", { class: "h5", tabindex: "-1" }, "Confirm this delivery decision"),
+                    node("p", {}, reviewed.decision === "confirmed_sent" ? "Confirm sent using the recorded evidence." : "Close this review without another send attempt."),
+                    node("p", { class: "message-preview private-text" }, reviewed.reason),
+                    node("p", { class: "private-text" }, reviewed.evidence ? `Evidence reference: ${reviewed.evidence}` : "No evidence reference recorded."),
+                    button("Back to decision", () => { preview.hidden = true; form.hidden = false; form.elements.decision.focus(); }),
+                    button("Confirm delivery decision", async () => {
+                        await request(`${base}/confirm/`, "POST", { review_token: reviewed.review_token });
+                        if (!body.isConnected) return;
+                        notify("Delivery decision recorded. No message was resent.");
+                        await back();
+                    }, "btn-primary"));
+                form.hidden = true;
+                preview.hidden = false;
+                preview.querySelector("h3").focus();
+            }, submit);
+        });
+        body.append(node("p", { class: "form-text" },
+            "A confirmed send needs a mail-service receipt or institutional evidence reference. Record a short reason and reference; keep message text, addresses, credentials and raw provider responses out of these notes. Closing the review leaves an already claimed send free to finish. These actions never send or retry a message."), form, preview);
+    }
     async function campaignProgress(body, row, data, back) {
         const progress = section("Sending progress");
         const label = node("p", { role: "status", class: "mb-2" });
@@ -888,9 +957,11 @@ window.createWorkspaceOperations = function (ui) {
                 bar.setAttribute("aria-valuenow", String(percent));
                 bar.setAttribute("aria-valuetext", `${counts.sent} of ${state.total} messages confirmed sent`);
                 summary.textContent = `${counts.queued} queued · ${counts.sending} sending · ${counts.needs_review} need review`;
+                if (counts.closed) summary.textContent += ` · ${counts.closed} closed without resending`;
                 scheduled.hidden = !state.send_after;
                 scheduled.textContent = state.send_after ? `Scheduled start: ${state.send_after.display}` : "";
                 explanation.textContent = state.campaign_status === "paused" ? "Campaign paused. No new messages will be sent until it is resumed."
+                    : state.status === "completed" && counts.closed ? "Delivery processing finished. Closed reviews are included in the audience total and excluded from sent totals."
                     : state.waiting ? "Scheduled and waiting. No messages will be sent before the reviewed time. You can leave this screen."
                         : explanations[state.status] || "Refresh to check delivery status.";
                 cancel.hidden = state.status !== "active";
@@ -1019,13 +1090,17 @@ window.createWorkspaceOperations = function (ui) {
         );
         await paged(deliveries, "deliveries", row.id, (rows) =>
             scrollTable(
-                ["Recipient account", "Status"],
+                ["Recipient account", "Status", "Review"],
                 rows.map((item) => [
                     [item.given_name, item.family_name]
                         .filter(Boolean)
                         .join(" ") ||
                         `Account …${item.recipient_user_id.slice(-8)}`,
-                    badge(item.status),
+                    badge(item.status === "sent" ? "sent" : item.disposition === "confirmed_sent" ? "Staff confirmed sending"
+                        : item.disposition === "closed" ? "Closed without resending" : item.status),
+                    can("sis:communications:admin") && can("sis:person:manage")
+                        && (item.resolution_id || ["sending", "needs_review"].includes(item.status))
+                        ? button(item.resolution_id ? "View delivery decision" : "Review delivery", () => campaignDeliveryDecision(row, item, back)) : "—",
                 ]),
                 "Campaign deliveries",
             ),

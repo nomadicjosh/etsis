@@ -4125,6 +4125,47 @@ if ($backgroundCommand->execute([]) !== 0 || !str_contains($backgroundCommand->g
     || $backgroundCommand->execute(['--limit' => '21']) !== 2) {
     throw new RuntimeException('Background delivery command lost its native registration or explicit apply boundary.');
 }
+// Fictional uncertain transport state exercises administrative review without contacting a mail service.
+$reviewDelivery = $sis->sql->one('sis_deliveries', ['campaign_id' => $communicationId]);
+$sis->sql->update('sis_deliveries', ['status' => 'needs_review', 'version' => 2], ['id' => $reviewDelivery['id']]);
+$deliveryDecisionPath = $communicationBase . 'deliveries/' . $reviewDelivery['id'];
+$decisionPayload = ['decision' => 'closed', 'reason' => 'Fictional delivery review reason.'];
+$deliveryDecisionGet = $get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $deliveryDecisionPath . '/review/'
+));
+$decisionNoCsrf = $communicationNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $deliveryDecisionPath . '/review/'
+))->withParsedBody($decisionPayload);
+$sis->access->staff = false;
+$sis->access->grants = ['sis:communications:manage', 'sis:person:manage'];
+if ($app->router->match($deliveryDecisionGet)->getStatusCode() !== 403
+    || $teachingPost($deliveryDecisionPath . '/review/', $decisionPayload)->getStatusCode() !== 403) {
+    throw new RuntimeException('Campaign ownership granted delivery administration.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+$deliveryDecisionReview = $teachingPost($deliveryDecisionPath . '/review/', $decisionPayload);
+$deliveryDecisionBody = json_decode((string) $deliveryDecisionReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$deliveryDecisionToken = $deliveryDecisionBody['review_token'] ?? '';
+$decisionConfirmPayload = ['review_token' => $deliveryDecisionToken];
+$decisionConfirmNoCsrf = $decisionNoCsrf->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $deliveryDecisionPath . '/confirm/'
+))->withParsedBody($decisionConfirmPayload);
+$decisionConfirmed = $teachingPost($deliveryDecisionPath . '/confirm/', $decisionConfirmPayload);
+$decisionRead = $app->router->match($deliveryDecisionGet);
+$deliveryList = $teachingPost('/sis/ui/context/deliveries/' . $communicationId . '/', []);
+if ($deliveryDecisionReview->getStatusCode() !== 200 || $decisionConfirmed->getStatusCode() !== 200
+    || $app->router->match($decisionNoCsrf)->getStatusCode() !== 403
+    || $app->router->match($decisionConfirmNoCsrf)->getStatusCode() !== 403
+    || $decisionRead->getStatusCode() !== 200 || $decisionRead->hasHeader('phpdebugbar-id')
+    || !str_contains($decisionRead->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $decisionRead->getBody(), $deliveryDecisionToken)
+    || str_contains((string) $deliveryList->getBody(), 'encrypted_resolution')
+    || str_contains((string) $deliveryList->getBody(), 'Fictional delivery review reason.')
+    || $sis->sql->one('sis_deliveries', ['id' => $reviewDelivery['id']])['status'] !== 'needs_review'
+    || $teachingPost($deliveryDecisionPath . '/confirm/', $decisionConfirmPayload)->getStatusCode() !== 200) {
+    throw new RuntimeException('Delivery decisions lost privacy, CSRF, retained transport facts or safe repeat handling.');
+}
 // Reusable compositions share the same private, CSRF-protected campaign boundary.
 $templateCreated = $teachingPost('/sis/campaigns/templates/create/', $announcement);
 $templateId = json_decode((string) $templateCreated->getBody(), true, flags: JSON_THROW_ON_ERROR)['id'];

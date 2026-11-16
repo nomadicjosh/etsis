@@ -29,7 +29,8 @@ final readonly class SqlOperationsRepository implements OperationsRepository
             'prerequisites' => ['sis_prerequisites', 'course_id', ['id', 'required_course_id']],
             'window' => ['sis_reg_windows', 'term_id', ['id', 'opens_at', 'closes_at', 'course_limit']],
             'audit' => ['sis_audit', 'subject_id', ['id', 'action', 'recorded_at', 'actor_id']],
-            'deliveries' => ['sis_deliveries', 'campaign_id', ['id', 'recipient_user_id', 'status', 'version']],
+            'deliveries' => ['sis_deliveries', 'campaign_id',
+                ['id', 'recipient_user_id', 'status', 'version', 'disposition', 'resolution_id']],
             default => throw new InvalidArgumentException('Unknown operations context.'),
         };
         $select = $columns('r', $fields);

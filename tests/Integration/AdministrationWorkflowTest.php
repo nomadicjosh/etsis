@@ -83,7 +83,9 @@ final class AdministrationWorkflowTest extends TestCase
         self::assertStringNotContainsString('Fictional', $stored['encrypted_content']);
         $deliveries = $service->queue($campaign->id, [$f->access->actor], 0);
         $queued = $f->sql->one('sis_deliveries', ['id' => $deliveries[0]->value]);
-        self::assertSame(['id', 'campaign_id', 'recipient_user_id', 'status', 'version'], array_keys($queued));
+        self::assertSame(['id', 'campaign_id', 'recipient_user_id', 'status', 'version',
+            'disposition', 'resolution_id', 'encrypted_resolution'], array_keys($queued));
+        self::assertNull($queued['encrypted_resolution']);
         $service->pause($campaign->id, true);
         try {
             $service->dispatch($deliveries[0], $campaign->id, 2, 0);

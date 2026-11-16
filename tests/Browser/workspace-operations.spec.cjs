@@ -215,6 +215,84 @@ test('balanced journals, billing batches, transfer awards and deliberate campaig
     expect(errors).toEqual([]);
 });
 
+for (const outcome of ['confirmed_sent', 'closed']) {
+    test(`delivery decisions retain evidence and review wording without retrying mail: ${outcome}`, async ({ page }) => {
+        const campaign = '01K00000000000000000000016', delivery = '01K00000000000000000000017';
+        const base = `/sis/campaigns/${campaign}/deliveries/${delivery}`;
+        const calls = []; const errors = [];
+        let decision = null;
+        page.on('pageerror', error => errors.push(error.message));
+        await page.route('**/sis/**', async route => {
+            const path = new URL(route.request().url()).pathname;
+            const raw = route.request().postData();
+            const payload = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+            if (payload) calls.push({ path, payload, csrf: route.request().headers()['x-csrf-token'] });
+            let result = {};
+            if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+            else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/campaigns/') ? [{ id: campaign, status: decision ? 'completed' : 'queued' }] : [], next_after: null };
+            else if (path === `/sis/campaigns/${campaign}/`) result = {
+                id: campaign, subject: 'Fictional notice', body: 'Fictional message.', status: decision ? 'completed' : 'queued', version: 1, can_dispatch: false,
+            };
+            else if (path.endsWith('/delivery-progress/')) result = {
+                status: decision ? 'completed' : 'held', campaign_status: decision ? 'completed' : 'queued', version: 2, total: 1,
+                counts: { sent: decision?.decision === 'confirmed_sent' ? 1 : 0, queued: 0, sending: 0,
+                    needs_review: decision ? 0 : 1, closed: decision?.decision === 'closed' ? 1 : 0 },
+            };
+            else if (path === `/sis/ui/context/deliveries/${campaign}/`) result = { items: [{
+                id: delivery, given_name: 'Alex', family_name: 'Example', recipient_user_id: '01K00000000000000000000019',
+                status: 'needs_review', version: 2, disposition: decision?.decision || null, resolution_id: decision ? delivery : null,
+            }], next_after: null };
+            else if (path === `${base}/review/` && route.request().method() === 'GET') result = {
+                delivery_id: delivery, transport_status: 'needs_review', disposition: decision?.decision || null,
+                worker_active: false, decision,
+            };
+            else if (path === `${base}/review/`) result = {
+                ...payload, delivery_id: delivery, transport_status: 'needs_review', review_token: 'fictional-delivery-decision',
+            };
+            else if (path === `${base}/confirm/`) {
+                const reviewed = calls.find(item => item.path === `${base}/review/`).payload;
+                decision = { ...reviewed, actor_id: '01K00000000000000000000020', decided_at: '2026-11-15T10:00:00-08:00' };
+                result = { disposition: decision.decision };
+            }
+            await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+        });
+        await page.goto('/admin/');
+        await page.locator('.workspace-nav-link[data-workspace="campaigns"]').click();
+        await page.getByRole('button', { name: `…${campaign.slice(-8)}`, exact: true }).click();
+        await page.getByRole('button', { name: 'Review delivery', exact: true }).click();
+        await expect(page.locator('#drawer-body')).toContainText(`Delivery reference: ${delivery}`);
+        await expect(page.getByRole('option', { name: 'Close without resending', exact: true })).toHaveAttribute('value', 'closed');
+        await expect(page.getByRole('option', { name: 'Confirm sent using evidence', exact: true })).toHaveAttribute('value', 'confirmed_sent');
+        await page.getByRole('combobox', { name: /^Decision/ }).selectOption(outcome);
+        const evidence = page.getByLabel('Mail-service receipt or institutional case reference', { exact: true });
+        if (outcome === 'confirmed_sent') await expect(evidence).toHaveAttribute('required', '');
+        else await expect(evidence).not.toHaveAttribute('required', '');
+        await page.getByRole('textbox', { name: /^Reason for this decision/ }).fill('Fictional evidence reviewed by staff.');
+        await evidence.fill('CASE-FICTIONAL');
+        await page.getByRole('button', { name: 'Review decision', exact: true }).click();
+        await expect(page.getByRole('region', { name: 'Delivery decision review', exact: true })).toContainText('CASE-FICTIONAL');
+        expect(calls.some(item => item.path === `${base}/confirm/`)).toBe(false);
+        await page.setViewportSize({ width: 375, height: 812 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(scan.violations.map(item => item.id)).toEqual([]);
+        await page.getByRole('button', { name: 'Confirm delivery decision', exact: true }).click();
+        await expect(page.getByRole('progressbar', { name: 'Confirmed sends', exact: true })).toHaveAttribute('aria-valuenow', outcome === 'confirmed_sent' ? '100' : '0');
+        if (outcome === 'closed') await expect(page.locator('#drawer-body')).toContainText('1 closed without resending');
+        await page.getByRole('button', { name: 'View delivery decision', exact: true }).click();
+        await expect(page.locator('#drawer-body')).toContainText('Mail-service result: Unconfirmed');
+        await expect(page.locator('#drawer-body')).toContainText(outcome === 'confirmed_sent' ? 'Staff confirmed sending' : 'Closed without resending');
+        await expect(page.locator('#drawer-body')).toContainText('CASE-FICTIONAL');
+        await expect(page.getByRole('button', { name: 'Confirm delivery decision', exact: true })).toHaveCount(0);
+        expect(calls.find(item => item.path === `${base}/confirm/`)).toMatchObject({
+            payload: { review_token: 'fictional-delivery-decision' }, csrf: 'fictional-test-token',
+        });
+        expect(calls.some(item => item.path.endsWith('/dispatch/') || item.path.endsWith('/delivery-confirm/'))).toBe(false);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(errors).toEqual([]);
+    });
+}
+
 test('scheduled campaign review binds the local time and keeps browser delivery independent', async ({ page }) => {
     const campaign = '01K00000000000000000000016';
     const calls = []; const errors = [];

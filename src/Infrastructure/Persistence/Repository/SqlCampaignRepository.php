@@ -6,6 +6,7 @@ namespace Infrastructure\Persistence\Repository;
 
 use DomainException;
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\DeliveryReviewDecision;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -96,10 +97,53 @@ final readonly class SqlCampaignRepository implements CampaignRepository
 
     public function delivery(EntityId $id): array
     {
-        $r = $this->sql->one('sis_deliveries', ['id' => $id->value]);
+        $q = $this->sql->quote(...);
+        $r = $this->sql->fetch('SELECT ' . implode(', ', array_map($q, [
+            'campaign_id', 'recipient_user_id', 'status', 'version', 'disposition', 'resolution_id',
+        ])) . ' FROM ' . $q('sis_deliveries') . ' WHERE ' . $q('id') . ' = ?', [$id->value], 1)[0]
+        ?? throw new \Domain\Shared\Exception\RecordNotFoundException('Delivery not found.');
 
         return ['campaign_id' => $r['campaign_id'], 'recipient_user_id' => $r['recipient_user_id'],
-            'status' => $r['status'], 'version' => (int) $r['version']];
+            'status' => $r['status'], 'version' => (int) $r['version'],
+            'disposition' => $r['disposition'], 'resolution_id' => $r['resolution_id']];
+    }
+
+    public function deliveryDecision(EntityId $id): ?array
+    {
+        $q = $this->sql->quote(...);
+        $r = $this->sql->fetch('SELECT ' . $q('resolution_id') . ', ' . $q('encrypted_resolution')
+            . ' FROM ' . $q('sis_deliveries') . ' WHERE ' . $q('id') . ' = ?', [$id->value], 1)[0] ?? null;
+        if (($r['resolution_id'] ?? null) === null) {
+            return null;
+        }
+        if (!is_string($r['resolution_id']) || !is_string($r['encrypted_resolution'])) {
+            throw new DomainException('The retained delivery decision is unavailable.');
+        }
+        return ['resolution_id' => $r['resolution_id'], 'encrypted_resolution' => $r['encrypted_resolution']];
+    }
+
+    public function recordDeliveryDecision(
+        EntityId $id,
+        EntityId $campaign,
+        int $expectedVersion,
+        string $expectedStatus,
+        DeliveryReviewDecision $decision,
+        EntityId $operation,
+        #[\SensitiveParameter] string $encryptedReceipt
+    ): void {
+        // Keep transport status/version independent so an already claimed send can record its real receipt.
+        $q = $this->sql->quote(...);
+        if (
+            $this->sql->execute('UPDATE ' . $q('sis_deliveries') . ' SET ' . $q('disposition') . ' = ?, '
+            . $q('resolution_id') . ' = ?, ' . $q('encrypted_resolution') . ' = ? WHERE ' . $q('id')
+            . ' = ? AND ' . $q('campaign_id') . ' = ? AND ' . $q('version') . ' = ? AND ' . $q('status')
+            . ' = ? AND ' . $q('resolution_id') . ' IS NULL AND ' . $q('disposition') . ' IS NULL', [
+                $decision->value, $operation->value, $encryptedReceipt, $id->value, $campaign->value,
+                $expectedVersion, $expectedStatus,
+            ]) !== 1
+        ) {
+            throw new ConcurrentModificationException('The delivery changed. Review its current result again.');
+        }
     }
 
     public function deliveries(EntityId $campaign): array
@@ -107,6 +151,7 @@ final readonly class SqlCampaignRepository implements CampaignRepository
         $q = $this->sql->quote(...);
         return $this->sql->fetch(
             'SELECT d.' . $q('id') . ', d.' . $q('recipient_user_id') . ', d.' . $q('version') . ', d.' . $q('status')
+            . ', d.' . $q('disposition')
             . ', p.' . $q('given_name') . ', p.' . $q('family_name') . ', i.' . $q('institutional_id')
             . ' FROM ' . $q('sis_deliveries') . ' d LEFT JOIN ' . $q('sis_persons') . ' p ON p.'
             . $q('owner_user_id') . ' = d.' . $q('recipient_user_id') . ' LEFT JOIN '
@@ -133,9 +178,13 @@ final readonly class SqlCampaignRepository implements CampaignRepository
     public function deliveryCounts(EntityId $campaign): array
     {
         $q = $this->sql->quote(...);
-        $rows = $this->sql->fetch('SELECT ' . $q('status') . ', COUNT(*) AS ' . $q('delivery_count')
+        $effective = 'CASE WHEN ' . $q('status') . " = 'sent' THEN 'sent' WHEN " . $q('disposition')
+        . " = 'confirmed_sent' THEN 'sent' WHEN " . $q('disposition') . " = 'closed' THEN 'closed' ELSE "
+        . $q('status') . ' END';
+        $rows = $this->sql->fetch('SELECT ' . $effective . ' AS ' . $q('status')
+            . ', COUNT(*) AS ' . $q('delivery_count')
             . ' FROM ' . $q('sis_deliveries') . ' WHERE ' . $q('campaign_id') . ' = ? GROUP BY '
-            . $q('status'), [$campaign->value], 5);
+            . $effective, [$campaign->value], 6);
         $counts = [];
         foreach ($rows as $row) {
             $counts[$row['status']] = (int) $row['delivery_count'];
@@ -143,10 +192,11 @@ final readonly class SqlCampaignRepository implements CampaignRepository
         return $counts;
     }
 
-    public function allSent(EntityId $campaign): bool
+    public function allFinished(EntityId $campaign): bool
     {
         $counts = $this->deliveryCounts($campaign);
-        return count($counts) === 1 && isset($counts['sent']);
+        return $counts !== [] && array_all(array_keys($counts), static fn(string $s): bool =>
+            in_array($s, ['sent', 'closed'], true));
     }
 
     public function recipient(EntityId $id): string

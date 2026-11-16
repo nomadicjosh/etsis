@@ -8,6 +8,7 @@ use Application\Http\FormInput;
 use Domain\Communications\Service\CampaignService;
 use Domain\Communications\Service\CampaignBackgroundService;
 use Domain\Communications\Enum\TemplateLibraryScope;
+use Domain\Communications\Enum\DeliveryReviewDecision;
 use InvalidArgumentException;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -148,5 +149,33 @@ final readonly class SisCampaignController
     {
         $this->background->cancel(new EntityId($id), FormInput::from($request)->integer('version'));
         return new JsonResponse(['status' => 'cancelled']);
+    }
+
+    public function deliveryDecision(string $id, string $delivery): ResponseInterface
+    {
+        return new JsonResponse($this->background->deliveryReviewState(new EntityId($id), new EntityId($delivery)));
+    }
+
+    public function reviewDeliveryDecision(ServerRequest $request, string $id, string $delivery): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $decision = DeliveryReviewDecision::tryFrom($f->text('decision', 16))
+        ?? throw new InvalidArgumentException('Choose a delivery review decision.');
+        return new JsonResponse($this->background->reviewDeliveryDecision(
+            new EntityId($id),
+            new EntityId($delivery),
+            $decision,
+            $f->bodyText('reason'),
+            $f->optionalText('evidence', 191)
+        ));
+    }
+
+    public function confirmDeliveryDecision(ServerRequest $request, string $id, string $delivery): ResponseInterface
+    {
+        return new JsonResponse($this->background->confirmDeliveryDecision(
+            new EntityId($id),
+            new EntityId($delivery),
+            FormInput::from($request)->text('review_token', 65536)
+        ));
     }
 }

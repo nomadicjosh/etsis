@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Communications\Repository;
 
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\DeliveryReviewDecision;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Shared\ValueObject\EntityId;
 
@@ -23,8 +24,23 @@ interface CampaignRepository
      * @return list<EntityId>
      */
     public function enqueue(EntityId $campaign, array $recipients): array;
-    /** @return array{campaign_id: string, recipient_user_id: string, status: string, version: int} */
+    /** @return array{campaign_id:string,recipient_user_id:string,status:string,version:int,
+     * disposition:?string,resolution_id:?string}
+     */
     public function delivery(EntityId $id): array;
+    /** Protected decision metadata; never return the encrypted receipt as a browser payload.
+     * @return array{resolution_id:string,encrypted_resolution:string}|null
+     */
+    public function deliveryDecision(EntityId $id): ?array;
+    public function recordDeliveryDecision(
+        EntityId $id,
+        EntityId $campaign,
+        int $expectedVersion,
+        string $expectedStatus,
+        DeliveryReviewDecision $decision,
+        EntityId $operation,
+        #[\SensitiveParameter] string $encryptedReceipt
+    ): void;
     /** Complete bounded delivery set with minimized current person labels; 501 probes the 500-recipient bound.
      * @return list<array<string,mixed>>
      */
@@ -34,7 +50,7 @@ interface CampaignRepository
      */
     public function deliveryCounts(EntityId $campaign): array;
     public function transitionDelivery(EntityId $id, string $status, int $expectedVersion): void;
-    public function allSent(EntityId $campaign): bool;
+    public function allFinished(EntityId $campaign): bool;
     public function recipient(EntityId $id): string;
 
     /** Minimal person/account labels; one page plus a continuation probe.

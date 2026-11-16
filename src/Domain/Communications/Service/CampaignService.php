@@ -355,7 +355,7 @@ final readonly class CampaignService
             $this->repository->lock($campaignId);
             $campaign = $this->owned($campaignId, $actor);
             $delivery = $this->repository->delivery($deliveryId);
-            if ($delivery['status'] !== 'queued') {
+            if ($delivery['status'] !== 'queued' || $delivery['disposition'] !== null) {
                 return null;
             }
             if (
@@ -395,7 +395,7 @@ final readonly class CampaignService
             $this->repository->transitionDelivery($deliveryId, 'sent', $claimed['version'] + 1);
             $this->audit->record($actor, 'message.sent', $deliveryId);
             $campaign = $this->repository->get($campaignId);
-            if ($campaign->status === 'queued' && $this->repository->allSent($campaignId)) {
+            if ($campaign->status === 'queued' && $this->repository->allFinished($campaignId)) {
                 $this->repository->save($campaign->transition('completed'), $campaign->version);
             }
         });

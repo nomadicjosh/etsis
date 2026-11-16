@@ -52,9 +52,26 @@ Reviews expire after twenty minutes and belong to the current account, message r
 
 An unavailable account/address, revoked authority or disabled mail transport blocks new sends before a claim. An interrupted or uncertain send holds the authorization for institutional review and is never automatically retried. Progress retains these distinct outcomes. The successful-send receipt is recorded even if the authorizer loses access during transport.
 
+### Review uncertain deliveries
+
+The campaign's delivery table offers **Review delivery** to staff with `sis:communications:manage`, `sis:communications:admin` and `sis:person:manage`. Owning the campaign alone does not grant this action. The review shows the delivery reference used in the mail header, its recorded transport result and any retained decision. Notes and evidence references are private to these authorized reviewers; ordinary delivery lists contain only the disposition and decision reference.
+
+First cancel an active background authorization. Pausing alone leaves an authorization available to resume, so it does not permit a delivery decision. Then choose one outcome and record a reason:
+
+- **Confirm sent using evidence** requires a mail-service receipt or institutional evidence reference. It is available only after the send attempt returned an uncertain result. A send still recorded as in progress cannot be manually confirmed.
+- **Close without resending** closes the review without making another send attempt. It records no claim that the recipient did or did not receive the message. A previously claimed send may still finish.
+
+Choose **Review decision**, check the outcome, reason and evidence, then **Confirm delivery decision**. Changing wording through **Back to decision** requires another review. Reviews expire after twenty minutes and are tied to the same actor, delivery, campaign revision, transport result and authorization. Changed results or permissions stop confirmation. Repeating the same accepted confirmation returns its retained decision without another send or duplicate audit entry. A different decision cannot overwrite it.
+
+The decision records who acted and when, with its reason and reference encrypted at rest. Use a short institutional reference rather than pasting email text, addresses, credentials or raw provider responses. The existing metadata audit contains the actor, action and delivery identity only.
+
+The original transport status and version remain intact. A real transport receipt arriving later is still recorded and takes precedence in sent counts; the earlier administrative decision remains available under **View delivery decision**. Evidence-based staff confirmations count as sent. Closed reviews have a separate count and are excluded from sent totals, so a finished campaign may show fewer confirmed sends than its complete audience. A campaign finishes when every delivery has a real send receipt or a retained administrative disposition.
+
+Neither outcome sends, retries or requeues a message. If other recipients remain queued, review and authorize those separately through the existing background-delivery flow. This action creates no new queue, event journal or automatic recovery process.
+
 ### Server setup
 
-Apply migrations `20261115000016_CreateSisCampaignDispatches.php` and `20261115000017_AddSisCampaignSchedules.php`. The first adds the reference-only authorization table beside the existing campaign and recipient queue. The second adds its nullable UTC schedule and due-work index. Earlier authorizations retain their original scope and send-as-soon-as-possible meaning; neither migration rewrites recorded messages or academic events. Live delivery requires `sis.mail_enabled`, a valid institutional sender and mail debugging disabled.
+Apply migrations `20261115000016_CreateSisCampaignDispatches.php`, `20261115000017_AddSisCampaignSchedules.php` and `20261115000018_AddSisDeliveryReviews.php`. They add the authorization table, its nullable UTC schedule/due-work index and nullable delivery-decision metadata. Earlier authorizations retain their original scope and send-as-soon-as-possible meaning. Existing delivery status/version and message/event records are preserved. Live delivery requires `sis.mail_enabled`, a valid institutional sender and mail debugging disabled.
 
 Configure the server to run Codefy's scheduler once a minute using the institution's PHP 8.4+ executable, for example:
 
@@ -70,4 +87,4 @@ The service rechecks current authority, the active authorization and expected re
 
 Private responses use no-store caching, browser mutations preserve framework CSRF and debug collectors stay suppressed. Message content, addresses, credentials and upstream responses do not enter audit metadata, browser storage or delivery-job payloads. Metadata audits identify the actor, action and affected composition/delivery only. Template operations are ordinary authorized, revision-checked CRUD and add no historical academic or financial events.
 
-Institutional reconciliation decisions and automatic schedule-change/cancellation alerts remain roadmap work. This workflow does not add attachments, tracking pixels or automatic resend/recovery actions.
+Automatic schedule-change/cancellation alerts remain roadmap work. This workflow does not add attachments, tracking pixels or automatic resend/recovery actions.

@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Dto\AuthorizedCampaignDelivery;
+use Domain\Communications\Enum\DeliveryReviewDecision;
 use Domain\Communications\Repository\CampaignDispatchRepository;
 use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -137,7 +138,7 @@ final readonly class CampaignBackgroundService
         $actor = $this->access->requirePermission('sis:communications:manage');
         $campaign = $this->campaigns->deliveryState($id, $actor);
         $job = $this->dispatches->get($id);
-        $counts = ['queued' => 0, 'sending' => 0, 'sent' => 0, 'needs_review' => 0];
+        $counts = ['queued' => 0, 'sending' => 0, 'sent' => 0, 'needs_review' => 0, 'closed' => 0];
         foreach ($this->messages->deliveryCounts($id) as $status => $count) {
             if (!array_key_exists($status, $counts)) {
                 throw new DomainException('The delivery queue needs institutional review.');
@@ -148,7 +149,8 @@ final readonly class CampaignBackgroundService
             throw new DomainException('This campaign exceeds the recipient limit.');
         }
         $this->campaigns->deliveryState($id, $actor);
-        return ['status' => $job['status'] ?? 'unconfirmed', 'version' => (int) ($job['version'] ?? 0),
+        return ['status' => $campaign->status === 'completed' ? 'completed' : ($job['status'] ?? 'unconfirmed'),
+            'version' => (int) ($job['version'] ?? 0),
             'campaign_status' => $campaign->status, 'total' => array_sum($counts), 'counts' => $counts,
             'send_after' => $this->timing($job['not_before_at'] ?? null),
             'waiting' => ($job['status'] ?? null) === 'active' && ($job['not_before_at'] ?? null) !== null
@@ -174,6 +176,162 @@ final readonly class CampaignBackgroundService
             }
             $this->campaigns->deliveryState($id, $actor);
         });
+    }
+
+    /** @return array<string,mixed> */
+    public function deliveryReviewState(EntityId $id, EntityId $delivery): array
+    {
+        $actor = $this->decisionActor();
+        [, $row, $job] = $this->decisionState($id, $delivery, $actor);
+        $receipt = $this->messages->deliveryDecision($delivery);
+        $decision = $receipt === null ? null
+        : json_decode($this->cipher->open($receipt['encrypted_resolution']), true, flags: JSON_THROW_ON_ERROR);
+        $this->decisionActor($actor);
+        $this->campaigns->deliveryState($id, $actor);
+        return ['delivery_id' => $delivery->value, 'transport_status' => $row['status'],
+            'disposition' => $row['disposition'], 'worker_active' => ($job['status'] ?? null) === 'active',
+            'decision' => $decision === null ? null : array_intersect_key($decision, array_flip([
+                'decision', 'reason', 'evidence', 'actor_id', 'decided_at', 'transport_status', 'delivery_version',
+            ]))];
+    }
+
+    /** @return array<string,mixed> */
+    public function reviewDeliveryDecision(
+        EntityId $id,
+        EntityId $delivery,
+        DeliveryReviewDecision $decision,
+        #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?string $evidence = null
+    ): array {
+        $actor = $this->decisionActor();
+        [$campaign, $row, $job] = $this->decisionState($id, $delivery, $actor);
+        if (($job['status'] ?? null) === 'active') {
+            throw new DomainException('Cancel background delivery before recording a delivery decision.');
+        }
+        if ($row['resolution_id'] !== null || !$decision->allows($row['status'])) {
+            throw new DomainException('Review an unresolved delivery. A live send cannot be confirmed by staff.');
+        }
+        $reason = trim($reason);
+        $evidence = $evidence === null ? null : trim($evidence);
+        if ($reason === '' || mb_strlen($reason) > 1000 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $reason)) {
+            throw new ValidationException([['field' => 'reason',
+                'message' => 'Record a reason of 1000 characters or fewer.']]);
+        }
+        if (
+            ($decision === DeliveryReviewDecision::ConfirmSent && ($evidence === null || $evidence === ''))
+            || ($evidence !== null && (mb_strlen($evidence) > 191 || preg_match('/[\x00-\x1F\x7F]/', $evidence)))
+        ) {
+            throw new ValidationException([['field' => 'evidence',
+                'message' => 'Record a mail-service receipt or institutional case reference for this confirmation.']]);
+        }
+        $data = ['kind' => 'campaign-delivery-decision', 'campaign_id' => $id->value,
+            'delivery_id' => $delivery->value, 'actor_id' => $actor->value,
+            'operation_id' => EntityId::generate()->value, 'campaign_version' => $campaign->version,
+            'delivery_version' => $row['version'], 'transport_status' => $row['status'],
+            'recipient_user_id' => $row['recipient_user_id'], 'job_version' => (int) ($job['version'] ?? 0),
+            'job_operation' => $job['operation_id'] ?? null, 'decision' => $decision->value,
+            'reason' => $reason, 'evidence' => $evidence,
+            'expires_at' => $this->clock->now()->modify('+20 minutes')->getTimestamp()];
+        $token = $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR));
+        $this->decisionActor($actor);
+        $this->campaigns->deliveryState($id, $actor);
+        return ['review_token' => $token, 'decision' => $decision->value, 'reason' => $reason, 'evidence' => $evidence,
+            'delivery_id' => $delivery->value, 'transport_status' => $row['status']];
+    }
+
+    /** This records a decision only. No transport, retry or queued authorization is invoked.
+     * @return array<string,mixed>
+     */
+    public function confirmDeliveryDecision(
+        EntityId $id,
+        EntityId $delivery,
+        #[\SensitiveParameter] string $token
+    ): array {
+        $actor = $this->decisionActor();
+        try {
+            $scope = strlen($token) <= 65536
+            ? json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR) : null;
+            if (!is_array($scope) || ($scope['kind'] ?? null) !== 'campaign-delivery-decision') {
+                throw new DomainException('Invalid delivery review.');
+            }
+        } catch (Throwable) {
+            throw new DomainException('This delivery review is unavailable. Review the current result again.');
+        }
+        if (
+            $scope['campaign_id'] !== $id->value || $scope['delivery_id'] !== $delivery->value
+            || $scope['actor_id'] !== $actor->value
+        ) {
+            throw new AccessDeniedException('Review this delivery under your own account.');
+        }
+        $this->transactions->run(function () use ($id, $delivery, $actor, $scope, $token): void {
+            $this->messages->lock($id);
+            $this->decisionActor($actor);
+            [$campaign, $row, $job] = $this->decisionState($id, $delivery, $actor);
+            $receipt = $this->messages->deliveryDecision($delivery);
+            if ($receipt !== null) {
+                $recorded = json_decode(
+                    $this->cipher->open($receipt['encrypted_resolution']),
+                    true,
+                    flags: JSON_THROW_ON_ERROR
+                );
+                if (
+                    $receipt['resolution_id'] === $scope['operation_id']
+                    && hash_equals($recorded['review_hash'], hash('sha256', $token))
+                ) {
+                    return;
+                }
+                throw new ConcurrentModificationException('This delivery already has a retained decision.');
+            }
+            $decision = DeliveryReviewDecision::from($scope['decision']);
+            if (
+                $scope['expires_at'] <= $this->clock->now()->getTimestamp()
+                || $campaign->version !== $scope['campaign_version'] || $row['version'] !== $scope['delivery_version']
+                || $row['status'] !== $scope['transport_status']
+                || $row['recipient_user_id'] !== $scope['recipient_user_id']
+                || !$decision->allows($row['status']) || ($job['status'] ?? null) === 'active'
+                || (int) ($job['version'] ?? 0) !== $scope['job_version']
+                || ($job['operation_id'] ?? null) !== $scope['job_operation']
+            ) {
+                throw new ConcurrentModificationException('The delivery changed or this review expired. Review again.');
+            }
+            $recorded = $scope + ['review_hash' => hash('sha256', $token), 'decided_at' => $this->timestamp()];
+            $this->messages->recordDeliveryDecision(
+                $delivery,
+                $id,
+                $row['version'],
+                $row['status'],
+                $decision,
+                new EntityId($scope['operation_id']),
+                $this->cipher->seal(json_encode($recorded, JSON_THROW_ON_ERROR))
+            );
+            if (in_array($campaign->status, ['queued', 'paused'], true) && $this->messages->allFinished($id)) {
+                $this->messages->save($campaign->transition('completed'), $campaign->version);
+            }
+            $this->audit->record($actor, 'campaign.delivery_' . $decision->value, $delivery);
+            $this->decisionActor($actor);
+            $this->campaigns->deliveryState($id, $actor);
+        });
+        return $this->deliveryReviewState($id, $delivery);
+    }
+
+    private function decisionActor(?EntityId $expected = null): EntityId
+    {
+        $actor = $this->recipientAuthority($expected);
+        if ($this->access->requirePermission('sis:communications:admin')->value !== $actor->value) {
+            throw new AccessDeniedException('Communications administration access is required.');
+        }
+        return $actor;
+    }
+
+    /** @return array{\Domain\Communications\Campaign,array<string,mixed>,?array<string,mixed>} */
+    private function decisionState(EntityId $id, EntityId $delivery, EntityId $actor): array
+    {
+        $campaign = $this->campaigns->deliveryState($id, $actor);
+        $row = $this->messages->delivery($delivery);
+        if ($row['campaign_id'] !== $id->value) {
+            throw new AccessDeniedException('This delivery belongs to another campaign.');
+        }
+        return [$campaign, $row, $this->dispatches->get($id)];
     }
 
     /** No login-session dependency: the executor validates the accepted actor against current database authority.
@@ -211,7 +369,7 @@ final readonly class CampaignBackgroundService
                     if ($delivery === null || $delivery['recipient_user_id'] !== $target[1]) {
                         throw new DomainException('The reviewed recipient changed.');
                     }
-                    if ($delivery['status'] === 'sent') {
+                    if ($delivery['status'] === 'sent' || $delivery['disposition'] !== null) {
                         continue;
                     }
                     if ($delivery['status'] !== 'queued') {
@@ -237,14 +395,15 @@ final readonly class CampaignBackgroundService
                         ++$counts['sent'];
                     }
                 }
-                $fresh = array_column($this->rows($id), 'status', 'id');
+                $fresh = array_column($this->rows($id), null, 'id');
                 $allDone = array_all($scope['deliveries'], static fn(array $t): bool =>
-                    ($fresh[$t[0]] ?? null) === 'sent');
+                    isset($fresh[$t[0]]) && ($fresh[$t[0]]['status'] === 'sent'
+                        || $fresh[$t[0]]['disposition'] !== null));
                 $this->finish($job, $allDone ? 'completed' : 'active');
             } catch (Throwable) {
                 // Never retry an unknown external effect. Known pre-claim failures keep the recipient queued.
                 $uncertain = array_any($this->rows($id), static fn(array $r): bool =>
-                    in_array($r['status'], ['sending', 'needs_review'], true));
+                    $r['disposition'] === null && in_array($r['status'], ['sending', 'needs_review'], true));
                 $this->finish($job, $uncertain ? 'held' : 'blocked');
                 ++$counts[$uncertain ? 'held' : 'blocked'];
             }
@@ -293,7 +452,7 @@ final readonly class CampaignBackgroundService
         return array_values(array_map(
             static fn(array $r): array =>
             [$r['id'], $r['recipient_user_id'], (int) $r['version']],
-            array_filter($rows, static fn(array $r): bool => $r['status'] === 'queued')
+            array_filter($rows, static fn(array $r): bool => $r['status'] === 'queued' && $r['disposition'] === null)
         ));
     }
 

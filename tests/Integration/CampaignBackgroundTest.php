@@ -7,6 +7,7 @@ namespace Tests\Integration;
 use Closure;
 use Domain\Access\Enum\GrantKind;
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Communications\Enum\DeliveryReviewDecision;
 use Domain\Communications\Service\CampaignBackgroundService;
 use Domain\Communications\Service\CampaignService;
 use Domain\Communications\Service\MailTransport;
@@ -102,6 +103,268 @@ final class CampaignBackgroundTest extends TestCase
         return [$f, $campaigns, $background, $mail, $id, $deliveries, $permissions];
     }
 
+    private function uncertainCampaign(int $people = 1, ?AuditTrail $audit = null): array
+    {
+        $context = $this->setupCampaign($people, $audit);
+        [, , $background, $mail, $id] = $context;
+        $background->confirm($id, $background->review($id)['review_token']);
+        $mail->fail = true;
+        self::assertSame(1, $background->run()['held']);
+        $mail->fail = false;
+        return $context;
+    }
+
+    public function testEvidenceBasedConfirmationRetainsTransportFactsAndEncryptedDecisionWithoutResending(): void
+    {
+        [$f, , $background, $mail, $id, $deliveries] = $this->uncertainCampaign();
+        $delivery = $deliveries[0];
+        $before = $f->sql->one('sis_deliveries', ['id' => $delivery->value]);
+        $events = $f->sql->rows('sis_history_events');
+        $review = $background->reviewDeliveryDecision(
+            $id,
+            $delivery,
+            DeliveryReviewDecision::ConfirmSent,
+            'Fictional evidence was reviewed.',
+            'INTERNAL-CASE-ALPHA'
+        );
+        self::assertNull($f->sql->one('sis_deliveries', ['id' => $delivery->value])['resolution_id']);
+        $result = $background->confirmDeliveryDecision($id, $delivery, $review['review_token']);
+        self::assertSame('confirmed_sent', $result['decision']['decision']);
+        self::assertSame('INTERNAL-CASE-ALPHA', $result['decision']['evidence']);
+        self::assertSame('needs_review', $result['transport_status']);
+        $row = $f->sql->one('sis_deliveries', ['id' => $delivery->value]);
+        self::assertSame($before['version'], $row['version']);
+        self::assertSame($before['status'], $row['status']);
+        self::assertStringNotContainsString('INTERNAL-CASE-ALPHA', $row['encrypted_resolution']);
+        self::assertStringNotContainsString('Fictional evidence', $row['encrypted_resolution']);
+        self::assertSame(1, $background->status($id)['counts']['sent']);
+        self::assertSame('completed', $background->status($id)['status']);
+        $f->clock->time = $f->clock->time->modify('+1 day');
+        self::assertSame($result, $background->confirmDeliveryDecision($id, $delivery, $review['review_token']));
+        self::assertCount(1, $f->sql->rows('sis_audit', ['action' => 'campaign.delivery_confirmed_sent']));
+        self::assertStringNotContainsString(
+            'INTERNAL-CASE-ALPHA',
+            json_encode($f->sql->rows('sis_audit'), JSON_THROW_ON_ERROR)
+        );
+        self::assertArrayNotHasKey('encrypted_resolution', new SqlCampaignRepository($f->sql)->delivery($delivery));
+        self::assertSame(0, $background->run()['sent']);
+        self::assertSame(1, $mail->calls);
+        self::assertSame($events, $f->sql->rows('sis_history_events'));
+    }
+
+    public function testClosingAnUncertainDeliveryAllowsOnlyRemainingQueuedRecipientsToBeReviewedAndSent(): void
+    {
+        [$f, , $background, $mail, $id] = $this->uncertainCampaign(3);
+        $uncertain = $f->sql->one('sis_deliveries', ['campaign_id' => $id->value, 'status' => 'needs_review']);
+        $delivery = new EntityId($uncertain['id']);
+        $review = $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional.');
+        $background->confirmDeliveryDecision($id, $delivery, $review['review_token']);
+        self::assertSame(1, $background->status($id)['counts']['closed']);
+        self::assertSame(0, $background->status($id)['counts']['sent']);
+        self::assertSame(0, $background->status($id)['counts']['needs_review']);
+        $remaining = $background->review($id);
+        self::assertCount(2, $remaining['recipients']);
+        $background->confirm($id, $remaining['review_token']);
+        self::assertSame(2, $background->run()['sent']);
+        self::assertSame(3, $mail->calls);
+        self::assertSame('completed', $background->status($id)['status']);
+        self::assertSame(2, $background->status($id)['counts']['sent']);
+        self::assertSame(1, $background->status($id)['counts']['closed']);
+        self::assertSame('needs_review', $f->sql->one('sis_deliveries', ['id' => $delivery->value])['status']);
+    }
+
+    public function testClosingAnInFlightReviewNeverPreventsTheActualSendReceiptFromBeingRecorded(): void
+    {
+        [$f, , $background, $mail, $id, $deliveries] = $this->setupCampaign(1);
+        $delivery = $deliveries[0];
+        $job = $background->confirm($id, $background->review($id)['review_token']);
+        $mail->afterSend = static function () use ($background, $id, $delivery, $job): void {
+            $background->cancel($id, $job['version']);
+            $review = $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional.');
+            $background->confirmDeliveryDecision($id, $delivery, $review['review_token']);
+        };
+        self::assertSame(1, $background->run()['sent']);
+        $row = $f->sql->one('sis_deliveries', ['id' => $delivery->value]);
+        self::assertSame('sent', $row['status']);
+        self::assertSame('closed', $row['disposition']);
+        self::assertSame(2, $row['version']);
+        self::assertSame('sending', $background->deliveryReviewState($id, $delivery)['decision']['transport_status']);
+        self::assertSame(1, $background->status($id)['counts']['sent']);
+        self::assertSame(0, $background->status($id)['counts']['closed']);
+        self::assertCount(1, $f->sql->rows('sis_audit', ['action' => 'message.sent']));
+        self::assertSame(1, $mail->calls);
+    }
+
+    public function testADeliveryReceiptArrivingBeforeConfirmationMakesAnOlderDecisionStale(): void
+    {
+        [$f, , $background, $mail, $id, $deliveries] = $this->setupCampaign(1);
+        $delivery = $deliveries[0];
+        $job = $background->confirm($id, $background->review($id)['review_token']);
+        $token = null;
+        $mail->afterSend = static function () use ($background, $id, $delivery, $job, &$token): void {
+            $background->cancel($id, $job['version']);
+            $token = $background->reviewDeliveryDecision(
+                $id,
+                $delivery,
+                DeliveryReviewDecision::Close,
+                'Fictional review pending.'
+            )['review_token'];
+        };
+        $background->run();
+        try {
+            $background->confirmDeliveryDecision($id, $delivery, $token);
+            self::fail('A stale review replaced a real send receipt.');
+        } catch (ConcurrentModificationException) {
+            $row = $f->sql->one('sis_deliveries', ['id' => $delivery->value]);
+            self::assertSame('sent', $row['status']);
+            self::assertNull($row['resolution_id']);
+        }
+    }
+
+    public function testActiveAndNewerAuthorizationsPreventDeliveryDecisions(): void
+    {
+        [$f, , $background, $mail, $id] = $this->uncertainCampaign(2);
+        $row = $f->sql->one('sis_deliveries', ['campaign_id' => $id->value, 'status' => 'needs_review']);
+        $delivery = new EntityId($row['id']);
+        $old = $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional reason.');
+        $background->confirm($id, $background->review($id)['review_token']);
+        self::assertTrue($background->deliveryReviewState($id, $delivery)['worker_active']);
+        try {
+            $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional reason.');
+            self::fail('An active authorization allowed a new decision review.');
+        } catch (DomainException) {
+            self::assertSame(1, $mail->calls);
+        }
+        $this->expectException(ConcurrentModificationException::class);
+        $background->confirmDeliveryDecision($id, $delivery, $old['review_token']);
+    }
+
+    public function testOwnerPermissionDoesNotGrantDeliveryAdministrationAndTokensAreActorAndDeliveryBound(): void
+    {
+        [$f, $campaigns, $background, , $id, $deliveries] = $this->uncertainCampaign();
+        $delivery = $deliveries[0];
+        $review = $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional.');
+        $token = $review['review_token'];
+        $f->access->staff = false;
+        $f->access->grants = ['sis:communications:manage', 'sis:person:manage'];
+        foreach (['read', 'review', 'confirm'] as $operation) {
+            try {
+                match ($operation) {
+                    'read' => $background->deliveryReviewState($id, $delivery),
+                    'review' => $background->reviewDeliveryDecision(
+                        $id,
+                        $delivery,
+                        DeliveryReviewDecision::Close,
+                        'Fictional reason.'
+                    ),
+                    'confirm' => $background->confirmDeliveryDecision($id, $delivery, $token),
+                };
+                self::fail('Ownership granted delivery administration.');
+            } catch (AccessDeniedException) {
+                self::assertNull($f->sql->one('sis_deliveries', ['id' => $delivery->value])['resolution_id']);
+            }
+        }
+        $f->access->staff = true;
+        $f->access->actor = $f->user();
+        try {
+            $background->confirmDeliveryDecision($id, $delivery, $token);
+            self::fail('Another actor used a delivery review.');
+        } catch (AccessDeniedException) {
+            $other = $campaigns->create('Other fictional composition', 'Fictional message.')->id;
+        }
+        $this->expectException(AccessDeniedException::class);
+        $background->confirmDeliveryDecision($other, $delivery, $token);
+    }
+
+    public function testFailedAuditOrRemovedAdministrationRollsBackDecisionAndCampaignCompletion(): void
+    {
+        foreach (['audit', 'permission'] as $failure) {
+            $f = null;
+            $audit = $this->createStub(AuditTrail::class);
+            $callback = function ($actor, $action, $subject) use (&$f, $failure): void {
+                $f->audit->record($actor, $action, $subject);
+                if (!str_starts_with($action, 'campaign.delivery_')) {
+                    return;
+                }
+                if ($failure === 'audit') {
+                    throw new RuntimeException('Fictional audit failure.');
+                }
+                $f->access->staff = false;
+                $f->access->grants = ['sis:communications:manage', 'sis:person:manage'];
+            };
+            $audit->method('record')->willReturnCallback($callback);
+            [$f, , $background, $mail, $id, $deliveries] = $this->setupCampaign(1, $audit);
+            $background->confirm($id, $background->review($id)['review_token']);
+            $mail->fail = true;
+            $background->run();
+            $mail->fail = false;
+            $review = $background->reviewDeliveryDecision(
+                $id,
+                $deliveries[0],
+                DeliveryReviewDecision::Close,
+                'Fictional.'
+            );
+            $token = $review['review_token'];
+            $before = $f->sql->rows('sis_deliveries');
+            $campaign = $f->sql->one('sis_campaigns', ['id' => $id->value]);
+            $audits = $f->sql->rows('sis_audit');
+            try {
+                $background->confirmDeliveryDecision($id, $deliveries[0], $token);
+                self::fail('A decision survived lost authority or auditing.');
+            } catch (RuntimeException) {
+                self::assertSame($before, $f->sql->rows('sis_deliveries'));
+                self::assertSame($campaign, $f->sql->one('sis_campaigns', ['id' => $id->value]));
+                self::assertSame($audits, $f->sql->rows('sis_audit'));
+            }
+        }
+    }
+
+    public function testEvidenceIsRequiredAndAnInFlightSendCannotBeManuallyConfirmed(): void
+    {
+        [$f, , $background, , $id, $deliveries] = $this->uncertainCampaign();
+        $delivery = $deliveries[0];
+        try {
+            $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::ConfirmSent, 'Fictional.');
+            self::fail('Staff confirmed sending without an evidence reference.');
+        } catch (\Domain\Shared\Exception\ValidationException $error) {
+            self::assertSame('evidence', $error->errors[0]['field']);
+        }
+        $f->sql->update('sis_deliveries', ['status' => 'sending'], ['id' => $delivery->value]);
+        $this->expectException(DomainException::class);
+        $background->reviewDeliveryDecision(
+            $id,
+            $delivery,
+            DeliveryReviewDecision::ConfirmSent,
+            'Fictional.',
+            'CASE-1'
+        );
+    }
+
+    public function testAnExpiredReviewAndACompetingDecisionCannotReplaceRetainedDecisions(): void
+    {
+        [$f, , $background, , $id, $deliveries] = $this->uncertainCampaign();
+        $delivery = $deliveries[0];
+        $old = $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional.');
+        $f->clock->time = $f->clock->time->modify('+21 minutes');
+        try {
+            $background->confirmDeliveryDecision($id, $delivery, $old['review_token']);
+            self::fail('An expired delivery review was accepted.');
+        } catch (ConcurrentModificationException) {
+            self::assertNull($f->sql->one('sis_deliveries', ['id' => $delivery->value])['resolution_id']);
+        }
+        $one = $background->reviewDeliveryDecision($id, $delivery, DeliveryReviewDecision::Close, 'Fictional close.');
+        $two = $background->reviewDeliveryDecision(
+            $id,
+            $delivery,
+            DeliveryReviewDecision::ConfirmSent,
+            'Fictional confirmed.',
+            'CASE-2'
+        );
+        $background->confirmDeliveryDecision($id, $delivery, $one['review_token']);
+        $this->expectException(ConcurrentModificationException::class);
+        $background->confirmDeliveryDecision($id, $delivery, $two['review_token']);
+    }
+
     public function testConfirmationReturnsWithoutSendingAndWorkerContinuesWithoutBrowserIdentity(): void
     {
         [$f, , $background, $mail, $id] = $this->setupCampaign();
@@ -134,7 +397,10 @@ final class CampaignBackgroundTest extends TestCase
         $background->run(1);
         $progress = $background->status($id);
         self::assertSame(3, $progress['total']);
-        self::assertSame(['queued' => 2, 'sending' => 0, 'sent' => 1, 'needs_review' => 0], $progress['counts']);
+        self::assertSame(
+            ['queued' => 2, 'sending' => 0, 'sent' => 1, 'needs_review' => 0, 'closed' => 0],
+            $progress['counts']
+        );
         $background->cancel($id, $progress['version']);
         self::assertSame('cancelled', $background->confirm($id, $review['review_token'])['status']);
         self::assertSame(0, $background->run()['examined']);
@@ -472,10 +738,39 @@ final class CampaignBackgroundTest extends TestCase
         self::assertContains('scd_due', array_column($indexes, 'name'));
     }
 
+    public function testDeliveryReviewMigrationPreservesRecordedTransportStatesAndVersions(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000018_AddSisDeliveryReviews.php';
+        $connection = new \Qubus\Expressive\Connection\Pdo\Sqlite([
+            'driver' => 'pdo_sqlite', 'dsn' => 'sqlite::memory:',
+        ]);
+        $connection->pdo->exec('CREATE TABLE sis_deliveries (id VARCHAR(26) PRIMARY KEY, '
+            . 'campaign_id VARCHAR(26), recipient_user_id VARCHAR(36), status VARCHAR(16), version INT)');
+        $sql = new \Infrastructure\Persistence\SqlRecords($connection->queryBuilder());
+        $before = [];
+        foreach (['queued', 'sending', 'needs_review', 'sent'] as $version => $status) {
+            $row = ['id' => EntityId::generate()->value, 'campaign_id' => EntityId::generate()->value,
+                'recipient_user_id' => EntityId::generate()->value, 'status' => $status, 'version' => $version];
+            $before[] = $row;
+            $sql->insert('sis_deliveries', $row);
+        }
+        $migration = new \AddSisDeliveryReviews('20261115000018');
+        $migration->setObjectMap(new \ArrayObject(['phpmig.adapter' =>
+            new \Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter($connection, 'migration')]));
+        $migration->up();
+        foreach ($before as $row) {
+            self::assertSame(
+                $row + ['disposition' => null, 'resolution_id' => null, 'encrypted_resolution' => null],
+                $sql->one('sis_deliveries', ['id' => $row['id']])
+            );
+        }
+    }
+
     public function testActualMigrationCompilesItsProtectedQueueAndIndexesForAllFrameworkDialects(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000016_CreateSisCampaignDispatches.php';
         require_once dirname(__DIR__, 2) . '/database/migrations/20261115000017_AddSisCampaignSchedules.php';
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261115000018_AddSisDeliveryReviews.php';
         foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $driver) {
             $connection = $this->createStub(\Qubus\Expressive\Connection::class);
             $connection->method('quoteIdentifier')->willReturnCallback(static fn(string $name): string =>
@@ -499,6 +794,9 @@ final class CampaignBackgroundTest extends TestCase
             $schedule = new \AddSisCampaignSchedules('20261115000017');
             $schedule->setObjectMap($migration->getObjectMap());
             $schedule->up();
+            $reviews = new \AddSisDeliveryReviews('20261115000018');
+            $reviews->setObjectMap($migration->getObjectMap());
+            $reviews->up();
             $compiled = implode("\n", $statements);
             self::assertStringContainsString('sis_campaign_dispatches', $compiled, $driver);
             self::assertStringContainsString('encrypted_scope', $compiled, $driver);
@@ -506,6 +804,9 @@ final class CampaignBackgroundTest extends TestCase
             self::assertStringContainsString('scd_actor_fk', $compiled, $driver);
             self::assertStringContainsString('scd_due', $compiled, $driver);
             self::assertStringContainsString('not_before_at', $compiled, $driver);
+            self::assertStringContainsString('encrypted_resolution', $compiled, $driver);
+            self::assertStringContainsString('disposition', $compiled, $driver);
+            self::assertStringContainsString('resolution_id', $compiled, $driver);
             self::assertStringNotContainsString('AUTO_INCREMENT', $compiled, $driver);
         }
     }
