@@ -9,6 +9,7 @@ use DateTimeZone;
 use Domain\Audit\Repository\ActorDirectory;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Finance\Event\AccountEntryWasCorrected;
+use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
 use Domain\Finance\Event\AccountEntryWasPosted;
 use Domain\Finance\Event\AccountEntryWasReversed;
 use Domain\Finance\StudentAccount;
@@ -83,7 +84,9 @@ final readonly class AccountEntryHistory
                         continue;
                     }
                     // Retain only minimized context; discard legacy rows and other envelope metadata per page.
-                    $bytes += strlen($summary["reason"] ?? "") + 512;
+                    $bytes += strlen($summary["reason"] ?? "") + 512
+                        + strlen($summary['payment_details']['reference'] ?? '')
+                        + strlen($summary['previous_payment_details']['reference'] ?? '');
                     if ($bytes > self::MAX_SUMMARY_BYTES) {
                         throw new HistoryReadLimitException();
                     }
@@ -169,6 +172,7 @@ final readonly class AccountEntryHistory
             $event instanceof AccountEntryWasPosted => "posted",
             $event instanceof AccountEntryWasReversed => "reversed",
             $event instanceof AccountEntryWasCorrected => "corrected",
+            $event instanceof AccountPaymentDetailsWereChanged => "receipt_corrected",
             default => null,
         };
         if ($action === null) {
@@ -179,7 +183,7 @@ final readonly class AccountEntryHistory
         $actor = $recordedActor === null ? $payload["actor_id"] ?? null : $recordedActor->value;
         return [
             "sequence" => $event->playhead(),
-            "operation_id" => $payload["operation_id"],
+            "operation_id" => $payload["entry_operation_id"] ?? $payload["operation_id"],
             "action" => $action,
             "actor_id" => $actor,
             "actor_source" =>
@@ -193,7 +197,11 @@ final readonly class AccountEntryHistory
                 ?->setTimezone(new DateTimeZone("UTC"))
                 ->format("Y-m-d\TH:i:s.u\Z"),
             "reason" => $stored->context->reason,
-        ] + ($action === "corrected" ? ["source_operation_id" => $payload["source_operation_id"]] : []);
+        ] + ($action === "corrected" ? ["source_operation_id" => $payload["source_operation_id"]] : [])
+        + ($action === 'receipt_corrected' ? ['previous_payment_details' => $payload['previous_details'],
+                'payment_details' => $payload['details']]
+                : (in_array($action, ['posted', 'corrected'], true)
+                    ? ['payment_details' => $event->metadata()['payment_details'] ?? null] : []));
     }
 
     /** Original and replacement identities form one retained correction chain, including reversed entries.

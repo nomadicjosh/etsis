@@ -367,6 +367,11 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Finance\StudentAccount::class,
                 "fields" => ["operation_id", "actor_id", "type", "minor", "currency"],
             ],
+            \Domain\Finance\Event\AccountPaymentDetailsWereChanged::class => [
+                'type' => 'student_account', 'root' => \Domain\Finance\StudentAccount::class,
+                'fields' => ['operation_id', 'entry_operation_id', 'receipt_operation_id',
+                    'previous_details', 'details', 'actor_id', 'review_hash'],
+            ],
             \Domain\Finance\Event\AccountEntryWasReversed::class => [
                 "type" => "student_account",
                 "root" => \Domain\Finance\StudentAccount::class,
@@ -456,11 +461,24 @@ final readonly class HistoricalSchemaRegistry
         try {
             $definition = $this->definition($class);
             if (
-                $class === \Domain\Finance\Event\AccountEntryWasCorrected::class
+                in_array($class, [\Domain\Finance\Event\AccountEntryWasCorrected::class,
+                    \Domain\Finance\Event\AccountPaymentDetailsWereChanged::class], true)
                 && (!is_string($payload['review_hash'] ?? null)
                     || preg_match('/^[a-f0-9]{64}$/D', $payload['review_hash']) !== 1)
             ) {
                 throw new CorruptHistoryException();
+            }
+            if ($class === \Domain\Finance\Event\AccountPaymentDetailsWereChanged::class) {
+                foreach (['previous_details', 'details'] as $field) {
+                    $value = $payload[$field] ?? null;
+                    if ($field === 'previous_details' && $value === null) {
+                        continue;
+                    }
+                    if (!is_array($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Finance\ValueObject\PaymentDetails::fromRecorded($value);
+                }
             }
             if ($class === \Domain\Student\Event\RestrictionOfficeWasChanged::class) {
                 \Domain\Student\PersonRestrictions::validateHandoff($payload);
@@ -824,6 +842,25 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'payment_details') {
+                    if (
+                        !is_array($value) || !in_array($class, [
+                        \Domain\Finance\Event\AccountEntryWasPosted::class,
+                        \Domain\Finance\Event\AccountEntryWasCorrected::class,
+                        ], true)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $details = \Domain\Finance\ValueObject\PaymentDetails::fromRecorded($value);
+                    if (
+                        $class === \Domain\Finance\Event\AccountEntryWasPosted::class
+                        && (($metadata['staff_recorded'] ?? false) !== true
+                            || !in_array($payload['type'], ['payment', 'refund'], true) || $details->isEmpty())
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'review_hash') {
                     if (
                         $class !== \Domain\Finance\Event\AccountEntryWasPosted::class

@@ -9,6 +9,8 @@ use Codefy\Domain\Metadata;
 use DomainException;
 use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Event\AccountEntryWasPosted;
+use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
+use Domain\Finance\ValueObject\PaymentDetails;
 use Domain\Finance\Event\AccountEntryWasCorrected;
 use Domain\Finance\Event\AccountEntryWasReversed;
 use Domain\Finance\Event\StudentAccountWasOpened;
@@ -23,6 +25,8 @@ use Domain\Shared\Exception\ValidationException;
  * @phpstan-type CorrectionResult array{status:string,operation_id:string,source_operation_id:string,
  *     balance_minor:int,position:int}
  * @phpstan-type PostingResult array{status:string,operation_id:string,balance_minor:int,position:int}
+ * @phpstan-type PaymentDetailsResult array{status:string,operation_id:string,entry_operation_id:string,
+ *     balance_minor:int,position:int}
  */
 final class StudentAccount extends EventSourcedAggregate
 {
@@ -41,6 +45,15 @@ final class StudentAccount extends EventSourcedAggregate
     private array $corrections = [];
     /** @var array<string, array{actor:string,hash:string,result:PostingResult}> */
     private array $postingReceipts = [];
+
+    /** @var array<string,string> Monetary replacements share one logical receipt. */
+    private array $receiptRoots = [];
+    /** @var array<string,PaymentDetails> Current details; absence means not recorded. */
+    private array $paymentDetails = [];
+    /** @var array<string,PaymentDetails> Opening snapshots keep raw posting retries stable after corrections. */
+    private array $openingPaymentDetails = [];
+    /** @var array<string,array{actor:string,hash:string,result:PaymentDetailsResult}> */
+    private array $paymentDetailsReceipts = [];
 
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
@@ -108,13 +121,25 @@ final class StudentAccount extends EventSourcedAggregate
         EntityId $actorId,
         bool $staffRecorded = false,
         ?string $reviewHash = null,
+        #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
     ): void {
         if ($amount->minor <= 0 || $amount->currency !== $this->balance->currency) {
             throw new DomainException("A positive amount in the account currency is required.");
         }
+        $paymentDetails = $paymentDetails?->isEmpty() ? null : $paymentDetails;
+        if ($paymentDetails !== null && (!$staffRecorded || $type === EntryType::Charge)) {
+            throw new DomainException("Receipt details belong to staff-recorded payments or refunds.");
+        }
+        if (isset($this->paymentDetailsReceipts[$operationId->value])) {
+            throw new DomainException("The operation identifier already belongs to a receipt correction.");
+        }
         $entry = ["type" => $type->value, "minor" => $amount->minor, "currency" => $amount->currency];
         if (isset($this->operations[$operationId->value])) {
-            if ($this->operations[$operationId->value] !== $entry) {
+            if (
+                $this->operations[$operationId->value] !== $entry ||
+                ($this->openingPaymentDetails[$operationId->value] ?? null)?->values() !==
+                    $paymentDetails?->values()
+            ) {
                 throw new DomainException("The operation identifier has already been used.");
             }
             return;
@@ -132,7 +157,8 @@ final class StudentAccount extends EventSourcedAggregate
                 ],
                 [Metadata::AGGREGATE_TYPE => "student_account"] +
                     ($staffRecorded ? ["staff_recorded" => true] : []) +
-                    ($reviewHash === null ? [] : ["review_hash" => $reviewHash]),
+                    ($reviewHash === null ? [] : ["review_hash" => $reviewHash]) +
+                    ($paymentDetails === null ? [] : ["payment_details" => $paymentDetails->values()]),
             ),
         );
     }
@@ -169,6 +195,7 @@ final class StudentAccount extends EventSourcedAggregate
         Money $amount,
         EntityId $actor,
         string $reviewHash,
+        #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
     ): array {
         if (($accepted = $this->postingResult($operation, $actor, $reviewHash)) !== null) {
             return $accepted;
@@ -176,7 +203,15 @@ final class StudentAccount extends EventSourcedAggregate
         if ($this->entry($operation) !== null) {
             throw new DomainException("A reviewed posting cannot adopt an existing entry identity.");
         }
-        $this->post($operation, $type, $amount, $actor, staffRecorded: true, reviewHash: $reviewHash);
+        $this->post(
+            $operation,
+            $type,
+            $amount,
+            $actor,
+            staffRecorded: true,
+            reviewHash: $reviewHash,
+            paymentDetails: $paymentDetails,
+        );
         return $this->postingReceipts[$operation->value]["result"];
     }
 
@@ -204,7 +239,8 @@ final class StudentAccount extends EventSourcedAggregate
 
     public function canCorrectAmount(EntityId $source): bool
     {
-        return isset($this->staffRecorded[$source->value]) && !isset($this->reversedOperations[$source->value]);
+        return isset($this->staffRecorded[$source->value]) &&
+        !isset($this->reversedOperations[$source->value]);
     }
 
     public function correctedBalance(EntityId $source, Money $amount): Money
@@ -218,7 +254,11 @@ final class StudentAccount extends EventSourcedAggregate
             ]);
         }
         $entry = $this->operations[$source->value];
-        if ($amount->currency !== $entry["currency"] || $amount->minor < 1 || $amount->minor === $entry["minor"]) {
+        if (
+            $amount->currency !== $entry["currency"] ||
+            $amount->minor < 1 ||
+            $amount->minor === $entry["minor"]
+        ) {
             throw new ValidationException([
                 [
                     "field" => "amount_minor",
@@ -239,7 +279,10 @@ final class StudentAccount extends EventSourcedAggregate
         $balance = new Money($minor, $amount->currency);
         if ($entry["type"] === EntryType::Refund->value && $balance->minor > 0) {
             throw new ValidationException([
-                ["field" => "amount_minor", "message" => "The corrected refund cannot exceed available credit."],
+                [
+                    "field" => "amount_minor",
+                    "message" => "The corrected refund cannot exceed available credit.",
+                ],
             ]);
         }
         return $balance;
@@ -270,9 +313,13 @@ final class StudentAccount extends EventSourcedAggregate
             return $result;
         }
         $this->correctedBalance($source, $amount);
-        if (isset($this->operations[$operation->value]) || preg_match('/^[a-f0-9]{64}$/D', $reviewHash) !== 1) {
+        if (
+            isset($this->operations[$operation->value]) ||
+            preg_match('/^[a-f0-9]{64}$/D', $reviewHash) !== 1
+        ) {
             throw new DomainException("A new correction identity and reviewed instruction are required.");
         }
+        $receiptDetails = $this->paymentDetails($source);
         $this->recordThat(
             AccountEntryWasCorrected::occur(
                 $this->aggregateId(),
@@ -284,10 +331,126 @@ final class StudentAccount extends EventSourcedAggregate
                     "actor_id" => $actor->value,
                     "review_hash" => $reviewHash,
                 ],
-                [Metadata::AGGREGATE_TYPE => "student_account"],
+                [Metadata::AGGREGATE_TYPE => "student_account"] +
+                    ($receiptDetails === null ? [] : ["payment_details" => $receiptDetails->values()]),
             ),
         );
         return $this->corrections[$operation->value]["result"];
+    }
+
+    public function canCorrectPaymentDetails(EntityId $entry): bool
+    {
+        return isset($this->staffRecorded[$entry->value]) &&
+        in_array($this->operations[$entry->value]["type"], ["payment", "refund"], true);
+    }
+
+    public function paymentDetails(EntityId $entry): ?PaymentDetails
+    {
+        $root = $this->receiptRoots[$entry->value] ?? null;
+        return $root === null ? null : $this->paymentDetails[$root] ?? null;
+    }
+
+    public function assertPaymentDetailsChange(
+        EntityId $entry,
+        #[\SensitiveParameter] PaymentDetails $details,
+    ): void {
+        if (!$this->canCorrectPaymentDetails($entry)) {
+            throw new ValidationException([
+                [
+                    "field" => "source_operation_id",
+                    "message" =>
+                        "Only explicitly staff-recorded payments or refunds support receipt corrections.",
+                ],
+            ]);
+        }
+        if (($this->paymentDetails($entry) ?? new PaymentDetails())->values() === $details->values()) {
+            throw new ValidationException([
+                [
+                    "field" => "payment_reference",
+                    "message" => "Change the payment method or receipt reference before reviewing.",
+                ],
+            ]);
+        }
+    }
+
+    /** @return PaymentDetailsResult|null */
+    public function paymentDetailsResult(EntityId $operation, EntityId $actor, string $hash): ?array
+    {
+        $receipt = $this->paymentDetailsReceipts[$operation->value] ?? null;
+        if ($receipt === null) {
+            return null;
+        }
+        if ($receipt["actor"] !== $actor->value || !hash_equals($receipt["hash"], $hash)) {
+            throw new DomainException("This receipt correction belongs to a different reviewed instruction.");
+        }
+        return $receipt["result"];
+    }
+
+    /** @return PaymentDetailsResult */
+    public function changePaymentDetails(
+        EntityId $entry,
+        EntityId $operation,
+        #[\SensitiveParameter] PaymentDetails $details,
+        EntityId $actor,
+        string $hash,
+    ): array {
+        if (($accepted = $this->paymentDetailsResult($operation, $actor, $hash)) !== null) {
+            return $accepted;
+        }
+        $this->assertPaymentDetailsChange($entry, $details);
+        if (
+            isset($this->operations[$operation->value]) ||
+            isset($this->paymentDetailsReceipts[$operation->value]) ||
+            preg_match('/^[a-f0-9]{64}$/D', $hash) !== 1
+        ) {
+            throw new DomainException(
+                "A new receipt correction identity and reviewed instruction are required.",
+            );
+        }
+        $this->recordThat(
+            AccountPaymentDetailsWereChanged::occur(
+                $this->aggregateId(),
+                [
+                    "operation_id" => $operation->value,
+                    "entry_operation_id" => $entry->value,
+                    "receipt_operation_id" => $this->receiptRoots[$entry->value],
+                    "previous_details" => $this->paymentDetails($entry)?->values(),
+                    "details" => $details->values(),
+                    "actor_id" => $actor->value,
+                    "review_hash" => $hash,
+                ],
+                [Metadata::AGGREGATE_TYPE => "student_account"],
+            ),
+        );
+        return $this->paymentDetailsReceipts[$operation->value]["result"];
+    }
+
+    protected function whenAccountPaymentDetailsWereChanged(AccountPaymentDetailsWereChanged $event): void
+    {
+        $p = $event->payload();
+        $entry = new EntityId($p["entry_operation_id"]);
+        $details = PaymentDetails::fromRecorded($p["details"]);
+        $this->assertPaymentDetailsChange($entry, $details);
+        if (
+            $p["receipt_operation_id"] !== $this->receiptRoots[$entry->value] ||
+            $p["previous_details"] !== $this->paymentDetails($entry)?->values() ||
+            isset($this->operations[$p["operation_id"]]) ||
+            isset($this->paymentDetailsReceipts[$p["operation_id"]])
+        ) {
+            throw new DomainException("The recorded receipt correction does not match the preceding facts.");
+        }
+        $this->paymentDetails[$p["receipt_operation_id"]] = $details;
+        $this->paymentDetailsReceipts[$p["operation_id"]] = [
+            "actor" => $p["actor_id"],
+            "hash" => $p["review_hash"],
+            "result" => [
+                "status" => "receipt_corrected",
+                "operation_id" => $p["operation_id"],
+                "entry_operation_id" => $entry->value,
+                "balance_minor" => $this->balance->minor,
+                "position" => $event->playhead(),
+            ],
+        ];
     }
 
     /** @return array{corrects_operation_id?:string,corrected_by_operation_id?:string} */
@@ -317,6 +480,17 @@ final class StudentAccount extends EventSourcedAggregate
             "minor" => $amount->minor,
             "currency" => $amount->currency,
         ];
+        $this->receiptRoots[$p["operation_id"]] = $this->receiptRoots[$source->value];
+        $snapshot = $event->metadata()["payment_details"] ?? null;
+        if (
+            $snapshot !== null &&
+            PaymentDetails::fromRecorded($snapshot)->values() !== $this->paymentDetails($source)?->values()
+        ) {
+            throw new DomainException("The corrected receipt snapshot does not match the preceding facts.");
+        }
+        if ($snapshot !== null) {
+            $this->openingPaymentDetails[$p["operation_id"]] = PaymentDetails::fromRecorded($snapshot);
+        }
         $this->balance = $balance;
         $this->staffRecorded[$p["operation_id"]] = true;
         $this->reversedOperations[$source->value] = true;
@@ -353,6 +527,12 @@ final class StudentAccount extends EventSourcedAggregate
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
+        $this->receiptRoots[$payload["operation_id"]] = $payload["operation_id"];
+        if (isset($event->metadata()["payment_details"])) {
+            $details = PaymentDetails::fromRecorded($event->metadata()["payment_details"]);
+            $this->paymentDetails[$payload["operation_id"]] = $details;
+            $this->openingPaymentDetails[$payload["operation_id"]] = $details;
+        }
         $this->operations[$payload["operation_id"]] = [
             "type" => $payload["type"],
             "minor" => $payload["minor"],

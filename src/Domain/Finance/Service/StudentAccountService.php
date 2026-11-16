@@ -12,6 +12,7 @@ use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\StudentAccount;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
+use Domain\Finance\ValueObject\PaymentDetails;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
@@ -60,6 +61,7 @@ final readonly class StudentAccountService
         Money $amount,
         int $position,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
     ): array {
         $actor = $this->access->requirePermission('sis:finance:post');
         $reason = $this->commands->reason($reason);
@@ -71,6 +73,7 @@ final readonly class StudentAccountService
             $position,
             $reason,
             $actor,
+            $paymentDetails,
         ): array {
             $account = $this->accounts->get($id);
             $existing = $account->entry($operationId) !== null;
@@ -78,7 +81,7 @@ final readonly class StudentAccountService
                 $this->commands->assertPosition($account->playhead(), $position);
             }
             $this->commands->assertActor($actor, 'sis:finance:post');
-            $account->post($operationId, $type, $amount, $actor, staffRecorded: true);
+            $account->post($operationId, $type, $amount, $actor, staffRecorded: true, paymentDetails: $paymentDetails);
             if (!$existing) {
                 $this->accounts->save($account, $this->commands->context($actor, $operationId, $reason));
                 $this->audit->record($actor, 'account.entry_posted', $operationId);

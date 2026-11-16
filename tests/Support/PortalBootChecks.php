@@ -5372,3 +5372,102 @@ foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"
         throw new RuntimeException("A native private history read bypassed independent finance authority.");
     }
 }
+// Receipt information uses the same native review boundary, with independent finance privacy.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$receiptPostingReview = $teachingPost($postingReviewBase . "review/", [
+    "type" => "payment",
+    "amount_minor" => 100,
+    "currency" => "USD",
+    "position" => 3,
+    "reason" => "Native fictional scholarship receipt.",
+    "payment_method" => "scholarship",
+    "payment_reference" => "FICT-SCHOLARSHIP-PRIVATE",
+]);
+$receiptPostingProof = json_decode((string) $receiptPostingReview->getBody(), true);
+if (
+    $receiptPostingReview->getStatusCode() !== 200 ||
+    ($receiptPostingProof["payment_details"]["method"] ?? null) !== "scholarship"
+) {
+    throw new RuntimeException("The native payment review lost its optional scholarship method.");
+}
+$receiptPostingCommit = $teachingPost($postingReviewBase . "commit/", [
+    "review_token" => $receiptPostingProof["review_token"],
+    "payment_reference" => "FORGED",
+]);
+$receiptPosting = json_decode((string) $receiptPostingCommit->getBody(), true);
+$receiptBase = $postingReviewBase . $receiptPosting["operation_id"] . "/receipt/";
+$receiptRead = $teachingPost($receiptBase, []);
+$receiptReadValues = json_decode((string) $receiptRead->getBody(), true);
+if (
+    $receiptPostingCommit->getStatusCode() !== 200 ||
+    $receiptRead->getStatusCode() !== 200 ||
+    ($receiptReadValues["payment_details"]["reference"] ?? null) !== "FICT-SCHOLARSHIP-PRIVATE" ||
+    !str_contains($receiptRead->getHeaderLine("Cache-Control"), "no-store") ||
+    $receiptRead->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException("The native private receipt read lost reviewed values or privacy.");
+}
+$receiptBefore = $sis->sql->rows("sis_account_balances", ["id" => (string) $postingReviewId], 1)[0];
+$receiptCorrectionReview = $teachingPost($receiptBase . "review/", [
+    "position" => 4,
+    "payment_method" => "grant",
+    "payment_reference" => "FICT-GRANT-PRIVATE",
+    "reason" => "Native fictional grant reference correction.",
+    "amount_minor" => 9999,
+]);
+$receiptCorrectionProof = json_decode((string) $receiptCorrectionReview->getBody(), true);
+if (
+    $receiptCorrectionReview->getStatusCode() !== 200 ||
+    ($receiptCorrectionProof["amount_minor"] ?? null) !== 100
+) {
+    throw new RuntimeException("The native receipt review accepted a forged amount.");
+}
+$receiptCorrectionCommit = $teachingPost($receiptBase . "commit/", [
+    "review_token" => $receiptCorrectionProof["review_token"],
+    "payment_reference" => "FORGED",
+]);
+$receiptAfter = $sis->sql->rows("sis_account_balances", ["id" => (string) $postingReviewId], 1)[0];
+$receiptBefore["position"] = 5;
+if ($receiptCorrectionCommit->getStatusCode() !== 200 || $receiptBefore != $receiptAfter) {
+    throw new RuntimeException("A native receipt correction changed money or failed to advance history.");
+}
+$receiptHistoryResponse = $teachingPost(
+    $postingReviewBase . $receiptPosting["operation_id"] . "/history/",
+    [],
+);
+$receiptHistory = json_decode((string) $receiptHistoryResponse->getBody(), true)["items"] ?? [];
+if (
+    array_column($receiptHistory, "action") !== ["receipt_corrected", "posted"] ||
+    ($receiptHistory[0]["payment_details"]["reference"] ?? null) !== "FICT-GRANT-PRIVATE" ||
+    ($receiptHistory[1]["payment_details"]["reference"] ?? null) !== "FICT-SCHOLARSHIP-PRIVATE"
+) {
+    throw new RuntimeException("The native receipt history did not preserve both references.");
+}
+$receiptOrdinary = $financeEvidenceGet("/sis/accounts/" . $postingReviewId . "/");
+if (
+    $receiptOrdinary->getStatusCode() !== 200 ||
+    str_contains((string) $receiptOrdinary->getBody(), "PRIVATE") ||
+    str_contains(json_encode($sis->sql->rows("sis_audit")), "FICT-GRANT-PRIVATE")
+) {
+    throw new RuntimeException(
+        "Private receipt references leaked into ordinary account data or audit metadata.",
+    );
+}
+$sis->access->staff = false;
+foreach ([["sis:finance:read"], ["sis:finance:post"], ["sis:registration:manage"]] as $receiptGrants) {
+    $sis->access->grants = $receiptGrants;
+    if (
+        $teachingPost($receiptBase, [])->getStatusCode() !== 403 ||
+        $teachingPost($receiptBase . "review/", [
+            "position" => 5,
+            "payment_method" => "cash",
+            "reason" => "Fictional denied correction.",
+        ])->getStatusCode() !== 403 ||
+        $teachingPost($receiptBase . "commit/", [
+            "review_token" => $receiptCorrectionProof["review_token"],
+        ])->getStatusCode() !== 403
+    ) {
+        throw new RuntimeException("Private receipt activity bypassed independent finance permissions.");
+    }
+}

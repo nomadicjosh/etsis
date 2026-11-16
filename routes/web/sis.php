@@ -48,6 +48,19 @@ return static function (Psr7Router $router): void {
         ])
         ->name('sis.accounts.correction.commit');
     $router
+        ->post('/sis/accounts/{id}/entries/{operation}/receipt/', [SisFinanceController::class, 'receipt'])
+        ->name('sis.accounts.receipt.read');
+    $router
+        ->post('/sis/accounts/{id}/entries/{operation}/receipt/review/', [
+            SisFinanceController::class, 'reviewPaymentDetails',
+        ])
+        ->name('sis.accounts.receipt.review');
+    $router
+        ->post('/sis/accounts/{id}/entries/{operation}/receipt/commit/', [
+            SisFinanceController::class, 'commitPaymentDetails',
+        ])
+        ->name('sis.accounts.receipt.commit');
+    $router
         ->map(["POST"], "/sis/persons/", [SisAdmissionsController::class, "createPerson"])
         ->name("sis.persons.create");
     $router

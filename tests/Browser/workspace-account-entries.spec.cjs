@@ -5,7 +5,8 @@ const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
 async function fixture(page, options = {}) {
     const calls = [], errors = [];
     let position = 2, balance = -1000, corrected = false, reviewNumber = 0, interrupt = false, posted = null;
-    const postingReviews = new Map();
+    const postingReviews = new Map(), receiptReviews = new Map();
+    let receiptDetails = options.receipt || null;
     let historyHead = 26;
     const currency = options.currency || 'USD';
     page.on('pageerror', e => errors.push(e.message));
@@ -22,11 +23,12 @@ async function fixture(page, options = {}) {
             position, balance_minor: balance,
             entries: [{ operation_id: id(4), type: 'payment', minor: 1000, currency, reversed: corrected,
                 can_correct_amount: options.eligible !== false && !corrected,
+                can_correct_payment_details: options.eligible !== false,
                 ...(corrected ? { corrected_by_operation_id: id(5) } : {}) },
                 ...(corrected ? [{ operation_id: id(5), type: 'payment', minor: 1250, currency, reversed: false,
-                    can_correct_amount: true, corrects_operation_id: id(4) }] : []),
+                    can_correct_amount: true, can_correct_payment_details: true, corrects_operation_id: id(4) }] : []),
                 ...(posted ? [{ operation_id: id(6), type: posted.type, minor: posted.amount_minor, currency,
-                    reversed: false, can_correct_amount: true }] : [])],
+                    reversed: false, can_correct_amount: true, can_correct_payment_details: posted.type !== "charge" }] : [])],
         };
         else if (path.endsWith('/correction/review/')) {
             reviewNumber++;
@@ -53,7 +55,8 @@ async function fixture(page, options = {}) {
                 result = { review_token: `fictional-posting-${reviewNumber}`, type: data.type,
                     amount_minor: data.amount_minor, currency, balance_minor: balance, resulting_balance_minor: next,
                     available_credit_minor: Math.max(0, -balance), remaining_credit_minor: Math.max(0, -next),
-                    reason: data.reason, position };
+                    reason: data.reason, position, payment_details: data.payment_method || data.payment_reference
+                        ? { method: data.payment_method || null, reference: data.payment_reference || null } : null };
                 postingReviews.set(result.review_token, result);
                 if (options.delayReview) await options.delayReview();
             }
@@ -68,6 +71,23 @@ async function fixture(page, options = {}) {
                     interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted response.' } };
                 }
             }
+        } else if (path.endsWith('/receipt/')) {
+            result = { payment_details: receiptDetails, position, entry_operation_id: id(4) };
+            if (options.delayReceipt) await options.delayReceipt();
+        } else if (path.endsWith('/receipt/review/')) {
+            reviewNumber++;
+            result = { review_token: `fictional-receipt-${reviewNumber}`, type: 'payment', amount_minor: 1000,
+                currency, balance_minor: balance, resulting_balance_minor: balance, reason: data.reason, position,
+                previous_payment_details: receiptDetails,
+                payment_details: { method: data.payment_method || null, reference: data.payment_reference || null } };
+            receiptReviews.set(result.review_token, result);
+        } else if (path.endsWith('/receipt/commit/')) {
+            const accepted = receiptReviews.get(data.review_token);
+            if (position === accepted.position) { receiptDetails = accepted.payment_details; position++; }
+            result = { status: 'receipt_corrected', balance_minor: balance, position };
+            if (interrupt) {
+                interrupt = false; status = 500; result = { error: { message: 'Fictional interrupted receipt response.' } };
+            }
         } else if (path === `/sis/accounts/${id(1)}/entries/${id(4)}/history/`) {
             const through = data.through_position ?? historyHead, after = data.after || 0;
             const history = Array.from({ length: through - 1 }, (_, i) => ({
@@ -81,6 +101,12 @@ async function fixture(page, options = {}) {
             result = { operation_id: id(4), entry: { operation_id: id(4), type: 'payment', minor: 1000,
                 currency, reversed: true }, through_position: through, earlier_details_unknown: true,
                 items: history.slice(after, after + 20), next_after: after + 20 < history.length ? after + 20 : null };
+            if (options.receiptHistory) result.items = [
+                { ...result.items[0], operation_id: id(4), action: 'receipt_corrected', source_operation_id: undefined,
+                    previous_payment_details: { method: 'check', reference: 'FICT-OLD' },
+                    payment_details: { method: 'scholarship', reference: '<script>FICT-NEW</script>' } },
+                { ...history.at(-1), payment_details: { method: 'check', reference: 'FICT-OLD' } },
+            ];
             if (options.delayHistory) await options.delayHistory();
         }
         await route.fulfill({ status, json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -296,3 +322,102 @@ for (const [currency, input, minor] of [['JPY', '1250', 1250], ['KWD', '1.250', 
         expect(f.calls.find(c => c.path.endsWith('/review/')).data).toMatchObject({ amount_minor: minor, currency });
     });
 }
+
+test('payment receipt fields are optional, private, escaped and excluded from charges', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Post a transaction', exact: true }).click();
+    await page.getByLabel('Transaction type').selectOption('payment');
+    await page.getByLabel('Amount (USD)').fill('10');
+    await page.getByLabel('Payment method', { exact: true }).selectOption('scholarship');
+    await page.getByLabel('Receipt or check reference').fill('<script>FICT-ONLY</script>');
+    await page.getByLabel('Reason for transaction').fill('Fictional scholarship receipt.');
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed transaction' });
+    await expect(preview).toContainText('Payment method: Scholarship');
+    await expect(preview).toContainText('<script>FICT-ONLY</script>');
+    await expect(preview.locator('script')).toHaveCount(0);
+    expect(f.calls.find(c => c.path.endsWith('/entries/review/')).data).toMatchObject({
+        payment_method: 'scholarship', payment_reference: '<script>FICT-ONLY</script>',
+    });
+    await page.getByLabel('Transaction type').selectOption('charge');
+    await expect(page.getByLabel('Receipt or check reference')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Confirm transaction', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review transaction', exact: true }).click();
+    await expect(preview).toBeVisible();
+    const charge = f.calls.filter(c => c.path.endsWith('/entries/review/')).at(-1).data;
+    expect(charge).not.toHaveProperty('payment_method'); expect(charge).not.toHaveProperty('payment_reference');
+    await expect(preview).not.toContainText('FICT-ONLY');
+    await page.getByLabel('Transaction type').selectOption('payment');
+    await expect(page.getByLabel('Receipt or check reference')).toHaveValue('<script>FICT-ONLY</script>');
+    await page.setViewportSize({ width: 375, height: 850 });
+    await accessible(page);
+    expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length })))
+        .toEqual({ local: 0, session: 0 });
+    expect(f.errors).toEqual([]);
+});
+
+test('receipt corrections reuse the editor, preserve fields and retry only the reviewed proof', async ({ page }) => {
+    const f = await fixture(page, { receipt: { method: 'check', reference: 'FICT-OLD' } });
+    await page.getByRole('button', { name: 'Correct receipt details', exact: true }).click();
+    await expect(page.getByLabel('Payment method', { exact: true })).toHaveValue('check');
+    await expect(page.getByLabel('Receipt or check reference')).toHaveValue('FICT-OLD');
+    await expect(page.getByLabel('Amount (USD)')).toHaveCount(0);
+    await page.getByLabel('Payment method', { exact: true }).selectOption('grant');
+    await page.getByLabel('Receipt or check reference').fill('FICT-NEW');
+    await page.getByLabel('Reason for receipt correction').fill('Fictional grant details corrected.');
+    await page.getByRole('button', { name: 'Review receipt correction', exact: true }).click();
+    const preview = page.getByRole('region', { name: 'Reviewed receipt correction' });
+    await expect(preview).toContainText('FICT-OLD'); await expect(preview).toContainText('FICT-NEW');
+    await expect(preview).toContainText('Amount unchanged');
+    await expect(preview).toContainText('-$10.00 → -$10.00');
+    await page.setViewportSize({ width: 375, height: 850 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Refresh account balance', exact: true }).click();
+    await expect(page.getByLabel('Receipt or check reference')).toHaveValue('FICT-NEW');
+    await expect(page.getByRole('button', { name: 'Confirm receipt correction', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review receipt correction', exact: true }).click();
+    f.interrupt();
+    await page.getByRole('button', { name: 'Confirm receipt correction', exact: true }).click();
+    await expect(page.getByLabel('Receipt or check reference')).toBeEnabled();
+    await page.getByRole('button', { name: 'Confirm receipt correction', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Balance: -$10.00');
+    const commits = f.calls.filter(c => c.path.endsWith('/receipt/commit/'));
+    expect(commits.map(c => c.data)).toEqual([
+        { review_token: 'fictional-receipt-2' }, { review_token: 'fictional-receipt-2' },
+    ]);
+    expect(commits.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    await expect(page.locator('#drawer-body')).not.toContainText('FICT-NEW');
+    expect(f.errors).toEqual([]);
+});
+
+test('entry history shows receipt changes alongside the original retained reference', async ({ page }) => {
+    const f = await fixture(page, { receiptHistory: true });
+    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    const articles = page.getByRole('region', { name: 'Entry activity' }).locator('article');
+    await expect(articles).toHaveCount(2);
+    await expect(articles.first()).toContainText('Receipt details corrected');
+    await expect(articles.first()).toContainText('<script>FICT-NEW</script>');
+    await expect(articles.last()).toContainText('FICT-OLD');
+    await expect(articles.last()).not.toContainText('FICT-NEW');
+    await expect(articles.locator('script')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('a delayed private receipt read cannot render into a different drawer', async ({ page }) => {
+    let release;
+    const pending = new Promise(resolve => release = resolve);
+    const f = await fixture(page, { receipt: { method: 'check', reference: 'FICT-PRIVATE-DELAY' },
+        delayReceipt: () => pending });
+    await page.getByRole('button', { name: 'Correct receipt details', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Opening transaction');
+    await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Account statement');
+    const delivered = page.waitForResponse(response => response.url().endsWith('/receipt/'));
+    release();
+    await (await delivered).finished();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    await expect(page.locator('#drawer-body')).toContainText('Account statement');
+    await expect(page.locator('#drawer-body')).not.toContainText('FICT-PRIVATE-DELAY');
+    await expect(page.getByLabel('Receipt or check reference')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});

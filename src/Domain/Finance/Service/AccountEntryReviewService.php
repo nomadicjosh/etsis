@@ -12,6 +12,7 @@ use Domain\Finance\Enum\EntryType;
 use Domain\Finance\Repository\AccountRepository;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\Money;
+use Domain\Finance\ValueObject\PaymentDetails;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -29,11 +30,12 @@ use Throwable;
  *
  * @phpstan-type EntryProof array{purpose:string,actor_id:string,account_id:string,operation_id:string,
  *     position:int,minor:int,currency:string,reason:string,issued_at:string,expires_at:string,
- *     source_operation_id?:string,type?:string}
+ *     source_operation_id?:string,type?:string,payment_details?:array{method:?string,reference:?string}}
  */
 final readonly class AccountEntryReviewService
 {
     private const string CORRECTION = "finance.account-correction";
+    private const string PAYMENT_DETAILS = "finance.payment-details";
     private const string POSTING = "finance.account-posting";
     private const int MAX_TOKEN_BYTES = 65536;
 
@@ -66,8 +68,56 @@ final readonly class AccountEntryReviewService
         Money $amount,
         int $position,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
     ): array {
-        return $this->review($id, null, $type, $amount, $position, $reason);
+        return $this->review($id, null, $type, $amount, $position, $reason, $paymentDetails);
+    }
+
+    /** Private receipt information is intentionally separate from owner-visible account entries.
+     * @return array<string,mixed>
+     */
+    public function receipt(AccountId $id, EntityId $entry): array
+    {
+        $actor = $this->authorize();
+        return $this->transactions->run(function () use ($id, $entry, $actor): array {
+            $account = $this->accounts->get($id, new HistoryReadBudget());
+            if (!$account->canCorrectPaymentDetails($entry)) {
+                throw new ValidationException([
+                    [
+                        "field" => "source_operation_id",
+                        "message" =>
+                            "Receipt details are available for explicitly staff-recorded payments and refunds.",
+                    ],
+                ]);
+            }
+            $this->audit->record($actor, "account.receipt_read", new EntityId((string) $id));
+            $this->actor($actor);
+            return [
+                "payment_details" => $account->paymentDetails($entry)?->values(),
+                "position" => $account->playhead(),
+                "entry_operation_id" => $entry->value,
+            ];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function reviewPaymentDetails(
+        AccountId $id,
+        EntityId $entry,
+        #[\SensitiveParameter] PaymentDetails $details,
+        int $position,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        return $this->review($id, $entry, null, null, $position, $reason, $details, receiptOnly: true);
+    }
+
+    /** @return array<string,mixed> */
+    public function commitPaymentDetails(
+        AccountId $id,
+        EntityId $entry,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        return $this->commit($id, $entry, $token, receiptOnly: true);
     }
 
     /** @return array<string,mixed> */
@@ -75,9 +125,11 @@ final readonly class AccountEntryReviewService
         AccountId $id,
         ?EntityId $source,
         ?EntryType $type,
-        Money $amount,
+        ?Money $amount,
         int $position,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
+        bool $receiptOnly = false,
     ): array {
         $actor = $this->authorize();
         $reason = $this->commands->reason($reason);
@@ -89,34 +141,78 @@ final readonly class AccountEntryReviewService
             $position,
             $reason,
             $actor,
+            $paymentDetails,
+            $receiptOnly,
         ): array {
             $account = $this->accounts->get($id, new HistoryReadBudget());
             $this->commands->assertPosition($account->playhead(), $position);
-            if ($source === null) {
+            if ($receiptOnly) {
+                $source ??= throw new \LogicException("A receipt correction requires an entry.");
+                $paymentDetails ??= throw new \LogicException("A receipt correction requires details.");
+                $account->assertPaymentDetailsChange($source, $paymentDetails);
+                $entry =
+                    $account->entry($source) ?? throw new \LogicException("The receipt entry is missing.");
+                $amount = new Money($entry["minor"], $entry["currency"]);
+                $balance = $account->balance();
+                $intent = [
+                    "source_operation_id" => $source->value,
+                    "payment_details" => $paymentDetails->values(),
+                ];
+                $details = [
+                    "type" => $entry["type"],
+                    "amount_minor" => $entry["minor"],
+                    "previous_payment_details" => $account->paymentDetails($source)?->values(),
+                    "payment_details" => $paymentDetails->values(),
+                ];
+                $purpose = self::PAYMENT_DETAILS;
+            } elseif ($source === null) {
+                $amount ??= throw new \LogicException("A posting requires an amount.");
+                if ($paymentDetails !== null && !$paymentDetails->isEmpty() && $type === EntryType::Charge) {
+                    throw new ValidationException([
+                        [
+                            "field" => "payment_method",
+                            "message" => "Receipt details apply to payments and refunds.",
+                        ],
+                    ]);
+                }
                 $type ??= throw new \LogicException("A posting requires a transaction type.");
                 try {
                     $balance = $account->postingBalance($type, $amount);
                 } catch (DomainException | InvalidArgumentException $error) {
                     // These aggregate/Money checks return fixed validation wording, without personal values.
-                    throw new ValidationException([["field" => "amount_minor", "message" => $error->getMessage()]]);
+                    throw new ValidationException([
+                        ["field" => "amount_minor", "message" => $error->getMessage()],
+                    ]);
                 }
-                $intent = ["type" => $type->value];
-                $details = ["type" => $type->value, "amount_minor" => $amount->minor];
+                $intent =
+                    ["type" => $type->value] +
+                    ($paymentDetails === null || $paymentDetails->isEmpty()
+                        ? []
+                        : ["payment_details" => $paymentDetails->values()]);
+                $details = [
+                    "type" => $type->value,
+                    "amount_minor" => $amount->minor,
+                    "payment_details" => $intent["payment_details"] ?? null,
+                ];
                 $purpose = self::POSTING;
             } else {
+                $amount ??= throw new \LogicException("An amount correction requires an amount.");
                 $balance = $account->correctedBalance($source, $amount);
-                $entry = $account->entry($source) ?? throw new \LogicException("The correction source is missing.");
+                $entry =
+                    $account->entry($source) ??
+                    throw new \LogicException("The correction source is missing.");
                 $intent = ["source_operation_id" => $source->value];
                 $details = [
                     "source_operation_id" => $source->value,
                     "type" => $entry["type"],
                     "original_minor" => $entry["minor"],
                     "corrected_minor" => $amount->minor,
+                    "payment_details" => $account->paymentDetails($source)?->values(),
                 ];
                 $purpose = self::CORRECTION;
             }
             $this->actor($actor);
-            $now = $this->clock->now()->setTimezone(new DateTimeZone('UTC'));
+            $now = $this->clock->now()->setTimezone(new DateTimeZone("UTC"));
             $proof =
                 [
                     "purpose" => $purpose,
@@ -133,7 +229,11 @@ final readonly class AccountEntryReviewService
             $token = $this->cipher->seal(json_encode($proof, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
             $this->audit->record(
                 $actor,
-                $source === null ? "account.posting_reviewed" : "account.correction_reviewed",
+                $receiptOnly
+                    ? "account.receipt_reviewed"
+                    : ($source === null
+                        ? "account.posting_reviewed"
+                        : "account.correction_reviewed"),
                 new EntityId((string) $id),
             );
             $this->actor($actor);
@@ -153,8 +253,11 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return array<string,mixed> */
-    public function commitCorrection(AccountId $id, EntityId $source, #[\SensitiveParameter] string $token): array
-    {
+    public function commitCorrection(
+        AccountId $id,
+        EntityId $source,
+        #[\SensitiveParameter] string $token,
+    ): array {
         return $this->commit($id, $source, $token);
     }
 
@@ -165,38 +268,68 @@ final readonly class AccountEntryReviewService
     }
 
     /** @return array<string,mixed> */
-    private function commit(AccountId $id, ?EntityId $source, #[\SensitiveParameter] string $token): array
-    {
+    private function commit(
+        AccountId $id,
+        ?EntityId $source,
+        #[\SensitiveParameter] string $token,
+        bool $receiptOnly = false,
+    ): array {
         $actor = $this->authorize();
-        $proof = $this->proof($token, $actor, $source === null ? self::POSTING : self::CORRECTION);
-        if ($proof["account_id"] !== (string) $id || ($proof["source_operation_id"] ?? null) !== $source?->value) {
+        $proof = $this->proof(
+            $token,
+            $actor,
+            $receiptOnly ? self::PAYMENT_DETAILS : ($source === null ? self::POSTING : self::CORRECTION),
+        );
+        if (
+            $proof["account_id"] !== (string) $id ||
+            ($proof["source_operation_id"] ?? null) !== $source?->value
+        ) {
             throw new AccessDeniedException("This review belongs to another account entry.");
         }
         $operation = new EntityId($proof["operation_id"]);
         $hash = hash("sha256", $token);
-        return $this->transactions->run(function () use ($id, $source, $proof, $operation, $hash, $actor): array {
+        return $this->transactions->run(function () use (
+            $id,
+            $source,
+            $proof,
+            $operation,
+            $hash,
+            $actor,
+            $receiptOnly,
+        ): array {
             $account = $this->accounts->get($id, new HistoryReadBudget());
             $this->actor($actor);
-            $accepted =
-                $source === null
+            $accepted = $receiptOnly
+                ? $account->paymentDetailsResult($operation, $actor, $hash)
+                : ($source === null
                     ? $account->postingResult($operation, $actor, $hash)
-                    : $account->correctionResult($operation, $actor, $hash);
+                    : $account->correctionResult($operation, $actor, $hash));
             if ($accepted !== null) {
                 return $accepted;
             }
             $this->fresh($proof);
             $this->commands->assertPosition($account->playhead(), $proof["position"]);
             $amount = new Money($proof["minor"], $proof["currency"]);
-            $result =
-                $source === null
+            $result = $receiptOnly
+                ? $account->changePaymentDetails(
+                    $source ?? throw new \LogicException("A receipt correction requires an entry."),
+                    $operation,
+                    PaymentDetails::fromRecorded($proof["payment_details"] ?? []),
+                    $actor,
+                    $hash,
+                )
+                : ($source === null
                     ? $account->postReviewed(
                         $operation,
                         EntryType::from($proof["type"] ?? ""),
                         $amount,
                         $actor,
                         $hash,
+                        isset($proof["payment_details"])
+                            ? PaymentDetails::fromRecorded($proof["payment_details"])
+                            : null,
                     )
-                    : $account->correct($source, $operation, $amount, $actor, $hash);
+                    : $account->correct($source, $operation, $amount, $actor, $hash));
             $this->actor($actor);
             $this->accounts->save(
                 $account,
@@ -204,7 +337,11 @@ final readonly class AccountEntryReviewService
             );
             $this->audit->record(
                 $actor,
-                $source === null ? "account.entry_posted" : "account.entry_corrected",
+                $receiptOnly
+                    ? "account.receipt_corrected"
+                    : ($source === null
+                        ? "account.entry_posted"
+                        : "account.entry_corrected"),
                 $operation,
             );
             $this->actor($actor);
@@ -251,7 +388,7 @@ final readonly class AccountEntryReviewService
             ) {
                 throw new InvalidArgumentException();
             }
-            if ($purpose === self::CORRECTION) {
+            if ($purpose === self::CORRECTION || $purpose === self::PAYMENT_DETAILS) {
                 if (!is_string($p["source_operation_id"] ?? null)) {
                     throw new InvalidArgumentException();
                 }
@@ -261,6 +398,17 @@ final readonly class AccountEntryReviewService
                 EntryType::tryFrom($p["type"]) === null ||
                 array_key_exists("source_operation_id", $p)
             ) {
+                throw new InvalidArgumentException();
+            }
+            if (array_key_exists("payment_details", $p)) {
+                if (!is_array($p["payment_details"]) || $purpose === self::CORRECTION) {
+                    throw new InvalidArgumentException();
+                }
+                $details = PaymentDetails::fromRecorded($p["payment_details"]);
+                if ($purpose === self::POSTING && ($p["type"] === "charge" || $details->isEmpty())) {
+                    throw new InvalidArgumentException();
+                }
+            } elseif ($purpose === self::PAYMENT_DETAILS) {
                 throw new InvalidArgumentException();
             }
             new EntityId($p["actor_id"]);
@@ -296,7 +444,9 @@ final readonly class AccountEntryReviewService
                 throw new InvalidArgumentException();
             }
         } catch (Throwable) {
-            throw new ConcurrentModificationException("This account review expired. Review the account again.");
+            throw new ConcurrentModificationException(
+                "This account review expired. Review the account again.",
+            );
         }
     }
 }

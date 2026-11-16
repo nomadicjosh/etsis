@@ -36,7 +36,10 @@ final readonly class SqlAccountBalanceProjection
         $delta = 0;
         $changes = array_fill_keys(array_values(self::ENTRY_TOTALS), 0);
         foreach ($events as $event) {
-            if ($event instanceof StudentAccountWasOpened) {
+            if (
+                $event instanceof StudentAccountWasOpened
+                || $event instanceof \Domain\Finance\Event\AccountPaymentDetailsWereChanged
+            ) {
                 continue;
             }
             if ($event instanceof AccountEntryWasCorrected) {

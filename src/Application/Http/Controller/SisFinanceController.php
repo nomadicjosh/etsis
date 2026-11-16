@@ -7,6 +7,8 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Codefy\Framework\Http\BaseController;
 use Domain\Finance\Enum\EntryType;
+use Domain\Finance\Enum\PaymentMethod;
+use Domain\Finance\ValueObject\PaymentDetails;
 use Domain\Finance\Service\StudentAccountService;
 use Domain\Finance\Service\AccountEntryReviewService;
 use Domain\Finance\Service\AccountEntryHistory;
@@ -57,6 +59,9 @@ final class SisFinanceController extends BaseController
             "entries" => array_map(
                 static fn(array $entry): array => $entry + [
                     "can_correct_amount" => $account->canCorrectAmount(new EntityId($entry["operation_id"])),
+                    "can_correct_payment_details" => $account->canCorrectPaymentDetails(
+                        new EntityId($entry["operation_id"]),
+                    ),
                 ],
                 $account->entries(),
             ),
@@ -85,6 +90,7 @@ final class SisFinanceController extends BaseController
             new Money((int) $minor, $this->text($data, "currency")),
             FormInput::from($request)->integer("position", 1),
             FormInput::from($request)->bodyText("reason"),
+            $this->paymentDetails(FormInput::from($request)),
         );
 
         return new JsonResponse($result);
@@ -109,7 +115,9 @@ final class SisFinanceController extends BaseController
         $f = FormInput::from($request);
         $type =
         EntryType::tryFrom($f->text("type", 24)) ??
-        throw new ValidationException([["field" => "type", "message" => "Choose charge, payment or refund."]]);
+        throw new ValidationException([
+                ["field" => "type", "message" => "Choose charge, payment or refund."],
+            ]);
         return new JsonResponse(
             $this->reviews->reviewPosting(
                 new AccountId($id),
@@ -117,6 +125,7 @@ final class SisFinanceController extends BaseController
                 new Money($f->integer("amount_minor", 1, Money::MAX_MINOR), $f->text("currency", 3)),
                 $f->integer("position", 1),
                 $f->bodyText("reason"),
+                $this->paymentDetails($f),
             ),
         );
     }
@@ -124,7 +133,10 @@ final class SisFinanceController extends BaseController
     public function commitPosting(ServerRequest $request, string $id): ResponseInterface
     {
         return new JsonResponse(
-            $this->reviews->commitPosting(new AccountId($id), FormInput::from($request)->bodyText("review_token")),
+            $this->reviews->commitPosting(
+                new AccountId($id),
+                FormInput::from($request)->bodyText("review_token"),
+            ),
         );
     }
 
@@ -142,12 +154,63 @@ final class SisFinanceController extends BaseController
     public function history(ServerRequest $request, string $id, string $operation): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->history->page(
-            new AccountId($id),
-            new EntityId($operation),
-            $f->optionalInteger('after') ?? 0,
-            $f->optionalInteger('through_position'),
-        ));
+        return new JsonResponse(
+            $this->history->page(
+                new AccountId($id),
+                new EntityId($operation),
+                $f->optionalInteger("after") ?? 0,
+                $f->optionalInteger("through_position"),
+            ),
+        );
+    }
+
+    public function receipt(string $id, string $operation): ResponseInterface
+    {
+        return new JsonResponse($this->reviews->receipt(new AccountId($id), new EntityId($operation)));
+    }
+
+    public function reviewPaymentDetails(
+        ServerRequest $request,
+        string $id,
+        string $operation,
+    ): ResponseInterface {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->reviews->reviewPaymentDetails(
+                new AccountId($id),
+                new EntityId($operation),
+                $this->paymentDetails($f),
+                $f->integer("position", 1),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+
+    public function commitPaymentDetails(
+        ServerRequest $request,
+        string $id,
+        string $operation,
+    ): ResponseInterface {
+        return new JsonResponse(
+            $this->reviews->commitPaymentDetails(
+                new AccountId($id),
+                new EntityId($operation),
+                FormInput::from($request)->bodyText("review_token"),
+            ),
+        );
+    }
+
+    private function paymentDetails(FormInput $f): PaymentDetails
+    {
+        $method = $f->search("payment_method", 32);
+        $method = $method === "" ? null : $method;
+        $choice = $method === null ? null : PaymentMethod::tryFrom($method);
+        if ($method !== null && $choice === null) {
+            throw new ValidationException([
+                ["field" => "payment_method", "message" => "Choose a supported payment method."],
+            ]);
+        }
+        return new PaymentDetails($choice, $f->search("payment_reference", 480));
     }
 
     /** @param array<string, mixed> $data */

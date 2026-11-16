@@ -361,28 +361,130 @@ window.createWorkspaceOperations = function (ui) {
             form.prepend(balance, refresh);
             return form;
         }
-        async function reviewEntry(item = null) {
+        const paymentMethods = [
+            ["cash", "Cash"],
+            ["check", "Check"],
+            ["card", "Card"],
+            ["bank_transfer", "Bank transfer"],
+            ["wire_transfer", "Wire transfer"],
+            ["money_order", "Money order"],
+            ["paypal", "PayPal"],
+            ["loan", "Loan"],
+            ["grant", "Grant"],
+            ["scholarship", "Scholarship"],
+            ["other", "Other"],
+        ].map(([value, label]) => ({ value, label }));
+        function receiptText(details) {
+            if (!details) return "Payment method and receipt reference were not recorded.";
+            const label = paymentMethods.find((option) => option.value === details.method)?.label || "Not recorded";
+            return `Payment method: ${label} · Receipt reference: ${details.reference || "Not recorded"}`;
+        }
+        async function reviewEntry(item = null, receiptOnly = false) {
             const correcting = item !== null;
             const entryBody = openDrawer(
-                correcting ? "Correct a recorded amount" : "Post transaction",
+                receiptOnly ? "Correct receipt details" : correcting ? "Correct a recorded amount" : "Post transaction",
                 "STUDENT ACCOUNT",
             );
             const descriptors = [
                 ...(!correcting ? [["type", "Transaction type", "choice", ["charge", "payment", "refund"]]] : []),
-                ["amount_minor", `${correcting ? "Corrected amount" : "Amount"} (${data.currency})`, "money"],
-                ["reason", correcting ? "Reason for amount correction" : "Reason for transaction", "textarea"],
+                ...(!receiptOnly
+                    ? [["amount_minor", `${correcting ? "Corrected amount" : "Amount"} (${data.currency})`, "money"]]
+                    : []),
+                ...(!correcting || receiptOnly
+                    ? [
+                          ["payment_method", "Payment method", "choice", paymentMethods, false],
+                          ["payment_reference", "Receipt or check reference", "text", "", false],
+                      ]
+                    : []),
+                [
+                    "reason",
+                    receiptOnly
+                        ? "Reason for receipt correction"
+                        : correcting
+                          ? "Reason for amount correction"
+                          : "Reason for transaction",
+                    "textarea",
+                ],
             ];
-            const form = await buildForm(descriptors);
+            const loading = node("p", { role: "status" }, "Opening transaction…");
+            entryBody.append(button("Back to account statement", back, "btn-link"), loading);
+            const receipt = receiptOnly
+                ? await request(`/sis/accounts/${row.id}/entries/${item.operation_id}/receipt/`, "POST", {})
+                : null;
+            if (!loading.isConnected) return;
+            // Opening another drawer while a private read is pending must never render these details there.
+            if (receipt && receipt.position !== data.position) {
+                entryBody.append(
+                    node(
+                        "p",
+                        { role: "status" },
+                        "This account changed. Return to the statement and reopen receipt details.",
+                    ),
+                );
+                loading.remove();
+                return;
+            }
+            const form = await buildForm(
+                descriptors,
+                receipt
+                    ? {
+                          payment_method: receipt.payment_details?.method || "",
+                          payment_reference: receipt.payment_details?.reference || "",
+                      }
+                    : {},
+            );
+            if (!loading.isConnected) return;
+            loading.remove();
+            const method = form.elements.namedItem("payment_method");
+            if (method) method.options[0].textContent = "Not recorded";
+            const reference = form.elements.namedItem("payment_reference");
+            if (reference) reference.maxLength = 120;
+            const receiptControls = ["payment_method", "payment_reference"]
+                .map((key) => form.elements.namedItem(key))
+                .filter(Boolean);
+            const receiptHint = node(
+                "p",
+                { class: "form-text", id: `receipt-hint-${row.id}` },
+                "Optional receipt information for finance staff only. Do not enter card numbers, bank account numbers or credentials.",
+            );
+            receiptControls.forEach((control) => control.setAttribute("aria-describedby", receiptHint.id));
+            if (receiptControls.length) form.append(receiptHint);
+            function toggleReceipt() {
+                const available = receiptOnly || form.elements.namedItem("type")?.value !== "charge";
+                receiptControls.forEach((control) => {
+                    control.disabled = !available;
+                    control.closest(".mb-4").hidden = !available;
+                });
+                receiptHint.hidden = !available;
+            }
+            form.addEventListener("change", toggleReceipt);
+            toggleReceipt();
+            function values() {
+                const result = formData(form, descriptors);
+                if (result.type === "charge") {
+                    delete result.payment_method;
+                    delete result.payment_reference;
+                }
+                return result;
+            }
             form.dataset.currency = data.currency;
             form.dispatchEvent(new Event("change"));
             const submit = node(
                 "button",
                 { type: "submit", class: "btn btn-primary" },
-                correcting ? "Review amount correction" : "Review transaction",
+                receiptOnly
+                    ? "Review receipt correction"
+                    : correcting
+                      ? "Review amount correction"
+                      : "Review transaction",
             );
             const preview = node("section", {
                 class: "record-section",
-                "aria-label": correcting ? "Reviewed amount correction" : "Reviewed transaction",
+                "aria-label": receiptOnly
+                    ? "Reviewed receipt correction"
+                    : correcting
+                      ? "Reviewed amount correction"
+                      : "Reviewed transaction",
                 hidden: true,
             });
             let reviewed = null,
@@ -396,29 +498,26 @@ window.createWorkspaceOperations = function (ui) {
             };
             form.addEventListener("input", clear);
             form.addEventListener("change", clear);
-            const base = correcting
-                ? `/sis/accounts/${row.id}/entries/${item.operation_id}/correction/`
-                : `/sis/accounts/${row.id}/entries/`;
+            const base = receiptOnly
+                ? `/sis/accounts/${row.id}/entries/${item.operation_id}/receipt/`
+                : correcting
+                  ? `/sis/accounts/${row.id}/entries/${item.operation_id}/correction/`
+                  : `/sis/accounts/${row.id}/entries/`;
             form.append(submit);
             form.addEventListener("submit", (event) => {
                 event.preventDefault();
                 task(async () => {
                     if (confirming || !form.reportValidity()) return;
                     clear();
-                    const values = formData(form, descriptors),
-                        signature = JSON.stringify(values),
+                    const entered = values(),
+                        signature = JSON.stringify(entered),
                         epoch = revision;
                     const result = await request(`${base}review/`, "POST", {
-                        ...values,
+                        ...entered,
                         currency: data.currency,
                         position: data.position,
                     });
-                    if (
-                        !form.isConnected ||
-                        epoch !== revision ||
-                        signature !== JSON.stringify(formData(form, descriptors))
-                    )
-                        return;
+                    if (!form.isConnected || epoch !== revision || signature !== JSON.stringify(values())) return;
                     reviewed = result;
                     preview.hidden = false;
                     preview.replaceChildren(
@@ -426,9 +525,11 @@ window.createWorkspaceOperations = function (ui) {
                         node(
                             "p",
                             {},
-                            correcting
-                                ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
-                                : `${result.type}: ${money(result.amount_minor, result.currency)}`,
+                            receiptOnly
+                                ? `${result.type}: ${money(result.amount_minor, result.currency)} · Amount unchanged`
+                                : correcting
+                                  ? `${result.type}: ${money(result.original_minor, result.currency)} → ${money(result.corrected_minor, result.currency)}`
+                                  : `${result.type}: ${money(result.amount_minor, result.currency)}`,
                         ),
                         node(
                             "p",
@@ -442,16 +543,32 @@ window.createWorkspaceOperations = function (ui) {
                                   `Available credit: ${money(result.available_credit_minor, result.currency)} → ${money(result.remaining_credit_minor, result.currency)}`,
                               )
                             : null,
+                        receiptOnly
+                            ? node(
+                                  "p",
+                                  { class: "text-break" },
+                                  `Previous: ${receiptText(result.previous_payment_details)}`,
+                              )
+                            : null,
+                        result.type === "charge"
+                            ? null
+                            : node("p", { class: "text-break" }, receiptText(result.payment_details)),
                         node("p", { class: "text-break", style: "white-space: pre-wrap" }, result.reason),
                         node(
                             "p",
                             { class: "form-text" },
-                            correcting
-                                ? "The original entry remains as reversed and links to its replacement. This corrects the account record only; no payment or refund is sent. Review expires in 20 minutes."
-                                : "This records institutional account activity only. It does not collect a payment or send a refund. Review expires in 20 minutes. Confirm only after checking the actual transaction.",
+                            receiptOnly
+                                ? "This changes receipt information only. Earlier values remain in the restricted history. No money moves and the account balance stays the same. Review expires in 20 minutes."
+                                : correcting
+                                  ? "The original entry remains as reversed and links to its replacement. This corrects the account record only; no payment or refund is sent. Review expires in 20 minutes."
+                                  : "This records institutional account activity only. It does not collect a payment or send a refund. Review expires in 20 minutes. Confirm only after checking the actual transaction.",
                         ),
                         button(
-                            correcting ? "Confirm amount correction" : "Confirm transaction",
+                            receiptOnly
+                                ? "Confirm receipt correction"
+                                : correcting
+                                  ? "Confirm amount correction"
+                                  : "Confirm transaction",
                             async () => {
                                 if (confirming || !reviewed) return;
                                 const accepted = reviewed;
@@ -464,10 +581,12 @@ window.createWorkspaceOperations = function (ui) {
                                     await back();
                                 } finally {
                                     confirming = false;
-                                    if (form.isConnected)
+                                    if (form.isConnected) {
                                         form.querySelectorAll("input, textarea, select, button").forEach(
                                             (control) => (control.disabled = false),
                                         );
+                                        toggleReceipt();
+                                    }
                                 }
                             },
                             "btn-primary",
@@ -476,7 +595,6 @@ window.createWorkspaceOperations = function (ui) {
                 }, submit);
             });
             entryBody.append(
-                button("Back to account statement", back, "btn-link"),
                 node(
                     "p",
                     {},
@@ -487,9 +605,11 @@ window.createWorkspaceOperations = function (ui) {
                 node(
                     "p",
                     { class: "form-text" },
-                    correcting
-                        ? "Correct a staff-recorded amount in its original billing account and currency. The transaction type stays the same."
-                        : "A payment reduces the amount owed. Refunds require available credit. Review the amount and resulting balance before recording the transaction.",
+                    receiptOnly
+                        ? "Correct the optional payment method or receipt reference. The original receipt and any amount replacements share these details. Leave both blank to clear them with a recorded reason."
+                        : correcting
+                          ? "Correct a staff-recorded amount in its original billing account and currency. The transaction type stays the same."
+                          : "A payment reduces the amount owed. Refunds require available credit. Review the amount and resulting balance before recording the transaction.",
                 ),
                 button("Refresh account balance", async () => {
                     if (confirming) return;
@@ -561,9 +681,12 @@ window.createWorkspaceOperations = function (ui) {
                         node(
                             "h3",
                             { class: "h5" },
-                            { posted: "Entry posted", corrected: "Amount corrected", reversed: "Entry reversed" }[
-                                item.action
-                            ],
+                            {
+                                posted: "Entry posted",
+                                corrected: "Amount corrected",
+                                reversed: "Entry reversed",
+                                receipt_corrected: "Receipt details corrected",
+                            }[item.action],
                         ),
                         node(
                             "p",
@@ -579,6 +702,16 @@ window.createWorkspaceOperations = function (ui) {
                                 ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
                                 : `Reference: ${item.operation_id.slice(-8)}`,
                         ),
+                        item.action === "receipt_corrected"
+                            ? node(
+                                  "p",
+                                  { class: "text-break" },
+                                  `Previous: ${receiptText(item.previous_payment_details)}`,
+                              )
+                            : null,
+                        item.type !== "charge" && Object.hasOwn(item, "payment_details")
+                            ? node("p", { class: "text-break" }, receiptText(item.payment_details))
+                            : null,
                         node(
                             "p",
                             {},
@@ -625,6 +758,8 @@ window.createWorkspaceOperations = function (ui) {
                 controls.push(
                     button(`View ${item.operation_id.slice(-8)} entry history`, () => entryHistory(item.operation_id)),
                 );
+            if (canRead && canPost && item.can_correct_payment_details)
+                controls.push(button("Correct receipt details", () => reviewEntry(item, true)));
             if (!item.reversed && canPost) {
                 if (item.can_correct_amount && canRead)
                     controls.push(button("Correct amount", () => reviewEntry(item)));
