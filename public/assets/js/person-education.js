@@ -19,7 +19,7 @@
             const content = node('section', { id: identity, hidden: true, 'aria-label': 'Institutions attended editor' });
             const toggle = node('button', { type: 'button', class: 'btn btn-outline-primary',
                 'aria-controls': identity, 'aria-expanded': 'false' }, 'Institutions attended');
-            let serial = 0, expanded = false, pending = false, record = null, draft = null;
+            let serial = 0, expanded = false, pending = false, record = null, draft = null, leave = () => true;
             const current = ticket => ticket === serial && container.isConnected;
             const show = () => {
                 expanded = true; content.hidden = false;
@@ -187,6 +187,17 @@
                     list, node('div', { class: 'mb-3' }, node('label', { for: reasonId, class: 'form-label' },
                         record.version > 0 ? 'Reason for update' : 'Reason for update (optional)'), reason),
                     status, node('div', { class: 'd-flex flex-wrap gap-2' }, add, save));
+                leave = () => {
+                    if (pending) { status.textContent = 'Wait for the current save before starting a message.'; return false; }
+                    const changed = draft.changed(read());
+                    const unfinished = [...form.querySelectorAll('textarea')].find(input => input.value.trim());
+                    if (changed || unfinished) {
+                        form.querySelectorAll('details').forEach(card => { card.open = true; });
+                        status.textContent = 'Save or clear background changes and finish review feedback before starting a message. Your draft is still here.';
+                        (changed ? save : unfinished).focus(); return false;
+                    }
+                    return true;
+                };
                 form.append(controls); content.replaceChildren(form); paint(focusKey);
             }
             toggle.addEventListener('click', () => {
@@ -195,6 +206,7 @@
             });
             container.replaceChildren(toggle, content);
             if (open) task(load, toggle);
+            return { beforeLeave: () => !expanded || leave() };
         },
     });
 })();

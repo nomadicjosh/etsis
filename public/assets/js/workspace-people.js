@@ -387,12 +387,17 @@ window.createWorkspacePeople = function (ui) {
         );
         const submission = review.submission;
         const casework = node('div', { class: 'record-section mt-3' });
-        window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
+        const workbench = window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
             { managePresets: can('sis:forms:manage') });
+        let background = null;
+        if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
+            button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
+                () => workbench.beforeLeave() && (background?.beforeLeave() ?? true))),
+        );
         body.append(casework);
         if (can('sis:person:manage')) {
             const education = node('div', { class: 'record-section mt-3' });
-            window.createPersonEducation({ node, request, task, notify }).mount(
+            background = window.createPersonEducation({ node, request, task, notify }).mount(
                 education, `/sis/ui/people/${person.id.value}/education/`, { canReview: can('sis:admissions:manage') },
             );
             body.append(education);

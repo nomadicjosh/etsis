@@ -749,6 +749,9 @@ window.createWorkspaceStudents = function (ui) {
             );
         if (can("sis:audit:read"))
             extra.push(button("View audit history", () => showAudit("students", id)));
+        if (can('sis:communications:manage') && can('sis:person:manage'))
+            extra.push(button('Message student', () => ui.messageRecord('student', id, back, body)));
+
         if (can("sis:student:read"))
             actions.append(
                 button("View transcript", async () => {

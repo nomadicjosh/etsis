@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Communications\Repository;
 
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\RecordRecipientSource;
 use Domain\Communications\Enum\DeliveryReviewDecision;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Shared\ValueObject\EntityId;
@@ -63,6 +64,11 @@ interface CampaignRepository
      * @return list<array<string,string|null>>
      */
     public function audience(array $users): array;
+
+    /** One canonical, enabled recipient. No email or private source facts are returned.
+     * @return array<string,string|null>
+     */
+    public function recordAudience(RecordRecipientSource $source, EntityId $record): array;
 
     /** Current canonical person/account labels for a complete, distinct shortlist of at most 25 students.
      * @param list<EntityId> $students

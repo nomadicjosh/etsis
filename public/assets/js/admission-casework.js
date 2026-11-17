@@ -97,7 +97,7 @@
         function mount(container, applicationId, { managePresets = false } = {}) {
             const identity = `casework-${++sequence}`;
             const content = node('section', { id: identity, hidden: true, 'aria-label': 'Application checklist and follow-up' });
-            let generation = 0, expanded = false;
+            let generation = 0, expanded = false, leave = () => true;
             const endpoint = `/sis/applications/${applicationId}/casework/`;
             const toggle = button('Checklist & follow-up', async () => {
                 if (expanded) { generation++; expanded = false; content.replaceChildren(); content.hidden = true; toggle.setAttribute('aria-expanded', 'false'); return; }
@@ -180,6 +180,15 @@
                 const values = () => ({ office: office.value, work_status: workStatus.value, follow_up_on: due.value,
                     private_notes: privateNotes.value, next_step: nextStep.value, items: editor.read() });
                 let pending = false;
+                const initialValues = JSON.stringify(values());
+                leave = () => {
+                    if (pending) { status.textContent = 'Wait for the current save before starting a message.'; return false; }
+                    if (JSON.stringify(values()) !== initialValues || claim.value !== 'keep') {
+                        status.textContent = 'Save casework before starting a message. Your draft is still here.';
+                        save.focus(); return false;
+                    }
+                    return true;
+                };
                 async function write(path, body, complete, kind = 'casework') {
                     if (pending) return;
                     pending = true; wrapper.disabled = true; toggle.disabled = true; let accepted = false;
@@ -303,6 +312,7 @@
                 wrapper.append(node('p', { class: 'form-text' }, 'Working checklists and follow-up do not change the formal admissions decision. Keep confidential notes in the staff-only field.'), form, library);
                 content.replaceChildren(wrapper, status);
             }
+            return { beforeLeave: () => !expanded || leave() };
         }
         function guidance(content, data) {
             const labels = { pending: 'Pending', received: 'Received', complete: 'Complete', not_needed: 'Not needed' };

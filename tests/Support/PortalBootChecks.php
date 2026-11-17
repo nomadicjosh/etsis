@@ -6186,3 +6186,35 @@ if (
 ) {
     throw new RuntimeException('Colleague lookup lost its provider or bounded private search contract.');
 }
+
+// Connected message shortcuts use the existing Communications permissions and return account labels only.
+// The earlier education fixture deliberately omitted a delivery address.
+$sis->sql->update(
+    'users',
+    ['email' => 'fictional-admissions@example.invalid'],
+    ['user_id' => $educationOwner->value]
+);
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+foreach (['person' => $educationPerson->id->value, 'application' => $caseworkApplication->value] as $source => $id) {
+    $recipientRequest = $get->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid/sis/campaigns/recipients/' . $source . '/' . $id . '/'
+    ));
+    $recipientResponse = $app->router->match($recipientRequest);
+    $recipientData = json_decode((string) $recipientResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $recipientResponse->getStatusCode() !== 200 || count($recipientData['items'] ?? []) !== 1
+        || $recipientData['items'][0]['user_id'] !== $educationOwner->value
+        || array_key_exists('email', $recipientData['items'][0])
+        || !str_contains($recipientResponse->getHeaderLine('Cache-Control'), 'no-store')
+    ) {
+        throw new RuntimeException(
+            'The connected recipient route lost its canonical account or private metadata contract.'
+        );
+    }
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:communications:manage', 'sis:person:manage'];
+if ($app->router->match($recipientRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException('Communications permission overrode the required admissions duty.');
+}

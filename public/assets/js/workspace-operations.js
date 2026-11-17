@@ -1520,9 +1520,10 @@ window.createWorkspaceOperations = function (ui) {
         renderSelection();
         body.append(form, reviewArea);
     }
-    async function campaignRecipients(row, draft, back, presetRecipients = []) {
+    async function campaignRecipients(row, draft, back, presetRecipients = [], origin = null) {
         if (presetRecipients.length > 500) throw new Error("Choose no more than 500 recipients.");
         const body = openDrawer("Choose recipients", "COMMUNICATIONS");
+        if (origin?.back) body.append(button(origin.backLabel, origin.back, "btn-link mb-3"));
         const selected = new Map(presetRecipients.map(person => [person.user_id, person]));
         let generation = 0, after = null, query = "", selectedPage = 0, timer;
         const search = node("input", { type: "search", class: "form-control", id: "campaign-recipient-search",
@@ -1630,12 +1631,25 @@ window.createWorkspaceOperations = function (ui) {
         renderSelection();
     }
     const messageFields = [["subject", "Subject"], ["body", "Message", "textarea"]];
-    async function composeMessage(recipients, back) {
+    async function messageRecord(source, id, back, container, beforeLeave = null) {
+        const duties = { person: 'sis:person:manage', application: 'sis:admissions:manage', student: 'sis:student:read' };
+        if (!Object.hasOwn(duties, source) || !can('sis:communications:manage') || !can('sis:person:manage') || !can(duties[source])) return;
+        if (beforeLeave && !beforeLeave()) return;
+        const response = await request(`/sis/campaigns/recipients/${source}/${id}/`);
+        if (!container.isConnected || (beforeLeave && !beforeLeave())) return;
+        if (!Array.isArray(response.items) || response.items.length !== 1) throw new Error('Review the linked person account before starting a message.');
+        return composeMessage(response.items, back, { backLabel: `Back to ${source}` });
+    }
+    async function composeMessage(recipients, back, { backLabel = 'Back to report selection' } = {}) {
+        const origin = { back, backLabel };
+        const recipientLabel = recipients.length === 1
+            ? `To: ${[recipients[0].given_name, recipients[0].family_name].filter(Boolean).join(' ')}${recipients[0].institutional_id ? ' · ' + recipients[0].institutional_id : ''}.`
+            : `${recipients.length} recipients selected.`;
         await createRecord("campaigns", {}, {
-            back, backLabel: "Back to report selection",
-            explanation: `${recipients.length} recipients selected. Save your message, then review the complete audience before queueing. Sending requires a separate background-delivery confirmation.`,
+            back, backLabel,
+            explanation: `${recipientLabel} Save your message, then review the complete audience before queueing. Sending requires a separate background-delivery confirmation.`,
             afterSave: saved => campaignRecipients({ id: saved.id }, saved,
-                () => openRecord("campaigns", { id: saved.id }), recipients),
+                () => openRecord("campaigns", { id: saved.id }, origin), recipients, origin),
         });
     }
     async function campaignTemplates(scope = "mine", after = null, stack = []) {
@@ -1904,10 +1918,10 @@ window.createWorkspaceOperations = function (ui) {
         await load(false);
         if (latest.status === "active") window.setTimeout(() => poll(), latest.waiting ? 60000 : 6000);
     }
-    async function campaign(body, row) {
+    async function campaign(body, row, origin = null) {
         const data = await request(`/sis/campaigns/${row.id}/`);
         if (!body.isConnected) return;
-        const back = () => openRecord("campaigns", row);
+        const back = () => openRecord("campaigns", row, origin || {});
         const templateLabels = {
             template: "Private template",
             template_retired: "Retired template",
@@ -2085,7 +2099,7 @@ window.createWorkspaceOperations = function (ui) {
         }
         if (data.status === "draft" && can("sis:person:manage"))
             actions.prepend(
-                button("Choose recipients", () => campaignRecipients(row, data, back), "btn-primary"),
+                button("Choose recipients", () => campaignRecipients(row, data, back, [], origin), "btn-primary"),
             );
         if (["queued", "paused"].includes(data.status))
             actions.prepend(
@@ -2199,7 +2213,7 @@ window.createWorkspaceOperations = function (ui) {
             ),
         );
     }
-    async function enhance(sectionName, row, body) {
+    async function enhance(sectionName, row, body, origin = null) {
         const tasks = node("div", { class: "record-task-grid" });
         const actions = node("div", {
             class: "inline-actions",
@@ -2405,7 +2419,7 @@ window.createWorkspaceOperations = function (ui) {
         if (sectionName === "accounts") await account(body, row);
         if (sectionName === "journals") await journal(body, row);
         if (sectionName === "billing") await billing(body, row);
-        if (sectionName === "campaigns") await campaign(body, row);
+        if (sectionName === "campaigns") await campaign(body, row, origin);
         if (sectionName === "terms" && can("sis:catalog:manage")) {
             body.append(button("Drop / withdrawal policy", () => ui.courseDrops().policy(row, () => openRecord(sectionName, row))));
             const panel = section("Registration window");
@@ -2500,6 +2514,7 @@ window.createWorkspaceOperations = function (ui) {
         openAccount,
         campaignTemplates,
         composeMessage,
+        messageRecord,
         flow,
         audit,
         registration,

@@ -6,6 +6,7 @@ namespace Infrastructure\Persistence\Repository;
 
 use DomainException;
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\RecordRecipientSource;
 use Domain\Communications\Enum\DeliveryReviewDecision;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Repository\CampaignRepository;
@@ -246,6 +247,24 @@ final readonly class SqlCampaignRepository implements CampaignRepository
             501
         );
         return $this->validatedAudience($rows, count($users));
+    }
+
+    public function recordAudience(RecordRecipientSource $source, EntityId $record): array
+    {
+        $q = $this->sql->quote(...);
+        $match = match ($source) {
+            RecordRecipientSource::Person => '?',
+            RecordRecipientSource::Student => '(SELECT s.' . $q('person_id') . ' FROM '
+            . $q('sis_students') . ' s WHERE s.' . $q('id') . ' = ?)',
+            RecordRecipientSource::Application => '(SELECT a.' . $q('person_id') . ' FROM '
+            . $q('sis_applications') . ' a WHERE a.' . $q('id') . ' = ?)',
+        };
+        $rows = $this->sql->fetch(
+            $this->recipientSelect() . ' AND p.' . $q('id') . ' = ' . $match,
+            [$record->value],
+            2
+        );
+        return $this->validatedAudience($rows, 1)[0];
     }
 
     public function studentAudience(array $students): array

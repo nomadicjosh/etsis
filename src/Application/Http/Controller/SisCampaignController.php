@@ -6,6 +6,7 @@ namespace Application\Http\Controller;
 
 use Application\Http\FormInput;
 use Domain\Communications\Service\CampaignService;
+use Domain\Communications\Enum\RecordRecipientSource;
 use Domain\Communications\Service\CampaignBackgroundService;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Enum\DeliveryReviewDecision;
@@ -94,6 +95,13 @@ final readonly class SisCampaignController
     {
         $f = FormInput::from($request);
         return new JsonResponse($this->service->recipientChoices($f->search('search', 80), $f->optionalId('after')));
+    }
+
+    public function recordRecipient(string $source, string $id): ResponseInterface
+    {
+        $context = RecordRecipientSource::tryFrom($source)
+        ?? throw new InvalidArgumentException('Choose a supported message source.');
+        return new JsonResponse($this->service->recordRecipient($context, new EntityId($id)));
     }
 
     public function studentRecipients(ServerRequest $request): ResponseInterface

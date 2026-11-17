@@ -7,6 +7,7 @@ namespace Domain\Communications\Service;
 use DomainException;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Campaign;
+use Domain\Communications\Enum\RecordRecipientSource;
 use Domain\Communications\Enum\TemplateLibraryScope;
 use Domain\Communications\Repository\CampaignRepository;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -294,6 +295,33 @@ final readonly class CampaignService
         }
         $this->authorizeStudents($actor);
         return ['items' => $people];
+    }
+
+    /** Resolve one source record without creating a draft, delivery, event or audit.
+     * @return array{items:list<array<string,string|null>>}
+     */
+    public function recordRecipient(RecordRecipientSource $source, EntityId $record): array
+    {
+        $actor = $this->authorizeRecord($source);
+        try {
+            $recipient = $this->repository->recordAudience($source, $record);
+        } catch (DomainException) {
+            $this->authorizeRecord($source, $actor);
+            throw new ValidationException([['field' => 'recipient',
+                'message' => 'This record needs an enabled linked person account with a valid delivery address. '
+                    . 'Review the person account before starting a message.']]);
+        }
+        $this->authorizeRecord($source, $actor);
+        return ['items' => [$recipient]];
+    }
+
+    private function authorizeRecord(RecordRecipientSource $source, ?EntityId $expected = null): EntityId
+    {
+        $actor = $this->authorizeRecipients($expected);
+        if ($this->access->requirePermission($source->permission())->value !== $actor->value) {
+            throw new AccessDeniedException('Access denied.');
+        }
+        return $actor;
     }
 
     private function authorizeStudents(?EntityId $expected = null): EntityId

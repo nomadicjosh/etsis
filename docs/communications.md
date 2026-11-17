@@ -2,6 +2,28 @@
 
 Open **Communications** in the staff workspace. Message content is plain text and encrypted at rest. Creating a draft, maintaining a template and reviewing recipients never sends mail. All reads and writes require `sis:communications:manage`; opening or changing a private composition also requires ownership or `sis:communications:admin`. Approved institutional templates may be read and copied by other Communications staff; this grants no editing or recipient-directory access.
 
+## Message from a person, student or application
+
+Start in the record where you are working:
+
+- **Person → More → Message person**.
+- **Student → More → Message student**.
+- **Application review → Message applicant**.
+
+Each shortcut resolves the source record's current canonical person account and opens the same Communications composer, with that recipient selected. Student and application records do not create a second identity. The screen shows the person's name and institutional ID, without exposing their email address. Disabled, unlinked or invalid-address accounts stop the handoff with an actionable error; nothing is silently excluded or sent.
+
+The shortcuts require both `sis:communications:manage` and `sis:person:manage`. Student entry also requires `sis:student:read`; application entry requires `sis:admissions:manage`. The server rechecks the actor and all required duties after reading the account. A source-record shortcut never grants message, directory or delivery access.
+
+Write a subject and plain-text message, then **Save and continue**. Applicant answers, private case notes, checklist contents, grades and financial information are not copied into the composition. Review the complete message and selected audience, then **Confirm recipient queue**. This uses the existing encrypted draft and reference-only delivery queue. Current account eligibility is checked again; the selected account is not automatically replaced with another account if the source record later changes.
+
+Queueing does not send mail. From the message, use the existing **Review background delivery** confirmation to send now or schedule a future start. Its progress bar, pause/cancel controls, server worker and delivery review remain the same as messages created in Communications. Live transport configuration and the running scheduler are still required. Opening a shortcut, saving a draft or returning to the source record does not authorize delivery.
+
+**Back to person**, **Back to student** or **Back to application** remains available while moving through this message's draft, recipient selection and message record. Report-selected messages now retain their report return path too. A saved draft remains in Communications if you leave; return shortcuts are only page-memory navigation and are not saved in browser storage or the database.
+
+The application shortcut protects unsaved casework, assignment choices, educational-background edits and review feedback. Save or clear those drafts before starting a message. If you edit the source or leave the screen while recipient lookup is pending, its late result cannot replace the screen. No case notes or unfinished source forms are copied into the message.
+
+The read-only handoff endpoint is `GET /sis/campaigns/recipients/{source}/{id}/`, where `source` is `person`, `student` or `application`. It returns exactly one minimal account label or rejects the handoff. It creates no campaign, delivery, domain event or audit. Message creation, audience review, queueing and background authorization continue through the existing private, CSRF-protected Communications endpoints. No schema migration, extra worker or parallel sender is introduced.
+
 ## Reusable message templates
 
 Choose **My message templates → Create reusable template**. Enter the subject and message, then choose **Save reusable template**. The subject identifies the template in the library. New templates begin as private reusable wording and have no delivery instructions. The library shows your own active templates in pages of twenty; **Show retired templates** opens your retired entries. List responses contain subjects and revisions, not message bodies.

@@ -275,7 +275,7 @@
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup() });
-    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
+    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
@@ -291,7 +291,7 @@
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
-    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, recordSummary, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
@@ -1029,6 +1029,8 @@
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.contact(person)) }, 'Contact information'));
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => peopleStudio.education(person) }, 'Educational background'));
                 if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value, `${person.givenName} ${person.familyName}`)) }, 'Start application'));
+                if (can('sis:person:manage') && can('sis:communications:manage')) extra.push({ label: 'Message person', icon: 'envelope',
+                    run: () => operations.messageRecord('person', id, () => openPerson(id), body) });
                 if (person.ownerUserId && can('admin:edit:user')) extra.push({ label: 'Manage sign-in account', icon: 'key', run: () => peopleStudio.account(person) });
                 if (can('sis:person:manage')) extra.push({ label: 'Account setup', icon: 'envelope', run: () => accountSetup(person) });
                 if (can('sis:person:assign-id')) extra.push({ label: 'Change institutional ID', icon: 'person-vcard', run: () => editInstitutionalId(person) });
@@ -1087,7 +1089,7 @@
         body.append(form);
     }
 
-    async function openRecord(section, row) {
+    async function openRecord(section, row, origin = {}) {
         if (section === 'registration') return batchRegistration.start(row.id);
         if (['institutions', 'external', 'equivalencies'].includes(section)) return transferStudio.record(section, row.id);
         if (section === 'students') return studentStudio.student(row.id);
@@ -1103,6 +1105,8 @@
         if (section === 'portal') return editCampusContent(row.id);
         if (section === 'transcripts') return reviewTranscript(row.id);
         const body = openDrawer(section === 'campaigns' ? 'Message details' : recordLabel(row), datasets[section]?.title.toUpperCase() || 'RECORD');
+        if (section === 'campaigns' && origin.back) body.append(node('button', { type: 'button',
+            class: 'btn btn-link mb-3', onclick: () => task(origin.back) }, origin.backLabel));
         const details = node('dl', { class: 'detail-list' });
         for (const [key, value] of Object.entries(row)) {
             if (key === 'id' || key.endsWith('_id') || ['given_name', 'family_name'].includes(key)) continue;
@@ -1130,7 +1134,7 @@
         if (section === 'sections' && can('sis:scheduling:manage') && can('sis:catalog:manage'))
             actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary',
                 onclick: () => task(() => schedulingStudio.meetingPlan(row.id)) }, 'Meeting plan'));
-        await operations.enhance(section, row, body);
+        await operations.enhance(section, row, body, origin);
     }
 
     function campusContentForm(form) {

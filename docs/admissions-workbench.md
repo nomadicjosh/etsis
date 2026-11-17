@@ -52,6 +52,12 @@ Loading the list does not mark updates read. After successfully opening guidance
 
 These are in-portal updates. This workflow sends no email or push messages and does not start a background delivery job. Institutions should continue using their established delivery channels for time-sensitive communication.
 
+## Message an applicant
+
+Choose **Message applicant** in application review when you have Communications and person-directory duties as well as admissions access. This opens the [shared Communications workflow](communications.md#message-from-a-person-student-or-application) with the applicant's enabled linked account selected. Save or clear any unsaved casework or educational-background/review feedback first; the shortcut preserves unfinished work rather than discarding it.
+
+Write and save the message, review the recipient, then queue it. Sending still requires the existing separate background-delivery confirmation and configured server worker. Use **Back to application** to continue admissions work. Private notes and application responses are never prefilled into the message. These are deliberate staff messages; saving visible checklist guidance continues to create only the in-portal update described above.
+
 ## Storage, privacy and setup
 
 Migration **20261117000002** adds `sis_admission_cases` and `sis_admission_checklists` with ULID primary keys, parent references and indexes for assignment, work status, due work and preset scope. Case contents, preset definitions and request fingerprints are encrypted. Only the routing fields needed by the staff queue remain separate indexed columns. Detailed reads verify protected content against its parent and routing metadata; unreadable data is rejected. Applying this additive migration converts or deletes no existing application, profile or event facts.
@@ -76,4 +82,4 @@ Endpoints are:
 
 The additive schema compiles for the framework's five database dialects. Runtime checks cover fictional SQLite data and the configured MariaDB installation. Broader driver deployment acceptance remains separate.
 
-Protected uploads/references, scanning/quarantine, institutional retention settings, optional email/push delivery and any policy that gates a formal admissions decision remain later work. No upload control is exposed before those safeguards are implemented. Continue using the institution's established document-delivery process and give applicants the appropriate instructions.
+Protected uploads/references, scanning/quarantine, institutional retention settings, optional automatic email/push delivery and any policy that gates a formal admissions decision remain later work. No upload control is exposed before those safeguards are implemented. Continue using the institution's established document-delivery process and give applicants the appropriate instructions.
