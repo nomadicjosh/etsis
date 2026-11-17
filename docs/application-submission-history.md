@@ -14,6 +14,14 @@ The current person owner can privately read their application answers, including
 
 Admissions review displays answers under the submitted form's original container titles and columns. Long answers retain their line breaks, and missing answers have a neutral **No answer provided** label. Recorded answers are displayed as text without reapplying current conditional rules or field limits. Later form changes do not reinterpret the earlier submission.
 
+## Applicant access to submitted answers
+
+Open **Portal → Start your application → Your applications → View answers**. Applicants can reopen their original answers, including applications entered by admissions staff. The viewer uses the retained form's name, questions, sections and columns. It is read-only. Program and term names in the application list reflect current catalog setup; they do not replace the retained form or original submission history.
+
+Answers load only when requested. **Close answers**, or selecting the same application again, clears the viewer and returns focus to its opener. Reading an earlier application preserves a new application being edited on the same page. Failed reads show an inline **Try again** action. Switching applications, closing the viewer or leaving the screen prevents late responses from restoring discarded answers. A successful submission refreshes the application list without reloading the page.
+
+The signed-in overview lists at most fifty applications in descending ULID order, including entries with no attached form answers. **No form answers** means no submission artifact is linked; it does not claim an older application was never submitted. This list contains routing metadata and current catalog labels, with an owner-bound query and a unique submission/application join. It does not load definitions, decrypt answers or replay admissions history. Opening answers uses the existing private **GET `/sis/form-submissions/{id}/`** endpoint, which independently rechecks current person ownership or admissions-management authority and verifies the retained submission. Knowing a submission identifier grants no access or ownership of its retry receipt. No new schema or event storage is needed.
+
 ## Application form studio
 
 Open **Application forms** to build a draft, preview it, save it and then **Review publication → Confirm publication**. Publication reviews the exact saved revision. Unsaved edits must be saved first; opening a published form creates a new draft revision and preserves the original.

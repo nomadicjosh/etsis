@@ -3948,6 +3948,25 @@ if (
 ) {
     throw new RuntimeException("The current applicant could not privately read their staff-assisted submission.");
 }
+$trackedOverviewResponse = $app->router->match(
+    new \Qubus\Http\ServerRequest(
+        [],
+        [],
+        'https://campus.example.invalid/portal/api/me/',
+        'GET',
+    )
+);
+$trackedOverview = json_decode((string) $trackedOverviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$trackedOwnerApplications = array_column($trackedOverview['applications'] ?? [], null, 'id');
+if (
+    $trackedOverviewResponse->getStatusCode() !== 200
+    || !str_contains($trackedOverviewResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || ($trackedOwnerApplications[$trackedApplicationId]['submission_id'] ?? null) !== $trackedSubmission->value
+    || str_contains((string) $trackedOverviewResponse->getBody(), 'Fictional private submitted statement')
+    || str_contains((string) $trackedOverviewResponse->getBody(), 'encrypted_answers')
+) {
+    throw new RuntimeException('The private applicant overview did not retain its answer-routing metadata boundary.');
+}
 if (
     $teachingPost("/sis/applications/", [
     "application_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,

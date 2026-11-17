@@ -343,9 +343,34 @@ final readonly class SqlCampusRepository implements CampusRepository
             ],
             "students" => $students,
             "accounts" => $accounts,
-            "applications" => $this->sql->rows("sis_applications", ["person_id" => $person->value], 50),
+            "applications" => $this->applicationsForPerson($person),
             "restrictions" => $this->sql->rows("sis_restrictions", ["person_id" => $person->value], 50),
         ];
+    }
+
+    /** List only routing metadata; protected answers are loaded through their independently authorized read.
+     * @return list<array<string, mixed>> */
+    private function applicationsForPerson(EntityId $person): array
+    {
+        $q = $this->sql->quote(...);
+        $columns = array_map(
+            static fn (string $name): string => 'a.' . $q($name),
+            ['id', 'person_id', 'program_id', 'entry_term_id', 'status', 'version'],
+        );
+
+        return $this->sql->fetch(
+            'SELECT ' . implode(', ', $columns) . ', s.' . $q('id') . ' AS ' . $q('submission_id') .
+            ', p.' . $q('code') . ' AS ' . $q('program_code') .
+            ', p.' . $q('title') . ' AS ' . $q('program_title') .
+            ', t.' . $q('code') . ' AS ' . $q('term_code') .
+            ' FROM ' . $q('sis_applications') . ' a LEFT JOIN ' . $q('sis_form_submissions') .
+            ' s ON s.' . $q('application_id') . ' = a.' . $q('id') .
+            ' LEFT JOIN ' . $q('sis_programs') . ' p ON p.' . $q('id') . ' = a.' . $q('program_id') .
+            ' LEFT JOIN ' . $q('sis_terms') . ' t ON t.' . $q('id') . ' = a.' . $q('entry_term_id') .
+            ' WHERE a.' . $q('person_id') . ' = ? ORDER BY a.' . $q('id') . ' DESC',
+            [$person->value],
+            50,
+        );
     }
 
     public function ownedStudent(EntityId $user, EntityId $student): array

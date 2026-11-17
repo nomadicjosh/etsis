@@ -660,6 +660,23 @@
     border-radius: 9px;
     padding: 25px;
 }
+.campus-application-answers {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--campus-border);
+}
+.campus-application-answer-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+.campus-application-answer-heading h3 {
+    flex: 1 1 18rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .campus-course-card h3 {
     margin-block: 15px;
     font-size: 1.7rem;
@@ -765,6 +782,7 @@
     margin-bottom: 30px;
 }
 .campus-application-page {
+    width: 100%;
     max-width: 850px;
     margin-inline: auto;
 }

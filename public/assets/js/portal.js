@@ -671,22 +671,81 @@
 
     }
 
-    function applications(container) {
-        if (me?.applications.length)
-            container.append(
-                surface(
-                    'Your applications',
-                    table(
-                        ['Program', 'Entry term', 'Progress'],
-                        me.applications.map((application) => [
-                            programName(application.program_id),
-                            termName(application.entry_term_id),
-                            chip(application.status),
-                        ]),
-                        'Your admissions applications',
-                    ),
-                ),
+    function submittedApplications(applications) {
+        const identity = `submitted-answers-${++controlSequence}`;
+        const detail = el('section', { id: identity, class: 'campus-application-answers mt-4', hidden: true,
+            'aria-labelledby': `${identity}-title` });
+        let serial = 0, opener = null, loading = false;
+        const programLabel = application => application.program_title
+            ? [application.program_code, application.program_title].filter(Boolean).join(' · ')
+            : programName(application.program_id);
+        const termLabel = application => application.term_code || termName(application.entry_term_id);
+        function close() {
+            serial++; loading = false;
+            detail.replaceChildren(); detail.hidden = true;
+            opener?.setAttribute('aria-expanded', 'false'); opener?.removeAttribute('aria-busy');
+            if (opener?.isConnected) opener.focus();
+            opener = null;
+        }
+        async function view(application, trigger, retry = false) {
+            if (opener === trigger && !retry) { close(); return; }
+            if (opener === trigger && loading) return;
+            const ticket = ++serial;
+            opener?.setAttribute('aria-expanded', 'false'); opener?.removeAttribute('aria-busy');
+            opener = trigger; loading = true;
+            trigger.setAttribute('aria-expanded', 'true'); trigger.setAttribute('aria-busy', 'true');
+            const title = el('h3', { id: `${identity}-title`, tabindex: '-1', class: 'application-review-title' }, 'Submitted answers');
+            const status = el('p', { class: 'campus-muted', role: 'status' }, 'Loading your answers…');
+            const content = el('div');
+            detail.replaceChildren(
+                el('div', { class: 'campus-application-answer-heading' }, title,
+                    el('button', { class: 'btn campus-button-outline btn-sm', type: 'button', onclick: close }, 'Close answers')),
+                el('p', { class: 'campus-muted' }, `${programLabel(application)} · ${termLabel(application)}`), status, content,
             );
+            detail.hidden = false; title.focus();
+            try {
+                const record = await request(`/sis/form-submissions/${application.submission_id}/`);
+                if (ticket !== serial || pageLeaving || !detail.isConnected) return;
+                if (record.application_id !== application.id) throw new Error('Application reference mismatch.');
+                const answers = window.createApplicationAnswerReview({ fields: record.form.fields,
+                    layout: record.form.layout || [], answers: record.answers });
+                title.textContent = record.form.name;
+                content.replaceChildren(
+                    el('p', { class: 'campus-muted' }, 'These answers use the original form. They cannot be edited here.'), answers,
+                );
+                status.className = 'visually-hidden'; status.textContent = 'Your submitted answers are ready.';
+            } catch {
+                if (ticket !== serial || pageLeaving || !detail.isConnected) return;
+                const error = el('p', { class: 'alert alert-danger', role: 'alert', tabindex: '-1' },
+                    'We couldn’t load these answers. Try again, or contact admissions.');
+                status.textContent = '';
+                content.replaceChildren(error, el('button', { class: 'btn campus-button-outline', type: 'button',
+                    onclick: () => view(application, trigger, true) }, 'Try again'));
+                error.focus();
+            } finally {
+                if (ticket === serial) { loading = false; trigger.removeAttribute('aria-busy'); }
+            }
+        }
+        const rows = applications.map(application => {
+            const answers = application.submission_id ? el('button', { class: 'btn campus-button-outline btn-sm', type: 'button',
+                'aria-label': `View answers for ${programLabel(application)} · ${termLabel(application)}`,
+                'aria-expanded': 'false', 'aria-controls': identity,
+                onclick: event => view(application, event.currentTarget) }, 'View answers')
+                : el('span', { class: 'campus-muted' }, 'No form answers');
+            return [programLabel(application), termLabel(application), chip(application.status), answers];
+        });
+        return surface('Your applications', applications.length === 50
+            ? el('p', { class: 'campus-muted' }, 'Showing up to 50 applications.') : null,
+            table(['Program', 'Entry term', 'Progress', 'Answers'], rows,
+            'Your admissions applications'), detail);
+    }
+
+    function applications(container) {
+        const saved = el('div');
+        const refreshApplications = () => {
+            saved.replaceChildren(...(me?.applications.length ? [submittedApplications(me.applications)] : []));
+        };
+        refreshApplications(); container.append(saved);
         const form = el('form');
         const program = control(
             form,
@@ -802,6 +861,8 @@
                                 ),
                             );
                             await refreshMe();
+                            if (pageLeaving || !saved.isConnected) return;
+                            refreshApplications();
                             notice(
                                 'Application submitted. Here’s to your next chapter.',
                             );
