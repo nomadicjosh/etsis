@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (number) => String(number).padStart(26, "0");
@@ -187,12 +188,7 @@ for (const accept of [true, false]) {
                     exact: true,
                 }),
             ).toHaveCount(0);
-        await page
-            .getByRole("button", {
-                name: "Application history",
-                exact: true,
-            })
-            .click();
+        await recordAction(page, 'Application history');
         await expect(
             page.getByRole("heading", {
                 name: accept ? "Application accepted" : "Application rejected",

@@ -14,6 +14,8 @@ window.createWorkspacePeople = function (ui) {
         badge,
         flow,
         historyPanel,
+        recordSummary,
+        actionMenu,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -321,25 +323,62 @@ window.createWorkspacePeople = function (ui) {
             "APPLICATION REVIEW",
         );
         body.append(
-            badge(app.status),
+            recordSummary([
+                ["Institutional ID", person.institutionalId.value],
+                ["Application status", badge(app.status)],
+                [
+                    "Program",
+                    review.labels
+                        ? `${review.labels.program_code} · ${review.labels.program_title}`
+                        : "Not available",
+                ],
+                ["Entry term", review.labels?.term_code ?? "Not available"],
+            ]),
+        );
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Application tasks",
+        });
+        const extra = [button("Application history", () => decisionHistory(row))];
+        if (can("sis:person:manage"))
+            extra.push(button("Open person record", () => openPerson(person.id.value)));
+        if (app.status === "submitted")
+            actions.append(
+                button("Accept application", () => decide(row, true), "btn-primary"),
+                button("Reject application", () => decide(row, false), "btn-outline-danger"),
+            );
+        if (app.status === "accepted")
+            actions.append(button("Matriculate student", () => matriculate(row), "btn-primary"));
+        if (
+            ["accepted", "rejected"].includes(app.status) &&
+            can("sis:admissions:manage") &&
+            can("sis:admissions:correct")
+        )
+            extra.push(button("Correct admissions decision", () => correctDecision(row, app.status)));
+        if (app.status === "matriculated")
+            extra.push(button("Matriculation history", () => matriculationHistory(row)));
+        actions.append(
+            extra.length === 1
+                ? extra[0]
+                : actionMenu("More", extra, { context: "More application actions" }),
+        );
+        const guidance = {
+            submitted: "Review the submitted responses before accepting or rejecting this application.",
+            accepted:
+                "Review matriculation to confirm the initial program and entry term before creating the student record.",
+            rejected: "This application was rejected. Authorized corrections preserve the earlier decision.",
+            matriculated:
+                "Matriculation is recorded. Earlier application and decision history remain available.",
+        };
+        body.append(
+            actions,
             node(
                 "p",
-                { class: "mt-3" },
-                `Institutional ID: ${person.institutionalId.value}`,
+                { class: "form-text" },
+                guidance[app.status] || "Review this application and its recorded history.",
             ),
         );
-        if (review.labels)
-            body.append(
-                node(
-                    "p",
-                    {},
-                    `${review.labels.program_code} · ${review.labels.program_title} · ${review.labels.term_code}`,
-                ),
-            );
-        if (can("sis:person:manage"))
-            body.append(
-                button("Open person record", () => openPerson(person.id.value)),
-            );
         const submission = review.submission;
         if (submission) {
             const section = node(
@@ -352,13 +391,13 @@ window.createWorkspacePeople = function (ui) {
                     "These answers use the form revision submitted by the applicant. Later form changes do not alter this application.",
                 ),
             );
-            const answers = node("dl", { class: "detail-list" });
+            const answers = node("dl", { class: "detail-list application-answers" });
             for (const field of submission.form.fields) {
                 const value = submission.answers[field.key];
                 answers.append(
                     node(
                         "div",
-                        {},
+                        { class: field.type === 'textarea' ? 'application-answer-wide' : '' },
                         node("dt", {}, field.label),
                         node(
                             "dd",
@@ -386,45 +425,6 @@ window.createWorkspacePeople = function (ui) {
                     "This application was entered directly. No application-form answers are attached.",
                 ),
             );
-        const actions = node("div", { class: "inline-actions" });
-        body.append(actions);
-        actions.append(
-            button("Application history", () => decisionHistory(row)),
-        );
-        if (app.status === "submitted") {
-            actions.append(
-                button(
-                    "Accept application",
-                    () => decide(row, true),
-                    "btn-primary",
-                ),
-                button("Reject application", () => decide(row, false)),
-            );
-        }
-        if (app.status === "accepted")
-            actions.append(
-                button(
-                    "Matriculate student",
-                    () => matriculate(row),
-                    "btn-primary",
-                ),
-            );
-        if (
-            ["accepted", "rejected"].includes(app.status) &&
-            can("sis:admissions:manage") &&
-            can("sis:admissions:correct")
-        )
-            actions.append(
-                button("Correct admissions decision", () =>
-                    correctDecision(row, app.status),
-                ),
-            );
-        if (app.status === "matriculated")
-            actions.append(
-                button("Matriculation history", () =>
-                    matriculationHistory(row),
-                ),
-            );
     }
     async function decide(row, accept, preset = {}) {
         const title = accept ? "Accept application" : "Reject application";
@@ -440,7 +440,7 @@ window.createWorkspacePeople = function (ui) {
         const fields = [
             ["reason", "Reason for admissions decision", "textarea"],
         ];
-        const form = await buildForm(fields, preset);
+        const form = await buildForm(fields, preset, { layout: "decision_reason" });
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
         const review = node(
@@ -533,7 +533,7 @@ window.createWorkspacePeople = function (ui) {
         const fields = [
             ["reason", "Reason for admissions correction", "textarea"],
         ];
-        const form = await buildForm(fields, preset);
+        const form = await buildForm(fields, preset, { layout: "decision_reason" });
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
         const review = node(
@@ -796,7 +796,7 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
         const fields = [["reason", "Reason for matriculation", "textarea"]];
-        const form = await buildForm(fields, preset);
+        const form = await buildForm(fields, preset, { layout: "decision_reason" });
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
         const review = node(

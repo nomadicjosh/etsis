@@ -1,4 +1,4 @@
-const { recordAction } = require('./support/workspace-actions.cjs');
+const { recordAction, chooseAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -103,7 +103,7 @@ test('registrars manage programs and student activity in one accessible record',
     expect(calls.find(call => call.path.endsWith('/programs/assign/commit/'))?.data).toEqual({ review_token: 'fictional-assignment-token' });
     await expect(page.locator('#drawer-body b')).toHaveCount(0);
     const arts = programSection.locator('tbody tr').filter({ hasText: 'BA.ART' });
-    await arts.getByRole('button', { name: 'Close assignment', exact: true }).click();
+    await chooseAction(arts, 'Close assignment');
     await page.getByLabel('Reason for this program decision').fill('Fictional program closure.');
     await accessible();
     await page.getByRole('button', { name: 'Review program status' }).click();
@@ -114,18 +114,18 @@ test('registrars manage programs and student activity in one accessible record',
     await page.getByRole('button', { name: 'Review program status' }).click();
     await page.getByRole('button', { name: 'Confirm program closure' }).click();
     await expect(arts).toContainText('closed');
-    await arts.getByRole('button', { name: 'Reopen assignment', exact: true }).click();
+    await chooseAction(arts, 'Reopen assignment');
     await page.getByLabel('Reason for this program decision').fill('Fictional program reopening.');
     await page.getByRole('button', { name: 'Review program status' }).click();
     await page.getByRole('button', { name: 'Confirm program reopening' }).click();
     await expect(arts).toContainText('active');
-    await arts.getByRole('button', { name: 'Program status history', exact: true }).click();
+    await chooseAction(arts, 'Program status history');
     await expect(page.locator('#drawer-body')).toContainText('Program assigned');
     await expect(page.locator('#drawer-body')).toContainText('Fictional arts as assigned');
     await expect(page.locator('#drawer-body')).toContainText('This history starts with the recorded assignment.');
     await accessible();
     await page.getByRole('button', { name: 'Back to student', exact: true }).click();
-    await arts.getByRole('button', { name: 'Make primary', exact: true }).click();
+    await chooseAction(arts, 'Make primary');
     await page.getByLabel('Reason for this primary-program decision').fill('Fictional primary selection.');
     await page.getByRole('button', { name: 'Review primary selection' }).click();
     expect(calls.some(call => call.path.endsWith('/primary-program/commit/'))).toBe(false);
@@ -135,7 +135,7 @@ test('registrars manage programs and student activity in one accessible record',
     await page.getByRole('button', { name: 'Review primary selection' }).click();
     await page.getByRole('button', { name: 'Confirm primary program', exact: true }).click();
     await expect(arts).toContainText('Primary');
-    await expect(arts.getByRole('button', { name: 'Close assignment', exact: true })).toHaveCount(0);
+    await expect(arts.getByRole('button', { name: 'Close assignment', exact: true, includeHidden: true })).toHaveCount(0);
     expect(calls.find(call => call.path.endsWith('/primary-program/review/'))?.data).toEqual({ assignment_id: id(999),
         revision: 'student-0', reason: 'Fictional primary selection.' });
     expect(calls.find(call => call.path.endsWith('/primary-program/commit/'))?.data).toEqual({ assignment_id: id(999), review_token: 'fictional-primary-token' });

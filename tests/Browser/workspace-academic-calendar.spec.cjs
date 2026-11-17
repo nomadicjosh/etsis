@@ -1,4 +1,4 @@
-const { workspaceTool } = require('./support/workspace-actions.cjs');
+const { workspaceTool, recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
@@ -130,7 +130,7 @@ test('student cohort shows retained curriculum and escaped history without a man
     await page.locator('#directory-search').fill('a');
     await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Sadie Example', exact: true }).click();
-    await page.getByRole('button', { name: 'Matriculation cohort', exact: true }).click();
+    await recordAction(page, 'Matriculation cohort');
     await expect(page.locator('#drawer-body')).toContainText('Academic year 2024-2025; retained curriculum version 1');
     await expect(page.locator('#drawer-body')).toContainText('Fictional <script>historical</script> note');
     await expect(page.locator('#drawer-body script')).toHaveCount(0);

@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
@@ -140,12 +141,7 @@ for (const known of [true, false]) {
         await page
             .getByRole("button", { name: "Fictional Applicant", exact: true })
             .click();
-        await page
-            .getByRole("button", {
-                name: "Correct admissions decision",
-                exact: true,
-            })
-            .click();
+        await recordAction(page, 'Correct admissions decision');
         await page
             .getByLabel("Reason for admissions correction")
             .fill("Fictional protected correction reason");
@@ -197,9 +193,7 @@ for (const known of [true, false]) {
                 exact: true,
             })
             .click();
-        await page
-            .getByRole("button", { name: "Application history", exact: true })
-            .click();
+        await recordAction(page, 'Application history');
         await expect(
             page.getByRole("heading", {
                 name: `Decision corrected: ${initial} → ${target}`,
@@ -311,6 +305,7 @@ test("ordinary admissions staff do not see correction controls", async ({
         page.getByRole("button", {
             name: "Correct admissions decision",
             exact: true,
+            includeHidden: true,
         }),
     ).toHaveCount(0);
 });

@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (number) => String(number).padStart(26, "0");
@@ -154,9 +155,7 @@ test("matriculation reviews the derived cohort, preserves revisions and shows cu
     await page
         .getByRole("button", { name: "Confirm matriculation", exact: true })
         .click();
-    await page
-        .getByRole("button", { name: "Matriculation history", exact: true })
-        .click();
+    await recordAction(page, 'Matriculation history');
     await expect(page.locator("#drawer-body")).toContainText(
         "Original cohort: 2026-2027",
     );

@@ -227,7 +227,7 @@
     function recordSummary(entries) {
         return node(
             'dl',
-            { class: 'record-summary' },
+            { class: `record-summary${entries.length === 4 ? ' record-summary-paired' : ''}` },
             entries.map(([label, value]) =>
                 node('div', {}, node('dt', {}, label), node('dd', {}, value ?? 'Not recorded')),
             ),
@@ -270,7 +270,7 @@
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
-    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
+    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
@@ -286,7 +286,7 @@
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
-    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, recordSummary, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
@@ -760,6 +760,19 @@
     }
 
     const formLayouts = {
+        decision_reason: [{ title: 'Decision reason', fields: ['reason'], wide: ['reason'] }],
+        student_activity: [
+            { title: 'Student activity', fields: ['active', 'effective_on'], wide: ['active'] },
+            { title: 'Decision reason', fields: ['reason'], wide: ['reason'] },
+        ],
+        student_program: [
+            {
+                title: 'New program',
+                fields: ['program_id', 'entry_term_id'],
+                wide: ['program_id', 'entry_term_id'],
+            },
+            { title: 'Decision reason', fields: ['reason'], wide: ['reason'] },
+        ],
         rooms: [
             {
                 title: 'Room details',

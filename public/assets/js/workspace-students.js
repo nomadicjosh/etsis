@@ -14,6 +14,8 @@ window.createWorkspaceStudents = function (ui) {
         registration,
         showAudit,
         actionMenu,
+        recordSummary,
+        disposeActionMenus,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -65,7 +67,7 @@ window.createWorkspaceStudents = function (ui) {
         const form = await ui.buildForm(descriptors, {
             active: record.active,
             effective_on: page.today,
-        });
+        }, { layout: 'student_activity' });
         form.elements.effective_on.max = page.today;
         form.elements.effective_on.required = true;
         form.elements.reason.required = true;
@@ -243,7 +245,7 @@ window.createWorkspaceStudents = function (ui) {
         const descriptors = [
             ["reason", "Reason for this program decision", "textarea"],
         ];
-        const form = await ui.buildForm(descriptors, preset);
+        const form = await ui.buildForm(descriptors, preset, { layout: "decision_reason" });
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
         const review = node(
@@ -410,7 +412,7 @@ window.createWorkspaceStudents = function (ui) {
         const descriptors = [
             ["reason", "Reason for this primary-program decision", "textarea"],
         ];
-        const form = await ui.buildForm(descriptors, preset);
+        const form = await ui.buildForm(descriptors, preset, { layout: "decision_reason" });
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
         const review = node(
@@ -598,7 +600,7 @@ window.createWorkspaceStudents = function (ui) {
             ["entry_term_id", "Program entry term", "lookup", "terms"],
             ["reason", changing ? "Reason for this program change" : "Reason for this assignment", "textarea"],
         ];
-        const form = await ui.buildForm(descriptors, preset);
+        const form = await ui.buildForm(descriptors, preset, { layout: 'student_program' });
         form.elements.reason.required = true;
         form.elements.reason.maxLength = 10000;
         const review = node(
@@ -720,30 +722,23 @@ window.createWorkspaceStudents = function (ui) {
         );
         const back = () => student(id);
         body.append(
-            node("p", {}, record.institutional_id),
-            badge(record.active ? "Active" : "Inactive"),
-            node(
-                "dl",
-                { class: "detail-list" },
-                node(
-                    "div",
-                    {},
-                    node("dt", {}, "Primary program"),
-                    node(
-                        "dd",
-                        {},
-                        `${record.primary_program.code} · ${record.primary_program.title}`,
-                    ),
-                ),
-                node(
-                    "div",
-                    {},
-                    node("dt", {}, "Institutional entry term"),
-                    node("dd", {}, record.entry_term.code),
-                ),
-            ),
+            recordSummary([
+                ["Institutional ID", record.institutional_id],
+                ["Student activity", badge(status(record.active))],
+                [
+                    "Primary program",
+                    record.primary_program
+                        ? `${record.primary_program.code} · ${record.primary_program.title}`
+                        : "No primary program recorded",
+                ],
+                ["Institutional entry term", record.entry_term?.code ?? "Not recorded"],
+            ]),
         );
-        const actions = node("div", { class: "inline-actions" });
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Student tasks",
+        });
         body.append(actions);
         const extra = [];
         if (can("sis:person:manage"))
@@ -880,9 +875,11 @@ window.createWorkspaceStudents = function (ui) {
         );
         if (can("sis:registration:manage"))
             programs.append(
-                button("Change program", () => assignProgram(record, back, {}, true), "btn-primary"),
-                button("Assign an additional program", () =>
-                    assignProgram(record, back),
+                node(
+                    "div",
+                    { class: "inline-actions", role: "group", "aria-label": "Program assignment tasks" },
+                    button("Change program", () => assignProgram(record, back, {}, true), "btn-primary"),
+                    button("Assign an additional program", () => assignProgram(record, back)),
                 ),
             );
         const information = node("p", {
@@ -890,7 +887,7 @@ window.createWorkspaceStudents = function (ui) {
             role: "status",
             "aria-live": "polite",
         });
-        const content = node("div");
+        const content = node("div", { class: 'program-assignments' });
         let after = "";
         let nextAfter = null;
         let serial = 0;
@@ -911,94 +908,83 @@ window.createWorkspaceStudents = function (ui) {
         );
         async function load() {
             const token = ++serial;
-            const page = await request(
-                `/sis/students/${id}/programs/`,
-                "POST",
-                { after },
-            );
+            const page = await request(`/sis/students/${id}/programs/`, "POST", { after });
             if (!body.isConnected || token !== serial) return;
             nextAfter = page.next_after;
             previous.disabled = previousCursors.length === 0;
             next.disabled = !nextAfter;
             information.textContent = `${page.items.length} programs on this page.${nextAfter ? " More are available." : ""}`;
+            disposeActionMenus(content);
             content.replaceChildren(
                 page.items.length
                     ? grid(
-                          [
-                              "Program",
-                              "Entry term",
-                              "Catalog",
-                              "Status",
-                              "Primary",
-                              "Actions",
-                          ],
+                          ["Program", "Entry term", "Catalog", "Status", "Actions"],
                           page.items.map((item) => {
                               const controls = node("div", {
-                                  class: "inline-actions",
+                                  class: "program-actions",
                               });
+                              const extra = [];
                               if (can("sis:student:read"))
                                   controls.append(
-                                      button("Specializations", () =>
-                                          specializations(id, item.id, back),
+                                      button(
+                                          "Degree requirements",
+                                          () => ui.degreeAudit().studentRequirements(id, item.id, back),
+                                          "btn-outline-primary btn-sm",
                                       ),
-                                  );
-                              if (can("sis:student:read"))
-                                  controls.append(
-                                      button("Degree requirements", () =>
-                                          ui
-                                              .degreeAudit()
-                                              .studentRequirements(
-                                                  id,
-                                                  item.id,
-                                                  back,
-                                              ),
+                                      button(
+                                          "Specializations",
+                                          () => specializations(id, item.id, back),
+                                          "btn-link btn-sm",
                                       ),
                                   );
                               if (can("sis:registration:manage")) {
-                                  controls.append(
+                                  extra.push(
                                       button("Program status history", () =>
                                           programStatusHistory(id, item, back),
                                       ),
                                   );
-                                  controls.append(
+                                  extra.push(
                                       button("Matriculation cohort", () =>
-                                          ui
-                                              .calendar()
-                                              .studentCatalog(id, item.id),
+                                          ui.calendar().studentCatalog(id, item.id),
                                       ),
                                   );
-                                  if (
-                                      !item.is_primary &&
-                                      item.status === "active"
-                                  )
-                                      controls.append(
-                                          button("Make primary", () =>
-                                              primaryProgram(
-                                                  record,
-                                                  item,
-                                                  back,
-                                              ),
-                                          ),
+                                  if (!item.is_primary && item.status === "active")
+                                      extra.push(
+                                          button("Make primary", () => primaryProgram(record, item, back)),
                                       );
                                   if (!item.is_primary)
-                                      controls.append(
+                                      extra.push(
                                           button(
                                               item.status === "active"
                                                   ? "Close assignment"
                                                   : "Reopen assignment",
-                                              () =>
-                                                  programStatus(id, item, back),
+                                              () => programStatus(id, item, back),
                                           ),
                                       );
                               }
+                              if (extra.length)
+                                  controls.append(
+                                      actionMenu("More", extra, {
+                                          context: `More actions for ${item.program_code} · ${item.term_code || "Entry term unknown"}`,
+                                          compact: true,
+                                      }),
+                                  );
                               return [
-                                  `${item.program_code} · ${item.program_title}`,
+                                  node(
+                                      "div",
+                                      { class: "program-identity" },
+                                      node(
+                                          "strong",
+                                          { class: "private-text" },
+                                          `${item.program_code} · ${item.program_title}`,
+                                      ),
+                                      item.is_primary ? badge("Primary") : null,
+                                  ),
                                   item.term_code,
                                   item.catalog_year
                                       ? `${item.catalog_year} · revision ${item.catalog_revision}`
                                       : "Catalog needs review",
                                   badge(item.status),
-                                  item.is_primary ? "Primary" : "—",
                                   controls,
                               ];
                           }),

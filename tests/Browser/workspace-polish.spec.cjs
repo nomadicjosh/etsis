@@ -31,9 +31,33 @@ async function fixture(page, path = '/admin/') {
                 employees: [{ id: id(8), person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', job_title: 'Academic advisor', active: true }],
                 rooms: [{ id: id(9), code: 'LIB.101', name: 'Advising room', building_name: 'Campus library', capacity: 24 }],
                 bookings: [{ id: id(10), title: 'Welcome seminar', status: 'approved' }],
+                students: [{ id: id(13), person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: true }],
+                applications: [{ id: id(14), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', status: 'submitted' }],
             };
             result = { items: records[dataset] || [], next_after: null };
-        } else if (path === `/sis/employees/${id(8)}/`) result = {
+        } else if (path === `/sis/applications/${id(14)}/review/`) result = {
+            application: { id: { value: id(14) }, status: 'submitted' },
+            person: { id: { value: id(2) }, givenName: 'Alex', familyName: 'Example', institutionalId: { value: 'S-FICTIONAL' } },
+            labels: { program_code: 'BA.ENG', program_title: 'English', term_code: '26/FA' },
+            submission: { form: { name: 'First-year application', fields: [
+                { key: 'school', type: 'text', label: 'Previous school' },
+                { key: 'consent', type: 'checkbox', label: 'Contact permission' },
+                { key: 'statement', type: 'textarea', label: 'Why this program?' },
+            ] }, answers: { school: 'Fictional Academy', consent: false,
+                statement: 'I enjoy reading, writing and discussing ideas.\nThis is a fictional application for visual testing.' } },
+        };
+        else if (path === `/sis/students/${id(13)}/record/`) result = {
+            id: id(13), person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL',
+            active: true, primary_program: { id: id(4), code: 'BA.ENG', title: 'English' },
+            entry_term: { id: id(5), code: '26/FA' }, revision: 'fictional-student-revision',
+        };
+        else if (path === `/sis/students/${id(13)}/programs/`) result = { items: [
+            { id: id(16), program_id: id(4), program_code: 'BA.ENG', program_title: 'English', term_code: '26/FA',
+                catalog_year: '2026-2027', catalog_revision: 1, status: 'active', is_primary: true },
+            { id: id(17), program_id: id(18), program_code: 'BS.CS', program_title: 'Computing', term_code: '25/FA',
+                catalog_year: '2025-2026', catalog_revision: 1, status: 'closed', is_primary: false },
+        ], next_after: null };
+        else if (path === `/sis/employees/${id(8)}/`) result = {
             id: id(8), person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL',
             job_title: 'Academic advisor', active: true, earlier_history_unknown: true, revision: 'fictional-revision',
         };
@@ -277,3 +301,70 @@ test('booking menus and compact meeting actions retain context and require confi
     expect(f.requests.some(r => r.path.includes('/occurrences/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });
+
+test('application tasks precede the answers and decisions still require a reasoned review', async ({ page }) => {
+    const f = await fixture(page);
+    await page.locator('.workspace-nav-link[data-workspace="applications"]').click();
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    const tasks = page.getByRole('group', { name: 'Application tasks', exact: true });
+    await expect(tasks.getByRole('button', { name: 'Accept application', exact: true })).toBeVisible();
+    const beforeAnswers = await tasks.evaluate(element => Boolean(element.compareDocumentPosition(document.querySelector('.application-answers')) & Node.DOCUMENT_POSITION_FOLLOWING));
+    expect(beforeAnswers).toBe(true);
+    const toggle = page.getByRole('button', { name: 'More application actions', exact: true });
+    await toggle.focus(); await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('button', { name: 'Application history', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(toggle).toBeFocused();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/workspace-polished-admissions.png' });
+    await page.setViewportSize({ width: 320, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await tasks.getByRole('button', { name: 'Accept application', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Decision reason', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Review admissions decision', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Reason for admissions decision', exact: true })).toBeFocused();
+    expect(f.requests.some(r => r.path.endsWith('/decision/review/') || r.path.endsWith('/decision/commit/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+for (const readOnly of [false, true]) {
+    test(`student pursuits keep degree tasks visible with ${readOnly ? 'read-only access' : 'contextual registrar actions'}`, async ({ page }) => {
+        const f = await fixture(page, readOnly ? '/admin/student-read-fixture/' : '/admin/');
+        await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+        await page.getByLabel('Search this workspace', { exact: true }).fill('Alex');
+        await page.getByLabel('Search this workspace', { exact: true }).press('Enter');
+        await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+        const programs = page.getByRole('table', { name: 'Program assignments', exact: true });
+        const current = programs.getByRole('row').filter({ hasText: 'BA.ENG' });
+        const former = programs.getByRole('row').filter({ hasText: 'BS.CS' });
+        await expect(current.getByText('Primary', { exact: true })).toBeVisible();
+        await expect(former).toContainText('closed');
+        await expect(current.getByRole('button', { name: 'Degree requirements', exact: true })).toBeVisible();
+        await expect(current.getByRole('button', { name: 'Specializations', exact: true })).toBeVisible();
+        if (readOnly) {
+            await expect(programs.locator('[data-workspace-menu]')).toHaveCount(0);
+            await expect(page.getByRole('button', { name: 'Change program', exact: true, includeHidden: true })).toHaveCount(0);
+        } else {
+            const toggle = former.getByRole('button', { name: 'More actions for BS.CS · 25/FA', exact: true });
+            await toggle.focus(); await page.keyboard.press('ArrowDown');
+            await expect(former.getByRole('button', { name: 'Program status history', exact: true })).toBeFocused();
+            await expect(former.getByRole('button', { name: 'Reopen assignment', exact: true })).toBeVisible();
+            await expect(current.getByRole('button', { name: 'Close assignment', exact: true, includeHidden: true })).toHaveCount(0);
+            await page.keyboard.press('Escape'); await expect(toggle).toBeFocused();
+            expect(f.requests.some(r => r.path.includes('/status/'))).toBe(false);
+            await page.screenshot({ path: 'test-results/workspace-polished-student.png' });
+        }
+        await page.setViewportSize({ width: 320, height: 812 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await accessible(page);
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await accessible(page);
+        expect(f.errors).toEqual([]);
+    });
+}

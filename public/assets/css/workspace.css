@@ -624,9 +624,18 @@ h3 { font-size: .9rem; font-weight: 650; }
     border-radius: .75rem;
 }
 .record-summary > div { min-width: 0; }
+.record-summary-paired { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .record-summary dt { margin-bottom: .4rem; color: #526a80; font-size: .75rem; font-weight: 500; }
 .record-summary dd { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
 .record-summary .text-secondary { color: #526a80 !important; }
+.application-answers > div { min-width: 0; padding-bottom: 1rem; border-bottom: 1px solid var(--campus-line); }
+.application-answer-wide { grid-column: 1 / -1; }
+.program-assignments .data-table :is(th, td) { padding: 1rem; }
+.program-identity { min-width: 10rem; max-width: 16rem; display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; }
+.program-identity strong { font-weight: 600; }
+.program-actions { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; }
+.program-actions > .btn { white-space: nowrap; }
+.program-actions > .btn-link { --bs-btn-color: var(--campus-primary); --bs-btn-hover-color: #285b88; --bs-btn-active-color: #285b88; padding-inline: 0; }
 .record-drawer .btn:disabled { color: #5e7287; background: #f1f4f7; border-color: #b7c4d2; opacity: 1; }
 .booking-meeting-actions { display: flex; align-items: center; gap: .5rem; }
 .booking-meeting-actions .btn { white-space: nowrap; }

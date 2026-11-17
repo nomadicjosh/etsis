@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
@@ -92,9 +93,7 @@ for (const decided of [false, true]) {
         await page
             .getByRole("button", { name: "Fictional Applicant", exact: true })
             .click();
-        await page
-            .getByRole("button", { name: "Application history", exact: true })
-            .click();
+        await recordAction(page, 'Application history');
         const body = page.locator("#drawer-body");
         await expect(
             page.getByRole("heading", {

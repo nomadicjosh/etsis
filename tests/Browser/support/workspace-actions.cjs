@@ -23,4 +23,4 @@ async function revealAction(root, name, last = false) {
     }
     return control;
 }
-module.exports = { workspaceTool, recordAction, revealRecordAction };
+module.exports = { workspaceTool, recordAction, revealRecordAction, chooseAction };
