@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 
@@ -69,7 +70,7 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     await expect(page.locator('#drawer-body')).toContainText('Balance: $87.50');
     expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/review/`)).toMatchObject({ payload: { type: 'payment', amount_minor: 1250, currency: 'USD', position: 1, reason: 'Fictional payment received.' }, csrf: 'fictional-test-token' });
     expect(requests.find(item => item.path === `/sis/accounts/${account}/entries/commit/`).payload).toEqual({ review_token: 'fictional-posting-review' });
-    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    await recordAction(page, 'Reverse entry');
     await page.getByRole('textbox', { name: /^Reason for reversal/ }).fill('Fictional posting correction.');
     await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Reviewed entry reversal' })).toContainText('$87.50 → $100.00');

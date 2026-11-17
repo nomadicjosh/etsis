@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
@@ -265,7 +266,7 @@ async function accessible(page) {
 
 test('staff review one correction, confirm once and see linked immutable originals', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Correct amount', exact: true }).click();
+    await recordAction(page, 'Correct amount');
     await page.getByLabel('Corrected amount (USD)').fill('12.50');
     await page.getByLabel('Reason for amount correction').fill('Fictional correction <script>literal only</script>');
     await page.getByRole('button', { name: 'Review amount correction', exact: true }).click();
@@ -288,7 +289,7 @@ test('staff review one correction, confirm once and see linked immutable origina
 
 test('a stale correction preserves form values and an interrupted confirmation reuses its proof', async ({ page }) => {
     const f = await fixture(page, { stale: true });
-    await page.getByRole('button', { name: 'Correct amount', exact: true }).click();
+    await recordAction(page, 'Correct amount');
     const amount = page.getByLabel('Corrected amount (USD)'), reason = page.getByLabel('Reason for amount correction');
     await amount.fill('12.50'); await reason.fill('Fictional reviewed correction.');
     await page.getByRole('button', { name: 'Review amount correction', exact: true }).click();
@@ -313,9 +314,9 @@ test('a stale correction preserves form values and an interrupted confirmation r
 
 test('edits invalidate the review and automated or unknown entries offer no amount correction', async ({ page }) => {
     await fixture(page, { eligible: false });
-    await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Correct amount', exact: true, includeHidden: true })).toHaveCount(0);
     await fixture(page);
-    await page.getByRole('button', { name: 'Correct amount', exact: true }).click();
+    await recordAction(page, 'Correct amount');
     await page.getByLabel('Corrected amount (USD)').fill('12.50');
     const reason = page.getByLabel('Reason for amount correction');
     await reason.fill('Fictional first reason.');
@@ -328,15 +329,15 @@ test('edits invalidate the review and automated or unknown entries offer no amou
 test('read-only finance access offers statements without correction controls', async ({ page }) => {
     await fixture(page, { readOnly: true });
     await expect(page.locator('#drawer-body')).toContainText('Balance: -$10.00');
-    await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Reverse entry', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Correct amount', exact: true, includeHidden: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Reverse entry', exact: true, includeHidden: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Post a transaction', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /entry history$/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /entry history$/, includeHidden: true })).toHaveCount(0);
 });
 
 test('private entry history pages corrections with captured context and explicit refresh', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await recordAction(page, /View .* entry history/);
     const activity = page.getByRole('region', { name: 'Entry activity', exact: true });
     await expect(activity.locator('article')).toHaveCount(20);
     await expect(activity).toContainText('Fictional action 24 <script>literal only</script>');
@@ -371,7 +372,7 @@ test('a late private history response cannot reopen the view after navigation', 
     let release;
     const waiting = new Promise(resolve => release = resolve);
     const f = await fixture(page, { delayHistory: () => waiting });
-    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await recordAction(page, /View .* entry history/);
     await expect(page.getByText('Loading entry history…', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Account statement');
@@ -438,7 +439,7 @@ test('a late review cannot restore a confirmation after the form was edited', as
     let release;
     const waiting = new Promise(resolve => release = resolve);
     const f = await fixture(page, { delayReview: () => waiting });
-    await page.getByRole('button', { name: 'Correct amount', exact: true }).click();
+    await recordAction(page, 'Correct amount');
     await page.getByLabel('Corrected amount (USD)').fill('12.50');
     const reason = page.getByLabel('Reason for amount correction');
     await reason.fill('Fictional original reason.');
@@ -454,7 +455,7 @@ test('a late review cannot restore a confirmation after the form was edited', as
 for (const [currency, input, minor] of [['JPY', '1250', 1250], ['KWD', '1.250', 1250]]) {
     test(`amount corrections preserve ${currency} precision`, async ({ page }) => {
         const f = await fixture(page, { currency });
-        await page.getByRole('button', { name: 'Correct amount', exact: true }).click();
+        await recordAction(page, 'Correct amount');
         await page.getByLabel(`Corrected amount (${currency})`).fill(input);
         await page.getByLabel('Reason for amount correction').fill('Fictional exact currency correction.');
         await page.getByRole('button', { name: 'Review amount correction', exact: true }).click();
@@ -498,7 +499,7 @@ test('payment receipt fields are optional, private, escaped and excluded from ch
 
 test('receipt corrections reuse the editor, preserve fields and retry only the reviewed proof', async ({ page }) => {
     const f = await fixture(page, { receipt: { method: 'check', reference: 'FICT-OLD' } });
-    await page.getByRole('button', { name: 'Correct receipt details', exact: true }).click();
+    await recordAction(page, 'Correct receipt details');
     await expect(page.getByLabel('Payment method', { exact: true })).toHaveValue('check');
     await expect(page.getByLabel('Receipt or check reference')).toHaveValue('FICT-OLD');
     await expect(page.getByLabel('Amount (USD)')).toHaveCount(0);
@@ -532,7 +533,7 @@ test('receipt corrections reuse the editor, preserve fields and retry only the r
 
 test('entry history shows receipt changes alongside the original retained reference', async ({ page }) => {
     const f = await fixture(page, { receiptHistory: true });
-    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await recordAction(page, /View .* entry history/);
     const articles = page.getByRole('region', { name: 'Entry activity' }).locator('article');
     await expect(articles).toHaveCount(2);
     await expect(articles.first()).toContainText('Receipt details corrected');
@@ -548,7 +549,7 @@ test('a delayed private receipt read cannot render into a different drawer', asy
     const pending = new Promise(resolve => release = resolve);
     const f = await fixture(page, { receipt: { method: 'check', reference: 'FICT-PRIVATE-DELAY' },
         delayReceipt: () => pending });
-    await page.getByRole('button', { name: 'Correct receipt details', exact: true }).click();
+    await recordAction(page, 'Correct receipt details');
     await expect(page.locator('#drawer-body')).toContainText('Opening transaction');
     await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Account statement');
@@ -564,7 +565,7 @@ test('a delayed private receipt read cannot render into a different drawer', asy
 
 test('staff review a reversal with exact balances and retained private receipt details', async ({ page }) => {
     const f = await fixture(page, { receipt: { method: 'scholarship', reference: 'FICT-PRIVATE-RECEIPT' } });
-    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    await recordAction(page, 'Reverse entry');
     await expect(page.getByLabel('Amount (USD)')).toHaveCount(0);
     await expect(page.getByLabel('Receipt or check reference')).toHaveCount(0);
     await page.getByLabel('Reason for reversal').fill('Fictional reversal <script>literal only</script>.');
@@ -594,7 +595,7 @@ test('staff review a reversal with exact balances and retained private receipt d
 
 test('stale reversals preserve the reason and accepted retries cannot reverse a later posting', async ({ page }) => {
     const f = await fixture(page, { staleReversal: true, eligible: false });
-    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    await recordAction(page, 'Reverse entry');
     const reason = page.getByLabel('Reason for reversal');
     await reason.fill('Fictional original reversal reason.');
     await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
@@ -623,7 +624,7 @@ test('editing a reversal invalidates confirmation and ignores a late review resp
     let release;
     const waiting = new Promise(resolve => release = resolve);
     const f = await fixture(page, { delayReview: () => waiting });
-    await page.getByRole('button', { name: 'Reverse entry', exact: true }).click();
+    await recordAction(page, 'Reverse entry');
     const reason = page.getByLabel('Reason for reversal');
     await reason.fill('Fictional original reason.');
     await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
@@ -656,7 +657,7 @@ test('partial and full charge credits retain the original bill and show understa
     await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Credit for');
     await expect(page.locator('#drawer-body')).toContainText('Credited $2.00 · Remaining $8.00');
-    await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Correct amount', exact: true, includeHidden: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Credit charge', exact: true }).click();
     await page.getByLabel('Amount to credit (USD)').fill('8');
     await page.getByLabel('Reason for charge credit').fill('Fictional remaining waiver.');
@@ -678,7 +679,7 @@ test('reversing a credited charge previews and retains the linked reversals', as
     await page.getByLabel('Reason for charge credit').fill('Fictional linked credit.');
     await page.getByRole('button', { name: 'Review charge credit', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm charge credit', exact: true }).click();
-    await page.getByRole('button', { name: 'Reverse entry', exact: true }).first().click();
+    await recordAction(page, 'Reverse entry');
     await page.getByLabel('Reason for reversal').fill('Fictional charge reversal.');
     await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
     const preview = page.getByRole('region', { name: 'Reviewed entry reversal' });
@@ -686,7 +687,7 @@ test('reversing a credited charge previews and retains the linked reversals', as
     await expect(preview).toContainText('$8.00 → $0.00');
     await page.getByRole('button', { name: 'Confirm entry reversal', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Reversed with charge');
-    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await recordAction(page, /View .* entry history/);
     const history = page.getByRole('region', { name: 'Entry activity' });
     await expect(history).toContainText('Charge credited');
     await expect(history).toContainText('charge credit: -$2.00');
@@ -784,10 +785,10 @@ test('payment reversal keeps linked refunds visible and private history groups t
     await page.getByLabel('Reason for payment refund').fill('Fictional source-linked refund.');
     await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
-    await page.getByRole('button', { name: /View .* entry history/ }).first().click();
+    await recordAction(page, /View .* entry history/);
     await expect(page.getByRole('region', { name: 'Entry activity' })).toContainText('Refund of payment');
     await page.getByRole('button', { name: 'Back to account statement', exact: true }).click();
-    await page.getByRole('button', { name: 'Reverse entry', exact: true }).first().click();
+    await recordAction(page, 'Reverse entry');
     await page.getByLabel('Reason for reversal').fill('Fictional payment amount was not received.');
     await page.getByRole('button', { name: 'Review entry reversal', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Reviewed entry reversal' }))
@@ -830,7 +831,7 @@ test('refund allocation correction redistributes one outflow with no balance cha
     await page.getByLabel('Reason for payment refund').fill('Fictional refund.');
     await page.getByRole('button', { name: 'Review payment refund', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm payment refund', exact: true }).click();
-    await page.getByRole('button', { name: 'Correct refund', exact: true }).click();
+    await recordAction(page, 'Correct refund');
     await expect(page.getByRole('heading', { name: 'Correct a refund', exact: true })).toBeVisible();
     await page.getByLabel('Corrected amount (USD)').fill('2');
     await page.getByRole('button', { name: /Add payment 00000030/ }).click();
@@ -895,7 +896,7 @@ test('registration prices stay readable in statements without enabling amount re
         rate_minor: 250, currency: 'USD', rounding: 'half_up',
     } });
     await expect(page.locator('#drawer-body')).toContainText('Fictional tuition · 4 credits × $2.50 per credit');
-    await expect(page.getByRole('button', { name: 'Correct amount', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Correct amount', exact: true, includeHidden: true })).toHaveCount(0);
     await page.setViewportSize({ width: 375, height: 850 }); await accessible(page);
     expect(f.errors).toEqual([]);
 });

@@ -171,7 +171,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         );
         form.elements.course_version_id.parentElement.append(status);
         if (cursor) {
-            const more = button("Load more accepted-course choices", async () => {
+            const more = button("More course choices", async () => {
                 const next = await request(base + "choices/", "POST", { cursor });
                 if (!form.isConnected) return;
                 next.items.forEach((item) =>

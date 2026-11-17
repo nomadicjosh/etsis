@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
@@ -97,7 +98,7 @@ test('course cloning retains draft details and copies only selected prerequisite
 
 test('course offerings stay drafts until a separately reviewed publication and can be resumed', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Build course offerings', exact: true }).click();
+    await workspaceTool(page, 'Build course offerings');
     await page.getByRole('combobox', { name: /^Offering term/ }).selectOption(f.term);
     await page.getByRole('button', { name: 'Choose sections', exact: true }).click();
     await page.getByRole('combobox', { name: /^Course/ }).selectOption(f.course);
@@ -231,7 +232,7 @@ test('section definition is selected and reviewed before an immutable binding is
 test('one paged definition choice covers multiple offering drafts without losing the selection', async ({ page }) => {
     const rows = [id(6), id(7)].map((section, index) => ({ id: section, course_id: id(1), code: `MATH.101.26FA.${index + 1}`, capacity: 20, delivery_mode: 'online', fee_minor: 0, currency: 'USD', web_registration: true }));
     const f = await fixture(page, { rows, saved: true, paged: true });
-    await page.getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await workspaceTool(page, 'Saved offering plans');
     await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
     await page.getByRole('button', { name: 'Review publication', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Sections: MATH.101.26FA.1, MATH.101.26FA.2');
@@ -260,7 +261,7 @@ test('one paged definition choice covers multiple offering drafts without losing
 test('missing course publication can be completed before returning to the saved offering choices', async ({ page }) => {
     const row = { id: id(6), course_id: id(1), code: 'MATH.101.26FA.A', capacity: 20, delivery_mode: 'online', fee_minor: 0, currency: 'USD', web_registration: true };
     const f = await fixture(page, { rows: [row], saved: true, noDefinitions: true });
-    await page.getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await workspaceTool(page, 'Saved offering plans');
     await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
     await page.getByRole('button', { name: 'Review publication', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Publish a course definition before publishing these offerings.');
@@ -286,7 +287,7 @@ test('offering date overrides stay section-specific and invalid periods do not s
     const rows = [id(6), id(7)].map((section, index) => ({ id: section, course_id: id(1), code: `MATH.101.${index + 1}`,
         capacity: 20, delivery_mode: 'online', fee_minor: 0, currency: 'USD', web_registration: true }));
     const f = await fixture(page, { rows, saved: true });
-    await page.getByRole('button', { name: 'Saved offering plans', exact: true }).click();
+    await workspaceTool(page, 'Saved offering plans');
     await page.getByRole('button', { name: 'Open offering plan', exact: true }).click();
     await page.getByRole('button', { name: 'Review publication', exact: true }).click();
     await page.getByRole('radio').check();
@@ -359,7 +360,7 @@ test('optional assistance requires consent and explicit copy and save, with acce
     const consent = page.getByRole('checkbox', { name: /I agree to send/ });
     await consent.check();
     await page.getByRole('button', { name: 'Suggest a course description', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Use suggested description in this editor' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Use suggested text' })).toBeVisible();
     await expect(consent).not.toBeChecked();
     await expect(page.getByLabel('Catalog description (optional)', { exact: true })).toHaveValue('');
     expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toEqual([{ path: `/sis/courses/${f.course}/assistance/`, csrf: 'fictional-test-token', data: { task: 'description', consent: true, revision: 'a'.repeat(64) } }]);
@@ -368,7 +369,7 @@ test('optional assistance requires consent and explicit copy and save, with acce
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole('button', { name: 'Use suggested description in this editor' }).click();
+    await page.getByRole('button', { name: 'Use suggested text' }).click();
     await expect(page.getByLabel('Catalog description (optional)', { exact: true })).toHaveValue('A fictional introduction to algebra.');
     expect(f.calls.filter(call => call.path.endsWith('/text/'))).toHaveLength(0);
     await page.getByRole('button', { name: 'Save course text draft', exact: true }).click();
@@ -413,7 +414,7 @@ for (const [task, label] of [['rewrite', 'Rewrite description'], ['expand', 'Exp
         expect(f.calls.filter(call => call.path.endsWith('/assistance/'))).toHaveLength(0);
         await consent.check();
         await page.getByRole('button', { name: label, exact: true }).click();
-        const copy = page.getByRole('button', { name: 'Use suggested description in this editor' });
+        const copy = page.getByRole('button', { name: 'Use suggested text' });
         await expect(copy).toBeVisible();
         await expect(consent).not.toBeChecked();
         const editor = page.getByLabel('Catalog description (optional)', { exact: true });

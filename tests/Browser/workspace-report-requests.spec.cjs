@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -55,7 +56,7 @@ async function fixture(page, { manager = false, initial = 'open', interrupted = 
 async function openRequests(page, manager = false) {
     await page.goto(manager ? '/admin/report-manager-fixture/' : '/admin/report-fixture/');
     await page.locator(`.workspace-nav-link[data-workspace="${manager ? 'reports' : 'sharedreports'}"]`).click();
-    await page.getByRole('button', { name: manager ? 'Report request queue' : 'My report requests', exact: true }).click();
+    await workspaceTool(page, manager ? 'Report request queue' : 'My report requests');
 }
 
 test('a report recipient submits a question without authoring access and retries the captured request after interruption', async ({ page }) => {
@@ -74,7 +75,7 @@ test('a report recipient submits a question without authoring access and retries
     const posts = f.sent.filter(r => r.path === '/sis/report-requests/');
     expect(posts).toHaveLength(2); expect(posts[0].data).toEqual(posts[1].data);
     expect(posts[0]).toMatchObject({ csrf: 'fictional-test-token', data: { operation_id: requestId, due_on: '2026-09-01', title: 'Fictional fall headcount' } });
-    await expect(page.getByRole('button', { name: 'Report request queue', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Report request queue', exact: true, includeHidden: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Open Report Studio', exact: true })).toHaveCount(0);
     await accessible(page); expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);

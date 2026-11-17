@@ -52,7 +52,7 @@ window.createWorkspacePositions = function (ui) {
                 `Last recorded: ${new Date(record.recorded_at).toLocaleString()}. Recorded by: ${record.recorded_by}.`));
         if (record.replaces_id) body.append(button('Open previous assignment', () => detail(employee, record.replaces_id)));
         if (!record.voided) {
-            body.append(button('Change position or agreed terms', async () => {
+            body.append(button('Change position terms', async () => {
                 const data = await request(`${base(employee)}/page/`, 'POST', {});
                 if (!body.isConnected) return;
                 await assign(employee, data.new_id, data.today, record);
@@ -70,7 +70,7 @@ window.createWorkspacePositions = function (ui) {
                 : 'Record why this assignment should be marked incorrect. Earlier facts stay protected.')));
     }
     async function assign(employee, id, today, previous = null) {
-        const body = openDrawer(previous ? 'Change position or agreed terms' : 'Record position assignment', 'HUMAN RESOURCES');
+        const body = openDrawer(previous ? 'Change position terms' : 'Record position assignment', 'HUMAN RESOURCES');
         body.append(button(previous ? 'Back to assignment' : 'Back to assignments', () => previous
             ? detail(employee, previous.id) : page(employee)));
         body.append(node('p', { class: 'form-text' }, previous

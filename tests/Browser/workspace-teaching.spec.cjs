@@ -45,7 +45,7 @@ test('teaching pages, assignment edits, attendance corrections and explicit rost
     await roster.getByRole('button', { name: 'Previous page', exact: true }).click();
     await expect(roster.locator('tbody tr')).toHaveCount(50);
     const downloadReady = page.waitForEvent('download');
-    await roster.getByRole('button', { name: 'Download this roster page (CSV)', exact: true }).click();
+    await roster.getByRole('button', { name: 'Export roster page', exact: true }).click();
     const download = await downloadReady;
     expect(download.suggestedFilename()).toBe('section-roster.csv');
     expect(await fs.readFile(await download.path(), 'utf8')).toContain('S-0,Alex');

@@ -1,3 +1,4 @@
+const { recordAction, revealRecordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = number => String(number).padStart(26, '0');
@@ -48,8 +49,8 @@ test('person managers maintain contact details without credential controls and k
     await page.getByLabel('Search this workspace').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     expect(reads).toHaveLength(0);
-    await expect(page.getByRole('button', { name: 'Manage sign-in account', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Profile history', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Manage sign-in account', exact: true, includeHidden: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Profile history', exact: true, includeHidden: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Contact information', exact: true }).click();
     await expect(page.getByLabel('Phone number', { exact: true })).toHaveValue('001234');
     await expect(page.getByLabel('Preferred name', { exact: true })).toHaveAttribute('maxlength', '80');
@@ -143,7 +144,7 @@ test('person edits, linked account maintenance and bounded access controls', asy
     await page.getByRole('button', { name: 'Save person profile', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Alexandra Example');
     expect(calls.find(item => item.path.endsWith('/profile/'))?.data).toMatchObject({ given_name: 'Alexandra', directory_restricted: false, revision: 'fictional-profile-revision' });
-    await page.getByRole('button', { name: 'Manage sign-in account', exact: true }).click();
+    await recordAction(page, 'Manage sign-in account');
     await page.getByRole('button', { name: 'Change sign-in email', exact: true }).click();
     await page.getByLabel('Email address').fill('new@example.invalid');
     await page.getByRole('button', { name: 'Save sign-in email', exact: true }).click();
@@ -315,7 +316,7 @@ test('profile history loads on demand, pages a fixed review, and never replaces 
     await page.getByLabel('Search this workspace').press('Enter');
     await page.getByRole('button', { name: 'Fictional Person', exact: true }).click();
     expect(calls).toHaveLength(0);
-    await page.getByRole('button', { name: 'Profile history', exact: true }).focus();
+    await (await revealRecordAction(page, 'Profile history')).focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('list', { name: 'Recorded profile changes' }).locator('li')).toHaveCount(20);
     await expect(page.locator('#drawer-body')).toContainText('Showing 20 of 22 recorded changes.');

@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -41,7 +42,7 @@ async function fixture(page, interrupted = false) {
         await route.fulfill({ status, json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/'); await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
-    await page.getByRole('button', { name: 'Offering templates', exact: true }).click();
+    await workspaceTool(page, 'Offering templates');
     return { calls, errors };
 }
 async function openTemplate(page) {
@@ -59,7 +60,7 @@ test('staff load defaults into a fresh editable offering plan and still review b
     expect(f.calls.some(call => call.path.endsWith('/save/'))).toBe(false);
     await page.getByRole('button', { name: 'Edit MATH.101.A', exact: true }).click();
     await expect(page.getByLabel('Section fee', { exact: false })).toHaveValue('125');
-    await page.getByLabel('Section code').fill('MATH.101.27FA.A');
+    await page.getByRole('textbox', { name: 'Section code', exact: true }).fill('MATH.101.27FA.A');
     await page.getByLabel('Seats', { exact: false }).fill('40');
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
     await page.getByRole('button', { name: 'Keep section in plan', exact: true }).click();

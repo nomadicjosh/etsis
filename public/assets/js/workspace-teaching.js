@@ -110,7 +110,7 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "div",
                         {},
-                        button("Download this roster page (CSV)", () =>
+                        button("Export roster page", () =>
                             requestFile(`/sis/ui/exports/roster/${row.id}/`, {
                                 after,
                             }),

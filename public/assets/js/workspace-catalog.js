@@ -910,7 +910,7 @@ window.createWorkspaceCatalog = function (ui) {
                         if (task !== "readiness" && response.advice.description) {
                             results.append(
                                 node("p", {}, response.advice.description),
-                                button("Use suggested description in this editor", () => {
+                                button("Use suggested text", () => {
                                     if (description.value !== (preview.draft.description || "")) {
                                         throw new Error(
                                             "Your description has changed. Review it before replacing any text.",

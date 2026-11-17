@@ -239,7 +239,7 @@ window.createWorkspacePrograms = function (ui) {
                                         { class: "course-description-text" },
                                         response.advice.description,
                                     ),
-                                    button("Use suggested description in this editor", () => {
+                                    button("Use suggested text", () => {
                                         if (!unchanged())
                                             throw new Error(
                                                 "Your program has changed. Review it before replacing any text.",

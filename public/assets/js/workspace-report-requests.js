@@ -315,7 +315,7 @@ window.createWorkspaceReportRequests = function (ui) {
             );
         if (value.actions.deliver)
             controls.append(
-                button("Build a report in Report Studio", () =>
+                button("Build report", () =>
                     ui.builder().start(),
                 ),
             );

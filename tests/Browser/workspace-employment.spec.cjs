@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -117,7 +118,7 @@ test('staff maintain employment and review paged time entries without leaving th
     await expect(page.locator('#drawer-body tbody tr')).toHaveCount(1);
     await page.getByRole('button', { name: 'Previous time page' }).click();
     await expect(page.locator('#drawer-body tbody tr')).toHaveCount(50);
-    await page.getByRole('button', { name: 'View audit history' }).click();
+    await recordAction(page, 'View audit history');
     await expect(page.locator('#drawer-body')).toContainText('employee.updated');
     await page.getByRole('button', { name: 'Back to record' }).click();
     await expect(page.locator('#drawer-body')).toContainText('Recent time entries');

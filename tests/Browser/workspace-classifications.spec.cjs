@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}`;
@@ -52,7 +53,7 @@ async function add(page, category, code, title, active = true) {
 
 test('staff set up departments and levels, choose them together and review their retained publication labels', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Departments & levels', exact: true }).click();
+    await workspaceTool(page, 'Departments & levels');
     await add(page, 'Department', 'SCI', 'Science <script>fictional</script>');
     await expect(page.locator('#drawer-body')).toContainText('Science <script>fictional</script>');
     await page.getByRole('button', { name: 'Academic levels', exact: true }).click();
@@ -94,7 +95,7 @@ test('staff set up departments and levels, choose them together and review their
 
 test('classification searches can be cleared and retired entries cannot be chosen; returning preserves draft choices', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Departments & levels', exact: true }).click();
+    await workspaceTool(page, 'Departments & levels');
     await add(page, 'Department', 'OLD', 'Retired department', false);
     await add(page, 'Department', 'SCI', 'Science');
     await page.getByRole('button', { name: 'Close record', exact: true }).click();

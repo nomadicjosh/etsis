@@ -163,7 +163,7 @@ test('program assistance requires consent, renders plain text and needs explicit
     expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(0);
     expect(await page.evaluate(() => window.programAiExecuted)).toBeUndefined();
     expect(await page.locator('#drawer-body script, #drawer-body img').count()).toBe(0);
-    await page.getByRole('button', { name: 'Use suggested description in this editor', exact: true }).click();
+    await page.getByRole('button', { name: 'Use suggested text', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('A fictional program <img src=x onerror=alert(1)>.');
     await expect(page.getByRole('button', { name: 'Publish for an academic year', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Save program details', exact: true }).click();
@@ -180,7 +180,7 @@ test('program assistance protects unsaved edits and offers only granted text act
     await expect(page.getByRole('button', { name: 'Expand description', exact: true })).toHaveCount(0);
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Rewrite description', exact: true }).click();
-    await page.getByRole('button', { name: 'Use suggested description in this editor', exact: true }).click();
+    await page.getByRole('button', { name: 'Use suggested text', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('My later edit');
     await expect(page.getByRole('alert').filter({ hasText: 'Your program has changed' })).toBeVisible();
     expect(f.calls.filter(call => call.path.endsWith('/details/'))).toHaveLength(0);

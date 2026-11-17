@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => `01K000000000000000000000${String(n).padStart(2, "0")}`;
@@ -540,7 +541,7 @@ test("independent course group uses cards, checkboxes, requirement types and rev
     page,
 }) => {
     const f = await fixture(page);
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Create course group", exact: true }).click();
     await page.getByLabel("Course group name", { exact: true }).fill("Shared core <b>fictional</b>");
     await page.getByRole("button", { name: "Create group draft", exact: true }).click();
@@ -595,7 +596,7 @@ test("credit-list cards retain fractional thresholds through save, reopen and pu
     page,
 }) => {
     const f = await fixture(page);
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await page.getByRole("button", { name: "Take credits", exact: true }).click();
     await page.getByLabel("Requirement 1 credits from this list", { exact: true }).fill("3.125");
@@ -608,7 +609,7 @@ test("credit-list cards retain fractional thresholds through save, reopen and pu
         minimum_credits_milli: 3125,
     });
     await page.getByRole("button", { name: "Close builder", exact: true }).click();
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await expect(page.getByLabel("Requirement 1 credits from this list", { exact: true })).toHaveValue(
         "3.125",
@@ -770,7 +771,7 @@ test("course version replacement is reviewed across the working group without ch
     page,
 }) => {
     const f = await fixture(page, { newCourseVersion: true });
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     const planning = page.getByRole("group", { name: "Group planning summary", exact: true });
     await expect(planning).toContainText("3 catalog credits");
@@ -801,7 +802,7 @@ test("group quantity switches between credits and course count with an individua
     page,
 }) => {
     const f = await fixture(page);
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await page.getByRole("button", { name: "Require courses", exact: true }).click();
     await page.getByLabel("Number of courses required", { exact: true }).fill("1");
@@ -830,7 +831,7 @@ test("automatic grade scale uses configured maximum and leaves the minimum to th
     page,
 }) => {
     const f = await fixture(page, { maximumPoints: 5000 });
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await expect(page.getByLabel("Maximum grade points", { exact: true })).toContainText(
         "Out of 5.0 grade points · From grade definitions",
@@ -858,7 +859,7 @@ test("earlier average group GPA is never copied into a per-course grade-point th
     page,
 }) => {
     const f = await fixture(page, { legacyGroup: true });
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Earlier average group GPA: 2");
     await page.getByRole("button", { name: "Use credit/course settings", exact: true }).click();
@@ -885,7 +886,7 @@ test("global scale editor distinguishes score percentages from GPA points and ex
     page,
 }) => {
     const f = await fixture(page);
-    await page.getByRole("button", { name: "Grading scales", exact: true }).click();
+    await workspaceTool(page, "Grading scales");
     await page.getByRole("button", { name: "Add grade", exact: true }).click();
     await page.getByLabel("Grade", { exact: true }).fill("A+");
     await page.getByLabel("Minimum score (%)", { exact: true }).fill("97");
@@ -964,7 +965,7 @@ test("a reusable group can use a program grading context without becoming progra
     page,
 }) => {
     const f = await fixture(page, { programMaximum: 5000 });
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await page.getByRole("button", { name: "Choose grading context", exact: true }).click();
     await page.getByRole("button", { name: "Use BSCS grading context", exact: true }).click();
@@ -1037,7 +1038,7 @@ test("expired course group review refreshes without saving or publishing until c
     page,
 }) => {
     const f = await fixture(page, { expiredGroupReview: true });
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     await page.getByRole("button", { name: "Save & review publication", exact: true }).click();
     await page.getByLabel("Reason for publication", { exact: true }).fill("Fictional renewed group approval");
@@ -1078,7 +1079,7 @@ test("group planning updates quantities and counts a shared course once without 
     page,
 }) => {
     const f = await fixture(page);
-    await page.getByRole("button", { name: "Course group library", exact: true }).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", { name: "Build General education", exact: true }).click();
     const plan = page.getByRole("group", { name: "Group planning summary", exact: true });
     await expect(plan).toContainText("1 distinct course · 3 catalog credits · 1 requirement card");
@@ -1149,7 +1150,7 @@ test("grading range conflicts open and describe the affected boundary without lo
     page,
 }) => {
     const f = await fixture(page, { rejectScaleOverlap: true });
-    await page.getByRole("button", { name: "Grading scales", exact: true }).click();
+    await workspaceTool(page, "Grading scales");
     await page.getByRole("button", { name: "Add grade", exact: true }).click();
     await page.getByLabel("Grade", { exact: true }).fill("D");
     await page.getByLabel("Minimum score (%)", { exact: true }).fill("65");
@@ -1226,7 +1227,7 @@ test("grading range conflicts open and describe the affected boundary without lo
 
 test("grading policy reason is visibly required and announced before sending a review", async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole("button", { name: "Grading scales", exact: true }).click();
+    await workspaceTool(page, "Grading scales");
     await expect(page.getByLabel("Reason for grading scale change", { exact: true })).toHaveAttribute(
         "required",
         "",
@@ -1366,7 +1367,7 @@ test('unsaved degree edits cannot be submitted for assistance and failures prese
 
 test("group assistance shares consent workflow, exposes only selected facts and never saves or publishes", async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole("button", {name:"Course group library",exact:true}).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button", {name:"Build General education",exact:true}).click();
     await page.getByRole("button", {name:"Optional group AI help",exact:true}).click();
     await expect(page.getByRole("heading",{name:"Saved group setup readiness",exact:true})).toBeFocused();
@@ -1391,7 +1392,7 @@ test("group assistance shares consent workflow, exposes only selected facts and 
 
 test("group assistance blocks unsaved input and discards results after later edits", async ({ page }) => {
     const f = await fixture(page,{groupAiEdit:true});
-    await page.getByRole("button",{name:"Course group library",exact:true}).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button",{name:"Build General education",exact:true}).click();
     await page.getByLabel("Course group name",{exact:true}).fill("Unsaved group edit");
     await page.getByRole("button",{name:"Optional group AI help",exact:true}).click();
@@ -1409,7 +1410,7 @@ test("group assistance blocks unsaved input and discards results after later edi
 test("disabled or failed group assistance leaves normal editing available", async ({ page }) => {
     for(const options of [{groupAiDisabled:true},{groupAiFailure:true}]) {
         const f = await fixture(page,options);
-        await page.getByRole("button",{name:"Course group library",exact:true}).click();
+        await workspaceTool(page, "Course group library");
         await page.getByRole("button",{name:"Build General education",exact:true}).click();
         await page.getByRole("button",{name:"Optional group AI help",exact:true}).click();
         if(options.groupAiFailure) {
@@ -1570,7 +1571,7 @@ test("publication history opens a runtime test without loading the working degre
 
 test("group requirement pins an explicit saved-rule revision through preview and publication", async ({page}) => {
     const f = await fixture(page);
-    await page.getByRole("button",{name:"Course group library",exact:true}).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button",{name:"Build General education",exact:true}).click();
     await page.getByRole("button",{name:"Choose saved rule for requirement 1",exact:true}).click();
     await page.getByRole("button",{name:"Browse DA.MATH.UPPER revisions",exact:true}).click();
@@ -1679,7 +1680,7 @@ test("mixed repeat memberships show each card's own credits without counting ano
 
 test("curriculum authors explicitly accept additional publications without replacing the required version", async ({page}) => {
     const f=await fixture(page,{newCourseVersion:true});
-    await page.getByRole("button",{name:"Course group library",exact:true}).click();
+    await workspaceTool(page, "Course group library");
     await page.getByRole("button",{name:"Build General education",exact:true}).click();
     await page.getByRole("button",{name:"Manage accepted publications for MATH.101",exact:true}).click();
     await expect(page.getByRole("dialog")).toContainText("Required publication: MATH.101 · Algebra");

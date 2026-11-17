@@ -56,7 +56,7 @@ test('owners independently choose static results and automatic removal in access
     await expect(studio).toContainText('Static report · 1 captured rows');
     await expect(studio).toContainText('Automatic removal: 2026-12-14');
     await expect(studio.getByRole('button', { name: 'Edit report in Studio', exact: true })).toHaveCount(0);
-    await expect(studio.getByRole('button', { name: 'Create a new report from this definition', exact: true })).toBeVisible();
+    await expect(studio.getByRole('button', { name: 'Copy report definition', exact: true })).toBeVisible();
     await expect(studio).toContainText('Fictional-S-1');
     await expect(studio).toContainText('Saved static results · page 1.');
     const save = f.calls.find(c => c.path.endsWith('/settings/') && c.data);

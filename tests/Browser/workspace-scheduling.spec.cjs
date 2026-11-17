@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -41,7 +42,7 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
     await page.locator('#directory-tabs').getByRole('link', { name: 'Rooms & spaces' }).click();
     await page.getByRole('button', { name: code, exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional seminar');
-    await page.getByRole('button', { name: 'View audit history' }).click();
+    await recordAction(page, 'View audit history');
     await expect(page.locator('#drawer-body')).toContainText('room.updated');
     await page.getByRole('button', { name: 'Back to record' }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional seminar');

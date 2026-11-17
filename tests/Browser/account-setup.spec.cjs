@@ -1,3 +1,4 @@
+const { revealRecordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 
@@ -60,5 +61,5 @@ test('staff create one person and account without assigning an initial password'
     await page.getByRole('button', { name: 'Save and continue', exact: false }).click();
     await expect(page.locator('#drawer-body')).toContainText('Alex Example');
     expect(creation).toEqual({ given_name: 'Alex', family_name: 'Example', email: 'alex@example.invalid', operation_id: operation });
-    await expect(page.getByRole('button', { name: 'Account setup', exact: true })).toBeVisible();
+    await expect(await revealRecordAction(page, 'Account setup')).toBeVisible();
 });

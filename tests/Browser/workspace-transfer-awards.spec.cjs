@@ -612,7 +612,7 @@ test("registrar resolves unknown acceptance with explicit choices, review and in
     const choice = page.getByLabel("Accepted course publication", { exact: false });
     await expect(choice).toHaveValue("");
     await expect(page.locator("#drawer-body")).toContainText("earlier accepted publication is unknown");
-    await page.getByRole("button", { name: "Load more accepted-course choices", exact: true }).click();
+    await page.getByRole("button", { name: "More course choices", exact: true }).click();
     await expect(choice).toBeFocused();
     await choice.selectOption(id(52));
     await page.getByRole("textbox", { name: "Effective date", exact: true }).fill("2026-08-01");

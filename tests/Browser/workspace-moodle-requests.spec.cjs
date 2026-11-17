@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const person = '00000000000000000000000001';
@@ -79,7 +80,7 @@ const uncertainRequest = {
 };
 
 async function recoveryReview(page) {
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
     await page.getByLabel('Reason for recovering this account link', { exact: true }).fill('Independently verified the original account identity.');
     await page.getByRole('button', { name: 'Review recovery link', exact: true }).click();
@@ -147,7 +148,7 @@ test('refresh recovers interrupted link confirmation without a repeated operatio
 
 test('receipt-inspection authority does not expose recovery without link permission', async ({ page }) => {
     const f = await fixture(page, { ...uncertainRequest, recoveryDenied: true });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Review recovery link', exact: true })).toHaveCount(0);
     expect(f.calls.some(c => c.path.includes('/recovery/'))).toBe(false);
@@ -156,7 +157,7 @@ test('receipt-inspection authority does not expose recovery without link permiss
 
 test('active processing can inspect a receipt but cannot recover its link', async ({ page }) => {
     const f = await fixture(page, { ...uncertainRequest, saved: { ...uncertainRequest.saved, state: 'processing', issue_code: 'connection_uncertain' } });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Processing has not stopped');
     await expect(page.getByRole('button', { name: 'Review recovery link', exact: true })).toHaveCount(0);
@@ -167,7 +168,7 @@ test('active processing can inspect a receipt but cannot recover its link', asyn
 for (const receiptStatus of ['recorded', 'not_observed', 'restricted']) {
     test(`inspect ${receiptStatus} original receipt without retrying creation or changing local status`, async ({ page }) => {
         const f = await fixture(page, { ...uncertainRequest, receiptStatus });
-        await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+        await recordAction(page, 'Create a Moodle account');
         const check = page.getByRole('button', { name: 'Check original Moodle operation', exact: true });
         await expect(check).toBeEnabled();
         expect(f.calls.filter(c => c.path.endsWith('/receipt/'))).toHaveLength(0);
@@ -193,7 +194,7 @@ for (const receiptStatus of ['recorded', 'not_observed', 'restricted']) {
 
 test('unavailable receipt read keeps the original operation and exposes no retry action', async ({ page }) => {
     const f = await fixture(page, { ...uncertainRequest, receiptFailed: true });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByRole('button', { name: 'Check original Moodle operation', exact: true }).click();
     await expect(page.locator('[data-account-request-status]')).toContainText('do not create a replacement');
     await expect(page.getByRole('heading', { name: 'Original operation check', exact: true })).toHaveCount(0);
@@ -203,7 +204,7 @@ test('unavailable receipt read keeps the original operation and exposes no retry
 
 test('disabled connection makes no original-operation request', async ({ page }) => {
     const f = await fixture(page, { ...uncertainRequest, connectionDisabled: true });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await expect(page.getByRole('button', { name: 'Check original Moodle operation', exact: true })).toBeDisabled();
     expect(f.calls.some(c => c.path.endsWith('/receipt/'))).toBe(false);
     expect(f.errors).toEqual([]);
@@ -211,7 +212,7 @@ test('disabled connection makes no original-operation request', async ({ page })
 
 test('resolve existing-account access with keyboard approval and accessible narrow layout while processing is disabled', async ({ page }) => {
     const f = await fixture(page, emailReview);
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await expect(page.getByRole('heading', { name: 'Resolve setup-email review' })).toBeVisible();
     await expect(page.getByLabel('Moodle username', { exact: true })).toHaveCount(0);
     await page.getByLabel('How was account access resolved?', { exact: true }).fill('Confirmed access through institutional support.');
@@ -239,7 +240,7 @@ test('resolve existing-account access with keyboard approval and accessible narr
 
 test('cancel access resolution saves nothing and restores focus', async ({ page }) => {
     const f = await fixture(page, emailReview);
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByLabel('How was account access resolved?', { exact: true }).fill('Verified support outcome.');
     await page.getByRole('button', { name: 'Review access resolution', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel resolution review', exact: true }).click();
@@ -250,7 +251,7 @@ test('cancel access resolution saves nothing and restores focus', async ({ page 
 
 test('interrupted resolution confirmation recovers by refresh without a new operation', async ({ page }) => {
     const f = await fixture(page, { ...emailReview, resolutionInterrupted: true });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByLabel('How was account access resolved?', { exact: true }).fill('Verified support outcome.');
     await page.getByRole('button', { name: 'Review access resolution', exact: true }).click();
     await page.getByRole('checkbox').check();
@@ -264,7 +265,7 @@ test('interrupted resolution confirmation recovers by refresh without a new oper
 
 test('uncertain creation outcome has no email resolution action', async ({ page }) => {
     const f = await fixture(page, { ...emailReview, saved: { ...emailReview.saved, issue_code: 'attempt_limit', issue: 'Reconcile the original operation first.' } });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await expect(page.getByRole('button', { name: 'Review access resolution' })).toHaveCount(0);
     expect(f.calls.some(c => c.path.includes('/resolution/'))).toBe(false);
     expect(f.errors).toEqual([]);
@@ -273,7 +274,7 @@ for (const mode of ['sso', 'password_email']) {
     test(`review and queue ${mode} with explicit confirmation, transient private state and accessible controls`, async ({ page }) => {
         const f = await fixture(page);
         expect(f.calls.some(c => c.path.includes('account-request'))).toBe(false);
-        await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+        await recordAction(page, 'Create a Moodle account');
         await expect(page.getByLabel('Moodle username', { exact: true })).toHaveValue('alex_example');
         await expect(page.getByLabel('Account email address', { exact: true })).toHaveValue('fictional@example.invalid');
         await expect(page.locator('[data-account-request-status]')).toContainText('will not create an account or send an email');
@@ -306,7 +307,7 @@ for (const mode of ['sso', 'password_email']) {
 }
 test('cancel preserves the person workflow without enqueueing', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByLabel('Institutional SSO', { exact: true }).check();
     await page.getByLabel('Reason for account creation', { exact: true }).fill('Fictional request.');
     await page.getByRole('button', { name: 'Review account request', exact: true }).click();
@@ -318,7 +319,7 @@ test('cancel preserves the person workflow without enqueueing', async ({ page })
 });
 test('refresh recovers an interrupted confirmation without a duplicate request', async ({ page }) => {
     const f = await fixture(page, { interrupted: true });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await page.getByLabel('Moodle password-setup email', { exact: true }).check();
     await page.getByLabel('Reason for account creation', { exact: true }).fill('Fictional request.');
     await page.getByRole('button', { name: 'Review account request', exact: true }).click();
@@ -332,7 +333,7 @@ test('refresh recovers an interrupted confirmation without a duplicate request',
 });
 test('disabled intake does not expose draft fields or run a review', async ({ page }) => {
     const f = await fixture(page, { disabled: true });
-    await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+    await recordAction(page, 'Create a Moodle account');
     await expect(page.locator('[data-account-request-status]')).toContainText('intake is disabled');
     await expect(page.getByLabel('Moodle username', { exact: true })).toHaveCount(0);
     expect(f.calls.some(c => c.path.endsWith('/review/'))).toBe(false);
@@ -340,7 +341,7 @@ test('disabled intake does not expose draft fields or run a review', async ({ pa
 });
 test('existing-link permission alone does not expose creation action', async ({ page }) => {
     const f = await fixture(page, { denied: true });
-    await expect(page.getByRole('button', { name: 'Create a Moodle account', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Create a Moodle account', exact: true, includeHidden: true })).toHaveCount(0);
     expect(f.calls.some(c => c.path.includes('account-request'))).toBe(false);
     expect(f.errors).toEqual([]);
 });
@@ -351,7 +352,7 @@ for (const state of ['queued', 'completed', 'review_required']) {
         const f = await fixture(page, { processing: true,
             saved: { id: '00000000000000000000000002', state, issue },
             link: state === 'queued' ? null : { moodle_user_id: '123' } });
-        await page.getByRole('button', { name: 'Create a Moodle account', exact: true }).click();
+        await recordAction(page, 'Create a Moodle account');
         await expect(page.locator('[data-account-request-status]')).toContainText(state);
         const body = page.locator('#drawer-body');
         if (state === 'queued') await expect(body).toContainText('background worker will verify and process');

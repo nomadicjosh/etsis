@@ -13,6 +13,7 @@ window.createWorkspaceStudents = function (ui) {
         flow,
         registration,
         showAudit,
+        actionMenu,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -744,6 +745,7 @@ window.createWorkspaceStudents = function (ui) {
         );
         const actions = node("div", { class: "inline-actions" });
         body.append(actions);
+        const extra = [];
         if (can("sis:person:manage"))
             actions.append(
                 button("Open connected person", () =>
@@ -751,9 +753,7 @@ window.createWorkspaceStudents = function (ui) {
                 ),
             );
         if (can("sis:audit:read"))
-            actions.append(
-                button("View audit history", () => showAudit("students", id)),
-            );
+            extra.push(button("View audit history", () => showAudit("students", id)));
         if (can("sis:student:read"))
             actions.append(
                 button("View transcript", async () => {
@@ -858,18 +858,12 @@ window.createWorkspaceStudents = function (ui) {
                 button("Hiatus history", () => ui.hiatus().page(id)),
             );
         if (can("sis:registration:manage")) {
-            actions.append(
-                button("Change student activity", () => activity(record, back)),
-            );
-            actions.append(
-                button("Activity history", () => activityHistory(id, back)),
-            );
-            actions.append(
-                button("Primary-program history", () =>
-                    primaryHistory(id, back),
-                ),
-            );
+            extra.push(button("Change student activity", () => activity(record, back)));
+            extra.push(button("Activity history", () => activityHistory(id, back)));
+            extra.push(button("Primary-program history", () => primaryHistory(id, back)));
         }
+
+        if (extra.length) actions.append(actionMenu("More", extra, { context: "More student actions" }));
 
         const programs = node(
             "section",

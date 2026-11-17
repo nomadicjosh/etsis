@@ -118,7 +118,7 @@ test('recording, rejected confirmation and later term changes share one private 
     await page.getByRole('button', { name: 'Confirm assignment', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Fictional HR recorder');
     expect(await page.locator('#drawer-body script, #drawer-body img').count()).toBe(0);
-    await page.getByRole('button', { name: 'Change position or agreed terms', exact: true }).click();
+    await page.getByRole('button', { name: 'Change position terms', exact: true }).click();
     await page.getByLabel('Job definition', { exact: true }).selectOption(jobId);
     await expect(page.getByLabel('Agreed rate', { exact: true })).toHaveValue('27.50');
     await page.getByLabel('Change effective on', { exact: true }).fill('2027-01-01');
@@ -171,7 +171,7 @@ test('end dates and voids retain version checks while delayed navigation cannot 
         await new Promise(resolve => { release = resolve; });
         await route.fulfill({ json: { items: [], next_after: null, new_id: id(105), today: '2026-11-15' } });
     });
-    await page.getByRole('button', { name: 'Change position or agreed terms', exact: true }).click();
+    await page.getByRole('button', { name: 'Change position terms', exact: true }).click();
     await expect.poll(() => typeof release).toBe('function');
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await expect(page.locator('#record-drawer')).not.toBeVisible();

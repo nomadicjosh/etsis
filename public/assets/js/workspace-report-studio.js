@@ -2021,7 +2021,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     await edit(dataset, saved.definition, saved);
                 }),
             );
-        if (saved.can_manage && frozen) body.append(button("Create a new report from this definition", async () => {
+        if (saved.can_manage && frozen) body.append(button("Copy report definition", async () => {
             const catalog = await request("/sis/report-studio/catalog/");
             const dataset = catalog.datasets.find(item => item.id === saved.definition.dataset);
             if (!dataset) throw new Error("This source is no longer available to your account.");

@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -27,7 +28,7 @@ test('subject setup and explicit course assignment are accessible draft actions'
     });
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
-    await page.getByRole('button', { name: 'Subjects', exact: true }).click();
+    await workspaceTool(page, 'Subjects');
     await page.getByRole('button', { name: 'Add subject', exact: true }).click();
     await page.getByRole('textbox', { name: 'Subject code', exact: true }).fill('MATH');
     await page.getByRole('textbox', { name: 'Subject name', exact: true }).fill('Mathematics <script>fictional</script>');

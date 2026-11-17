@@ -9,7 +9,10 @@
             <i class="bi bi-plus-lg" aria-hidden="true"></i> <span>Add a person</span>
         </button>
     </div>
-    <nav class="workspace-tabs" id="directory-tabs" aria-label="Related workspaces"></nav>
+    <div class="directory-navigation" id="directory-navigation">
+        <nav class="workspace-tabs" id="directory-tabs" aria-label="Related workspaces"></nav>
+        <div class="workspace-tools" id="directory-tools" role="group" aria-label="Workspace tools"></div>
+    </div>
     <section class="surface directory-surface" aria-labelledby="directory-list-title">
         <div class="directory-toolbar">
             <div>
@@ -17,18 +20,22 @@
                 <span id="record-count" class="muted-text">Loading…</span>
             </div>
             <form class="directory-search" id="directory-search-form" role="search">
-                <label class="visually-hidden" for="directory-search">Search this workspace</label><i class="bi bi-search" aria-hidden="true"></i><input
+                <label class="visually-hidden" for="directory-search">Search this workspace</label>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input
                     id="directory-search"
                     type="search"
                     placeholder="Search this workspace…"
                     maxlength="80"
                     autocomplete="off"
-                /><button type="submit" class="btn btn-sm btn-outline-secondary">Search</button>
+                />
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Search</button>
             </form>
         </div>
         <div id="directory-results" aria-live="polite"></div>
         <div class="directory-bottom">
-            <span class="muted-text">Open a record to keep working without leaving this page.</span><button class="quiet-button" type="button" id="directory-more" hidden>
+            <span class="muted-text">Open a record to view details and available actions.</span>
+            <button class="quiet-button" type="button" id="directory-more" hidden>
                 Load more <i class="bi bi-arrow-down" aria-hidden="true"></i>
             </button>
         </div>

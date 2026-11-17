@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -138,12 +139,12 @@ test('registrars manage programs and student activity in one accessible record',
     expect(calls.find(call => call.path.endsWith('/primary-program/review/'))?.data).toEqual({ assignment_id: id(999),
         revision: 'student-0', reason: 'Fictional primary selection.' });
     expect(calls.find(call => call.path.endsWith('/primary-program/commit/'))?.data).toEqual({ assignment_id: id(999), review_token: 'fictional-primary-token' });
-    await page.getByRole('button', { name: 'Primary-program history', exact: true }).click();
+    await recordAction(page, 'Primary-program history');
     await expect(page.locator('#drawer-body')).toContainText('Observed current selection');
     await expect(page.locator('#drawer-body')).not.toContainText('Fictional primary selection.');
     await accessible();
     await page.getByRole('button', { name: 'Back to student', exact: true }).click();
-    await page.getByRole('button', { name: 'Change student activity' }).click();
+    await recordAction(page, 'Change student activity');
     await page.getByLabel('Active student record').uncheck();
     await page.getByLabel('Reason for this decision').fill('Fictional registrar decision.');
     await accessible();
@@ -158,7 +159,7 @@ test('registrars manage programs and student activity in one accessible record',
         effective_on: '2026-08-10', reason: 'Fictional registrar decision.', revision: 'student-1' });
     expect(calls.find(call => call.path.endsWith('/activity/commit/'))?.data).toEqual({ review_token: 'fictional-review-token' });
     await expect(page.locator('#drawer-body')).toContainText('26/FA');
-    await page.getByRole('button', { name: 'Activity history', exact: true }).click();
+    await recordAction(page, 'Activity history');
     await expect(page.locator('#drawer-body')).toContainText('Observed current status');
     await expect(page.locator('#drawer-body')).not.toContainText('Fictional registrar decision.');
     await accessible();

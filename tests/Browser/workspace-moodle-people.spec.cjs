@@ -1,3 +1,4 @@
+const { recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const person = '00000000000000000000000001';
@@ -35,7 +36,7 @@ async function fixture(page, options = {}) {
 test('explicit person link is reviewed with unknown flags and keyboard approval without browser storage', async ({ page }) => {
     const f = await fixture(page);
     expect(f.calls.some(c => c.path.includes('/moodle/'))).toBe(false);
-    await page.getByRole('button', { name: 'Moodle account link', exact: true }).click();
+    await recordAction(page, 'Moodle account link');
     await page.getByLabel('Moodle user ID', { exact: true }).fill('0');
     await page.getByLabel('Reason for linking', { exact: true }).fill('Institutional account verified independently.');
     await page.getByRole('button', { name: 'Review Moodle account link', exact: true }).click();
@@ -70,7 +71,7 @@ test('explicit person link is reviewed with unknown flags and keyboard approval 
 });
 test('cancellation preserves the person workflow without creating a link', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Moodle account link', exact: true }).click();
+    await recordAction(page, 'Moodle account link');
     await page.getByLabel('Moodle user ID', { exact: true }).fill('123');
     await page.getByLabel('Reason for linking', { exact: true }).fill('Fictional initial setup.');
     await page.getByRole('button', { name: 'Review Moodle account link', exact: true }).click();
@@ -84,7 +85,7 @@ test('cancellation preserves the person workflow without creating a link', async
 });
 test('refresh recovers saved link after an interrupted response without repeating confirmation', async ({ page }) => {
     const f = await fixture(page, { interrupted: true });
-    await page.getByRole('button', { name: 'Moodle account link', exact: true }).click();
+    await recordAction(page, 'Moodle account link');
     await page.getByLabel('Moodle user ID', { exact: true }).fill('123');
     await page.getByLabel('Reason for linking', { exact: true }).fill('Fictional initial setup.');
     await page.getByRole('button', { name: 'Review Moodle account link', exact: true }).click();
@@ -98,7 +99,7 @@ test('refresh recovers saved link after an interrupted response without repeatin
 });
 test('unapproved installation makes no account lookup', async ({ page }) => {
     const f = await fixture(page, { unapproved: true });
-    await page.getByRole('button', { name: 'Moodle account link', exact: true }).click();
+    await recordAction(page, 'Moodle account link');
     await expect(page.locator('[data-moodle-link-status]')).toContainText('approve the institutional installation');
     await expect(page.getByLabel('Moodle user ID', { exact: true })).toHaveCount(0);
     expect(f.calls.some(c => /\/(review|confirm)\//.test(c.path))).toBe(false);
@@ -106,7 +107,7 @@ test('unapproved installation makes no account lookup', async ({ page }) => {
 });
 test('Moodle administration permission alone does not show the person-link action', async ({ page }) => {
     const f = await fixture(page, { denied: true });
-    await expect(page.getByRole('button', { name: 'Moodle account link', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Moodle account link', exact: true, includeHidden: true })).toHaveCount(0);
     expect(f.calls.some(c => c.path.includes('/moodle/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });

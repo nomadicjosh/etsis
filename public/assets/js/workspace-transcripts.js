@@ -107,7 +107,7 @@ window.createWorkspaceTranscripts = function (ui) {
             );
         if (current.document)
             body.append(
-                button("Review prepared transcript document", () =>
+                button("Review transcript", () =>
                     document(id, current.document.id),
                 ),
             );

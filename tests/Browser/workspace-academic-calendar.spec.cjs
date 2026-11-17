@@ -1,3 +1,4 @@
+const { workspaceTool } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
@@ -47,7 +48,7 @@ else if (path.startsWith('/sis/term-types/') && path.endsWith('/save/')) {
     return { calls, errors };
 }
 async function review(page) {
-    await page.getByRole('button', { name: 'Academic years', exact: true }).click();
+    await workspaceTool(page, 'Academic years');
     await page.getByRole('button', { name: 'Create academic year', exact: true }).click();
     await page.getByLabel('Start year', { exact: false }).fill('2026');
     await expect(page.locator('#drawer-body')).toContainText('2026–2027');
@@ -69,7 +70,7 @@ test('start-year-only review generates terms together without a separate catalog
 });
 
 test('term types support year placeholders, anchored dates and future-only deactivation', async ({ page }) => {
-    const f = await fixture(page); await page.getByRole('button', { name: 'Term types', exact: true }).click();
+    const f = await fixture(page); await workspaceTool(page, 'Term types');
     await page.getByRole('button', { name: 'Add term type', exact: true }).click();
     await page.getByLabel('Term type code', { exact: false }).fill('SP');
     await page.getByLabel('Display name template', { exact: false }).fill('Spring {{END_YEAR}}');
@@ -153,7 +154,7 @@ test('a term-code collision stays in one structured drawer alert and staff can r
     const f = await fixture(page);
     const message = 'Term type FA generates code 26/FA for academic year 2027-2028. That code already belongs to academic year 2026-2027. Review the Term code template in Term types.';
     await page.route('**/sis/academic-years/review/', route => route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'terms', message }] } }));
-    await page.getByRole('button', { name: 'Academic years', exact: true }).click();
+    await workspaceTool(page, 'Academic years');
     await page.getByRole('button', { name: 'Create academic year', exact: true }).click();
     await page.getByLabel('Start year', { exact: false }).fill('2027');
     await page.getByRole('button', { name: 'Review generated terms', exact: true }).click();
@@ -197,7 +198,7 @@ test('drawer errors highlight the active input and directory errors still appear
 
 test('Spring starting point shows explicit 2028/2029 choices and previews the following calendar year without saving', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Academic years', exact: true }).click();
+    await workspaceTool(page, 'Academic years');
     await page.getByRole('button', { name: 'Create academic year', exact: true }).click();
     await page.getByLabel('Start year', { exact: false }).fill('2028');
     await page.getByRole('button', { name: 'Review term types', exact: true }).click();
@@ -224,7 +225,7 @@ test('Spring starting point shows explicit 2028/2029 choices and previews the fo
 
 test('Fall and Summer starting points keep dates and code years together and clear outdated previews', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Term types', exact: true }).click();
+    await workspaceTool(page, 'Term types');
     await page.getByRole('button', { name: 'Add term type', exact: true }).click();
     await page.getByLabel('Example academic year starts in', { exact: true }).fill('2028');
     await page.getByRole('button', { name: 'Use Fall starting point', exact: true }).click();
@@ -245,7 +246,7 @@ test('Fall and Summer starting points keep dates and code years together and cle
 
 test('optional J-Term and summer choices remain simple and use editable second-year dates', async ({ page }) => {
     const f = await fixture(page);
-    await page.getByRole('button', { name: 'Term types', exact: true }).click();
+    await workspaceTool(page, 'Term types');
     await page.getByRole('button', { name: 'Add term type', exact: true }).click();
     await page.getByLabel('Example academic year starts in', { exact: true }).fill('2028');
     await expect(page.getByRole('button', { name: 'Use J-Term starting point', exact: true })).toBeHidden();

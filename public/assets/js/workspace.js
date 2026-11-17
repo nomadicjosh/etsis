@@ -8,7 +8,8 @@
     const csrf = () => $one('#csrf-store input').value;
     const number = value => new Intl.NumberFormat().format(Number(value || 0));
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
-    const clear = element => element.replaceChildren();
+    const clear = element => { disposeActionMenus(element); element.replaceChildren(); };
+    let actionMenuSequence = 0;
     const currencyCodes = new Set(Intl.supportedValuesOf('currency'));
     const currencyOptions = [...new Set(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', ...currencyCodes])];
     const currencyDigits = currency => currencyCodes.has(currency)
@@ -173,6 +174,44 @@
         if (element) element.addEventListener(type, event => { if (type === 'submit') event.preventDefault(); task(() => callback(event), type === 'click' ? element : $one('[type="submit"]', element)); });
     }
 
+    function disposeActionMenus(root) {
+        root?.querySelectorAll('[data-workspace-menu]').forEach(toggle => bootstrap.Dropdown.getInstance(toggle)?.dispose());
+    }
+
+    /** Native buttons/links keep their handlers and permission checks inside a Bootstrap disclosure. */
+    function actionMenu(label, entries, { context = label, icon: iconName = 'three-dots', compact = false } = {}) {
+        const identity = `workspace-actions-${++actionMenuSequence}`;
+        const toggle = node('button', { type: 'button', id: identity,
+            class: `btn btn-outline-secondary dropdown-toggle${compact ? ' btn-sm' : ''}`,
+            'data-bs-toggle': 'dropdown', 'data-workspace-menu': '', 'aria-expanded': 'false',
+            'aria-controls': `${identity}-items`, 'aria-label': context }, icon(iconName), node('span', {}, label));
+        const items = node('ul', { id: `${identity}-items`, class: 'dropdown-menu dropdown-menu-end', 'aria-labelledby': identity });
+        for (const entry of entries) {
+            if (entry.heading) {
+                items.append(node('li', {}, node('h3', { class: 'dropdown-header' }, entry.heading)));
+                continue;
+            }
+            if (entry.divider) { items.append(node('li', {}, node('hr', { class: 'dropdown-divider' }))); continue; }
+            const control = entry instanceof HTMLElement ? entry
+                : node('button', { type: 'button', onclick: event => task(entry.run, event.currentTarget) },
+                    icon(entry.icon || 'arrow-right'), node('span', {}, entry.label));
+            if (!control.hasAttribute('aria-label')) control.setAttribute('aria-label', control.textContent.trim());
+            const danger = control.matches('.btn-danger, .btn-outline-danger') || entry.danger;
+            control.classList.remove(...[...control.classList].filter(name => name === 'btn' || name.startsWith('btn-')));
+            control.classList.add('dropdown-item');
+            if (danger) control.classList.add('workspace-danger');
+            control.addEventListener('click', () => {
+                bootstrap.Dropdown.getInstance(toggle)?.hide();
+                toggle.focus({ preventScroll: true });
+            }, { capture: true });
+            items.append(node('li', {}, control));
+        }
+        const wrapper = node('div', { class: 'dropdown workspace-action-menu' }, toggle, items);
+        // Fixed positioning keeps row actions inside the viewport when a table scrolls horizontally.
+        new bootstrap.Dropdown(toggle, { popperConfig: config => ({ ...config, strategy: 'fixed' }) });
+        return wrapper;
+    }
+
     function emptyState(title, description, name = 'flower1') {
         return node('div', { class: 'empty-state' }, icon(name), node('h3', {}, title), node('p', {}, description));
     }
@@ -208,7 +247,7 @@
         portal: { title: 'Campus content', description: 'A useful, welcoming home for campus news and information.', icon: 'window', action: 'Create content', endpoint: '/sis/portal/editor/', permission: 'sis:portal:manage', fields: [['kind', 'Content type', 'choice', ['news', 'page', 'link']], ['code', 'Unique code'], ['title', 'Title'], ['content', 'Content or HTTPS link', 'textarea'], ['audience', 'Audience', 'choice', ['campus', 'public']]], columns: [['Title', 'title'], ['Type', 'kind'], ['Status', 'status']] },
     };
     datasets.transcripts = { title: 'Transcript requests', description: 'Review a request, prepare the official record, and record delivery after it is complete.', icon: 'file-earmark-text', permission: 'sis:transcript:manage', columns: [['Request', 'short_id'], ['Delivery', 'delivery'], ['Status', 'status'], ['Requested', 'requested_at']] };
-    const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, moneyInput, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, moneyInput, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const courseDropStudio = window.createWorkspaceCourseDrops({ node, request, task, openDrawer, notify, buildForm, formData });
     const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
     const degreeAuditStudio = window.createWorkspaceDegreeAudit({ node, request, task, can, closeDrawer: () => drawer.hide() });
@@ -238,7 +277,7 @@
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
-    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
@@ -275,34 +314,64 @@
     const pageNames = { holds: 'Holds & restrictions', overview: 'Overview', forms: 'Application forms', imports: 'Import data', rules: 'Rules & audiences', access: 'Roles & access', moodle: 'Moodle integration', apply: 'Application', ...Object.fromEntries(Object.entries(datasets).map(([key, value]) => [key, value.title])) };
     const catalogTabs = [['courses', 'Courses'], ['sections', 'Sections'], ['programs', 'Programs'], ['terms', 'Terms'], ['grades', 'Grade definitions']];
 
+    function navigationParent(section) {
+        if (catalogTabs.some(([key]) => key === section)) return 'courses';
+        if (['rooms', 'buildings', 'bookings', 'bookingcategories', 'calendar'].includes(section)) return 'bookings';
+        if (['employees', 'timesheets'].includes(section)) return 'employees';
+        if (['accounts', 'journals', 'billing', 'ledger'].includes(section)) return 'accounts';
+        if (['institutions', 'external', 'equivalencies'].includes(section)) return 'institutions';
+        return section;
+    }
+
     async function navigate(section, push = true) {
         if (dirty && current === 'forms' && section !== 'forms') { pendingNavigation = () => navigate(section, push); leaveModal.show(); return; }
         if (section !== 'moodle') moodleStudio.leave();
         if (current !== section) $one('#directory-search').value = '';
+        drawer.hide();
         current = section;
         generation++;
         $one('#workspace-alert').hidden = true;
         $all('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== (datasets[section] ? 'directory' : section); });
         $all('[data-workspace]').forEach(link => {
             const key = link.dataset.workspace;
-            const active = key === section || (key === 'courses' && catalogTabs.some(([tab]) => tab === section)) || (key === 'bookings' && ['rooms', 'buildings', 'bookingcategories', 'calendar'].includes(section)) || (key === 'employees' && section === 'timesheets');
+            const active = key === section || (link.classList.contains('workspace-nav-link') && key === navigationParent(section));
             link.classList.toggle('active', active);
             if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
         });
         $all('[data-requires]').forEach(element => { element.hidden = !can(element.dataset.requires); });
         $one('#topbar-page').textContent = pageNames[section] || 'Workspace';
+        const parent = navigationParent(section), parentLink = $one('#topbar-parent');
+        parentLink.hidden = parent === section;
+        $one('#topbar-parent-divider').hidden = parent === section;
+        parentLink.textContent = pageNames[parent] || 'Workspace';
+        parentLink.href = `/admin/workspace/${parent}/`;
+        parentLink.dataset.workspace = parent;
         document.title = `${pageNames[section] || 'Workspace'} · etsis`;
         if (push) history.pushState({ section }, '', section === 'overview' ? '/admin/' : `/admin/workspace/${section}/`);
-        bootstrap.Offcanvas.getInstance($one('#workspace-navigation'))?.hide();
-        if (section === 'overview') await renderDashboard();
-        else if (datasets[section]) await loadDirectory();
-        else if (section === 'forms') await loadFormStudio();
-        else if (section === 'rules') await loadRuleStudio();
-        else if (section === 'holds') await restrictionStudio.load();
-        else if (section === 'access') await loadAccess();
-        else if (section === 'moodle') await moodleStudio.load();
-        else if (section === 'apply') await loadApplicantSelect();
-        $one('#workspace-main').focus({ preventScroll: true });
+        const navigation = $one('#workspace-navigation');
+        const navigationWasOpen = navigation.matches('.show, .showing');
+        const focusMain = () => $one('#workspace-main').focus({ preventScroll: true });
+        if (navigationWasOpen) {
+            const version = generation;
+            navigation.addEventListener('hidden.bs.offcanvas', () => {
+                const focused = document.activeElement;
+                if (version === generation && (focused === document.body || navigation.contains(focused)
+                    || focused?.matches('[aria-label="Open navigation"]'))) focusMain();
+            }, { once: true });
+        }
+        bootstrap.Offcanvas.getInstance(navigation)?.hide();
+        let loading;
+        if (section === 'overview') loading = renderDashboard();
+        else if (datasets[section]) loading = loadDirectory();
+        else if (section === 'forms') loading = loadFormStudio();
+        else if (section === 'rules') loading = loadRuleStudio();
+        else if (section === 'holds') loading = restrictionStudio.load();
+        else if (section === 'access') loading = loadAccess();
+        else if (section === 'moodle') loading = moodleStudio.load();
+        else if (section === 'apply') loading = loadApplicantSelect();
+        // Announce navigation once; a late response must not steal focus from a menu or editor.
+        if (!navigationWasOpen) focusMain();
+        await loading;
     }
 
     document.addEventListener('click', event => {
@@ -312,7 +381,7 @@
         task(() => navigate(link.dataset.workspace));
     });
     window.addEventListener('popstate', () => task(() => navigate(location.pathname.match(/workspace\/([^/]+)/)?.[1] || 'overview', false)));
-    window.addEventListener('pagehide', () => { $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
+    window.addEventListener('pagehide', () => { disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
     listen('#discard-draft', 'click', () => { dirty = false; leaveModal.hide(); pendingNavigation?.(); pendingNavigation = null; });
@@ -335,7 +404,7 @@
         const context = $one('#intake-chart').getContext('2d');
         const gradient = context.createLinearGradient(0, 0, 0, 260);
         gradient.addColorStop(0, '#4a8bc244'); gradient.addColorStop(1, '#4a8bc202');
-        intakeChart = new Chart(context, { type: 'line', data: { labels: intake.map(item => item.label), datasets: [{ label: 'Students', data: intake.map(item => Number(item.value)), borderColor: '#346d9d', backgroundColor: gradient, fill: true, tension: .35, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, borderWidth: 2.5 }] }, options: { responsive: true, maintainAspectRatio: false, animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 450 }, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: '#586d82', font: { size: 10 } } }, y: { beginAtZero: true, grid: { color: '#edf1f6' }, border: { display: false }, ticks: { precision: 0, color: '#586d82', font: { size: 10 } } } } } });
+        intakeChart = new Chart(context, { type: 'line', data: { labels: intake.map(item => item.label), datasets: [{ label: 'Students', data: intake.map(item => Number(item.value)), borderColor: '#346d9d', backgroundColor: gradient, fill: true, tension: .35, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, borderWidth: 2.5 }] }, options: { responsive: true, maintainAspectRatio: false, animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 450 }, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: '#586d82', font: { size: 11 } } }, y: { beginAtZero: true, grid: { color: '#edf1f6' }, border: { display: false }, ticks: { precision: 0, color: '#586d82', font: { size: 11 } } } } } });
         clear($one('#intake-table')); $one('#intake-table').append(table(['Entry term', 'Students'], intake.map(item => [item.label, number(item.value)]), 'Student intake values'));
         const pipeline = $one('#pipeline-bars'); clear(pipeline);
         const max = Math.max(1, ...(data.pipeline || []).map(item => Number(item.value)));
@@ -407,26 +476,62 @@
         $one('#directory-list-title').textContent = definition.title;
         const create = $one('#directory-create'); create.hidden = !definition.action || !can(definition.permission);
         $one('span', create).textContent = definition.action || 'Add record';
-        const tabs = $one('#directory-tabs'); clear(tabs);
-        const related = catalogTabs.some(([key]) => key === section) ? catalogTabs : ['rooms', 'buildings', 'bookings', 'bookingcategories', 'calendar'].includes(section) ? [['bookings', 'Space requests'], ['calendar', 'Calendar'], ['rooms', 'Rooms & spaces'], ['buildings', 'Buildings'], ['bookingcategories', 'Categories']] : ['employees', 'timesheets'].includes(section) ? [['employees', 'Team'], ['timesheets', 'Timesheets']] : ['accounts', 'journals', 'billing', 'ledger'].includes(section) ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']] : ['institutions', 'external', 'equivalencies'].includes(section) ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
-        related.forEach(([key, label]) => tabs.append(node('a', { href: `/admin/workspace/${key}/`, 'data-workspace': key, class: section === key ? 'active' : '' }, label)));
-        if (['employees', 'timesheets'].includes(section) && can('sis:hr:manage')) tabs.append(node('button', {
-            type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => hrSetup.library(), event.currentTarget),
-        }, 'HR setup'));
-        if (section === 'campaigns' && can('sis:communications:manage')) tabs.append(node('button', {
-            type: 'button', class: 'btn btn-outline-primary',
-            onclick: event => task(() => operations.campaignTemplates(), event.currentTarget),
-        }, 'My message templates'));
-        if (['reports', 'sharedreports'].includes(section)) { tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => reportRequests.create(), event.currentTarget) }, 'Request a report'), node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => reportRequests.queue(), event.currentTarget) }, 'My report requests')); if (can('sis:reporting:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => reportRequests.queue(true), event.currentTarget) }, 'Report request queue')); }
-        if (catalogTabs.some(([key]) => key === section) && can('sis:catalog:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => degreeAuditStudio.library(), event.currentTarget) }, 'Course group library'));
-        if (catalogTabs.some(([key]) => key === section) && can('sis:catalog:manage')) { tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => degreeAuditStudio.gradingScale(), event.currentTarget) }, 'Grading scales')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => catalogStudio.subjects(), event.currentTarget) }, 'Subjects')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => classificationStudio.library(), event.currentTarget) }, 'Departments & levels')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => classificationStudio.library('award'), event.currentTarget) }, 'Degrees & awards')); }
-        if (section === 'reports' && can('sis:reporting:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => relationalStudio.start(), event.currentTarget) }, 'Open Report Studio'));
-        if (section === 'accounts' && can('sis:finance:post')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => financeReviewStudio.queue(), event.currentTarget) }, 'Finance review queue'));
-        if (section === 'billing' && can('sis:finance:post') && can('sis:finance:read') && can('sis:student:read')) tabs.append(node('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: event => task(() => operations.billingBatch(), event.currentTarget) }, 'Review student bills'));
-        if (catalogTabs.some(([key]) => key === section) && can('sis:catalog:manage')) { tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => academicCalendarStudio.years(), event.currentTarget) }, 'Academic years')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => academicCalendarStudio.types(), event.currentTarget) }, 'Term types')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => offeringTemplates.page(), event.currentTarget) }, 'Offering templates')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => catalogStudio.start(), event.currentTarget) }, 'Build course offerings')); tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => catalogStudio.plans(), event.currentTarget) }, 'Saved offering plans')); }
-        if (section === 'registration' && can('sis:registration:manage')) tabs.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: event => task(() => hiatusStudio.choose(), event.currentTarget) }, 'Student hiatus history'));
-        tabs.hidden = related.length === 0 && !['registration', 'reports', 'sharedreports', 'campaigns'].includes(section);
-        if (!append) { listRows = []; nextAfter = null; $one('#directory-results').replaceChildren(node('div', { class: 'loading-card' }, 'Getting everything in order…')); }
+        const tabs = $one('#directory-tabs'), tools = $one('#directory-tools');
+        clear(tabs); clear(tools);
+        const family = navigationParent(section);
+        const related = family === 'courses' ? catalogTabs
+            : family === 'bookings' ? [['bookings', 'Space requests'], ['calendar', 'Calendar'], ['rooms', 'Rooms & spaces'], ['buildings', 'Buildings'], ['bookingcategories', 'Categories']]
+            : family === 'employees' ? [['employees', 'Team'], ['timesheets', 'Timesheets']]
+            : family === 'accounts' ? [['accounts', 'Student accounts'], ['billing', 'Term billing'], ['journals', 'Journals'], ['ledger', 'Chart of accounts']]
+            : family === 'institutions' ? [['institutions', 'Institutions'], ['external', 'External courses'], ['equivalencies', 'Equivalencies']] : [];
+        const visibleRelated = related.filter(([key]) => !['journals', 'ledger'].includes(key) || can('sis:finance:ledger'));
+        visibleRelated.forEach(([key, label]) => tabs.append(node('a', { href: `/admin/workspace/${key}/`,
+            'data-workspace': key, class: section === key ? 'active' : '', ...(section === key ? { 'aria-current': 'page' } : {}) }, label)));
+        const tool = (label, run, name = label, iconName = 'arrow-right') => node('button', {
+            type: 'button', class: 'btn btn-outline-primary', 'aria-label': name,
+            onclick: event => task(run, event.currentTarget),
+        }, icon(iconName), node('span', {}, label));
+        if (family === 'courses' && can('sis:catalog:manage')) {
+            tools.append(
+                actionMenu('Curriculum', [
+                    { label: 'Course group library', icon: 'collection', run: () => degreeAuditStudio.library() },
+                    { label: 'Grading scales', icon: 'clipboard-data', run: () => degreeAuditStudio.gradingScale() },
+                    { label: 'Subjects', icon: 'journal-bookmark', run: () => catalogStudio.subjects() },
+                    { label: 'Departments & levels', icon: 'diagram-3', run: () => classificationStudio.library() },
+                    { label: 'Degrees & awards', icon: 'award', run: () => classificationStudio.library('award') },
+                ], { icon: 'collection' }),
+                actionMenu('Academic calendar', [
+                    { label: 'Academic years', icon: 'calendar-range', run: () => academicCalendarStudio.years() },
+                    { label: 'Term types', icon: 'calendar3', run: () => academicCalendarStudio.types() },
+                ], { icon: 'calendar3' }),
+                actionMenu('Course offerings', [
+                    { label: 'Build course offerings', icon: 'plus-circle', run: () => catalogStudio.start() },
+                    { label: 'Saved offering plans', icon: 'journals', run: () => catalogStudio.plans() },
+                    { label: 'Offering templates', icon: 'layout-text-window', run: () => offeringTemplates.page() },
+                ], { icon: 'journal-richtext' }),
+            );
+        }
+        if (family === 'employees' && can('sis:hr:manage')) tools.append(tool('HR setup', () => hrSetup.library(), 'HR setup', 'gear'));
+        if (section === 'campaigns' && can('sis:communications:manage')) tools.append(tool('Message templates', () => operations.campaignTemplates(), 'My message templates', 'chat-square-text'));
+        if (['reports', 'sharedreports'].includes(section)) {
+            const requests = [
+                { label: 'Request a report', icon: 'plus-circle', run: () => reportRequests.create() },
+                { label: 'My report requests', icon: 'person-lines-fill', run: () => reportRequests.queue() },
+            ];
+            if (can('sis:reporting:manage')) requests.push({ label: 'Report request queue', icon: 'inboxes', run: () => reportRequests.queue(true) });
+            tools.append(actionMenu('Report requests', requests, { icon: 'inboxes' }));
+        }
+        if (section === 'reports' && can('sis:reporting:manage')) {
+            $one('span', create).textContent = 'Report Studio';
+            create.setAttribute('aria-label', 'Open Report Studio');
+        } else create.removeAttribute('aria-label');
+        if (section === 'accounts' && can('sis:finance:post')) tools.append(tool('Finance reviews', () => financeReviewStudio.queue(), 'Finance review queue', 'inboxes'));
+        if (section === 'billing' && can('sis:finance:post') && can('sis:finance:read') && can('sis:student:read')) tools.append(tool('Review bills', () => operations.billingBatch(), 'Review student bills', 'receipt'));
+        if (section === 'registration' && can('sis:registration:manage')) tools.append(tool('Hiatus history', () => hiatusStudio.choose(), 'Student hiatus history', 'clock-history'));
+        tabs.hidden = visibleRelated.length === 0;
+        tools.hidden = tools.childElementCount === 0;
+        $one('#directory-navigation').hidden = tabs.hidden && tools.hidden;
+        if (!append) { listRows = []; nextAfter = null; $one('#directory-results').replaceChildren(node('div', { class: 'loading-card' }, 'Loading records…')); }
         $one('#directory-search-form').hidden = section === 'calendar';
         if (section === 'calendar') {
             listRows = []; nextAfter = null;
@@ -470,7 +575,7 @@
         if (token !== directoryRequest || navigation !== generation || section !== current) return;
         listRows = append ? [...listRows, ...result.items] : result.items; nextAfter = result.next_after;
         const results = $one('#directory-results'); clear(results);
-        if (!listRows.length) results.append(emptyState('A clean slate.', 'There are no matching records here yet. Try a different search or use the button above to get started.', definition.icon));
+        if (!listRows.length) results.append(emptyState(directoryQuery ? 'No matching records' : 'No records yet', directoryQuery ? 'Try a different name, code or search term.' : definition.action && can(definition.permission) ? 'Add your first record using the button above.' : 'Records available to your role will appear here.', definition.icon));
         else results.append(node('div', { class: 'table-responsive', tabindex: '0', role: 'region', 'aria-label': 'Scrollable records' }, table([...definition.columns.map(([label]) => label), ''], listRows.map(row => [
             ...definition.columns.map(([, field], index) => renderCell(section, row, field, index)),
             node('button', { class: 'icon-button', type: 'button', 'aria-label': `Open ${recordLabel(row)}`, onclick: () => task(() => openRecord(section, row)) }, icon('arrow-up-right')),
@@ -491,7 +596,7 @@
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
         if (field === 'status') return badge(value);
         if (field === 'account') return badge(row.owner_user_id ? 'Linked' : 'Not linked');
-        if (field === 'credits_milli') value = Number(value) / 1000;
+        if (['credits_milli', 'points_milli'].includes(field)) value = value === null ? '—' : Number(value) / 1000;
         if (index === 0) {
             const link = node('button', { class: 'record-link', type: 'button', onclick: () => task(() => openRecord(section, row)) }, text(value));
             if (row.given_name) return node('div', { class: 'person-cell' }, node('span', { class: 'avatar', 'aria-hidden': 'true' }, `${row.given_name[0] || ''}${row.family_name[0] || ''}`), link);
@@ -514,6 +619,7 @@
         const alreadyOpen = $one('#record-drawer').matches('.show, .showing');
         if (!alreadyOpen) drawerOpener = document.activeElement;
         const content = node('div');
+        disposeActionMenus($one('#drawer-body'));
         $one('#drawer-body').replaceChildren(content); drawer.show();
         if (alreadyOpen) {
             $one('#drawer-title').tabIndex = -1;
@@ -523,6 +629,7 @@
     }
     $one('#record-drawer').addEventListener('hidden.bs.offcanvas', () => {
         if (!relationalStudio?.isOpen()) relationalStudio?.cleanup();
+        disposeActionMenus($one('#drawer-body'));
         $one('#drawer-body').replaceChildren();
         if (relationalStudio?.isOpen()) return;
         if (drawerOpener?.isConnected && !drawerOpener.disabled) drawerOpener.focus();
@@ -703,8 +810,8 @@
     }
 
     async function openPerson(id) {
-        const body = openDrawer('Person workspace', 'ONE PERSON. ONE CONNECTED STORY.');
-        body.append(node('p', { class: 'muted-text' }, 'Gathering the story…'));
+        const body = openDrawer('Person workspace', 'PERSON RECORD');
+        body.append(node('p', { class: 'muted-text' }, 'Loading person record…'));
         const data = await request(`/sis/ui/people/${id}/`); const person = data.person; clear(body);
         body.append(node('div', { class: 'record-profile' }, node('span', { class: 'avatar large', 'aria-hidden': 'true' }, `${person.givenName[0]}${person.familyName[0]}`), node('div', {}, node('h3', {}, `${person.givenName} ${person.familyName}`), badge(person.institutionalId.value))));
         const tabs = node('div', { class: 'workspace-tabs', role: 'tablist', 'aria-label': 'Person record sections' });
@@ -714,20 +821,29 @@
             const panel = node('div', { id: `person-panel-${key}`, role: 'tabpanel', 'aria-labelledby': `person-tab-${key}`, hidden: index !== 0 });
             const button = node('button', { type: 'button', id: `person-tab-${key}`, role: 'tab', 'aria-controls': panel.id, 'aria-selected': index === 0 ? 'true' : 'false', tabindex: index === 0 ? '0' : '-1', class: index === 0 ? 'active' : '' }, label);
             button.addEventListener('click', () => { [...tabs.children].forEach(tab => { tab.classList.toggle('active', tab === button); tab.setAttribute('aria-selected', tab === button ? 'true' : 'false'); tab.tabIndex = tab === button ? 0 : -1; }); [...panes.children].forEach(item => { item.hidden = item !== panel; }); });
-            button.addEventListener('keydown', event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const all = [...tabs.children]; const next = all[(all.indexOf(button) + (event.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]; next.click(); next.focus(); } });
+            button.addEventListener('keydown', event => { if (['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const all = [...tabs.children]; const next = all[event.key === 'Home' ? 0 : event.key === 'End' ? all.length - 1 : (all.indexOf(button) + (event.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]; next.click(); next.focus(); } });
             if (key === 'overview') {
                 panel.append(node('dl', { class: 'detail-list' }, node('div', {}, node('dt', {}, 'Institutional ID'), node('dd', {}, person.institutionalId.value)), node('div', {}, node('dt', {}, 'Sign-in account'), node('dd', {}, person.ownerUserId ? 'Linked' : 'Not linked'))));
                 const actions = node('div', { class: 'inline-actions' });
-                if (can('sis:moodle:link-person')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => moodlePeople.open(person.id.value)) }, 'Moodle account link'));
-                if (can('sis:moodle:create-person') && can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => moodleRequests.open(person.id.value)) }, 'Create a Moodle account'));
+                const extra = [];
                 if (can('sis:person:manage') && (!person.ownerUserId || can('admin:edit:user'))) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.editProfile(person)) }, 'Edit person profile'));
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.contact(person)) }, 'Contact information'));
-                if (person.ownerUserId && can('admin:edit:user')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.account(person)) }, 'Manage sign-in account'));
-                if (can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(() => accountSetup(person)) }, 'Account setup'));
-                if (can('sis:person:manage') && can('sis:audit:read')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(() => peopleStudio.history(person)) }, 'Profile history'));
-            if (can('sis:person:assign-id')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => editInstitutionalId(person)) }, 'Change institutional ID'));
                 if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value)) }, 'Start application'));
-                if (can('sis:hr:manage') && !data.employees?.length) actions.append(node('button', { class: 'btn btn-outline-secondary', type: 'button', onclick: () => task(() => createRecord('employees', { person_id: person.id.value })) }, 'Add employment'));
+                if (person.ownerUserId && can('admin:edit:user')) extra.push({ label: 'Manage sign-in account', icon: 'key', run: () => peopleStudio.account(person) });
+                if (can('sis:person:manage')) extra.push({ label: 'Account setup', icon: 'envelope', run: () => accountSetup(person) });
+                if (can('sis:person:assign-id')) extra.push({ label: 'Change institutional ID', icon: 'person-vcard', run: () => editInstitutionalId(person) });
+                if (can('sis:person:manage') && can('sis:audit:read')) extra.push({ label: 'Profile history', icon: 'clock-history', run: () => peopleStudio.history(person) });
+                if (can('sis:hr:manage') && !data.employees?.length) extra.push({ label: 'Add employment', icon: 'person-workspace', run: () => createRecord('employees', { person_id: person.id.value }) });
+                if (can('sis:moodle:link-person') || (can('sis:moodle:create-person') && can('sis:person:manage'))) {
+                    if (extra.length) extra.push({ divider: true });
+                    extra.push({ heading: 'Moodle' });
+                    if (can('sis:moodle:link-person')) extra.push({ label: 'Moodle account link', icon: 'link-45deg', run: () => moodlePeople.open(person.id.value) });
+                    if (can('sis:moodle:create-person') && can('sis:person:manage')) {
+                        const createMoodle = node('button', { type: 'button', 'aria-label': 'Create a Moodle account', onclick: event => task(() => moodleRequests.open(person.id.value), event.currentTarget) }, icon('person-plus'), node('span', {}, 'Create Moodle account'));
+                        extra.push(createMoodle);
+                    }
+                }
+                if (extra.length) actions.append(actionMenu('More', extra, { context: 'More person actions' }));
 
                 panel.append(actions, node('p', { class: 'muted-text' }, 'This institutional ID follows the person across student, employment and financial records. Sign-in access is attached to the same person.'));
             } else if (key === 'access') {
@@ -790,7 +906,10 @@
         const details = node('dl', { class: 'detail-list' });
         for (const [key, value] of Object.entries(row)) {
             if (key === 'id' || key.endsWith('_id') || ['given_name', 'family_name'].includes(key)) continue;
-            details.append(node('div', {}, node('dt', {}, key.replaceAll('_', ' ')), node('dd', {}, key === 'credits_milli' ? Number(value) / 1000 : text(value))));
+            const quantity = ['credits_milli', 'points_milli'].includes(key);
+            const label = key === 'credits_milli' ? 'Credits' : key === 'points_milli' ? 'Grade points'
+                : key.replaceAll('_', ' ').replace(/^./u, value => value.toUpperCase());
+            details.append(node('div', {}, node('dt', {}, label), node('dd', {}, quantity && value !== null ? Number(value) / 1000 : text(value))));
         }
         body.append(details);
         const actions = node('div', { class: 'inline-actions' });

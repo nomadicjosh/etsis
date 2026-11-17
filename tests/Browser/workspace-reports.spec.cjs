@@ -89,7 +89,7 @@ test('new report selection preserves inactive false rather than treating it as a
     const f = await fixture(page, true);
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="reports"]').click();
-    await page.getByRole('button', { name: 'Create a report', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Report Studio', exact: true }).click();
     await page.getByRole('button', { name: 'Create a simple student list', exact: true }).click();
     await page.getByLabel('Report name').fill('Inactive mathematicians');
     await page.getByLabel('Primary program (optional)', { exact: true }).selectOption(f.program);

@@ -11,6 +11,8 @@ window.createWorkspaceOperations = function (ui) {
         badge,
         money,
         moneyInput,
+        actionMenu,
+        disposeActionMenus,
         buildForm,
         formData,
         openDrawer,
@@ -103,7 +105,7 @@ window.createWorkspaceOperations = function (ui) {
             "Manage grading scale",
             [
                 ["Grade", "code"],
-                ["GPA points × 1000", "points_milli"],
+                ["Grade points", "points_milli"],
             ],
             "Set up the global grade scale and use explicit program overrides where grading policies differ.",
         ),
@@ -1094,29 +1096,30 @@ window.createWorkspaceOperations = function (ui) {
         if (can("sis:finance:post") && can("sis:finance:read"))
             actions.append(button("Post a transaction", () => reviewEntry(), "btn-primary"));
         function entryActions(item) {
-            const controls = [];
-            const canRead = can("sis:finance:read"),
-                canPost = can("sis:finance:post");
-            if (canRead && canPost)
-                controls.push(
-                    button(`View ${item.operation_id.slice(-8)} entry history`, () => entryHistory(item.operation_id)),
-                );
-            if (canRead && canPost && item.can_correct_payment_details)
-                controls.push(button("Correct receipt details", () => reviewEntry(item, "receipt")));
-            if (!item.reversed && canPost && canRead) {
-                if (item.can_refund_payment) controls.push(button("Refund payment", () => reviewEntry(item, "refund")));
-                if (item.can_credit_charge) controls.push(button("Credit charge", () => reviewEntry(item, "credit")));
-                if (item.can_correct_amount && canRead)
-                    controls.push(
-                        button(item.type === "refund" ? "Correct refund" : "Correct amount", () => reviewEntry(item)),
-                    );
-                controls.push(button("Reverse entry", () => reviewEntry(item, "reversal")));
+            const canRead = can("sis:finance:read"), canPost = can("sis:finance:post");
+            if (!canRead || !canPost) return "—";
+            const history = button("History", () => entryHistory(item.operation_id));
+            history.setAttribute("aria-label", `View ${item.operation_id.slice(-8)} entry history`);
+            const secondary = [];
+            let primary = history;
+            if (!item.reversed && item.can_refund_payment) primary = button("Refund payment", () => reviewEntry(item, "refund"));
+            else if (!item.reversed && item.can_credit_charge) primary = button("Credit charge", () => reviewEntry(item, "credit"));
+            if (primary !== history) secondary.push(history);
+            if (item.can_correct_payment_details) secondary.push(button("Correct receipt details", () => reviewEntry(item, "receipt")));
+            if (!item.reversed) {
+                if (item.can_correct_amount) secondary.push(button(item.type === "refund" ? "Correct refund" : "Correct amount", () => reviewEntry(item)));
+                const reverse = button("Reverse entry", () => reviewEntry(item, "reversal"), "btn-outline-danger");
+                secondary.push({ divider: true }, reverse);
             }
-            return controls.length ? node("div", { class: "d-flex flex-wrap gap-2" }, ...controls) : "—";
+            const controls = node("div", { class: "entry-actions" }, primary);
+            if (secondary.length) controls.append(actionMenu("More", secondary,
+                { context: `More actions for entry ${item.operation_id.slice(-8)}`, compact: true }));
+            return controls;
         }
         const entries = node("div");
         let offset = 0;
         function renderEntries() {
+            disposeActionMenus(entries);
             entries.replaceChildren(
                 scrollTable(
                     ["Entry", "Reference", "Amount", "Status", "Actions"],
