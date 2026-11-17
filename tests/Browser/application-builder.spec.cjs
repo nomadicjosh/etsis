@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const program = '01K00000000000000000000001', level = '01K00000000000000000000002', draftId = '01K00000000000000000000003';
+const replacementDraftId = '01K00000000000000000000004';
 
 async function fixture(page, { levels = [{ id: level, code: 'DIP', title: 'Professional diploma' }], editor = false } = {}) {
     const writes = [], errors = [];
@@ -137,6 +138,8 @@ test('editing while a draft saves retains newer local answers and blocks publica
     });
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect.poll(() => Boolean(captured)).toBe(true);
+    await expect(page.locator('#form-scope')).toBeDisabled();
+    await expect(page.locator('#form-level')).toBeDisabled();
     await page.getByLabel('Question or field label').fill('More recent question');
     release();
     await expect(page.locator('#designer-save-status')).toContainText('latest changes');
@@ -218,6 +221,148 @@ test('containers retain columns and reading order with keyboard moves, pointer m
     await page.screenshot({ path: 'test-results/application-layout-mobile.png', fullPage: true });
     expect(errors).toEqual([]);
 });
+
+test('a first save holds the selected target and releases it after a failed request', async ({ page }) => {
+    const { errors } = await fixture(page);
+    await page.locator('#form-name').fill('Program application');
+    await page.locator('#form-scope').selectOption('program');
+    await page.locator('#form-program').selectOption(program);
+    await add(page, 'text', 'Original question');
+    const posted = [];
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    await page.route('**/sis/forms/', async route => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        const input = JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json'));
+        posted.push(input);
+        if (posted.length === 1) {
+            await gate;
+            return route.fulfill({ status: 503, json: { error: 'Fictional temporary interruption.' } });
+        }
+        await route.fulfill({ json: { ...input, id: draftId, version: 0, status: 'draft' } });
+    });
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect.poll(() => posted.length).toBe(1);
+    await expect(page.locator('#form-scope')).toBeDisabled();
+    await expect(page.locator('#form-program')).toBeDisabled();
+    await expect(page.getByRole('searchbox', { name: 'Search programs options', exact: true })).toBeHidden();
+    await page.getByLabel('Question or field label', { exact: true }).fill('Corrected while sending');
+    release();
+    await expect(page.locator('#workspace-alert')).toBeVisible();
+    await expect(page.locator('#form-scope')).toBeEnabled();
+    await expect(page.locator('#form-program')).toBeEnabled();
+    await expect(page.getByRole('searchbox', { name: 'Search programs options', exact: true })).toBeVisible();
+    await page.locator('#form-scope').selectOption('academic_level');
+    await page.locator('#form-level').selectOption(level);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+    expect(posted[0].program_id).toBe(program);
+    expect(posted[1].program_id).toBeNull(); expect(posted[1].academic_level_id).toBe(level);
+    expect(posted[1].fields[0].label).toBe('Corrected while sending');
+    expect(posted[1].id).toBeUndefined();
+    await expect(page.locator('#form-scope')).toBeDisabled();
+    expect(errors).toEqual([]);
+});
+
+test('publication review waits for a clean draft save to settle', async ({ page }) => {
+    const { errors } = await fixture(page);
+    await page.locator('#form-name').fill('Reviewed application'); await page.locator('#form-level').selectOption(level);
+    await add(page, 'text', 'Question');
+    const save = page.getByRole('button', { name: 'Save draft', exact: true });
+    const publish = page.getByRole('button', { name: 'Review publication', exact: true });
+    await save.click(); await expect(publish).toBeEnabled();
+    let release, captured;
+    const gate = new Promise(resolve => { release = resolve; });
+    await page.route('**/sis/forms/', async route => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        captured = JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json'));
+        await gate;
+        await route.fulfill({ json: { ...captured, id: draftId, version: 1, status: 'draft' } });
+    });
+    await save.click(); await expect.poll(() => Boolean(captured)).toBe(true);
+    await expect(publish).toBeDisabled();
+    release(); await expect(save).toBeEnabled(); await expect(publish).toBeEnabled();
+    expect(captured.id).toBe(draftId); expect(captured.version).toBe(0);
+    await publish.click();
+    await expect(page.getByRole('button', { name: 'Confirm publication', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+});
+
+for (const fail of [false, true]) {
+    test(`a discarded form's late ${fail ? 'failure' : 'save'} leaves the replacement draft intact`, async ({ page }) => {
+        const { errors } = await fixture(page);
+        await page.locator('#form-name').fill('Earlier application'); await page.locator('#form-level').selectOption(level);
+        await add(page, 'text', 'Earlier question');
+        const posted = [];
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        await page.route('**/sis/forms/', async route => {
+            if (route.request().method() !== 'POST') return route.fallback();
+            const input = JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json'));
+            posted.push(input);
+            if (posted.length === 1) {
+                await gate;
+                if (fail) return route.fulfill({ status: 503, json: { error: 'Fictional older request failed.' } });
+            }
+            await route.fulfill({ json: { ...input, id: posted.length === 1 ? draftId : replacementDraftId, version: 0, status: 'draft' } });
+        });
+        await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+        await expect.poll(() => posted.length).toBe(1);
+        await page.getByRole('button', { name: 'New application form', exact: true }).click();
+        await page.locator('#discard-draft').click();
+        await expect(page.locator('#form-scope')).toBeEnabled();
+        await page.locator('#form-name').fill('Replacement application');
+        await page.locator('#form-scope').selectOption('program'); await page.locator('#form-program').selectOption(program);
+        await add(page, 'text', 'Replacement question');
+        release();
+        await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeEnabled();
+        await expect(page.locator('#workspace-alert')).toBeHidden();
+        await expect(page.locator('#form-name')).toHaveValue('Replacement application');
+        await expect(page.getByLabel('Question or field label', { exact: true })).toHaveValue('Replacement question');
+        await expect(page.locator('#form-scope')).toBeEnabled();
+        await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+        await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+        expect(posted).toHaveLength(2);
+        expect(posted[1].id).toBeUndefined(); expect(posted[1].version).toBeUndefined();
+        expect(posted[1].program_id).toBe(program); expect(posted[1].academic_level_id).toBeNull();
+        expect(posted[1].fields[0].label).toBe('Replacement question');
+        expect(errors).toEqual([]);
+    });
+}
+
+for (const bounds of [
+    { type: 'text', minimum: 'Minimum characters', maximum: 'Maximum characters', low: '10', high: '5', fixed: '20' },
+    { type: 'number', minimum: 'Minimum value', maximum: 'Maximum value', low: '6', high: '3', fixed: '8' },
+    { type: 'date', minimum: 'Earliest date', maximum: 'Latest date', low: '2027-02-01', high: '2027-01-01', fixed: '2027-03-01' },
+]) {
+    test(`restored ${bounds.type} limits reveal the invalid control and keep collapse state consistent`, async ({ page }) => {
+        const { writes, errors } = await fixture(page);
+        await page.locator('#form-name').fill('Bounded application'); await page.locator('#form-level').selectOption(level);
+        await add(page, bounds.type, 'Bounded answer'); await add(page, 'text', 'Other question');
+        const first = page.locator('.designer-field').first();
+        await first.getByText('Field settings', { exact: true }).click();
+        await first.getByLabel(bounds.minimum, { exact: true }).fill(bounds.low);
+        await first.getByLabel(bounds.maximum, { exact: true }).fill(bounds.high);
+        await page.getByRole('button', { name: 'Duplicate field 2', exact: true }).click();
+        await page.getByRole('button', { name: 'Undo edit', exact: true }).click();
+        const maximum = first.getByLabel(bounds.maximum, { exact: true });
+        expect(await maximum.evaluate(control => control.validity.customError)).toBe(true);
+        await page.getByRole('button', { name: 'Collapse field 1', exact: true }).click();
+        await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+        await expect(maximum).toBeVisible(); await expect(maximum).toBeFocused();
+        await expect(page.getByRole('button', { name: 'Collapse field 1', exact: true })).toHaveAttribute('aria-expanded', 'true');
+        expect(writes.filter(write => write.path === '/sis/forms/')).toHaveLength(0);
+        await page.getByRole('button', { name: 'Collapse field 1', exact: true }).click();
+        await expect(maximum).toBeHidden();
+        await page.getByRole('button', { name: 'Expand field 1', exact: true }).click();
+        await maximum.fill(bounds.fixed);
+        await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+        await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+        expect(writes.filter(write => write.path === '/sis/forms/')).toHaveLength(1);
+        await accessible(page);
+        expect(errors).toEqual([]);
+    });
+}
 
 test('question settings validate preview answers and a saved card keeps later edits', async ({ page }) => {
     const { writes } = await fixture(page);

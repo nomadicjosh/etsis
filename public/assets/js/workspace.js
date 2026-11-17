@@ -47,6 +47,7 @@
     let pendingNavigation = null;
     let signInPending = false;
     let formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] };
+    let savingFormDraft = null;
     const collapsedFormFields = new Set();
     const formEdits = { past: [], future: [], current: null, group: null };
     let formConditions = null;
@@ -1388,7 +1389,7 @@
     }
 
     function updateFormPublication() {
-        $one('#form-publish').disabled = dirty || !formDraft.id;
+        $one('#form-publish').disabled = dirty || !formDraft.id || savingFormDraft === formDraft;
     }
 
     function formTarget() {
@@ -1398,13 +1399,14 @@
 
     function syncFormScope() {
         const program = $one('#form-scope').value === 'program';
-        $one('#form-scope').disabled = Boolean(formDraft.id);
+        const locked = Boolean(formDraft.id) || savingFormDraft === formDraft;
+        $one('#form-scope').disabled = locked;
         for (const [name, active] of [['program', program], ['level', !program]]) {
             $one(`#form-${name}-group`).hidden = !active;
-            $one(`#form-${name}`).disabled = !active || Boolean(formDraft.id);
+            $one(`#form-${name}`).disabled = !active || locked;
             $one(`#form-${name}`).required = active;
         }
-        if ($one('#form-program').nextElementSibling) $one('#form-program').nextElementSibling.hidden = Boolean(formDraft.id);
+        if ($one('#form-program').nextElementSibling) $one('#form-program').nextElementSibling.hidden = locked;
     }
 
     function cleanupFormConditions() {
@@ -1529,6 +1531,14 @@
             : field.type === 'number' ? [['min_value', 'Minimum value', 'number'], ['max_value', 'Maximum value', 'number']]
                 : field.type === 'date' ? [['earliest_date', 'Earliest date', 'date'], ['latest_date', 'Latest date', 'date']] : [];
         const controls = new Map();
+        const validate = () => {
+            for (const [min, max] of [['min_length', 'max_length'], ['min_value', 'max_value'], ['earliest_date', 'latest_date']]) {
+                const maximum = controls.get(max);
+                const reversed = field.settings?.[min] !== undefined && field.settings?.[max] !== undefined && field.settings[min] > field.settings[max];
+                maximum?.setCustomValidity(reversed ? (field.type === 'date'
+                    ? 'The latest date must be on or after the earliest date.' : 'The maximum must be at least the minimum.') : '');
+            }
+        };
         const result = definitions.map(([key, label, type]) => {
             const characters = key.endsWith('_length');
             const control = node('input', { id: `designer-${index}-${key}`, class: 'form-control', type,
@@ -1540,14 +1550,12 @@
                 if (control.value === '') delete field.settings[key];
                 else field.settings[key] = type === 'number' ? Number(control.value) : control.value;
                 if (!Object.keys(field.settings).length) delete field.settings;
-                for (const [min, max] of [['min_length', 'max_length'], ['min_value', 'max_value'], ['earliest_date', 'latest_date']]) {
-                    const maximum = controls.get(max);
-                    if (maximum) maximum.setCustomValidity(field.settings?.[min] !== undefined && field.settings?.[max] !== undefined && field.settings[min] > field.settings[max] ? 'The maximum must be at least the minimum.' : '');
-                }
+                validate();
                 formChanged(event);
             });
             return node('div', { class: type === 'text' ? 'col-12' : 'col-md-6' }, node('label', { class: 'form-label', for: control.id }, label), control);
         });
+        validate();
         return result;
     }
 
@@ -1677,7 +1685,9 @@
         const invalid = $all('input, select, textarea', $one('#designer-fields')).find(control => !control.checkValidity());
         if (invalid) {
             const disclosure = invalid.closest('details'); if (disclosure) disclosure.open = true;
-            const fieldBody = invalid.closest('.designer-field-body'); if (fieldBody) fieldBody.hidden = false;
+            const fieldBody = invalid.closest('.designer-field-body');
+            if (fieldBody?.hidden) invalid.closest('.designer-field')
+                .querySelector(`[aria-controls="${CSS.escape(fieldBody.id)}"]`).click();
             invalid.reportValidity(); return false;
         }
         if (!formDraft.fields.length) throw new Error('Add at least one field before saving your form.');
@@ -1692,7 +1702,17 @@
         const source = formDraft;
         const input = { ...formTarget(), name: $one('#form-name').value, fields: structuredClone(formDraft.fields), layout: structuredClone(formDraft.layout || []) };
         formEdits.group = null;
-        const record = await request('/sis/forms/', 'POST', { ...input, id: source.id || undefined, version: source.version ?? undefined });
+        savingFormDraft = source; syncFormScope(); updateFormPublication();
+        let record;
+        try {
+            record = await request('/sis/forms/', 'POST', { ...input, id: source.id || undefined, version: source.version ?? undefined });
+        } catch (error) {
+            if (source !== formDraft) return false;
+            throw error;
+        } finally {
+            if (savingFormDraft === source) savingFormDraft = null;
+            if ($one('#form-scope')) { syncFormScope(); updateFormPublication(); }
+        }
         if (source !== formDraft) return false;
         const unchanged = JSON.stringify(input) === JSON.stringify({ ...formTarget(), name: $one('#form-name').value, fields: formDraft.fields, layout: formDraft.layout || [] });
         formDraft = unchanged ? record : { ...formDraft, id: record.id, version: record.version };
@@ -1712,7 +1732,7 @@
     listen('#form-save', 'click', saveDraft);
     listen('#form-add-container', 'click', formLayoutEditor.addContainer);
     listen('#form-publish', 'click', () => {
-        if (dirty || !formDraft.id) throw new Error('Save your draft before reviewing publication.');
+        if (dirty || !formDraft.id || savingFormDraft === formDraft) throw new Error('Finish saving your draft before reviewing publication.');
         const reviewed = structuredClone(formDraft);
         const level = Boolean(reviewed.academic_level_id);
         const body = openDrawer('Review application form', 'APPLICATION PUBLICATION');
