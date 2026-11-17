@@ -256,7 +256,7 @@
         portal: { title: 'Campus content', description: 'A useful, welcoming home for campus news and information.', icon: 'window', action: 'Create content', endpoint: '/sis/portal/editor/', permission: 'sis:portal:manage', fields: [['kind', 'Content type', 'choice', ['news', 'page', 'link']], ['code', 'Unique code'], ['title', 'Title'], ['content', 'Content or HTTPS link', 'textarea'], ['audience', 'Audience', 'choice', ['campus', 'public']]], columns: [['Title', 'title'], ['Type', 'kind'], ['Status', 'status']] },
     };
     datasets.transcripts = { title: 'Transcript requests', description: 'Review a request, prepare the official record, and record delivery after it is complete.', icon: 'file-earmark-text', permission: 'sis:transcript:manage', columns: [['Request', 'short_id'], ['Delivery', 'delivery'], ['Status', 'status'], ['Requested', 'requested_at']] };
-    const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, moneyInput, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const courseDropStudio = window.createWorkspaceCourseDrops({ node, request, task, openDrawer, notify, buildForm, formData });
     const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
     const degreeAuditStudio = window.createWorkspaceDegreeAudit({ node, request, task, can, closeDrawer: () => drawer.hide() });
@@ -269,7 +269,7 @@
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
-    const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
+    const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup() });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
@@ -760,6 +760,8 @@
     }
 
     const formLayouts = {
+        campaigns: [{ title: 'Message content', fields: ['subject', 'body'], wide: ['subject', 'body'] }],
+        access_definition: [{ title: 'Access definition', fields: ['name', 'description'], wide: ['name', 'description'] }],
         teaching_assignment: [
             {
                 title: 'Assignment details',
@@ -1064,7 +1066,7 @@
         if (section === 'applications') return peopleStudio.application(row);
         if (section === 'portal') return editCampusContent(row.id);
         if (section === 'transcripts') return reviewTranscript(row.id);
-        const body = openDrawer(recordLabel(row), datasets[section]?.title.toUpperCase() || 'RECORD');
+        const body = openDrawer(section === 'campaigns' ? 'Message details' : recordLabel(row), datasets[section]?.title.toUpperCase() || 'RECORD');
         const details = node('dl', { class: 'detail-list' });
         for (const [key, value] of Object.entries(row)) {
             if (key === 'id' || key.endsWith('_id') || ['given_name', 'family_name'].includes(key)) continue;
@@ -1080,7 +1082,7 @@
                 : text(value);
             details.append(node('div', {}, node('dt', {}, label), node('dd', {}, formatted)));
         }
-        if (section !== 'teaching') body.append(details);
+        if (!['teaching', 'campaigns'].includes(section)) body.append(details);
         const actions = node('div', { class: 'inline-actions' });
         const action = (label, path, data = {}, success = 'Updated.', style = 'btn-outline-primary') => actions.append(node('button', { type: 'button', class: `btn ${style}`, onclick: event => task(async () => { await request(path, 'POST', data); notify(success); drawer.hide(); if (datasets[current]) await loadDirectory(); }, event.currentTarget) }, label));
         if (row.person_id && can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => task(() => openPerson(row.person_id)) }, 'Open person record'));
@@ -1413,11 +1415,11 @@
         const record = await request(`/sis/rules/${id}/`); $('#student-rule-builder').queryBuilder('setRules', record.rules); $one('#rule-name').value = record.name; accessibleRules();
     });
 
-    async function loadAccess() { await accessStudio.load(); $one('#access-roles').prepend(node('button', { type: 'button', class: 'btn btn-outline-primary mb-3', onclick: event => task(() => restrictionStudio.officeSetup(), event.currentTarget) }, 'Offices & delegation')); }
+    async function loadAccess() { await accessStudio.load(); }
     async function createAccessDefinition(kind) {
         const body = openDrawer(kind === 'roles' ? 'Create a role' : 'Create a permission', 'A LITTLE MORE FLEXIBILITY');
         const fields = [['name', kind === 'roles' ? 'Role identifier' : 'Permission identifier'], ['description', 'Description', 'text', '', false]];
-        const form = await buildForm(fields); form.append(node('p', { class: 'form-text' }, 'Use lowercase letters, digits, colons, underscores or hyphens. Identifiers stay stable; descriptions can explain the purpose.'), node('button', { class: 'btn btn-primary mt-3', type: 'submit' }, 'Create'));
+        const form = await buildForm(fields, {}, { layout: 'access_definition' }); form.append(node('p', { class: 'form-text' }, 'Use lowercase letters, digits, colons, underscores or hyphens. Identifiers stay stable; descriptions can explain the purpose.'), node('button', { class: 'btn btn-primary mt-3', type: 'submit' }, 'Create'));
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => { if (!form.reportValidity()) return; await request(`/sis/access/${kind}/`, 'POST', formData(form, fields)); notify('Created. Ready to assign.'); drawer.hide(); await loadAccess(); }, $one('[type="submit"]', form)); });
         body.append(form);
     }
@@ -1426,7 +1428,7 @@
     listen('#access-new-permission', 'click', () => createAccessDefinition('permissions'));
 
     function definitionActions(body, kind, definition) {
-        const edit = node('button', { type: 'button', class: 'btn btn-outline-primary mt-3', onclick: () => task(async () => {
+        const edit = node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(async () => {
             const surface = openDrawer(`Edit ${definition.name}`, 'CUSTOM ACCESS DEFINITION');
             const fields = [['description', 'Description', 'text', '', false]];
             const form = await buildForm(fields, definition);
@@ -1437,14 +1439,15 @@
             }, save); });
             surface.append(form);
         }) }, 'Edit description');
-        const remove = node('button', { type: 'button', class: 'btn btn-outline-danger mt-3', onclick: () => {
+        const remove = node('button', { type: 'button', class: 'btn btn-outline-danger', onclick: () => {
             const surface = openDrawer(`Delete ${definition.name}?`, 'CUSTOM ACCESS DEFINITION');
             surface.append(node('p', {}, 'Deleting this definition also removes its assignments. Review affected access before confirming.'));
             surface.append(node('button', { type: 'button', class: 'btn btn-danger', onclick: event => task(async () => {
                 await request(`/sis/access/${kind}/${definition.id}/`, 'DELETE'); notify('Custom definition deleted.'); drawer.hide(); await loadAccess();
             }, event.currentTarget) }, 'Confirm deletion'));
         } }, 'Delete definition');
-        body.append(node('div', { class: 'inline-actions' }, edit, remove));
+        body.append(node('div', { class: 'inline-actions' },
+            actionMenu('Definition actions', [edit, remove], { context: `Definition actions for ${definition.name}` })));
     }
     async function personAccess(container, userId) { return accessStudio.person(container, userId); }
 

@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 
 test('private message templates create independent drafts and retire without changing earlier messages', async ({ page }) => {
@@ -74,7 +75,7 @@ test('private message templates create independent drafts and retire without cha
     await page.getByRole('button', { name: 'Edit template', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Future template wording.');
     await page.getByRole('button', { name: 'Save message template', exact: true }).click();
-    await page.getByRole('button', { name: 'Retire template', exact: true }).click();
+    await recordAction(page, 'Retire template');
     await page.getByRole('button', { name: 'Confirm template retirement', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Start a new message', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Back to my templates', exact: true }).click();
@@ -150,7 +151,7 @@ test('institutional template review separates authoring, approval and shared rea
     };
     const open = () => page.getByRole('button', { name: `Open template ${source.subject}`, exact: true }).click();
     const submit = async () => {
-        await page.getByRole('button', { name: 'Submit for institutional approval', exact: true }).click();
+        await recordAction(page, 'Submit for institutional approval');
         await page.getByRole('button', { name: 'Confirm template submission', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Edit template', exact: true })).toHaveCount(0);
     };
@@ -184,7 +185,7 @@ test('institutional template review separates authoring, approval and shared rea
     await expect(body).toContainText('Reviewed fictional wording.');
     await library('author');
     await page.getByRole('button', { name: 'Institutional library', exact: true }).click(); await open();
-    await page.getByRole('button', { name: 'Return to private editing', exact: true }).click();
+    await recordAction(page, 'Return to private editing');
     await page.getByRole('button', { name: 'Confirm withdrawal to private editing', exact: true }).click();
     await library('reader');
     await page.getByRole('button', { name: 'Institutional library', exact: true }).click();

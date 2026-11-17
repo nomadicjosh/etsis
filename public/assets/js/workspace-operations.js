@@ -11,6 +11,7 @@ window.createWorkspaceOperations = function (ui) {
         badge,
         money,
         moneyInput,
+        recordSummary,
         actionMenu,
         disposeActionMenus,
         buildForm,
@@ -1655,7 +1656,8 @@ window.createWorkspaceOperations = function (ui) {
             button("Create reusable template", async () => {
                 const form = await flow("Save reusable template", messageFields,
                     "/sis/campaigns/templates/create/", null, () => campaignTemplates(), {},
-                    "Save plain-text wording for future messages. This creates a private template, not a delivery queue.");
+                    "Save plain-text wording for future messages. This creates a private template, not a delivery queue.",
+                    { layout: "campaigns" });
                 form.elements.subject.maxLength = 191;
                 form.elements.body.maxLength = 100000;
             }, "btn-primary"));
@@ -1687,8 +1689,9 @@ window.createWorkspaceOperations = function (ui) {
             node("p", { id: "campaign-send-time-help", class: "form-text" },
                 "Use the institution's local date and time. Sending begins on the first worker run after this time; it may take several batches."));
         const timing = node("fieldset", {}, node("legend", { class: "h5" }, "Delivery timing"),
-            node("div", { class: "form-check" }, now, node("label", { for: now.id, class: "form-check-label" }, "Send now")),
-            node("div", { class: "form-check" }, later, node("label", { for: later.id, class: "form-check-label" }, "Schedule for later")), schedule);
+            node("div", { class: "delivery-timing-options" },
+                node("div", { class: "form-check" }, now, node("label", { for: now.id, class: "form-check-label" }, "Send now")),
+                node("div", { class: "form-check" }, later, node("label", { for: later.id, class: "form-check-label" }, "Schedule for later"))), schedule);
         const update = node("button", { type: "submit", class: "btn btn-outline-primary mt-2", hidden: true }, "Update delivery review");
         const hint = node("p", { role: "status", class: "form-text" });
         const form = node("form", {}, timing, hint, update);
@@ -1845,7 +1848,7 @@ window.createWorkspaceOperations = function (ui) {
             `/sis/campaigns/${row.id}/delivery-cancel/`, () => ({ version: latest.version }), back, {},
             "Stop new sends under this authorization. A send already claimed may finish. Sent and uncertain delivery records are retained."));
         cancel.hidden = true;
-        const refresh = button("Refresh sending progress", () => load(false));
+        const refresh = button("Refresh progress", () => load(false));
         progress.append(label, node("div", { class: "progress" }, bar), summary, scheduled, explanation,
             node("div", { class: "d-flex flex-wrap gap-2" }, review, cancel, refresh));
         body.append(progress);
@@ -1905,88 +1908,193 @@ window.createWorkspaceOperations = function (ui) {
         const data = await request(`/sis/campaigns/${row.id}/`);
         if (!body.isConnected) return;
         const back = () => openRecord("campaigns", row);
-        const templateLabels = { template: "Private template", template_retired: "Retired template",
-            template_review: "Awaiting institutional approval", template_shared: "Approved institutional template" };
+        const templateLabels = {
+            template: "Private template",
+            template_retired: "Retired template",
+            template_review: "Awaiting institutional approval",
+            template_shared: "Approved institutional template",
+        };
         const template = Object.hasOwn(templateLabels, data.status);
-        const canManageTemplate = data.status !== "template_shared" || data.is_owner || can("sis:communications:admin");
+        const canManageTemplate =
+            data.status !== "template_shared" || data.is_owner || can("sis:communications:admin");
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": template ? "Template tasks" : "Message tasks",
+        });
+        const more = [];
+        const content = section("Message", node("p", { class: "message-preview" }, data.body));
         body.append(
-            section(
-                data.subject,
-                node("p", { class: "message-preview" }, data.body),
-                badge(template ? templateLabels[data.status] : data.status),
-            ),
+            node("h3", { class: "message-subject private-text" }, data.subject),
+            recordSummary([
+                ["Status", badge(template ? templateLabels[data.status] : data.status)],
+                ["Type", template ? "Reusable template" : "Message"],
+            ]),
+            actions,
         );
         if (["draft", "template"].includes(data.status))
-            body.append(
+            actions.append(
                 button(template ? "Edit template" : "Edit draft", async () => {
                     const form = await flow(
                         template ? "Save message template" : "Save message draft",
                         messageFields,
-                        template ? `/sis/campaigns/${row.id}/template/edit/` : `/sis/campaigns/${row.id}/draft/`,
+                        template
+                            ? `/sis/campaigns/${row.id}/template/edit/`
+                            : `/sis/campaigns/${row.id}/draft/`,
                         (values) => ({
                             ...values,
                             version: Number(data.version),
                         }),
                         back,
                         data,
+                        template
+                            ? "Edits affect this template. Existing message copies keep their wording."
+                            : "Save this wording before reviewing recipients or delivery.",
+                        { layout: "campaigns" },
                     );
                     form.elements.subject.maxLength = 191;
                     form.elements.body.maxLength = 100000;
                 }),
             );
+        if (can("sis:audit:read"))
+            actions.append(button("History", () => audit("campaigns", row), "btn-outline-secondary"));
         if (template) {
             const decision = async (action, title, explanation) => {
-                const form = await flow(title, [], `/sis/campaigns/${row.id}/template/review/`,
-                    () => ({ version: data.version, action }), back, {}, explanation);
-                form.prepend(node("h3", { class: "h5 private-text" }, data.subject),
-                    node("p", { class: "message-preview" }, data.body));
+                const form = await flow(
+                    title,
+                    [],
+                    `/sis/campaigns/${row.id}/template/review/`,
+                    () => ({ version: data.version, action }),
+                    back,
+                    {},
+                    explanation,
+                );
+                form.prepend(
+                    node("h3", { class: "h5 private-text" }, data.subject),
+                    node("p", { class: "message-preview" }, data.body),
+                );
             };
-            body.append(node("p", { class: "form-text" },
-                "Templates have no recipients and cannot send mail. Each new message keeps its own editable copy."),
-                button("Back to my templates", () => campaignTemplates(data.status === "template_retired" ? "retired"
-                    : data.status === "template_shared" ? "institutional" : data.status === "template_review" ? "submitted" : "mine")));
-            if (["template", "template_shared"].includes(data.status)) body.append(button("Start a new message", async () => {
-                const draft = await request(`/sis/campaigns/${row.id}/template/draft/`, "POST", { version: data.version });
-                if (!body.isConnected) return;
-                notify("Independent message draft created. Review it before choosing recipients.");
-                await openRecord("campaigns", { id: draft.id });
-            }, "btn-primary"));
-            if (data.status === "template") body.append(button("Submit for institutional approval", () =>
-                decision("submit", "Confirm template submission", "A Communications administrator will review this exact wording. Editing pauses until it is returned or withdrawn.")));
+            body.prepend(
+                button(
+                    "Back to my templates",
+                    () =>
+                        campaignTemplates(
+                            data.status === "template_retired"
+                                ? "retired"
+                                : data.status === "template_shared"
+                                  ? "institutional"
+                                  : data.status === "template_review"
+                                    ? "submitted"
+                                    : "mine",
+                        ),
+                    "btn-link mb-3",
+                ),
+            );
+            body.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Templates have no recipients and cannot send mail. Each new message keeps its own editable copy.",
+                ),
+            );
+            if (["template", "template_shared"].includes(data.status))
+                actions.prepend(
+                    button(
+                        "Start a new message",
+                        async () => {
+                            const draft = await request(`/sis/campaigns/${row.id}/template/draft/`, "POST", {
+                                version: data.version,
+                            });
+                            if (!body.isConnected) return;
+                            notify(
+                                "Independent message draft created. Review it before choosing recipients.",
+                            );
+                            await openRecord("campaigns", { id: draft.id });
+                        },
+                        "btn-primary",
+                    ),
+                );
+            if (data.status === "template")
+                more.push(
+                    button("Submit for institutional approval", () =>
+                        decision(
+                            "submit",
+                            "Confirm template submission",
+                            "A Communications administrator will review this exact wording. Editing pauses until it is returned or withdrawn.",
+                        ),
+                    ),
+                );
             if (["template_review", "template_shared"].includes(data.status) && canManageTemplate)
-                body.append(button("Return to private editing", () => decision("withdraw", "Confirm withdrawal to private editing",
-                    "This removes institutional availability or the pending submission. Approval will be required again after edits. Existing message copies stay intact.")));
+                more.push(
+                    button("Return to private editing", () =>
+                        decision(
+                            "withdraw",
+                            "Confirm withdrawal to private editing",
+                            "This removes institutional availability or the pending submission. Approval will be required again after edits. Existing message copies stay intact.",
+                        ),
+                    ),
+                );
             if (data.status === "template_review" && can("sis:communications:admin")) {
-                body.append(button("Approve institutional template", () => decision("approve", "Confirm institutional approval",
-                    "Approve this exact wording for all staff with Communications access to read and copy. This does not send a message."), "btn-primary"),
-                button("Return to author", () => decision("return", "Confirm return to author", "Return this wording to its owner's private editing library.")));
+                actions.append(
+                    button(
+                        "Approve institutional template",
+                        () =>
+                            decision(
+                                "approve",
+                                "Confirm institutional approval",
+                                "Approve this exact wording for all staff with Communications access to read and copy. This does not send a message.",
+                            ),
+                        "btn-primary",
+                    ),
+                    button("Return to author", () =>
+                        decision(
+                            "return",
+                            "Confirm return to author",
+                            "Return this wording to its owner's private editing library.",
+                        ),
+                    ),
+                );
             }
-            if (canManageTemplate) body.append(button(data.status === "template_retired" ? "Restore template" : "Retire template", () =>
-                flow(data.status === "template_retired" ? "Confirm template restoration" : "Confirm template retirement", [],
-                    `/sis/campaigns/${row.id}/template/status/`,
-                    () => ({ version: data.version, retired: data.status !== "template_retired" }), back, {},
-                    "Retirement stops new messages from using this template. Restoration returns it to private editing, requiring new institutional approval. Existing messages keep their content.")));
+            if (canManageTemplate)
+                more.push(
+                    button(
+                        data.status === "template_retired" ? "Restore template" : "Retire template",
+                        () =>
+                            flow(
+                                data.status === "template_retired"
+                                    ? "Confirm template restoration"
+                                    : "Confirm template retirement",
+                                [],
+                                `/sis/campaigns/${row.id}/template/status/`,
+                                () => ({
+                                    version: data.version,
+                                    retired: data.status !== "template_retired",
+                                }),
+                                back,
+                                {},
+                                "Retirement stops new messages from using this template. Restoration returns it to private editing, requiring new institutional approval. Existing messages keep their content.",
+                            ),
+                        data.status === "template_retired" ? "btn-outline-primary" : "btn-outline-danger",
+                    ),
+                );
+            if (more.length > 1)
+                actions.append(actionMenu("More", more, { context: "More template actions" }));
+            else if (more.length) actions.append(more[0]);
+            body.append(content);
             return;
         }
         if (data.status === "draft" && can("sis:person:manage"))
-            body.append(button("Choose recipients", () => campaignRecipients(row, data, back), "btn-primary"));
+            actions.prepend(
+                button("Choose recipients", () => campaignRecipients(row, data, back), "btn-primary"),
+            );
         if (["queued", "paused"].includes(data.status))
-            body.append(
-                button(
-                    data.status === "paused"
-                        ? "Resume campaign"
-                        : "Pause campaign",
-                    async () => {
-                        await request(
-                            `/sis/campaigns/${row.id}/pause/`,
-                            "POST",
-                            {
-                                pause: data.status !== "paused",
-                            },
-                        );
-                        await back();
-                    },
-                ),
+            actions.prepend(
+                button(data.status === "paused" ? "Resume campaign" : "Pause campaign", async () => {
+                    await request(`/sis/campaigns/${row.id}/pause/`, "POST", {
+                        pause: data.status !== "paused",
+                    });
+                    await back();
+                }),
             );
         if (!data.can_dispatch)
             body.append(
@@ -1999,6 +2107,8 @@ window.createWorkspaceOperations = function (ui) {
         const deliveries = section("Delivery queue");
         if (data.status !== "draft") await campaignProgress(body, row, data, back);
         if (!body.isConnected) return;
+        body.append(content);
+        if (data.status === "draft") return;
         body.append(deliveries);
         deliveries.append(
             node(
@@ -2011,15 +2121,24 @@ window.createWorkspaceOperations = function (ui) {
             scrollTable(
                 ["Recipient account", "Status", "Review"],
                 rows.map((item) => [
-                    [item.given_name, item.family_name]
-                        .filter(Boolean)
-                        .join(" ") ||
+                    [item.given_name, item.family_name].filter(Boolean).join(" ") ||
                         `Account …${item.recipient_user_id.slice(-8)}`,
-                    badge(item.status === "sent" ? "sent" : item.disposition === "confirmed_sent" ? "Staff confirmed sending"
-                        : item.disposition === "closed" ? "Closed without resending" : item.status),
-                    can("sis:communications:admin") && can("sis:person:manage")
-                        && (item.resolution_id || ["sending", "needs_review"].includes(item.status))
-                        ? button(item.resolution_id ? "View delivery decision" : "Review delivery", () => campaignDeliveryDecision(row, item, back)) : "—",
+                    badge(
+                        item.status === "sent"
+                            ? "sent"
+                            : item.disposition === "confirmed_sent"
+                              ? "Staff confirmed sending"
+                              : item.disposition === "closed"
+                                ? "Closed without resending"
+                                : item.status,
+                    ),
+                    can("sis:communications:admin") &&
+                    can("sis:person:manage") &&
+                    (item.resolution_id || ["sending", "needs_review"].includes(item.status))
+                        ? button(item.resolution_id ? "View delivery decision" : "Review delivery", () =>
+                              campaignDeliveryDecision(row, item, back),
+                          )
+                        : "—",
                 ]),
                 "Campaign deliveries",
             ),
@@ -2184,7 +2303,7 @@ window.createWorkspaceOperations = function (ui) {
                     editCatalog(sectionName, row),
                 ),
             );
-        if (can("sis:audit:read"))
+        if (can("sis:audit:read") && sectionName !== "campaigns")
             actions.append(
                 button("View audit history", () => audit(sectionName, row)),
             );

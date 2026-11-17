@@ -256,6 +256,25 @@ h3 { font-size: .9rem; font-weight: 650; }
     grid-column: 1 / -1;
     min-width: 0;
 }
+.access-definition-grid { padding: 0; }
+.access-definition-grid .role-card { min-width: 0; }
+.access-definition-grid .role-card strong { font-size: .95rem; }
+.access-definition-grid .role-card small { color: #526a80; font-size: .8rem; line-height: 1.6; }
+.access-identifier { overflow-wrap: anywhere; }
+.permission-picker { max-height: min(55vh, 32rem); padding: .75rem; gap: .5rem; }
+.access-grant.form-check { margin: 0; padding: 1rem 1rem 1rem 3rem; border: 1px solid var(--campus-line); border-radius: .6rem; background: #fff; min-width: 0; }
+.access-grant:has(input:checked) { border-color: #96b4d0; background: #f2f7fb; }
+.access-grant .form-check-input { margin-left: -1.8rem; }
+.access-grant .form-check-label { display: block; cursor: pointer; overflow-wrap: anywhere; }
+.access-grant .access-identifier { display: block; font-weight: 600; }
+.permission-picker .form-check-label small { margin-top: .3rem; color: #526a80; font-size: .8rem; line-height: 1.6; }
+.access-grant-state { display: block; margin-top: .5rem; }
+.record-drawer .message-subject { font-size: 1.2rem; line-height: 1.5; margin-bottom: 1rem; overflow-wrap: anywhere; }
+.record-form-section textarea[name="body"] { min-height: 16rem; }
+.delivery-timing-options { display: flex; flex-wrap: wrap; gap: .75rem; }
+.delivery-timing-options .form-check { flex: 1 1 12rem; margin: 0; padding: 1rem 1rem 1rem 2.75rem; border: 1px solid var(--campus-line); border-radius: .6rem; background: #f8fafc; }
+.delivery-timing-options .form-check:has(input:checked) { border-color: #96b4d0; background: #f2f7fb; }
+.delivery-timing-options .form-check-label { display: block; cursor: pointer; }
 
 .account-shell {
     max-width: 1060px;
@@ -642,7 +661,7 @@ h3 { font-size: .9rem; font-weight: 650; }
 .program-actions { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; }
 .program-actions > .btn { white-space: nowrap; }
 .program-actions > .btn-link { --bs-btn-color: var(--campus-primary); --bs-btn-hover-color: #285b88; --bs-btn-active-color: #285b88; padding-inline: 0; }
-.record-drawer .btn:disabled { color: #5e7287; background: #f1f4f7; border-color: #b7c4d2; opacity: 1; }
+.record-drawer .btn:disabled, .access-directory .btn:disabled { color: #5e7287; background: #f1f4f7; border-color: #b7c4d2; opacity: 1; }
 .booking-meeting-actions { display: flex; align-items: center; gap: .5rem; }
 .booking-meeting-actions .btn { white-space: nowrap; }
 .booking-meeting-actions .btn-outline-danger { color: #a02834; border-color: #a02834; }

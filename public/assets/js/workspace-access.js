@@ -9,6 +9,7 @@ window.createWorkspaceAccess = function (ui) {
         badge,
         notify,
         definitionActions,
+        offices,
     } = ui;
     let serial = 0;
     const bool = (value) => value === true || Number(value) === 1;
@@ -49,7 +50,7 @@ window.createWorkspaceAccess = function (ui) {
             class: "form-text",
             role: "status",
             "aria-live": "polite",
-        });
+        }, "Loading definitions…");
         const assigned = node("input", {
             type: "checkbox",
             id: `access-assigned-${unique}`,
@@ -87,8 +88,8 @@ window.createWorkspaceAccess = function (ui) {
                     ),
                 ),
             );
-        const results = node("div", {
-            class: choose ? "role-grid" : "permission-picker",
+        const results = node(choose ? "div" : "fieldset", {
+            class: choose ? "role-grid access-definition-grid" : "permission-picker",
         });
         const previous = click("Previous page", async () => {
             after = trail.pop() || "";
@@ -99,6 +100,8 @@ window.createWorkspaceAccess = function (ui) {
             after = next.dataset.after;
             await load();
         });
+        previous.disabled = true;
+        next.disabled = true;
         container.append(
             form,
             status,
@@ -136,6 +139,7 @@ window.createWorkspaceAccess = function (ui) {
             }
             if (version !== requestVersion || !container.isConnected) return;
             results.replaceChildren();
+            if (!choose) results.append(node("legend", { class: "visually-hidden" }, title));
             status.textContent = `${page.items.length} ${title.toLowerCase()} on this page.${page.next_after ? " More are available." : ""}`;
             previous.disabled = trail.length === 0;
             next.disabled = !page.next_after;
@@ -157,11 +161,9 @@ window.createWorkspaceAccess = function (ui) {
                     );
                     card.replaceChildren(
                         badge(
-                            bool(item.is_system)
-                                ? "Protected system definition"
-                                : "Custom definition",
+                            bool(item.is_system) ? "System" : "Custom",
                         ),
-                        node("strong", {}, item.name),
+                        node("strong", { class: "access-identifier" }, item.name),
                         node(
                             "small",
                             {},
@@ -181,11 +183,13 @@ window.createWorkspaceAccess = function (ui) {
                 const label = node(
                     "label",
                     { class: "form-check-label", for: input.id },
-                    item.name,
+                    node("span", { class: "access-identifier" }, item.name),
                     node("small", {}, item.description),
                 );
+                if (bool(item.assigned)) label.append(node("span", { class: "access-grant-state" }, badge("Direct")));
                 if (bool(item.effective) && !bool(item.assigned))
                     label.append(
+                        node("span", { class: "access-grant-state" }, badge("Inherited")),
                         node(
                             "small",
                             { class: "d-block" },
@@ -214,7 +218,7 @@ window.createWorkspaceAccess = function (ui) {
                     }, input),
                 );
                 results.append(
-                    node("div", { class: "form-check" }, input, label),
+                    node("div", { class: "form-check access-grant" }, input, label),
                 );
             }
             if (focusId) (document.getElementById(focusId) || status).focus();
@@ -247,6 +251,7 @@ window.createWorkspaceAccess = function (ui) {
                     : "Checkboxes represent direct grants. Permission groups may also provide inherited access.",
             ),
         );
+        if (!bool(record.is_system)) definitionActions(body, "roles", record);
         await browser(body, {
             kind: "permissions",
             title: "Permissions",
@@ -254,7 +259,6 @@ window.createWorkspaceAccess = function (ui) {
             subject: record.id,
             disabled: bool(record.is_system),
         });
-        if (!bool(record.is_system)) definitionActions(body, "roles", record);
     }
     async function permissions() {
         const body = openDrawer("Permission definitions", "ROLES & ACCESS");
@@ -280,10 +284,11 @@ window.createWorkspaceAccess = function (ui) {
         const surface = node("div", { class: "access-directory" });
         container.append(surface);
         surface.append(
-            click(
-                "Manage permission definitions",
-                permissions,
-                "btn btn-outline-primary mb-4",
+            node(
+                "div",
+                { class: "inline-actions mb-4", role: "group", "aria-label": "Access setup" },
+                click("Permission definitions", permissions),
+                click("Offices & delegation", offices, "btn btn-outline-secondary"),
             ),
         );
         await browser(surface, { kind: "roles", title: "Roles", choose: role });
@@ -313,6 +318,7 @@ window.createWorkspaceAccess = function (ui) {
             grant: "user_role",
             subject: userId,
         });
+        if (!container.isConnected) return;
         await browser(permissions, {
             kind: "permissions",
             title: "Permissions",

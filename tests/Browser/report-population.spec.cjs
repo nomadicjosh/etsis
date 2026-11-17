@@ -279,7 +279,7 @@ test('a messaging recipient uses the shared composer, explicit recipient queue a
     await expect(drawer).toContainText('You can leave this screen');
     expect(f.calls.find(c => c.path.endsWith('/delivery-confirm/')).data).toEqual({ review_token: 'fictional-report-message-delivery' });
     f.sent = 2;
-    await drawer.getByRole('button', { name: 'Refresh sending progress', exact: true }).click();
+    await drawer.getByRole('button', { name: 'Refresh progress', exact: true }).click();
     await expect(drawer.getByRole('progressbar', { name: 'Confirmed sends' })).toHaveAttribute('aria-valuenow', '100');
     expect(f.calls.filter(c => c.path.endsWith('/population/select/')).every(c => c.data.action === 'messaging')).toBe(true);
     expect(f.calls.filter(c => c.path === '/sis/campaigns/recipients/students/').every(c =>
