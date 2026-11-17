@@ -247,6 +247,12 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Communications\AuthorizedCampaignExecutor::class,
             \Domain\Communications\Service\MessageCipher::class =>
                 \Infrastructure\Communications\DefuseMessageCipher::class,
+            \Domain\Admissions\Repository\AdmissionDocumentRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAdmissionDocumentRepository::class,
+            \Domain\Admissions\Service\AdmissionDocumentStorage::class =>
+                \Infrastructure\Admissions\PrivateAdmissionDocumentStorage::class,
+            \Domain\Admissions\Service\AdmissionDocumentScanner::class =>
+                \Infrastructure\Admissions\ClamdDocumentScanner::class,
             \Domain\Communications\Service\MailTransport::class =>
                 \Infrastructure\Communications\ConfiguredMailTransport::class,
             \Domain\Portal\Repository\PortalRepository::class =>
@@ -278,6 +284,14 @@ final class SisServiceProvider extends CodefyServiceProvider
         foreach ($bindings as $port => $adapter) {
             $this->codefy->alias($port, $adapter);
         }
+        $this->codefy->delegate(\Domain\Admissions\Service\AdmissionDocumentPolicy::class, function () {
+            $enabled = $this->codefy->configContainer->getConfigKey('admission_documents.enabled', false) === true;
+            return new \Domain\Admissions\Service\AdmissionDocumentPolicy(
+                $enabled && class_exists(\finfo::class),
+                (int) $this->codefy->configContainer->getConfigKey('admission_documents.retention_days', 0),
+                $this->codefy->configContainer->getConfigKey('admission_documents.scanner_reviewed', false) === true,
+            );
+        });
         $this->codefy->delegate(\Domain\Transcript\ValueObject\TranscriptIssuer::class, function () {
             return new \Domain\Transcript\ValueObject\TranscriptIssuer(
                 $this->codefy->configContainer->string("transcript.issuer_name", ""),

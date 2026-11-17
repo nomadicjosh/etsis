@@ -75,12 +75,13 @@
     }
 
     async function send(path, method = 'GET', data, accept = 'application/json') {
+        const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
         const response = await fetch(path, {
             method, credentials: 'same-origin', cache: 'no-store', redirect: 'error',
             // The router's legacy input parser accepts form strings, but crashes on JSON numbers/booleans.
             // Private middleware restores the typed object before CSRF, firewall and controller handling.
-            headers: { Accept: accept, ...(method === 'GET' ? {} : { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-CSRF-Token': csrf() }) },
-            body: method === 'GET' ? undefined : new URLSearchParams({ _workspace_json: JSON.stringify(data || {}) }).toString(),
+            headers: { Accept: accept, ...(method === 'GET' ? {} : { ...(!multipart ? { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' } : {}), 'X-CSRF-Token': csrf() }) },
+            body: method === 'GET' ? undefined : multipart ? data : new URLSearchParams({ _workspace_json: JSON.stringify(data || {}) }).toString(),
         });
         if (response.status === 401) {
             if (!signInPending) {

@@ -17,10 +17,23 @@ use Qubus\Routing\Interfaces\Mappable;
 use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
 use Application\Http\Controller\PersonEducationController as Education;
 use Application\Http\Controller\AdmissionCaseworkController as Casework;
+use Application\Http\Controller\AdmissionDocumentController as Documents;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/sis/applications/{application}/documents/', [Documents::class, 'listing']);
+    $router->map(['POST'], '/sis/applications/{application}/documents/', [Documents::class, 'upload']);
+    $router->map(['GET'], '/sis/applications/{application}/documents/{id}/download/', [Documents::class, 'download']);
+    $router->map(['POST'], '/sis/applications/{application}/documents/{id}/rescan/', [Documents::class, 'rescan']);
+    $router->map(['POST'], '/sis/applications/{application}/documents/{id}/retain/', [Documents::class, 'retain']);
+    $router->map(
+        ['POST'],
+        '/sis/applications/{application}/documents/{id}/purge-review/',
+        [Documents::class, 'reviewPurge']
+    );
+    $router->map(['POST'], '/sis/applications/{application}/documents/{id}/purge/', [Documents::class, 'purge']);
+
     $router->map(['GET'], '/sis/applications/{id}/casework/', [Casework::class, 'view'])
         ->name('sis.admissions.casework');
     $router->map(['POST'], '/sis/applications/{id}/casework/', [Casework::class, 'save'])

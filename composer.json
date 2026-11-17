@@ -59,6 +59,7 @@
         "qubus/qubus-coding-standard": "^2"
     },
     "suggest": {
+        "ext-fileinfo": "Required for optional private admissions document MIME verification.",
         "fenom/fenom": "Lightweight and fast template engine for PHP.",
         "fenom/providers-collection": "Additional providers for Fenom template engine.",
         "foil/foil": "Write simple, clean, and concise templates with nothing more than PHP.",

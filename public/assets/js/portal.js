@@ -65,6 +65,7 @@
     }
 
     async function request(path, method = 'GET', data) {
+        const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
         const token = one('#campus-csrf input')?.value;
         const response = await fetch(path, {
             method,
@@ -76,15 +77,14 @@
                 ...(method === 'GET'
                     ? {}
                     : {
-                          'Content-Type':
-                              'application/x-www-form-urlencoded;charset=UTF-8',
+                          ...(!multipart ? { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' } : {}),
                           'X-CSRF-Token': token || '',
                       }),
             },
             body:
                 method === 'GET'
                     ? undefined
-                    : new URLSearchParams({
+                    : multipart ? data : new URLSearchParams({
                           _workspace_json: JSON.stringify(data || {}),
                       }).toString(),
         });
@@ -697,7 +697,7 @@
 
     }
 
-    function submittedApplications(applications) {
+    function submittedApplications(applications, documentGuards = null) {
         const identity = `submitted-answers-${++controlSequence}`;
         const detail = el('section', { id: identity, class: 'campus-application-answers mt-4', hidden: true,
             'aria-labelledby': `${identity}-title` });
@@ -752,6 +752,7 @@
                 if (ticket === serial) { loading = false; trigger.removeAttribute('aria-busy'); }
             }
         }
+        const documentArea = el('div');
         const rows = applications.map(application => {
             const answers = application.submission_id ? el('button', { class: 'btn campus-button-outline btn-sm', type: 'button',
                 'aria-label': `View answers for ${programLabel(application)} · ${termLabel(application)}`,
@@ -764,20 +765,22 @@
                 el('p', { class: 'campus-muted mb-0' }, progress.next),
                 progress.href ? el('a', { href: progress.href }, 'My campus') : null);
             const steps = el('div');
-            window.createAdmissionCasework({ node: el, request, task, notify: notice })
-                .applicant(steps, application.id, `${programLabel(application)} · ${termLabel(application)}`);
+            const guard = window.createAdmissionCasework({ node: el, request, task, notify: notice })
+                .applicant(steps, application.id, `${programLabel(application)} · ${termLabel(application)}`, documentArea);
+            documentGuards?.push(guard);
             return [programLabel(application), termLabel(application), next, steps, answers];
         });
         return surface('Your applications', applications.length === 50
             ? el('p', { class: 'campus-muted' }, 'Showing up to 50 applications.') : null,
             table(['Program', 'Entry term', 'Progress', 'Next steps', 'Answers'], rows,
-            'Your admissions applications'), detail);
+            'Your admissions applications'), documentArea, detail);
     }
 
     function applications(container) {
-        const saved = el('div');
+        const saved = el('div'); let documentGuards = [];
         const refreshApplications = () => {
-            saved.replaceChildren(...(me?.applications.length ? [submittedApplications(me.applications)] : []));
+            documentGuards = [];
+            saved.replaceChildren(...(me?.applications.length ? [submittedApplications(me.applications, documentGuards)] : []));
         };
         refreshApplications(); container.append(saved);
         if (config.signedIn) {
@@ -791,11 +794,13 @@
         let statusRequest = 0;
         const status = el('p', { class: 'campus-muted mb-0', role: 'status', 'aria-atomic': 'true' });
         async function reloadApplications() {
+            if (documentGuards.some(guard => !guard.beforeLeave())) return;
             const ticket = ++statusRequest;
             status.textContent = 'Checking your application status…';
             try {
                 const result = await readApplicationContext();
                 if (ticket !== statusRequest || pageLeaving || !saved.isConnected || !me) return;
+                if (documentGuards.some(guard => !guard.beforeLeave())) { status.textContent = 'Upload or clear selected documents before refreshing status.'; return; }
                 if (result.person_id !== me.person.id) throw new Error('Application ownership changed.');
                 me.applications = result.items;
                 refreshApplications();

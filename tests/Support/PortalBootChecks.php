@@ -6218,3 +6218,115 @@ $sis->access->grants = ['sis:communications:manage', 'sis:person:manage'];
 if ($app->router->match($recipientRequest)->getStatusCode() !== 403) {
     throw new RuntimeException('Communications permission overrode the required admissions duty.');
 }
+
+// Fictional private uploads cross the real provider, multipart, CSRF and binary-download boundaries.
+$documentStorage = new class implements \Domain\Admissions\Service\AdmissionDocumentStorage {
+    private array $values = [];
+    public function put(
+        \Domain\Shared\ValueObject\EntityId $application,
+        \Domain\Shared\ValueObject\EntityId $id,
+        #[\SensitiveParameter] string $bytes
+    ): void {
+        $this->values[$application->value . ':' . $id->value] = $bytes;
+    }
+    public function read(
+        \Domain\Shared\ValueObject\EntityId $application,
+        \Domain\Shared\ValueObject\EntityId $id
+    ): string {
+        return $this->values[$application->value . ':' . $id->value];
+    }
+    public function remove(
+        \Domain\Shared\ValueObject\EntityId $application,
+        \Domain\Shared\ValueObject\EntityId $id
+    ): void {
+        unset($this->values[$application->value . ':' . $id->value]);
+    }
+};
+$app->delegate(\Domain\Admissions\Service\AdmissionDocumentStorage::class, static fn() => $documentStorage);
+$app->delegate(
+    \Domain\Admissions\Service\AdmissionDocumentPolicy::class,
+    static fn() => new \Domain\Admissions\Service\AdmissionDocumentPolicy(true, 365, true)
+);
+$app->delegate(\Domain\Admissions\Service\AdmissionDocumentScanner::class, static fn() =>
+    new class implements \Domain\Admissions\Service\AdmissionDocumentScanner {
+        public function scan(#[\SensitiveParameter] string $bytes): string
+        {
+ return 'clean';
+        }
+    });
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$documentId = \Domain\Shared\ValueObject\EntityId::generate();
+$documentPath = '/portal/api/applications/' . $caseworkApplication->value . '/documents/';
+$documentBytes = "%PDF-1.4\nFictional HTTP test document.\n%%EOF";
+$documentStream = new \Laminas\Diactoros\Stream('php://temp', 'w+');
+$documentStream->write($documentBytes);
+$documentStream->rewind();
+$documentRequest = $post->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $documentPath))
+    ->withBody(new \Laminas\Diactoros\Stream('php://temp', 'w+'))
+    ->withParsedBody(['upload_id' => $documentId->value])
+    ->withUploadedFiles(['document' => new \Laminas\Diactoros\UploadedFile(
+        $documentStream,
+        strlen($documentBytes),
+        UPLOAD_ERR_OK,
+        'fictional.pdf',
+        'application/pdf'
+    )]);
+if ($app->router->match($documentRequest)->getStatusCode() !== 403) {
+    throw new RuntimeException('A document upload bypassed CSRF.');
+}
+$documentResponse = $app->router->match($documentRequest->withHeader('X-CSRF-Token', 'fictionalcsrftoken'));
+if (
+    $documentResponse->getStatusCode() !== 201
+    || !str_contains($documentResponse->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('A valid private multipart upload failed its real HTTP boundary.');
+}
+$documentDownload = $get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $documentPath . $documentId->value . '/download/'
+));
+if ($app->router->match($documentDownload)->getStatusCode() === 200) {
+    throw new RuntimeException('The HTTP boundary downloaded an unscanned file.');
+}
+$app->make(\Domain\Admissions\Service\AdmissionDocumentWorker::class)->run();
+$documentDownloadResponse = $app->router->match($documentDownload);
+if (
+    $documentDownloadResponse->getStatusCode() !== 200
+    || $documentDownloadResponse->getHeaderLine('Content-Type') !== 'application/octet-stream'
+    || !str_contains($documentDownloadResponse->getHeaderLine('Content-Disposition'), 'attachment;')
+    || $documentDownloadResponse->getHeaderLine('X-Content-Type-Options') !== 'nosniff'
+    || !str_contains($documentDownloadResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || (string) $documentDownloadResponse->getBody() !== $documentBytes
+) {
+    throw new RuntimeException('The private owner download lost its safe attachment contract.');
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+if ($app->router->match($documentDownload)->getStatusCode() !== 403) {
+    throw new RuntimeException('A staff account overrode the owner-only document route.');
+}
+
+$documentRow = $sis->sql->one('sis_admission_documents', ['id' => $documentId->value]);
+$documentBase = '/sis/applications/' . $caseworkApplication->value . '/documents/';
+$documentControls = $documentBase . $documentId->value . '/retain/';
+if (
+    $teachingPost($documentControls, ['version' => (int) $documentRow['version'], 'hold' => true,
+    'until' => null, 'visible' => false])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Custodial document access and retention failed the private CSRF boundary.');
+}
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+if ($app->router->match($documentDownload)->getStatusCode() !== 403) {
+    throw new RuntimeException('An applicant could still download a restricted staff file.');
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->grants = ['sis:admissions:manage'];
+if (
+    $teachingPost($documentControls, ['version' => (int) $documentRow['version'] + 1, 'hold' => true,
+    'until' => null, 'visible' => true])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Ordinary admissions authority changed applicant file access.');
+}

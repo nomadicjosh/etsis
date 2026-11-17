@@ -58,6 +58,51 @@ Choose **Message applicant** in application review when you have Communications 
 
 Write and save the message, review the recipient, then queue it. Sending still requires the existing separate background-delivery confirmation and configured server worker. Use **Back to application** to continue admissions work. Private notes and application responses are never prefilled into the message. These are deliberate staff messages; saving visible checklist guidance continues to create only the in-portal update described above.
 
+## Private working documents
+
+Open **Documents** in staff application review or **Your applications → Documents** in the portal. Portal editing opens at full width below the application list. Files and filenames load only when the panel is opened. Owners see only files shared with them on their own applications; admissions staff use a separate authorized route. Applicant uploads are visible to their owner. Staff uploads default to staff-only; records staff with the independent document permission can share a file with its applicant or restrict it later. Hidden files and their names do not appear in the owner inventory. Staff privileges cannot override ownership on the portal route.
+
+When deployment setup is complete, choose one PDF, JPEG or PNG of up to **5 MiB**, then **Upload document**. The server checks the bytes instead of trusting the browser's media type or filename extension. Each application can retain twenty documents, and each person can retain fifty across applications. Originals are immutable: upload a replacement as a new file. An interrupted request can retry the same selected file without creating another document or duplicate audit. Changing the file or its initial audience starts another upload reference. A retry preserves the accepted upload without reversing later access changes.
+
+An upload starts in **Waiting for safety scan**. The background worker changes it to **Available** only after a successful scan; unavailable scanners and inconclusive results keep it quarantined. A rejected file cannot be downloaded. You can leave the page while scanning and choose **Refresh documents** later. Uploading or scanning does not mark a checklist item received, verify a credential, accept an application or award credit. Staff review the actual material and update working checklist progress separately.
+
+Available files download as private attachments with a neutral filename. They are never published as media, rendered inline or sent to an AI provider. The application encrypts durable file contents and metadata, keeps storage outside the public directory and verifies the protected scan/routing state and file digest before download. Filenames, file contents, scanner output and disposal reasons stay out of logs and jobs. Downloads are audited by actor and document reference. Expiry prevents owner downloads; authorized admissions staff can still review retained material.
+
+Unfinished file selections and retention forms block switching into applicant messaging or refreshing the document panel. Clear a selection explicitly with **Clear selection** when needed. Portal status refresh also preserves pending document work. Late requests cannot restore a detached panel. The shared owner/staff editor uses ordinary labeled controls and an explicit removal review. **File controls** opens one **Access & retention** panel at a time; save or discard changes before opening another file’s controls. Refreshing temporarily disables editing while the request finishes.
+
+### Retention and disposal
+
+Each upload captures its UTC retention deadline from the deployment policy; changing the default later does not silently shorten earlier records. **File controls → Access & retention** requires both `sis:admissions:manage` and the independent protected permission **`sis:admissions:documents:retain`**. Grant the latter deliberately through Roles & access; the regular admin/SIS role does not receive it automatically. Super remains unrestricted.
+
+Authorized staff can **Show file to applicant**, **Keep under hold**, release a hold, or extend retention through an explicitly labeled UTC date. **Save controls** applies access, hold and deadline changes together; changing applicant access has its own audit entry. Holds prevent disposal and survive rescanning. Changes require the current document revision and required audit. Admissions staff can **Quarantine for recheck** to block an available file immediately, or **Retry scan** after a scanner problem is resolved. Both reuse the same bounded worker; files remain unavailable until another successful scan.
+
+Expiry alone never deletes a file. For an expired file without a hold, enter a reason and choose **Review file removal**, then **Permanently remove file**. Confirmation is bound to the actor, file and reviewed revision and expires after twenty minutes. A newly placed hold, changed audience, extended deadline or changed scan state invalidates it. Editing the reason or unsaved retention fields invalidates the on-screen confirmation too.
+
+Approval makes the file inaccessible immediately and replaces identifying metadata with an encrypted disposition receipt. The worker then deletes the encrypted artifact and marks the reference disposed. Cleanup can resume after interruption and still runs when new uploads are disabled. A late scanner result cannot restore a disposed file. A repeated accepted confirmation does not duplicate the approval or reverse later state. There is no automatic deletion of rejected files or mass purge.
+
+These are working attachments, not an automatically selected decision-evidence snapshot. Institutional record categories, case/person-wide holds, evidence bindings for formal decisions, backup disposition and deployment acceptance remain separate work. Before approving disposal, the institution must determine whether an original is required by its own retention, verification or hold procedures. This feature does not establish legal compliance.
+
+### Operator setup
+
+1. Apply migration **20261117000004**. It adds `sis_admission_documents`, ULID references, queue/quota indexes and the protected retention permission without changing academic/profile events or granting roles.
+2. Provide PHP `fileinfo`, set `upload_max_filesize` to at least `5M` and `post_max_size` to at least `6M`, and allow the multipart request through your web server’s body limit (at least 6 MiB). Provide private writable `storage/app/admissions/documents` storage, and a supported, updated ClamAV daemon with its `clamdscan` client. Use a restricted local socket. See the [official scanning guide](https://docs.clamav.net/manual/Usage/Scanning.html).
+3. Review the daemon's limits and privacy settings before accepting files. Stream/file limits must accept 5 MiB; limit-exceeding and encrypted-document cases must alert rather than pass. Keep signatures current and disable debug/metadata retention and content-logging hooks. Relevant [official configuration options](https://github.com/Cisco-Talos/clamav/blob/main/etc/clamd.conf.sample) include `AlertExceedsMax`, `AlertEncryptedDoc`, `LeaveTemporaryFiles` and `GenerateMetadataJson`. Protect PHP upload temporary storage and ClamAV temporary storage too; HTTP uploads necessarily pass through PHP's temporary upload handling before durable encryption.
+4. Set an institution-approved retention period and scanner executable in `config/admission_documents.php` / environment. Defaults keep new uploads off:
+
+   ```dotenv
+   SIS_ADMISSION_DOCUMENTS_ENABLED=false
+   SIS_ADMISSION_DOCUMENT_RETENTION_DAYS=0
+   SIS_ADMISSION_DOCUMENT_SCANNER=/usr/bin/clamdscan
+   SIS_ADMISSION_DOCUMENT_SCANNER_REVIEWED=false
+   ```
+
+   Choose the retention days deliberately, verify the scanner configuration and real clean/rejected/failed-scan behavior, then set both boolean flags to `true`. `SCANNER_REVIEWED` records operator acknowledgement; it does not inspect the daemon's settings. The `clamdscan` client cannot override daemon engine policy.
+5. Run Codefy's existing server scheduler once a minute. It registers **`sis:admissions:documents --apply --limit=1`**, with one instance at a time. For a manual bounded pass, use `php codex sis:admissions:documents --apply --limit=1`. Without `--apply`, the command only shows usage. A client attempt times out after twenty seconds; unavailable scans wait fifteen minutes unless staff request a retry, and abandoned claims can be reclaimed after five minutes. The browser never scans or deletes file contents.
+
+Back up the database, encrypted artifact directory and the institution's application encryption key together. The database alone does not contain the uploaded bytes. Filesystem writes and database commits cannot form one transaction: failed in-transaction uploads attempt cleanup, and unindexed encrypted artifacts left by interrupted commits are never served. Administrators must include orphan-artifact reconciliation and backup disposal in their storage procedures. Broad automated storage cleanup is not enabled by this feature.
+
+Runtime tests use fictional files and injected scanner outcomes. No real scanner is installed or launched by the tests. Schema compilation is checked for the framework's five supported database dialects; deployment scanning acceptance still requires the institution's actual daemon configuration.
+
 ## Storage, privacy and setup
 
 Migration **20261117000002** adds `sis_admission_cases` and `sis_admission_checklists` with ULID primary keys, parent references and indexes for assignment, work status, due work and preset scope. Case contents, preset definitions and request fingerprints are encrypted. Only the routing fields needed by the staff queue remain separate indexed columns. Detailed reads verify protected content against its parent and routing metadata; unreadable data is rejected. Applying this additive migration converts or deletes no existing application, profile or event facts.
@@ -82,4 +127,4 @@ Endpoints are:
 
 The additive schema compiles for the framework's five database dialects. Runtime checks cover fictional SQLite data and the configured MariaDB installation. Broader driver deployment acceptance remains separate.
 
-Protected uploads/references, scanning/quarantine, institutional retention settings, optional automatic email/push delivery and any policy that gates a formal admissions decision remain later work. No upload control is exposed before those safeguards are implemented. Continue using the institution's established document-delivery process and give applicants the appropriate instructions.
+Formal decision-evidence bindings, institution-wide retention/disposition policy, optional automatic email/push delivery and any policy that gates an admissions decision remain later work. New uploads remain disabled until the operator completes scanner and retention setup; use established delivery channels until then.

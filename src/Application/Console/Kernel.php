@@ -31,6 +31,7 @@ final class Kernel extends ConsoleKernel
             $schedule->command('sis:accounts:send-setup --apply')->everyMinute()->onlyOneInstance();
             $schedule->command('sis:communications:send --apply --limit=10')->everyMinute()->onlyOneInstance();
         }
+        $schedule->command('sis:admissions:documents --apply --limit=1')->everyMinute()->onlyOneInstance();
         $schedule->command('sis:reports:prune --apply --limit=50')->hourly()->onlyOneInstance();
         // Register existing scripts using absolute paths and explicit arguments.
         // onlyOneInstance() runs in the foreground and holds the lock until completion.

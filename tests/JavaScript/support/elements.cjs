@@ -3,19 +3,23 @@ class Element {
     constructor(tag, attributes = {}) {
         this.tag = tag; this.attributes = attributes; this.children = []; this.events = {};
         this.value = attributes.value ?? ''; this.checked = !!attributes.checked;
-        this.name = attributes.name ?? ''; this.dataset = {}; this.text = ''; this.isConnected = true;
+        this.parent = null; this.files = []; this.name = attributes.name ?? ''; this.dataset = {}; this.text = ''; this.isConnected = true;
     }
     append(...children) {
         for (const child of children.flat(Infinity)) {
             if (child === null || child === undefined) continue;
-            this.children.push(child instanceof Element ? child : Object.assign(new Element('text'), { text: String(child) }));
+            const element = child instanceof Element ? child : Object.assign(new Element('text'), { text: String(child) });
+            element.parent = this; this.children.push(element);
         }
     }
     replaceChildren(...children) { this.children = []; this.text = ''; this.append(...children); }
     get textContent() { return this.text + this.children.map(child => child.textContent).join(''); }
     set textContent(text) { this.children = []; this.text = String(text); }
+    getAttribute(name) { return this.attributes[name] ?? null; }
+    reportValidity() { return true; }
     setAttribute(name, value) { this.attributes[name] = value; }
     addEventListener(name, callback) { this.events[name] = callback; }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
     focus() { this.focused = true; }
     setCustomValidity() {}
     querySelectorAll(selector) { return walk(this).filter(element => element.tag === selector); }

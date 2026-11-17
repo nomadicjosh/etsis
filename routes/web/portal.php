@@ -11,10 +11,19 @@ use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
 use Application\Http\Controller\PersonEducationController as Education;
 use Application\Http\Controller\AdmissionCaseworkController as Casework;
 use Application\Http\Controller\AdmissionUpdatesController as AdmissionUpdates;
+use Application\Http\Controller\AdmissionDocumentController as Documents;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/portal/api/applications/{application}/documents/', [Documents::class, 'listingMine']);
+    $router->map(['POST'], '/portal/api/applications/{application}/documents/', [Documents::class, 'uploadMine']);
+    $router->map(
+        ['GET'],
+        '/portal/api/applications/{application}/documents/{id}/download/',
+        [Documents::class, 'downloadMine']
+    );
+
     $router->map(['GET'], '/portal/admissions-updates/', [Portal::class, 'admissionsUpdates'])
         ->name('portal.admissionsupdates');
     $router->map(['GET'], '/portal/api/admissions-updates/', [AdmissionUpdates::class, 'page'])
@@ -48,6 +57,7 @@ return static function (Psr7Router $router): void {
     )->name('portal.account.setup.complete')->middleware(['rate.limiter']);
 
     /** @var Psr7Router&Mappable $router */
+
     $moodle = \Application\Http\Controller\PortalMoodleController::class;
     $router->map(["GET"], "/portal/moodle/", [$moodle, "page"])->name("portal.moodle");
     $router->map(["POST"], "/portal/moodle/launch/", [$moodle, "launch"])->name("portal.moodle.launch");

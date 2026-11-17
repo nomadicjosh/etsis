@@ -326,7 +326,7 @@
                     item.due_on ? node('p', { class: 'form-text' }, `Due: ${item.due_on}`) : null)),
                 node('p', { class: 'form-text' }, 'Checklist progress does not itself mean that admission or registration has been approved.'));
         }
-        function applicant(container, applicationId, label = '') {
+        function applicant(container, applicationId, label = '', documentTarget = null) {
             const identity = `casework-applicant-${++sequence}`;
             const content = node('section', { id: identity, class: 'mt-3', hidden: true, 'aria-label': 'Application next steps' });
             let generation = 0, expanded = false;
@@ -341,6 +341,9 @@
             toggle.setAttribute('aria-controls', identity); toggle.setAttribute('aria-expanded', 'false');
             if (label) toggle.setAttribute('aria-label', `Next steps for ${label}`);
             container.replaceChildren(toggle, content);
+            const documents = node('div'); (documentTarget || container).append(documents);
+            return window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, applicationId,
+                { toggleTarget: documentTarget ? container : null, label });
         }
         function queue(container, openApplication) {
             const filters = node('div', { class: 'd-flex flex-wrap gap-3 align-items-end mb-3' });

@@ -389,10 +389,13 @@ window.createWorkspacePeople = function (ui) {
         const casework = node('div', { class: 'record-section mt-3' });
         const workbench = window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
             { managePresets: can('sis:forms:manage') });
+        const documents = node('div', { class: 'record-section mt-3' });
+        const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, row.id, { staff: true });
+        body.append(documents);
         let background = null;
         if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
-                () => workbench.beforeLeave() && (background?.beforeLeave() ?? true))),
+                () => workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true))),
         );
         body.append(casework);
         if (can('sis:person:manage')) {
