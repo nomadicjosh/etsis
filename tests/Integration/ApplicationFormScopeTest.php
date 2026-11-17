@@ -81,7 +81,7 @@ final class ApplicationFormScopeTest extends TestCase
         $s->publish($override->id, 0);
         $s->disable($level, academicLevel: true);
         self::assertSame($override->id->value, $s->active($f->program)->id->value);
-        self::assertCount(3, $s->listing());
+        self::assertCount(3, $s->listing()['items']);
         $this->expectException(RecordNotFoundException::class);
         $s->active($other);
     }
@@ -170,7 +170,7 @@ final class ApplicationFormScopeTest extends TestCase
             $s->save(null, $f->program, 'Invalid two targets', $this->fields(), null, $level);
             self::fail('Both targets were accepted.');
         } catch (InvalidArgumentException) {
-            self::assertCount(1, $s->listing());
+            self::assertCount(1, $s->listing()['items']);
         }
         try {
             $s->save($draft->id, $f->program, 'Changed target', $this->fields(), 0);

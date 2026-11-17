@@ -19,9 +19,14 @@ final readonly class SisFormBuilderController
     {
     }
 
-    public function listing(): ResponseInterface
+    public function listing(ServerRequest $request): ResponseInterface
     {
-        return new JsonResponse(['items' => $this->service->listing()]);
+        $query = new FormInput($request->getQueryParams());
+        return new JsonResponse($this->service->listing(
+            $query->search(maximum: 80),
+            $query->optionalText('state', 16) ?? 'all',
+            $query->optionalId('after'),
+        ));
     }
 
     public function levels(): ResponseInterface

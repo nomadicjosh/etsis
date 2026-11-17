@@ -18,19 +18,59 @@ $fieldTypes = [
             <h1 id="forms-heading">Applications, your way<span class="brand-dot">.</span></h1>
             <p>A simpler start, with forms tailored to your institution’s academic levels and programs.</p>
         </div>
-        <button class="btn btn-primary" type="button" id="form-new">
-            <i class="bi bi-plus-lg" aria-hidden="true"></i> New application form
-        </button>
+        <div class="d-flex flex-wrap gap-2">
+            <button
+                class="btn btn-outline-secondary"
+                type="button"
+                id="form-library-toggle"
+                aria-controls="form-library-panel"
+                aria-expanded="true">
+                <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i> <span data-form-library-label>Hide library</span>
+            </button>
+            <button class="btn btn-primary" type="button" id="form-new">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> New application form
+            </button>
+        </div>
     </div>
-    <div class="forms-layout">
-        <aside class="surface form-library">
+    <div class="forms-layout" id="form-studio-layout">
+        <aside
+            class="surface form-library"
+            id="form-library-panel"
+            aria-labelledby="form-library-title">
             <div class="surface-heading">
                 <div>
-                    <h2>Your form library</h2>
+                    <h2 id="form-library-title">Your form library</h2>
                     <p>Draft, preview, then publish.</p>
                 </div>
             </div>
-            <div id="form-library-list" aria-live="polite"></div>
+            <form id="form-library-search-form" class="form-library-search">
+                <label class="form-label" for="form-library-search">Find a form</label>
+                <input
+                    class="form-control"
+                    type="search"
+                    id="form-library-search"
+                    name="search"
+                    maxlength="80"
+                    placeholder="Name, program or level"
+                />
+                <label class="form-label mt-3" for="form-library-state">Show</label>
+                <select class="form-select" id="form-library-state" name="state">
+                    <option value="all">All forms</option>
+                    <option value="draft">Drafts</option>
+                    <option value="published">Published forms</option>
+                    <option value="enabled">Enabled forms</option>
+                </select>
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button class="btn btn-sm btn-outline-primary" type="submit" id="form-library-find">Find</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-clear">Clear</button>
+                </div>
+            </form>
+            <p class="form-library-status" id="form-library-status" role="status"></p>
+            <div id="form-library-list" role="region" aria-label="Saved forms" tabindex="0"></div>
+            <nav class="form-library-pager" aria-label="Form library pages">
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-previous" disabled>Previous</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-next" disabled>Next</button>
+            </nav>
         </aside>
         <section class="surface form-designer" aria-labelledby="designer-title">
             <div class="surface-heading">

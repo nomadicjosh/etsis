@@ -19,8 +19,8 @@ interface ApplicationFormRepository
     public function disableLevel(EntityId $level): void;
     /** @return list<array<string,mixed>> */
     public function levels(): array;
-    /** @return list<array<string, mixed>> */
-    public function listing(): array;
+    /** @return array{items:list<array<string,mixed>>,next_after:?string} */
+    public function listing(string $search = '', string $state = 'all', ?EntityId $after = null): array;
     /** @return array<string, mixed>|null */
     public function submission(EntityId $id): ?array;
     /** @return array<string, mixed>|null */

@@ -3903,6 +3903,19 @@ $trackedForm = $formApplications->save(null, $sis->program, "Fictional tracked s
     ["key" => "statement", "label" => "Statement", "type" => "text", "required" => true],
 ], null);
 $formApplications->publish($trackedForm->id, 0);
+$formLibraryResponse = $app->router->match(new \Qubus\Http\ServerRequest(
+    [], [], 'https://campus.example.invalid/sis/forms/', 'GET'
+)->withQueryParams(['search' => 'tracked submission', 'state' => 'enabled']));
+$formLibrary = json_decode((string) $formLibraryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $formLibraryResponse->getStatusCode() !== 200
+    || array_column($formLibrary['items'] ?? [], 'id') !== [$trackedForm->id->value]
+    || !array_key_exists('next_after', $formLibrary) || $formLibrary['next_after'] !== null
+    || !str_contains($formLibraryResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || array_key_exists('fields_json', $formLibrary['items'][0] ?? [])
+) {
+    throw new RuntimeException('The form library did not resolve bounded private metadata through the HTTP pipeline.');
+}
 $trackedSubmission = \Domain\Shared\ValueObject\EntityId::generate();
 $trackedResponse = $teachingPost("/sis/forms/" . $trackedForm->id->value . "/submissions/", [
     "submission_id" => $trackedSubmission->value, "person_id" => $catalogPerson->id->value,

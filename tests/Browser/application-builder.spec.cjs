@@ -97,6 +97,7 @@ test('empty academic-level setup still allows program forms; keyboard and pointe
     await add(page, 'text', 'Second question');
     await page.getByRole('button', { name: 'Move field up: Second question', exact: true }).click();
     await expect(page.locator('.designer-field-header h3').first()).toHaveText('Second question');
+    await page.getByRole('button', { name: 'More actions for field 1', exact: true }).click();
     await page.getByRole('button', { name: 'Duplicate field 1', exact: true }).click();
     await expect(page.locator('.designer-field-header h3').nth(1)).toHaveText('Second question copy');
     await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
@@ -167,7 +168,8 @@ test('containers retain columns and reading order with keyboard moves, pointer m
     await page.getByRole('button', { name: 'Add container', exact: true }).click();
     await page.getByLabel('Container title', { exact: true }).fill('About you');
     await page.getByLabel('Columns', { exact: true }).selectOption('2');
-    await page.getByRole('button', { name: 'Move field 2 to another column', exact: true }).click();
+    await page.getByRole('button', { name: 'More actions for field 2', exact: true }).click();
+    await page.getByRole('button', { name: 'Move question 2 to another column', exact: true }).click();
     await page.getByLabel('Destination', { exact: true }).selectOption({ label: 'About you · Column 2' });
     await page.getByRole('button', { name: 'Move question', exact: true }).click();
     await expect(page.locator('.designer-column').nth(1)).toContainText('Contact email');

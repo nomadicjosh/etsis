@@ -141,10 +141,32 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
             . $q('active') . ' = ? ORDER BY ' . $q('code'), ['academic_level', 1], 100);
     }
 
-    public function listing(): array
+    public function listing(string $search = '', string $state = 'all', ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
-        return $this->sql->fetch(
+        $conditions = [];
+        $parameters = [];
+        if ($search !== '') {
+            $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
+            $fields = ['f.' . $q('name'), 'p.' . $q('code'), 'p.' . $q('title'),
+                'c.' . $q('code'), 'c.' . $q('title')];
+            $conditions[] = '(' . implode(' OR ', array_map(
+                static fn(string $field): string => 'LOWER(' . $field . ") LIKE ? ESCAPE '!'",
+                $fields,
+            )) . ')';
+            array_push($parameters, ...array_fill(0, count($fields), $pattern));
+        }
+        if ($state === 'enabled') {
+            $conditions[] = 'COALESCE(b.' . $q('form_id') . ', l.' . $q('form_id') . ') IS NOT NULL';
+        } elseif ($state !== 'all') {
+            $conditions[] = 'f.' . $q('status') . ' = ?';
+            $parameters[] = $state;
+        }
+        if ($after !== null) {
+            $conditions[] = 'f.' . $q('id') . ' < ?';
+            $parameters[] = $after->value;
+        }
+        $items = $this->sql->fetch(
             'SELECT f.' . $q('id') . ', f.' . $q('name') . ', f.' . $q('program_id')
             . ', f.' . $q('academic_level_id') . ', f.' . $q('status') . ', f.' . $q('version')
             . ', COALESCE(p.' . $q('code') . ', c.' . $q('title') . ') AS ' . $q('program')
@@ -152,12 +174,22 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
             . ' FROM ' . $q('sis_application_forms') . ' f LEFT JOIN ' . $q('sis_programs') . ' p ON p.'
             . $q('id') . ' = f.' . $q('program_id') . ' LEFT JOIN ' . $q('sis_catalog_classifications')
             . ' c ON c.' . $q('id') . ' = f.' . $q('academic_level_id') . ' LEFT JOIN '
-            . $q('sis_program_forms') . ' b ON b.' . $q('form_id') . ' = f.' . $q('id') . ' LEFT JOIN '
+            . $q('sis_program_forms') . ' b ON b.' . $q('form_id') . ' = f.' . $q('id')
+            . ' AND b.' . $q('program_id') . ' = f.' . $q('program_id')
+            . ' AND f.' . $q('status') . " = 'published' LEFT JOIN "
             . $q('sis_level_forms') . ' l ON l.' . $q('form_id') . ' = f.' . $q('id')
+            . ' AND l.' . $q('academic_level_id') . ' = f.' . $q('academic_level_id')
+            . ' AND f.' . $q('status') . " = 'published'"
+            . ($conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions))
             . ' ORDER BY f.' . $q('id') . ' DESC',
-            [],
-            100,
+            $parameters,
+            21,
         );
+        $more = count($items) > 20;
+        if ($more) {
+            array_pop($items);
+        }
+        return ['items' => $items, 'next_after' => $more ? $items[array_key_last($items)]['id'] : null];
     }
 
     public function submission(EntityId $id): ?array

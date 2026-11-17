@@ -12,6 +12,7 @@ use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 use DomainException;
+use InvalidArgumentException;
 
 final readonly class ApplicationFormService
 {
@@ -25,12 +26,18 @@ final readonly class ApplicationFormService
     ) {
     }
 
-    /** @return list<array<string, mixed>> */
-    public function listing(): array
+    /** @return array{items:list<array<string,mixed>>,next_after:?string} */
+    public function listing(string $search = '', string $state = 'all', ?EntityId $after = null): array
     {
         $this->access->requirePermission("sis:forms:manage");
+        if (
+            mb_strlen($search) > 80 || preg_match('/[\x00-\x1f\x7f]/', $search)
+            || !in_array($state, ['all', 'draft', 'published', 'enabled'], true)
+        ) {
+            throw new InvalidArgumentException('Choose a valid form filter and a search of up to eighty characters.');
+        }
 
-        return $this->repository->listing();
+        return $this->repository->listing(trim($search), $state, $after);
     }
 
     public function get(EntityId $id): ApplicationForm

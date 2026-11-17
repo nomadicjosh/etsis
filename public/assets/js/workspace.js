@@ -1307,6 +1307,23 @@
     }
 
     const applicationForms = new WeakMap();
+    const formLibrary = window.createApplicationFormLibrary({ node, request, task, badge, can, emptyState,
+        openForm: async (id, targetLabel) => {
+            if (dirty) { pendingNavigation = async () => loadDraft(id, targetLabel); leaveModal.show(); return false; }
+            return loadDraft(id, targetLabel);
+        },
+        removeDefault: reviewFormDisable,
+        active: () => current === 'forms' ? generation : null,
+    });
+    function showFormLibrary(visible) {
+        $one('#form-library-panel').hidden = !visible;
+        $one('#form-studio-layout').classList.toggle('library-hidden', !visible);
+        $one('#form-library-toggle').setAttribute('aria-expanded', String(visible));
+        $one('[data-form-library-label]').textContent = visible ? 'Hide library' : 'Show library';
+    }
+    showFormLibrary(!matchMedia('(max-width: 767px)').matches);
+    listen('#form-library-toggle', 'click', () => showFormLibrary($one('#form-library-panel').hidden));
+
     const formLayoutEditor = window.createApplicationLayoutEditor({ node, icon, openDrawer, task,
         draft: () => formDraft, changed: formChanged, render: renderDesigner,
         announce: message => { $one('#form-sort-status').textContent = message; },
@@ -1321,7 +1338,7 @@
     async function loadFormStudio() {
         if (!can('sis:forms:manage')) throw new Error('Form administration needs additional access.');
         const version = generation;
-        const [programs, result, levels] = await Promise.all([options('programs'), request('/sis/forms/'), request('/sis/forms/academic-levels/')]);
+        const [programs, levels] = await Promise.all([options('programs'), request('/sis/forms/academic-levels/'), formLibrary.load()]);
         if (version !== generation || current !== 'forms') return;
         const selected = $one('#form-program').value;
         const selectedLabel = $one('#form-program').selectedOptions[0]?.textContent;
@@ -1339,24 +1356,11 @@
             ? 'Uses the academic levels configured by your institution. A program-specific form takes precedence.'
             : 'No academic levels are configured. Set them up in Academic catalog, or choose One academic program.';
         syncFormScope();
-        const library = $one('#form-library-list'); clear(library);
-        if (!result.items.length) library.append(emptyState('Your first welcome starts here.', 'Create a form for an academic level or a specific program.', 'ui-checks'));
-        for (const form of result.items) {
-            const button = node('button', { class: 'form-library-item', type: 'button', onclick: () => task(async () => {
-                if (dirty) { pendingNavigation = async () => loadDraft(form.id); leaveModal.show(); return; }
-                await loadDraft(form.id);
-            }) }, node('strong', {}, form.name), badge(form.enabled_id ? 'Enabled' : form.status), node('small', {}, `${form.program} · ${form.status === 'published' ? 'Open to create a new revision' : 'Continue editing draft'}`));
-            const item = node('div', {}, button);
-            if (form.enabled_id && can('sis:forms:publish')) item.append(node('button', { class: 'btn btn-sm btn-outline-secondary ms-3 mb-3', type: 'button', 'aria-label': `Remove default: ${form.name}`, onclick: event => task(async () => {
-                reviewFormDisable(form);
-            }, event.currentTarget) }, 'Remove default'));
-            library.append(item);
-        }
         if (!formDraft.fields.length) renderDesigner();
         updateFormPublication();
     }
 
-    async function loadDraft(id) {
+    async function loadDraft(id, targetLabel = '') {
         const serial = ++formLoadSerial, version = generation;
         const record = await request(`/sis/forms/${id}/`);
         if (serial !== formLoadSerial || version !== generation || current !== 'forms' || dirty) return;
@@ -1365,13 +1369,16 @@
         $one('#form-scope').value = record.program_id ? 'program' : 'academic_level';
         for (const [selector, value, fallback] of [['#form-program', record.program_id, 'Selected program'], ['#form-level', record.academic_level_id, 'Selected academic level']]) {
             const select = $one(selector);
-            if (value && ![...select.options].some(option => option.value === value)) select.append(node('option', { value }, record.target_label || fallback));
+            if (value && ![...select.options].some(option => option.value === value)) select.append(node('option', { value }, record.target_label || targetLabel || fallback));
             select.value = value || '';
         }
         syncFormScope();
         $one('#designer-state').textContent = record.status === 'published' ? 'New revision' : 'Draft';
         $one('#designer-save-status').textContent = record.status === 'published' ? 'The published form stays unchanged. Save this as a new revision.' : 'You are editing an unpublished draft.';
         dirty = false; renderDesigner(); updateFormPublication();
+        formLibrary.select(id);
+        if (matchMedia('(max-width: 767px)').matches) { showFormLibrary(false); $one('#form-name').focus(); }
+        return true;
     }
 
     function updateFormPublication() {
@@ -1503,15 +1510,23 @@
                     $one('#form-sort-status').textContent = `${field.label || 'Field'} moved to position ${position + 1}.`;
                 } }, icon(name)));
             }
-            controls.append(node('button', { class: 'icon-button', type: 'button', 'aria-label': `Duplicate field ${index + 1}`, disabled: formDraft.fields.length >= 40, onclick: () => {
-                const copy = structuredClone(field); copy.key = newFormFieldKey(); copy.label = `${copy.label || types[field.type]} copy`.slice(0, 120);
-                formDraft.fields.splice(index + 1, 0, copy); formLayoutEditor.insertAfter(field.key, copy.key);
-                formChanged(); renderDesigner(formDraft.fields.indexOf(copy), 'label');
-            } }, icon('copy')));
-            controls.append(node('button', { class: 'icon-button', type: 'button', 'data-field-remove': '', 'aria-label': `Remove field ${index + 1}`, onclick: () => {
-                formDraft.fields.splice(index, 1); formLayoutEditor.remove(field.key); formChanged(); renderDesigner(Math.min(index, formDraft.fields.length - 1), 'remove');
-            } }, icon('trash3')));
-            if (formDraft.layout?.length) controls.append(node('button', { class: 'icon-button', type: 'button', 'aria-label': `Move field ${index + 1} to another column`, onclick: () => formLayoutEditor.showMove(field) }, icon('box-arrow-right')));
+            const duplicate = node('button', { type: 'button', 'aria-label': `Duplicate field ${index + 1}`,
+                disabled: formDraft.fields.length >= 40, onclick: () => {
+                    const copy = structuredClone(field); copy.key = newFormFieldKey(); copy.label = `${copy.label || types[field.type]} copy`.slice(0, 120);
+                    formDraft.fields.splice(index + 1, 0, copy); formLayoutEditor.insertAfter(field.key, copy.key);
+                    formChanged(); renderDesigner(formDraft.fields.indexOf(copy), 'label');
+                } }, icon('copy'), ' Duplicate field');
+            const remove = node('button', { class: 'btn-outline-danger', type: 'button', 'data-field-remove': '',
+                'aria-label': `Remove field ${index + 1}`, onclick: () => {
+                    formDraft.fields.splice(index, 1); formLayoutEditor.remove(field.key); formChanged();
+                    renderDesigner(Math.min(index, formDraft.fields.length - 1), 'drag');
+                } }, icon('trash3'), ' Remove field');
+            const actions = [duplicate];
+            if (formDraft.layout?.length) actions.push(node('button', { type: 'button',
+                'aria-label': `Move question ${index + 1} to another column`,
+                onclick: () => formLayoutEditor.showMove(field) }, icon('box-arrow-right'), ' Move question'));
+            actions.push({ divider: true }, remove);
+            controls.append(actionMenu('More', actions, { context: `More actions for field ${index + 1}`, compact: true }));
             const content = node('div', { class: 'designer-field-body row g-3', id: `field-body-${index}`, hidden: collapsedFormFields.has(field) });
             const toggle = node('button', { class: 'icon-button', type: 'button', 'aria-label': `${content.hidden ? 'Expand' : 'Collapse'} field ${index + 1}`, 'aria-expanded': String(!content.hidden), 'aria-controls': content.id, onclick: () => {
                 content.hidden = !content.hidden;
@@ -1583,7 +1598,7 @@
     listen('#form-level-setup', 'click', () => classificationStudio.library('academic_level', '', null, [], null,
         async () => { drawer.hide(); await loadFormStudio(); }, 'Back to application form'));
     listen('#form-new', 'click', () => {
-        const reset = () => { formLoadSerial++; formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = ''; syncFormScope(); dirty = false; $one('#designer-state').textContent = 'New draft'; $one('#designer-save-status').textContent = 'A draft is visible only to form administrators.'; renderDesigner(); updateFormPublication(); $one('#form-name').focus(); };
+        const reset = () => { formLoadSerial++; formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = ''; formLibrary.select(null); syncFormScope(); dirty = false; $one('#designer-state').textContent = 'New draft'; $one('#designer-save-status').textContent = 'A draft is visible only to form administrators.'; renderDesigner(); updateFormPublication(); $one('#form-name').focus(); };
         if (dirty) { pendingNavigation = reset; leaveModal.show(); } else reset();
     });
     async function saveDraft() {
@@ -1618,7 +1633,8 @@
         if (current === 'forms') {
             $one('#designer-state').textContent = unchanged ? 'Draft saved' : 'Unsaved changes';
             $one('#designer-save-status').textContent = unchanged ? 'Saved. Preview your form or review publication.' : 'An earlier edit was saved. Save your latest changes before publication review.';
-            await loadFormStudio();
+            formLibrary.select(record.id);
+            await formLibrary.load();
             notify(unchanged ? 'Draft saved.' : 'Earlier edit saved. Your latest changes are still in the editor.');
         }
         updateFormPublication(); syncFormScope();
@@ -1648,7 +1664,7 @@
             if (!body.isConnected) return;
             notify('Application form published.');
             drawer.hide();
-            await loadFormStudio();
+            await formLibrary.load();
         }, event.currentTarget) }, 'Confirm publication');
         body.append(
             node('button', { type: 'button', class: 'btn btn-link mb-3', onclick: event => task(async () => {
@@ -1680,7 +1696,7 @@
                     if (!body.isConnected) return;
                     notify('Application default removed. Existing submissions are preserved.');
                     drawer.hide();
-                    await loadFormStudio();
+                    await formLibrary.load();
                 }, event.currentTarget) }, 'Remove default'),
             ),
         );
