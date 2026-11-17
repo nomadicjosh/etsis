@@ -11,6 +11,7 @@ window.createWorkspaceImports = function (ui) {
         can,
         subjects,
         classifications,
+        recordSummary,
     } = ui;
     const one = (selector) => document.querySelector(selector);
     const all = (selector) => [...document.querySelectorAll(selector)];
@@ -51,7 +52,13 @@ window.createWorkspaceImports = function (ui) {
         });
         const heading = one(`[data-import-panel="${value}"] h2`);
         heading?.setAttribute("tabindex", "-1");
-        heading?.focus({ preventScroll: true });
+        if (!one('[data-panel="imports"]').hidden) {
+            one(".import-steps").scrollIntoView({
+                block: "start",
+                behavior: "instant",
+            });
+            heading?.focus({ preventScroll: true });
+        }
     }
     function payload() {
         return {
@@ -73,9 +80,9 @@ window.createWorkspaceImports = function (ui) {
         JSON.stringify([...state.reviewedChoices].sort());
     function synchronize() {
         all(
-            "[data-import-back], #import-inspect, #import-review, #import-refresh, #import-again, #import-reference-subjects, #import-reference-classes, .import-choice-action",
-        ).forEach((button) => {
-            button.disabled = busy;
+            "[data-import-back], #import-inspect, #import-review, #import-refresh, #import-again, #import-reference-subjects, #import-reference-classes, .import-choice-action, #import-source, #import-file, #import-delimiter, #import-mapping select, #import-plan-filter, #import-plan-search",
+        ).forEach((control) => {
+            control.disabled = busy;
         });
         one("#import-commit").disabled =
             busy ||
@@ -131,7 +138,7 @@ window.createWorkspaceImports = function (ui) {
         const controls = (row) => {
             const box = node("div", { class: "inline-actions" }),
                 choice = state.choices.get(row.external_id);
-            const button = (label, callback) =>
+            const button = (label, callback, accessibleName) =>
                 node(
                     "button",
                     {
@@ -139,31 +146,38 @@ window.createWorkspaceImports = function (ui) {
                         class: "btn btn-sm btn-outline-primary import-choice-action",
                         disabled: busy,
                         onclick: callback,
+                        "aria-label": accessibleName,
                     },
                     label,
                 );
             if (choice)
                 box.append(
                     button(
+                        choice.action === "skip" ? "Include" : "Undo link",
+                        () => choose(row, null),
                         choice.action === "skip"
                             ? `Include row ${row.row}`
                             : `Undo link for row ${row.row}`,
-                        () => choose(row, null),
                     ),
                 );
             else if (["match", "link"].includes(row.action))
                 box.append(
-                    button(`Link course for row ${row.row}`, () =>
-                        choose(row, {
-                            action: "link",
-                            course_id: row.course_id,
-                        }),
+                    button(
+                        "Link course",
+                        () =>
+                            choose(row, {
+                                action: "link",
+                                course_id: row.course_id,
+                            }),
+                        `Link course for row ${row.row}`,
                     ),
                 );
             if (choice?.action !== "skip")
                 box.append(
-                    button(`Leave out row ${row.row}`, () =>
-                        choose(row, { action: "skip", course_id: null }),
+                    button(
+                        "Leave out",
+                        () => choose(row, { action: "skip", course_id: null }),
+                        `Leave out row ${row.row}`,
                     ),
                 );
             return box;
@@ -264,9 +278,27 @@ window.createWorkspaceImports = function (ui) {
             ? "Your import is ready for confirmation."
             : "Review the rows that need attention.";
         const summary = preview.summary;
-        one("#import-plan-summary").textContent = summary
-            ? `New drafts: ${number(summary.create)} · Approved links: ${number(summary.link)} · Prior imports: ${number(summary.skip)} · Left out: ${number(summary.omitted)} · Needs attention: ${number(summary.match + summary.conflict)}.`
-            : "";
+        one("#import-plan-summary").replaceChildren(
+            ...(summary
+                ? [
+                      ["New drafts", summary.create],
+                      ["Approved links", summary.link],
+                      ["Prior imports", summary.skip],
+                      ["Left out", summary.omitted],
+                      ["Needs attention", summary.match + summary.conflict],
+                  ].map(([label, count]) =>
+                      node(
+                          "div",
+                          {},
+                          node("dt", {}, label),
+                          node("dd", {}, number(count)),
+                      ),
+                  )
+                : []),
+        );
+        one("#import-catalog-setup").open = (preview.plan || []).some(
+            (row) => row.reference_errors?.length,
+        );
         const errors = one("#import-review-errors");
         errors.replaceChildren();
         if (preview.errors.length)
@@ -318,6 +350,18 @@ window.createWorkspaceImports = function (ui) {
         );
         const mapping = one("#import-mapping");
         mapping.replaceChildren();
+        one("#import-file-summary").replaceChildren(
+            recordSummary([
+                ["File", file.name],
+                ["Source", one("#import-source").value],
+                [
+                    "Source rows",
+                    preview.row_count === undefined
+                        ? "Not available"
+                        : number(preview.row_count),
+                ],
+            ]),
+        );
         const optionalFields = node("div", { class: "mapping-list mt-3" });
         const optional = node(
             "details",
@@ -379,6 +423,7 @@ window.createWorkspaceImports = function (ui) {
                     id: `map-${target}`,
                     name: target,
                     required,
+                    "aria-describedby": `map-${target}-sample`,
                 },
                 node(
                     "option",
@@ -400,6 +445,30 @@ window.createWorkspaceImports = function (ui) {
                 select.value = String(index);
                 if (!required) optional.open = true;
             }
+            const sample = node("small", {
+                id: `map-${target}-sample`,
+                class: "mapping-sample",
+            });
+            const showSample = () => {
+                const value =
+                    select.value === ""
+                        ? ""
+                        : (preview.samples || [])
+                              .map((row) =>
+                                  String(
+                                      row[Number(select.value)] ?? "",
+                                  ).trim(),
+                              )
+                              .find(Boolean) || "";
+                sample.textContent =
+                    select.value === ""
+                        ? "No source column selected."
+                        : value
+                          ? `Example: ${value.slice(0, 120)}${value.length > 120 ? "…" : ""}`
+                          : "No example value in the source sample.";
+            };
+            select.addEventListener("change", showSample);
+            showSample();
             (required ? mapping : optionalFields).append(
                 node(
                     "div",
@@ -414,7 +483,7 @@ window.createWorkspaceImports = function (ui) {
                         class: "bi bi-arrow-right",
                         "aria-hidden": "true",
                     }),
-                    select,
+                    node("div", { class: "mapping-source" }, select, sample),
                 ),
             );
         }

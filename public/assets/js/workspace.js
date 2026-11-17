@@ -253,7 +253,7 @@
         journals: { title: 'General ledger', description: 'Balanced journals with an immutable financial history.', icon: 'journal-text', permission: 'sis:finance:ledger', columns: [['Reference', 'reference'], ['Posted', 'posted_on'], ['Currency', 'currency']] },
         reports: { title: 'Reports', description: 'Useful answers, securely scoped to reports you own or can administer.', icon: 'bar-chart-line', action: 'Create a report', endpoint: '/sis/reports/', permission: 'sis:reporting:manage', fields: [['name', 'Report name'], ['program_id', 'Program (optional)', 'lookup', 'programs', false], ['term_id', 'Entry term (optional)', 'lookup', 'terms', false]], columns: [['Report', 'name']] },
         campaigns: { title: 'Communications', description: 'Thoughtful messages. Encrypted content. A deliberate send.', icon: 'chat-square-text', action: 'Draft a message', endpoint: '/sis/campaigns/', permission: 'sis:communications:manage', fields: [['subject', 'Subject'], ['body', 'Message', 'textarea']], columns: [['Campaign', 'short_id'], ['Status', 'status']] },
-        portal: { title: 'Campus content', description: 'A useful, welcoming home for campus news and information.', icon: 'window', action: 'Create content', endpoint: '/sis/portal/editor/', permission: 'sis:portal:manage', fields: [['kind', 'Content type', 'choice', ['news', 'page', 'link']], ['code', 'Unique code'], ['title', 'Title'], ['content', 'Content or HTTPS link', 'textarea'], ['audience', 'Audience', 'choice', ['campus', 'public']]], columns: [['Title', 'title'], ['Type', 'kind'], ['Status', 'status']] },
+        portal: { title: 'Campus content', description: 'A useful, welcoming home for campus news and information.', icon: 'window', action: 'Create content', endpoint: '/sis/portal/editor/', permission: 'sis:portal:manage', fields: [['kind', 'Content type', 'choice', [{ value: 'news', label: 'News update' }, { value: 'page', label: 'Text page' }, { value: 'link', label: 'Website link' }]], ['code', 'Unique code'], ['title', 'Title'], ['content', 'Content', 'textarea'], ['audience', 'Audience', 'choice', [{ value: 'campus', label: 'Signed-in campus' }, { value: 'public', label: 'Public website' }]]], columns: [['Title', 'title'], ['Type', 'kind'], ['Status', 'status']] },
     };
     datasets.transcripts = { title: 'Transcript requests', description: 'Review a request, prepare the official record, and record delivery after it is complete.', icon: 'file-earmark-text', permission: 'sis:transcript:manage', columns: [['Request', 'short_id'], ['Delivery', 'delivery'], ['Status', 'status'], ['Requested', 'requested_at']] };
     const operations = window.createWorkspaceOperations({ node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -280,7 +280,7 @@
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
-    const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, subjects: () => catalogStudio.subjects(), classifications: () => classificationStudio.library() });
+    const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: () => classificationStudio.library() });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money,
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
@@ -684,13 +684,7 @@
             form.elements.subject.maxLength = 191;
             form.elements.body.maxLength = 100000;
         }
-        if (section === 'portal') {
-            const code = form.elements.namedItem('code');
-            code.maxLength = 80; code.pattern = '[a-z0-9][a-z0-9-]{0,79}';
-            code.setAttribute('aria-describedby', 'portal-code-help');
-            code.after(node('p', { class: 'form-text', id: 'portal-code-help' }, 'Use lowercase letters, numbers and hyphens, for example fall-welcome.'));
-            form.append(node('p', { class: 'form-text' }, 'Choose News for portal updates. Campus content requires sign-in; public news appears on the public website. Use Page builder to design public pages.'));
-        }
+        if (section === 'portal') campusContentForm(form);
         if (section === 'terms') {
             const code = form.elements.namedItem('code');
             code.maxLength = 22; code.pattern = String.raw`[A-Za-z0-9][A-Za-z0-9._\/\-]{0,21}`;
@@ -760,6 +754,10 @@
     }
 
     const formLayouts = {
+        portal: [
+            { title: 'Content details', fields: ['kind', 'code', 'title'], wide: ['title'] },
+            { title: 'Wording & audience', fields: ['content', 'audience'], wide: ['content', 'audience'] },
+        ],
         campaigns: [{ title: 'Message content', fields: ['subject', 'body'], wide: ['subject', 'body'] }],
         access_definition: [{ title: 'Access definition', fields: ['name', 'description'], wide: ['name', 'description'] }],
         teaching_assignment: [
@@ -1097,26 +1095,183 @@
         await operations.enhance(section, row, body);
     }
 
-    async function editCampusContent(id) {
-        const post = await request(`/sis/portal/editor/${id}/`);
-        const body = openDrawer(post.title, 'CAMPUS PUBLISHING');
-        const fields = datasets.portal.fields;
-        const form = await buildForm(fields, post);
-        form.elements.kind.disabled = true; form.elements.code.readOnly = true;
-        form.append(node('p', { class: 'form-text' }, 'Campus content is visible after sign-in. Public news appears on the public portal. Saving an edit returns content to draft for review.'), node('button', { class: 'btn btn-primary', type: 'submit' }, 'Save draft'));
-        form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
-            if (!form.reportValidity()) return;
-            await request('/sis/portal/editor/', 'POST', { ...formData(form, fields), id, version: Number(post.version) });
-            notify('Draft saved. Review it before publishing.'); await editCampusContent(id); await loadDirectory();
-        }, $one('[type="submit"]', form)); });
-        body.append(badge(post.status), node('p', { class: 'mt-3' }, `Audience: ${post.audience === 'public' ? 'Public website' : 'Signed-in campus'}`), form);
-        if (post.status !== 'archived') body.append(node('button', { class: 'btn btn-outline-primary mt-4', type: 'button', onclick: event => task(async () => {
-            await request(`/sis/portal/posts/${id}/publication/`, 'POST', { publish: post.status !== 'published', version: Number(post.version) });
-            notify(post.status === 'published' ? 'Content archived.' : 'Content published to its selected audience.'); drawer.hide(); await loadDirectory();
-        }, event.currentTarget) }, post.status === 'published' ? 'Archive content' : 'Publish saved draft'));
-        if (can('vihzhuo:manage')) body.append(node('a', { class: 'btn btn-link mt-4', href: '/admin/manager' }, 'Design public pages in Vihzhuo'));
+    function campusContentForm(form) {
+        const code = form.elements.namedItem('code');
+        const kind = form.elements.namedItem('kind');
+        const content = form.elements.namedItem('content');
+        content.maxLength = 100000;
+        const helpId = `${code.id}-help`;
+        code.maxLength = 80;
+        code.pattern = '[a-z0-9][a-z0-9-]{0,79}';
+        code.setAttribute('aria-describedby', helpId);
+        code.after(
+            node(
+                'p',
+                { class: 'form-text', id: helpId },
+                code.readOnly ? 'The content type and code stay fixed after creation.'
+                    : 'Use lowercase letters, numbers and hyphens, for example fall-welcome.',
+            ),
+        );
+        form.elements.title.maxLength = 191;
+        const update = () => {
+            form.querySelector(`label[for="${content.id}"]`).firstChild.textContent =
+                kind.value === 'link' ? 'HTTPS link ' : 'Content ';
+            content.rows = kind.value === 'link' ? 3 : 12;
+            content.placeholder =
+                kind.value === 'link' ? 'https://example.edu/' : 'Write your campus update…';
+        };
+        kind.addEventListener('change', update);
+        update();
+        form.append(
+            node(
+                'p',
+                { class: 'form-text' },
+                'Campus content requires sign-in. Public news appears on the public website. Use Page builder to design public pages.',
+            ),
+        );
     }
 
+    async function reviewCampusPublication(post) {
+        const publish = post.status !== 'published';
+        const body = openDrawer(publish ? 'Review publication' : 'Review archive', 'CAMPUS PUBLISHING');
+        const confirm = node(
+            'button',
+            {
+                type: 'button',
+                class: 'btn btn-primary',
+                onclick: (event) =>
+                    task(async () => {
+                        try {
+                            await request(`/sis/portal/posts/${post.id}/publication/`, 'POST', {
+                                publish,
+                                version: Number(post.version),
+                            });
+                        } catch (error) {
+                            if (error.status === 409 && body.isConnected) confirm.remove();
+                            throw error;
+                        }
+                        if (!body.isConnected) return;
+                        notify(publish ? 'Content published to its selected audience.' : 'Content archived.');
+                        drawer.hide();
+                        await loadDirectory();
+                    }, event.currentTarget),
+            },
+            publish ? 'Confirm publication' : 'Confirm archive',
+        );
+        body.append(
+            node(
+                'button',
+                {
+                    type: 'button',
+                    class: 'btn btn-link mb-3',
+                    onclick: () => task(() => editCampusContent(post.id)),
+                },
+                'Back to editor',
+            ),
+            recordSummary([
+                ['Audience', post.audience === 'public' ? 'Public website' : 'Signed-in campus'],
+                ['Current status', badge(post.status)],
+            ]),
+            node(
+                'section',
+                { class: 'record-section', 'aria-label': 'Saved content review' },
+                node('h3', {}, post.title),
+                node('p', { class: 'message-preview' }, post.content),
+            ),
+            node(
+                'p',
+                { class: 'alert alert-info' },
+                publish
+                    ? post.audience === 'public'
+                        ? 'Publish this saved content for the public website. Public content may be read without signing in.'
+                        : 'Publish this saved content for signed-in campus users.'
+                    : 'Archive this published content so it no longer appears in the portal. Its saved wording is retained.',
+            ),
+            confirm,
+        );
+    }
+
+    async function editCampusContent(id) {
+        const body = openDrawer('Content editor', 'CAMPUS PUBLISHING');
+        body.append(node('p', { role: 'status' }, 'Loading saved content…'));
+        const post = { ...(await request(`/sis/portal/editor/${id}/`)), id };
+        if (!body.isConnected) return;
+        $one('#drawer-title').textContent = post.title;
+        const fields = datasets.portal.fields;
+        const form = await buildForm(fields, post, { layout: 'portal' });
+        if (!body.isConnected) return;
+        form.elements.kind.disabled = true;
+        form.elements.code.readOnly = true;
+        campusContentForm(form);
+        form.append(
+            node('p', { class: 'form-text' }, 'Saving an edit returns content to draft for review.'),
+            node('button', { class: 'btn btn-primary', type: 'submit' }, 'Save draft'),
+        );
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            task(
+                async () => {
+                    if (!form.reportValidity()) return;
+                    await request('/sis/portal/editor/', 'POST', {
+                        ...formData(form, fields),
+                        id,
+                        version: Number(post.version),
+                    });
+                    if (!body.isConnected) return;
+                    notify('Draft saved. Review it before publishing.');
+                    await editCampusContent(id);
+                    await loadDirectory();
+                },
+                $one('[type="submit"]', form),
+            );
+        });
+        const actions = node('div', {
+            class: 'inline-actions',
+            role: 'group',
+            'aria-label': 'Content tasks',
+        });
+        const baseline = JSON.stringify(formData(form, fields));
+        const changed = () => JSON.stringify(formData(form, fields)) !== baseline;
+        const hint = node('p', { class: 'form-text', role: 'status', hidden: true });
+        if (post.status !== 'archived') {
+            const review = node(
+                'button',
+                {
+                    class: 'btn btn-outline-primary',
+                    type: 'button',
+                    onclick: (event) =>
+                        task(async () => {
+                            if (changed()) return;
+                            await reviewCampusPublication(post);
+                        }, event.currentTarget),
+                },
+                post.status === 'published' ? 'Review archive' : 'Review publication',
+            );
+            const update = () => {
+                review.disabled = changed();
+                hint.hidden = !review.disabled;
+                hint.textContent = review.disabled
+                    ? 'Save your changes before reviewing publication or archiving.'
+                    : '';
+            };
+            form.addEventListener('input', update);
+            form.addEventListener('change', update);
+            actions.append(review);
+        }
+        if (can('vihzhuo:manage'))
+            actions.append(
+                node('a', { class: 'btn btn-outline-secondary', href: '/admin/manager' }, 'Page builder'),
+            );
+        body.replaceChildren(
+            recordSummary([
+                ['Status', badge(post.status)],
+                ['Audience', post.audience === 'public' ? 'Public website' : 'Signed-in campus'],
+            ]),
+            actions,
+            hint,
+            form,
+        );
+    }
     async function reviewTranscript(id) {
         return transcriptStudio.record(id);
     }

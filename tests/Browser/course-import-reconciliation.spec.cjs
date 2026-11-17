@@ -45,8 +45,8 @@ test('course import reviews matches and exclusions with bounded rows, safe rende
     await page.locator('.workspace-nav-link[data-workspace="imports"]').click();
     await page.locator('#import-file').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv',
         buffer: Buffer.from('External ID,Code,Title,Credits\n1,MATH.101,Fictional Algebra,3\n') });
-    await page.getByRole('button', { name: 'Continue to field mapping', exact: false }).click();
-    await page.getByRole('button', { name: 'Check the preview', exact: false }).click();
+    await page.getByRole('button', { name: 'Match fields', exact: false }).click();
+    await page.getByRole('button', { name: 'Review import', exact: false }).click();
     await expect(page.getByLabel('Review rows', { exact: true })).toHaveValue('unresolved');
     await expect(page.getByRole('table', { name: 'Reviewed course import rows' })).toContainText(title);
     await expect(page.locator('[data-import-panel="3"] img')).toHaveCount(0);
@@ -57,7 +57,9 @@ test('course import reviews matches and exclusions with bounded rows, safe rende
     await expect(page.locator('#import-commit')).toBeDisabled();
     await accessible();
     await page.getByRole('button', { name: 'Review choices', exact: true }).click();
-    await expect(page.locator('#import-plan-summary')).toContainText('New drafts: 27 · Approved links: 1 · Prior imports: 1 · Left out: 1');
+    for (const [label, count] of [['New drafts', '27'], ['Approved links', '1'], ['Prior imports', '1'], ['Left out', '1']]) {
+        await expect(page.locator('#import-plan-summary').getByText(label, { exact: true }).locator('..').locator('dd')).toHaveText(count);
+    }
     await expect(page.getByRole('table', { name: 'Reviewed course import rows' }).locator('tbody tr')).toHaveCount(25);
     await page.getByRole('button', { name: 'Next rows', exact: true }).click();
     await expect(page.locator('#import-plan-status')).toHaveText('26–30 of 30 matching rows.');

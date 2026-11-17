@@ -10,7 +10,7 @@
         </a>
     </div>
     <ol class="import-steps" aria-label="Import progress">
-        <li class="active" data-import-step="1"><span>1</span> Choose a file</li>
+        <li class="active" data-import-step="1" aria-current="step"><span>1</span> Choose a file</li>
         <li data-import-step="2"><span>2</span> Match your fields</li>
         <li data-import-step="3"><span>3</span> Review & import</li>
         <li data-import-step="4"><span>4</span> All set</li>
@@ -49,18 +49,19 @@
                 </div>
             </div>
             <button class="btn btn-primary mt-4" type="button" id="import-inspect">
-                Continue to field mapping <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                Match fields <i class="bi bi-arrow-right" aria-hidden="true"></i>
             </button>
         </div>
         <div data-import-panel="2" hidden>
             <p class="eyebrow">CONNECT THE DOTS</p>
             <h2>Where should each column go?</h2>
             <p class="muted-text">Your source columns are on the right. You can leave unrelated source columns out.</p>
+            <div id="import-file-summary"></div>
             <div id="import-mapping" class="mapping-list"></div>
             <div class="d-flex gap-2 mt-4">
                 <button class="btn btn-outline-secondary" type="button" data-import-back="1">Back</button>
                 <button class="btn btn-primary" type="button" id="import-review">
-                    Check the preview <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    Review import <i class="bi bi-arrow-right" aria-hidden="true"></i>
                 </button>
             </div>
         </div>
@@ -73,9 +74,24 @@
                 </div>
             </div>
             <div id="import-review-errors" role="alert"></div>
-            <p id="import-plan-summary" class="fw-semibold mt-3" role="status"></p>
-            <div class="mb-3" data-requires="sis:catalog:manage">
-                <p class="form-text">Missing or retired classifications? Update the catalog here, close its drawer,
+            <dl id="import-plan-summary" class="import-summary mt-3" aria-live="polite" aria-label="Import summary"></dl>
+            <p class="muted-text mt-3">
+                New courses are inactive drafts. Approve matching course links explicitly, or leave rows out.
+                Existing courses and historical publications are preserved.
+            </p>
+            <div class="import-review-actions">
+                <p id="import-choice-status" class="form-text" role="status"></p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-secondary" type="button" data-import-back="2">Adjust mapping</button>
+                    <button class="btn btn-outline-primary" type="button" id="import-refresh">Review choices</button>
+                    <button class="btn btn-primary" type="button" id="import-commit">
+                        Import courses <i class="bi bi-arrow-up-square" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+            <details id="import-catalog-setup" class="mb-4" data-requires="sis:catalog:manage">
+                <summary>Catalog setup</summary>
+                <p class="form-text mt-2">Missing or retired classifications? Update the catalog here, close its drawer,
                     then select Review choices. Your file and row choices stay in place.</p>
                 <div class="d-flex flex-wrap gap-2">
                     <button id="import-reference-subjects" class="btn btn-outline-secondary" type="button">
@@ -85,7 +101,7 @@
                         Set up departments &amp; levels
                     </button>
                 </div>
-            </div>
+            </details>
             <div class="row g-3 mb-3">
                 <div class="col-md-6">
                     <label for="import-plan-filter" class="form-label">Review rows</label>
@@ -118,20 +134,14 @@
             </div>
             <details class="mt-3">
                 <summary>Original CSV sample</summary>
-                <div id="import-preview-table" class="table-responsive mt-3"></div>
+                <div
+                    id="import-preview-table"
+                    class="table-responsive mt-3"
+                    tabindex="0"
+                    role="region"
+                    aria-label="Source CSV sample"
+                ></div>
             </details>
-            <p class="muted-text mt-3">
-                Every row is checked against the catalog. New courses are inactive drafts. Approve matching course links
-                explicitly, or leave rows out. Existing courses and historical publications are preserved.
-            </p>
-            <p id="import-choice-status" class="form-text" role="status"></p>
-            <div class="d-flex flex-wrap gap-2">
-                <button class="btn btn-outline-secondary" type="button" data-import-back="2">Adjust mapping</button>
-                <button class="btn btn-outline-primary" type="button" id="import-refresh">Review choices</button>
-                <button class="btn btn-primary" type="button" id="import-commit">
-                    Import courses <i class="bi bi-arrow-up-square" aria-hidden="true"></i>
-                </button>
-            </div>
         </div>
         <div data-import-panel="4" hidden>
             <span class="completion-mark" aria-hidden="true"><i class="bi bi-check2"></i></span>
