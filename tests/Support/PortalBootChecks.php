@@ -236,6 +236,47 @@ $teachingPost = static function (
     }
     return $response;
 };
+// One connected owner/staff education cycle through real routes, providers and framework CSRF.
+$educationActor = $sis->access->actor;
+$educationStaff = $sis->access->staff;
+$educationGrants = $sis->access->grants;
+$educationOwner = $sis->user();
+$educationPerson = $sis->legacyPerson($educationOwner, 'Fictional', 'Education applicant');
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$educationGet = $get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/portal/api/education/'));
+$educationResponse = $app->router->match($educationGet);
+if ($educationResponse->getStatusCode() !== 200
+    || !str_contains($educationResponse->getHeaderLine('Cache-Control'), 'no-store')) {
+    throw new RuntimeException('The owner-only education read failed its provider/privacy boundary.');
+}
+if ($teachingPost('/portal/api/education/', ['entries' => [
+    ['key' => 'fictional_college', 'institution' => 'Fictional Previous College'],
+], 'version' => 0, 'reason' => ''])->getStatusCode() !== 200) {
+    throw new RuntimeException('Owner educational-background entry failed through the typed browser envelope.');
+}
+$educationReviewPath = '/sis/ui/people/' . $educationPerson->id->value . '/education/review/';
+$educationReview = ['entry_key' => 'fictional_college', 'review_status' => 'changes_requested',
+    'version' => 1, 'reason' => 'Please provide the attendance dates.'];
+if ($teachingPost($educationReviewPath, $educationReview)->getStatusCode() !== 403) {
+    throw new RuntimeException('An owner could assign an admissions review outcome.');
+}
+$sis->access->actor = $educationActor;
+$sis->access->staff = true;
+if ($teachingPost($educationReviewPath, $educationReview)->getStatusCode() !== 200) {
+    throw new RuntimeException('Authorized educational-background feedback failed through the HTTP boundary.');
+}
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$educationResult = json_decode((string) $app->router->match($educationGet)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (($educationResult['entries'][0]['feedback'] ?? null) !== $educationReview['reason']) {
+    throw new RuntimeException('The applicant could not read the requested education correction.');
+}
+$sis->access->actor = $educationActor;
+$sis->access->staff = $educationStaff;
+$sis->access->grants = $educationGrants;
+
 $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
 $moodlePersonPath = '/sis/people/' . $sis->admissions->student($teachingStudent->id)->personId->value . '/moodle/';
 $moodleRequestPath = $moodlePersonPath . 'account-request/';

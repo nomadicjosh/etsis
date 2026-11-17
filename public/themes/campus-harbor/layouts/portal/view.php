@@ -36,6 +36,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <script defer src="/assets/js/application-form.js"></script>
         <script defer src="/assets/js/degree-progress-guide.js"></script>
         <script defer src="/assets/js/person-emergency-contacts.js"></script>
+        <script defer src="/assets/js/person-education.js"></script>
         <script defer src="/assets/js/person-addresses.js"></script>
         <script defer src="/assets/js/academic-timetable.js"></script>
         <script defer src="/assets/js/public-events.js"></script>
@@ -79,24 +80,22 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                         </li>
                         <li class="nav-item"><a class="nav-link" href="/portal/news/">Updates</a></li>
                         <li class="nav-item"><a class="nav-link" href="/portal/events/">Events</a></li>
-                        <?php if ($staffAccess): ?>
+                        <?php if ($staffAccess) : ?>
                             <li class="nav-item"><a class="nav-link" href="/admin/">Staff workspace</a></li>
                         <?php endif; ?>
-                        <?php if ($signedIn && ($moodleLaunchEnabled ?? false)): ?>
+                        <?php if ($signedIn && ($moodleLaunchEnabled ?? false)) : ?>
                             <li class="nav-item"><a class="nav-link" href="/portal/moodle/">Moodle</a></li>
                         <?php endif; ?>
-                        <?php if ($signedIn): ?>
+                        <?php if ($signedIn) : ?>
                             <li class="nav-item"><a class="nav-link" href="/portal/student/">My campus</a></li>
                             <li class="nav-item">
                                 <form method="post" action="/logout/" class="m-0">
-                                    <?= $csrfMarkup ?? csrf_field() ?>
+                            <?= $csrfMarkup ?? csrf_field() ?>
                                     <button class="nav-link" type="submit">Sign out</button>
                                 </form>
                             </li>
-                        <?php else: ?>
-                            <li class="nav-item"><a class="nav-link" href="<?= $esc(
-                                $loginUrl,
-                            ) ?>">Sign in</a></li>
+                        <?php else : ?>
+                            <li class="nav-item"><a class="nav-link" href="<?= $esc($loginUrl) ?>">Sign in</a></li>
                         <?php endif; ?>
                         <li class="nav-item">
                             <a class="btn campus-button" href="/portal/apply/">

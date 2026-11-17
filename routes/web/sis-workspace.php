@@ -15,10 +15,17 @@ use Application\Http\Controller\SisMappedImportController;
 use Application\Http\Controller\SisRulesController;
 use Qubus\Routing\Interfaces\Mappable;
 use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
+use Application\Http\Controller\PersonEducationController as Education;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/sis/ui/people/{id}/education/', [Education::class, 'staff'])
+        ->name('sis.ui.person.education');
+    $router->map(['POST'], '/sis/ui/people/{id}/education/', [Education::class, 'saveStaff'])
+        ->name('sis.ui.person.education.save');
+    $router->map(['POST'], '/sis/ui/people/{id}/education/review/', [Education::class, 'review'])
+        ->name('sis.ui.person.education.review');
     $router->map(['GET'], '/sis/ui/people/{id}/addresses/', [Addresses::class, 'staff'])
         ->name('sis.ui.person.addresses');
     $router->map(['POST'], '/sis/ui/people/{id}/addresses/', [Addresses::class, 'saveStaff'])

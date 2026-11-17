@@ -8,10 +8,13 @@ use Application\Http\Controller\SisPortalEditorController as Editor;
 use Application\Http\Controller\PortalPaymentController as Payments;
 use Qubus\Routing\Interfaces\Mappable;
 use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
+use Application\Http\Controller\PersonEducationController as Education;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/portal/api/education/', [Education::class, 'mine'])->name('portal.education');
+    $router->map(['POST'], '/portal/api/education/', [Education::class, 'saveMine'])->name('portal.education.save');
     $router->map(['GET'], '/portal/api/addresses/', [Addresses::class, 'mine'])
         ->name('portal.addresses');
     $router->map(['POST'], '/portal/api/addresses/', [Addresses::class, 'saveMine'])

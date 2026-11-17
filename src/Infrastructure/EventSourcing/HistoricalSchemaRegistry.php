@@ -84,6 +84,11 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent'],
             ],
+            \Domain\Person\Event\PersonEducationWasRecorded::class => [
+                'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent',
+                    'action', 'entry_key', 'reason'],
+            ],
             \Domain\Person\Event\PersonProfileWasRecorded::class,
             \Domain\Person\Event\PersonContactWasRecorded::class => [
                 'type' => 'person_profile', 'root' => \Domain\Person\ProfileHistory::class,
@@ -519,6 +524,9 @@ final readonly class HistoricalSchemaRegistry
             }
             if ($class === \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class) {
                 \Domain\Person\ValueObject\EmergencyContacts::validateEvent($payload);
+            }
+            if ($class === \Domain\Person\Event\PersonEducationWasRecorded::class) {
+                \Domain\Person\ValueObject\EducationBackground::validateEvent($payload);
             }
             if ($class === \Domain\Person\Event\PersonContactWasRecorded::class) {
                 \Domain\Person\ValueObject\ContactDetails::validateEvent($payload);

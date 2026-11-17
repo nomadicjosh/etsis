@@ -1025,6 +1025,7 @@
                 const extra = [];
                 if (can('sis:person:manage') && (!person.ownerUserId || can('admin:edit:user'))) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.editProfile(person)) }, 'Edit person profile'));
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.contact(person)) }, 'Contact information'));
+                if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => peopleStudio.education(person) }, 'Educational background'));
                 if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value, `${person.givenName} ${person.familyName}`)) }, 'Start application'));
                 if (person.ownerUserId && can('admin:edit:user')) extra.push({ label: 'Manage sign-in account', icon: 'key', run: () => peopleStudio.account(person) });
                 if (can('sis:person:manage')) extra.push({ label: 'Account setup', icon: 'envelope', run: () => accountSetup(person) });

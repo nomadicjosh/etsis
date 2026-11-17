@@ -22,7 +22,7 @@ async function fixture(page, { applications = [
     row(first, receipt, 'DIP.ART', 'Studio Arts', 'accepted'),
     row(second, otherReceipt, 'BS.SCI', 'Applied Science', 'matriculated'),
     row(direct, null, 'BA.HIST', 'History'),
-], answer = null, refresh = null } = {}) {
+], answer = null, refresh = null, education = null } = {}) {
     const reads = [], writes = [], errors = [], overviewReads = [], statusReads = [];
     const me = { person: { id: person }, applications, students: [], contact: {}, accounts: [], news: [] };
     page.on('pageerror', error => errors.push(error.message));
@@ -30,6 +30,10 @@ async function fixture(page, { applications = [
         const req = route.request(), path = new URL(req.url()).pathname;
         let json = {};
         if (path === '/portal/api/me/') { overviewReads.push(path); json = me; }
+        else if (path === '/portal/api/education/') {
+            if (education) return education(route);
+            json = { entries: [], version: 0 };
+        }
         else if (path === '/portal/api/applications/') {
             expect(req.method()).toBe('GET');
             statusReads.push(path);
@@ -249,4 +253,42 @@ test('a failed follow-up status read keeps a successful submission confirmed', a
     await expect(page.getByRole('button', { name: 'Submit application', exact: true })).toHaveCount(0);
     expect(state.writes).toHaveLength(1); expect(state.statusReads).toHaveLength(2);
     expect(state.overviewReads).toHaveLength(0); expect(state.errors).toEqual([]);
+});
+
+test('an applicant responds to educational-background feedback without losing an application draft', async ({ page }) => {
+    const updates = [];
+    let background = { version: 2, entries: [{ key: 'college_one', institution: 'Fictional College',
+        institution_code: '', start_date: '', end_date: '', major: '', degree: '', conferred_date: '',
+        gpa: '7.5', gpa_max: '10', review_status: 'changes_requested', feedback: 'Please provide attendance dates.' }] };
+    const state = await fixture(page, { education: route => {
+        const request = route.request();
+        if (request.method() === 'POST') {
+            expect(request.headers()['x-csrf-token']).toBe('fictional-test-token');
+            const input = JSON.parse(new URLSearchParams(request.postData()).get('_workspace_json'));
+            updates.push(input);
+            background = { version: 3, entries: input.entries.map(entry => ({ ...entry, review_status: 'unreviewed', feedback: '' })) };
+            return route.fulfill({ json: { status: 'saved' } });
+        }
+        return route.fulfill({ json: background, headers: { 'Cache-Control': 'private, no-store' } });
+    } });
+    await openNewApplication(page);
+    await page.getByRole('button', { name: 'Institutions attended', exact: true }).click();
+    const editor = page.getByRole('region', { name: 'Institutions attended editor' });
+    await expect(editor).toContainText('Fictional College');
+    await editor.locator('summary').filter({ hasText: 'Fictional College' }).click();
+    await expect(editor).toContainText('Please provide attendance dates.');
+    await editor.getByLabel('Attended from', { exact: true }).fill('2020-08-01');
+    await editor.getByLabel('Attended through', { exact: true }).fill('2024-06-30');
+    await editor.getByLabel('Reason for update', { exact: true }).fill('Provided the requested attendance dates.');
+    await editor.getByRole('button', { name: 'Save background', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Close institutions', exact: true })).toBeFocused();
+    await expect(editor.locator('fieldset')).toContainText('Not yet reviewed');
+    expect(updates).toHaveLength(1); expect(updates[0].version).toBe(2);
+    expect(updates[0].entries[0].review_status).toBeUndefined();
+    expect(updates[0].entries[0].feedback).toBeUndefined();
+    expect(updates[0].entries[0].gpa).toBe('7.5'); expect(updates[0].entries[0].gpa_max).toBe('10');
+    await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
+    await expect(editor.getByText('Review entry', { exact: true })).toHaveCount(0);
+    await accessible(page);
+    expect(state.errors).toEqual([]); expect(state.overviewReads).toHaveLength(0);
 });

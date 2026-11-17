@@ -690,6 +690,10 @@
             window.createPersonEmergencyContacts({ node: el, request, task, notify: notice })
                 .open(emergency, '/portal/api/emergency-contacts/'), event.currentTarget) }, 'Manage emergency contacts'));
         container.append(surface('Emergency contacts', emergency));
+        const education = el('div');
+        window.createPersonEducation({ node: el, request, task, notify: notice })
+            .mount(education, '/portal/api/education/');
+        container.append(surface('Educational background', education));
 
     }
 
@@ -773,6 +777,14 @@
             saved.replaceChildren(...(me?.applications.length ? [submittedApplications(me.applications)] : []));
         };
         refreshApplications(); container.append(saved);
+        if (config.signedIn) {
+            const education = el('div');
+            window.createPersonEducation({ node: el, request, task, notify: notice })
+                .mount(education, '/portal/api/education/');
+            container.append(surface('Educational background',
+                el('p', { class: 'campus-muted' }, 'Keep institutions attended in one place for your applications. Open the list to check admissions feedback or requested changes.'),
+                education));
+        }
         let statusRequest = 0;
         const status = el('p', { class: 'campus-muted mb-0', role: 'status', 'aria-atomic': 'true' });
         async function reloadApplications() {

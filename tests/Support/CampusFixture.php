@@ -66,6 +66,7 @@ final class CampusFixture
     public CampusService $service;
     public \Domain\Person\Service\PersonContactService $contacts;
     public \Domain\Person\Service\EmergencyContactsService $emergency;
+    public \Domain\Person\Service\EducationBackgroundService $education;
     public \Domain\Person\Service\PersonAddressService $addresses;
     public CampusContentService $content;
     public PortalService $posts;
@@ -141,6 +142,15 @@ final class CampusFixture
             new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
             $f->profileLedger(),
             $profileAccess,
+            $f->transactions,
+            $f->audit
+        );
+        $this->education = new \Domain\Person\Service\EducationBackgroundService(
+            new \Infrastructure\Persistence\Repository\SqlEducationBackgroundRepository($f->sql, $this->cipher),
+            new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($f->sql),
+            $f->profileLedger(),
+            $profileAccess,
+            $f->access,
             $f->transactions,
             $f->audit
         );

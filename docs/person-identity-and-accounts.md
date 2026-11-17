@@ -110,6 +110,38 @@ The ordered list and each accepted revision are retained in the existing person 
 
 `PersonProfileAccess` is shared by ordinary/emergency contact workflows: portal ownership remains mandatory, staff need person-management permission, and super records require a super administrator through staff routes. Person locks, trusted actor/time, expected revisions, shared replay limits, encrypted payloads, required audit and atomic rollback remain in force. Lists and general portal overviews do not eagerly load emergency contacts. Raw event streams and emergency contact details are not ordinary Report Studio sources.
 
+## Institutions attended and education corrections
+
+Educational background belongs to the person, including before matriculation. It stays with the same identity if a student later becomes staff or returns for another program. It is self-reported background, separate from accepted transfer awards, GPA calculations, prerequisites and degree progress.
+
+Applicants open **Start your application → Educational background → Institutions attended**. The same editor is available in **My campus → Personal information**. Staff use **People → open person → Educational background**; admissions can also open the list inside an application's existing review without leaving it. Nothing is loaded until the editor is opened, and a new application being edited on the same screen stays intact.
+
+### Supply and maintain background
+
+Add up to twenty institution entries. Each needs a name; school/FICE/CEEB code, attendance dates, field of study, qualification, conferral date and reported GPA are optional. Leave unknown dates blank. An institution may appear more than once for distinct attendance periods. Entries have stable internal keys; a school's readable code is not the person's primary key or a foreign-key identity.
+
+For a reported GPA, supply its original maximum as well. A 7.5 out of 10 remains on that scale; etSIS neither assumes 4.0 nor converts it. Future attendance/award policy is not inferred from missing dates. Dates must be valid and an attendance end or conferral date cannot precede a supplied attendance start. A conferral date needs the name of the qualification awarded.
+
+Cards show the institution name when collapsed. Open a card to edit, move it earlier/later or remove it from the current list, then choose **Save background**. The first entry can be saved without a separate reason; later revisions require **Reason for update**. Saving an unchanged list appends nothing. Removing an entry clears its current display but retains its protected recorded history.
+
+### Review and request changes
+
+Staff need `sis:person:manage` to read or maintain background through the workspace. **Mark reviewed** and **Request changes** additionally require `sis:admissions:manage`. The existing super-account protection still applies. Portal reads and writes remain owner-only even when that owner has staff permissions.
+
+Open **Review entry**, enter a **Message to applicant**, then mark the entry reviewed or request changes. That message is visible to the applicant; use it for a specific correction or next step, not confidential internal commentary. Save any pending detail edits before reviewing. Review always uses the currently loaded revision and stops if another person changes it first.
+
+The applicant sees **Changes requested** and the message in the same institution card. They correct the details, explain the update and save. The changed entry returns to **Not yet reviewed**, while unchanged entries keep their existing reviews. Staff then review the revised entry. Earlier details, feedback and decisions remain in protected history. An old retry cannot restore an earlier request or overwrite later answers.
+
+**Reviewed** means that staff reviewed the supplied background; it does not verify a credential, award credit, satisfy degree requirements or approve an application. Background review does not add a hidden admissions requirement or block existing decisions/registration. Institutions should communicate requested changes through their existing admissions process; this workflow does not yet send automatic email, collect documents or assign a case. General profile/application correction requests remain separate roadmap work.
+
+### Protected history and setup
+
+The API uses owner-only `GET`/`POST /portal/api/education/`, staff `GET`/`POST /sis/ui/people/{person}/education/`, and staff `POST /sis/ui/people/{person}/education/review/`. Browser writes require framework CSRF. Detail commands contain `entries`, `version` and `reason`; review commands contain `entry_key`, `review_status`, `version` and `reason`. Review fields are server-managed and cannot be submitted as ordinary detail fields. Staff authority and the actor are checked again after the person lock and before completion.
+
+Migration **20261117000001** adds `sis_person_education`, an encrypted, versioned, one-row-per-person projection with ULID keys. New attributed `PersonEducationWasRecorded` events share the existing person-profile stream and authoritative `sis_history_events` journal. Profile observation, education events, receipts, projection and audit commit together. Existing events are untouched, and no earlier education history is fabricated. A missing or altered projection stops the read/write; it is not silently accepted or repaired. The shared profile-history screen reports value-free education change summaries under its existing audit permission.
+
+The projection can be reconstructed from recorded education events, subject to the existing bounded replay and institution-owned key/backup/retention requirements. This does not add general operational rebuild or erasure tooling. Names, dates, GPA and feedback stay encrypted in the projection and journal, are redacted from debugging and are not new Report Studio fields or browser-storage values. All five framework SQL dialects compile the additive schema; SQLite fixtures and the configured MariaDB installation are exercised directly.
+
 ## Employment and time review
 
 Employment retains the same parent person and sign-in account. See the consolidated [Human resources guide](human-resources.md) for job/pay-grade setup, protected employment changes, historical review and weekly time review. Library edits do not rewrite employee or academic facts.

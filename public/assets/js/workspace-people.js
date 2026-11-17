@@ -245,6 +245,12 @@ window.createWorkspacePeople = function (ui) {
         body.append(emergency);
 
     }
+    function education(person) {
+        const body = openDrawer('Educational background', 'PERSON');
+        window.createPersonEducation({ node, request, task, notify }).mount(
+            body, `/sis/ui/people/${personId(person)}/education/`, { canReview: can('sis:admissions:manage'), open: true },
+        );
+    }
     async function password(person, record) {
         const id = personId(person);
         const body = openDrawer(
@@ -380,6 +386,13 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
         const submission = review.submission;
+        if (can('sis:person:manage')) {
+            const education = node('div', { class: 'record-section mt-3' });
+            window.createPersonEducation({ node, request, task, notify }).mount(
+                education, `/sis/ui/people/${person.id.value}/education/`, { canReview: can('sis:admissions:manage') },
+            );
+            body.append(education);
+        }
         if (submission) {
             const section = node(
                 "section",
@@ -895,5 +908,5 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
-    return { editProfile, account, contact, history, application };
+    return { editProfile, account, contact, education, history, application };
 };

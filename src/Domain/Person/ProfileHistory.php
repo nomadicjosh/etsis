@@ -10,6 +10,8 @@ use Domain\Person\Event\PersonProfileWasRecorded;
 use Domain\Person\Event\PersonContactWasRecorded;
 use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
 use Domain\Person\ValueObject\EmergencyContacts;
+use Domain\Person\Event\PersonEducationWasRecorded;
+use Domain\Person\ValueObject\EducationBackground;
 use Domain\Person\ValueObject\AddressBook;
 use Domain\Person\Event\PersonAddressesWereRecorded;
 use Domain\Person\ValueObject\ContactDetails;
@@ -21,6 +23,7 @@ final class ProfileHistory extends EventSourcedAggregate
     private ?Person $person = null;
     private ?ContactDetails $contact = null;
     private ?EmergencyContacts $emergency = null;
+    private ?EducationBackground $education = null;
     private ?string $operation = null;
     private ?AddressBook $addresses = null;
     public function acceptRecorded(\Domain\Shared\EventSourcing\StoredEvent $stored): void
@@ -40,13 +43,16 @@ final class ProfileHistory extends EventSourcedAggregate
             (!$e instanceof PersonProfileWasRecorded
             && !$e instanceof PersonContactWasRecorded
                 && !$e instanceof PersonEmergencyContactsWereRecorded
+                && !$e instanceof PersonEducationWasRecorded
                 && !$e instanceof PersonAddressesWereRecorded)
             || !$e->aggregateId()->equals($this->aggregateId())
             || $e->playhead() !== $this->playhead() + 1
         ) {
             throw new CorruptHistoryException();
         }
-        if ($e instanceof PersonAddressesWereRecorded) {
+        if ($e instanceof PersonEducationWasRecorded) {
+            EducationBackground::validateEvent($e->payload());
+        } elseif ($e instanceof PersonAddressesWereRecorded) {
             AddressBook::validateEvent($e->payload());
         } elseif ($e instanceof PersonEmergencyContactsWereRecorded) {
             EmergencyContacts::validateEvent($e->payload());
@@ -155,6 +161,24 @@ final class ProfileHistory extends EventSourcedAggregate
     public function addresses(): ?AddressBook
     {
         return $this->addresses;
+    }
+    public function whenPersonEducationWasRecorded(PersonEducationWasRecorded $event): void
+    {
+        $payload = $event->payload();
+        $next = EducationBackground::restore($payload['facts']);
+        if (
+            $this->person === null || $payload['previous_operation_id'] !== $this->operation
+            || $payload['operation_id'] === $this->operation
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $next->assertTransition($this->education, $payload['action'], $payload['entry_key'], $payload['reason']);
+        $this->education = $next;
+        $this->operation = $payload['operation_id'];
+    }
+    public function education(): ?EducationBackground
+    {
+        return $this->education;
     }
     public function emergency(): ?EmergencyContacts
     {

@@ -9,6 +9,8 @@ use Domain\Person\Event\PersonProfileWasRecorded;
 use Domain\Person\Event\PersonContactWasRecorded;
 use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
 use Domain\Person\ValueObject\EmergencyContacts;
+use Domain\Person\Event\PersonEducationWasRecorded;
+use Domain\Person\ValueObject\EducationBackground;
 use Domain\Person\ValueObject\AddressBook;
 use Domain\Person\Event\PersonAddressesWereRecorded;
 use Domain\Person\ValueObject\ContactDetails;
@@ -105,6 +107,54 @@ final readonly class ProfileLedger
         $event = PersonEmergencyContactsWereRecorded::occur($root->aggregateId(), [
             'operation_id' => $operation->value, 'previous_operation_id' => $root->operation(),
             'facts' => $after->facts(), 'intent' => $intent,
+        ], ['__aggregate_type' => 'person_profile'])->withPlayhead($root->playhead() + 1);
+        $this->commit($root, $event, $operation, $actor, 'changed');
+        return true;
+    }
+    public function educationReceipt(
+        EntityId $person,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent
+    ): ?EducationBackground {
+        return $this->load($person, $operation, $actor, $intent)['education_receipt'];
+    }
+    public function verifyEducation(Person $person, ?EducationBackground $current): void
+    {
+        $this->checkEducation($this->load($person->id)['root'], $person, $current);
+    }
+    private function checkEducation(ProfileHistory $root, Person $person, ?EducationBackground $current): void
+    {
+        $root->verifyPerson($person);
+        if ($root->education()?->facts() !== $current?->facts()) {
+            throw new CorruptHistoryException();
+        }
+    }
+    public function recordEducation(
+        Person $person,
+        ?EducationBackground $before,
+        EducationBackground $after,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent,
+        string $action,
+        string $entryKey,
+        #[\SensitiveParameter] string $reason
+    ): bool {
+        $root = $this->load($person->id)['root'];
+        $this->checkEducation($root, $person, $before);
+        if ($after->version !== ($before?->version ?? 0) + 1) {
+            throw new ConcurrentModificationException('Reload the educational background.');
+        }
+        if ($after->entries === ($before?->entries ?? [])) {
+            return false;
+        }
+        $after->assertTransition($before, $action, $entryKey, $reason);
+        $this->observePerson($root, $person, $operation, $actor, $intent);
+        $event = PersonEducationWasRecorded::occur($root->aggregateId(), [
+            'operation_id' => $operation->value, 'previous_operation_id' => $root->operation(),
+            'facts' => $after->facts(), 'intent' => $intent, 'action' => $action,
+            'entry_key' => $entryKey, 'reason' => $reason,
         ], ['__aggregate_type' => 'person_profile'])->withPlayhead($root->playhead() + 1);
         $this->commit($root, $event, $operation, $actor, 'changed');
         return true;
@@ -332,7 +382,7 @@ final readonly class ProfileLedger
     }
     /** @return array{
      * root:ProfileHistory, receipt:?Person, contact_receipt:?ContactDetails,
-     * emergency_receipt:?EmergencyContacts, address_receipt:?AddressBook
+     * emergency_receipt:?EmergencyContacts, address_receipt:?AddressBook, education_receipt:?EducationBackground
      * } */
     private function load(
         EntityId $id,
@@ -345,6 +395,7 @@ final readonly class ProfileLedger
         $contactReceipt = null;
         $emergencyReceipt = null;
         $addressReceipt = null;
+        $educationReceipt = null;
         $cursor = null;
         $count = 0;
         do {
@@ -359,7 +410,9 @@ final readonly class ProfileLedger
                     if ($stored->context->actor?->value !== $actor?->value || $p['intent'] !== $intent) {
                         throw new AccessDeniedException('This profile operation has another actor or intent.');
                     }
-                    if ($stored->event instanceof PersonAddressesWereRecorded) {
+                    if ($stored->event instanceof PersonEducationWasRecorded) {
+                        $educationReceipt = $root->education();
+                    } elseif ($stored->event instanceof PersonAddressesWereRecorded) {
                         $addressReceipt = $root->addresses();
                     } elseif ($stored->event instanceof PersonContactWasRecorded) {
                         $contactReceipt = $root->contact();
@@ -374,6 +427,6 @@ final readonly class ProfileLedger
         } while ($cursor !== null);
         return ['root' => $root, 'receipt' => $receipt,
             'contact_receipt' => $contactReceipt, 'emergency_receipt' => $emergencyReceipt,
-            'address_receipt' => $addressReceipt];
+            'address_receipt' => $addressReceipt, 'education_receipt' => $educationReceipt];
     }
 }

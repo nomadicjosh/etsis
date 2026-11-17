@@ -9,6 +9,7 @@ use Domain\Audit\Repository\ActorDirectory;
 use Domain\Person\Event\PersonContactWasRecorded;
 use Domain\Person\Event\PersonAddressesWereRecorded;
 use Domain\Person\Event\PersonEmergencyContactsWereRecorded;
+use Domain\Person\Event\PersonEducationWasRecorded;
 use Domain\Person\ProfileHistory;
 use Domain\Person\Person;
 use Domain\Person\ValueObject\PersonProfileId;
@@ -126,6 +127,7 @@ final readonly class PersonHistoryReview
             $stored->event instanceof PersonContactWasRecorded => $root->contact()?->facts() ?? [],
             $stored->event instanceof PersonEmergencyContactsWereRecorded => $root->emergency()?->facts() ?? [],
             $stored->event instanceof PersonAddressesWereRecorded => $root->addresses()?->facts() ?? [],
+            $stored->event instanceof PersonEducationWasRecorded => $root->education()?->facts() ?? [],
             default => $root->person() === null ? [] : ProfileFacts::of($root->person()),
         };
     }
@@ -141,13 +143,16 @@ final readonly class PersonHistoryReview
             $stored->event instanceof PersonContactWasRecorded => 'Contact information',
             $stored->event instanceof PersonEmergencyContactsWereRecorded => 'Emergency contacts',
             $stored->event instanceof PersonAddressesWereRecorded => 'Dated addresses',
+            $stored->event instanceof PersonEducationWasRecorded => 'Educational background',
             default => 'Person profile',
         };
         $after = $this->facts($root, $stored);
         $labels = $stored->event instanceof PersonContactWasRecorded ? self::CONTACT_FIELDS : self::PROFILE_FIELDS;
         $fields = [];
         if (!$observed) {
-            if ($stored->event instanceof PersonAddressesWereRecorded) {
+            if ($stored->event instanceof PersonEducationWasRecorded) {
+                $fields[] = 'Institutions attended or review feedback';
+            } elseif ($stored->event instanceof PersonAddressesWereRecorded) {
                 $fields[] = 'Address details, purpose or dates';
             } elseif ($stored->event instanceof PersonEmergencyContactsWereRecorded) {
                 $fields[] = 'Emergency contact details or priority order';
@@ -159,9 +164,14 @@ final readonly class PersonHistoryReview
                 }
             }
         }
+        $action = $observed ? 'Existing details first recorded' : ($provenance === 'created' ? 'Created' : 'Updated');
+        if ($stored->event instanceof PersonEducationWasRecorded) {
+            $action = match ($payload['action']) {
+                'reviewed' => 'Reviewed', 'changes_requested' => 'Changes requested', default => 'Updated',
+            };
+        }
         return ['sequence' => $stored->event->playhead(), 'category' => $category,
-            'action' => $observed ? 'Existing details first recorded'
-                : ($provenance === 'created' ? 'Created' : 'Updated'),
+            'action' => $action,
             'fields' => $fields, 'earlier_details_unknown' => $observed,
             'recorded_at' => $stored->recordedAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z'),
             'effective_at' => $stored->context->effectiveAt?->setTimezone(new DateTimeZone('UTC'))
