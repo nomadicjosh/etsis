@@ -25,7 +25,8 @@ $fieldTypes = [
                 id="form-library-toggle"
                 aria-controls="form-library-panel"
                 aria-expanded="true">
-                <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i> <span data-form-library-label>Hide library</span>
+                <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
+                <span data-form-library-label>Hide library</span>
             </button>
             <button class="btn btn-primary" type="button" id="form-new">
                 <i class="bi bi-plus-lg" aria-hidden="true"></i> New application form
@@ -62,14 +63,20 @@ $fieldTypes = [
                 </select>
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <button class="btn btn-sm btn-outline-primary" type="submit" id="form-library-find">Find</button>
-                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-clear">Clear</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-clear">
+                        Clear
+                    </button>
                 </div>
             </form>
             <p class="form-library-status" id="form-library-status" role="status"></p>
             <div id="form-library-list" role="region" aria-label="Saved forms" tabindex="0"></div>
             <nav class="form-library-pager" aria-label="Form library pages">
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-previous" disabled>Previous</button>
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-next" disabled>Next</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-previous" disabled>
+                    Previous
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="form-library-next" disabled>
+                    Next
+                </button>
             </nav>
         </aside>
         <section class="surface form-designer" aria-labelledby="designer-title">
@@ -102,8 +109,15 @@ $fieldTypes = [
                 <div class="col-md-7" id="form-level-group">
                     <label class="form-label" for="form-level">Academic level</label>
                     <select class="form-select" id="form-level" name="academic_level_id" required></select>
-                    <p class="form-text" id="form-level-help">Uses the academic levels configured by your institution. A program-specific form takes precedence.</p>
-                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-level-setup" data-requires="sis:catalog:manage">
+                    <p class="form-text" id="form-level-help">
+                        Uses the academic levels configured by your institution.
+                        A program-specific form takes precedence.
+                    </p>
+                    <button
+                        class="btn btn-sm btn-outline-secondary"
+                        type="button"
+                        id="form-level-setup"
+                        data-requires="sis:catalog:manage">
                         Academic levels
                     </button>
                 </div>
@@ -118,8 +132,12 @@ $fieldTypes = [
                     <button class="btn btn-sm btn-outline-primary" type="button" id="form-add-container">
                         <i class="bi bi-layout-three-columns" aria-hidden="true"></i> Add container
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-collapse-fields">Collapse all</button>
-                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-expand-fields">Expand all</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-collapse-fields">
+                        Collapse all
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-expand-fields">
+                        Expand all
+                    </button>
                 </div>
                 <div class="dropdown">
                     <button
@@ -134,7 +152,7 @@ $fieldTypes = [
                         <?php foreach ($fieldTypes as $type => $label) : ?>
                             <li>
                                 <button class="dropdown-item" type="button" data-add-field="<?= $this->esc($type) ?>">
-                                    <?= $this->esc($label) ?>
+                            <?= $this->esc($label) ?>
                                 </button>
                             </li>
                         <?php endforeach; ?>
@@ -142,11 +160,36 @@ $fieldTypes = [
                 </div>
             </div>
             <div class="designer-footer">
-                <span class="muted-text" id="designer-save-status" role="status">A draft is visible only to form administrators.</span>
+                <span class="muted-text" id="designer-save-status" role="status">
+                    A draft is visible only to form administrators.
+                </span>
                 <div class="d-flex flex-wrap gap-2" role="group" aria-label="Application form tasks">
+                    <button
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        id="form-undo"
+                        aria-label="Undo edit"
+                        title="Undo a question or layout edit"
+                        disabled>
+                        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Undo
+                    </button>
+                    <button
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        id="form-redo"
+                        aria-label="Redo edit"
+                        title="Redo a question or layout edit"
+                        disabled>
+                        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Redo
+                    </button>
                     <button class="btn btn-outline-secondary" type="button" id="form-preview">Preview form</button>
                     <button class="btn btn-outline-primary" type="button" id="form-save">Save draft</button>
-                    <button class="btn btn-primary" type="button" id="form-publish" data-requires="sis:forms:publish" disabled>
+                    <button
+                        class="btn btn-primary"
+                        type="button"
+                        id="form-publish"
+                        data-requires="sis:forms:publish"
+                        disabled>
                         Review publication <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
                     </button>
                 </div>

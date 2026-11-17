@@ -47,7 +47,8 @@
     let pendingNavigation = null;
     let signInPending = false;
     let formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] };
-    const collapsedFormFields = new WeakSet();
+    const collapsedFormFields = new Set();
+    const formEdits = { past: [], future: [], current: null, group: null };
     let formConditions = null;
     let formLoadSerial = 0;
     const drawer = bootstrap.Offcanvas.getOrCreateInstance($one('#record-drawer'));
@@ -393,10 +394,13 @@
         task(() => navigate(link.dataset.workspace));
     });
     window.addEventListener('popstate', () => task(() => navigate(location.pathname.match(/workspace\/([^/]+)/)?.[1] || 'overview', false)));
-    window.addEventListener('pagehide', () => { cleanupFormConditions(); formLayoutEditor.cleanup(); disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
+    window.addEventListener('pagehide', () => { cleanupFormConditions(); formLayoutEditor.cleanup(); disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; collapsedFormFields.clear(); formEdits.past = []; formEdits.future = []; formEdits.current = null; formEdits.group = null; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
-    listen('#discard-draft', 'click', () => { dirty = false; leaveModal.hide(); pendingNavigation?.(); pendingNavigation = null; });
+    listen('#discard-draft', 'click', async () => {
+        const destination = pendingNavigation; pendingNavigation = null;
+        resetFormStudio(false); leaveModal.hide(); await destination?.();
+    });
 
     async function renderDashboard() {
         const token = generation;
@@ -1307,6 +1311,7 @@
     }
 
     const applicationForms = new WeakMap();
+    resetFormEdits();
     const formLibrary = window.createApplicationFormLibrary({ node, request, task, badge, can, emptyState,
         openForm: async (id, targetLabel) => {
             if (dirty) { pendingNavigation = async () => loadDraft(id, targetLabel); leaveModal.show(); return false; }
@@ -1373,6 +1378,7 @@
             select.value = value || '';
         }
         syncFormScope();
+        collapsedFormFields.clear(); resetFormEdits();
         $one('#designer-state').textContent = record.status === 'published' ? 'New revision' : 'Draft';
         $one('#designer-save-status').textContent = record.status === 'published' ? 'The published form stays unchanged. Save this as a new revision.' : 'You are editing an unpublished draft.';
         dirty = false; renderDesigner(); updateFormPublication();
@@ -1454,7 +1460,62 @@
         ));
     }
 
-    function formChanged() {
+    // Question/layout edits only: names, targets, server versions and publication decisions stay separate.
+    function formEditSnapshot() {
+        return JSON.stringify({ fields: formDraft.fields, layout: formDraft.layout || [] });
+    }
+
+    function updateFormEdits() {
+        $one('#form-undo').disabled = !formEdits.past.length;
+        $one('#form-redo').disabled = !formEdits.future.length;
+    }
+
+    function resetFormEdits() {
+        formEdits.past = []; formEdits.future = []; formEdits.current = formEditSnapshot(); formEdits.group = null;
+        updateFormEdits();
+    }
+
+    function trimFormEdits() {
+        let bytes = 2 * [formEdits.current, ...formEdits.past, ...formEdits.future].reduce((sum, value) => sum + value.length, 0);
+        for (const entries of [formEdits.past, formEdits.future]) {
+            while (entries.length && (formEdits.past.length + formEdits.future.length > 30 || bytes > 2 * 1024 * 1024))
+                bytes -= 2 * entries.shift().length;
+        }
+    }
+
+    function rememberFormEdit(event) {
+        const next = formEditSnapshot();
+        if (next === formEdits.current) return;
+        const control = event?.type === 'input' ? event.target : null;
+        const group = control?.matches('textarea, input:not([type="checkbox"]):not([type="radio"])') ? control : null;
+        if (!group || group !== formEdits.group || formEdits.future.length) formEdits.past.push(formEdits.current);
+        formEdits.current = next; formEdits.future = []; formEdits.group = group;
+        if (formEdits.current === formEdits.past.at(-1)) { formEdits.past.pop(); formEdits.group = null; }
+        trimFormEdits();
+        updateFormEdits();
+    }
+
+    function restoreFormEdit(redo) {
+        const source = redo ? formEdits.future : formEdits.past;
+        if (!source.length) return;
+        const trigger = document.activeElement;
+        (redo ? formEdits.past : formEdits.future).push(formEdits.current);
+        formEdits.current = source.pop(); formEdits.group = null;
+        const state = JSON.parse(formEdits.current);
+        cleanupFormConditions();
+        // Mutate the current draft so an in-flight save can still bind its returned identity/version.
+        Object.assign(formDraft, { fields: state.fields, layout: state.layout });
+        renderDesigner(); formChanged(null, false); updateFormEdits();
+        $one('#form-sort-status').textContent = redo ? 'Edit reapplied.' : 'Previous edit restored.';
+        if (trigger?.disabled) $one(redo ? '#form-undo' : '#form-redo').focus();
+    }
+
+    $one('#form-undo').addEventListener('click', () => restoreFormEdit(false));
+    $one('#form-redo').addEventListener('click', () => restoreFormEdit(true));
+    $one('#form-studio-layout').addEventListener('focusout', () => { formEdits.group = null; });
+
+    function formChanged(event = null, remember = true) {
+        if (remember) rememberFormEdit(event);
         dirty = true;
         formLoadSerial++;
         $one('#designer-state').textContent = 'Unsaved changes';
@@ -1474,7 +1535,7 @@
                 ...(type === 'text' ? { maxlength: 160 } : type === 'number' ? { step: 1, min: characters ? 0 : -999999999, max: characters ? field.type === 'textarea' ? 4000 : 191 : 999999999 } : {}) });
             control.value = field.settings?.[key] ?? '';
             controls.set(key, control);
-            control.addEventListener('input', () => {
+            control.addEventListener('input', event => {
                 field.settings ||= {};
                 if (control.value === '') delete field.settings[key];
                 else field.settings[key] = type === 'number' ? Number(control.value) : control.value;
@@ -1483,7 +1544,7 @@
                     const maximum = controls.get(max);
                     if (maximum) maximum.setCustomValidity(field.settings?.[min] !== undefined && field.settings?.[max] !== undefined && field.settings[min] > field.settings[max] ? 'The maximum must be at least the minimum.' : '');
                 }
-                formChanged();
+                formChanged(event);
             });
             return node('div', { class: type === 'text' ? 'col-12' : 'col-md-6' }, node('label', { class: 'form-label', for: control.id }, label), control);
         });
@@ -1491,6 +1552,7 @@
     }
 
     function renderDesigner(focusIndex = null, focusControl = null) {
+        formEdits.group = null;
         formLayoutEditor.cleanup();
         const container = $one('#designer-fields'); clear(container);
         const cards = new Map();
@@ -1510,27 +1572,27 @@
                     $one('#form-sort-status').textContent = `${field.label || 'Field'} moved to position ${position + 1}.`;
                 } }, icon(name)));
             }
-            const duplicate = node('button', { type: 'button', 'aria-label': `Duplicate field ${index + 1}`,
+            const duplicate = node('button', { class: 'icon-button', type: 'button', title: 'Duplicate field',
+                'aria-label': `Duplicate field ${index + 1}`,
                 disabled: formDraft.fields.length >= 40, onclick: () => {
                     const copy = structuredClone(field); copy.key = newFormFieldKey(); copy.label = `${copy.label || types[field.type]} copy`.slice(0, 120);
                     formDraft.fields.splice(index + 1, 0, copy); formLayoutEditor.insertAfter(field.key, copy.key);
                     formChanged(); renderDesigner(formDraft.fields.indexOf(copy), 'label');
-                } }, icon('copy'), ' Duplicate field');
-            const remove = node('button', { class: 'btn-outline-danger', type: 'button', 'data-field-remove': '',
+                } }, icon('copy'));
+            const remove = node('button', { class: 'icon-button field-remove', type: 'button', title: 'Remove field', 'data-field-remove': '',
                 'aria-label': `Remove field ${index + 1}`, onclick: () => {
-                    formDraft.fields.splice(index, 1); formLayoutEditor.remove(field.key); formChanged();
+                    formDraft.fields.splice(index, 1); formLayoutEditor.remove(field.key); collapsedFormFields.delete(field.key); formChanged();
                     renderDesigner(Math.min(index, formDraft.fields.length - 1), 'drag');
-                } }, icon('trash3'), ' Remove field');
-            const actions = [duplicate];
-            if (formDraft.layout?.length) actions.push(node('button', { type: 'button',
+                } }, icon('trash3'));
+            if (formDraft.layout?.length) controls.append(node('button', { class: 'icon-button', type: 'button',
+                title: 'Move to another column',
                 'aria-label': `Move question ${index + 1} to another column`,
-                onclick: () => formLayoutEditor.showMove(field) }, icon('box-arrow-right'), ' Move question'));
-            actions.push({ divider: true }, remove);
-            controls.append(actionMenu('More', actions, { context: `More actions for field ${index + 1}`, compact: true }));
-            const content = node('div', { class: 'designer-field-body row g-3', id: `field-body-${index}`, hidden: collapsedFormFields.has(field) });
+                onclick: () => formLayoutEditor.showMove(field) }, icon('box-arrow-right')));
+            controls.append(duplicate, remove);
+            const content = node('div', { class: 'designer-field-body row g-3', id: `field-body-${index}`, hidden: collapsedFormFields.has(field.key) });
             const toggle = node('button', { class: 'icon-button', type: 'button', 'aria-label': `${content.hidden ? 'Expand' : 'Collapse'} field ${index + 1}`, 'aria-expanded': String(!content.hidden), 'aria-controls': content.id, onclick: () => {
                 content.hidden = !content.hidden;
-                if (content.hidden) collapsedFormFields.add(field); else collapsedFormFields.delete(field);
+                if (content.hidden) collapsedFormFields.add(field.key); else collapsedFormFields.delete(field.key);
                 toggle.setAttribute('aria-expanded', String(!content.hidden)); toggle.setAttribute('aria-label', `${content.hidden ? 'Expand' : 'Collapse'} field ${index + 1}`);
                 toggle.replaceChildren(icon(content.hidden ? 'chevron-down' : 'chevron-up'));
             } }, icon(content.hidden ? 'chevron-down' : 'chevron-up'));
@@ -1539,7 +1601,7 @@
                 const id = `designer-${index}-${key}`;
                 const control = node(type === 'textarea' ? 'textarea' : 'input', { class: 'form-control', id, maxlength: key === 'help' ? 300 : key === 'key' ? 40 : type === 'textarea' ? 3630 : 120, ...(type === 'textarea' ? { rows: 3 } : { type: 'text' }) });
                 control.value = type === 'textarea' ? field.options.join('\n') : field[key] || '';
-                control.addEventListener('input', () => {
+                control.addEventListener('input', event => {
                     if (key === 'key') {
                         const valid = /^[a-z][a-z0-9_]{0,39}$/.test(control.value) && !formDraft.fields.some(other => other !== field && other.key === control.value);
                         control.setCustomValidity(valid ? '' : 'Use a unique key with lowercase letters, numbers and underscores.');
@@ -1550,7 +1612,7 @@
                         for (const [name, label] of [['arrow-up', 'Move field up'], ['arrow-down', 'Move field down']])
                             controls.querySelector(`[data-field-move="${name}"]`).setAttribute('aria-label', `${label}: ${field.label || `field ${index + 1}`}`);
                     }
-                    formChanged();
+                    formChanged(event);
                 });
                 return node('div', { class: 'col-12' }, node('label', { class: 'form-label', for: id }, label), control);
             };
@@ -1579,7 +1641,7 @@
     function newFormFieldKey() { return `field_${crypto.randomUUID().replaceAll('-', '').slice(0, 28)}`; }
 
     for (const [selector, collapse] of [['#form-collapse-fields', true], ['#form-expand-fields', false]]) listen(selector, 'click', () => {
-        for (const field of formDraft.fields) { if (collapse) collapsedFormFields.add(field); else collapsedFormFields.delete(field); }
+        for (const field of formDraft.fields) { if (collapse) collapsedFormFields.add(field.key); else collapsedFormFields.delete(field.key); }
         renderDesigner();
     });
 
@@ -1598,9 +1660,18 @@
     listen('#form-level-setup', 'click', () => classificationStudio.library('academic_level', '', null, [], null,
         async () => { drawer.hide(); await loadFormStudio(); }, 'Back to application form'));
     listen('#form-new', 'click', () => {
-        const reset = () => { formLoadSerial++; formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = ''; formLibrary.select(null); syncFormScope(); dirty = false; $one('#designer-state').textContent = 'New draft'; $one('#designer-save-status').textContent = 'A draft is visible only to form administrators.'; renderDesigner(); updateFormPublication(); $one('#form-name').focus(); };
-        if (dirty) { pendingNavigation = reset; leaveModal.show(); } else reset();
+        if (dirty) { pendingNavigation = () => $one('#form-name').focus(); leaveModal.show(); } else resetFormStudio();
     });
+    function resetFormStudio(focus = true) {
+        cleanupFormConditions();
+        formLoadSerial++; formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] };
+        collapsedFormFields.clear(); $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = '';
+        formLibrary.select(null); syncFormScope(); resetFormEdits(); dirty = false;
+        $one('#designer-state').textContent = 'New draft';
+        $one('#designer-save-status').textContent = 'A draft is visible only to form administrators.';
+        renderDesigner(); updateFormPublication();
+        if (focus) $one('#form-name').focus();
+    }
     async function saveDraft() {
         if (!$one('#form-designer-meta').reportValidity()) return false;
         const invalid = $all('input, select, textarea', $one('#designer-fields')).find(control => !control.checkValidity());
@@ -1620,14 +1691,12 @@
             throw new Error('Each field needs a unique stable key using lowercase letters, numbers and underscores.');
         const source = formDraft;
         const input = { ...formTarget(), name: $one('#form-name').value, fields: structuredClone(formDraft.fields), layout: structuredClone(formDraft.layout || []) };
+        formEdits.group = null;
         const record = await request('/sis/forms/', 'POST', { ...input, id: source.id || undefined, version: source.version ?? undefined });
         if (source !== formDraft) return false;
         const unchanged = JSON.stringify(input) === JSON.stringify({ ...formTarget(), name: $one('#form-name').value, fields: formDraft.fields, layout: formDraft.layout || [] });
-        if (unchanged) {
-            const collapsed = new Set(source.fields.filter(field => collapsedFormFields.has(field)).map(field => field.key));
-            for (const field of record.fields) if (collapsed.has(field.key)) collapsedFormFields.add(field);
-        }
         formDraft = unchanged ? record : { ...formDraft, id: record.id, version: record.version };
+        formEdits.current = formEditSnapshot(); formEdits.group = null; trimFormEdits(); updateFormEdits();
         if (unchanged) renderDesigner();
         dirty = !unchanged;
         if (current === 'forms') {
@@ -1657,6 +1726,7 @@
             }
             if (formDraft.id === reviewed.id && formDraft.version === reviewed.version && !dirty) {
                 formDraft = { ...formDraft, id: null, version: null, status: 'draft' };
+                resetFormEdits();
                 $one('#designer-state').textContent = 'Published';
                 $one('#designer-save-status').textContent = 'Published forms stay unchanged. Open one from the library to create a new revision.';
                 updateFormPublication(); syncFormScope();

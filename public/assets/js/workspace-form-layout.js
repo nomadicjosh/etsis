@@ -95,11 +95,11 @@ window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, t
                         column.setAttribute('aria-label', `${container.label}, column ${position + 1}`);
                         column.querySelector('.form-column-add button').setAttribute('aria-label', `Add a field to ${container.label}, column ${position + 1}`);
                     });
-                    changed();
+                    changed(event);
                 } });
             titleInput.value = container.label;
             const help = node('input', { class: 'form-control', id: `container-help-${container.key}`, maxlength: 300, type: 'text',
-                oninput: event => { container.help = event.target.value; changed(); } }); help.value = container.help || '';
+                oninput: event => { container.help = event.target.value; changed(event); } }); help.value = container.help || '';
             const columnsSelect = node('select', { class: 'form-select', id: `container-columns-${container.key}`, onchange: event => {
                 const count = Number(event.target.value);
                 while (container.columns.length < count) container.columns.push([]);

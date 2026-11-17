@@ -226,9 +226,9 @@ h3 { font-size: .9rem; font-weight: 650; }
 .form-condition-builder .rules-list { padding-left: 12px; }
 .form-condition-builder .rule-header { margin-left: auto; order: 4; }
 .designer-field-header .field-order { font-size: .8rem; color: #526a80; }
-.designer-field-header .field-controls { margin-left: auto; display: flex; gap: 4px; }
-.designer-field-header .workspace-action-menu .dropdown-toggle { min-height: 32px; }
-.designer-field-header .dropdown-item { white-space: normal; }
+.designer-field-header .field-controls { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+.designer-field-header .field-remove { color: #a12823; }
+.designer-field-header .icon-button:disabled { color: #62758a; background: #f1f4f7; border-color: #b7c4d2; cursor: not-allowed; }
 .designer-field-body { padding: 17px; }
 .designer-field .form-control, .designer-field .form-select { font-size: .875rem; }
 .designer-field .form-label { font-size: .8rem; }
@@ -245,6 +245,7 @@ h3 { font-size: .9rem; font-weight: 650; }
     .designer-column { padding: 8px; }
     .designer-field-header { flex-wrap: wrap; }
     .designer-field-header .field-controls { margin-left: 0; width: 100%; justify-content: flex-end; }
+    .designer-field-header .field-controls .icon-button { width: 36px; height: 36px; }
     .designer-toolbar { flex-wrap: wrap; }
     .designer-fields { padding-inline: 12px; }
     .designer-field-body { padding: 12px; }

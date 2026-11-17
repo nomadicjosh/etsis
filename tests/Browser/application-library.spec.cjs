@@ -120,19 +120,20 @@ test('typing during a pending search clearly leaves the newer search unapplied',
     await expect(page.locator('.form-library-item')).toContainText('Needle% application');
 });
 
-test('compact field actions support keyboard use and mobile library selection focuses the editor', async ({ page }) => {
+test('visible field icons support keyboard use and mobile library selection focuses the editor', async ({ page }) => {
     const { errors } = await fixture(page);
     await add(page, 'First question'); await add(page, 'Second question');
-    const more = page.getByRole('button', { name: 'More actions for field 1', exact: true });
-    const oldToggle = await more.elementHandle();
-    await more.click(); await more.press('ArrowDown');
     const duplicate = page.getByRole('button', { name: 'Duplicate field 1', exact: true });
+    await expect(duplicate.locator('.bi-copy')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Remove field 1', exact: true }).locator('.bi-trash3')).toBeVisible();
+    await expect(page.locator('#designer-fields .workspace-action-menu')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Move field down: First question', exact: true }).focus();
+    await page.keyboard.press('Tab');
     await expect(duplicate).toBeFocused(); await duplicate.press('Enter');
     await expect(page.getByLabel('Question or field label').nth(1)).toHaveValue('First question copy');
     await expect(page.getByLabel('Question or field label').nth(1)).toBeFocused();
-    expect(await oldToggle.evaluate(toggle => bootstrap.Dropdown.getInstance(toggle) === null)).toBe(true);
-    await page.getByRole('button', { name: 'More actions for field 2', exact: true }).click();
-    await page.getByRole('button', { name: 'Remove field 2', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove field 2', exact: true }).focus();
+    await page.keyboard.press('Enter');
     await expect(page.locator('.form-field-drag').nth(1)).toBeFocused();
     await expect(page.locator('.designer-field')).toHaveCount(2);
     await accessible(page);
@@ -147,6 +148,9 @@ test('compact field actions support keyboard use and mobile library selection fo
     await expect(page.locator('#form-name')).toHaveValue('Fictional form 47');
     await expect(page.locator('#form-name')).toBeFocused();
     await expect(page.locator('#form-library-panel')).toBeHidden();
+    await page.getByRole('button', { name: 'Collapse field 1', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Duplicate field 1', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Remove field 1', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await accessible(page);
     await page.screenshot({ path: 'test-results/form-library-mobile.png', fullPage: true });
