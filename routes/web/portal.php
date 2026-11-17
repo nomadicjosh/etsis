@@ -16,6 +16,10 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $offers = \Application\Http\Controller\AdmissionOfferController::class;
+    $router->map(['GET'], '/portal/api/applications/{id}/offer/', [$offers, 'mine']);
+    $router->map(['POST'], '/portal/api/applications/{id}/offer/review/', [$offers, 'reviewMine']);
+    $router->map(['POST'], '/portal/api/applications/{id}/offer/commit/', [$offers, 'commitMine']);
     $router->map(['GET'], '/portal/api/applications/{application}/documents/', [Documents::class, 'listingMine']);
     $router->map(['POST'], '/portal/api/applications/{application}/documents/', [Documents::class, 'uploadMine']);
     $router->map(

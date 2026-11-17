@@ -511,6 +511,8 @@
         }, icon(iconName), node('span', {}, label));
         if (section === 'applications') tools.append(tool('Follow-up queue', () => peopleStudio.caseQueue(),
             'Open admissions follow-up queue', 'inboxes'));
+        if (section === 'applications' && can('sis:admissions:policy')) tools.append(
+            tool('Offer policy', () => peopleStudio.offerPolicy(), 'Configure admission offer policy', 'sliders'));
         if (family === 'courses' && can('sis:catalog:manage')) {
             tools.append(
                 actionMenu('Curriculum', [

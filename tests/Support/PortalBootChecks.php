@@ -6435,3 +6435,82 @@ if (
 ) {
     throw new RuntimeException('An HTTP retry re-applied the original withdrawal after return to review.');
 }
+
+// Offers use the same CSRF/private middleware and keep the applicant response separate from admission.
+$offerBase = '/sis/applications/' . $caseworkApplication->value . '/offer/';
+$offerOwnerBase = '/portal/api/applications/' . $caseworkApplication->value . '/offer/';
+$offerDecision = $teachingPost('/sis/applications/' . $caseworkApplication->value . '/decision/review/', [
+    'decision' => 'accept', 'reason' => 'Fictional fresh admission decision.',
+]);
+$offerDecisionData = json_decode((string) $offerDecision->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $offerDecision->getStatusCode() !== 200 || $teachingPost(
+        '/sis/applications/' . $caseworkApplication->value . '/decision/commit/',
+        ['review_token' => $offerDecisionData['review_token']]
+    )->getStatusCode() !== 200
+) {
+    throw new RuntimeException('The offer fixture could not record its actual fresh admission decision.');
+}
+$offerPolicy = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/admission-offer-policy/'
+)));
+$offerPolicyData = json_decode((string) $offerPolicy->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $offerPolicy->getStatusCode() !== 200 || $teachingPost('/sis/admission-offer-policy/', [
+    'require_acceptance' => true, 'revision' => $offerPolicyData['revision'],
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('The institutional offer policy routes did not resolve or save.');
+}
+$offerNoCsrf = $post->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $offerBase . 'review/'))
+    ->withParsedBody(['action' => 'issue']);
+if ($app->router->match($offerNoCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('An admission offer mutation bypassed CSRF.');
+}
+$offerReview = $teachingPost($offerBase . 'review/', ['action' => 'issue',
+    'title' => 'Fictional admission offer', 'message' => 'Welcome to the fictional program.',
+    'respond_by' => '', 'reason' => 'Fictional private issue reason.',
+]);
+$offerReviewData = json_decode((string) $offerReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $offerReview->getStatusCode() !== 200 || $teachingPost($offerBase . 'commit/', [
+    'review_token' => $offerReviewData['review_token'],
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('The real offer routes did not review and issue the private letter.');
+}
+// Staff authority does not allow reading someone else's owner endpoint.
+if (
+    $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid' . $offerOwnerBase
+    )))->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Admissions authority bypassed the offer owner boundary.');
+}
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$offerRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $offerOwnerBase
+)));
+$offerReadData = json_decode((string) $offerRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $offerRead->getStatusCode() !== 200 || ($offerReadData['offer']['status'] ?? null) !== 'pending'
+    || !str_contains($offerRead->getHeaderLine('Cache-Control'), 'no-store')
+    || $offerRead->hasHeader('phpdebugbar-id') || str_contains((string) $offerRead->getBody(), 'private issue reason')
+) {
+    throw new RuntimeException('The applicant offer read lost its ownership, privacy or retained-letter contract.');
+}
+$ownerOfferReview = $teachingPost($offerOwnerBase . 'review/', ['action' => 'accept']);
+$ownerOfferData = json_decode((string) $ownerOfferReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $ownerOfferReview->getStatusCode() !== 200 || $teachingPost($offerOwnerBase . 'commit/', [
+    'review_token' => $ownerOfferData['review_token'],
+    ])->getStatusCode() !== 200 || $sis->admissions->application($caseworkApplication)->status->value !== 'accepted'
+) {
+    throw new RuntimeException(
+        'An owner could not accept their offer, or the response changed the admission decision.'
+    );
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;

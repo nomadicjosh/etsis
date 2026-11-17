@@ -58,6 +58,21 @@ final readonly class AdmissionApplication
         );
     }
 
+    public function recordOffer(): self
+    {
+        if ($this->status !== ApplicationStatus::Accepted) {
+            throw new DomainException('Only an accepted, unmatriculated application can change its offer.');
+        }
+        return new self(
+            $this->id,
+            $this->personId,
+            $this->programId,
+            $this->entryTermId,
+            $this->status,
+            $this->version + 1
+        );
+    }
+
     public function matriculate(EntityId $studentId): Student
     {
         if ($this->status !== ApplicationStatus::Accepted) {

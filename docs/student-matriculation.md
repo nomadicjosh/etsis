@@ -1,5 +1,7 @@
 # Initial student matriculation
 
+Before reviewing matriculation, follow the institution’s [admission-offer workflow](admissions-offers.md). Applicant acceptance is required by default. Institutions may change that default; issued offers retain their policy. A declined, cancelled or expired pending offer requires review and replacement. Already confirmed matriculation receipts retain their original result.
+
 Implemented 2026-11-09. A newly confirmed matriculation now records the student's creation, first program assignment, initial active status and initial primary program together in the existing protected journal. It complements [additional program assignments](student-program-assignments.md), [activity decisions](student-activity-history.md) and [primary-program decisions](student-primary-program-history.md).
 
 ## Staff workflow

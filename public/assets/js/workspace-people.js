@@ -401,9 +401,12 @@ window.createWorkspacePeople = function (ui) {
         const documents = node('div', { class: 'record-section mt-3' });
         const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, row.id, { staff: true });
         body.append(documents);
+        const offerArea = node('div'); body.append(offerArea);
+        const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, row.id,
+            { staff: true, canIssue: can('sis:admissions:offers'), canPolicy: can('sis:admissions:policy') });
         let background = null;
         function mayLeave() {
-            return workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true);
+            return workbench.beforeLeave() && documentEditor.beforeLeave() && offerEditor.beforeLeave() && (background?.beforeLeave() ?? true);
         }
         if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
@@ -747,7 +750,7 @@ window.createWorkspacePeople = function (ui) {
                         : "No acceptance or rejection has been recorded in the protected decision history. Earlier decisions and original submission timing remain unknown.",
                 ),
             );
-            return;
+            if (!record.items?.some(item => item.kind !== 'submission' && item.kind !== 'observation')) return;
         }
         if (Array.isArray(record.items)) {
             body.append(
@@ -762,13 +765,14 @@ window.createWorkspacePeople = function (ui) {
             )) {
                 const observed = item.kind === "observation";
                 const reviewState = ['withdrawal', 'review_resumed'].includes(item.kind);
+                const offer = item.kind.startsWith('offer_');
                 const section = node(
                     "section",
                     { class: "record-section" },
                     node(
                         "h3",
                         {},
-                        observed
+                        offer ? `Admission offer: ${item.status}` : observed
                             ? "Observed current application"
                             : reviewState ? (item.kind === 'withdrawal' ? 'Application withdrawn' : 'Returned to review')
                             : item.kind === "correction"
@@ -795,7 +799,11 @@ window.createWorkspacePeople = function (ui) {
                             : `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}.`,
                     ),
                 );
-                if (!observed && !reviewState) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
+                if (offer) {
+                    section.append(node('h4', { class: 'h6 text-break' }, item.offer.title),
+                        node('p', { class: 'private-text text-break', style: 'white-space: pre-wrap' }, item.offer.message));
+                }
+                if (!observed && !reviewState && !offer) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
                 body.append(section);
             }
             body.append(
@@ -998,9 +1006,14 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
+    function offerPolicy() {
+        const body = openDrawer('Offer policy', 'ADMISSIONS');
+        window.createAdmissionOffers({ node, request, task, notify }).mount(body, null,
+            { staff: true, canPolicy: can('sis:admissions:policy'), policyOnly: true });
+    }
     function caseQueue() {
         const body = openDrawer('Admissions follow-up', 'APPLICATION WORKBENCH');
         window.createAdmissionCasework({ node, request, task, notify }).queue(body, row => application(row));
     }
-    return { editProfile, account, contact, education, history, application, caseQueue };
+    return { editProfile, account, contact, education, history, application, caseQueue, offerPolicy };
 };

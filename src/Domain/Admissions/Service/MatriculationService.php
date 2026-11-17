@@ -48,6 +48,8 @@ final readonly class MatriculationService
         private MessageCipher $cipher,
         private Clock $clock,
         private AdmissionDecisionLedger $decisions,
+        private AdmissionOfferGate $offers,
+        private \Domain\Access\Repository\AccessRepository $permissions,
     ) {
     }
 
@@ -68,7 +70,7 @@ final readonly class MatriculationService
         $route = $this->admissions->application($application);
         return $this->transactions->run(function () use ($route, $actor, $reason): array {
             $a = $this->lock($route, $actor);
-            $this->eligible($a);
+            $offer = $this->eligible($a);
             $source = $this->entry->proposal($a->programId, $a->entryTermId);
             $person = $this->admissions->person($a->personId);
             $token = $this->cipher->seal(
@@ -81,7 +83,7 @@ final readonly class MatriculationService
                         "assignment" => EntityId::generate()->value,
                         "operation" => EntityId::generate()->value,
                         "reason" => trim($reason),
-                        "context" => $this->context($a, $source),
+                        "context" => $this->context($a, $source, $offer),
                         "expires" => $this->clock->now()->getTimestamp() + 1200,
                     ],
                     JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
@@ -154,11 +156,11 @@ final readonly class MatriculationService
                 }
                 return $this->result($recorded["facts"], $recorded["effective_at"]);
             }
-            $this->eligible($a);
+            $offer = $this->eligible($a);
             $source = $this->entry->proposal($a->programId, $a->entryTermId);
             if (
                 $p["expires"] < $this->clock->now()->getTimestamp() ||
-                !hash_equals($p["context"], $this->context($a, $source))
+                !hash_equals($p["context"], $this->context($a, $source, $offer))
             ) {
                 throw new ConcurrentModificationException(
                     "This matriculation review expired or its context changed. Review it again.",
@@ -183,6 +185,7 @@ final readonly class MatriculationService
             ];
             $e = StudentWasMatriculated::occur(new MatriculationId($a->id->value), $facts, [
                 "__aggregate_type" => "matriculation",
+                "admission_offer" => $offer,
             ])->withPlayhead(1);
             Matriculation::root(new MatriculationId($a->id->value))->acceptHistorical($e);
             $at = $this->clock->now();
@@ -194,6 +197,9 @@ final readonly class MatriculationService
                 [$e],
             );
             $this->audit->record($actor, "student.matriculated", $studentId);
+            if ($this->access->requirePermission('sis:admissions:manage')->value !== $actor->value) {
+                throw new AccessDeniedException('The matriculation actor changed.');
+            }
             return $this->result($facts, $at->format(DATE_ATOM));
         });
     }
@@ -215,7 +221,7 @@ final readonly class MatriculationService
             return [
                 "history_recorded" => true,
                 "earlier_history_unknown" => false,
-                "acceptance_history_unknown" => $this->decisions->verify($a) === 0,
+                "acceptance_history_unknown" => !$this->decisions->hasRecordedAcceptance($a),
                 "matriculation" => $this->result($f, $r["effective_at"]),
                 "source" => $this->programs->timeline($assignment, null)["assignment_source"],
             ];
@@ -224,6 +230,7 @@ final readonly class MatriculationService
 
     private function lock(AdmissionApplication $route, EntityId $actor): AdmissionApplication
     {
+        $this->permissions->lock();
         // The person lock serializes different accepted applications belonging to the same person.
         $this->admissions->lockPerson($route->personId);
         $this->admissions->lockApplication($route->id);
@@ -248,7 +255,8 @@ final readonly class MatriculationService
         $this->decisions->verify($a);
         return $a;
     }
-    private function eligible(AdmissionApplication $a): void
+    /** @return array<string,mixed> */
+    private function eligible(AdmissionApplication $a): array
     {
         if ($a->status !== ApplicationStatus::Accepted) {
             throw new ValidationException([
@@ -258,6 +266,7 @@ final readonly class MatriculationService
                 ],
             ]);
         }
+        $offer = $this->offers->proof($a);
         if ($this->admissions->studentForPerson($a->personId) !== null) {
             throw new ValidationException([
                 [
@@ -267,9 +276,10 @@ final readonly class MatriculationService
                 ],
             ]);
         }
+        return $offer;
     }
-    /** @param array<string,mixed> $source */
-    private function context(AdmissionApplication $a, array $source): string
+    /** @param array<string,mixed> $source @param array<string,mixed> $offer */
+    private function context(AdmissionApplication $a, array $source, array $offer): string
     {
         $p = $this->admissions->person($a->personId);
         return hash(
@@ -282,6 +292,7 @@ final readonly class MatriculationService
                     $a->entryTermId->value,
                     $a->status->value,
                     $a->version,
+                    $offer,
                     $p->identityVersion,
                     $p->givenName,
                     $p->familyName,

@@ -123,6 +123,10 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Registration\SectionPublication::class,
                 "fields" => ["version_id", "previous_version_id", "definition"],
             ],
+            \Domain\Admissions\Event\AdmissionOfferWasRecorded::class => [
+                'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
+                'fields' => \Domain\Admissions\ValueObject\AdmissionOfferSchema::FIELDS,
+            ],
             \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class => [
                 'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
                 'fields' => \Domain\Admissions\ValueObject\AdmissionReviewStateSchema::FIELDS,
@@ -551,7 +555,9 @@ final readonly class HistoricalSchemaRegistry
                 $definition["fields"][] = "grade_scale";
             }
             if ($stream->type === "admission_decision") {
-                if ($class === \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class) {
+                if ($class === \Domain\Admissions\Event\AdmissionOfferWasRecorded::class) {
+                    \Domain\Admissions\ValueObject\AdmissionOfferSchema::validate($payload);
+                } elseif ($class === \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class) {
                     \Domain\Admissions\ValueObject\AdmissionReviewStateSchema::validate($payload);
                 } elseif ($class === \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class) {
                     \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::validate($payload);
@@ -811,7 +817,8 @@ final readonly class HistoricalSchemaRegistry
                             \Domain\Student\Event\PersonRestrictionsWereRecorded::class,
                             \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class,
                             \Domain\HumanResources\Event\EmployeePositionWasRecorded::class,
-                            \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class], true) &&
+                            \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class,
+                            \Domain\Admissions\Event\AdmissionOfferWasRecorded::class], true) &&
                         $name === 'previous_operation_id' && $value === null
                     ) {
                         continue;
@@ -861,6 +868,32 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'admission_offer') {
+                    if (
+                        $class !== \Domain\Admissions\Event\StudentWasMatriculated::class || !is_array($value)
+                        || count($value) !== 4 || array_diff(array_keys($value), ['offer_id', 'operation_id',
+                        'require_acceptance', 'policy_revision']) !== []
+                        || !is_bool($value['require_acceptance'] ?? null)
+                        || !is_int($value['policy_revision'] ?? null) || $value['policy_revision'] < 0
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    foreach (['offer_id', 'operation_id'] as $key) {
+                        if ($value[$key] !== null) {
+                            if (!is_string($value[$key])) {
+                                throw new CorruptHistoryException();
+                            }
+                            new \Domain\Shared\ValueObject\EntityId($value[$key]);
+                        }
+                    }
+                    if (
+                        ($value['offer_id'] === null) !== ($value['operation_id'] === null)
+                        || ($value['require_acceptance'] && $value['offer_id'] === null)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'admission_evidence') {
                     if (
                         !in_array($class, [\Domain\Admissions\Event\AdmissionWasDecided::class,

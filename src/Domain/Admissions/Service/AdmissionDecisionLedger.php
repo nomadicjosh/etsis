@@ -138,6 +138,110 @@ final readonly class AdmissionDecisionLedger
             $evidence
         );
     }
+    /** Verified, selected-application reads only; never replayed for a listing. */
+    public function offer(AdmissionApplication $a): ?array
+    {
+        return $this->load($a)['root']->offer();
+    }
+    public function hasRecordedAcceptance(AdmissionApplication $a): bool
+    {
+        return $this->load($a)['root']->acceptanceKnown();
+    }
+    /** Projection CAS has succeeded in the caller's transaction. @return array<string,mixed> */
+    public function recordOffer(
+        AdmissionApplication $before,
+        AdmissionApplication $after,
+        #[\SensitiveParameter] array $payload,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException('The admissions actor changed.');
+        }
+        $root = $this->observe(
+            $before,
+            $operation,
+            $actor,
+            $this->context->source($before),
+            \Domain\Admissions\Event\AdmissionOfferWasRecorded::class
+        );
+        $payload['operation_id'] = $operation->value;
+        $payload['previous_operation_id'] = $root->lastOfferOperation();
+        $payload['admission_context_id'] = $root->decision();
+        $payload['application_version'] = $after->version;
+        $version = $root->playhead();
+        $event = \Domain\Admissions\Event\AdmissionOfferWasRecorded::occur(
+            new AdmissionDecisionId($before->id->value),
+            $payload,
+            ['__aggregate_type' => 'admission_decision']
+        )->withPlayhead($version + 1);
+        $root->acceptHistorical($event);
+        $at = $this->clock->now();
+        $this->history->append(
+            $this->stream($before->id),
+            $operation,
+            $version,
+            new EventContext($actor, $at, $operation, reason: $reason),
+            [$event]
+        );
+        $this->verify($after);
+        return $this->offerResult($before->id, $payload, $at->format(DATE_ATOM));
+    }
+    /** @return array<string,mixed> */
+    private function offerResult(EntityId $application, #[\SensitiveParameter] array $payload, string $at): array
+    {
+        ksort($payload['offer']);
+        return ['application_id' => $application->value, 'operation_id' => $payload['operation_id'],
+            'action' => $payload['action'], 'offer' => $payload['offer'],
+            'version' => $payload['application_version'], 'effective_at' => $at];
+    }
+    /** Observe older current state explicitly; never fabricate its earlier acceptance. */
+    private function observe(
+        AdmissionApplication $before,
+        EntityId $operation,
+        EntityId $actor,
+        array $source,
+        string $class
+    ): AdmissionDecision {
+        $root = $this->load($before)['root'];
+        $at = $this->clock->now();
+        if ($root->playhead() === 0) {
+            $submitted = $before->status === ApplicationStatus::Submitted;
+            $observation = PublishedGradeId::forVersion(
+                $operation,
+                $submitted ? 'admissions.observation' : 'admissions.decision.observation'
+            );
+            $payload = ['decision_id' => $observation->value, 'application' => AdmissionDecisionSchema::facts($before)];
+            $observationClass = AdmissionApplicationWasObserved::class;
+            if (!$submitted) {
+                $payload['source'] = $source;
+                $observationClass = \Domain\Admissions\Event\AdmissionDecisionWasObserved::class;
+            }
+            $observed = $observationClass::occur(
+                new AdmissionDecisionId($before->id->value),
+                $payload,
+                ['__aggregate_type' => 'admission_decision']
+            )->withPlayhead(1);
+            $root->acceptHistorical($observed);
+            $this->history->append(
+                $this->stream($before->id),
+                $observation,
+                0,
+                new EventContext($actor, $at, $operation, reason: $submitted
+                    ? 'Submitted application observed before this decision; earlier history is unknown.'
+                    : ($class === \Domain\Admissions\Event\AdmissionOfferWasRecorded::class
+                        ? 'Current admissions outcome observed before an offer; earlier decision history is unknown.'
+                        : ($class === \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class
+                        ? 'Current admissions outcome observed before a review-state change; '
+                            . 'earlier decision history is unknown.'
+                        : 'Current admissions outcome observed before correction; '
+                            . 'its earlier decision history is unknown.'))),
+                [$observed]
+            );
+        }
+        return $root;
+    }
     /** @return array<string,mixed> */
     public function current(AdmissionApplication $a): array
     {
@@ -145,7 +249,7 @@ final readonly class AdmissionDecisionLedger
         return [
             "status" => $a->status->value,
             "version" => $a->version,
-            "history_recorded" => $r["root"]->source() !== null,
+            "history_recorded" => $r["at"] !== null,
             "decision_id" => $r["root"]->decision(),
             "effective_at" => $r["at"],
             "source" => AdmissionDecisionSchema::displaySource(
@@ -214,40 +318,8 @@ final readonly class AdmissionDecisionLedger
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException('The admissions actor changed.');
         }
-        $root = $this->load($before)['root'];
         $at = $this->clock->now();
-        if ($root->playhead() === 0) {
-            $submitted = $before->status === ApplicationStatus::Submitted;
-            $observation = PublishedGradeId::forVersion(
-                $operation,
-                $submitted ? 'admissions.observation' : 'admissions.decision.observation'
-            );
-            $payload = ['decision_id' => $observation->value, 'application' => AdmissionDecisionSchema::facts($before)];
-            $observationClass = AdmissionApplicationWasObserved::class;
-            if (!$submitted) {
-                $payload['source'] = $source;
-                $observationClass = \Domain\Admissions\Event\AdmissionDecisionWasObserved::class;
-            }
-            $observed = $observationClass::occur(
-                new AdmissionDecisionId($before->id->value),
-                $payload,
-                ['__aggregate_type' => 'admission_decision']
-            )->withPlayhead(1);
-            $root->acceptHistorical($observed);
-            $this->history->append(
-                $this->stream($before->id),
-                $observation,
-                0,
-                new EventContext($actor, $at, $operation, reason: $submitted
-                    ? 'Submitted application observed before this decision; earlier history is unknown.'
-                    : ($class === \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class
-                        ? 'Current admissions outcome observed before a review-state change; '
-                            . 'earlier decision history is unknown.'
-                        : 'Current admissions outcome observed before correction; '
-                            . 'its earlier decision history is unknown.')),
-                [$observed]
-            );
-        }
+        $root = $this->observe($before, $operation, $actor, $source, $class);
         $previous = new EntityId($root->decision() ?? throw new CorruptHistoryException());
         $version = $root->playhead();
         $payload = ['decision_id' => $operation->value, 'previous_decision_id' => $previous->value,
@@ -299,8 +371,9 @@ final readonly class AdmissionDecisionLedger
             $initial = $e instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted;
             $correction = $e instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected;
             $reviewState = $e instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged;
+            $offer = $e instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded;
             $items[] = [
-                "kind" => $observed
+                "kind" => $offer ? "offer_" . $p["action"] : ($observed
                     ? "observation"
                     : ($initial
                         ? "submission"
@@ -308,8 +381,9 @@ final readonly class AdmissionDecisionLedger
                             ? "correction"
                             : ($reviewState
                                 ? ($p['status'] === 'withdrawn' ? 'withdrawal' : 'review_resumed')
-                                : "decision"))),
-                "status" => $p["status"] ?? $p["application"]["status"],
+                                : "decision")))),
+                "status" => $offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]),
+                "offer" => $offer ? $p["offer"] : null,
                 "previous_status" => $p["previous_status"] ?? null,
                 "source" => isset($p["source"]) ? AdmissionDecisionSchema::displaySource($p["source"]) : null,
                 "effective_at" => $observed ? null : $stored->context->effectiveAt?->format(DATE_ATOM),
@@ -322,12 +396,12 @@ final readonly class AdmissionDecisionLedger
         $base = [
             "items" => $items,
             "next_cursor" => $page->nextCursor,
-            "history_recorded" => $source !== null,
+            "history_recorded" => $r["at"] !== null,
             "earlier_history_unknown" => $birth === null,
             "current_status" => $a->status->value,
             "submission" => $submission,
         ];
-        if ($source === null) {
+        if ($source === null || $r["at"] === null) {
             return $base;
         }
         return $base + [
@@ -357,6 +431,7 @@ final readonly class AdmissionDecisionLedger
         $actor = null;
         $at = null;
         $recordedAt = null;
+        $observedDecision = null;
         do {
             $page = $budget->page($this->history, $this->stream($a->id), $cursor);
             foreach ($page->events as $stored) {
@@ -369,6 +444,26 @@ final readonly class AdmissionDecisionLedger
                     $birthActor = $stored->context->actor?->value;
                     $birthAt = $stored->context->effectiveAt?->format(DATE_ATOM);
                     $birthRecordedAt = $stored->recordedAt->format(DATE_ATOM);
+                }
+                if ($stored->event instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded) {
+                    $p = $stored->event->payload();
+                    if ($p['operation_id'] === $operation?->value) {
+                        if ($stored->context->actor?->value !== $receiptActor?->value) {
+                            throw new AccessDeniedException('This offer receipt belongs to another actor.');
+                        }
+                        $receipt = $this->offerResult(
+                            $a->id,
+                            $p,
+                            $stored->context->effectiveAt?->format(DATE_ATOM) ?? throw new CorruptHistoryException()
+                        );
+                    }
+                }
+                if ($stored->event instanceof \Domain\Admissions\Event\AdmissionDecisionWasObserved) {
+                    // Validate observation provenance without inventing an original acceptance time.
+                    if ($stored->context->actor === null || $stored->context->effectiveAt === null) {
+                        throw new CorruptHistoryException();
+                    }
+                    $observedDecision = $stored->event->payload()['decision_id'];
                 }
                 if (
                     $stored->event instanceof AdmissionWasDecided ||
@@ -400,8 +495,13 @@ final readonly class AdmissionDecisionLedger
                 $this->context->verify($a, $birth, new EntityId($birthActor));
             }
             if (
-                ($root->source() === null && ($birth === null || $facts["status"] !== "submitted")) ||
-                ($root->source() !== null && ($actor === null || $at === null))
+                ($root->source() === null &&
+                ($birth === null ||
+                $facts["status"] !== "submitted")) ||
+                ($root->source() !== null &&
+                $root->decision() !== $observedDecision &&
+                    ($actor === null ||
+                    $at === null))
             ) {
                 throw new CorruptHistoryException();
             }

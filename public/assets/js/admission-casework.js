@@ -342,8 +342,12 @@
             if (label) toggle.setAttribute('aria-label', `Next steps for ${label}`);
             container.replaceChildren(toggle, content);
             const documents = node('div'); (documentTarget || container).append(documents);
-            return window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, applicationId,
+            const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, applicationId,
                 { toggleTarget: documentTarget ? container : null, label });
+            const offerArea = node('div'); (documentTarget || container).append(offerArea);
+            const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, applicationId,
+                { toggleTarget: container, label });
+            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() };
         }
         function queue(container, openApplication) {
             const filters = node('div', { class: 'd-flex flex-wrap gap-3 align-items-end mb-3' });
@@ -406,7 +410,9 @@
                 try {
                     const data = await request(`/portal/api/applications/${item.application_id}/next-steps/`);
                     if (ticket !== detailRequest || !container.isConnected) return;
-                    guidance(body, data); loaded = true; progress.textContent = 'Your current next steps are ready.';
+                    guidance(body, data);
+                    body.append(node('a', { href: '/portal/apply/', class: 'btn btn-outline-primary mt-3' }, 'View application and offer'));
+                    loaded = true; progress.textContent = 'Your current next steps are ready.';
                     const result = await request(`/portal/api/admissions-updates/${item.id}/read/`, 'POST', { revision: item.revision });
                     if (ticket !== detailRequest || !container.isConnected) return;
                     acknowledged = true;
@@ -437,7 +443,7 @@
                     list.replaceChildren(...data.items.map(item => node('article', { class: 'border rounded p-3 mb-3' },
                         node('h2', { class: 'h5' }, `${item.program_code} · ${item.program_title}`),
                         node('p', { class: 'form-text' }, `${item.term_code} · ${item.unread ? 'Unread' : 'Read'}`),
-                        node('p', {}, 'Admissions updated your application next steps.'),
+                        node('p', {}, 'Admissions updated your application.'),
                         node('p', { class: 'form-text' }, `Updated: ${new Date(item.updated_at).toLocaleString()}`),
                         button('Read update', () => open(item)))));
                     if (!data.items.length) list.append(node('p', {}, showRead ? 'No admissions updates are available.' : 'You have no unread admissions updates.'));
@@ -451,7 +457,7 @@
                     throw error;
                 }
             }
-            container.append(node('p', { class: 'form-text' }, 'Find updates from admissions and open an application to review your current next steps.'),
+            container.append(node('p', { class: 'form-text' }, 'Find updates from admissions and open an application to review your current next steps and offer.'),
                 filters, status, list, detail);
             task(() => load());
         }

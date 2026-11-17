@@ -20,6 +20,49 @@ final class AdmissionDecision extends EventSourcedAggregate
     private ?string $decision = null;
     /** @var array<string,mixed>|null */
     private ?array $submission = null;
+    /** @var array<string,mixed>|null */
+    private ?array $offer = null;
+    private bool $acceptanceKnown = false;
+
+    /** Only an offer issued under the current admissions decision is actionable. */
+    public function offer(): ?array
+    {
+        return ($this->offer['admission_context_id'] ?? null) === $this->decision ? $this->offer : null;
+    }
+    public function lastOfferOperation(): ?string
+    {
+        return $this->offer['operation_id'] ?? null;
+    }
+    public function acceptanceKnown(): bool
+    {
+        return $this->acceptanceKnown;
+    }
+    public function whenAdmissionOfferWasRecorded(
+        #[\SensitiveParameter] \Domain\Admissions\Event\AdmissionOfferWasRecorded $event
+    ): void {
+        $p = $event->payload();
+        if (
+            $this->application === null || $this->application['status'] !== 'accepted'
+            || $p['admission_context_id'] !== $this->decision
+            || $p['previous_operation_id'] !== $this->lastOfferOperation()
+            || $p['application_version'] !== $this->application['version'] + 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if ($p['action'] !== 'issue') {
+            $before = $this->offer()['offer'] ?? throw new CorruptHistoryException();
+            if (!in_array($before['status'], $p['action'] === 'cancel' ? ['pending', 'accepted'] : ['pending'], true)) {
+                throw new CorruptHistoryException();
+            }
+            foreach ($before as $key => $value) {
+                if ($key !== 'status' && $p['offer'][$key] !== $value) {
+                    throw new CorruptHistoryException();
+                }
+            }
+        }
+        $this->offer = $p;
+        $this->application['version'] = $p['application_version'];
+    }
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (array_key_exists('admission_evidence', $event->metadata())) {
@@ -37,7 +80,9 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        if ($event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged) {
+        if ($event instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded) {
+            \Domain\Admissions\ValueObject\AdmissionOfferSchema::validate($event->payload());
+        } elseif ($event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged) {
             \Domain\Admissions\ValueObject\AdmissionReviewStateSchema::validate($event->payload());
         } elseif ($event instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted) {
             \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::validate($event->payload());
@@ -96,6 +141,7 @@ final class AdmissionDecision extends EventSourcedAggregate
         $this->application["version"] = $p["application_version"];
         $this->source = $p["source"];
         $this->decision = $p["decision_id"];
+        $this->acceptanceKnown = $p["status"] === "accepted";
     }
     public function whenAdmissionDecisionWasObserved(
         \Domain\Admissions\Event\AdmissionDecisionWasObserved $event,
@@ -126,6 +172,7 @@ final class AdmissionDecision extends EventSourcedAggregate
         $this->application["version"] = $p["application_version"];
         $this->source = $p["source"];
         $this->decision = $p["decision_id"];
+        $this->acceptanceKnown = $p["status"] === "accepted";
     }
     public function whenAdmissionReviewStateWasChanged(
         \Domain\Admissions\Event\AdmissionReviewStateWasChanged $event
@@ -143,6 +190,7 @@ final class AdmissionDecision extends EventSourcedAggregate
         $this->application['version'] = $p['application_version'];
         $this->source = $p['source'];
         $this->decision = $p['decision_id'];
+        $this->acceptanceKnown = false;
     }
     /** @param array<string,mixed> $source */
     private function assertSubmission(array $source): void

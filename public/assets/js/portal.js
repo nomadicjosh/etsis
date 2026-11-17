@@ -18,7 +18,7 @@
         submitted: Object.freeze({ label: 'Submitted', positive: false,
             next: 'Admissions has your application. Check here for a decision or contact admissions with questions.' }),
         accepted: Object.freeze({ label: 'Accepted', positive: true,
-            next: 'Your application was accepted. Contact admissions about the next steps for this program.' }),
+            next: 'Your application was accepted. Open Admission offer to review and respond, or contact admissions about your next steps.' }),
         withdrawn: Object.freeze({ label: 'Withdrawn', positive: false,
             next: 'This application was withdrawn. Contact admissions if you would like it considered again.' }),
         rejected: Object.freeze({ label: 'Not accepted', positive: false,

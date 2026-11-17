@@ -74,4 +74,8 @@ Both new event schemas use **`sis_history_events`** and its existing stream head
 
 Fictional integration checks cover both outcomes, replay, submitted-form references, protected payloads, stale/expired reviews, permission and owner rechecks, complete rollback, competing confirmations, changed projections and retries after matriculation. Real-provider/router checks cover CSRF, private responses and admissions authorization. Browser checks cover revision, confirmation, history, focus, accessibility and narrow screens. No working database was migrated or used for these fixtures.
 
-New submissions and deliberately selected document evidence now retain their actual history. Offers, applicant responses, institutional decision-gating policies, approved evidence disposition, reopening and operational rebuild tooling remain subsequent stages. Event history supports evidence; it does not establish legal compliance by itself.
+New submissions and deliberately selected document evidence now retain their actual history. Private offers, applicant responses and their institutional acceptance policy now share this application history. Approved evidence disposition and operational rebuild tooling remain subsequent stages. Event history supports evidence; it does not establish legal compliance by itself.
+
+## Offers after an admissions acceptance
+
+The [offer workflow](admissions-offers.md) separates the institution’s acceptance decision from the applicant’s response to a private letter. Institutional policy requires applicant acceptance by default. Staff can configure that policy, issue or replace a letter and record documented responses in the same application history. Matriculation checks the retained offer policy; cancelling an offer does not withdraw an application or close a student record.

@@ -231,10 +231,11 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
             }
             $length = strlen($canonical);
             $size += $length;
-            // Reviewed course descriptions and normalized section meeting plans have bounded larger contracts.
+            // Reviewed text publications and normalized section meeting plans have bounded larger contracts.
             // Keep other events at 64 KiB and retain the existing 256 KiB batch ceiling.
             $maximum = $event instanceof \Domain\Catalog\Event\CourseDefinitionWasPublished
-            || $event instanceof \Domain\Registration\Event\SectionMeetingPlanWasPublished ? 262144 : 65536;
+            || $event instanceof \Domain\Registration\Event\SectionMeetingPlanWasPublished
+            || $event instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded ? 262144 : 65536;
             if ($length > $maximum || $size > 262144) {
                 throw new InvalidArgumentException("The protected event batch exceeds its size limit.");
             }

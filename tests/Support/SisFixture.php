@@ -241,6 +241,11 @@ final class SisFixture
         $this->sql = new SqlRecords($db);
         $this->transactions = new DatabaseUnitOfWork($db);
         $this->access = new FixtureAccess($actor ?? $this->user());
+        if ($initialize) {
+            // Earlier workflow fixtures deliberately exercise institutions without mandatory offer acceptance.
+            $this->sql->update('sis_admission_offer_policy', ['require_acceptance' => 0],
+                ['id' => \Domain\Admissions\Repository\AdmissionOfferPolicyRepository::ID]);
+        }
         $this->clock = new FixtureClock();
         if ($initialize) {
             $this->office = EntityId::generate();
@@ -1166,6 +1171,26 @@ final class SisFixture
             ),
         );
     }
+    public function offerPolicy(): \Domain\Admissions\Repository\AdmissionOfferPolicyRepository
+    {
+        return new \Infrastructure\Persistence\Repository\SqlAdmissionOfferPolicyRepository($this->sql);
+    }
+    public function offerService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\Admissions\Service\AdmissionOfferService {
+        return new \Domain\Admissions\Service\AdmissionOfferService(
+            $this->admissions,
+            $this->decisionLedger(),
+            $this->offerPolicy(),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlAdmissionUpdatesRepository($this->sql)
+        );
+    }
     public function matriculationService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Catalog\Service\CatalogEnrollment $initializer = null,
@@ -1194,6 +1219,13 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             $this->decisionLedger(),
+            new \Domain\Admissions\Service\AdmissionOfferGate(
+                policy: $this->offerPolicy(),
+                ledger: $this->decisionLedger(),
+                admissions: $repository ?? $this->admissions,
+                clock: $this->clock
+            ),
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
         );
     }
     public function matriculate(EntityId $application): Student

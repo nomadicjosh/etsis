@@ -60,6 +60,8 @@ final readonly class WorkspaceService
         "sis:admissions:manage",
         "sis:admissions:correct",
         "sis:admissions:withdraw",
+        "sis:admissions:offers",
+        "sis:admissions:policy",
         "sis:student:read",
         "sis:catalog:manage",
         "sis:registration:manage",

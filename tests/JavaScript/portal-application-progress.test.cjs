@@ -27,7 +27,7 @@ test('each supported application status has an explicit next step', () => {
 });
 
 test('acceptance does not promise access to registration or create an actionable student shortcut', () => {
-    assert.match(progress('accepted').next, /next steps for this program/);
+    assert.match(progress('accepted').next, /Admission offer to review and respond/);
     assert.doesNotMatch(progress('accepted').next, /created|eligible|registered|enrolled/i);
     for (const status of ['submitted', 'accepted', 'rejected', 'withdrawn']) assert.equal(progress(status).href, undefined);
     assert.equal(progress('matriculated').href, '/portal/student/');

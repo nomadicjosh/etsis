@@ -30,6 +30,9 @@ interface AdmissionsRepository
     /** Projection CAS only; the review-state service owns the full decision transaction. */
     public function saveReviewState(AdmissionApplication $before, AdmissionApplication $after): void;
 
+    /** Projection CAS only; the offer service owns the complete transaction. */
+    public function saveOffer(AdmissionApplication $before, AdmissionApplication $after): void;
+
     public function lockPerson(EntityId $id): void;
     public function lockApplication(EntityId $id): void;
     public function studentForPerson(EntityId $person): ?EntityId;

@@ -98,6 +98,12 @@ return static function (Psr7Router $router): void {
             "review",
         ])
         ->name("sis.applications.decision.review");
+    $offers = \Application\Http\Controller\AdmissionOfferController::class;
+    $router->map(['GET'], '/sis/admission-offer-policy/', [$offers, 'policy']);
+    $router->map(['POST'], '/sis/admission-offer-policy/', [$offers, 'savePolicy']);
+    $router->map(['GET'], '/sis/applications/{id}/offer/', [$offers, 'current']);
+    $router->map(['POST'], '/sis/applications/{id}/offer/review/', [$offers, 'review']);
+    $router->map(['POST'], '/sis/applications/{id}/offer/commit/', [$offers, 'commit']);
     $router->post('/sis/applications/{id}/review-state/review/', [
         \Application\Http\Controller\SisAdmissionReviewStateController::class, 'review',
     ])->name('sis.applications.review_state.review');
