@@ -383,6 +383,7 @@
                 }
             }
             filters.append(button('Refresh queue', () => load()));
+            filters.append(node('p', { class: 'form-text w-100' }, 'Follow-up is paused for withdrawn applications. Unfinished tasks return when an application returns to review.'));
             container.replaceChildren(filters, status, list); task(() => load());
         }
         function updates(target) {

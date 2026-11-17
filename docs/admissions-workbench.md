@@ -40,6 +40,8 @@ Applicants open **Start your application → Your applications → Next steps** 
 
 If staff have not added guidance, the portal directs the applicant to contact admissions. Checklist progress alone is not an admission approval or registration confirmation. Reading next steps neither changes the application nor writes an event/audit. Closing it or refreshing the application list prevents detached viewers from restoring late results.
 
+Withdrawn applications are paused in the follow-up queue without changing their working case. Returning one to review restores its unfinished tasks; this is separate from changing a student record or closing a person account. See [application withdrawal](admissions-decisions.md#withdraw-an-application-or-return-it-to-review).
+
 ## In-portal admissions updates
 
 Applicants can choose **Admissions updates** from their application toolbar or campus-services navigation. This page is available to a signed-in person before they have a student record. It loads only update metadata, without requesting the full student overview. Updates show the application program and entry term, the update time and whether they are unread. Use **Read update** to open the current next steps. **Include read updates** and explicit refresh let applicants revisit earlier guidance; lists contain twenty records per page.

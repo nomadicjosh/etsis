@@ -5,6 +5,9 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        'sis:admissions:withdraw' => [
+            'description' => 'Withdraw pre-matriculation applications and return withdrawn applications to review.',
+        ],
         'sis:admissions:documents:retain' => [
             'description' => 'Manage admissions document access, holds, retention and reviewed disposal.',
         ],

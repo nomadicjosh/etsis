@@ -8,7 +8,7 @@ Open **Admissions → an accepted/rejected application → Correct admissions de
 
 **Revise admissions correction** preserves the entered reason. Reviewing creates no event or status change. **Confirm admissions correction** records the actual correction, advances the application version once and updates its current outcome atomically with the event receipt and required audit.
 
-A correction takes effect on confirmation. Staff cannot supply a backdated effective date or change the application person, program, entry term or submitted answers through this action. It does not reopen an application for editing. Those changes need their own institutional policies and attributed workflows.
+A correction takes effect on confirmation. Staff cannot supply a backdated effective date or change the application person, program, entry term or submitted answers through this action. It does not reopen an application for editing. [Withdrawal and return to review](admissions-decisions.md#withdraw-an-application-or-return-it-to-review) use a separate permission and reviewed action; returning to review requires a new decision. Those changes need their own institutional policies and attributed workflows.
 
 A matriculated application cannot start or commit a new outcome correction here. Its student/program/academic/financial records require the appropriate student-record workflow. If matriculation wins a competing request, the pending correction is rejected. If a correction to rejected wins first, an earlier matriculation review cannot create a student.
 

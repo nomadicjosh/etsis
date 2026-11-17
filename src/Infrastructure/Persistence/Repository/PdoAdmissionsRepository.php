@@ -195,6 +195,13 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
     {
         $this->lock("sis_persons", $id);
     }
+    public function saveReviewState(AdmissionApplication $before, AdmissionApplication $after): void
+    {
+        if ($before->changeReviewState($after->status === ApplicationStatus::Withdrawn) != $after) {
+            throw new DomainException('The review-state change must preserve identity and advance one revision.');
+        }
+        $this->transition($after, $before->version, $before->status, $after->status);
+    }
     public function lockApplication(EntityId $id): void
     {
         $this->lock("sis_applications", $id);

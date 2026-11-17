@@ -6362,3 +6362,76 @@ if (
 ) {
     throw new RuntimeException('The real decision routes lost their retained-evidence or private-history contract.');
 }
+
+// Staff withdrawal and return-to-review share the real private routes; owners see status only.
+$reviewStatePath = '/sis/applications/' . $caseworkApplication->value . '/review-state/';
+$reviewStateNoCsrf = $post->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $reviewStatePath . 'review/'
+))->withParsedBody(['withdraw' => true, 'reason' => 'Fictional withdrawal request.']);
+if ($app->router->match($reviewStateNoCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('An application withdrawal bypassed CSRF.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:admissions:manage'];
+if (
+    $teachingPost($reviewStatePath . 'review/', ['withdraw' => true,
+    'reason' => 'Fictional unauthorized request.'])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Ordinary admissions duties allowed application withdrawal.');
+}
+$sis->access->staff = true;
+$withdrawalResponse = $teachingPost($reviewStatePath . 'review/', ['withdraw' => true,
+    'reason' => 'Fictional protected withdrawal explanation.']);
+$withdrawalPreview = json_decode((string) $withdrawalResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($withdrawalResponse->getStatusCode() !== 200 || ($withdrawalPreview['status'] ?? null) !== 'withdrawn') {
+    throw new RuntimeException('The real application withdrawal review failed.');
+}
+$withdrawalResponse = $teachingPost($reviewStatePath . 'commit/', [
+    'review_token' => $withdrawalPreview['review_token'],
+]);
+$withdrawalResult = json_decode((string) $withdrawalResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($withdrawalResponse->getStatusCode() !== 200 || ($withdrawalResult['status'] ?? null) !== 'withdrawn') {
+    throw new RuntimeException('The real application withdrawal confirmation failed.');
+}
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$withdrawnOwnerResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/portal/api/applications/'
+)));
+$withdrawnOwner = json_decode((string) $withdrawnOwnerResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$withdrawnOwnedApplication = array_values(array_filter(
+    $withdrawnOwner['items'] ?? [],
+    static fn(array $item): bool => $item['id'] === $caseworkApplication->value
+));
+if (
+    $withdrawnOwnerResponse->getStatusCode() !== 200 || count($withdrawnOwnedApplication) !== 1
+    || $withdrawnOwnedApplication[0]['status'] !== 'withdrawn'
+    || str_contains((string) $withdrawnOwnerResponse->getBody(), 'protected withdrawal explanation')
+    || !str_contains($withdrawnOwnerResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $withdrawnOwnerResponse->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('The owner lost its private application status or received a restricted reason.');
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+$returnResponse = $teachingPost($reviewStatePath . 'review/', ['withdraw' => false,
+    'reason' => 'Fictional reconsideration request.']);
+$returnPreview = json_decode((string) $returnResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($returnResponse->getStatusCode() !== 200) {
+    throw new RuntimeException('The return-to-review preview failed.');
+}
+$returnResponse = $teachingPost($reviewStatePath . 'commit/', ['review_token' => $returnPreview['review_token']]);
+$returnResult = json_decode((string) $returnResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($returnResponse->getStatusCode() !== 200 || ($returnResult['status'] ?? null) !== 'submitted') {
+    throw new RuntimeException('Returning to review restored an earlier acceptance.');
+}
+$reviewStateBeforeRetry = $sis->sql->rows('sis_history_events');
+$retryWithdrawal = $teachingPost($reviewStatePath . 'commit/', ['review_token' => $withdrawalPreview['review_token']]);
+if (
+    json_decode((string) $retryWithdrawal->getBody(), true, flags: JSON_THROW_ON_ERROR) !== $withdrawalResult
+    || $reviewStateBeforeRetry !== $sis->sql->rows('sis_history_events')
+    || $sis->admissions->application($caseworkApplication)->status->value !== 'submitted'
+) {
+    throw new RuntimeException('An HTTP retry re-applied the original withdrawal after return to review.');
+}

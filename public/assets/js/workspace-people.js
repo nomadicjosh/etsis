@@ -362,6 +362,13 @@ window.createWorkspacePeople = function (ui) {
             can("sis:admissions:correct")
         )
             extra.push(button("Correct admissions decision", () => mayLeave() && correctDecision(row, app.status)));
+        if (can('sis:admissions:withdraw')) {
+            if (['submitted', 'accepted', 'rejected'].includes(app.status)) {
+                extra.push(button('Withdraw application', () => mayLeave() && reviewState(row, true)));
+            } else if (app.status === 'withdrawn') {
+                actions.append(button('Return to review', () => mayLeave() && reviewState(row, false), 'btn-primary'));
+            }
+        }
         if (app.status === "matriculated")
             extra.push(button("Matriculation history", () => mayLeave() && matriculationHistory(row)));
         actions.append(
@@ -374,6 +381,8 @@ window.createWorkspacePeople = function (ui) {
             accepted:
                 "Review matriculation to confirm the initial program and entry term before creating the student record.",
             rejected: "This application was rejected. Authorized corrections preserve the earlier decision.",
+            withdrawn: 'This application was withdrawn. Returning it to review requires a fresh admissions decision.',
+
             matriculated:
                 "Matriculation is recorded. Earlier application and decision history remain available.",
         };
@@ -645,6 +654,43 @@ window.createWorkspacePeople = function (ui) {
         });
         body.append(form);
     }
+    async function reviewState(row, withdraw, preset = {}) {
+        const title = withdraw ? 'Withdraw application' : 'Return to review';
+        const description = withdraw
+            ? 'Close this application before matriculation. Earlier decisions and documents remain in history.'
+            : 'Return this withdrawn application for a fresh decision. This does not restore an earlier acceptance or reopen submitted answers.';
+        const body = openDrawer(title, 'ADMISSIONS REVIEW');
+        body.append(button('Back to application', () => application(row)), node('p', {}, description));
+        const fields = [['reason', 'Reason for this change', 'textarea']];
+        const form = await buildForm(fields, preset, { layout: 'decision_reason' });
+        form.elements.reason.required = true; form.elements.reason.maxLength = 10000;
+        const controls = node('fieldset', {}, node('legend', { class: 'visually-hidden' }, title));
+        controls.append(...form.childNodes); form.append(controls);
+        const review = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review change');
+        controls.append(review); body.append(form);
+        form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
+            if (controls.disabled || !form.reportValidity()) return;
+            const data = formData(form, fields); controls.disabled = true;
+            try {
+                const preview = await request(`/sis/applications/${row.id}/review-state/review/`, 'POST', { ...data, withdraw });
+                if (!form.isConnected) return;
+                const confirmation = openDrawer(withdraw ? 'Confirm withdrawal' : 'Confirm return to review', 'REVIEWED CHANGE');
+                const heading = node('h3', { tabindex: '-1' }, `${preview.person.given_name} ${preview.person.family_name}`);
+                confirmation.append(button('Revise change', () => reviewState(row, withdraw, data)), heading,
+                    node('p', {}, `Institutional ID: ${preview.person.institutional_id}`),
+                    node('p', {}, `${preview.source.program_code} · ${preview.source.program_title} · ${preview.source.entry_term_code}`),
+                    node('p', {}, `${preview.previous_status} → ${preview.status}. Effective on confirmation: ${preview.effective_on}.`),
+                    node('p', {}, description),
+                    node('p', { class: 'form-text' }, 'The person account and any separate student record remain unchanged.'),
+                    button(withdraw ? 'Confirm withdrawal' : 'Confirm return to review', async () => {
+                        await request(`/sis/applications/${row.id}/review-state/commit/`, 'POST', { review_token: preview.review_token });
+                        notify(withdraw ? 'Application withdrawn.' : 'Application returned for a fresh review.');
+                        if (heading.isConnected) await application(row);
+                    }, withdraw ? 'btn-danger' : 'btn-primary'));
+                heading.focus();
+            } finally { controls.disabled = false; }
+        }, review); });
+    }
     async function decisionHistory(row, cursor = null, previous = []) {
         const record =
             cursor === null
@@ -715,6 +761,7 @@ window.createWorkspacePeople = function (ui) {
                 (item) => item.kind !== "submission",
             )) {
                 const observed = item.kind === "observation";
+                const reviewState = ['withdrawal', 'review_resumed'].includes(item.kind);
                 const section = node(
                     "section",
                     { class: "record-section" },
@@ -723,6 +770,7 @@ window.createWorkspacePeople = function (ui) {
                         {},
                         observed
                             ? "Observed current application"
+                            : reviewState ? (item.kind === 'withdrawal' ? 'Application withdrawn' : 'Returned to review')
                             : item.kind === "correction"
                               ? `Decision corrected: ${item.previous_status} → ${item.status}`
                               : item.status === "accepted"
@@ -747,7 +795,7 @@ window.createWorkspacePeople = function (ui) {
                             : `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}.`,
                     ),
                 );
-                if (!observed) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
+                if (!observed && !reviewState) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
                 body.append(section);
             }
             body.append(

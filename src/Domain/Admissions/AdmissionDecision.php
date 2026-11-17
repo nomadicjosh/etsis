@@ -37,7 +37,9 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        if ($event instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted) {
+        if ($event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged) {
+            \Domain\Admissions\ValueObject\AdmissionReviewStateSchema::validate($event->payload());
+        } elseif ($event instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted) {
             \Domain\Admissions\ValueObject\ApplicationSubmissionSchema::validate($event->payload());
         } elseif (
             $event instanceof \Domain\Admissions\Event\AdmissionDecisionWasObserved ||
@@ -89,20 +91,7 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        if ($this->submission !== null) {
-            $before = $this->submission["source"]["submission"];
-            $after = $p["source"]["submission"];
-            if (($before === null) !== ($after === null)) {
-                throw new CorruptHistoryException();
-            }
-            if ($before !== null) {
-                foreach ($before as $key => $value) {
-                    if ($after[$key] !== $value) {
-                        throw new CorruptHistoryException();
-                    }
-                }
-            }
-        }
+        $this->assertSubmission($p['source']);
         $this->application["status"] = $p["status"];
         $this->application["version"] = $p["application_version"];
         $this->source = $p["source"];
@@ -132,8 +121,38 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        $before = $this->source["submission"];
-        $after = $p["source"]["submission"];
+        $this->assertSubmission($p['source']);
+        $this->application["status"] = $p["status"];
+        $this->application["version"] = $p["application_version"];
+        $this->source = $p["source"];
+        $this->decision = $p["decision_id"];
+    }
+    public function whenAdmissionReviewStateWasChanged(
+        \Domain\Admissions\Event\AdmissionReviewStateWasChanged $event
+    ): void {
+        $p = $event->payload();
+        if (
+            $this->application === null || $this->application['status'] !== $p['previous_status']
+            || $p['previous_decision_id'] !== $this->decision
+            || $p['application_version'] !== $this->application['version'] + 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->assertSubmission($p['source']);
+        $this->application['status'] = $p['status'];
+        $this->application['version'] = $p['application_version'];
+        $this->source = $p['source'];
+        $this->decision = $p['decision_id'];
+    }
+    /** @param array<string,mixed> $source */
+    private function assertSubmission(array $source): void
+    {
+        $prior = $this->submission['source'] ?? $this->source;
+        if ($prior === null) {
+            return;
+        }
+        $before = $prior['submission'];
+        $after = $source['submission'];
         if (($before === null) !== ($after === null)) {
             throw new CorruptHistoryException();
         }
@@ -144,10 +163,6 @@ final class AdmissionDecision extends EventSourcedAggregate
                 }
             }
         }
-        $this->application["status"] = $p["status"];
-        $this->application["version"] = $p["application_version"];
-        $this->source = $p["source"];
-        $this->decision = $p["decision_id"];
     }
     /** @return array<string,mixed>|null */
     public function application(): ?array

@@ -27,6 +27,8 @@ interface AdmissionsRepository
     public function saveDecision(AdmissionApplication $application, int $expectedVersion): void;
     /** Compare-and-swap projection only; the authorized correction service owns the complete transaction. */
     public function saveCorrection(AdmissionApplication $before, AdmissionApplication $after): void;
+    /** Projection CAS only; the review-state service owns the full decision transaction. */
+    public function saveReviewState(AdmissionApplication $before, AdmissionApplication $after): void;
 
     public function lockPerson(EntityId $id): void;
     public function lockApplication(EntityId $id): void;

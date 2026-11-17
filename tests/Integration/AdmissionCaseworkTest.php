@@ -23,6 +23,24 @@ final class AdmissionCaseworkTest extends TestCase
             'instructions' => $visible ? 'Arrange delivery through admissions.' : 'Fictional private casework.',
             'needed' => true, 'visible' => $visible, 'status' => 'pending', 'due_on' => '2026-01-01'];
     }
+    public function testWithdrawalPausesFollowUpsWithoutResettingTheWorkingCase(): void
+    {
+        $f = new AdmissionCaseworkFixture();
+        $s = $f->campus->sis;
+        $f->service->save($f->application, ['items' => [$this->item()]], 0, 'me');
+        $cases = $s->sql->rows('sis_admission_cases');
+        self::assertCount(1, $f->service->queue()['items']);
+        $state = $s->reviewStateService();
+        $state->commit($f->application, $state->review($f->application, true, 'Fictional withdrawal.')['review_token']);
+        self::assertSame([], $f->service->queue()['items']);
+        self::assertSame($cases, $s->sql->rows('sis_admission_cases'));
+        $state->commit(
+            $f->application,
+            $state->review($f->application, false, 'Fictional reconsideration.')['review_token']
+        );
+        self::assertCount(1, $f->service->queue()['items']);
+        self::assertSame($cases, $s->sql->rows('sis_admission_cases'));
+    }
     public function testOwnerGuidanceIsCuratedAndCaseworkDoesNotChangeFormalAdmissionsOrCreateEvents(): void
     {
         $f = new AdmissionCaseworkFixture();

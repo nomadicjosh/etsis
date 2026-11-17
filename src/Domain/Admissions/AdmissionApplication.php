@@ -66,4 +66,23 @@ final readonly class AdmissionApplication
 
         return new Student($studentId, $this->personId, $this->programId, $this->entryTermId);
     }
+
+    public function changeReviewState(bool $withdraw): self
+    {
+        if (
+            ($withdraw && !in_array($this->status, [ApplicationStatus::Submitted,
+            ApplicationStatus::Accepted, ApplicationStatus::Rejected], true))
+            || (!$withdraw && $this->status !== ApplicationStatus::Withdrawn)
+        ) {
+            throw new DomainException('Only a pre-matriculation application can be withdrawn or returned to review.');
+        }
+        return new self(
+            $this->id,
+            $this->personId,
+            $this->programId,
+            $this->entryTermId,
+            $withdraw ? ApplicationStatus::Withdrawn : ApplicationStatus::Submitted,
+            $this->version + 1
+        );
+    }
 }

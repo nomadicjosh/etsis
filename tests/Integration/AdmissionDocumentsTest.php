@@ -134,6 +134,13 @@ final class AdmissionDocumentsTest extends TestCase
         $history = $decisions->history($f->application);
         self::assertSame([['name' => 'fictional-evidence.pdf']], $history['items'][1]['evidence']);
         self::assertStringNotContainsString('sha256', json_encode($history, JSON_THROW_ON_ERROR));
+        $state = $s->reviewStateService();
+        $state->commit($f->application, $state->review($f->application, true, 'Fictional withdrawal.')['review_token']);
+        $state->commit(
+            $f->application,
+            $state->review($f->application, false, 'Fictional reconsideration.')['review_token']
+        );
+        self::assertTrue($s->decisionLedger()->retainsDocument($s->admissions->application($f->application), $id));
         self::assertStringNotContainsString('fictional-evidence.pdf', json_encode($s->sql->rows('sis_history_events')));
         $s->clock->time = $s->clock->now()->modify('+2 days');
         $row = $repo->find($id);

@@ -115,7 +115,7 @@ The [application form studio](docs/application-submission-history.md#application
 
 [Application submission history](docs/application-submission-history.md), [admissions decisions](docs/admissions-decisions.md), and [outcome corrections](docs/admissions-corrections.md) describe retained history, staff permissions and reviewed corrections before matriculation.
 
-[Admissions workbench](docs/admissions-workbench.md) covers reusable working checklists, office routing, colleague handoffs, due follow-up queues, private applicant next steps, an owner-only admissions update inbox, and optional private documents with background scanning, reviewed retention and deliberately selected decision evidence alongside application review.
+[Admissions workbench](docs/admissions-workbench.md) covers reusable working checklists, office routing, colleague handoffs, due follow-up queues, private applicant next steps, an owner-only admissions update inbox, and optional private documents with background scanning, reviewed retention and deliberately selected decision evidence alongside application review. [Staff withdrawal and return to review](docs/admissions-decisions.md#withdraw-an-application-or-return-it-to-review) preserve earlier outcomes and require a fresh decision before matriculation. [Application withdrawal and return to review](docs/admissions-decisions.md#withdraw-an-application-or-return-it-to-review) preserve earlier decisions and require independent authority.
 
 [Course subjects](docs/course-subjects.md) explains explicit subject setup, draft assignment and historical publication references.
 [Departments and levels](docs/course-classifications.md) explains their searchable setup, combined course assignment and retained publication/report labels.

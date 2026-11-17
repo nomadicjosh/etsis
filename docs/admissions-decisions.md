@@ -6,7 +6,7 @@ Implemented 2026-11-09. Acceptance and rejection now use reviewed, attributed de
 
 Open **Admissions → an application** and review the submitted answers and program. For a submitted application, choose **Accept application** or **Reject application**, enter a reason and select **Review admissions decision**.
 
-The review shows the person and current institutional ID, proposed outcome, program, entry term and original submitted form name/revision, when attached. A directly entered application is identified explicitly. **Revise admissions decision** preserves the reason. Reviewing creates no decision event and changes no status.
+The review shows the person and current institutional ID, proposed outcome, program, entry term and original submitted form name/revision, when attached. A directly entered application is identified explicitly. [Withdrawal and return to review](#withdraw-an-application-or-return-it-to-review) are separate pre-matriculation actions. **Revise admissions decision** preserves the reason. Reviewing creates no decision event and changes no status.
 
 Choose **Confirm acceptance** or **Confirm rejection**. The application status/version, observation, actual decision events, operation receipts and required audit commit together. A failure rolls everything back. Acceptance does not create a student, assign a cohort or charge tuition; **Matriculate student** remains a separate reviewed action. Rejection creates no student record.
 
@@ -29,6 +29,26 @@ Selected evidence is protected from ordinary expired-file disposal independently
 Each decision verification/disposal history read is bounded to 500 events in 25 pages. Ordinary document inventories remain bounded projection reads and do not replay decision history. An over-limit or inconsistent history requires institutional review; it never permits partial evidence retention or disposal. Operational reconstruction can derive markers from genuine decision metadata; general rebuild tooling remains outstanding.
 
 Institutional retention categories, approved formal-evidence disposition, case/person-wide holds, backups and real scanner/browser acceptance remain production work. This safeguard does not declare a universal retention period or establish legal compliance. Uploaded documents do not automatically satisfy checklists or become official transcripts/transfer awards.
+
+## Withdraw an application or return it to review
+
+This closes an **application**, not the person's campus account, an existing student record, employment or a student-program pursuit. It is available only before that application is matriculated. A person who is already a student can still have a separate application withdrawn; their existing student history stays unchanged.
+
+In **Admissions → application → More**, choose **Withdraw application**. This works for submitted, accepted or rejected applications. Enter a reason and choose **Review change**. The confirmation identifies the applicant, program, term, previous/new status and institution date. **Revise change** preserves the reason. **Confirm withdrawal** closes current review; it does not delete the application, answers, working notes, documents or original outcomes. Unfinished casework, documents and educational-background edits must be saved or cleared before changing tasks.
+
+A withdrawn application offers **Return to review**. Use the same reason → review → confirmation flow. It returns to **Submitted** for a fresh admissions decision. It does not restore an earlier acceptance, open the original submitted answers for editing, create another person/application, or enroll a student. If an earlier matriculation review was prepared before withdrawal, a later acceptance still requires a new matriculation review.
+
+Withdrawn applications are paused in the follow-up queue. No checklist, assignment, due date or working status is reset; unfinished work appears again when the application returns to review. Staff can still find withdrawn applications in Admissions/the person record, read their authorized history and manage retained documents. The portal shows **Withdrawn** with an instruction to contact admissions. Report Studio offers the same status as a filter and dashboard counts include it. Applicants do not receive the staff reason or a self-service withdrawal/reopening action.
+
+Apply migration **20261117000005**. It registers the protected **`sis:admissions:withdraw`** permission and its self-implication only, without changing application rows or granting roles/users. Both this permission and `sis:admissions:manage` are required for review and confirmation. Delegate deliberately through Roles & access; an ordinary admin's broad SIS grant does not include it. Super keeps its existing unrestricted authority. The migration uses the existing portable SQL/transaction abstraction and adds no table or column; rollback cannot delete a protected system permission.
+
+**AdmissionReviewStateWasChanged** records the actual previous/new status, preceding recorded decision identity, resulting application version and retained program/term/submitted-form context in the same protected admissions stream. Actor, reason and effective/recorded times are protected. An untracked older submitted/accepted/rejected application gets an explicit current observation at confirmation; no original submission or decision date is invented. An untracked withdrawn row is rejected as inconsistent rather than silently treated as recorded history.
+
+Review changes no facts. The actor-bound encrypted review expires after twenty minutes and across institution-date changes; changed identity, application/history version or source context requires another review. Current authority is checked after waiting and before completion. Permission, person, application and catalog-context locks follow a consistent order. Projection CAS, event, stream head, retry receipt and required audit commit together. A competing decision or matriculation invalidates a pending withdrawal, and a withdrawn application cannot be matriculated.
+
+Exact completed confirmations return their original receipt after later withdrawal/review/acceptance cycles or matriculation, without reapplying that earlier action. Earlier decisions, submitted answers and selected evidence stay retained; ordinary file disposal still verifies all recorded evidence references. New withdrawals and returns after matriculation are blocked. Application history distinguishes **Application withdrawn** and **Returned to review** from acceptance/rejection and shows their actual recording/effective times without exposing reasons or raw events.
+
+Offers, applicant responses, applicant-initiated withdrawal policy, editing/resubmission and post-matriculation rescission remain separate work. Do not use this action for a student's course drop, institutional withdrawal or registrar program change.
 
 ## Historical facts and retries
 

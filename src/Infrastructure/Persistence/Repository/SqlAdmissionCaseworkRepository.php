@@ -177,8 +177,8 @@ final readonly class SqlAdmissionCaseworkRepository implements AdmissionCasework
         ?EntityId $after
     ): array {
         $q = $this->sql->quote(...);
-        $where = ['c.' . $q('work_status') . ' IN (?, ?)'];
-        $args = ['open', 'waiting'];
+        $where = ['c.' . $q('work_status') . ' IN (?, ?)', 'a.' . $q('status') . ' <> ?'];
+        $args = ['open', 'waiting', 'withdrawn'];
         if ($assignedTo !== null) {
             $where[] = 'c.' . $q('assigned_to') . ' = ?';
             $args[] = $assignedTo->value;

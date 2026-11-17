@@ -9,5 +9,6 @@ enum ApplicationStatus: string
     case Submitted = 'submitted';
     case Accepted = 'accepted';
     case Rejected = 'rejected';
+    case Withdrawn = 'withdrawn';
     case Matriculated = 'matriculated';
 }

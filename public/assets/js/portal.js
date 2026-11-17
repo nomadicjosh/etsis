@@ -19,6 +19,8 @@
             next: 'Admissions has your application. Check here for a decision or contact admissions with questions.' }),
         accepted: Object.freeze({ label: 'Accepted', positive: true,
             next: 'Your application was accepted. Contact admissions about the next steps for this program.' }),
+        withdrawn: Object.freeze({ label: 'Withdrawn', positive: false,
+            next: 'This application was withdrawn. Contact admissions if you would like it considered again.' }),
         rejected: Object.freeze({ label: 'Not accepted', positive: false,
             next: 'Contact admissions if you have questions about the decision.' }),
         matriculated: Object.freeze({ label: 'Student record linked', positive: true,

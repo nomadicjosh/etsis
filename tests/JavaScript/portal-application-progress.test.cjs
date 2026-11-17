@@ -15,7 +15,7 @@ const progress = context.window.campusApplicationProgress;
 test('each supported application status has an explicit next step', () => {
     const domain = readFileSync(path.join(__dirname, '../../src/Domain/Admissions/Enum/ApplicationStatus.php'), 'utf8');
     const statuses = [...domain.matchAll(/case \w+ = '([^']+)'/g)].map(match => match[1]);
-    assert.equal(statuses.length, 4);
+    assert.equal(statuses.length, 5);
     for (const status of statuses) {
         const result = progress(status);
         assert.notEqual(result.label, 'Status unavailable');
@@ -29,7 +29,7 @@ test('each supported application status has an explicit next step', () => {
 test('acceptance does not promise access to registration or create an actionable student shortcut', () => {
     assert.match(progress('accepted').next, /next steps for this program/);
     assert.doesNotMatch(progress('accepted').next, /created|eligible|registered|enrolled/i);
-    for (const status of ['submitted', 'accepted', 'rejected']) assert.equal(progress(status).href, undefined);
+    for (const status of ['submitted', 'accepted', 'rejected', 'withdrawn']) assert.equal(progress(status).href, undefined);
     assert.equal(progress('matriculated').href, '/portal/student/');
     assert.doesNotMatch(progress('matriculated').next, /eligible|registered|enrolled/i);
 });
@@ -42,4 +42,12 @@ test('unknown or prototype-like statuses receive neutral guidance without echoin
         assert.equal(result.href, undefined);
         assert.equal(result.next, 'Contact admissions to check the status of this application.');
     }
+});
+
+
+test('withdrawn applications give a neutral next step without exposing a reason or student access', () => {
+    assert.equal(progress('withdrawn').label, 'Withdrawn');
+    assert.equal(progress('withdrawn').positive, false);
+    assert.equal(progress('withdrawn').href, undefined);
+    assert.match(progress('withdrawn').next, /Contact admissions/);
 });

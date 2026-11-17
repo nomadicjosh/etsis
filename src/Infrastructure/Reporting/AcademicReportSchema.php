@@ -553,7 +553,7 @@ final class AcademicReportSchema
         $datasets['sections']['fields']['enrollment_status']['choices'] = $registrationChoices;
         $datasets['applications']['fields']['status']['choices'] = [
             'submitted' => 'Submitted', 'accepted' => 'Accepted', 'rejected' => 'Rejected',
-            'matriculated' => 'Matriculated',
+            'withdrawn' => 'Withdrawn', 'matriculated' => 'Matriculated',
         ];
         $datasets['applications']['fields']['submission_channel']['choices'] = [
             'direct' => 'Direct staff entry', 'form' => 'Application form',

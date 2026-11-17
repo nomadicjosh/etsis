@@ -561,17 +561,30 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
             $intake = array_reverse($intake);
         }
         if ($allowed("sis:admissions:manage")) {
+            $q = $this->sql->quote(...);
+            $statuses = array_map(
+                static fn(\Domain\Admissions\Enum\ApplicationStatus $status): string => $status->value,
+                \Domain\Admissions\Enum\ApplicationStatus::cases()
+            );
+            $totals = $this->sql->fetch(
+                'SELECT ' . $q('status') . ', COUNT(*) AS ' . $q('n')
+                . ' FROM ' . $q('sis_applications') . ' WHERE ' . $q('status')
+                . ' IN (' . implode(', ', array_fill(0, count($statuses), '?')) . ') GROUP BY ' . $q('status'),
+                $statuses,
+                count($statuses)
+            );
+            $counts = array_column($totals, 'n', 'status');
             $cards[] = [
                 "label" => "Applications to review",
-                "value" => $this->count("sis_applications", ["status" => "submitted"]),
+                "value" => (int) ($counts['submitted'] ?? 0),
                 "caption" => "Ready for an admissions decision",
                 "icon" => "inbox",
                 "destination" => "applications",
             ];
-            foreach (["submitted", "accepted", "rejected", "matriculated"] as $status) {
+            foreach ($statuses as $status) {
                 $pipeline[] = [
                     "label" => ucfirst($status),
-                    "value" => $this->count("sis_applications", ["status" => $status]),
+                    "value" => (int) ($counts[$status] ?? 0),
                 ];
             }
         }
