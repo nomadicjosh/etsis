@@ -22,6 +22,15 @@ final class AdmissionDecision extends EventSourcedAggregate
     private ?array $submission = null;
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
+        if (array_key_exists('admission_evidence', $event->metadata())) {
+            if (
+                !$event instanceof AdmissionWasDecided
+                && !$event instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected
+            ) {
+                throw new CorruptHistoryException();
+            }
+            \Domain\Admissions\ValueObject\AdmissionEvidence::validate($event->metaParam('admission_evidence'));
+        }
         if (
             !$event->aggregateId()->equals($this->aggregateId()) ||
             $event->playhead() !== $this->playhead() + 1

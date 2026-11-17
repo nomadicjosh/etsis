@@ -36,6 +36,7 @@ final readonly class AdmissionDocumentService
         private AuditTrail $audit,
         private Clock $clock,
         private AccessRepository $permissions,
+        private AdmissionDecisionLedger $decisions,
     ) {
     }
     private function at(): string
@@ -99,7 +100,10 @@ final readonly class AdmissionDocumentService
                 'status' => $row['status'], 'version' => (int) $row['version'],
                 'created_at' => $row['created_at'], 'expires_at' => $row['expires_at'],
                 'held' => $staff && (int) $row['held'] === 1,
+                'retained_evidence' => $staff && ($meta['evidence_decisions'] ?? []) !== [],
+                'can_select_evidence' => $staff && $row['status'] === 'ready' && $row['expires_at'] > $this->at(),
                 'can_purge' => $canRetain && (int) $row['held'] === 0 && $row['expires_at'] <= $this->at()
+                    && ($meta['evidence_decisions'] ?? []) === []
                     && !in_array($row['status'], ['purging', 'purged'], true),
                 'can_download' => $row['status'] === 'ready' && ($staff || $row['expires_at'] > $this->at())];
         }
@@ -371,6 +375,15 @@ final readonly class AdmissionDocumentService
     /** @param array<string,mixed> $row */
     private function purgeEligible(array $row, int $version): void
     {
+        if (
+            ($this->metadata($row)['evidence_decisions'] ?? []) !== []
+            || $this->decisions->retainsDocument(
+                $this->admissions->application(new EntityId($row['application_id'])),
+                new EntityId($row['id'])
+            )
+        ) {
+            throw new ConcurrentModificationException('This file is retained admissions-decision evidence.');
+        }
         if (
             (int) $row['version'] !== $version || (int) $row['held'] !== 0 || $row['expires_at'] > $this->at()
             || in_array($row['status'], ['purging', 'purged'], true)

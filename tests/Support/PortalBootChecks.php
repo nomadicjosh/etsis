@@ -64,6 +64,41 @@ $app->delegate(
     ),
 );
 $app->delegate(\Domain\Shared\Service\Clock::class, static fn() => $sis->clock);
+// Substitute fictional artifact IO before any decision service resolves its collaborators.
+$documentStorage = new class implements \Domain\Admissions\Service\AdmissionDocumentStorage {
+    private array $values = [];
+    public function put(
+        \Domain\Shared\ValueObject\EntityId $application,
+        \Domain\Shared\ValueObject\EntityId $id,
+        #[\SensitiveParameter] string $bytes
+    ): void {
+        $this->values[$application->value . ':' . $id->value] = $bytes;
+    }
+    public function read(
+        \Domain\Shared\ValueObject\EntityId $application,
+        \Domain\Shared\ValueObject\EntityId $id
+    ): string {
+        return $this->values[$application->value . ':' . $id->value];
+    }
+    public function remove(
+        \Domain\Shared\ValueObject\EntityId $application,
+        \Domain\Shared\ValueObject\EntityId $id
+    ): void {
+        unset($this->values[$application->value . ':' . $id->value]);
+    }
+};
+$app->delegate(\Domain\Admissions\Service\AdmissionDocumentStorage::class, static fn() => $documentStorage);
+$app->delegate(
+    \Domain\Admissions\Service\AdmissionDocumentPolicy::class,
+    static fn() => new \Domain\Admissions\Service\AdmissionDocumentPolicy(true, 365, true)
+);
+$app->delegate(\Domain\Admissions\Service\AdmissionDocumentScanner::class, static fn() =>
+    new class implements \Domain\Admissions\Service\AdmissionDocumentScanner {
+        public function scan(#[\SensitiveParameter] string $bytes): string
+        {
+            return 'clean';
+        }
+    });
 $app->delegate(\Domain\Portal\Service\CampusService::class, static fn() => $campus->service);
 $app->delegate(\Domain\Portal\Service\PortalPaymentService::class, static fn() => $campus->checkout);
 $app->delegate(
@@ -6220,40 +6255,6 @@ if ($app->router->match($recipientRequest)->getStatusCode() !== 403) {
 }
 
 // Fictional private uploads cross the real provider, multipart, CSRF and binary-download boundaries.
-$documentStorage = new class implements \Domain\Admissions\Service\AdmissionDocumentStorage {
-    private array $values = [];
-    public function put(
-        \Domain\Shared\ValueObject\EntityId $application,
-        \Domain\Shared\ValueObject\EntityId $id,
-        #[\SensitiveParameter] string $bytes
-    ): void {
-        $this->values[$application->value . ':' . $id->value] = $bytes;
-    }
-    public function read(
-        \Domain\Shared\ValueObject\EntityId $application,
-        \Domain\Shared\ValueObject\EntityId $id
-    ): string {
-        return $this->values[$application->value . ':' . $id->value];
-    }
-    public function remove(
-        \Domain\Shared\ValueObject\EntityId $application,
-        \Domain\Shared\ValueObject\EntityId $id
-    ): void {
-        unset($this->values[$application->value . ':' . $id->value]);
-    }
-};
-$app->delegate(\Domain\Admissions\Service\AdmissionDocumentStorage::class, static fn() => $documentStorage);
-$app->delegate(
-    \Domain\Admissions\Service\AdmissionDocumentPolicy::class,
-    static fn() => new \Domain\Admissions\Service\AdmissionDocumentPolicy(true, 365, true)
-);
-$app->delegate(\Domain\Admissions\Service\AdmissionDocumentScanner::class, static fn() =>
-    new class implements \Domain\Admissions\Service\AdmissionDocumentScanner {
-        public function scan(#[\SensitiveParameter] string $bytes): string
-        {
- return 'clean';
-        }
-    });
 $sis->access->actor = $educationOwner;
 $sis->access->staff = false;
 $sis->access->grants = [];
@@ -6329,4 +6330,35 @@ if (
     'until' => null, 'visible' => true])->getStatusCode() !== 403
 ) {
     throw new RuntimeException('Ordinary admissions authority changed applicant file access.');
+}
+
+
+// Retain a deliberate evidence choice through the same real reviewed-decision and history routes.
+$sis->access->staff = true;
+$documentRow = $sis->sql->one('sis_admission_documents', ['id' => $documentId->value]);
+$evidenceReviewResponse = $teachingPost('/sis/applications/' . $caseworkApplication->value . '/decision/review/', [
+    'decision' => 'accept', 'reason' => 'Fictional evidence-backed HTTP decision.',
+    'documents' => [['id' => $documentId->value, 'version' => (int) $documentRow['version']]],
+]);
+$evidenceReview = json_decode((string) $evidenceReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $evidenceReviewResponse->getStatusCode() !== 200
+    || ($evidenceReview['evidence'] ?? null) !== [['name' => 'fictional.pdf']]
+) {
+    throw new RuntimeException('The real decision review failed to bind private document selection.');
+}
+$evidenceCommitResponse = $teachingPost('/sis/applications/' . $caseworkApplication->value . '/decision/commit/', [
+    'review_token' => $evidenceReview['review_token'],
+]);
+$evidenceHistoryResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/applications/' . $caseworkApplication->value . '/decision/history/'
+)));
+$evidenceHistory = json_decode((string) $evidenceHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $evidenceCommitResponse->getStatusCode() !== 200 || $evidenceHistoryResponse->getStatusCode() !== 200
+    || ($evidenceHistory['items'][1]['evidence'] ?? null) !== [['name' => 'fictional.pdf']]
+    || str_contains((string) $evidenceHistoryResponse->getBody(), 'sha256')
+    || !str_contains($evidenceHistoryResponse->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('The real decision routes lost their retained-evidence or private-history contract.');
 }

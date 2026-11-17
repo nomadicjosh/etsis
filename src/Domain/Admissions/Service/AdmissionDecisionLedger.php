@@ -39,6 +39,10 @@ final readonly class AdmissionDecisionLedger
     {
         return $this->load($a)["root"]->playhead();
     }
+    public function retainsDocument(AdmissionApplication $application, EntityId $document): bool
+    {
+        return isset($this->load($application)['evidence_documents'][$document->value]);
+    }
     /** Bind a selected answer artifact to the actual submission, not merely its application row. */
     public function verifySubmission(AdmissionApplication $a, EntityId $submission): void
     {
@@ -121,6 +125,7 @@ final readonly class AdmissionDecisionLedger
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] array $evidence = [],
     ): array {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException("The admissions actor changed.");
@@ -162,7 +167,7 @@ final readonly class AdmissionDecisionLedger
                 "application_version" => $after->version,
                 "source" => $source,
             ],
-            ["__aggregate_type" => "admission_decision"],
+            ["__aggregate_type" => "admission_decision", 'admission_evidence' => $evidence],
         )->withPlayhead($version + 1);
         $root->acceptHistorical($event);
         $this->history->append(
@@ -203,6 +208,7 @@ final readonly class AdmissionDecisionLedger
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] array $evidence = [],
     ): array {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException("The correction actor changed.");
@@ -247,7 +253,7 @@ final readonly class AdmissionDecisionLedger
                 "application_version" => $after->version,
                 "source" => $source,
             ],
-            ["__aggregate_type" => "admission_decision"],
+            ["__aggregate_type" => "admission_decision", 'admission_evidence' => $evidence],
         )->withPlayhead($version + 1);
         $root->acceptHistorical($e);
         $this->history->append(
@@ -299,6 +305,9 @@ final readonly class AdmissionDecisionLedger
                 "source" => isset($p["source"]) ? AdmissionDecisionSchema::displaySource($p["source"]) : null,
                 "effective_at" => $observed ? null : $stored->context->effectiveAt?->format(DATE_ATOM),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
+                'evidence' => \Domain\Admissions\ValueObject\AdmissionEvidence::display(
+                    $e->metadata()['admission_evidence'] ?? null
+                ),
             ];
         }
         $base = [
@@ -328,6 +337,8 @@ final readonly class AdmissionDecisionLedger
         ?EntityId $receiptActor = null,
     ): array {
         $root = AdmissionDecision::root(new AdmissionDecisionId($a->id->value));
+        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget(25, 500);
+        $evidence = [];
         $cursor = null;
         $receipt = null;
         $birthActor = null;
@@ -338,9 +349,12 @@ final readonly class AdmissionDecisionLedger
         $at = null;
         $recordedAt = null;
         do {
-            $page = $this->history->page($this->stream($a->id), $cursor, 20);
+            $page = $budget->page($this->history, $this->stream($a->id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
+                foreach ($stored->event->metaParam('admission_evidence', []) as $file) {
+                    $evidence[$file['id']] = true;
+                }
                 if ($stored->event instanceof \Domain\Admissions\Event\AdmissionApplicationWasSubmitted) {
                     $submissionFact = \Domain\Admissions\ValueObject\SubmissionFact::fromEvent($stored);
                     $birthActor = $stored->context->actor?->value;
@@ -406,6 +420,7 @@ final readonly class AdmissionDecisionLedger
             "birth_at" => $birthAt,
             "birth_recorded_at" => $birthRecordedAt,
             'submission_fact' => $submissionFact,
+            'evidence_documents' => $evidence,
         ];
     }
     /**

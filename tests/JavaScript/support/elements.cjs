@@ -3,6 +3,7 @@ class Element {
     constructor(tag, attributes = {}) {
         this.tag = tag; this.attributes = attributes; this.children = []; this.events = {};
         this.value = attributes.value ?? ''; this.checked = !!attributes.checked;
+        this.hidden = !!attributes.hidden; this.id = attributes.id ?? ''; this.disabled = !!attributes.disabled;
         this.parent = null; this.files = []; this.name = attributes.name ?? ''; this.dataset = {}; this.text = ''; this.isConnected = true;
     }
     append(...children) {

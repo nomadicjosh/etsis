@@ -346,24 +346,24 @@ window.createWorkspacePeople = function (ui) {
             role: "group",
             "aria-label": "Application tasks",
         });
-        const extra = [button("Application history", () => decisionHistory(row))];
+        const extra = [button("Application history", () => mayLeave() && decisionHistory(row))];
         if (can("sis:person:manage"))
-            extra.push(button("Open person record", () => openPerson(person.id.value)));
+            extra.push(button("Open person record", () => mayLeave() && openPerson(person.id.value)));
         if (app.status === "submitted")
             actions.append(
-                button("Accept application", () => decide(row, true), "btn-primary"),
-                button("Reject application", () => decide(row, false), "btn-outline-danger"),
+                button("Accept application", () => mayLeave() && decide(row, true), "btn-primary"),
+                button("Reject application", () => mayLeave() && decide(row, false), "btn-outline-danger"),
             );
         if (app.status === "accepted")
-            actions.append(button("Matriculate student", () => matriculate(row), "btn-primary"));
+            actions.append(button("Matriculate student", () => mayLeave() && matriculate(row), "btn-primary"));
         if (
             ["accepted", "rejected"].includes(app.status) &&
             can("sis:admissions:manage") &&
             can("sis:admissions:correct")
         )
-            extra.push(button("Correct admissions decision", () => correctDecision(row, app.status)));
+            extra.push(button("Correct admissions decision", () => mayLeave() && correctDecision(row, app.status)));
         if (app.status === "matriculated")
-            extra.push(button("Matriculation history", () => matriculationHistory(row)));
+            extra.push(button("Matriculation history", () => mayLeave() && matriculationHistory(row)));
         actions.append(
             extra.length === 1
                 ? extra[0]
@@ -393,9 +393,12 @@ window.createWorkspacePeople = function (ui) {
         const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, row.id, { staff: true });
         body.append(documents);
         let background = null;
+        function mayLeave() {
+            return workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true);
+        }
         if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
-                () => workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true))),
+                mayLeave)),
         );
         body.append(casework);
         if (can('sis:person:manage')) {
@@ -453,70 +456,83 @@ window.createWorkspacePeople = function (ui) {
             { type: "submit", class: "btn btn-primary" },
             "Review admissions decision",
         );
-        form.append(review);
+        const evidenceHost = node("section", { class: "record-section" });
+        const evidenceEditor = window.createAdmissionDocuments({ node, request, task, notify });
+        const evidence = evidenceEditor.evidence(evidenceHost, row.id, preset.documents || []);
+        form.append(evidenceHost, review);
+        const controls = node("fieldset", {}, node("legend", { class: "visually-hidden" }, "Admissions decision details"));
+        controls.append(...form.childNodes);
+        form.append(controls);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
-                if (!form.reportValidity()) return;
-                const data = formData(form, fields);
-                const preview = await request(
-                    `/sis/applications/${row.id}/decision/review/`,
-                    "POST",
-                    { ...data, decision: accept ? "accept" : "reject" },
-                );
-                const confirmation = openDrawer(
-                    accept ? "Confirm acceptance" : "Confirm rejection",
-                    "REVIEWED DECISION",
-                );
-                const source = preview.source;
-                confirmation.append(
-                    button("Revise admissions decision", () =>
-                        decide(row, accept, data),
-                    ),
-                    node(
-                        "h3",
-                        {},
-                        `${preview.person.given_name} ${preview.person.family_name} · ${preview.status}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        `Institutional ID: ${preview.person.institutional_id}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        `${source.program_code} · ${source.program_title} · ${source.entry_term_code}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        source.submission
-                            ? `${source.submission.form_name} · submitted form revision ${source.submission.form_version}`
-                            : "This application was entered directly; no application-form submission is attached.",
-                    ),
-                    node(
-                        "p",
-                        {},
-                        `Effective on confirmation: ${preview.effective_on}. ${accept ? "Matriculation remains a separate reviewed action." : "This records a rejection; it does not create a student record."}`,
-                    ),
-                    button(
+                if (controls.disabled || !form.reportValidity()) return;
+                const data = { ...formData(form, fields), documents: evidence.selection() };
+                controls.disabled = true;
+                try {
+                    const preview = await request(
+                        `/sis/applications/${row.id}/decision/review/`,
+                        "POST",
+                        { ...data, decision: accept ? "accept" : "reject" },
+                    );
+                    if (!form.isConnected) return;
+                    const confirmation = openDrawer(
                         accept ? "Confirm acceptance" : "Confirm rejection",
-                        async () => {
-                            await request(
-                                `/sis/applications/${row.id}/decision/commit/`,
-                                "POST",
-                                { review_token: preview.review_token },
-                            );
-                            notify("Admissions decision recorded.");
-                            await application(row);
-                        },
-                        "btn-primary",
-                    ),
-                );
-                const heading = confirmation.querySelector("h3");
-                heading.tabIndex = -1;
-                heading.focus();
+                        "REVIEWED DECISION",
+                    );
+                    const source = preview.source;
+                    confirmation.append(
+                        button("Revise admissions decision", () =>
+                            decide(row, accept, data),
+                        ),
+                        node(
+                            "h3",
+                            {},
+                            `${preview.person.given_name} ${preview.person.family_name} · ${preview.status}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `Institutional ID: ${preview.person.institutional_id}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `${source.program_code} · ${source.program_title} · ${source.entry_term_code}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            source.submission
+                                ? `${source.submission.form_name} · submitted form revision ${source.submission.form_version}`
+                                : "This application was entered directly; no application-form submission is attached.",
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `Effective on confirmation: ${preview.effective_on}. ${accept ? "Matriculation remains a separate reviewed action." : "This records a rejection; it does not create a student record."}`,
+                        ),
+                        button(
+                            accept ? "Confirm acceptance" : "Confirm rejection",
+                            async () => {
+                                await request(
+                                    `/sis/applications/${row.id}/decision/commit/`,
+                                    "POST",
+                                    { review_token: preview.review_token },
+                                );
+                                notify("Admissions decision recorded.");
+                                if (heading.isConnected) await application(row);
+                            },
+                            "btn-primary",
+                        ),
+                    );
+                    const evidenceSummary = node("div");
+                    evidenceEditor.summary(evidenceSummary, preview.evidence ?? null);
+                    confirmation.insertBefore(evidenceSummary, confirmation.lastElementChild);
+                    const heading = confirmation.querySelector("h3");
+                    heading.tabIndex = -1;
+                    heading.focus();
+                } finally { controls.disabled = false; }
             }, review);
         });
         body.append(form);
@@ -546,72 +562,85 @@ window.createWorkspacePeople = function (ui) {
             { type: "submit", class: "btn btn-primary" },
             "Review admissions correction",
         );
-        form.append(review);
+        const evidenceHost = node("section", { class: "record-section" });
+        const evidenceEditor = window.createAdmissionDocuments({ node, request, task, notify });
+        const evidence = evidenceEditor.evidence(evidenceHost, row.id, preset.documents || []);
+        form.append(evidenceHost, review);
+        const controls = node("fieldset", {}, node("legend", { class: "visually-hidden" }, "Admissions decision details"));
+        controls.append(...form.childNodes);
+        form.append(controls);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
-                if (!form.reportValidity()) return;
-                const data = formData(form, fields);
-                const preview = await request(
-                    `/sis/applications/${row.id}/decision/correction/review/`,
-                    "POST",
-                    {
-                        ...data,
-                        decision: target === "accepted" ? "accept" : "reject",
-                    },
-                );
-                const confirmation = openDrawer(
-                    "Confirm admissions correction",
-                    "REVIEWED CORRECTION",
-                );
-                confirmation.append(
-                    button("Revise admissions correction", () =>
-                        correctDecision(row, currentStatus, data),
-                    ),
-                    node(
-                        "h3",
-                        {},
-                        `${preview.before.status} → ${preview.status}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        `${preview.person.given_name} ${preview.person.family_name} · ${preview.person.institutional_id}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        `${preview.source.program_code} · ${preview.source.program_title} · ${preview.source.entry_term_code}`,
-                    ),
-                    node(
-                        "p",
-                        {},
-                        preview.before.history_recorded
-                            ? "The previous recorded outcome remains in history. This correction takes effect on confirmation."
-                            : "The earlier decision was not recorded. Its current status will be observed before this correction; no earlier decision date will be invented.",
-                    ),
-                    node(
-                        "p",
-                        {},
-                        `Effective on confirmation: ${preview.effective_on}`,
-                    ),
-                    button(
-                        "Confirm admissions correction",
-                        async () => {
-                            await request(
-                                `/sis/applications/${row.id}/decision/correction/commit/`,
-                                "POST",
-                                { review_token: preview.review_token },
-                            );
-                            notify("Admissions correction recorded.");
-                            await application(row);
+                if (controls.disabled || !form.reportValidity()) return;
+                const data = { ...formData(form, fields), documents: evidence.selection() };
+                controls.disabled = true;
+                try {
+                    const preview = await request(
+                        `/sis/applications/${row.id}/decision/correction/review/`,
+                        "POST",
+                        {
+                            ...data,
+                            decision: target === "accepted" ? "accept" : "reject",
                         },
-                        "btn-primary",
-                    ),
-                );
-                const heading = confirmation.querySelector("h3");
-                heading.tabIndex = -1;
-                heading.focus();
+                    );
+                    if (!form.isConnected) return;
+                    const confirmation = openDrawer(
+                        "Confirm admissions correction",
+                        "REVIEWED CORRECTION",
+                    );
+                    confirmation.append(
+                        button("Revise admissions correction", () =>
+                            correctDecision(row, currentStatus, data),
+                        ),
+                        node(
+                            "h3",
+                            {},
+                            `${preview.before.status} → ${preview.status}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `${preview.person.given_name} ${preview.person.family_name} · ${preview.person.institutional_id}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `${preview.source.program_code} · ${preview.source.program_title} · ${preview.source.entry_term_code}`,
+                        ),
+                        node(
+                            "p",
+                            {},
+                            preview.before.history_recorded
+                                ? "The previous recorded outcome remains in history. This correction takes effect on confirmation."
+                                : "The earlier decision was not recorded. Its current status will be observed before this correction; no earlier decision date will be invented.",
+                        ),
+                        node(
+                            "p",
+                            {},
+                            `Effective on confirmation: ${preview.effective_on}`,
+                        ),
+                        button(
+                            "Confirm admissions correction",
+                            async () => {
+                                await request(
+                                    `/sis/applications/${row.id}/decision/correction/commit/`,
+                                    "POST",
+                                    { review_token: preview.review_token },
+                                );
+                                notify("Admissions correction recorded.");
+                                if (heading.isConnected) await application(row);
+                            },
+                            "btn-primary",
+                        ),
+                    );
+                    const evidenceSummary = node("div");
+                    evidenceEditor.summary(evidenceSummary, preview.evidence ?? null);
+                    confirmation.insertBefore(evidenceSummary, confirmation.lastElementChild);
+                    const heading = confirmation.querySelector("h3");
+                    heading.tabIndex = -1;
+                    heading.focus();
+                } finally { controls.disabled = false; }
             }, review);
         });
         body.append(form);
@@ -718,6 +747,7 @@ window.createWorkspacePeople = function (ui) {
                             : `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}.`,
                     ),
                 );
+                if (!observed) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
                 body.append(section);
             }
             body.append(

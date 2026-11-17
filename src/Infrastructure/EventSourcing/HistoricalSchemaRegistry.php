@@ -855,6 +855,16 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'admission_evidence') {
+                    if (
+                        !in_array($class, [\Domain\Admissions\Event\AdmissionWasDecided::class,
+                        \Domain\Admissions\Event\AdmissionDecisionWasCorrected::class], true)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Admissions\ValueObject\AdmissionEvidence::validate($value);
+                    continue;
+                }
                 if ($name === 'pricing_basis') {
                     if (
                         $class !== \Domain\Finance\Event\BillingRuleWasDefined::class

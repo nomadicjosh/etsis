@@ -3,6 +3,70 @@
     'use strict';
     let sequence = 0;
     window.createAdmissionDocuments = ({ node, request, task, notify }) => ({
+        summary(container, evidence) {
+            const section = node('section', { class: 'record-section' }, node('h4', { class: 'h6' }, 'Decision evidence'));
+            if (evidence?.length) section.append(node('ul', {}, ...evidence.map(file => node('li', { class: 'text-break private-text' }, file.name))));
+            else section.append(node('p', {}, evidence === null ? 'Earlier document evidence was not recorded.' : 'No uploaded files were selected for this decision.'));
+            container.append(section);
+        },
+        evidence(container, application, selected = []) {
+            const choices = new Map(selected.map(file => [file.id, { id: file.id, version: file.version }]));
+            const content = node('div', { hidden: true, id: `decision-evidence-${++sequence}`, class: 'mt-2' });
+            const status = node('p', { role: 'status', 'aria-atomic': 'true', class: 'form-text' });
+            const toggle = node('button', { type: 'button', class: 'btn btn-outline-secondary',
+                'aria-expanded': 'false', 'aria-controls': content.id }, 'Choose evidence');
+            let generation = 0, loading = false, failed = false, files = null;
+            const count = () => { status.textContent = `${choices.size} of 10 files selected. Confirmation retains these files as decision evidence.`; };
+            async function load() {
+                const ticket = ++generation; loading = true; failed = false; toggle.disabled = true;
+                status.textContent = 'Loading evidence choices…';
+                try {
+                    const data = await request(`/sis/applications/${application}/documents/`);
+                    if (!container.isConnected || ticket !== generation) return;
+                    files = data.items;
+                    const group = node('fieldset', {}, node('legend', { class: 'h6' }, 'Files used for this decision'));
+                    group.append(node('p', { class: 'form-text' }, 'Choose available files you relied on, up to ten. A safety scan does not verify a document’s authenticity.'));
+                    for (const file of files) {
+                        const id = `evidence-choice-${++sequence}`, prior = choices.get(file.id);
+                        const checkbox = node('input', { type: 'checkbox', id, class: 'form-check-input',
+                            checked: !!prior, disabled: !file.can_select_evidence && !prior });
+                        const row = node('div', { class: 'form-check mb-3' }, checkbox,
+                            node('label', { for: id, class: 'form-check-label text-break' }, file.name));
+                        if (!file.can_select_evidence) row.append(node('p', { class: 'form-text' }, 'Not available for a new decision.'));
+                        if (prior && prior.version !== file.version) row.append(node('p', { class: 'form-text' }, 'File controls changed. Clear and reselect this file to review it again.'));
+                        if (file.can_download) row.append(node('a', { href: `/sis/applications/${application}/documents/${file.id}/download/`,
+                            class: 'btn btn-link btn-sm', download: '', 'aria-label': `Download ${file.name}` }, 'Download'));
+                        checkbox.addEventListener('change', () => {
+                            if (!checkbox.checked) choices.delete(file.id);
+                            else if (file.can_select_evidence && choices.size < 10) choices.set(file.id, { id: file.id, version: file.version });
+                            else { checkbox.checked = false; status.textContent = 'Choose up to ten available files.'; return; }
+                            count();
+                        });
+                        group.append(row);
+                    }
+                    if (!files.length) group.append(node('p', {}, 'No uploaded documents are available.'));
+                    if ([...choices.keys()].some(id => !files.some(file => file.id === id))) group.append(node('p', { class: 'alert alert-warning' }, 'An earlier selected file is no longer available. Clear the selection and choose again.'));
+                    group.append(node('button', { type: 'button', class: 'btn btn-link', onclick: () => {
+                        choices.clear(); group.querySelectorAll('input').forEach(input => { input.checked = false; }); count();
+                    } }, 'Clear selection'));
+                    content.replaceChildren(group); count();
+                } catch (error) { failed = true; status.textContent = 'Evidence choices could not be loaded. Choose evidence to retry.'; throw error; }
+                finally { loading = false; toggle.disabled = false; }
+            }
+            toggle.addEventListener('click', () => {
+                if (loading) return;
+                if (!content.hidden && !failed) { content.hidden = true; toggle.setAttribute('aria-expanded', 'false'); return; }
+                content.hidden = false; toggle.setAttribute('aria-expanded', 'true'); task(load, toggle);
+            });
+            container.append(toggle, content, status); count();
+            return { selection: () => {
+                if (loading || failed) throw new Error('Load and review the evidence choices before continuing.');
+                if (files && [...choices.values()].some(choice => !files.some(file => file.id === choice.id && file.version === choice.version && file.can_select_evidence))) {
+                    throw new Error('Clear unavailable or changed evidence choices and select current files.');
+                }
+                return [...choices.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+            } };
+        },
         mount(container, application, { staff = false, toggleTarget = null, label = '' } = {}) {
             const base = `${staff ? '/sis' : '/portal/api'}/applications/${application}/documents/`;
             const content = node('section', { hidden: true, class: 'mt-3', 'aria-label': 'Application documents' });
@@ -89,7 +153,9 @@
                         }), event.currentTarget); },
                     }, item.status === 'quarantined' ? 'Retry scan' : 'Quarantine for recheck'));
                     if (staff && item.status !== 'purging') card.append(node('p', { class: 'form-text' }, item.applicant_visible ? 'Shared with applicant' : 'Staff only'));
+                    if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Used in an admissions decision. Ordinary file removal is unavailable.'));
                     if (staff) card.append(node('p', { class: 'form-text' }, `Retention ends ${item.expires_at.slice(0, 10)} UTC${item.held ? ' · Hold in place' : ''}`));
+                    if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Retained for an admissions decision. Ordinary file removal is unavailable.'));
                     if (data.can_retain && item.status !== 'purging') {
                         const settingsId = `document-controls-${++sequence}`;
                         const manage = node('button', { type: 'button', class: 'btn btn-outline-secondary ms-2',

@@ -184,7 +184,7 @@
                 leave = () => {
                     if (pending) { status.textContent = 'Wait for the current save before starting a message.'; return false; }
                     if (JSON.stringify(values()) !== initialValues || claim.value !== 'keep') {
-                        status.textContent = 'Save casework before starting a message. Your draft is still here.';
+                        status.textContent = 'Save casework before starting another task. Your draft is still here.';
                         save.focus(); return false;
                     }
                     return true;

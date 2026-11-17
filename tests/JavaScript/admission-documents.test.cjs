@@ -123,3 +123,56 @@ test('refresh disables edits and blocks leaving until the private response finis
     assert.equal(f.guard.beforeLeave(), true);
     assert.notEqual(f.find(element => element.tag === 'fieldset').disabled, true);
 });
+
+
+async function evidenceFixture(data, selected = [], callback = null) {
+    const root = new Element('root'), window = {}, calls = [], tasks = [], errors = [];
+    const api = { node, notify() {}, request: async (...args) => {
+        calls.push(args); return callback ? callback(...args) : data;
+    }, task: run => { const pending = Promise.resolve().then(run).catch(error => errors.push(error)); tasks.push(pending); return pending; } };
+    vm.runInNewContext(source, { window, FormData: Multipart }, { timeout: 500 });
+    const factory = window.createAdmissionDocuments(api), picker = factory.evidence(root, 'application', selected);
+    return { root, factory, picker, calls, errors, flush: async () => { await Promise.all([...tasks]); } };
+}
+
+test('decision evidence loads on demand and includes only deliberate available choices', async () => {
+    const f = await evidenceFixture({ items: [
+        { id: 'first', name: '<img src=x>', version: 3, can_select_evidence: true },
+        { id: 'waiting', name: 'fictional pending.pdf', version: 1, can_select_evidence: false },
+    ] });
+    assert.equal(f.calls.length, 0); assert.equal(f.picker.selection().length, 0);
+    f.root.children[0].events.click(); await f.flush();
+    const inputs = walk(f.root).filter(element => element.tag === 'input');
+    assert.equal(inputs[1].attributes.disabled, true);
+    inputs[0].checked = true; inputs[0].events.change();
+    assert.deepEqual(JSON.parse(JSON.stringify(f.picker.selection())), [{ id: 'first', version: 3 }]);
+    assert.equal(walk(f.root).some(element => element.tag === 'img'), false);
+});
+
+test('revising an evidence choice requires explicit reselection after file controls change', async () => {
+    const f = await evidenceFixture({ items: [{ id: 'first', name: 'fictional.pdf', version: 4, can_select_evidence: true }] }, [{ id: 'first', version: 3 }]);
+    f.root.children[0].events.click(); await f.flush();
+    assert.throws(() => f.picker.selection(), /changed|reselect|review/i);
+    const input = walk(f.root).find(element => element.tag === 'input');
+    input.checked = false; input.events.change(); input.checked = true; input.events.change();
+    assert.equal(f.picker.selection()[0].version, 4);
+});
+
+test('failed or pending evidence reads cannot silently turn retained selections into an empty decision', async () => {
+    let finish;
+    const f = await evidenceFixture({}, [{ id: 'first', version: 3 }], () => new Promise(resolve => { finish = resolve; }));
+    f.root.children[0].events.click(); await Promise.resolve(); await Promise.resolve();
+    assert.throws(() => f.picker.selection(), /wait|load/i);
+    finish({ items: [] }); await f.flush();
+    assert.throws(() => f.picker.selection(), /changed|reselect|review/i);
+    const clear = walk(f.root).find(element => element.tag === 'button' && element.textContent === 'Clear selection');
+    clear.attributes.onclick(); assert.equal(f.picker.selection().length, 0);
+});
+
+test('decision summaries distinguish earlier unknown evidence from an explicit empty selection', async () => {
+    const f = await evidenceFixture({ items: [] });
+    const summary = new Element('root'); f.factory.summary(summary, null);
+    assert.match(summary.textContent, /Earlier document evidence was not recorded/);
+    const empty = new Element('root'); f.factory.summary(empty, []);
+    assert.match(empty.textContent, /No uploaded files were selected/);
+});

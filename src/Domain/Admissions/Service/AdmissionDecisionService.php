@@ -31,12 +31,17 @@ final readonly class AdmissionDecisionService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private AdmissionEvidenceService $evidence,
     ) {
     }
 
     /** @return array<string,mixed> */
-    public function review(EntityId $application, bool $accept, #[\SensitiveParameter] string $reason): array
-    {
+    public function review(
+        EntityId $application,
+        bool $accept,
+        #[\SensitiveParameter] string $reason,
+        array $documents = []
+    ): array {
         $actor = $this->access->requirePermission("sis:admissions:manage");
         if (
             !mb_check_encoding($reason, "UTF-8") ||
@@ -49,10 +54,11 @@ final readonly class AdmissionDecisionService
             ]);
         }
         $route = $this->admissions->application($application);
-        return $this->transactions->run(function () use ($route, $actor, $accept, $reason): array {
+        return $this->transactions->run(function () use ($route, $actor, $accept, $reason, $documents): array {
             $a = $this->lock($route, $actor);
             $this->eligible($a);
             $source = $this->context->source($a);
+            $files = $this->evidence->capture($a, $documents);
             $person = $this->admissions->person($a->personId);
             $token = $this->cipher->seal(
                 json_encode(
@@ -62,6 +68,7 @@ final readonly class AdmissionDecisionService
                         "actor" => $actor->value,
                         "operation" => EntityId::generate()->value,
                         "accept" => $accept,
+                        "evidence" => $files,
                         "reason" => trim($reason),
                         "context" => $this->context($a, $source),
                         "expires" => $this->clock->now()->getTimestamp() + 1200,
@@ -69,6 +76,7 @@ final readonly class AdmissionDecisionService
                     JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
                 ),
             );
+            $this->authorize($actor);
             return [
                 "status" => $accept ? "accepted" : "rejected",
                 "source" => AdmissionDecisionSchema::displaySource($source),
@@ -77,6 +85,7 @@ final readonly class AdmissionDecisionService
                     "family_name" => $person->familyName,
                     "institutional_id" => $person->institutionalId->value,
                 ],
+                "evidence" => \Domain\Admissions\ValueObject\AdmissionEvidence::display($files),
                 "review_token" => $token,
                 "effective_on" => $this->clock->now()->format("Y-m-d"),
             ];
@@ -93,7 +102,7 @@ final readonly class AdmissionDecisionService
             $p = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($p) ||
-                count($p) !== 8 ||
+                !in_array(count($p), [8, 9], true) ||
                 ($p["purpose"] ?? null) !== "admission-decision.v1" ||
                 ($p["application"] ?? null) !== $application->value ||
                 ($p["actor"] ?? null) !== $actor->value ||
@@ -104,6 +113,9 @@ final readonly class AdmissionDecisionService
                 !is_int($p["expires"] ?? null)
             ) {
                 throw new \InvalidArgumentException();
+            }
+            if (array_key_exists("evidence", $p)) {
+                \Domain\Admissions\ValueObject\AdmissionEvidence::validate($p["evidence"]);
             }
             $operation = new EntityId($p["operation"]);
         } catch (\Throwable) {
@@ -116,7 +128,11 @@ final readonly class AdmissionDecisionService
             $a = $this->lock($route, $actor);
             $receipt = $this->ledger->receipt($a, $operation, $actor);
             if ($receipt !== null) {
+                $this->authorize($actor);
                 return $receipt;
+            }
+            if (!array_key_exists("evidence", $p)) {
+                throw new ConcurrentModificationException("Review the current decision form before confirming.");
             }
             $this->eligible($a);
             $source = $this->context->source($a);
@@ -128,14 +144,22 @@ final readonly class AdmissionDecisionService
                     "This decision review expired or its context changed. Review it again.",
                 );
             }
+            $selection = array_map(static fn(array $file): array => [
+                "id" => $file["id"], "version" => $file["version"],
+            ], $p["evidence"]);
+            if ($this->evidence->capture($a, $selection) !== $p["evidence"]) {
+                throw new ConcurrentModificationException("The selected evidence changed. Review the decision again.");
+            }
+            $this->evidence->retain($p["evidence"], $operation);
             $after = $a->decide($p["accept"]);
             $this->admissions->saveDecision($after, $a->version);
-            $result = $this->ledger->record($a, $after, $source, $operation, $actor, $p["reason"]);
+            $result = $this->ledger->record($a, $after, $source, $operation, $actor, $p["reason"], $p["evidence"]);
             $this->audit->record(
                 $actor,
                 $p["accept"] ? "admissions.accepted" : "admissions.rejected",
                 $a->id,
             );
+            $this->authorize($actor);
             return $result;
         });
     }

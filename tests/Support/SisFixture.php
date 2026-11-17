@@ -905,9 +905,21 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlSubmissionProjection($this->sql),
         );
     }
+    public function admissionEvidenceService(): \Domain\Admissions\Service\AdmissionEvidenceService
+    {
+        return new \Domain\Admissions\Service\AdmissionEvidenceService(
+            new \Infrastructure\Persistence\Repository\SqlAdmissionDocumentRepository($this->sql),
+            new \Domain\Admissions\Service\AdmissionDocumentContent(
+                $this->dropCipher,
+                new \Infrastructure\Admissions\PrivateAdmissionDocumentStorage($this->dropCipher)
+            ),
+            $this->clock
+        );
+    }
     public function correctionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+        ?\Domain\Admissions\Service\AdmissionEvidenceService $evidence = null,
     ): \Domain\Admissions\Service\AdmissionCorrectionService {
         return new \Domain\Admissions\Service\AdmissionCorrectionService(
             $repository ?? $this->admissions,
@@ -919,11 +931,13 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
+            $evidence ?? $this->admissionEvidenceService(),
         );
     }
     public function decisionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+        ?\Domain\Admissions\Service\AdmissionEvidenceService $evidence = null,
     ): \Domain\Admissions\Service\AdmissionDecisionService {
         return new \Domain\Admissions\Service\AdmissionDecisionService(
             $repository ?? $this->admissions,
@@ -935,6 +949,7 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
+            $evidence ?? $this->admissionEvidenceService(),
         );
     }
     /** Explicit current-state decision fixture predating tracked acceptance/rejection. */

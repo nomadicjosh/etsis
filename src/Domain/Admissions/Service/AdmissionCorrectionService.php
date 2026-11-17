@@ -31,11 +31,16 @@ final readonly class AdmissionCorrectionService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private AdmissionEvidenceService $evidence,
     ) {
     }
     /** @return array<string,mixed> */
-    public function review(EntityId $application, bool $accept, #[\SensitiveParameter] string $reason): array
-    {
+    public function review(
+        EntityId $application,
+        bool $accept,
+        #[\SensitiveParameter] string $reason,
+        array $documents = []
+    ): array {
         $actor = $this->actor();
         if (
             !mb_check_encoding($reason, "UTF-8") ||
@@ -48,10 +53,11 @@ final readonly class AdmissionCorrectionService
             ]);
         }
         $route = $this->admissions->application($application);
-        return $this->transactions->run(function () use ($route, $actor, $accept, $reason): array {
+        return $this->transactions->run(function () use ($route, $actor, $accept, $reason, $documents): array {
             $a = $this->lock($route, $actor);
             $this->eligible($a, $accept);
             $source = $this->context->source($a);
+            $files = $this->evidence->capture($a, $documents);
             $person = $this->admissions->person($a->personId);
             $token = $this->cipher->seal(
                 json_encode(
@@ -61,6 +67,7 @@ final readonly class AdmissionCorrectionService
                         "actor" => $actor->value,
                         "operation" => EntityId::generate()->value,
                         "accept" => $accept,
+                        "evidence" => $files,
                         "reason" => trim($reason),
                         "context" => $this->fingerprint($a, $source),
                         "expires" => $this->clock->now()->getTimestamp() + 1200,
@@ -68,6 +75,7 @@ final readonly class AdmissionCorrectionService
                     JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
                 ),
             );
+            $this->authorize($actor);
             return [
                 "before" => $this->ledger->current($a),
                 "status" => $accept ? "accepted" : "rejected",
@@ -78,6 +86,7 @@ final readonly class AdmissionCorrectionService
                     "family_name" => $person->familyName,
                     "institutional_id" => $person->institutionalId->value,
                 ],
+                "evidence" => \Domain\Admissions\ValueObject\AdmissionEvidence::display($files),
                 "review_token" => $token,
             ];
         });
@@ -93,7 +102,7 @@ final readonly class AdmissionCorrectionService
             $p = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($p) ||
-                count($p) !== 8 ||
+                !in_array(count($p), [8, 9], true) ||
                 ($p["purpose"] ?? null) !== "admission-correction.v1" ||
                 ($p["application"] ?? null) !== $application->value ||
                 ($p["actor"] ?? null) !== $actor->value ||
@@ -104,6 +113,9 @@ final readonly class AdmissionCorrectionService
                 !is_int($p["expires"] ?? null)
             ) {
                 throw new \InvalidArgumentException();
+            }
+            if (array_key_exists("evidence", $p)) {
+                \Domain\Admissions\ValueObject\AdmissionEvidence::validate($p["evidence"]);
             }
             $operation = new EntityId($p["operation"]);
         } catch (\Throwable) {
@@ -116,7 +128,11 @@ final readonly class AdmissionCorrectionService
             $a = $this->lock($route, $actor);
             $receipt = $this->ledger->receipt($a, $operation, $actor);
             if ($receipt !== null) {
+                $this->authorize($actor);
                 return $receipt;
+            }
+            if (!array_key_exists("evidence", $p)) {
+                throw new ConcurrentModificationException("Review the current decision form before confirming.");
             }
             $this->eligible($a, $p["accept"]);
             $source = $this->context->source($a);
@@ -128,12 +144,26 @@ final readonly class AdmissionCorrectionService
                     "This correction review expired or its context changed. Review it again.",
                 );
             }
+            $selection = array_map(static fn(array $file): array => [
+                "id" => $file["id"], "version" => $file["version"],
+            ], $p["evidence"]);
+            if ($this->evidence->capture($a, $selection) !== $p["evidence"]) {
+                throw new ConcurrentModificationException("The selected evidence changed. Review the decision again.");
+            }
+            $this->evidence->retain($p["evidence"], $operation);
             $after = $a->correctDecision($p["accept"]);
             $this->admissions->saveCorrection($a, $after);
-            $result = $this->ledger->correct($a, $after, $source, $operation, $actor, $p["reason"]);
+            $result = $this->ledger->correct($a, $after, $source, $operation, $actor, $p["reason"], $p["evidence"]);
             $this->audit->record($actor, "admissions.decision_corrected", $a->id);
+            $this->authorize($actor);
             return $result;
         });
+    }
+    private function authorize(EntityId $actor): void
+    {
+        if ($this->actor()->value !== $actor->value) {
+            throw new AccessDeniedException("The correction actor changed.");
+        }
     }
     private function actor(): EntityId
     {
@@ -147,9 +177,7 @@ final readonly class AdmissionCorrectionService
     {
         $this->admissions->lockPerson($route->personId);
         $this->admissions->lockApplication($route->id);
-        if ($this->actor()->value !== $actor->value) {
-            throw new AccessDeniedException("The correction actor changed.");
-        }
+        $this->authorize($actor);
         $a = $this->admissions->application($route->id);
         if (
             $a->personId->value !== $route->personId->value ||
@@ -161,9 +189,7 @@ final readonly class AdmissionCorrectionService
         if (in_array($a->status, [ApplicationStatus::Accepted, ApplicationStatus::Rejected], true)) {
             $this->catalogs->lockTerm($a->entryTermId);
             $this->catalogs->lockProgram($a->programId);
-            if ($this->actor()->value !== $actor->value) {
-                throw new AccessDeniedException("The correction actor changed.");
-            }
+            $this->authorize($actor);
         }
         $this->ledger->verify($a);
         return $a;

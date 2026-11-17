@@ -25,7 +25,7 @@ test('applicant messaging cannot discard edited casework or assignment choices',
     assert.equal(f.guard.beforeLeave(), true);
     f.control('private_notes').value = 'Fictional unsaved staff note.';
     assert.equal(f.guard.beforeLeave(), false);
-    assert.match(f.root.textContent, /Save casework before starting a message/);
+    assert.match(f.root.textContent, /Save casework before starting another task/);
     assert.equal(f.control('private_notes').value, 'Fictional unsaved staff note.');
     f.control('private_notes').value = '';
     assert.equal(f.guard.beforeLeave(), true);

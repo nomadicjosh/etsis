@@ -60,7 +60,8 @@ final class AdmissionDocumentsTest extends TestCase
             $s->transactions,
             $s->audit,
             $s->clock,
-            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql)
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $s->decisionLedger()
         );
         $scanner = new class implements AdmissionDocumentScanner {
             public string $verdict = 'clean';
@@ -85,6 +86,225 @@ final class AdmissionDocumentsTest extends TestCase
         );
         return [$f, $service, $worker, $repo, $storage, $scanner, $root];
     }
+    private function evidence(
+        AdmissionCaseworkFixture $f,
+        \Domain\Admissions\Service\AdmissionDocumentStorage $storage
+    ): \Domain\Admissions\Service\AdmissionEvidenceService {
+        return new \Domain\Admissions\Service\AdmissionEvidenceService(
+            new SqlAdmissionDocumentRepository($f->campus->sis->sql),
+            new \Domain\Admissions\Service\AdmissionDocumentContent($f->campus->cipher, $storage),
+            $f->campus->sis->clock
+        );
+    }
+
+    public function testSelectedDecisionEvidenceIsRetainedAtomicallyAndCannotBeDisposedEvenIfItsMarkerIsLost(): void
+    {
+        [$f, $documents, $worker, $repo, $storage] = $this->fixture(new AdmissionDocumentPolicy(true, 1, true));
+        $id = EntityId::generate();
+        $documents->upload($f->application, $id, 'fictional-evidence.pdf', self::PDF, false);
+        $worker->run();
+        $s = $f->campus->sis;
+        $decisions = $s->decisionService(evidence: $this->evidence($f, $storage));
+        $version = (int) $repo->find($id)['version'];
+        $before = $s->sql->rows('sis_history_events');
+        $review = $decisions->review(
+            $f->application,
+            true,
+            'Fictional decision.',
+            [['id' => $id->value, 'version' => $version]]
+        );
+        self::assertSame([['name' => 'fictional-evidence.pdf']], $review['evidence']);
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
+        self::assertSame($version, (int) $repo->find($id)['version']);
+        $older = json_decode($s->dropCipher->open($review['review_token']), true, flags: JSON_THROW_ON_ERROR);
+        unset($older['evidence']);
+        $olderToken = $s->dropCipher->seal(json_encode($older, JSON_THROW_ON_ERROR));
+        try {
+            $decisions->commit($f->application, $olderToken);
+            self::fail('An unconfirmed older review bypassed the current decision form.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $s->sql->rows('sis_history_events'));
+        }
+        $result = $decisions->commit($f->application, $review['review_token']);
+        self::assertSame($result, $decisions->commit($f->application, $olderToken));
+        $content = new \Domain\Admissions\Service\AdmissionDocumentContent($f->campus->cipher, $storage);
+        self::assertSame([$result['decision_id']], $content->metadata($repo->find($id))['evidence_decisions']);
+        self::assertTrue($documents->listing($f->application, true)['items'][0]['retained_evidence']);
+        self::assertFalse($documents->listing($f->application, false)['items'][0]['retained_evidence']);
+        $history = $decisions->history($f->application);
+        self::assertSame([['name' => 'fictional-evidence.pdf']], $history['items'][1]['evidence']);
+        self::assertStringNotContainsString('sha256', json_encode($history, JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString('fictional-evidence.pdf', json_encode($s->sql->rows('sis_history_events')));
+        $s->clock->time = $s->clock->now()->modify('+2 days');
+        $row = $repo->find($id);
+        $meta = $content->metadata($row);
+        unset($meta['evidence_decisions']);
+        // Simulate a missing projection marker. Disposal must still consult authoritative recorded decisions.
+        $repo->change($id, (int) $row['version'], $content->changes($row, [], $meta));
+        try {
+            $documents->reviewPurge($f->application, $id, (int) $repo->find($id)['version'], 'Fictional expiry.');
+            self::fail('A missing marker allowed decision evidence to be destroyed.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame(self::PDF, $storage->read($f->application, $id));
+        }
+        $before = $s->sql->rows('sis_history_events');
+        self::assertSame($result, $decisions->commit($f->application, $review['review_token']));
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
+    }
+
+    public function testCorrectionsSelectTheirOwnEvidenceWithoutRewritingOrReleasingOriginalFiles(): void
+    {
+        [$f, $documents, $worker, $repo, $storage] = $this->fixture();
+        $first = EntityId::generate();
+        $second = EntityId::generate();
+        foreach ([$first, $second] as $index => $id) {
+            $documents->upload($f->application, $id, 'fictional-' . $index . '.pdf', self::PDF, false);
+        }
+        $worker->run(2);
+        $s = $f->campus->sis;
+        $evidence = $this->evidence($f, $storage);
+        $decisions = $s->decisionService(evidence: $evidence);
+        $review = $decisions->review(
+            $f->application,
+            true,
+            'Fictional acceptance.',
+            [['id' => $first->value, 'version' => 3]]
+        );
+        $accepted = $decisions->commit($f->application, $review['review_token']);
+        $corrections = $s->correctionService(evidence: $evidence);
+        $s->access->staff = false;
+        $s->access->grants = ['sis:admissions:manage'];
+        try {
+            $corrections->review(
+                $f->application,
+                false,
+                'Fictional correction.',
+                [['id' => $second->value, 'version' => 3]]
+            );
+            self::fail('Ordinary admissions access allowed an evidence-backed correction.');
+        } catch (AccessDeniedException) {
+            self::assertSame(3, (int) $repo->find($second)['version']);
+        }
+        $s->access->staff = true;
+        $correction = $corrections->review(
+            $f->application,
+            false,
+            'Fictional correction.',
+            [['id' => $second->value, 'version' => 3]]
+        );
+        $corrected = $corrections->commit($f->application, $correction['review_token']);
+        self::assertSame('rejected', $corrected['status']);
+        $items = $decisions->history($f->application)['items'];
+        self::assertSame([['name' => 'fictional-0.pdf']], $items[1]['evidence']);
+        self::assertSame([['name' => 'fictional-1.pdf']], $items[2]['evidence']);
+        self::assertSame($accepted, $decisions->commit($f->application, $review['review_token']));
+        self::assertSame('rejected', $s->admissions->application($f->application)->status->value);
+        self::assertTrue($s->decisionLedger()->retainsDocument($s->admissions->application($f->application), $first));
+        self::assertTrue($s->decisionLedger()->retainsDocument($s->admissions->application($f->application), $second));
+    }
+
+    public function testChangedControlsScanExpiryOrBytesRejectAnUnconfirmedEvidenceReview(): void
+    {
+        foreach (['controls', 'scan', 'expiry', 'bytes'] as $change) {
+            [$f, $documents, $worker, $repo, $storage, , $root] = $this->fixture(
+                new AdmissionDocumentPolicy(true, 1, true)
+            );
+            $id = EntityId::generate();
+            $documents->upload($f->application, $id, 'fictional.pdf', self::PDF, false);
+            $worker->run();
+            $s = $f->campus->sis;
+            $decisions = $s->decisionService(evidence: $this->evidence($f, $storage));
+            $review = $decisions->review(
+                $f->application,
+                true,
+                'Fictional decision.',
+                [['id' => $id->value, 'version' => 3]]
+            );
+            match ($change) {
+                'controls' => $documents->retain($f->application, $id, 3, true),
+                'scan' => $documents->rescan($f->application, $id, 3),
+                'expiry' => $s->clock->time = $s->clock->now()->modify('+2 days'),
+                default => file_put_contents(
+                    $root . '/' . $f->application->value . '/' . $id->value . '.protected',
+                    'tampered'
+                ),
+            };
+            $before = $s->sql->rows('sis_history_events');
+            try {
+                $decisions->commit($f->application, $review['review_token']);
+                self::fail('An outdated or damaged evidence review was committed.');
+            } catch (ConcurrentModificationException | DomainException) {
+                self::assertSame($before, $s->sql->rows('sis_history_events'));
+                self::assertSame('submitted', $s->admissions->application($f->application)->status->value);
+            }
+        }
+    }
+
+    public function testFailedAuditOrRevokedAuthorityRollsBackEvidenceWithTheDecision(): void
+    {
+        foreach (['audit', 'authority'] as $failure) {
+            [$f, $documents, $worker, $repo, $storage] = $this->fixture();
+            $id = EntityId::generate();
+            $documents->upload($f->application, $id, 'fictional.pdf', self::PDF, false);
+            $worker->run();
+            $s = $f->campus->sis;
+            $audit = $this->createMock(\Domain\Audit\Repository\AuditTrail::class);
+            $audit->expects(self::once())->method('record')->willReturnCallback(static function () use (
+                $failure,
+                $s
+            ): void {
+                if ($failure === 'audit') {
+                    throw new \RuntimeException('Fictional required audit failure.');
+                }
+                $s->access->staff = false;
+                $s->access->grants = [];
+            });
+            $decisions = $s->decisionService(audit: $audit, evidence: $this->evidence($f, $storage));
+            $review = $decisions->review(
+                $f->application,
+                true,
+                'Fictional reason.',
+                [['id' => $id->value, 'version' => 3]]
+            );
+            $before = $repo->find($id);
+            $events = $s->sql->rows('sis_history_events');
+            try {
+                $decisions->commit($f->application, $review['review_token']);
+                self::fail('A failed decision retained evidence.');
+            } catch (\RuntimeException | AccessDeniedException) {
+                self::assertSame($before, $repo->find($id));
+                self::assertSame($events, $s->sql->rows('sis_history_events'));
+                self::assertSame('submitted', $s->admissions->application($f->application)->status->value);
+                self::assertSame(self::PDF, $storage->read($f->application, $id));
+            }
+        }
+    }
+
+    public function testForeignDuplicateAndUnscannedEvidenceChoicesAreRejectedWithoutWritingFacts(): void
+    {
+        [$f, $documents, , $repo, $storage] = $this->fixture();
+        $id = EntityId::generate();
+        $documents->upload($f->application, $id, 'fictional.pdf', self::PDF, false);
+        $s = $f->campus->sis;
+        $decisions = $s->decisionService(evidence: $this->evidence($f, $storage));
+        $otherPerson = $s->legacyPerson($s->user(), 'Fictional', 'Other applicant');
+        $otherApplication = $s->legacyApplication($otherPerson->id, $s->program, $s->term);
+        $foreign = EntityId::generate();
+        $documents->upload($otherApplication->id, $foreign, 'other-fictional.pdf', self::PDF, true);
+        foreach (
+            [[['id' => $id->value, 'version' => 1]], [['id' => $foreign->value, 'version' => 1]],
+            [['id' => $id->value, 'version' => 1], ['id' => $id->value, 'version' => 1]]] as $selected
+        ) {
+            try {
+                $decisions->review($f->application, true, 'Fictional decision.', $selected);
+                self::fail('Invalid evidence was accepted.');
+            } catch (ConcurrentModificationException | \Domain\Shared\Exception\ValidationException) {
+                self::assertSame([], $s->sql->rows('sis_history_events'));
+                self::assertSame(1, (int) $repo->find($id)['version']);
+            }
+        }
+    }
+
     public function testUploadIsEncryptedQuarantinedAndIdempotentUntilABackgroundScanAllowsDownload(): void
     {
         [$f, $service, $worker, $repo, $storage, $scanner, $root] = $this->fixture();
@@ -288,7 +508,8 @@ final class AdmissionDocumentsTest extends TestCase
             $s->transactions,
             $audit,
             $s->clock,
-            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql)
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $s->decisionLedger()
         );
         try {
             $service->upload($f->application, EntityId::generate(), 'fictional.pdf', self::PDF, false);

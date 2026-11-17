@@ -70,9 +70,14 @@ for (const accept of [true, false]) {
                         term_code: source.entry_term_code,
                     },
                 };
+            else if (path === `/sis/applications/${app}/documents/`)
+                result = { items: [{ id: id(9), name: 'Fictional transcript.pdf', version: 3,
+                    can_select_evidence: true, can_download: true }, { id: id(10), name: 'Pending scan.pdf', version: 1,
+                    can_select_evidence: false, can_download: false }] };
             else if (path.endsWith("/decision/review/"))
                 result = {
                     status: outcome,
+                    evidence: accept ? [{ name: "Fictional transcript.pdf" }] : [],
                     source,
                     person: {
                         given_name: "Fictional",
@@ -122,6 +127,11 @@ for (const accept of [true, false]) {
         await page
             .getByLabel("Reason for admissions decision")
             .fill("Fictional protected decision reason");
+        if (accept) {
+            await page.getByRole('button', { name: 'Choose evidence', exact: true }).click();
+            await page.getByLabel('Fictional transcript.pdf', { exact: true }).check();
+            await expect(page.getByLabel('Pending scan.pdf', { exact: true })).toBeDisabled();
+        }
         await accessible(page);
         await page
             .getByRole("button", {
@@ -143,6 +153,8 @@ for (const accept of [true, false]) {
                 ? "Original fictional form · submitted form revision 1"
                 : "entered directly",
         );
+        await expect(page.getByRole('heading', { name: 'Decision evidence', exact: true })).toBeVisible();
+        await expect(page.locator('#drawer-body')).toContainText(accept ? 'Fictional transcript.pdf' : 'No uploaded files were selected');
         expect(
             posted.filter((call) => call.path.endsWith("/commit/")),
         ).toHaveLength(0);
@@ -213,6 +225,7 @@ for (const accept of [true, false]) {
         ).toEqual({
             decision: accept ? "accept" : "reject",
             reason: "Fictional protected decision reason",
+            documents: accept ? [{ id: id(9), version: 3 }] : [],
         });
         await accessible(page);
         expect(

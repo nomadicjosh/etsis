@@ -47,6 +47,20 @@ final readonly class AdmissionDocumentContent
             if ($row['status'] === 'ready' && ($meta['scan_verdict'] ?? null) !== 'clean') {
                 throw new DomainException();
             }
+            $references = $meta['evidence_decisions'] ?? [];
+            if (
+                !is_array($references) || !array_is_list($references) || count($references) > 500
+                || count(array_unique($references, SORT_REGULAR)) !== count($references)
+                || (in_array($row['status'], ['purging', 'purged'], true) && $references !== [])
+            ) {
+                throw new DomainException();
+            }
+            foreach ($references as $reference) {
+                if (!is_string($reference)) {
+                    throw new DomainException();
+                }
+                new EntityId($reference);
+            }
             return $meta;
         } catch (Throwable) {
             throw new DomainException('This protected document needs institutional review.');
@@ -84,14 +98,18 @@ final readonly class AdmissionDocumentContent
     /** @param array<string,mixed> $row */
     public function read(array $row): string
     {
-        $meta = $this->metadata($row);
-        $bytes = $this->storage->read(new EntityId($row['application_id']), new EntityId($row['id']));
-        if (
-            strlen($bytes) !== ($meta['bytes'] ?? null)
-            || !hash_equals($meta['sha256'] ?? '', hash('sha256', $bytes))
-        ) {
+        try {
+            $meta = $this->metadata($row);
+            $bytes = $this->storage->read(new EntityId($row['application_id']), new EntityId($row['id']));
+            if (
+                strlen($bytes) !== ($meta['bytes'] ?? null)
+                || !hash_equals($meta['sha256'] ?? '', hash('sha256', $bytes))
+            ) {
+                throw new DomainException();
+            }
+            return $bytes;
+        } catch (Throwable) {
             throw new DomainException('This protected document needs institutional review.');
         }
-        return $bytes;
     }
 }

@@ -27,7 +27,12 @@ final readonly class SisAdmissionDecisionController
             ]);
         }
         return new JsonResponse(
-            $this->service->review(new EntityId($id), $decision === "accept", $f->bodyText("reason")),
+            $this->service->review(
+                new EntityId($id),
+                $decision === "accept",
+                $f->bodyText("reason"),
+                $f->values("documents", 10)
+            ),
         );
     }
     public function commit(ServerRequest $request, string $id): ResponseInterface
