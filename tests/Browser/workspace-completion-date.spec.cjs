@@ -154,7 +154,7 @@ test("registrar reviews actual completion independently from grades with reason,
         .analyze();
     expect(audit.violations).toEqual([]);
     await page.getByRole("button", { name: "Confirm completion date", exact: true }).click();
-    await expect(drawer).toContainText("Actual completion date: 2026-08-02");
+    await expect(drawer.getByText("Actual completion date", { exact: true }).locator("..").locator("dd")).toHaveText("2026-08-02");
     const reviews = f.calls.filter((c) => c.path.endsWith("/completion-date/review/"));
     expect(reviews[0]).toMatchObject({
         data: {
@@ -184,7 +184,7 @@ test("clearing a known completion date requires an explicit reviewed unknown", a
     await page.getByRole("button", { name: "Review completion date", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2026-08-01 → Unknown");
     await page.getByRole("button", { name: "Confirm completion date", exact: true }).click();
-    await expect(page.locator("#drawer-body")).toContainText("Actual completion date: Unknown");
+    await expect(page.getByText("Actual completion date", { exact: true }).locator("..").locator("dd")).toHaveText("Unknown");
     expect(f.calls.find((c) => c.path.endsWith("/completion-date/review/"))?.data.completed_on).toBeNull();
     expect(f.errors).toEqual([]);
 });
@@ -318,7 +318,7 @@ test("registrar reviews a missing institutional source period separately from co
     expect(audit.violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole("button", { name: "Confirm academic period", exact: true }).click();
-    await expect(drawer).toContainText("Registrar-recorded academic period start: 2026-01-12");
+    await expect(drawer.getByText("Recorded academic period start", { exact: true }).locator("..").locator("dd")).toHaveText("2026-01-12");
     expect(f.calls.find((c) => c.path.endsWith("/academic-period/review/"))).toMatchObject({
         csrf: "fictional-test-token",
         data: { enrollment_id: f.enrollment, version: 3, academic_on: "2026-01-12" },
@@ -343,7 +343,7 @@ test("clearing a source period explicitly records unknown rather than substituti
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
     await page.getByRole("button", { name: "Confirm academic period", exact: true }).click();
     expect(f.calls.find((c) => c.path.endsWith("/academic-period/review/"))?.data.academic_on).toBeNull();
-    await expect(page.locator("#drawer-body")).toContainText("Registrar-recorded academic period start: Unknown");
+    await expect(page.getByText("Recorded academic period start", { exact: true }).locator("..").locator("dd")).toHaveText("Unknown");
     expect(f.errors).toEqual([]);
 });
 

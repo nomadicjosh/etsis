@@ -13,6 +13,7 @@ window.createWorkspaceTeaching = function (ui) {
         table,
         badge,
         flow,
+        recordSummary,
     } = ui;
     const status = (value) =>
         ({
@@ -88,7 +89,16 @@ window.createWorkspaceTeaching = function (ui) {
     }
     async function section(body, row, sectionName) {
         const back = () => openRecord(sectionName, row);
-        if (row.term_code)
+        if (sectionName === "teaching")
+            body.append(
+                recordSummary([
+                    ["Section", row.code],
+                    ["Course", row.course_title || row.course_code],
+                    ["Term", row.term_code],
+                    ["Seat capacity", row.capacity],
+                ]),
+            );
+        else if (row.term_code)
             body.append(
                 node(
                     "p",
@@ -110,10 +120,14 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "div",
                         {},
-                        button("Export roster page", () =>
-                            requestFile(`/sis/ui/exports/roster/${row.id}/`, {
-                                after,
-                            }),
+                        node(
+                            "div",
+                            { class: "record-list-actions" },
+                            button(
+                                "Export roster page",
+                                () => requestFile(`/sis/ui/exports/roster/${row.id}/`, { after }),
+                                "btn-outline-secondary btn-sm",
+                            ),
                         ),
                         page.items.length
                             ? grid(
@@ -165,6 +179,9 @@ window.createWorkspaceTeaching = function (ui) {
                     `/sis/sections/${row.id}/assignments/`,
                     null,
                     back,
+                    {},
+                    "Assignments and scores are separate from the official final grade.",
+                    { layout: "teaching_assignment" },
                 ),
             ),
         );
@@ -206,6 +223,7 @@ window.createWorkspaceTeaching = function (ui) {
                 possible_hundredths: Number(record.possible_hundredths) / 100,
             },
             "Changing possible points changes the percentage represented by existing scores. Recorded earned scores are preserved; the new maximum cannot be below any earned score. Final grades remain separate.",
+            { layout: "teaching_assignment" },
         );
     }
     async function recordFinalGrade(sectionRow, student, back, assignment = null) {
@@ -250,26 +268,48 @@ window.createWorkspaceTeaching = function (ui) {
         );
         body.append(
             button("Back to record", back, "btn-link"),
-            node("p", {}, `Current grade: ${choices.current_grade_code || "Not graded"}`),
-            node("p", {}, `Actual completion date: ${choices.completed_on || "Unknown"}`),
+            recordSummary([
+                ["Final grade", choices.current_grade_code || "Not graded"],
+                ["Actual completion date", choices.completed_on || "Unknown"],
+                ...(choices.can_record_academic_period
+                    ? [["Recorded academic period start", choices.academic_on || "Unknown"]]
+                    : []),
+            ]),
         );
+        const related = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Related academic reviews",
+        });
         if (choices.can_accept_course)
-            body.append(button("Review course publication", () => coursePublication(sectionRow, student, choices, () =>
-                recordFinalGrade(sectionRow, student, back, assignment))));
+            related.append(
+                button("Review course publication", () =>
+                    coursePublication(sectionRow, student, choices, () =>
+                        recordFinalGrade(sectionRow, student, back, assignment),
+                    ),
+                ),
+            );
         if (choices.can_record_academic_period)
-            body.append(
-                node("p", {}, `Registrar-recorded academic period start: ${choices.academic_on || "Unknown"}`),
-                button("Review academic period", () => academicDate(sectionRow, student, choices, () =>
-                    recordFinalGrade(sectionRow, student, back, assignment), "academic_period")),
+            related.append(
+                button("Review academic period", () =>
+                    academicDate(
+                        sectionRow,
+                        student,
+                        choices,
+                        () => recordFinalGrade(sectionRow, student, back, assignment),
+                        "academic_period",
+                    ),
+                ),
             );
         if (choices.posted && choices.can_amend)
-            body.append(
+            related.append(
                 button("Review actual completion date", () =>
                     academicDate(sectionRow, student, choices, () =>
                         recordFinalGrade(sectionRow, student, back, assignment),
                     ),
                 ),
             );
+        if (related.childElementCount) body.append(related);
         if (choices.posted && !choices.can_amend) {
             body.append(
                 node(
@@ -300,7 +340,11 @@ window.createWorkspaceTeaching = function (ui) {
                 !!choices.posted,
             ],
         ];
-        const form = await buildForm(descriptors, { effective_on: choices.effective_on_default });
+        const form = await buildForm(
+            descriptors,
+            { effective_on: choices.effective_on_default },
+            { layout: "final_grade" },
+        );
         form.elements.reason.maxLength = 1000;
         form.elements.effective_on.max = choices.effective_on_default;
         const reviewButton = node(
@@ -531,7 +575,11 @@ window.createWorkspaceTeaching = function (ui) {
             ],
             ["reason", "Reason for recording or correcting this date", "textarea", "", true],
         ];
-        const form = await buildForm(descriptors, { [field]: choices[field] || "" });
+        const form = await buildForm(
+            descriptors,
+            { [field]: choices[field] || "" },
+            { layout: "academic_date" },
+        );
         form.elements[field].max = choices.effective_on_default;
         form.elements.reason.maxLength = 1000;
         body.append(form);
@@ -634,16 +682,53 @@ window.createWorkspaceTeaching = function (ui) {
         const body = openDrawer(`${student.given_name} ${student.family_name}`, "GRADES & ATTENDANCE");
         body.append(button("Back to roster", back, "btn-link"));
         const final = area("Final grade");
-        body.append(final);
+        const attendance = area("Attendance");
+        const scores = area("Assignment scores");
+        const navigation = node("nav", { class: "record-section-nav", "aria-label": "Gradebook sections" });
+        for (const [title, target] of [
+            ["Final grade", final],
+            ["Attendance", attendance],
+            ["Scores", scores],
+        ]) {
+            const heading = target.querySelector("h3");
+            heading.tabIndex = -1;
+            navigation.append(
+                button(
+                    title,
+                    () => {
+                        heading.focus({ preventScroll: true });
+                        heading.scrollIntoView({ block: "start", behavior: "instant" });
+                    },
+                    "record-jump-link",
+                ),
+            );
+        }
+        body.append(
+            recordSummary([
+                ["Institutional ID", student.institutional_id],
+                ["Section", sectionRow.code || "Not specified"],
+                ["Term", sectionRow.term_code || "Not specified"],
+            ]),
+            navigation,
+            final,
+            attendance,
+            scores,
+        );
+        const scoresLoading = node("p", { class: "form-text", role: "status" }, "Loading assignment scores…");
+        scores.append(scoresLoading);
         final.append(
             node("p", {}, `Current grade: ${student.grade_code || "Not graded"}`),
-            button(student.grade_code ? "Review final grade" : "Record final grade", () =>
-                recordFinalGrade(sectionRow, student, back),
+            node(
+                "div",
+                { class: "inline-actions" },
+                button(
+                    student.grade_code ? "Review final grade" : "Record final grade",
+                    () => recordFinalGrade(sectionRow, student, back),
+                    "btn-primary",
+                ),
+                button("Grade history", () => gradeHistory(sectionRow, student, back)),
             ),
-            button("Grade history", () => gradeHistory(sectionRow, student, back)),
         );
-        const attendance = area("Attendance");
-        body.append(attendance);
         let term = null;
         attendance.append(
             button("Record attendance", () => attendanceForm(sectionRow, student, back, null, term)),
@@ -682,8 +767,8 @@ window.createWorkspaceTeaching = function (ui) {
                 );
             },
         );
-        const scores = area("Assignment scores");
-        body.append(scores);
+        if (!body.isConnected) return;
+        scoresLoading.remove();
         await pages(
             scores,
             (after) =>
@@ -752,6 +837,7 @@ window.createWorkspaceTeaching = function (ui) {
             record
                 ? "This corrects the selected mark and checks its current revision before saving."
                 : "Attendance must fall within the term. To change an existing mark, use its Correct mark action in the attendance history.",
+            { layout: "attendance_mark" },
         );
         if (record) form.elements.held_on.readOnly = true;
         if (term) {

@@ -12,6 +12,7 @@ window.createWorkspaceTranscripts = function (ui) {
         buildForm,
         formData,
         openDrawer,
+        recordSummary,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -43,11 +44,10 @@ window.createWorkspaceTranscripts = function (ui) {
                 "aria-label": "Reviewed academic transcript",
             },
             node("h3", {}, snapshot.student.name),
-            node(
-                "p",
-                {},
-                `Institutional ID: ${snapshot.student.institutional_id}. Program: ${snapshot.program.code} — ${snapshot.program.title}.`,
-            ),
+            recordSummary([
+                ["Institutional ID", snapshot.student.institutional_id],
+                ["Program", `${snapshot.program.code} — ${snapshot.program.title}`],
+            ]),
             grid(
                 ["Term", "Course", "Title", "Attempted", "Earned", "Grade"],
                 snapshot.credits.map((row) => [
@@ -61,25 +61,42 @@ window.createWorkspaceTranscripts = function (ui) {
                 "Transcript credit history",
             ),
             node(
-                "p",
-                {},
-                `Attempted: ${units(snapshot.totals.attempted_milli)}. Earned: ${units(snapshot.totals.completed_milli)}. GPA: ${snapshot.totals.gpa_milli === null ? "Not yet available" : units(snapshot.totals.gpa_milli)}.`,
+                "div",
+                { class: "transcript-totals" },
+                recordSummary([
+                    ["Attempted credits", units(snapshot.totals.attempted_milli)],
+                    ["Earned credits", units(snapshot.totals.completed_milli)],
+                    [
+                        "GPA",
+                        snapshot.totals.gpa_milli === null
+                            ? "Not yet available"
+                            : units(snapshot.totals.gpa_milli),
+                    ],
+                ]),
             ),
         );
     }
     async function record(id) {
         const original = await request(`/portal/api/transcripts/${id}/`);
-        const body = openDrawer(
-            "Official transcript fulfillment",
-            "REGISTRAR WORKSPACE",
-        );
+        const body = openDrawer("Transcript request", "REGISTRAR WORKSPACE");
+        const currentStatus = node("span", {}, badge(original.status));
         body.append(
-            badge(original.status),
-            node(
-                "p",
-                {},
-                `Requested delivery: ${original.delivery}. Recipient: ${original.recipient || "Student pickup"}.`,
-            ),
+            recordSummary([
+                ["Request status", currentStatus],
+                [
+                    "Requested delivery",
+                    original.delivery === "pickup"
+                        ? "Student pickup"
+                        : String(original.delivery || "Not recorded")
+                              .replaceAll("_", " ")
+                              .replace(/^./u, (value) => value.toUpperCase()),
+                ],
+                [
+                    "Recipient",
+                    original.recipient ||
+                        (original.delivery === "pickup" ? "Student pickup" : "Not recorded"),
+                ],
+            ]),
         );
         if (!can("sis:student:read")) {
             body.append(
@@ -91,26 +108,27 @@ window.createWorkspaceTranscripts = function (ui) {
             );
             return;
         }
-        const current = await request(
-            `/sis/transcript-requests/${id}/fulfillment/`,
-        );
+        const current = await request(`/sis/transcript-requests/${id}/fulfillment/`);
         if (!body.isConnected) return;
-        if (["pending", "ready"].includes(current.status))
-            body.append(
-                button(
-                    current.document
-                        ? "Review an updated document revision"
-                        : "Review document preparation",
-                    () => review(id),
-                    "btn-primary",
-                ),
-            );
+        currentStatus.replaceChildren(badge(current.status));
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Transcript request tasks",
+        });
         if (current.document)
-            body.append(
-                button("Review transcript", () =>
-                    document(id, current.document.id),
+            actions.append(
+                button("Review transcript", () => document(id, current.document.id), "btn-primary"),
+            );
+        if (["pending", "ready"].includes(current.status))
+            actions.append(
+                button(
+                    current.document ? "Review new revision" : "Review preparation",
+                    () => review(id),
+                    current.document ? "btn-outline-secondary" : "btn-primary",
                 ),
             );
+        if (actions.childElementCount) body.append(actions);
         body.append(
             node(
                 "p",
@@ -211,37 +229,34 @@ window.createWorkspaceTranscripts = function (ui) {
         );
     }
     async function document(id, documentId) {
-        const value = await request(
-            `/sis/transcript-requests/${id}/documents/${documentId}/`,
-        );
-        const current = await request(
-            `/sis/transcript-requests/${id}/fulfillment/`,
-        );
-        const body = openDrawer(
-            "Prepared transcript document",
-            "IMMUTABLE ACADEMIC SNAPSHOT",
-        );
+        const value = await request(`/sis/transcript-requests/${id}/documents/${documentId}/`);
+        const current = await request(`/sis/transcript-requests/${id}/fulfillment/`);
+        const body = openDrawer("Prepared transcript", "OFFICIAL TRANSCRIPT");
         body.append(
-            academic(value.snapshot),
-            node(
-                "p",
-                {},
-                `Prepared at ${value.created_at}. Reference: ${value.id}.`,
-            ),
-            value.academic_changed
-                ? node(
-                      "p",
-                      { class: "alert alert-warning" },
-                      "The academic record or institutional details changed after preparation. Review and prepare an updated revision before recording delivery.",
-                  )
-                : null,
-            !value.is_latest
-                ? node(
-                      "p",
-                      { class: "alert alert-info" },
-                      "This historical document has been superseded by a later revision.",
-                  )
-                : null,
+            recordSummary([
+                ["Prepared at", value.created_at],
+                ["Document reference", value.id],
+            ]),
+        );
+        if (value.academic_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning" },
+                    "The academic record or institutional details changed after preparation. Review and prepare an updated revision before recording delivery.",
+                ),
+            );
+        if (!value.is_latest)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "This historical document has been superseded by a later revision.",
+                ),
+            );
+        const actions = node(
+            "div",
+            { class: "inline-actions", role: "group", "aria-label": "Transcript document tasks" },
             button("Download protected PDF", () =>
                 requestFile(
                     `/sis/transcript-requests/${id}/documents/${documentId}/pdf/`,
@@ -257,22 +272,20 @@ window.createWorkspaceTranscripts = function (ui) {
                     href: `/sis/transcript-requests/${id}/documents/${documentId}/view/`,
                     target: "_blank",
                     rel: "noopener",
+                    "aria-label": "Accessible view (opens in a new tab)",
                 },
-                "Open accessible document view",
+                "Accessible view",
             ),
         );
-        if (
-            current.status === "ready" &&
-            value.is_latest &&
-            !value.academic_changed
-        )
-            body.append(
+        if (current.status === "ready" && value.is_latest && !value.academic_changed)
+            actions.append(
                 button(
                     "Record completed delivery",
                     () => delivery(id, documentId, current.version),
                     "btn-primary",
                 ),
             );
+        body.append(actions, academic(value.snapshot));
         if (value.delivery)
             body.append(
                 node(
@@ -290,9 +303,7 @@ window.createWorkspaceTranscripts = function (ui) {
                     ),
                 ),
             );
-        body.append(
-            button("Back to transcript request", () => record(id), "btn-link"),
-        );
+        body.append(button("Back to transcript request", () => record(id), "btn-link"));
     }
     async function delivery(id, documentId, version) {
         const operation = await request("/sis/ui/operation-id/");
@@ -308,7 +319,7 @@ window.createWorkspaceTranscripts = function (ui) {
                 "textarea",
             ],
         ];
-        const form = await buildForm(fields),
+        const form = await buildForm(fields, {}, { layout: "transcript_delivery" }),
             submit = node(
                 "button",
                 { type: "submit", class: "btn btn-primary" },

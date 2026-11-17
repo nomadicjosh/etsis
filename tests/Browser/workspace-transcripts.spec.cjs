@@ -36,9 +36,9 @@ test('transcript fulfillment requires reviewed preparation and separate evidence
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="transcripts"]').click();
     await page.locator('#directory-results tbody button').first().click();
-    await page.getByRole('button', { name: 'Review document preparation', exact: true }).click();
+    await page.getByRole('button', { name: 'Review preparation', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Prepare protected transcript PDF', exact: true })).toBeDisabled();
-    await expect(page.locator('#drawer-body')).toContainText('GPA: 4.000');
+    await expect(page.getByText('GPA', { exact: true }).locator('..').locator('dd')).toHaveText('4.000');
     await expect(page.locator('#drawer-body script')).toHaveCount(0);
     expect(calls.some(call => call.path.endsWith('/prepare/'))).toBe(false);
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);

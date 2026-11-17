@@ -271,7 +271,7 @@
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
-    const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
+    const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
             explanation: 'Review this copy of the published invitation and dates before saving. Later event changes are not copied into this message. Saving creates an encrypted draft; choose recipients and confirm delivery in Communications.' }) });
@@ -281,7 +281,7 @@
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, subjects: () => catalogStudio.subjects(), classifications: () => classificationStudio.library() });
-    const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money,
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -760,6 +760,23 @@
     }
 
     const formLayouts = {
+        teaching_assignment: [
+            {
+                title: 'Assignment details',
+                fields: ['title', 'possible_hundredths', 'due_on'],
+                wide: ['title'],
+            },
+        ],
+        attendance_mark: [{ title: 'Attendance mark', fields: ['held_on', 'status'] }],
+        final_grade: [
+            { title: 'Grade decision', fields: ['grade_id', 'effective_on', 'reason'], wide: ['reason'] },
+        ],
+        academic_date: [
+            { title: 'Academic date', fields: ['completed_on', 'academic_on', 'reason'], wide: ['reason'] },
+        ],
+        transcript_delivery: [
+            { title: 'Delivery evidence', fields: ['delivered_at', 'evidence'], wide: ['evidence'] },
+        ],
         decision_reason: [{ title: 'Decision reason', fields: ['reason'], wide: ['reason'] }],
         student_activity: [
             { title: 'Student activity', fields: ['active', 'effective_on'], wide: ['active'] },
@@ -1063,7 +1080,7 @@
                 : text(value);
             details.append(node('div', {}, node('dt', {}, label), node('dd', {}, formatted)));
         }
-        body.append(details);
+        if (section !== 'teaching') body.append(details);
         const actions = node('div', { class: 'inline-actions' });
         const action = (label, path, data = {}, success = 'Updated.', style = 'btn-outline-primary') => actions.append(node('button', { type: 'button', class: `btn ${style}`, onclick: event => task(async () => { await request(path, 'POST', data); notify(success); drawer.hide(); if (datasets[current]) await loadDirectory(); }, event.currentTarget) }, label));
         if (row.person_id && can('sis:person:manage')) actions.append(node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => task(() => openPerson(row.person_id)) }, 'Open person record'));
