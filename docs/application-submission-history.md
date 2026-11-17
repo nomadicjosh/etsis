@@ -12,6 +12,8 @@ Staff can open **Admissions → an application → Application history** before 
 
 The current person owner can privately read their application answers, including answers entered by admissions staff on their behalf. Admissions management authority also permits that read. Another person's account, directory access and student-read permission alone do not. The original submitting actor remains recorded privately; permitting the applicant to read staff-assisted answers does not let them claim that staff member's retry receipt.
 
+Admissions review displays answers under the submitted form's original container titles and columns. Long answers retain their line breaks, and missing answers have a neutral **No answer provided** label. Recorded answers are displayed as text without reapplying current conditional rules or field limits. Later form changes do not reinterpret the earlier submission.
+
 ## Application form studio
 
 Open **Application forms** to build a draft, preview it, save it and then **Review publication → Confirm publication**. Publication reviews the exact saved revision. Unsaved edits must be saved first; opening a published form creates a new draft revision and preserves the original.
@@ -33,6 +35,14 @@ Choose **Add container** to group the questions already in your draft. Give it a
 Each column has its own **Add a field** menu. Drag a question into another column, or use **More → Move question** to choose a destination with a keyboard. Arrow buttons move a question within its column; container arrows and drag handles reorder whole containers. Duplicating a question places the copy beside the original in that same column. Remove a container after moving or removing its questions. Reducing the number of columns moves questions from removed columns into the last remaining column; it never deletes them.
 
 Reading and condition order runs down the first column, then down the next column, then through subsequent containers. Reordering updates that order and checks earlier-question references before save. All columns stack in the same order on narrow screens. Preview uses the same container titles, introductions, columns and field controls as applicant and staff submissions.
+
+### Completing and reviewing an application
+
+Portal applicants and admissions staff use the same **Your answers → Review & submit** flow. **Review answers** checks the visible questions, then displays their answers with the same container and column structure. **Edit answers** returns to the entered controls without losing values. Hidden conditional questions are excluded from this review and the submitted answers. Longer forms offer keyboard-accessible section shortcuts; entirely hidden sections do not leave empty headings or shortcuts.
+
+Only **Submit application** sends the application. Reviewing or editing makes no submission request and creates no event. Answers stay in memory on the open page; closing or reloading it before submission loses them. There is no browser-storage autosave. Staff-assisted intake keeps the selected person, program and entry term visible through review.
+
+While sending, the confirmation and edit buttons are disabled and a status message announces progress. Field errors return to the existing answers with linked, focused errors. A temporary request failure keeps the reviewed answers available for retry with the same submission identifier. Server-side authorization, validation and transactional receipt handling remain authoritative. Responses from a discarded application screen do not replace the next screen.
 
 ### Question guidance and validation
 

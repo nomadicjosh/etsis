@@ -671,10 +671,6 @@
 
     }
 
-    function applicationForm(schema) {
-        return window.createApplicationForm({ fields: schema.fields, layout: schema.layout || [] });
-    }
-
     function applications(container) {
         if (me?.applications.length)
             container.append(
@@ -791,57 +787,25 @@
                         `/sis/forms/programs/${programId}/active/`,
                     );
                     if (serial !== applicationRequest || programId !== program.value || termId !== term.value) return;
-                    const { form: answersForm, answers, reportValidity, showErrors, reset } =
-                        applicationForm(schema);
-                    answersForm.append(
-                        el(
-                            'p',
-                            { class: 'campus-muted' },
-                            'Required questions are marked with an asterisk. Your answers are private and encrypted.',
-                        ),
-                        el(
-                            'button',
-                            { class: 'btn campus-button', type: 'submit' },
-                            'Submit application',
-                            icon('send'),
-                        ),
-                    );
-                    answersForm.addEventListener('submit', (event) => {
-                        event.preventDefault();
-                        task(
-                            async () => {
-                                const data = answers();
-                                if (!reportValidity()) return;
-                                try {
-                                    await request(
-                                        `/sis/forms/${schema.id}/submissions/`,
-                                        'POST',
-                                        {
-                                            submission_id: schema.submission_id,
-                                            person_id: me.person.id,
-                                            program_id: programId,
-                                            entry_term_id: termId,
-                                            answers: data,
-                                        },
-                                    );
-                                } catch (error) {
-                                    if (error.status === 422 && showErrors(error.fields)) return;
-                                    throw error;
-                                }
-                                reset();
-                                next.replaceChildren(
-                                    empty(
-                                        'You’re one step closer.',
-                                        `Your application to ${programName(programId)} has been submitted. Admissions will review your next steps.`,
-                                    ),
-                                );
-                                await refreshMe();
-                                notice(
-                                    'Application submitted. Here’s to your next chapter.',
-                                );
-                            },
-                            one('[type="submit"]', answersForm),
-                        );
+                    const intake = window.createApplicationIntake({
+                        fields: schema.fields, layout: schema.layout || [], run: task,
+                        primaryClass: 'btn campus-button', secondaryClass: 'btn campus-button-outline',
+                        submit: answers => request(`/sis/forms/${schema.id}/submissions/`, 'POST', {
+                            submission_id: schema.submission_id, person_id: me.person.id,
+                            program_id: programId, entry_term_id: termId, answers,
+                        }),
+                        complete: async () => {
+                            next.replaceChildren(
+                                empty(
+                                    'You’re one step closer.',
+                                    `Your application to ${programName(programId)} has been submitted. Admissions will review your next steps.`,
+                                ),
+                            );
+                            await refreshMe();
+                            notice(
+                                'Application submitted. Here’s to your next chapter.',
+                            );
+                        },
                     });
                     next.append(
                         surface(
@@ -851,7 +815,7 @@
                                 { class: 'campus-muted' },
                                 `${programName(programId)} · ${termName(termId)}`,
                             ),
-                            answersForm,
+                            intake,
                         ),
                     );
                     next.tabIndex = -1;

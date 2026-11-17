@@ -1,5 +1,5 @@
 .application-fields { display: grid; gap: 1.5rem; }
-.application-fields [hidden] { display: none !important; }
+.application-fields [hidden], .application-intake [hidden] { display: none !important; }
 .application-container { min-width: 0; margin: 0; padding: 1.25rem; border: 1px solid #c6d3df; border-radius: .75rem; background: #fcfdff; }
 .application-container-title { float: none; width: auto; margin: 0 0 1rem; padding: 0; font-size: 1.125rem; font-weight: 650; }
 .application-columns { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); }
@@ -13,6 +13,23 @@
 .application-errors a { color: #842029; text-decoration: underline; overflow-wrap: anywhere; }
 .application-errors:focus { outline: 3px solid #2864a0; outline-offset: 3px; }
 .application-question input, .application-question select, .application-question textarea { scroll-margin-top: 6rem; }
+.application-section-nav { display: grid; gap: .5rem; }
+.application-section-links, .application-review-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.application-section-links .btn { white-space: normal; text-align: start; }
+.application-container { scroll-margin-top: 6rem; }
+.application-container:focus, .application-review-title:focus { outline: 3px solid #2864a0; outline-offset: 4px; }
+.application-answer { min-width: 0; margin: 0; }
+.application-answer dt { margin-bottom: .375rem; font-weight: 600; overflow-wrap: anywhere; }
+.application-answer-value { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.application-answer-empty { color: #526375; font-style: italic; }
+.application-review { display: grid; gap: 1rem; }
+.application-review > .form-text { margin: 0; }
+.application-review-title { margin-bottom: 0; scroll-margin-top: 6rem; }
+.application-steps { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; list-style: none; margin: 0 0 1.5rem; padding: 0; color: #526375; }
+.application-steps li { display: flex; gap: .5rem; align-items: center; }
+.application-steps span { display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border: 1px solid #a4b5c6; border-radius: 50%; font-size: .875rem; }
+.application-steps [aria-current] { color: #173d66; font-weight: 650; }
+.application-steps [aria-current] span { color: #fff; background: #205b93; border-color: #205b93; }
 @media (min-width: 768px) {
     .application-columns[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .application-columns[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -1020,7 +1020,7 @@
                 const extra = [];
                 if (can('sis:person:manage') && (!person.ownerUserId || can('admin:edit:user'))) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.editProfile(person)) }, 'Edit person profile'));
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.contact(person)) }, 'Contact information'));
-                if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value)) }, 'Start application'));
+                if (can('sis:admissions:manage')) actions.append(node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(() => startApplication(person.id.value, `${person.givenName} ${person.familyName}`)) }, 'Start application'));
                 if (person.ownerUserId && can('admin:edit:user')) extra.push({ label: 'Manage sign-in account', icon: 'key', run: () => peopleStudio.account(person) });
                 if (can('sis:person:manage')) extra.push({ label: 'Account setup', icon: 'envelope', run: () => accountSetup(person) });
                 if (can('sis:person:assign-id')) extra.push({ label: 'Change institutional ID', icon: 'person-vcard', run: () => editInstitutionalId(person) });
@@ -1706,7 +1706,7 @@
         body.append(node('p', { class: 'muted-text' }, 'Preview only. Nothing you enter here is submitted.'), applicationControls(formDraft.fields, true, formDraft.layout || []));
     });
 
-    async function startApplication(personId) {
+    async function startApplication(personId, personLabel = '') {
         const body = openDrawer('Start an application', 'A NEW BEGINNING');
         const fields = [...(personId ? [] : [['person_id', 'Person', 'lookup', 'people']]), ['program_id', 'Academic program', 'lookup', 'programs'], ['entry_term_id', 'Entry term', 'lookup', 'terms']];
         const selector = await buildForm(fields);
@@ -1714,7 +1714,11 @@
         selector.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!selector.reportValidity()) return;
             const data = formData(selector, fields); const form = await request(`/sis/forms/programs/${data.program_id}/active/`);
-            clear(body); await renderSubmission(body, form, personId || data.person_id, data.entry_term_id);
+            if (!selector.isConnected || fields.some(([key]) => selector.elements.namedItem(key).value !== data[key])) return;
+            const context = [['Person', personLabel || selector.elements.namedItem('person_id').selectedOptions[0].label],
+                ['Academic program', selector.elements.namedItem('program_id').selectedOptions[0].label],
+                ['Entry term', selector.elements.namedItem('entry_term_id').selectedOptions[0].label]];
+            clear(body); await renderSubmission(body, form, personId || data.person_id, data.entry_term_id, context);
         }, $one('[type="submit"]', selector)); });
         body.append(selector);
     }
@@ -1724,27 +1728,28 @@
         installLookup('#apply-program', 'programs'); installLookup('#apply-term', 'terms');
     }
     listen('#application-select-form', 'submit', async () => {
+        const programId = $one('#apply-program').value, termId = $one('#apply-term').value;
+        const context = [['Academic program', $one('#apply-program').selectedOptions[0].label], ['Entry term', $one('#apply-term').selectedOptions[0].label]];
         const person = await request('/sis/ui/me/');
-        const form = await request(`/sis/forms/programs/${$one('#apply-program').value}/active/`);
-        const container = $one('#applicant-form'); clear(container); await renderSubmission(container, form, person.id, $one('#apply-term').value);
+        const form = await request(`/sis/forms/programs/${programId}/active/`);
+        if (programId !== $one('#apply-program').value || termId !== $one('#apply-term').value) return;
+        const container = $one('#applicant-form'); clear(container); await renderSubmission(container, form, person.id, termId, context);
     });
-    async function renderSubmission(container, form, personId, termId) {
-        container.append(node('h3', { class: 'mb-4' }, form.name));
-        const answers = applicationControls(form.fields, false, form.layout || []);
-        answers.append(node('p', { class: 'form-text' }, 'Your application is private. Required fields are marked with an asterisk.'), node('button', { type: 'submit', class: 'btn btn-primary mt-3' }, 'Submit application ', icon('send')));
-        answers.addEventListener('submit', event => { event.preventDefault(); task(async () => {
-            const instance = applicationForms.get(answers);
-            if (!instance.reportValidity()) return;
-            try {
-                await request(`/sis/forms/${form.id}/submissions/`, 'POST', { submission_id: form.submission_id, person_id: personId, program_id: form.application_program_id || form.program_id, entry_term_id: termId, answers: instance.answers() });
-            } catch (error) {
-                if (error.status === 422 && instance.showErrors(error.fields)) return;
-                throw error;
-            }
-            clear(container); container.append(emptyState('You’re one step closer.', 'Your application has been submitted. The admissions team can now review your program-specific form.', 'check2-circle'));
-            notify('Application submitted. Here’s to your next chapter.');
-        }, $one('[type="submit"]', answers)); });
-        container.append(answers);
+    async function renderSubmission(container, form, personId, termId, context = []) {
+        const title = node('h3', { class: 'application-review-title mb-4', tabindex: '-1' }, form.name);
+        container.append(title);
+        if (context.length) container.append(recordSummary(context));
+        container.append(window.createApplicationIntake({ fields: form.fields, layout: form.layout || [], run: task,
+            submit: answers => request(`/sis/forms/${form.id}/submissions/`, 'POST', {
+                submission_id: form.submission_id, person_id: personId, program_id: form.application_program_id || form.program_id,
+                entry_term_id: termId, answers,
+            }),
+            complete: () => {
+                clear(container); container.append(emptyState('You’re one step closer.', 'Your application has been submitted. The admissions team can now review your program-specific form.', 'check2-circle'));
+                notify('Application submitted. Here’s to your next chapter.');
+            },
+        }));
+        title.focus();
     }
 
 

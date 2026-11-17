@@ -736,8 +736,6 @@ h3 { font-size: .9rem; font-weight: 650; }
 .record-jump-link.btn:hover { background: #edf4fa; color: #285b88; }
 .transcript-totals { margin-top: 1.25rem; }
 .transcript-totals dd { font-variant-numeric: tabular-nums; font-size: 1rem; font-weight: 650; }
-.application-answers > div { min-width: 0; padding-bottom: 1rem; border-bottom: 1px solid var(--campus-line); }
-.application-answer-wide { grid-column: 1 / -1; }
 .program-assignments .data-table :is(th, td) { padding: 1rem; }
 .program-identity { min-width: 10rem; max-width: 16rem; display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; }
 .program-identity strong { font-weight: 600; }

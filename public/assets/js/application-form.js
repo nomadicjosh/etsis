@@ -34,6 +34,38 @@
         return group.condition === 'AND' ? results.every(Boolean) : results.some(Boolean);
     }
 
+    function arrangeQuestions(root, questions, layout) {
+        if (!layout.length) for (const question of questions.values()) root.appendChild(question);
+        const sections = [];
+        for (const container of layout) {
+            const columns = container.columns.map(column => column.map(key => questions.get(key)).filter(Boolean));
+            if (!columns.some(column => column.length)) continue;
+            const section = node('fieldset', { class: 'application-container' },
+                node('legend', { class: 'application-container-title' }, container.label));
+            if (container.help) section.append(node('p', { class: 'form-text mt-0' }, container.help));
+            section.append(node('div', { class: 'application-columns', 'data-columns': columns.length },
+                columns.map(column => node('div', { class: 'application-column' }, column))));
+            root.appendChild(section);
+            sections.push({ element: section, label: container.label, keys: container.columns.flat() });
+        }
+        return sections;
+    }
+
+    // Display retained labels and recorded values without applying today's rules or validation.
+    window.createApplicationAnswerReview = ({ fields, layout = [], answers }) => {
+        const review = node('div', { class: 'application-fields application-answer-review' });
+        const questions = new Map(fields.map(field => {
+            const value = Object.hasOwn(answers, field.key) ? answers[field.key] : undefined;
+            const unanswered = value === undefined || value === null || value === '';
+            const text = unanswered ? 'No answer provided' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
+            return [field.key, node('dl', { class: 'application-answer', 'data-answer-key': field.key },
+                node('dt', {}, field.label),
+                node('dd', { class: `application-answer-value${unanswered ? ' application-answer-empty' : ''}` }, text))];
+        }));
+        arrangeQuestions(review, questions, layout);
+        return review;
+    };
+
     window.createApplicationForm = ({ fields, layout = [], preview = false }) => {
         const prefix = `application-${++sequence}`;
         const form = node('form', { class: 'application-fields', novalidate: true,
@@ -41,7 +73,7 @@
         const summary = node('div', { class: 'application-errors alert alert-danger', role: 'alert', tabindex: '-1', hidden: true });
         const entries = new Map(), remote = new Map();
         let showValidation = false;
-        form.append(summary);
+        form.appendChild(summary);
         fields.forEach((field, index) => {
             const id = `${prefix}-field-${index}`, settings = field.settings || {};
             const group = field.type === 'radio';
@@ -94,15 +126,19 @@
             wrapper.append(error);
             entries.set(field.key, { field, wrapper, controls, error, descriptions, message: '' });
         });
-        if (!layout.length) form.append(...[...entries.values()].map(entry => entry.wrapper));
-        for (const container of layout) {
-            const section = node('fieldset', { class: 'application-container' },
-                node('legend', { class: 'application-container-title' }, container.label));
-            if (container.help) section.append(node('p', { class: 'form-text mt-0' }, container.help));
-            const columns = node('div', { class: 'application-columns', 'data-columns': container.columns.length });
-            for (const column of container.columns) columns.append(node('div', { class: 'application-column' },
-                column.map(key => entries.get(key)?.wrapper).filter(Boolean)));
-            section.append(columns); form.append(section);
+        const sections = arrangeQuestions(form, new Map([...entries].map(([key, entry]) => [key, entry.wrapper])), layout);
+        if (sections.length > 1) {
+            const navigation = node('nav', { class: 'application-section-nav', 'aria-label': 'Application sections' },
+                node('span', { class: 'form-text' }, 'Jump to a section'));
+            const links = node('div', { class: 'application-section-links' });
+            sections.forEach((section, index) => {
+                section.element.id = `${prefix}-section-${index}`;
+                section.element.tabIndex = -1;
+                section.button = node('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary',
+                    'aria-controls': section.element.id, onclick: () => section.element.focus() }, section.label);
+                links.append(section.button);
+            });
+            navigation.append(links); summary.after(navigation);
         }
         function value(entry) {
             if (entry.field.type === 'radio') return entry.controls.find(control => control.checked)?.value;
@@ -156,6 +192,10 @@
                     if (described.length) control.setAttribute('aria-describedby', described.join(' ')); else control.removeAttribute('aria-describedby');
                 }
             }
+            for (const section of sections) {
+                section.element.hidden = section.keys.every(key => entries.get(key)?.wrapper.hidden !== false);
+                if (section.button) section.button.hidden = section.element.hidden;
+            }
             if (showValidation) {
                 const errors = [...entries.values()].filter(entry => entry.message);
                 summary.replaceChildren(); summary.hidden = !errors.length;
@@ -175,10 +215,11 @@
             if (!summary.hidden) { summary.focus(); return false; }
             return true;
         };
-        if (preview) form.append(node('button', { type: 'button', class: 'btn btn-outline-primary application-preview-check', onclick: reportValidity }, 'Test answers'));
+        if (preview) form.appendChild(node('button', { type: 'button', class: 'btn btn-outline-primary application-preview-check', onclick: reportValidity }, 'Test answers'));
         return {
             form,
             answers: update,
+            visibleFields: () => fields.filter(field => !entries.get(field.key).wrapper.hidden),
             reportValidity,
             showErrors: fields => {
                 const relevant = (fields || []).filter(item => entries.has(item.field) && !entries.get(item.field).wrapper.hidden);
@@ -188,5 +229,67 @@
             },
             reset: () => { HTMLFormElement.prototype.reset.call(form); remote.clear(); showValidation = false; summary.hidden = true; update(); },
         };
+    };
+
+    // One transient review/submit flow for portal applicants and staff-assisted intake.
+    window.createApplicationIntake = ({ fields, layout = [], submit, complete, run,
+        primaryClass = 'btn btn-primary', secondaryClass = 'btn btn-outline-secondary' }) => {
+        const instance = window.createApplicationForm({ fields, layout });
+        const root = node('div', { class: 'application-intake' });
+        const editor = instance.form;
+        const title = node('h3', { tabindex: '-1', class: 'application-review-title' }, 'Review your answers');
+        const values = node('div');
+        const stepAnswers = node('li', { 'aria-current': 'step' }, node('span', { 'aria-hidden': 'true' }, '1'), 'Your answers');
+        const stepReview = node('li', {}, node('span', { 'aria-hidden': 'true' }, '2'), 'Review & submit');
+        const steps = node('ol', { class: 'application-steps', 'aria-label': 'Application steps' }, stepAnswers, stepReview);
+        const review = node('section', { hidden: true, class: 'application-review' }, title,
+            node('p', { class: 'form-text' }, 'Check your answers before submitting. You can go back and edit them.'), values);
+        let snapshot = null, pending = false, finished = false;
+        function edit(focus = true) {
+            if (pending || finished) return;
+            snapshot = null; values.replaceChildren(); review.hidden = true; editor.removeAttribute('hidden');
+            stepReview.removeAttribute('aria-current'); stepAnswers.setAttribute('aria-current', 'step');
+            if (focus) editor.querySelector('input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button')?.focus();
+        }
+        const back = node('button', { type: 'button', class: secondaryClass, onclick: () => edit() }, 'Edit answers');
+        const confirm = node('button', { type: 'button', class: primaryClass, onclick: () => {
+            if (pending || finished || !snapshot) return;
+            pending = true; confirm.disabled = true; back.disabled = true;
+            confirm.setAttribute('aria-busy', 'true');
+            status.textContent = 'Submitting your application…';
+            run(async () => {
+                try {
+                    const result = await submit(snapshot);
+                    if (!root.isConnected) return;
+                    finished = true; snapshot = null; instance.reset(); root.replaceChildren();
+                    await complete(result);
+                } catch (error) {
+                    if (!root.isConnected) return;
+                    if (error.status === 422) {
+                        pending = false; edit(false);
+                        if (instance.showErrors(error.fields)) return;
+                    }
+                    throw error;
+                } finally {
+                    pending = false; confirm.disabled = false; back.disabled = false;
+                    confirm.removeAttribute('aria-busy'); status.textContent = '';
+                }
+            });
+        } }, 'Submit application');
+        const status = node('p', { class: 'form-text mb-0', role: 'status' });
+        review.append(node('div', { class: 'application-review-actions' }, back, confirm), status);
+        editor.appendChild(node('p', { class: 'form-text' },
+            'Required questions are marked with an asterisk. Your answers stay in this page until you submit. Keep this page open while editing.'));
+        editor.appendChild(node('button', { type: 'submit', class: primaryClass }, 'Review answers'));
+        editor.addEventListener('submit', event => {
+            event.preventDefault();
+            if (pending || finished || review.hidden === false || !instance.reportValidity()) return;
+            snapshot = instance.answers();
+            values.replaceChildren(window.createApplicationAnswerReview({ fields: instance.visibleFields(), layout, answers: snapshot }));
+            editor.setAttribute('hidden', ''); review.hidden = false;
+            stepAnswers.removeAttribute('aria-current'); stepReview.setAttribute('aria-current', 'step'); title.focus();
+        });
+        root.append(steps, editor, review);
+        return root;
     };
 })();

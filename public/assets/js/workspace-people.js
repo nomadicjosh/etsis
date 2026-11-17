@@ -391,31 +391,11 @@ window.createWorkspacePeople = function (ui) {
                     "These answers use the form revision submitted by the applicant. Later form changes do not alter this application.",
                 ),
             );
-            const answers = node("dl", { class: "detail-list application-answers" });
-            for (const field of submission.form.fields) {
-                const value = submission.answers[field.key];
-                answers.append(
-                    node(
-                        "div",
-                        { class: field.type === 'textarea' ? 'application-answer-wide' : '' },
-                        node("dt", {}, field.label),
-                        node(
-                            "dd",
-                            { class: "message-preview" },
-                            typeof value === "boolean"
-                                ? value
-                                    ? "Yes"
-                                    : "No"
-                                : value === null ||
-                                    value === undefined ||
-                                    value === ""
-                                  ? "No response"
-                                  : String(value),
-                        ),
-                    ),
-                );
-            }
-            section.append(answers);
+            section.append(window.createApplicationAnswerReview({
+                fields: submission.form.fields,
+                layout: submission.form.layout || [],
+                answers: submission.answers,
+            }));
             body.append(section);
         } else
             body.append(

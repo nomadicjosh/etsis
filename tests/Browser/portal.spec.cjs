@@ -107,6 +107,8 @@ test('student applications, records, registration and accounts stay in one acces
     await page.getByLabel('Transfer applicant?').check();
     await page.getByLabel('Previous college').fill('Fictional College');
     await accessible(page);
+    await page.getByRole('button', { name: 'Review answers' }).click();
+    await expect(page.locator('.application-answer-review')).toContainText('Fictional College');
     await page.getByRole('button', { name: 'Submit application' }).click();
     await expect(page.locator('#campus-service-content')).toContainText('one step closer');
     expect(mutations.at(-1).data.answers).toEqual({ transfer: true, college: 'Fictional College' });
