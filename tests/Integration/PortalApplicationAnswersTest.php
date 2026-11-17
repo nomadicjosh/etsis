@@ -32,6 +32,17 @@ final class PortalApplicationAnswersTest extends TestCase
         );
     }
 
+    public function testApplicationContextProvidesOnlyTheOwnerReferenceAndMetadataEvenBeforeTheFirstApplication(): void
+    {
+        $c = new CampusFixture();
+        $f = $c->sis;
+        $person = $f->legacyPerson($f->access->actor, 'Fictional', 'First application');
+        $f->access->staff = false;
+
+        self::assertSame(['person_id' => $person->id->value, 'items' => []], $c->service->applications());
+        self::assertSame([], $f->sql->rows('sis_history_events'));
+    }
+
     public function testOwnerDiscoversStaffEnteredAnswersWithoutLoadingThemIntoTheOverview(): void
     {
         $c = new CampusFixture();
@@ -59,7 +70,8 @@ final class PortalApplicationAnswersTest extends TestCase
         $events = $f->sql->rows('sis_history_events');
 
         $overview = $c->service->me();
-        self::assertSame($overview['applications'], $c->service->applications());
+        self::assertSame($person->id->value, $c->service->applications()['person_id']);
+        self::assertSame($overview['applications'], $c->service->applications()['items']);
         self::assertCount(1, $overview['applications']);
         $row = $overview['applications'][0];
         self::assertSame($application->value, $row['id']);
@@ -105,7 +117,7 @@ final class PortalApplicationAnswersTest extends TestCase
         $f->access->staff = false;
         $f->access->grants = ['sis:person:manage', 'sis:student:read'];
         self::assertSame([$otherApplication->id->value], array_column($c->service->me()['applications'], 'id'));
-        self::assertSame([$otherApplication->id->value], array_column($c->service->applications(), 'id'));
+        self::assertSame([$otherApplication->id->value], array_column($c->service->applications()['items'], 'id'));
         self::assertNull($c->service->me()['applications'][0]['submission_id']);
         try {
             $forms->submission($receipt);
@@ -115,14 +127,15 @@ final class PortalApplicationAnswersTest extends TestCase
         }
         $f->access->staff = true;
         self::assertSame([$otherApplication->id->value], array_column($c->service->me()['applications'], 'id'));
-        self::assertSame([$otherApplication->id->value], array_column($c->service->applications(), 'id'));
+        self::assertSame([$otherApplication->id->value], array_column($c->service->applications()['items'], 'id'));
         $replacementOwner = $f->user();
         $f->sql->update('sis_persons', ['owner_user_id' => $replacementOwner->value], ['id' => $person->id->value]);
         $f->access->staff = false;
         $f->access->grants = [];
         $f->access->actor = $replacementOwner;
+        self::assertSame($person->id->value, $c->service->applications()['person_id']);
         self::assertSame([$application->value], array_column($c->service->me()['applications'], 'id'));
-        self::assertSame([$application->value], array_column($c->service->applications(), 'id'));
+        self::assertSame([$application->value], array_column($c->service->applications()['items'], 'id'));
         self::assertSame($application->value, $forms->submission($receipt)['application_id']);
         $f->access->actor = $owner;
         $this->expectException(AccessDeniedException::class);
@@ -142,7 +155,7 @@ final class PortalApplicationAnswersTest extends TestCase
         }
         rsort($ids, SORT_STRING);
         $rows = $c->repository->overview($f->access->actor)['applications'];
-        self::assertSame($rows, $c->service->applications());
+        self::assertSame($rows, $c->service->applications()['items']);
         self::assertCount(50, $rows);
         self::assertSame(array_slice($ids, 0, 50), array_column($rows, 'id'));
         foreach ($rows as $row) {

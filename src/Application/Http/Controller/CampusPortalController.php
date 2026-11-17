@@ -176,7 +176,7 @@ final readonly class CampusPortalController
 
     public function applications(): ResponseInterface
     {
-        return new JsonResponse(['items' => $this->service->applications()]);
+        return new JsonResponse($this->service->applications());
     }
 
     public function contact(ServerRequest $request): ResponseInterface

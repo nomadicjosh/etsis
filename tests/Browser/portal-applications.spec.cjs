@@ -33,8 +33,8 @@ async function fixture(page, { applications = [
         else if (path === '/portal/api/applications/') {
             expect(req.method()).toBe('GET');
             statusReads.push(path);
-            if (refresh) return refresh(route, statusReads.length, me);
-            json = { items: me.applications };
+            if (refresh && statusReads.length > 1) return refresh(route, statusReads.length - 1, me);
+            json = { person_id: person, items: me.applications };
         }
         else if (path.includes('/sis/form-submissions/')) {
             expect(req.method()).toBe('GET');
@@ -180,7 +180,7 @@ test('status refresh preserves an unfinished application and avoids another full
     let release;
     const state = await fixture(page, { refresh: async route => {
         await new Promise(resolve => { release = resolve; });
-        await route.fulfill({ json: { items: [row(first, receipt, 'DIP.ART', 'Studio Arts', 'rejected')] } });
+        await route.fulfill({ json: { person_id: person, items: [row(first, receipt, 'DIP.ART', 'Studio Arts', 'rejected')] } });
     } });
     await openNewApplication(page);
     const refresh = page.getByRole('button', { name: 'Refresh status', exact: true });
@@ -194,14 +194,14 @@ test('status refresh preserves an unfinished application and avoids another full
     await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
     await expect(refresh).toBeEnabled();
     await expect(page.getByRole('status').filter({ hasText: 'Your application status is up to date.' })).toBeVisible();
-    expect(state.overviewReads).toHaveLength(1); expect(state.statusReads).toHaveLength(1);
+    expect(state.overviewReads).toHaveLength(0); expect(state.statusReads).toHaveLength(2);
     expect(state.reads).toEqual([]); expect(state.writes).toEqual([]); expect(state.errors).toEqual([]);
 });
 
 test('a failed status refresh retains previous results and can be retried', async ({ page }) => {
     const state = await fixture(page, { refresh: (route, attempt, me) => attempt === 1
         ? route.fulfill({ status: 503, json: { error: 'Fictional unavailable service.' } })
-        : route.fulfill({ json: { items: me.applications } }) });
+        : route.fulfill({ json: { person_id: person, items: me.applications } }) });
     await openNewApplication(page);
     const refresh = page.getByRole('button', { name: 'Refresh status', exact: true });
     await refresh.click();
@@ -210,7 +210,7 @@ test('a failed status refresh retains previous results and can be retried', asyn
     await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
     await refresh.click();
     await expect(page.getByRole('status').filter({ hasText: 'Your application status is up to date.' })).toBeVisible();
-    expect(state.statusReads).toHaveLength(2); expect(state.overviewReads).toHaveLength(1);
+    expect(state.statusReads).toHaveLength(3); expect(state.overviewReads).toHaveLength(0);
     expect(state.errors).toEqual([]);
 });
 
@@ -219,9 +219,9 @@ test('a delayed status read cannot replace the list refreshed after submission',
     const state = await fixture(page, { applications: [], refresh: async (route, attempt, me) => {
         if (attempt === 1) {
             await new Promise(resolve => { release = resolve; });
-            return route.fulfill({ json: { items: [] } });
+            return route.fulfill({ json: { person_id: person, items: [] } });
         }
-        return route.fulfill({ json: { items: me.applications } });
+        return route.fulfill({ json: { person_id: person, items: me.applications } });
     } });
     await openNewApplication(page);
     const refresh = page.getByRole('button', { name: 'Refresh status', exact: true });
@@ -234,7 +234,7 @@ test('a delayed status read cannot replace the list refreshed after submission',
     release();
     await expect(refresh).toBeEnabled();
     await expect(page.getByRole('table', { name: 'Your admissions applications' })).toContainText('BS.CS');
-    expect(state.statusReads).toHaveLength(2); expect(state.overviewReads).toHaveLength(1);
+    expect(state.statusReads).toHaveLength(3); expect(state.overviewReads).toHaveLength(0);
     expect(state.writes).toHaveLength(1); expect(state.errors).toEqual([]);
 });
 
@@ -247,6 +247,6 @@ test('a failed follow-up status read keeps a successful submission confirmed', a
     await expect(page.getByRole('heading', { name: 'You’re one step closer.', exact: true })).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Status could not be refreshed.' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Submit application', exact: true })).toHaveCount(0);
-    expect(state.writes).toHaveLength(1); expect(state.statusReads).toHaveLength(1);
-    expect(state.overviewReads).toHaveLength(1); expect(state.errors).toEqual([]);
+    expect(state.writes).toHaveLength(1); expect(state.statusReads).toHaveLength(2);
+    expect(state.overviewReads).toHaveLength(0); expect(state.errors).toEqual([]);
 });

@@ -20,7 +20,7 @@ Admissions review displays answers under the submitted form's original container
 
 Use **Refresh status** to check for a decision while keeping an unfinished application on screen. A live status message announces checking, completion or failure; failed refreshes keep the previous results and can be retried. Refresh runs only when requested or after a successful submission, without automatic polling. Late responses from an older refresh cannot replace newer results.
 
-The owner-only `GET /portal/api/applications/` returns up to 50 application metadata records, using the same query as the portal overview. It checks current person ownership on every read, including for staff accounts, and keeps responses private/no-store with debug collection suppressed. Refresh does not load submitted answers, contact details, financial statements or event streams. Answers still require their separate authorized read.
+Opening the signed-in application page and refreshing its status both use the owner-only `GET /portal/api/applications/`. Its response is `{person_id, items}`: the canonical person ULID needed for submission and up to 50 application metadata records, using the same list query as the portal overview. The person reference is present even before the first application. It checks current person ownership on every read, including for staff accounts, and keeps responses private/no-store with debug collection suppressed. Neither opening this page nor refreshing its list loads submitted answers, contact details, financial statements or event streams. Answers still require their separate authorized read. Other campus services retain their existing context and authorization.
 
 Open **Portal → Start your application → Your applications → View answers**. Applicants can reopen their original answers, including applications entered by admissions staff. The viewer uses the retained form's name, questions, sections and columns. It is read-only. Program and term names in the application list reflect current catalog setup; they do not replace the retained form or original submission history.
 
@@ -105,6 +105,8 @@ The paged library needs no schema change. **GET `/sis/forms/`** accepts optional
 ### Lightweight verification
 
 Run `npm run test:forms` for browser-free checks of reference-preserving key edits, placement, restored working definitions, input limits and a forty-question form. This uses one Node process with a 32-MiB heap cap. The focused PHP form/submission suites cover target selection, publication, access, encrypted answers, retries and stale-removal/audit rollback. This completion pass also verifies the removal endpoints through the framework HTTP/CSRF pipeline. Existing browser scenarios cover the interactive builder; they were not rerun in this pass to avoid the reported workstation slowdown.
+
+`node --max-old-space-size=32 tests/JavaScript/portal-application-context.test.cjs` checks the actual portal startup without a browser or network. It verifies the application-only request, empty first-application context, rejection of invalid context and the overview's separate full-context read. Owner-bound PHP checks and the isolated HTTP fixture cover the corresponding response shape and private metadata boundary.
 
 ## Preserved facts
 

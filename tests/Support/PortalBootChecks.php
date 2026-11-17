@@ -3988,6 +3988,8 @@ if (
     $applicationStatusResponse->getStatusCode() !== 200
     || !str_contains($applicationStatusResponse->getHeaderLine('Cache-Control'), 'private')
     || !str_contains($applicationStatusResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || array_keys($applicationStatusRows) !== ['person_id', 'items']
+    || ($applicationStatusRows['person_id'] ?? null) !== $catalogPerson->id->value
     || ($applicationStatusRows['items'] ?? null) !== $trackedOverview['applications']
     || str_contains($applicationStatusBody, 'Fictional private submitted statement')
     || str_contains($applicationStatusBody, 'encrypted_answers')
@@ -3995,10 +3997,14 @@ if (
     throw new RuntimeException('Application status refresh did not preserve the private metadata boundary.');
 }
 $sis->access->actor = $sis->user();
-$sis->legacyPerson($sis->access->actor, 'Fictional', 'Unrelated applicant');
+$unrelatedStatusPerson = $sis->legacyPerson($sis->access->actor, 'Fictional', 'Unrelated applicant');
 $unrelatedStatusResponse = $app->router->match($applicationStatusRequest);
 $unrelatedStatus = json_decode((string) $unrelatedStatusResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($unrelatedStatusResponse->getStatusCode() !== 200 || ($unrelatedStatus['items'] ?? null) !== []) {
+if (
+    $unrelatedStatusResponse->getStatusCode() !== 200
+    || ($unrelatedStatus['items'] ?? null) !== []
+    || ($unrelatedStatus['person_id'] ?? null) !== $unrelatedStatusPerson->id->value
+) {
     throw new RuntimeException('Application status refresh exposed another applicant\'s metadata.');
 }
 if ($app->router->match($trackedOwnerRequest)->getStatusCode() !== 403) {

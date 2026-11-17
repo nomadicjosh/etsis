@@ -472,6 +472,13 @@
         return me;
     }
 
+    async function readApplicationContext() {
+        const result = await request('/portal/api/applications/');
+        if (!result || typeof result.person_id !== 'string' || !result.person_id || !Array.isArray(result.items))
+            throw new Error('Application status is unavailable. Please reload and try again.');
+        return result;
+    }
+
     function overview(container) {
         const firstName = me.contact.preferred_name || me.person.given_name;
         one('#campus-service-title').textContent =
@@ -772,9 +779,9 @@
             const ticket = ++statusRequest;
             status.textContent = 'Checking your application status…';
             try {
-                const result = await request('/portal/api/applications/');
+                const result = await readApplicationContext();
                 if (ticket !== statusRequest || pageLeaving || !saved.isConnected || !me) return;
-                if (!Array.isArray(result.items)) throw new Error('Application status is unavailable.');
+                if (result.person_id !== me.person.id) throw new Error('Application ownership changed.');
                 me.applications = result.items;
                 refreshApplications();
                 status.textContent = result.items.length ? 'Your application status is up to date.' : 'No applications found.';
@@ -2275,7 +2282,11 @@
             applications(container);
             return;
         }
-        if (!['timetable', 'bookings'].includes(config.section)) await refreshMe();
+        if (config.section === 'applications') {
+            const context = await readApplicationContext();
+            if (pageLeaving) return;
+            me = { person: { id: context.person_id }, applications: context.items };
+        } else if (!['timetable', 'bookings'].includes(config.section)) await refreshMe();
         const restoreFocus = container.contains(document.activeElement);
         const content = document.createDocumentFragment();
         const actions = {

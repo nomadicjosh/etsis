@@ -113,7 +113,7 @@ final readonly class CampusService
         return $data;
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return array{person_id: string, items: list<array<string, mixed>>} */
     public function applications(): array
     {
         return $this->repository->applications($this->access->authenticatedUserId());
