@@ -12,6 +12,13 @@ use Domain\Shared\ValueObject\EntityId;
 interface AccessRepository
 {
     public function allows(string $userId, string $permission): bool;
+    /**
+     * @param list<EntityId> $users
+     * @return list<string> Allowed account IDs, bounded to twenty candidates.
+     */
+    public function allowedUsers(array $users, string $permission): array;
+    /** @return list<array{id:string,given_name:string,family_name:string,institutional_id:string}> */
+    public function eligibleAccounts(string $permission, string $search, ?EntityId $after = null): array;
     public function anyoneCanManage(): bool;
     public function isSuper(string $userId): bool;
     public function anySuper(): bool;

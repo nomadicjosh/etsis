@@ -6132,6 +6132,57 @@ if ($teachingPost($caseworkPath, ['version' => 1, 'claim' => 'me', 'values' => [
 $sis->access->actor = $originalSubmissionActor;
 $sis->access->staff = true;
 if ($app->router->match($caseworkOwnerRequest)->getStatusCode() !== 403
-    || $caseworkEvents !== $sis->sql->rows('sis_history_events')) {
+    || $caseworkEvents !== $sis->sql->rows('sis_history_events')
+) {
     throw new RuntimeException('Working casework overrode portal ownership or wrote academic history.');
+}
+
+// In-portal updates remain reference-only, owner-scoped and protected by the existing CSRF boundary.
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$updatesRequest = $get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/portal/api/admissions-updates/'
+));
+$updatesResponse = $app->router->match($updatesRequest);
+$updatesData = json_decode((string) $updatesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $updatesResponse->getStatusCode() !== 200 || count($updatesData['items'] ?? []) !== 1
+    || ($updatesData['unread_count'] ?? null) !== 1
+    || !str_contains($updatesResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $updatesResponse->getBody(), 'Fictional private case note.')
+    || str_contains((string) $updatesResponse->getBody(), 'Arrange delivery')
+) {
+    throw new RuntimeException('Admission update metadata crossed its private owner boundary.');
+}
+$updateNotice = $updatesData['items'][0];
+$updateReadPath = '/portal/api/admissions-updates/' . $updateNotice['id'] . '/read/';
+if ($teachingPost($updateReadPath, ['revision' => $updateNotice['revision']])->getStatusCode() !== 200) {
+    throw new RuntimeException('The owner could not mark an admission update read with valid CSRF.');
+}
+$readUpdatesData = json_decode(
+    (string) $app->router->match($updatesRequest)->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR
+);
+if ($readUpdatesData['items'] !== [] || $readUpdatesData['unread_count'] !== 0) {
+    throw new RuntimeException('An acknowledged admission update remained unread.');
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+if (
+    $teachingPost($updateReadPath, ['revision' => $updateNotice['revision']])->getStatusCode() !== 403
+    || $caseworkEvents !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Staff authority overrode update ownership or changed academic events.');
+}
+$assigneesRequest = $get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/admissions/assignees/'
+));
+$assigneesResponse = $app->router->match($assigneesRequest);
+$assigneesData = json_decode((string) $assigneesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $assigneesResponse->getStatusCode() !== 200 || ($assigneesData['search_required'] ?? null) !== true
+    || !str_contains($assigneesResponse->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('Colleague lookup lost its provider or bounded private search contract.');
 }

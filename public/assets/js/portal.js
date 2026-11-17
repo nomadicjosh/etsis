@@ -807,7 +807,9 @@
         }
         if (config.signedIn) {
             container.insertBefore(el('div', { class: 'd-flex flex-wrap gap-3 align-items-center mb-3' },
-                button('Refresh status', reloadApplications), status), saved);
+                button('Refresh status', reloadApplications),
+                el('a', { class: 'btn campus-button-outline', href: '/portal/admissions-updates/' }, 'Admissions updates'),
+                status), saved);
         }
         const form = el('form');
         const program = control(
@@ -2301,7 +2303,7 @@
             const context = await readApplicationContext();
             if (pageLeaving) return;
             me = { person: { id: context.person_id }, applications: context.items };
-        } else if (!['timetable', 'bookings'].includes(config.section)) await refreshMe();
+        } else if (!['timetable', 'bookings', 'admissionsupdates'].includes(config.section)) await refreshMe();
         const restoreFocus = container.contains(document.activeElement);
         const content = document.createDocumentFragment();
         const actions = {
@@ -2315,6 +2317,7 @@
             accounts,
             updates,
             bookings: bookingUpdates,
+            admissionsupdates: content => window.createAdmissionCasework({ node: el, request, task, notify: notice }).updates(content),
             timetable: async content => {
                 const context = await request('/portal/api/timetable/context/');
                 const selected = context.recommended_term || context.terms[0];

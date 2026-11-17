@@ -37,6 +37,52 @@ final readonly class SqlAccessRepository implements AccessRepository
             . $this->permissionMatch("u.$user") . '))', [$userId, $permission], 1) !== [];
     }
 
+    public function allowedUsers(array $users, string $permission): array
+    {
+        if (count($users) > 20) {
+            throw new \InvalidArgumentException('Use a bounded account candidate page.');
+        }
+        if ($users === []) {
+            return [];
+        }
+        $ids = array_values(array_unique(array_map(static fn (EntityId $id): string => $id->value, $users)));
+        $q = $this->sql->quote(...);
+        $account = 'u.' . $q('user_id');
+        $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+        $sql = 'SELECT ' . $account . ' FROM ' . $q('users') . ' u WHERE ' . $account
+        . ' IN (' . $placeholders . ') AND u.' . $q('sign_in_enabled') . ' = 1 AND ('
+        . $this->superMatch($account) . ' OR EXISTS (SELECT p.' . $q('id') . ' FROM '
+        . $q('sis_access_permissions') . ' p WHERE p.' . $q('name') . ' = ? AND '
+        . $this->permissionMatch($account) . '))';
+        return array_column($this->sql->fetch($sql, [...$ids, $permission], 20), 'user_id');
+    }
+
+    public function eligibleAccounts(string $permission, string $search, ?EntityId $after = null): array
+    {
+        $q = $this->sql->quote(...);
+        $user = 'u.' . $q('user_id');
+        $where = ['u.' . $q('sign_in_enabled') . ' = 1', '(' . $this->superMatch($user)
+            . ' OR EXISTS (SELECT p.' . $q('id') . ' FROM ' . $q('sis_access_permissions') . ' p WHERE p.'
+            . $q('name') . ' = ? AND ' . $this->permissionMatch($user) . '))'];
+        $args = [$permission];
+        $fields = ['person.' . $q('given_name'), 'person.' . $q('family_name'), 'i.' . $q('institutional_id')];
+        foreach (preg_split('/\s+/u', trim($search), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $term) {
+            $where[] = '(' . implode(' OR ', array_map(static fn (string $field): string =>
+                'LOWER(' . $field . ") LIKE ? ESCAPE '!'", $fields)) . ')';
+            $text = '%' . strtr(mb_strtolower($term), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            array_push($args, $text, $text, $text);
+        }
+        if ($after !== null) {
+            $where[] = $user . ' > ?';
+            $args[] = $after->value;
+        }
+        return $this->sql->fetch('SELECT ' . $user . ' AS ' . $q('id') . ', person.' . $q('given_name')
+            . ', person.' . $q('family_name') . ', i.' . $q('institutional_id') . ' FROM ' . $q('users')
+            . ' u JOIN ' . $q('sis_persons') . ' person ON person.' . $q('owner_user_id') . ' = ' . $user
+            . ' JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = person.' . $q('id')
+            . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . $user . ' ASC', $args, 21);
+    }
+
     public function anyoneCanManage(): bool
     {
         if ($this->anySuper()) {

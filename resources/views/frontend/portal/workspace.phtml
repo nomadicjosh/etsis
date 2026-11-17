@@ -1,8 +1,11 @@
 <?php
 
+// phpcs:disable Generic.WhiteSpace.ScopeIndent -- Follow the enclosing HTML indentation in this mixed template.
+
 $sections = [
     'overview' => ['My campus', 'house-door'],
     'applications' => ['Applications', 'send'],
+    'admissionsupdates' => ['Admissions updates', 'inboxes'],
     'profile' => ['Personal information', 'person'],
     'grades' => ['Grades & academic status', 'mortarboard'],
     'progress' => ['Degree progress', 'signpost-split'],
@@ -26,15 +29,16 @@ $client = [
     <?= json_encode($client, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR); ?>
 </script>
 <div class="campus-container campus-student-shell">
-    <?php if (!$applicationPage): ?>
+    <?php if (!$applicationPage) : ?>
         <aside class="campus-student-sidebar">
             <p class="campus-eyebrow">YOUR CAMPUS. YOUR JOURNEY.</p>
             <nav aria-label="Campus services">
-                <?php foreach ($sections as $key => [$label, $icon]): ?>
+                <?php foreach ($sections as $key => [$label, $icon]) : ?>
                     <?php
                     $serviceUrl = match ($key) {
                         'timetable' => '/portal/timetable/',
                         'bookings' => '/portal/bookings/',
+                        'admissionsupdates' => '/portal/admissions-updates/',
                         default => '/portal/student/' . ($key === 'overview' ? '' : $key . '/'),
                     };
                     ?>
@@ -52,10 +56,18 @@ $client = [
             </a>
         </aside>
     <?php endif; ?>
-    <section class="campus-student-main<?= $applicationPage ? ' campus-application-page' : ''; ?>" aria-labelledby="campus-service-title">
+    <section
+        class="campus-student-main<?= $applicationPage ? ' campus-application-page' : ''; ?>"
+        aria-labelledby="campus-service-title">
         <p class="campus-eyebrow"><?= $applicationPage ? 'YOUR NEXT CHAPTER' : 'ONE PLACE FOR YOUR NEXT STEP'; ?></p>
-        <h1 id="campus-service-title"><?= $applicationPage ? 'Start something great.' : $this->esc($sections[$section][0]); ?></h1>
-        <p class="campus-lead" id="campus-service-intro"><?= $applicationPage ? 'A different path for every program. A simpler start for you.' : 'A little clarity. A little momentum. Your campus life, connected.'; ?></p>
+        <h1 id="campus-service-title">
+            <?= $applicationPage ? 'Start something great.' : $this->esc($sections[$section][0]); ?>
+        </h1>
+        <p class="campus-lead" id="campus-service-intro">
+            <?= $applicationPage
+                ? 'A different path for every program. A simpler start for you.'
+                : 'A little clarity. A little momentum. Your campus life, connected.'; ?>
+        </p>
         <div id="campus-error" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>
         <div id="campus-service-content" aria-live="polite">
             <p class="campus-muted">Getting your next steps ready…</p>

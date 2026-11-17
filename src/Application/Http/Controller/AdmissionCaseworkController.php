@@ -28,7 +28,13 @@ final readonly class AdmissionCaseworkController
     public function save(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->save(new EntityId($id), $this->values($request), $f->integer('version'), $f->text('claim', 20));
+        $this->service->save(
+            new EntityId($id),
+            $this->values($request),
+            $f->integer('version'),
+            $f->text('claim', 20),
+            $f->optionalId('assignee_id')
+        );
         return new JsonResponse(['status' => 'saved']);
     }
     public function queue(ServerRequest $request): ResponseInterface
@@ -43,6 +49,11 @@ final readonly class AdmissionCaseworkController
             $due === '1',
             $f->optionalId('after')
         ));
+    }
+    public function assignees(ServerRequest $request): ResponseInterface
+    {
+        $f = new FormInput($request->getQueryParams());
+        return new JsonResponse($this->service->assignees($f->search('search', 80), $f->optionalId('after')));
     }
     public function presets(ServerRequest $request): ResponseInterface
     {

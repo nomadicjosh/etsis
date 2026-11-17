@@ -63,3 +63,10 @@ test('the campus overview still loads its full service context', async () => {
     assert.equal(result.rendering, true);
     assert.deepEqual(result.requests.map(request => request.url), ['/portal/api/me/']);
 });
+
+
+test('admissions updates starts without loading the full student overview', async () => {
+    const result = await startup('admissionsupdates', {});
+    assert.equal(result.rendering, true);
+    assert.deepEqual(result.requests, []);
+});

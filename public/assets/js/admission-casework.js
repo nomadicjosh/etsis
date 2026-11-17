@@ -131,7 +131,50 @@
                 const due = field(details, 'follow_up_on', 'Follow up on', value.follow_up_on, 'date');
                 details.append(node('p', { class: 'form-text' }, `Assigned to: ${packet.assignee_name}`));
                 const claim = select(details, 'claim', 'Assignment', 'keep',
-                    [['keep', 'Keep current assignment'], ['me', 'Assign to me'], ['unassigned', 'Leave unassigned']]);
+                    [['keep', 'Keep current assignment'], ['me', 'Assign to me'], ['selected', 'Assign a colleague'], ['unassigned', 'Leave unassigned']]);
+                const picker = node('section', { hidden: true, 'aria-label': 'Choose an admissions colleague' });
+                const colleagueSearch = field(picker, 'assignee_search', 'Colleague name or institutional ID', '', 'search', 80);
+                const candidates = node('div'), chosen = node('p', { role: 'status', class: 'form-text' }, 'No colleague selected.');
+                let selectedAssignee = null, candidateRequest = 0, candidateSearch = '';
+                async function findColleague(after = '') {
+                    const queryText = colleagueSearch.value.trim();
+                    if (after && queryText !== candidateSearch) return findColleague();
+                    const serial = ++candidateRequest;
+                    const query = new URLSearchParams({ search: queryText }); if (after) query.set('after', after);
+                    const result = await request(`/sis/admissions/assignees/?${query}`);
+                    if (!alive() || serial !== candidateRequest || queryText !== colleagueSearch.value.trim() || claim.value !== 'selected') return;
+                    candidateSearch = queryText;
+                    const group = node('fieldset', { class: 'mt-3' }, node('legend', { class: 'h6' }, 'Eligible colleagues'));
+                    result.items.forEach(item => {
+                        const id = `casework-colleague-${++sequence}`;
+                        const label = `${item.given_name} ${item.family_name} · ${item.institutional_id}`;
+                        const radio = node('input', { id, type: 'radio', name: 'assignee_id', value: item.id,
+                            class: 'form-check-input', checked: selectedAssignee?.id === item.id });
+                        radio.addEventListener('change', () => {
+                            selectedAssignee = { id: item.id, label }; colleagueSearch.setCustomValidity('');
+                            chosen.textContent = `Selected: ${label}`;
+                        });
+                        group.append(node('div', { class: 'form-check mb-2' }, radio,
+                            node('label', { for: id, class: 'form-check-label' }, label)));
+                    });
+                    if (!after) candidates.replaceChildren(); candidates.querySelector('[data-more-colleagues]')?.remove();
+                    if (result.items.length) candidates.append(group);
+                    else if (!after) candidates.append(node('p', { role: 'status', class: 'form-text' }, result.search_required
+                        ? 'Enter at least two characters to find a colleague.' : 'No eligible colleagues match this search.'));
+                    if (result.next_after) {
+                        const more = button('More colleagues', () => findColleague(result.next_after));
+                        more.dataset.moreColleagues = ''; candidates.append(more);
+                    }
+                }
+                const findColleagueButton = button('Find colleague', () => findColleague());
+                colleagueSearch.addEventListener('keydown', event => {
+                    if (event.key === 'Enter') { event.preventDefault(); findColleagueButton.click(); }
+                });
+                picker.append(findColleagueButton, chosen, candidates);
+                claim.addEventListener('change', () => {
+                    candidateRequest++; picker.hidden = claim.value !== 'selected'; colleagueSearch.setCustomValidity('');
+                });
+                details.append(picker);
                 form.append(details);
                 const save = node('button', { type: 'submit', class: 'btn btn-primary mt-3' }, 'Save casework'); form.append(save);
                 const values = () => ({ office: office.value, work_status: workStatus.value, follow_up_on: due.value,
@@ -145,6 +188,10 @@
                         const result = await request(path, 'POST', body); accepted = true;
                         if (alive()) await complete(result);
                     } catch (error) {
+                        if (!accepted && kind === 'casework' && error.fields?.some(field => field.field === 'assignee_id')) {
+                            selectedAssignee = null; chosen.textContent = 'The selection needs review. Find and choose an eligible colleague again.';
+                            candidates.querySelectorAll('input[name="assignee_id"]').forEach(input => { input.checked = false; });
+                        }
                         if (alive()) status.textContent = accepted
                             ? (kind === 'preset' ? 'Preset saved. Find and edit the preset to reload it. Your casework draft is unchanged.'
                                 : 'Saved. Close and reopen this panel to load the latest values before another change.')
@@ -159,8 +206,13 @@
                 form.addEventListener('submit', event => {
                     event.preventDefault(); if (pending) return;
                     editor.expand(); details.open = true;
+                    if (claim.value === 'selected' && !selectedAssignee) {
+                        colleagueSearch.setCustomValidity('Find and choose an eligible colleague.');
+                        colleagueSearch.reportValidity(); return;
+                    }
                     if (!form.reportValidity()) return;
-                    task(() => write(endpoint, { version: value.version, values: values(), claim: claim.value }, async () => {
+                    task(() => write(endpoint, { version: value.version, values: values(), claim: claim.value,
+                        assignee_id: claim.value === 'selected' ? selectedAssignee.id : null }, async () => {
                         const saved = await request(endpoint); if (!alive()) return;
                         render(saved, ticket); notify('Application casework saved.');
                     }), save);
@@ -252,6 +304,18 @@
                 content.replaceChildren(wrapper, status);
             }
         }
+        function guidance(content, data) {
+            const labels = { pending: 'Pending', received: 'Received', complete: 'Complete', not_needed: 'Not needed' };
+            content.replaceChildren(node('h3', { class: 'h5' }, 'Your next steps'),
+                node('p', {}, data.next_step || 'Admissions has not added a specific next step. Contact the office with questions.'),
+                data.office ? node('p', { class: 'form-text' }, `Office: ${data.office}`) : null,
+                ...data.items.map(item => node('div', { class: 'border rounded p-3 mb-2' },
+                    node('h4', { class: 'h6' }, item.label), node('p', {}, labels[item.status] || 'Check with admissions'),
+                    node('p', { class: 'form-text' }, item.needed ? 'Requested for review' : 'Additional item'),
+                    item.instructions ? node('p', {}, item.instructions) : null,
+                    item.due_on ? node('p', { class: 'form-text' }, `Due: ${item.due_on}`) : null)),
+                node('p', { class: 'form-text' }, 'Checklist progress does not itself mean that admission or registration has been approved.'));
+        }
         function applicant(container, applicationId, label = '') {
             const identity = `casework-applicant-${++sequence}`;
             const content = node('section', { id: identity, class: 'mt-3', hidden: true, 'aria-label': 'Application next steps' });
@@ -262,16 +326,7 @@
                 const data = await request(`/portal/api/applications/${applicationId}/next-steps/`);
                 if (ticket !== generation || !container.isConnected) return;
                 expanded = true; content.hidden = false; toggle.setAttribute('aria-expanded', 'true');
-                const labels = { pending: 'Pending', received: 'Received', complete: 'Complete', not_needed: 'Not needed' };
-                content.replaceChildren(node('h3', { class: 'h5' }, 'Your next steps'),
-                    node('p', {}, data.next_step || 'Admissions has not added a specific next step. Contact the office with questions.'),
-                    data.office ? node('p', { class: 'form-text' }, `Office: ${data.office}`) : null,
-                    ...data.items.map(item => node('div', { class: 'border rounded p-3 mb-2' },
-                        node('h4', { class: 'h6' }, item.label), node('p', {}, labels[item.status] || 'Check with admissions'),
-                        node('p', { class: 'form-text' }, item.needed ? 'Requested for review' : 'Additional item'),
-                        item.instructions ? node('p', {}, item.instructions) : null,
-                        item.due_on ? node('p', { class: 'form-text' }, `Due: ${item.due_on}`) : null)),
-                    node('p', { class: 'form-text' }, 'Checklist progress does not itself mean that admission or registration has been approved.'));
+                guidance(content, data);
             });
             toggle.setAttribute('aria-controls', identity); toggle.setAttribute('aria-expanded', 'false');
             if (label) toggle.setAttribute('aria-label', `Next steps for ${label}`);
@@ -317,6 +372,75 @@
             filters.append(button('Refresh queue', () => load()));
             container.replaceChildren(filters, status, list); task(() => load());
         }
-        return { mount, applicant, queue };
+        function updates(target) {
+            const container = node('div'); target.append(container);
+            const filters = node('div', { class: 'd-flex flex-wrap gap-3 align-items-center mb-3' });
+            const includeRead = check(filters, 'admission_updates_read', 'Include read updates', false);
+            const status = node('p', { class: 'form-text', role: 'status', 'aria-atomic': 'true' });
+            const list = node('section', { 'aria-label': 'Admissions update list' });
+            const detail = node('section', { class: 'mt-4', hidden: true, 'aria-label': 'Admissions update details' });
+            let pageRequest = 0, detailRequest = 0, cursor = null, stack = [], loadedFilter = false;
+            const refresh = button('Refresh updates', () => load()); filters.append(refresh);
+            function closeDetail() { detailRequest++; detail.hidden = true; detail.replaceChildren(); refresh.focus(); }
+            async function open(item) {
+                const ticket = ++detailRequest;
+                const heading = node('h2', { class: 'h4', tabindex: '-1' }, `${item.program_code} · ${item.program_title} · ${item.term_code}`);
+                const progress = node('p', { role: 'status', class: 'form-text' }, 'Loading your next steps…');
+                const body = node('div');
+                detail.hidden = false; detail.replaceChildren(heading, button('Close update', closeDetail, 'btn-link'), progress, body); heading.focus();
+                let loaded = false, acknowledged = false;
+                try {
+                    const data = await request(`/portal/api/applications/${item.application_id}/next-steps/`);
+                    if (ticket !== detailRequest || !container.isConnected) return;
+                    guidance(body, data); loaded = true; progress.textContent = 'Your current next steps are ready.';
+                    const result = await request(`/portal/api/admissions-updates/${item.id}/read/`, 'POST', { revision: item.revision });
+                    if (ticket !== detailRequest || !container.isConnected) return;
+                    acknowledged = true;
+                    await load(cursor, stack, true);
+                    if (ticket !== detailRequest || !container.isConnected) return;
+                    progress.textContent = result.unread ? 'A newer update arrived. Refresh updates to review it.' : 'Update marked read.';
+                } catch (error) {
+                    if (ticket !== detailRequest || !container.isConnected) return;
+                    progress.textContent = acknowledged ? 'Your read status was saved. Refresh updates to see the latest list.'
+                        : loaded ? 'Your next steps are ready, but we couldn’t confirm the read status. Try again.'
+                        : 'We couldn’t load your next steps. Try again.';
+                    body.append(button('Try again', () => open(item)));
+                    throw error;
+                }
+            }
+            async function load(after = null, previous = [], keepDetail = false) {
+                if (after && includeRead.checked !== loadedFilter) return load();
+                const showRead = includeRead.checked, ticket = ++pageRequest;
+                if (!keepDetail) { detailRequest++; detail.hidden = true; detail.replaceChildren(); }
+                status.textContent = 'Loading admissions updates…';
+                try {
+                    const query = new URLSearchParams({ include_read: showRead ? '1' : '0' });
+                    if (after) { query.set('after_at', after.at); query.set('after', after.id); }
+                    const data = await request(`/portal/api/admissions-updates/?${query}`);
+                    if (ticket !== pageRequest || !container.isConnected) return;
+                    if (showRead !== includeRead.checked) { status.textContent = 'Filters changed. Choose Refresh updates.'; return; }
+                    cursor = after; stack = previous; loadedFilter = showRead;
+                    list.replaceChildren(...data.items.map(item => node('article', { class: 'border rounded p-3 mb-3' },
+                        node('h2', { class: 'h5' }, `${item.program_code} · ${item.program_title}`),
+                        node('p', { class: 'form-text' }, `${item.term_code} · ${item.unread ? 'Unread' : 'Read'}`),
+                        node('p', {}, 'Admissions updated your application next steps.'),
+                        node('p', { class: 'form-text' }, `Updated: ${new Date(item.updated_at).toLocaleString()}`),
+                        button('Read update', () => open(item)))));
+                    if (!data.items.length) list.append(node('p', {}, showRead ? 'No admissions updates are available.' : 'You have no unread admissions updates.'));
+                    const pages = node('nav', { class: 'd-flex flex-wrap gap-2', 'aria-label': 'Admissions update pages' });
+                    if (stack.length) pages.append(button('Previous updates', () => { const earlier = [...stack]; return load(earlier.pop(), earlier); }));
+                    if (data.next) pages.append(button('Next updates', () => load(data.next, [...stack, cursor])));
+                    list.append(pages); status.textContent = `${data.unread_count} unread admissions updates`;
+                } catch (error) {
+                    if (ticket !== pageRequest || !container.isConnected) return;
+                    status.textContent = 'Could not refresh admissions updates. Previous results are still shown.';
+                    throw error;
+                }
+            }
+            container.append(node('p', { class: 'form-text' }, 'Find updates from admissions and open an application to review your current next steps.'),
+                filters, status, list, detail);
+            task(() => load());
+        }
+        return { mount, applicant, queue, updates };
     };
 })();

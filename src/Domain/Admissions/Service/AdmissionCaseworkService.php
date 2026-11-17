@@ -9,6 +9,8 @@ use Domain\Admissions\AdmissionCasework;
 use Domain\Admissions\AdmissionChecklistPreset;
 use Domain\Admissions\Repository\AdmissionCaseworkRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
+use Domain\Admissions\Repository\AdmissionUpdatesRepository;
+use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\ValueObject\CaseworkChecklist;
 use Domain\Audit\Repository\ActorDirectory;
 use Domain\Audit\Repository\AuditTrail;
@@ -32,6 +34,8 @@ final readonly class AdmissionCaseworkService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private AccessRepository $permissions,
+        private AdmissionUpdatesRepository $updates,
     ) {
     }
 
@@ -107,18 +111,40 @@ final readonly class AdmissionCaseworkService
     }
 
     /** @param array<string,mixed> $values */
-    public function save(EntityId $application, #[\SensitiveParameter] array $values, int $version, string $claim): void
-    {
+    public function save(
+        EntityId $application,
+        #[\SensitiveParameter] array $values,
+        int $version,
+        string $claim,
+        ?EntityId $selectedAssignee = null
+    ): void {
         $actor = $this->manager();
         $this->version($version);
-        if (!in_array($claim, ['keep', 'me', 'unassigned'], true)) {
-            CaseworkChecklist::invalid('claim', 'Keep, claim or release the casework assignment.');
+        if (
+            !in_array($claim, ['keep', 'me', 'unassigned', 'selected'], true)
+            || (($claim === 'selected') !== ($selectedAssignee !== null))
+        ) {
+            CaseworkChecklist::invalid('assignee_id', 'Choose an eligible colleague or another assignment option.');
         }
         $values = AdmissionCasework::fromInput($application, $values, null, $version + 1)->values;
         $route = $this->admissions->application($application);
         $command = [$actor->value, $application->value, $version, $values, $claim];
+        if ($selectedAssignee !== null) {
+            $command[] = $selectedAssignee->value;
+        }
         $hash = hash('sha256', json_encode($command, JSON_THROW_ON_ERROR));
-        $this->transactions->run(function () use ($route, $actor, $values, $version, $claim, $hash): void {
+        $this->transactions->run(function () use (
+            $route,
+            $actor,
+            $values,
+            $version,
+            $claim,
+            $hash,
+            $selectedAssignee
+        ): void {
+            if ($selectedAssignee !== null) {
+                $this->permissions->lock();
+            }
             $this->admissions->lockPerson($route->personId);
             $this->admissions->lockApplication($route->id);
             $this->manager($actor);
@@ -135,15 +161,59 @@ final readonly class AdmissionCaseworkService
                 throw new ConcurrentModificationException('Casework changed. Reload before saving.');
             }
             $assignee = match ($claim) {
-                'me' => $actor, 'unassigned' => null, default => $before->assignedTo
+                'me' => $actor, 'unassigned' => null, 'selected' => $selectedAssignee, default => $before->assignedTo
             };
+            if ($selectedAssignee !== null) {
+                $candidate = $this->people->findByUser($selectedAssignee);
+                $allowed = array_flip($this->permissions->allowedUsers(
+                    [$actor, $selectedAssignee],
+                    'sis:admissions:manage'
+                ));
+                if (!isset($allowed[$actor->value])) {
+                    throw new AccessDeniedException('The admissions account no longer has assignment authority.');
+                }
+                if (
+                    $candidate?->ownerUserId?->value !== $selectedAssignee->value
+                    || !isset($allowed[$selectedAssignee->value])
+                ) {
+                    CaseworkChecklist::invalid('assignee_id', 'Choose an enabled colleague with admissions access.');
+                }
+            }
             $next = AdmissionCasework::fromInput($route->id, $values, $assignee, $version + 1);
             if ($next->values !== $before->values || $next->assignedTo?->value !== $before->assignedTo?->value) {
-                $this->cases->save($next, $version, $actor, $this->at(), $hash);
+                $at = $this->at();
+                $this->cases->save($next, $version, $actor, $at, $hash);
+                if ($next->applicantView() !== $before->applicantView()) {
+                    $owner = $this->admissions->person($route->personId)->ownerUserId;
+                    if ($owner !== null) {
+                        $this->updates->record($route->id, $owner, $at);
+                    }
+                }
                 $this->audit->record($actor, 'admissions.casework_updated', $route->id);
             }
             $this->manager($actor);
         });
+    }
+
+    /** @return array<string,mixed> */
+    public function assignees(string $search = '', ?EntityId $after = null): array
+    {
+        $actor = $this->manager();
+        $search = trim($search);
+        if (
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80
+            || preg_match('/[\x00-\x1f\x7f]/', $search)
+        ) {
+            CaseworkChecklist::invalid('search', 'Search with up to eighty characters.');
+        }
+        if (mb_strlen($search) < 2) {
+            return ['items' => [], 'next_after' => null, 'search_required' => true];
+        }
+        $rows = $this->permissions->eligibleAccounts('sis:admissions:manage', $search, $after);
+        $more = count($rows) > 20;
+        $rows = array_slice($rows, 0, 20);
+        $this->manager($actor);
+        return ['items' => $rows, 'next_after' => $more ? end($rows)['id'] : null, 'search_required' => false];
     }
 
     /** @return array<string,mixed> */

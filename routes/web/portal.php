@@ -10,10 +10,17 @@ use Qubus\Routing\Interfaces\Mappable;
 use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
 use Application\Http\Controller\PersonEducationController as Education;
 use Application\Http\Controller\AdmissionCaseworkController as Casework;
+use Application\Http\Controller\AdmissionUpdatesController as AdmissionUpdates;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/portal/admissions-updates/', [Portal::class, 'admissionsUpdates'])
+        ->name('portal.admissionsupdates');
+    $router->map(['GET'], '/portal/api/admissions-updates/', [AdmissionUpdates::class, 'page'])
+        ->name('portal.admissionsupdates.page');
+    $router->map(['POST'], '/portal/api/admissions-updates/{id}/read/', [AdmissionUpdates::class, 'read'])
+        ->name('portal.admissionsupdates.read');
     $router->map(['GET'], '/portal/api/applications/{id}/next-steps/', [Casework::class, 'applicant'])
         ->name('portal.application.nextsteps');
     $router->map(['GET'], '/portal/api/education/', [Education::class, 'mine'])->name('portal.education');

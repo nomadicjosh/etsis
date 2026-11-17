@@ -104,19 +104,23 @@ final readonly class CampusPortalController
 
     public function timetable(): ResponseInterface
     {
-        if (!$this->gate->isLoggedIn()) {
-            return new RedirectResponse($this->renderer->loginUrl());
-        }
-        return $this->renderer->render('workspace', 'My timetable', ['section' => 'timetable',
-            'public' => ['programs' => [], 'terms' => []], 'applicationPage' => false]);
+        return $this->standalone('timetable', 'My timetable');
     }
 
     public function bookings(): ResponseInterface
     {
+        return $this->standalone('bookings', 'Booking updates');
+    }
+    public function admissionsUpdates(): ResponseInterface
+    {
+        return $this->standalone('admissionsupdates', 'Admissions updates');
+    }
+    private function standalone(string $section, string $title): ResponseInterface
+    {
         if (!$this->gate->isLoggedIn()) {
             return new RedirectResponse($this->renderer->loginUrl());
         }
-        return $this->renderer->render('workspace', 'Booking updates', ['section' => 'bookings',
+        return $this->renderer->render('workspace', $title, ['section' => $section,
             'public' => ['programs' => [], 'terms' => []], 'applicationPage' => false]);
     }
 

@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . '/Support/CampusFixture.php';
+namespace Tests\Integration;
 
+use CampusFixture;
 use Application\Http\Controller\CampusPortalController;
 use Application\View\CampusRenderer;
 use Codefy\Framework\Auth\Gate;
@@ -13,6 +14,11 @@ use Qubus\Http\ServerRequest;
 
 final class PortalAuthenticationTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . '/Support/CampusFixture.php';
+    }
+
     public function testPortalUsesTheConfiguredSignInRouteForLinksAndGuestRedirects(): void
     {
         $config = Collection::factory([]);
@@ -26,6 +32,7 @@ final class PortalAuthenticationTest extends TestCase
         self::assertStringContainsString('href="/campus-sign-in/"', (string) $response->getBody());
         $controller = new CampusPortalController(new CampusFixture()->service, $renderer, $gate);
         self::assertSame('/campus-sign-in/', $controller->student()->getHeaderLine('Location'));
+        self::assertSame('/campus-sign-in/', $controller->admissionsUpdates()->getHeaderLine('Location'));
         self::assertSame('/campus-sign-in/', $controller->landing(new ServerRequest())
             ->getHeaderLine('Location'));
     }

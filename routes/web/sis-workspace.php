@@ -27,6 +27,8 @@ return static function (Psr7Router $router): void {
         ->name('sis.admissions.casework.save');
     $router->map(['GET'], '/sis/admissions/follow-ups/', [Casework::class, 'queue'])
         ->name('sis.admissions.followups');
+    $router->map(['GET'], '/sis/admissions/assignees/', [Casework::class, 'assignees'])
+        ->name('sis.admissions.assignees');
     $router->map(['GET'], '/sis/admissions/checklists/', [Casework::class, 'presets'])
         ->name('sis.admissions.checklists');
     $router->map(['GET'], '/sis/admissions/checklists/{id}/', [Casework::class, 'preset'])
