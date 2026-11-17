@@ -15,7 +15,7 @@ $fieldTypes = [
         <div>
             <div class="eyebrow">A WARMER WELCOME</div>
             <h1 id="forms-heading">Applications, your way<span class="brand-dot">.</span></h1>
-            <p>A different path for every program. A simpler start for every applicant.</p>
+            <p>A simpler start, with forms tailored to your institution’s academic levels and programs.</p>
         </div>
         <button class="btn btn-primary" type="button" id="form-new">
             <i class="bi bi-plus-lg" aria-hidden="true"></i> New application form
@@ -40,24 +40,43 @@ $fieldTypes = [
                 <span class="status-badge" id="designer-state">New draft</span>
             </div>
             <form id="form-designer-meta" class="row g-3 px-4">
-                <div class="col-md-6">
+                <div class="col-12">
                     <label class="form-label" for="form-name">Form name</label>
                     <input
                         class="form-control"
                         id="form-name"
                         name="name"
                         maxlength="191"
-                        placeholder="e.g. Undergraduate admission"
+                        placeholder="e.g. New student application"
                         required
                     />
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-5">
+                    <label class="form-label" for="form-scope">Use this form for</label>
+                    <select class="form-select" id="form-scope" name="scope">
+                        <option value="academic_level">An academic level</option>
+                        <option value="program">One academic program</option>
+                    </select>
+                </div>
+                <div class="col-md-7" id="form-level-group">
+                    <label class="form-label" for="form-level">Academic level</label>
+                    <select class="form-select" id="form-level" name="academic_level_id" required></select>
+                    <p class="form-text" id="form-level-help">Uses the academic levels configured by your institution. A program-specific form takes precedence.</p>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-level-setup" data-requires="sis:catalog:manage">
+                        Academic levels
+                    </button>
+                </div>
+                <div class="col-md-7" id="form-program-group" hidden>
                     <label class="form-label" for="form-program">Academic program</label>
-                    <select class="form-select" id="form-program" name="program_id" required></select>
+                    <select class="form-select" id="form-program" name="program_id" disabled></select>
                 </div>
             </form>
             <div class="designer-toolbar">
-                <span class="muted-text">Add fields. Use the arrows to set their order.</span>
+                <span class="muted-text">Drag the handles or use the arrows to reorder fields.</span>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-collapse-fields">Collapse all</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="form-expand-fields">Expand all</button>
+                </div>
                 <div class="dropdown">
                     <button
                         class="btn btn-sm btn-outline-primary dropdown-toggle"
@@ -71,23 +90,25 @@ $fieldTypes = [
                         <?php foreach ($fieldTypes as $type => $label) : ?>
                             <li>
                                 <button class="dropdown-item" type="button" data-add-field="<?= $this->esc($type) ?>">
-                            <?= $this->esc($label) ?>
+                                    <?= $this->esc($label) ?>
                                 </button>
                             </li>
                         <?php endforeach; ?>
                     </ul>
                 </div>
             </div>
-            <div id="designer-fields" class="designer-fields"></div>
             <div class="designer-footer">
-                <span class="muted-text" id="designer-save-status">A draft is visible only to form administrators.</span>
-                <div class="d-flex flex-wrap gap-2">
-                    <button class="btn btn-outline-secondary" type="button" id="form-preview">Preview form</button><button class="btn btn-outline-primary" type="button" id="form-save">Save draft</button>
-                    <button class="btn btn-primary" type="button" id="form-publish" data-requires="sis:forms:publish">
-                        Publish for program <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                <span class="muted-text" id="designer-save-status" role="status">A draft is visible only to form administrators.</span>
+                <div class="d-flex flex-wrap gap-2" role="group" aria-label="Application form tasks">
+                    <button class="btn btn-outline-secondary" type="button" id="form-preview">Preview form</button>
+                    <button class="btn btn-outline-primary" type="button" id="form-save">Save draft</button>
+                    <button class="btn btn-primary" type="button" id="form-publish" data-requires="sis:forms:publish" disabled>
+                        Review publication <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
                     </button>
                 </div>
             </div>
+            <div id="designer-fields" class="designer-fields"></div>
+            <p class="visually-hidden" id="form-sort-status" role="status"></p>
         </section>
     </div>
 </section>

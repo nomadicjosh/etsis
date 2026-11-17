@@ -7,7 +7,8 @@ namespace Domain\Admissions\ValueObject;
 use Domain\Admissions\ApplicationForm;
 use Domain\Shared\ValueObject\EntityId;
 
-/** Frozen v1 fingerprints. Verification never executes today's answer validation or conditional rules. */
+/** Preserve program-form fingerprints; shared forms additionally bind the chosen program.
+ * Verification never executes today's answer validation or conditional rules. */
 final class SubmissionIntegrity
 {
     /** @param array<string,mixed> $answers */
@@ -16,10 +17,12 @@ final class SubmissionIntegrity
         EntityId $person,
         EntityId $term,
         #[\SensitiveParameter] array $answers,
+        ?EntityId $program = null,
     ): string {
         return hash(
             "sha256",
-            json_encode([$form->value, $person->value, $term->value, $answers], JSON_THROW_ON_ERROR),
+            json_encode([$form->value, $person->value, $term->value, $answers]
+                + ($program === null ? [] : [4 => $program->value]), JSON_THROW_ON_ERROR),
         );
     }
     public static function formHash(ApplicationForm $form): string
@@ -28,7 +31,8 @@ final class SubmissionIntegrity
             "sha256",
             self::canonical([
                 "id" => $form->id->value,
-                "program_id" => $form->programId->value,
+                ...($form->programId !== null ? ['program_id' => $form->programId->value]
+                    : ['academic_level_id' => $form->academicLevelId?->value]),
                 "name" => $form->name,
                 "version" => $form->version,
                 "fields" => $form->fields,

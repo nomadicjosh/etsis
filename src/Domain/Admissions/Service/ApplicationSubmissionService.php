@@ -99,6 +99,7 @@ final readonly class ApplicationSubmissionService
         EntityId $person,
         EntityId $term,
         #[\SensitiveParameter] array $answers,
+        ?EntityId $program = null,
     ): EntityId {
         $actor = $this->authorize($person);
         return $this->transactions->run(function () use (
@@ -108,12 +109,25 @@ final readonly class ApplicationSubmissionService
             $term,
             $answers,
             $actor,
+            $program,
         ): EntityId {
             $this->admissions->lockPerson($person);
             $this->recheck($person, $actor);
             $form = $this->forms->get($formId);
+            $program ??= $form->programId;
+            if ($program === null || ($form->programId !== null && $form->programId->value !== $program->value)) {
+                throw new ValidationException([
+                    ['field' => 'program_id', 'message' => 'Choose the program for this application.'],
+                ]);
+            }
             $canonical = $form->validate($answers);
-            $fingerprint = SubmissionIntegrity::fingerprint($formId, $person, $term, $canonical);
+            $fingerprint = SubmissionIntegrity::fingerprint(
+                $formId,
+                $person,
+                $term,
+                $canonical,
+                $form->programId === null ? $program : null
+            );
             $r = $this->forms->submission($submission);
             if ($r !== null) {
                 if ($r["owner_user_id"] !== $actor->value || !hash_equals($r["fingerprint"], $fingerprint)) {
@@ -130,7 +144,7 @@ final readonly class ApplicationSubmissionService
                 $this->recheck($person, $actor);
                 if (
                     $a->personId->value !== $person->value ||
-                    $a->programId->value !== $form->programId->value ||
+                    $a->programId->value !== $program->value ||
                     $a->entryTermId->value !== $term->value
                 ) {
                     throw new CorruptHistoryException();
@@ -140,8 +154,12 @@ final readonly class ApplicationSubmissionService
                 $this->ledger->submissionReceipt($a, $submission, $actor);
                 return $id;
             }
-            $this->lockCatalog($person, $form->programId, $term, $actor);
-            if ($this->forms->active($form->programId)->id->value !== $formId->value) {
+            $this->lockCatalog($person, $program, $term, $actor);
+            if ($form->academicLevelId !== null) {
+                $this->forms->lockLevel($form->academicLevelId);
+                $this->recheck($person, $actor);
+            }
+            if ($this->forms->active($program)->id->value !== $formId->value) {
                 throw new ValidationException([
                     [
                         "field" => "form_id",
@@ -151,14 +169,20 @@ final readonly class ApplicationSubmissionService
             }
             $form = $this->forms->get($formId);
             $canonical = $form->validate($answers);
-            $fingerprint = SubmissionIntegrity::fingerprint($formId, $person, $term, $canonical);
+            $fingerprint = SubmissionIntegrity::fingerprint(
+                $formId,
+                $person,
+                $term,
+                $canonical,
+                $form->programId === null ? $program : null
+            );
             $id = PublishedGradeId::forVersion($submission, "admissions.application");
             if ($this->existing($id) !== null) {
                 throw new ConcurrentModificationException(
                     "This application identity already exists. Start a new submission.",
                 );
             }
-            $a = new AdmissionApplication($id, $person, $form->programId, $term);
+            $a = new AdmissionApplication($id, $person, $program, $term);
             $this->admissions->addApplication($a);
             $this->forms->storeSubmission(
                 $submission,

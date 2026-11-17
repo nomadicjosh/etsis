@@ -15,6 +15,10 @@ interface ApplicationFormRepository
     public function publish(ApplicationForm $form): void;
     public function disable(EntityId $program): void;
     public function lockProgram(EntityId $program): void;
+    public function lockLevel(EntityId $level): void;
+    public function disableLevel(EntityId $level): void;
+    /** @return list<array<string,mixed>> */
+    public function levels(): array;
     /** @return list<array<string, mixed>> */
     public function listing(): array;
     /** @return array<string, mixed>|null */

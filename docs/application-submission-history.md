@@ -12,6 +12,22 @@ Staff can open **Admissions → an application → Application history** before 
 
 The current person owner can privately read their application answers, including answers entered by admissions staff on their behalf. Admissions management authority also permits that read. Another person's account, directory access and student-read permission alone do not. The original submitting actor remains recorded privately; permitting the applicant to read staff-assisted answers does not let them claim that staff member's retry receipt.
 
+## Application form studio
+
+Open **Application forms** to build a draft, preview it, save it and then **Review publication → Confirm publication**. Publication reviews the exact saved revision. Unsaved edits must be saved first; opening a published form creates a new draft revision and preserves the original.
+
+Choose **An academic level** for a reusable default, or **One academic program** for a program override. Academic levels come from **Academic catalog → Curriculum → Departments & levels → Academic levels**. They are institution-defined: Undergraduate and Graduate are examples, not built-in codes or seeded requirements. An installation with no levels can still publish program forms. An authorized catalog administrator can open **Academic levels** directly from the form editor.
+
+Applicants still choose their intended program and entry term. A program-specific form takes precedence; otherwise the program uses the form enabled for its current academic level. Programs without either form do not accept form-based applications. Removing a program override exposes the level default if one is enabled. Removing a level default leaves program overrides enabled. Both actions explain this before confirmation. A saved draft's target stays fixed; create a new draft to change its target.
+
+Field cards display their current question label and type. Expand or collapse individual cards or all cards, duplicate questions, and reorder them using drag handles or the keyboard-accessible arrow buttons. Each question has a label, optional hint and required-answer setting. Dropdown questions provide one choice per line. **Field settings** holds the unique stable key used by conditions and saved answers. Forms support up to 40 questions, with up to 30 choices per dropdown.
+
+**Edit conditions** opens the existing visual QueryBuilder for that question. Combine earlier answers using **All** or **Any**, nested groups, lists and numeric comparisons. **Apply conditions** commits the rule to the draft; **Cancel** leaves it unchanged; **Always show** removes it. Rules can only reference earlier questions. Moving or deleting a source question requires repairing its dependent conditions before saving. Preview evaluates the same bounded rule language as submission validation. Hidden questions do not require answers and their values are omitted from the submitted answers.
+
+Sorting uses self-hosted [SortableJS](https://github.com/SortableJS/Sortable), with reduced-motion support and arrow-button alternatives. The builder and preview keep working values in memory; no applicant answers or drafts are stored in browser storage. Failed saves retain edits, and edits made while a save is pending remain unsaved rather than being overwritten by the response.
+
+Migration **20261116000007** makes the existing form's program reference nullable, adds an optional academic-level reference and introduces the unique level/default binding table. It preserves existing program forms, bindings, protected answers and receipt fingerprints. A shared-form submission additionally binds its actual chosen program into its receipt, preventing the same receipt from being reused for another program. Historical reads and exact retries use the originally retained program/form facts even after current classifications or defaults change. Drafts and bindings remain audited configuration; consequential submissions continue using the existing authoritative event store.
+
 ## Preserved facts
 
 The new event retains application/person/program/entry-term ULIDs, initial submitted status/version, program and term labels, form/direct channel and the authorization relationship used at submission. Trusted context records the actor and actual effective/recording times. Names, institutional IDs and answers are not copied into the event.

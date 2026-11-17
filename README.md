@@ -109,6 +109,8 @@ The staff workspace brings campus metrics, student intake, admissions, and revie
 
 ## Setup documentation
 
+The [application form studio](docs/application-submission-history.md#application-form-studio) supports institution-defined academic levels and program overrides, sortable field cards, conditional questions, previews and reviewed publication.
+
 [Term types, academic years and terms](docs/academic-calendar-setup.md) explains calendar setup and automatically derived matriculation cohorts. [Initial student matriculation](docs/student-matriculation.md) explains the admissions review, first-program history and retry behavior.
 
 [Application submission history](docs/application-submission-history.md), [admissions decisions](docs/admissions-decisions.md), and [outcome corrections](docs/admissions-corrections.md) describe retained history, staff permissions and reviewed corrections before matriculation.

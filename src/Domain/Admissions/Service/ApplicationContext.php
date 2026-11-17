@@ -35,7 +35,10 @@ final readonly class ApplicationContext
         $submission = null;
         if ($r !== null) {
             $form = $this->forms->get(new EntityId($r["form_id"]));
-            if ($r["application_id"] !== $a->id->value || $form->programId->value !== $a->programId->value) {
+            if (
+                $r["application_id"] !== $a->id->value
+                || ($form->programId !== null && $form->programId->value !== $a->programId->value)
+            ) {
                 throw new CorruptHistoryException();
             }
             $submission = [
@@ -83,7 +86,7 @@ final readonly class ApplicationContext
         try {
             $form = $this->forms->get(new EntityId($ref["form_id"]));
             if (
-                $form->programId->value !== $a->programId->value ||
+                ($form->programId !== null && $form->programId->value !== $a->programId->value) ||
                 $form->version !== $ref["form_version"] ||
                 $form->name !== $ref["form_name"] ||
                 !hash_equals($birth["form_definition_hash"], SubmissionIntegrity::formHash($form))
@@ -100,7 +103,13 @@ final readonly class ApplicationContext
                 !is_array($answers) ||
                 !hash_equals(
                     $ref["fingerprint"],
-                    SubmissionIntegrity::fingerprint($form->id, $a->personId, $a->entryTermId, $answers),
+                    SubmissionIntegrity::fingerprint(
+                        $form->id,
+                        $a->personId,
+                        $a->entryTermId,
+                        $answers,
+                        $form->programId === null ? $a->programId : null
+                    ),
                 )
             ) {
                 throw new CorruptHistoryException();

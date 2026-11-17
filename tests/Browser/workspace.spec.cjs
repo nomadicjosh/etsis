@@ -29,6 +29,7 @@ test('connected workspace, form studio, CSV mapping, rules and narrow-screen acc
             students: [], applications: [], accounts: [], employees: [],
         };
         else if (path === '/sis/forms/') result = { items: [] };
+        else if (path === '/sis/forms/academic-levels/') result = { items: [] };
         else if (path === '/sis/imports/preview/') {
             result = { headers: ['Source', 'Code', 'Title', 'Credits'], samples: [['example-1', 'CS-101', 'Fictional Computing', '3']], row_count: 1, ready: true, errors: [], fingerprint: 'fictional-fingerprint' };
         } else if (path === '/sis/rules/preview/') result = { items: [], count: 0 };
@@ -54,9 +55,10 @@ test('connected workspace, form studio, CSV mapping, rules and narrow-screen acc
     await page.locator('#add-field-menu').click();
     await page.getByRole('button', { name: 'Short answer', exact: true }).click();
     await page.getByLabel('Question or field label').fill('Preferred name');
+    await page.getByText('Field settings', { exact: true }).click();
     await page.getByLabel('Stable field key').fill('preferred_name');
     await page.getByRole('button', { name: 'Preview form', exact: true }).click();
-    await expect(page.getByLabel('Preferred name')).toBeVisible();
+    await expect(page.locator('#drawer-body').getByRole('textbox', { name: 'Preferred name', exact: true })).toBeVisible();
     await accessible();
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="imports"]').click();

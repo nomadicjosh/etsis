@@ -14,6 +14,8 @@ const files = {
     'jQuery-QueryBuilder/dist/css/query-builder.default.css': 'query-builder.min.css',
     'jQuery-QueryBuilder/LICENSE': 'query-builder.LICENSE',
     'bootstrap-icons/LICENSE': 'bootstrap-icons.LICENSE',
+    'sortablejs/Sortable.min.js': 'sortable.min.js',
+    'sortablejs/LICENSE': 'sortable.LICENSE',
 };
 for (const [source, destination] of Object.entries(files)) {
     await copyFile(new URL(`node_modules/${source}`, root), new URL(destination, assets));

@@ -177,21 +177,47 @@ h3 { font-size: .9rem; font-weight: 650; }
 .forms-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 22px; align-items: start; }
 .form-library .surface-heading { border-bottom: 1px solid var(--campus-line); }
 .form-library-item { border: 0; border-bottom: 1px solid #edf0f4; width: 100%; text-align: left; background: #fff; padding: 17px 21px; display: block; color: var(--campus-ink); }
-.form-library-item strong { font-size: .76rem; display: block; margin-bottom: 7px; }
-.form-library-item small { color: #5e7387; font-size: .64rem; display: block; margin-top: 5px; }
+.form-library-item strong { font-size: .875rem; display: block; margin-bottom: 7px; overflow-wrap: anywhere; }
+.form-library-item small { color: #526a80; font-size: .8rem; display: block; margin-top: 5px; overflow-wrap: anywhere; }
 .form-library-item:hover { background: #f5f9fc; }
 .designer-toolbar { padding: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .designer-fields { padding: 0 24px 20px; display: grid; gap: 13px; }
 .designer-field { border: 1px solid #c6d3df; background: #fcfdfe; border-radius: 9px; overflow: hidden; }
 .designer-field-header { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--campus-line); background: #f6f9fc; }
-.designer-field-header strong { font-size: .7rem; }
-.designer-field-header .field-order { font-size: .6rem; color: #5c7185; }
+.designer-field-header h3 { font-size: .925rem; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
+.field-heading-text { min-width: 0; }
+.designer-field-header .field-type { font-size: .75rem; color: #526a80; }
+.form-field-drag { cursor: grab; touch-action: none; flex-shrink: 0; }
+.form-field-drag:active { cursor: grabbing; }
+.form-field-ghost { opacity: .5; border: 2px dashed var(--campus-primary); }
+.field-visibility { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.field-visibility .text-danger { flex-basis: 100%; }
+.form-condition-builder { margin-block: 1.5rem; }
+.form-condition-builder .rule-container { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.form-condition-builder .rule-value-container { min-width: 0; }
+.form-condition-builder select, .form-condition-builder input { max-width: 100%; }
+.form-condition-builder .rules-group-container { min-width: 0; max-width: 100%; }
+.form-condition-builder .rules-list { padding-left: 12px; }
+.form-condition-builder .rule-header { margin-left: auto; order: 4; }
+.designer-field-header .field-order { font-size: .8rem; color: #526a80; }
 .designer-field-header .field-controls { margin-left: auto; display: flex; gap: 4px; }
 .designer-field-body { padding: 17px; }
-.designer-field .form-control, .designer-field .form-select { font-size: .75rem; }
-.designer-field .form-label { font-size: .68rem; }
-.designer-footer { border-top: 1px solid var(--campus-line); padding: 20px 24px; display: flex; flex-direction: column; gap: 17px; background: #fbfcfe; }
-.designer-footer .muted-text { font-size: .65rem; }
+.designer-field .form-control, .designer-field .form-select { font-size: .875rem; }
+.designer-field .form-label { font-size: .8rem; }
+.designer-footer { border-block: 1px solid var(--campus-line); padding: 20px 24px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 12px; background: #fbfcfe; }
+.designer-footer .muted-text { font-size: .8rem; }
+.designer-settings { margin-top: 1rem; border-top: 1px solid var(--campus-line); padding-top: 1rem; }
+.designer-settings summary { color: var(--campus-primary); font-weight: 600; cursor: pointer; }
+.designer-settings .designer-setting-fields { margin-top: .25rem; }
+.form-designer .btn:disabled { color: #5e7287; background: #f1f4f7; border-color: #b7c4d2; opacity: 1; }
+@media (max-width: 575px) {
+    .designer-field-header { flex-wrap: wrap; }
+    .designer-field-header .field-controls { margin-left: 0; width: 100%; justify-content: flex-end; }
+    .designer-toolbar { flex-wrap: wrap; }
+    .designer-fields { padding-inline: 12px; }
+    .designer-field-body { padding: 12px; }
+    .form-condition-builder .rule-filter-container, .form-condition-builder .rule-value-container { width: 100%; }
+}
 .form-preview-frame { padding: 24px; border: 1px solid var(--campus-line); border-radius: 9px; background: #fcfdff; }
 .import-steps { display: flex; gap: 0; list-style: none; padding: 0; margin: 0 0 26px; }
 .import-steps li { display: flex; align-items: center; flex: 1; gap: 10px; color: #5c7085; font-size: .75rem; position: relative; padding: 5px 0 16px; border-bottom: 2px solid #d8e2ec; }

@@ -24,6 +24,11 @@ final readonly class SisFormBuilderController
         return new JsonResponse(['items' => $this->service->listing()]);
     }
 
+    public function levels(): ResponseInterface
+    {
+        return new JsonResponse(['items' => $this->service->levels()]);
+    }
+
     public function show(string $id): ResponseInterface
     {
         return new JsonResponse($this->serialize($this->service->get(new EntityId($id))));
@@ -32,7 +37,7 @@ final readonly class SisFormBuilderController
     public function active(string $id): ResponseInterface
     {
         return new JsonResponse($this->serialize($this->service->active(new EntityId($id)))
-            + ['submission_id' => EntityId::generate()->value]);
+            + ['submission_id' => EntityId::generate()->value, 'application_program_id' => $id]);
     }
 
     public function save(ServerRequest $request): ResponseInterface
@@ -58,10 +63,11 @@ final readonly class SisFormBuilderController
         }
         $form = $this->service->save(
             $f->optionalId('id'),
-            $f->id('program_id'),
+            $f->optionalId('program_id'),
             $f->text('name'),
             $fields,
-            $f->optionalInteger('version')
+            $f->optionalInteger('version'),
+            $f->optionalId('academic_level_id'),
         );
 
         return new JsonResponse($this->serialize($form), 201);
@@ -81,6 +87,12 @@ final readonly class SisFormBuilderController
         return new JsonResponse(['status' => 'disabled']);
     }
 
+    public function disableLevel(string $id): ResponseInterface
+    {
+        $this->service->disable(new EntityId($id), academicLevel: true);
+        return new JsonResponse(['status' => 'disabled']);
+    }
+
     public function submit(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
@@ -93,7 +105,8 @@ final readonly class SisFormBuilderController
             new EntityId($id),
             $f->id('person_id'),
             $f->id('entry_term_id'),
-            $body['answers']
+            $body['answers'],
+            $f->optionalId('program_id'),
         );
 
         return new JsonResponse(['id' => $application->value, 'status' => 'submitted'], 201);
@@ -120,7 +133,8 @@ final readonly class SisFormBuilderController
     /** @return array<string, mixed> */
     private function serialize(ApplicationForm $form): array
     {
-        return ['id' => $form->id->value, 'program_id' => $form->programId->value, 'name' => $form->name,
+        return ['id' => $form->id->value, 'program_id' => $form->programId?->value,
+            'academic_level_id' => $form->academicLevelId?->value, 'name' => $form->name,
             'fields' => $form->fields, 'status' => $form->status, 'version' => $form->version];
     }
 }

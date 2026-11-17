@@ -903,6 +903,7 @@
                                     {
                                         submission_id: schema.submission_id,
                                         person_id: me.person.id,
+                                        program_id: programId,
                                         entry_term_id: termId,
                                         answers: data,
                                     },

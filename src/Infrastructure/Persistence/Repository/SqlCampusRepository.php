@@ -67,8 +67,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                 $q("code") .
                 ", p." .
                 $q("title") .
-                ", f." .
-                $q("form_id") .
+                ", COALESCE(f." . $q('form_id') . ', l.' . $q('form_id') . ') AS ' . $q('form_id') .
                 " FROM " .
                 $q("sis_programs") .
                 " p LEFT JOIN " .
@@ -77,6 +76,9 @@ final readonly class SqlCampusRepository implements CampusRepository
                 $q("program_id") .
                 " = p." .
                 $q("id") .
+                ' LEFT JOIN ' . $q('sis_program_details') . ' c ON c.' . $q('id') . ' = p.' . $q('id')
+                . ' LEFT JOIN ' . $q('sis_level_forms') . ' l ON l.' . $q('academic_level_id')
+                . ' = c.' . $q('academic_level_id') .
                 ($where === [] ? "" : " WHERE " . implode(" AND ", $where)) .
                 " ORDER BY p." .
                 $q("id"),

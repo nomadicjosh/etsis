@@ -17,14 +17,16 @@ final readonly class ApplicationForm
     /** @param array<int, array<string, mixed>> $fields */
     public function __construct(
         public EntityId $id,
-        public EntityId $programId,
+        public ?EntityId $programId,
         public string $name,
         array $fields,
         public string $status = 'draft',
         public int $version = 0,
+        public ?EntityId $academicLevelId = null,
     ) {
         if (
-            trim($name) === '' || mb_strlen($name) > 191 || count($fields) < 1 || count($fields) > 40
+            (($programId === null) === ($academicLevelId === null))
+            || trim($name) === '' || mb_strlen($name) > 191 || count($fields) < 1 || count($fields) > 40
             || !array_is_list($fields) || !in_array($status, ['draft', 'published'], true) || $version < 0
         ) {
             throw new InvalidArgumentException('A named application form with 1–40 fields is required.');
@@ -75,6 +77,17 @@ final readonly class ApplicationForm
                 'show_when' => $condition];
         }
         $this->fields = $clean;
+    }
+
+    public function targetKind(): string
+    {
+        return $this->programId !== null ? 'program' : 'academic_level';
+    }
+
+    public function targetId(): EntityId
+    {
+        return $this->programId ?? $this->academicLevelId
+        ?? throw new InvalidArgumentException('An application form requires one target.');
     }
 
     /**

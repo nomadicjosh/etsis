@@ -3885,6 +3885,20 @@ if (
 $sis->access->staff = true;
 $originalSubmissionActor = $sis->access->actor;
 $formApplications = $app->make(\Domain\Admissions\Service\ApplicationFormService::class);
+$sis->access->staff = false;
+$sis->access->grants = ['sis:forms:manage'];
+$formLevelsResponse = $app->router->match(new \Qubus\Http\ServerRequest(
+    [], [], 'https://campus.example.invalid/sis/forms/academic-levels/', 'GET'
+));
+$formLevels = json_decode((string) $formLevelsResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $formLevelsResponse->getStatusCode() !== 200 || !is_array($formLevels['items'] ?? null)
+    || !str_contains($formLevelsResponse->getHeaderLine('Cache-Control'), 'no-store')
+) {
+    throw new RuntimeException('Institution-defined form levels did not resolve privately for a form editor.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $trackedForm = $formApplications->save(null, $sis->program, "Fictional tracked submission", [
     ["key" => "statement", "label" => "Statement", "type" => "text", "required" => true],
 ], null);

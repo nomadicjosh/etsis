@@ -47,6 +47,10 @@
     let pendingNavigation = null;
     let signInPending = false;
     let formDraft = { id: null, version: null, status: 'draft', fields: [] };
+    const collapsedFormFields = new WeakSet();
+    let formSortable = null;
+    let formConditions = null;
+    let formLoadSerial = 0;
     const drawer = bootstrap.Offcanvas.getOrCreateInstance($one('#record-drawer'));
     const searchModal = bootstrap.Modal.getOrCreateInstance($one('#search-modal'));
     const leaveModal = bootstrap.Modal.getOrCreateInstance($one('#leave-modal'));
@@ -390,7 +394,7 @@
         task(() => navigate(link.dataset.workspace));
     });
     window.addEventListener('popstate', () => task(() => navigate(location.pathname.match(/workspace\/([^/]+)/)?.[1] || 'overview', false)));
-    window.addEventListener('pagehide', () => { disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
+    window.addEventListener('pagehide', () => { cleanupFormConditions(); formSortable?.destroy(); disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
     listen('#discard-draft', 'click', () => { dirty = false; leaveModal.hide(); pendingNavigation?.(); pendingNavigation = null; });
@@ -622,6 +626,7 @@
     document.addEventListener('click', event => { if (event.target.closest('[data-action="new-person"]')) task(() => createRecord('people')); });
 
     function openDrawer(title, eyebrow = 'CONNECTED RECORD') {
+        cleanupFormConditions();
         relationalStudio?.cleanup();
         $one('#workspace-alert').hidden = true;
         $one('#drawer-title').textContent = title; $one('#drawer-eyebrow').textContent = eyebrow;
@@ -637,6 +642,7 @@
         return content;
     }
     $one('#record-drawer').addEventListener('hidden.bs.offcanvas', () => {
+        cleanupFormConditions();
         if (!relationalStudio?.isOpen()) relationalStudio?.cleanup();
         disposeActionMenus($one('#drawer-body'));
         $one('#drawer-body').replaceChildren();
@@ -1371,126 +1377,333 @@
 
     async function loadFormStudio() {
         if (!can('sis:forms:manage')) throw new Error('Form administration needs additional access.');
-        const [programs, result] = await Promise.all([options('programs'), request('/sis/forms/')]);
+        const version = generation;
+        const [programs, result, levels] = await Promise.all([options('programs'), request('/sis/forms/'), request('/sis/forms/academic-levels/')]);
+        if (version !== generation || current !== 'forms') return;
         const selected = $one('#form-program').value;
-        populate($one('#form-program'), programs); $one('#form-program').value = selected;
+        const selectedLabel = $one('#form-program').selectedOptions[0]?.textContent;
+        populate($one('#form-program'), programs);
+        if (selected && !programs.some(program => program.value === selected))
+            $one('#form-program').append(node('option', { value: selected }, selectedLabel || 'Selected program'));
+        $one('#form-program').value = selected;
         installLookup('#form-program', 'programs');
+        const levelSelect = $one('#form-level'), selectedLevel = levelSelect.value;
+        const levelLabel = levelSelect.selectedOptions[0]?.textContent;
+        populate(levelSelect, levels.items.map(level => ({ value: level.id, label: level.title })), 'Choose an academic level');
+        if (selectedLevel && !levels.items.some(level => level.id === selectedLevel)) levelSelect.append(node('option', { value: selectedLevel }, levelLabel || 'Selected academic level'));
+        levelSelect.value = selectedLevel;
+        $one('#form-level-help').textContent = levels.items.length
+            ? 'Uses the academic levels configured by your institution. A program-specific form takes precedence.'
+            : 'No academic levels are configured. Set them up in Academic catalog, or choose One academic program.';
+        syncFormScope();
         const library = $one('#form-library-list'); clear(library);
-        if (!result.items.length) library.append(emptyState('Your first welcome starts here.', 'Create a form and enable it for an academic program.', 'ui-checks'));
+        if (!result.items.length) library.append(emptyState('Your first welcome starts here.', 'Create a form for an academic level or a specific program.', 'ui-checks'));
         for (const form of result.items) {
             const button = node('button', { class: 'form-library-item', type: 'button', onclick: () => task(async () => {
                 if (dirty) { pendingNavigation = async () => loadDraft(form.id); leaveModal.show(); return; }
                 await loadDraft(form.id);
             }) }, node('strong', {}, form.name), badge(form.enabled_id ? 'Enabled' : form.status), node('small', {}, `${form.program} · ${form.status === 'published' ? 'Open to create a new revision' : 'Continue editing draft'}`));
             const item = node('div', {}, button);
-            if (form.enabled_id && can('sis:forms:publish')) item.append(node('button', { class: 'btn btn-sm btn-outline-secondary ms-3 mb-3', type: 'button', 'aria-label': `Disable ${form.name}`, onclick: event => task(async () => {
-                if (!window.confirm(`Stop accepting new applications through “${form.name}”? Existing submissions will be preserved.`)) return;
-                await request(`/sis/forms/programs/${form.program_id}/disable/`, 'POST', {});
-                notify('Application form disabled. Existing submissions are preserved.'); await loadFormStudio();
-            }, event.currentTarget) }, 'Disable application form'));
+            if (form.enabled_id && can('sis:forms:publish')) item.append(node('button', { class: 'btn btn-sm btn-outline-secondary ms-3 mb-3', type: 'button', 'aria-label': `Remove default: ${form.name}`, onclick: event => task(async () => {
+                reviewFormDisable(form);
+            }, event.currentTarget) }, 'Remove default'));
             library.append(item);
         }
         if (!formDraft.fields.length) renderDesigner();
+        updateFormPublication();
     }
 
     async function loadDraft(id) {
+        const serial = ++formLoadSerial, version = generation;
         const record = await request(`/sis/forms/${id}/`);
+        if (serial !== formLoadSerial || version !== generation || current !== 'forms' || dirty) return;
         formDraft = { ...record, id: record.status === 'published' ? null : record.id, version: record.status === 'published' ? null : record.version, status: 'draft', fields: structuredClone(record.fields) };
         $one('#form-name').value = record.name;
-        const programSelect = $one('#form-program');
-        if (![...programSelect.options].some(option => option.value === record.program_id)) programSelect.append(node('option', { value: record.program_id }, 'Selected program'));
-        programSelect.value = record.program_id;
+        $one('#form-scope').value = record.program_id ? 'program' : 'academic_level';
+        for (const [selector, value, fallback] of [['#form-program', record.program_id, 'Selected program'], ['#form-level', record.academic_level_id, 'Selected academic level']]) {
+            const select = $one(selector);
+            if (value && ![...select.options].some(option => option.value === value)) select.append(node('option', { value }, record.target_label || fallback));
+            select.value = value || '';
+        }
+        syncFormScope();
         $one('#designer-state').textContent = record.status === 'published' ? 'New revision' : 'Draft';
         $one('#designer-save-status').textContent = record.status === 'published' ? 'The published form stays unchanged. Save this as a new revision.' : 'You are editing an unpublished draft.';
-        dirty = false; renderDesigner();
+        dirty = false; renderDesigner(); updateFormPublication();
     }
 
-    function renderDesigner() {
+    function updateFormPublication() {
+        $one('#form-publish').disabled = dirty || !formDraft.id;
+    }
+
+    function formTarget() {
+        const program = $one('#form-scope').value === 'program';
+        return { program_id: program ? $one('#form-program').value : null, academic_level_id: program ? null : $one('#form-level').value };
+    }
+
+    function syncFormScope() {
+        const program = $one('#form-scope').value === 'program';
+        $one('#form-scope').disabled = Boolean(formDraft.id);
+        for (const [name, active] of [['program', program], ['level', !program]]) {
+            $one(`#form-${name}-group`).hidden = !active;
+            $one(`#form-${name}`).disabled = !active || Boolean(formDraft.id);
+            $one(`#form-${name}`).required = active;
+        }
+        if ($one('#form-program').nextElementSibling) $one('#form-program').nextElementSibling.hidden = Boolean(formDraft.id);
+    }
+
+    function cleanupFormConditions() {
+        if (formConditions) { formConditions.queryBuilder('destroy'); formConditions = null; }
+    }
+
+    function conditionProblem(field, index) {
+        if (!field.show_when) return '';
+        const preceding = new Set(formDraft.fields.slice(0, index).map(item => item.key));
+        const valid = group => Array.isArray(group.rules) && group.rules.every(rule => rule.rules ? valid(rule) : preceding.has(rule.id));
+        return valid(field.show_when) ? '' : 'A visibility rule refers to a missing or later question. Move that question earlier, or edit these conditions before saving.';
+    }
+
+    function editFormConditions(field) {
+        const index = formDraft.fields.indexOf(field);
+        const body = openDrawer('Field visibility', field.label || 'APPLICATION QUESTION');
+        const prior = formDraft.fields.slice(0, index);
+        body.append(node('p', { class: 'muted-text' }, 'Show this question when earlier answers match. Combine conditions using All or Any. Hidden questions do not require an answer.'));
+        const builder = node('div', { class: 'form-condition-builder' }); body.append(builder);
+        if (prior.length) {
+            const values = items => Object.fromEntries(items.map(item => [item, escapeLabel(item)]));
+            const filters = prior.map(item => ({ id: item.key, label: escapeLabel(item.label || item.key),
+                type: item.type === 'number' ? 'integer' : item.type === 'checkbox' ? 'boolean' : 'string',
+                ...(item.type === 'checkbox' ? { input: 'select', values: { 1: 'Checked', 0: 'Not checked' } }
+                    : item.type === 'select' ? { input: 'select', values: values(item.options) } : {}),
+                operators: item.type === 'number' ? ['equal', 'not_equal', 'less', 'greater', 'in', 'not_in'] : ['equal', 'not_equal', 'in', 'not_in'],
+            }));
+            const accessible = () => {
+                $all('i', builder).forEach(icon => icon.setAttribute('aria-hidden', 'true'));
+                $all('.rule-filter-container select', builder).forEach(control => control.setAttribute('aria-label', 'Earlier question'));
+                $all('.rule-operator-container select', builder).forEach(control => control.setAttribute('aria-label', 'Comparison'));
+                $all('.rule-value-container input, .rule-value-container select', builder).forEach(control => control.setAttribute('aria-label', 'Condition value'));
+                $all('.rules-group-header input', builder).forEach(control => control.setAttribute('aria-label', control.value === 'AND' ? 'Match all conditions' : 'Match any condition'));
+            };
+            formConditions = $(builder);
+            formConditions.on('afterAddGroup.queryBuilder afterCreateRuleFilters.queryBuilder afterCreateRuleOperators.queryBuilder afterCreateRuleInput.queryBuilder afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder afterSetRules.queryBuilder', accessible);
+            formConditions.queryBuilder({ allow_groups: 4, allow_empty: false, plugins: [], filters,
+                lang: { add_rule: 'Add condition', add_group: 'Add group', conditions: { AND: 'All', OR: 'Any' } },
+                ...(field.show_when && !conditionProblem(field, index) ? { rules: field.show_when } : {}),
+            });
+            accessible();
+        } else body.append(node('p', { class: 'alert alert-info' }, 'The first question is always visible. Add or move another question before it to use conditions.'));
+        body.append(node('div', { class: 'inline-actions' },
+            node('button', { class: 'btn btn-outline-secondary', type: 'button', onclick: () => drawer.hide() }, 'Cancel'),
+            node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => { delete field.show_when; formChanged(); renderDesigner(index, 'conditions'); drawer.hide(); } }, 'Always show'),
+            ...(prior.length ? [node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(async () => {
+                const rules = formConditions.queryBuilder('getRules');
+                if (!rules) throw new Error('Complete each condition before applying it.');
+                // Persist only the domain rule language, never plugin metadata or labels.
+                const clean = group => ({ condition: group.condition, rules: group.rules.map(rule => rule.rules ? clean(rule) : { id: rule.id, operator: rule.operator, value: rule.value }) });
+                field.show_when = clean(rules); formChanged(); renderDesigner(index, 'conditions'); drawer.hide();
+            }) }, 'Apply conditions')] : []),
+        ));
+    }
+
+    function formChanged() {
+        dirty = true;
+        formLoadSerial++;
+        $one('#designer-state').textContent = 'Unsaved changes';
+        $one('#designer-save-status').textContent = 'Save your draft before reviewing publication. Existing applications keep their published form.';
+        updateFormPublication();
+    }
+
+    function renderDesigner(focusIndex = null, focusControl = null) {
+        formSortable?.destroy(); formSortable = null;
         const container = $one('#designer-fields'); clear(container);
-        if (!formDraft.fields.length) container.append(emptyState('A blank canvas, full of possibility.', 'Add the fields your program needs. Applicants will see a clean, accessible form.', 'layout-text-window'));
+        if (!formDraft.fields.length) container.append(emptyState('A blank canvas, full of possibility.', 'Add the questions your applicants need.', 'layout-text-window'));
         formDraft.fields.forEach((field, index) => {
-            const heading = node('div', { class: 'designer-field-header' }, node('span', { class: 'field-order' }, String(index + 1).padStart(2, '0')), node('strong', {}, field.type === 'select' ? 'Dropdown choice' : field.type === 'textarea' ? 'Long answer' : field.type));
+            const types = { text: 'Short answer', textarea: 'Long answer', select: 'Dropdown choice', email: 'Email address', date: 'Date', number: 'Whole number', checkbox: 'Confirmation' };
+            const title = node('h3', { id: `field-title-${index}` }, field.label || types[field.type]);
+            const drag = node('button', { class: 'icon-button form-field-drag', type: 'button', 'aria-label': `Reorder field ${index + 1}`, title: 'Drag to reorder; use the arrow buttons with a keyboard' }, icon('grip-vertical'));
+            const heading = node('div', { class: 'designer-field-header' }, drag,
+                node('span', { class: 'field-order', 'aria-hidden': 'true' }, String(index + 1).padStart(2, '0')),
+                node('div', { class: 'field-heading-text' }, title, node('span', { class: 'field-type' }, types[field.type])));
             const controls = node('div', { class: 'field-controls' });
             for (const [label, name, delta] of [['Move field up', 'arrow-up', -1], ['Move field down', 'arrow-down', 1]]) {
-                controls.append(node('button', { class: 'icon-button', type: 'button', 'aria-label': `${label}: ${field.label || `field ${index + 1}`}`, disabled: index + delta < 0 || index + delta >= formDraft.fields.length, onclick: () => {
+                controls.append(node('button', { class: 'icon-button', type: 'button', 'data-field-move': name, 'aria-label': `${label}: ${field.label || `field ${index + 1}`}`, disabled: index + delta < 0 || index + delta >= formDraft.fields.length, onclick: () => {
                     [formDraft.fields[index], formDraft.fields[index + delta]] = [formDraft.fields[index + delta], formDraft.fields[index]];
-                    // The server rejects forward references. A moved field's visibility can be adjusted here before save.
-                    dirty = true; renderDesigner();
+                    formChanged(); renderDesigner(index + delta, name);
+                    $one('#form-sort-status').textContent = `${field.label || 'Field'} moved to position ${index + delta + 1}.`;
                 } }, icon(name)));
             }
-            controls.append(node('button', { class: 'icon-button', type: 'button', 'aria-label': `Remove field ${index + 1}`, onclick: () => { formDraft.fields.splice(index, 1); dirty = true; renderDesigner(); } }, icon('trash3')));
-            heading.append(controls);
-            const content = node('div', { class: 'designer-field-body row g-3' });
-            const input = (key, label, width, type = 'text') => {
+            controls.append(node('button', { class: 'icon-button', type: 'button', 'aria-label': `Duplicate field ${index + 1}`, disabled: formDraft.fields.length >= 40, onclick: () => {
+                const copy = structuredClone(field); copy.key = newFormFieldKey(); copy.label = `${copy.label || types[field.type]} copy`.slice(0, 120);
+                formDraft.fields.splice(index + 1, 0, copy); formChanged(); renderDesigner(index + 1, 'label');
+            } }, icon('copy')));
+            controls.append(node('button', { class: 'icon-button', type: 'button', 'data-field-remove': '', 'aria-label': `Remove field ${index + 1}`, onclick: () => {
+                formDraft.fields.splice(index, 1); formChanged(); renderDesigner(Math.min(index, formDraft.fields.length - 1), 'remove');
+            } }, icon('trash3')));
+            const content = node('div', { class: 'designer-field-body row g-3', id: `field-body-${index}`, hidden: collapsedFormFields.has(field) });
+            const toggle = node('button', { class: 'icon-button', type: 'button', 'aria-label': `${content.hidden ? 'Expand' : 'Collapse'} field ${index + 1}`, 'aria-expanded': String(!content.hidden), 'aria-controls': content.id, onclick: () => {
+                content.hidden = !content.hidden;
+                if (content.hidden) collapsedFormFields.add(field); else collapsedFormFields.delete(field);
+                toggle.setAttribute('aria-expanded', String(!content.hidden)); toggle.setAttribute('aria-label', `${content.hidden ? 'Expand' : 'Collapse'} field ${index + 1}`);
+                toggle.replaceChildren(icon(content.hidden ? 'chevron-down' : 'chevron-up'));
+            } }, icon(content.hidden ? 'chevron-down' : 'chevron-up'));
+            controls.append(toggle); heading.append(controls);
+            const input = (key, label, type = 'text') => {
                 const id = `designer-${index}-${key}`;
-                const control = node(type === 'textarea' ? 'textarea' : 'input', { class: 'form-control', id, value: type === 'textarea' ? undefined : field[key] || '', maxlength: key === 'help' ? 300 : key === 'key' ? 40 : 120, ...(type === 'textarea' ? { rows: 3 } : { type: 'text' }) });
-                if (type === 'textarea') control.value = field.options.join('\n');
-                control.addEventListener('input', () => { if (type === 'textarea') field.options = control.value.split('\n').filter(value => value.trim()); else field[key] = control.value; dirty = true; });
-                return node('div', { class: `col-md-${width}` }, node('label', { class: 'form-label', for: id }, label), control);
-            };
-            content.append(input('label', 'Question or field label', 7), input('key', 'Stable field key', 5), input('help', 'A helpful hint (optional)', 12));
-            if (field.type === 'select') content.append(input('options', 'Choices (one per line)', 12, 'textarea'));
-            const required = node('input', { class: 'form-check-input', type: 'checkbox', id: `field-required-${index}`, checked: field.required, onchange: event => { field.required = event.target.checked; dirty = true; } });
-            content.append(node('div', { class: 'col-12' }, node('div', { class: 'form-check' }, required, node('label', { class: 'form-check-label', for: required.id }, 'An answer is required'))));
-            if (index > 0) {
-                const conditionBox = node('input', { class: 'form-check-input', type: 'checkbox', id: `field-condition-${index}`, checked: Boolean(field.show_when) });
-                const conditionRow = node('div', { class: 'row g-2 mt-2', hidden: !field.show_when });
-                const prior = node('select', { class: 'form-select', id: `field-condition-source-${index}`, 'aria-label': 'Show when this earlier field' });
-                populate(prior, formDraft.fields.slice(0, index).map(item => ({ value: item.key, label: item.label || item.key })), 'Choose an earlier field');
-                const expected = node('input', { class: 'form-control', type: 'text', id: `field-condition-value-${index}`, 'aria-label': 'Equals this value', placeholder: 'Equals this value', maxlength: 191 });
-                const rule = field.show_when?.rules?.[0]; if (rule && !rule.condition) { prior.value = rule.id; expected.value = text(rule.value); }
-                function updateCondition() {
-                    if (!conditionBox.checked) { field.show_when = null; conditionRow.hidden = true; }
-                    else {
-                        conditionRow.hidden = false;
-                        const source = formDraft.fields.find(item => item.key === prior.value);
-                        let value = expected.value;
-                        if (source?.type === 'checkbox') value = value === 'true' || value === '1';
-                        else if (source?.type === 'number') value = Number(value);
-                        field.show_when = { condition: 'AND', rules: [{ id: prior.value, operator: 'equal', value }] };
+                const control = node(type === 'textarea' ? 'textarea' : 'input', { class: 'form-control', id, maxlength: key === 'help' ? 300 : key === 'key' ? 40 : type === 'textarea' ? 3630 : 120, ...(type === 'textarea' ? { rows: 3 } : { type: 'text' }) });
+                control.value = type === 'textarea' ? field.options.join('\n') : field[key] || '';
+                control.addEventListener('input', () => {
+                    if (type === 'textarea') field.options = control.value.split('\n').filter(value => value.trim()); else field[key] = control.value;
+                    if (key === 'label') {
+                        title.textContent = field.label || types[field.type];
+                        for (const [name, label] of [['arrow-up', 'Move field up'], ['arrow-down', 'Move field down']])
+                            controls.querySelector(`[data-field-move="${name}"]`).setAttribute('aria-label', `${label}: ${field.label || `field ${index + 1}`}`);
                     }
-                    dirty = true;
-                }
-                conditionBox.addEventListener('change', updateCondition); prior.addEventListener('change', updateCondition); expected.addEventListener('input', updateCondition);
-                conditionRow.append(node('div', { class: 'col-md-6' }, prior), node('div', { class: 'col-md-6' }, expected));
-                content.append(node('div', { class: 'col-12' }, node('div', { class: 'form-check' }, conditionBox, node('label', { class: 'form-check-label', for: conditionBox.id }, 'Show only when an earlier answer matches')), conditionRow));
-            }
-            container.append(node('div', { class: 'designer-field' }, heading, content));
+                    formChanged();
+                });
+                return node('div', { class: 'col-12' }, node('label', { class: 'form-label', for: id }, label), control);
+            };
+            content.append(input('label', 'Question or field label'), input('help', 'A helpful hint (optional)'));
+            if (field.type === 'select') content.append(input('options', 'Choices (one per line)', 'textarea'));
+            const required = node('input', { class: 'form-check-input', type: 'checkbox', id: `field-required-${index}`, checked: field.required, onchange: event => { field.required = event.target.checked; formChanged(); } });
+            content.append(node('div', { class: 'col-12' }, node('div', { class: 'form-check' }, required, node('label', { class: 'form-check-label', for: required.id }, 'An answer is required'))));
+            const problem = conditionProblem(field, index);
+            content.append(node('div', { class: 'col-12 field-visibility' },
+                node('span', { class: 'muted-text' }, field.show_when ? 'Conditional visibility' : 'Always visible'),
+                node('button', { class: 'btn btn-sm btn-outline-primary', type: 'button', 'data-field-conditions': '', 'aria-label': `Edit conditions for field ${index + 1}`, onclick: () => editFormConditions(field) }, 'Edit conditions'),
+                ...(problem ? [node('p', { class: 'text-danger mb-0', role: 'status' }, problem)] : [])));
+            content.append(node('details', { class: 'designer-settings col-12' }, node('summary', {}, 'Field settings'), node('div', { class: 'row g-3 designer-setting-fields' }, input('key', 'Stable field key'))));
+            container.append(node('section', { class: 'designer-field', 'aria-labelledby': title.id }, heading, content));
         });
+        if (formDraft.fields.length && window.Sortable) formSortable = new window.Sortable(container, {
+            handle: '.form-field-drag', draggable: '.designer-field', ghostClass: 'form-field-ghost',
+            forceFallback: true, fallbackOnBody: true,
+            animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 140,
+            delayOnTouchOnly: true, delay: 150, store: null,
+            onEnd: event => {
+                if (event.oldDraggableIndex === event.newDraggableIndex) return;
+                const [field] = formDraft.fields.splice(event.oldDraggableIndex, 1);
+                formDraft.fields.splice(event.newDraggableIndex, 0, field); formChanged();
+                $one('#form-sort-status').textContent = `${field.label || 'Field'} moved to position ${event.newDraggableIndex + 1}.`;
+                requestAnimationFrame(() => renderDesigner(event.newDraggableIndex, 'drag'));
+            },
+        });
+        if (focusIndex !== null) {
+            const field = container.querySelectorAll('.designer-field')[focusIndex];
+            const selector = focusControl === 'remove' ? '[data-field-remove]' : focusControl === 'drag' ? '.form-field-drag' : focusControl === 'conditions' ? '[data-field-conditions]' : focusControl === 'label' ? 'input' : `[data-field-move="${focusControl}"]:not(:disabled)`;
+            const control = field?.querySelector(selector);
+            (control && !control.closest('[hidden]') ? control : field?.querySelector('.form-field-drag') || $one('#add-field-menu')).focus();
+        }
     }
+
+    function newFormFieldKey() { return `field_${crypto.randomUUID().replaceAll('-', '').slice(0, 28)}`; }
+
+    for (const [selector, collapse] of [['#form-collapse-fields', true], ['#form-expand-fields', false]]) listen(selector, 'click', () => {
+        for (const field of formDraft.fields) { if (collapse) collapsedFormFields.add(field); else collapsedFormFields.delete(field); }
+        renderDesigner();
+    });
 
     document.addEventListener('click', event => {
         const button = event.target.closest('[data-add-field]');
         if (!button) return;
         if (formDraft.fields.length >= 40) return showError(new Error('An application form supports up to 40 fields.'));
         const type = button.dataset.addField;
-        const next = formDraft.fields.length + 1;
-        formDraft.fields.push({ key: `field_${next}_${Date.now().toString(36).slice(-4)}`, label: '', help: '', type, required: false, options: type === 'select' ? ['Option one', 'Option two'] : [], show_when: null });
-        dirty = true; renderDesigner();
+        formDraft.fields.push({ key: newFormFieldKey(), label: '', help: '', type, required: false, options: type === 'select' ? ['Option one', 'Option two'] : [], show_when: null });
+        formChanged(); renderDesigner();
         $one('.designer-field:last-child input', $one('#designer-fields'))?.focus();
     });
-    listen('#form-designer-meta', 'input', () => { dirty = true; });
-    listen('#form-designer-meta', 'change', () => { dirty = true; });
+    listen('#form-designer-meta', 'input', formChanged);
+    listen('#form-designer-meta', 'change', formChanged);
+    listen('#form-scope', 'change', syncFormScope);
+    listen('#form-level-setup', 'click', () => classificationStudio.library('academic_level', '', null, [], null,
+        async () => { drawer.hide(); await loadFormStudio(); }, 'Back to application form'));
     listen('#form-new', 'click', () => {
-        const reset = () => { formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#form-name').value = ''; $one('#form-program').value = ''; dirty = false; $one('#designer-state').textContent = 'New draft'; renderDesigner(); $one('#form-name').focus(); };
+        const reset = () => { formLoadSerial++; formDraft = { id: null, version: null, status: 'draft', fields: [] }; $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = ''; syncFormScope(); dirty = false; $one('#designer-state').textContent = 'New draft'; $one('#designer-save-status').textContent = 'A draft is visible only to form administrators.'; renderDesigner(); updateFormPublication(); $one('#form-name').focus(); };
         if (dirty) { pendingNavigation = reset; leaveModal.show(); } else reset();
     });
     async function saveDraft() {
         if (!$one('#form-designer-meta').reportValidity()) return false;
         if (!formDraft.fields.length) throw new Error('Add at least one field before saving your form.');
-        const record = await request('/sis/forms/', 'POST', { id: formDraft.id || undefined, version: formDraft.version ?? undefined, program_id: $one('#form-program').value, name: $one('#form-name').value, fields: formDraft.fields });
-        formDraft = record; dirty = false;
-        $one('#designer-state').textContent = 'Draft saved'; $one('#designer-save-status').textContent = 'Saved. Your draft is ready to preview or publish.';
-        await loadFormStudio(); notify('Draft saved. A good start.'); return true;
+        const invalidCondition = formDraft.fields.findIndex((field, index) => conditionProblem(field, index));
+        if (invalidCondition !== -1) throw new Error(`Review visibility conditions for field ${invalidCondition + 1} before saving.`);
+        if (formDraft.fields.some(field => !field.label.trim())) throw new Error('Give each field a label before saving.');
+        const keys = formDraft.fields.map(field => field.key);
+        if (new Set(keys).size !== keys.length || keys.some(key => !/^[a-z][a-z0-9_]{0,39}$/.test(key)))
+            throw new Error('Each field needs a unique stable key using lowercase letters, numbers and underscores.');
+        const source = formDraft;
+        const input = { ...formTarget(), name: $one('#form-name').value, fields: structuredClone(formDraft.fields) };
+        const record = await request('/sis/forms/', 'POST', { ...input, id: source.id || undefined, version: source.version ?? undefined });
+        if (source !== formDraft) return false;
+        const unchanged = JSON.stringify(input) === JSON.stringify({ ...formTarget(), name: $one('#form-name').value, fields: formDraft.fields });
+        formDraft = unchanged ? record : { ...formDraft, id: record.id, version: record.version };
+        dirty = !unchanged;
+        if (current === 'forms') {
+            $one('#designer-state').textContent = unchanged ? 'Draft saved' : 'Unsaved changes';
+            $one('#designer-save-status').textContent = unchanged ? 'Saved. Preview your form or review publication.' : 'An earlier edit was saved. Save your latest changes before publication review.';
+            await loadFormStudio();
+            notify(unchanged ? 'Draft saved.' : 'Earlier edit saved. Your latest changes are still in the editor.');
+        }
+        updateFormPublication(); syncFormScope();
+        return unchanged;
     }
     listen('#form-save', 'click', saveDraft);
-    listen('#form-publish', 'click', async () => {
-        if (dirty || !formDraft.id) { if (!await saveDraft()) return; }
-        await request(`/sis/forms/${formDraft.id}/publish/`, 'POST', { version: formDraft.version });
-        notify('Published. This program now uses your new application form.');
-        $one('#designer-state').textContent = 'Published'; $one('#designer-save-status').textContent = 'Published forms stay unchanged. Open one from the library to create a new revision.';
-        formDraft = { ...formDraft, id: null, version: null, status: 'draft' }; dirty = false; await loadFormStudio();
+    listen('#form-publish', 'click', () => {
+        if (dirty || !formDraft.id) throw new Error('Save your draft before reviewing publication.');
+        const reviewed = structuredClone(formDraft);
+        const level = Boolean(reviewed.academic_level_id);
+        const body = openDrawer('Review application form', 'APPLICATION PUBLICATION');
+        let stale = false;
+        const confirm = node('button', { type: 'button', class: 'btn btn-primary', onclick: event => task(async () => {
+            try {
+                await request(`/sis/forms/${reviewed.id}/publish/`, 'POST', { version: reviewed.version });
+            } catch (error) {
+                if (error.status === 409 && body.isConnected) { stale = true; confirm.remove(); }
+                throw error;
+            }
+            if (formDraft.id === reviewed.id && formDraft.version === reviewed.version && !dirty) {
+                formDraft = { ...formDraft, id: null, version: null, status: 'draft' };
+                $one('#designer-state').textContent = 'Published';
+                $one('#designer-save-status').textContent = 'Published forms stay unchanged. Open one from the library to create a new revision.';
+                updateFormPublication(); syncFormScope();
+            }
+            if (!body.isConnected) return;
+            notify('Application form published.');
+            drawer.hide();
+            await loadFormStudio();
+        }, event.currentTarget) }, 'Confirm publication');
+        body.append(
+            node('button', { type: 'button', class: 'btn btn-link mb-3', onclick: event => task(async () => {
+                drawer.hide();
+                if (stale) await loadDraft(reviewed.id);
+                else $one('#form-publish').focus();
+            }, event.currentTarget) }, 'Back to editor'),
+            recordSummary([
+                ['Form', reviewed.name], [level ? 'Academic level' : 'Academic program', $one(level ? '#form-level' : '#form-program').selectedOptions[0]?.textContent || 'Selected target'],
+                ['Fields', reviewed.fields.length],
+            ]),
+            node('p', { class: 'alert alert-info' }, (level ? 'This becomes the default form for programs assigned to this academic level. Program-specific forms take precedence. ' : 'This becomes the form for this program, taking precedence over any academic-level default. ') + 'It replaces the current form for this target. Existing applications keep their original form and answers.'),
+            node('section', { class: 'record-section', 'aria-label': 'Saved application form review' },
+                node('h3', {}, 'Applicant preview'), applicationControls(reviewed.fields, true)),
+            confirm,
+        );
     });
+
+    function reviewFormDisable(form) {
+        const level = Boolean(form.academic_level_id);
+        const body = openDrawer('Remove application default', 'APPLICATION AVAILABILITY');
+        body.append(
+            recordSummary([[level ? 'Academic level' : 'Academic program', form.program], ['Listed form', form.name]]),
+            node('p', { class: 'alert alert-info' }, (level ? 'Remove the currently enabled default for this academic level. Program-specific forms stay enabled. ' : 'Remove the currently enabled program override. If an academic-level default is enabled, this program will use it. ') + 'Existing applications and answers are preserved.'),
+            node('div', { class: 'inline-actions' },
+                node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => drawer.hide() }, 'Keep enabled'),
+                node('button', { type: 'button', class: 'btn btn-primary', onclick: event => task(async () => {
+                    await request(`/sis/forms/${level ? 'academic-levels' : 'programs'}/${level ? form.academic_level_id : form.program_id}/disable/`, 'POST', {});
+                    if (!body.isConnected) return;
+                    notify('Application default removed. Existing submissions are preserved.');
+                    drawer.hide();
+                    await loadFormStudio();
+                }, event.currentTarget) }, 'Remove default'),
+            ),
+        );
+    }
     listen('#form-preview', 'click', () => {
         const body = openDrawer($one('#form-name').value || 'Application preview', 'AS YOUR APPLICANT WILL SEE IT');
         body.append(node('p', { class: 'muted-text' }, 'Preview only. Nothing you enter here is submitted.'), applicationControls(formDraft.fields, true));
@@ -1524,7 +1737,7 @@
         answers.append(node('p', { class: 'form-text' }, 'Your application is private. Required fields are marked with an asterisk.'), node('button', { type: 'submit', class: 'btn btn-primary mt-3' }, 'Submit application ', icon('send')));
         answers.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!answers.reportValidity()) return;
-            await request(`/sis/forms/${form.id}/submissions/`, 'POST', { submission_id: form.submission_id, person_id: personId, entry_term_id: termId, answers: applicationAnswers(answers, form.fields) });
+            await request(`/sis/forms/${form.id}/submissions/`, 'POST', { submission_id: form.submission_id, person_id: personId, program_id: form.application_program_id || form.program_id, entry_term_id: termId, answers: applicationAnswers(answers, form.fields) });
             clear(container); container.append(emptyState('You’re one step closer.', 'Your application has been submitted. The admissions team can now review your program-specific form.', 'check2-circle'));
             notify('Application submitted. Here’s to your next chapter.');
         }, $one('[type="submit"]', answers)); });

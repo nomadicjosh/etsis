@@ -99,12 +99,20 @@ return static function (Psr7Router $router): void {
         ->name('sis.forms.list');
     $router->map(['POST'], '/sis/forms/', [SisFormBuilderController::class, 'save'])
         ->name('sis.forms.save');
+    $router->map(['GET'], '/sis/forms/academic-levels/', [SisFormBuilderController::class, 'levels'])
+        ->name('sis.forms.levels');
     $router->map(['GET'], '/sis/forms/{id}/', [SisFormBuilderController::class, 'show'])
         ->name('sis.forms.show');
     $router->map(['POST'], '/sis/forms/{id}/publish/', [SisFormBuilderController::class, 'publish'])
         ->name('sis.forms.publish');
     $router->map(['POST'], '/sis/forms/programs/{id}/disable/', [SisFormBuilderController::class, 'disable'])
         ->name('sis.forms.disable');
+    $router->map(
+        ['POST'],
+        '/sis/forms/academic-levels/{id}/disable/',
+        [SisFormBuilderController::class, 'disableLevel']
+    )
+        ->name('sis.forms.level.disable');
     $router->map(['GET'], '/sis/forms/programs/{id}/active/', [SisFormBuilderController::class, 'active'])
         ->name('sis.forms.active');
     $router->map(['POST'], '/sis/forms/{id}/submissions/', [SisFormBuilderController::class, 'submit'])

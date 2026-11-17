@@ -40,6 +40,13 @@ final readonly class ApplicationFormService
         return $this->repository->get($id);
     }
 
+    /** @return list<array<string,mixed>> */
+    public function levels(): array
+    {
+        $this->access->requirePermission('sis:forms:manage');
+        return $this->repository->levels();
+    }
+
     public function active(EntityId $program): ApplicationForm
     {
         $this->access->authenticatedUserId();
@@ -50,10 +57,11 @@ final readonly class ApplicationFormService
     /** @param list<array<string, mixed>> $fields */
     public function save(
         ?EntityId $id,
-        EntityId $program,
+        ?EntityId $program,
         string $name,
         array $fields,
         ?int $version,
+        ?EntityId $academicLevel = null,
     ): ApplicationForm {
         return $this->transactions->run(function () use (
             $id,
@@ -61,14 +69,32 @@ final readonly class ApplicationFormService
             $name,
             $fields,
             $version,
+            $academicLevel,
         ): ApplicationForm {
             $actor = $this->access->requirePermission("sis:forms:manage");
-            $this->repository->lockProgram($program);
+            $form = new ApplicationForm(
+                $id ?? EntityId::generate(),
+                $program,
+                $name,
+                $fields,
+                'draft',
+                $id === null ? 0 : $version + 1,
+                $academicLevel
+            );
+            if ($program !== null) {
+                $this->repository->lockProgram($program);
+            } else {
+                $this->repository->lockLevel($form->targetId());
+            }
+            if ($this->access->requirePermission('sis:forms:manage')->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('Access denied.');
+            }
             if ($id !== null) {
                 $existing = $this->repository->get($id);
                 if (
                     $existing->status !== "draft" ||
-                    $existing->programId->value !== $program->value ||
+                    $existing->targetKind() !== $form->targetKind() ||
+                    $existing->targetId()->value !== $form->targetId()->value ||
                     $version !== $existing->version
                 ) {
                     throw new ConcurrentModificationException(
@@ -76,14 +102,6 @@ final readonly class ApplicationFormService
                     );
                 }
             }
-            $form = new ApplicationForm(
-                $id ?? EntityId::generate(),
-                $program,
-                $name,
-                $fields,
-                "draft",
-                $id === null ? 0 : $version + 1,
-            );
             $this->repository->save($form, $id === null ? null : $version);
             $this->audit->record($actor, "admissions.form_saved", $form->id);
 
@@ -96,7 +114,14 @@ final readonly class ApplicationFormService
         $this->transactions->run(function () use ($id, $version): void {
             $actor = $this->access->requirePermission("sis:forms:publish");
             $form = $this->repository->get($id);
-            $this->repository->lockProgram($form->programId);
+            if ($form->programId !== null) {
+                $this->repository->lockProgram($form->programId);
+            } else {
+                $this->repository->lockLevel($form->targetId());
+            }
+            if ($this->access->requirePermission('sis:forms:publish')->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('Access denied.');
+            }
             $form = $this->repository->get($id);
             if ($form->version !== $version || $form->status !== "draft") {
                 throw new ConcurrentModificationException("Reload the current draft before publishing.");
@@ -106,12 +131,23 @@ final readonly class ApplicationFormService
         });
     }
 
-    public function disable(EntityId $program): void
+    public function disable(EntityId $program, bool $academicLevel = false): void
     {
-        $this->transactions->run(function () use ($program): void {
+        $this->transactions->run(function () use ($program, $academicLevel): void {
             $actor = $this->access->requirePermission("sis:forms:publish");
-            $this->repository->lockProgram($program);
-            $this->repository->disable($program);
+            if ($academicLevel) {
+                $this->repository->lockLevel($program);
+            } else {
+                $this->repository->lockProgram($program);
+            }
+            if ($this->access->requirePermission('sis:forms:publish')->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('Access denied.');
+            }
+            if ($academicLevel) {
+                $this->repository->disableLevel($program);
+            } else {
+                $this->repository->disable($program);
+            }
             $this->audit->record($actor, "admissions.form_disabled", $program);
         });
     }
@@ -123,8 +159,9 @@ final readonly class ApplicationFormService
         EntityId $person,
         EntityId $term,
         #[\SensitiveParameter] array $answers,
+        ?EntityId $program = null,
     ): EntityId {
-        return $this->submissions->submit($submission, $formId, $person, $term, $answers);
+        return $this->submissions->submit($submission, $formId, $person, $term, $answers, $program);
     }
 
     /** @return array<string, mixed> */

@@ -158,6 +158,7 @@ echo $loader->render('framework::backend/workspace/index', [
     'section' => 'overview',
     'permissions' => match ($path) {
         '/admin/admissions-only-fixture/' => ['sis:admissions:manage'],
+        '/admin/form-editor-fixture/' => ['sis:forms:manage'],
         '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
         '/admin/student-read-fixture/' => ['sis:student:read'],
         '/admin/transcript-office-fixture/' => ['sis:transcript:manage'],
