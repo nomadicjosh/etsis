@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 async function fixture(page, options = {}) {
+    let release;
+    const pending = new Promise(resolve => { release = resolve; });
     const id = suffix => `01K000000000000000000000${suffix}`;
     const institution = id('41'), external = id('42'), equivalency = id('43'), course = id('44'), student = id('45'), term = id('46');
     const publication = id('51'), olderPublication = id('52');
@@ -32,7 +34,10 @@ async function fixture(page, options = {}) {
                 terms: [{ id: term, code: '26/FA' }],
             };
             result = { items: rows[dataset] || [], next_after: null };
-        } else if (path === `/sis/ui/transfer/institutions/${institution}/`) result = { id: institution, code: 'EXT.1', name, revision };
+        } else if (path === `/sis/ui/transfer/institutions/${institution}/`) {
+            if (options.deferCatalog) await pending;
+            result = { id: institution, code: 'EXT.1', name, revision };
+        }
         else if (path === `/sis/ui/transfer/institutions/${institution}/edit/`) { name = data.name; revision = 'b'.repeat(64); }
         else if (path === `/sis/ui/transfer/institutions/${institution}/children/`) result = { items: [{ id: external, code: 'MATH.101', title: 'External algebra' }], next_after: data.after ? null : external };
         else if (path === `/sis/ui/transfer/external/${external}/`) result = { id: external, institution_id: institution, institution_code: 'EXT.1', institution_name: name, code: 'MATH.101', title: 'External algebra', revision };
@@ -42,11 +47,14 @@ async function fixture(page, options = {}) {
         else if (path === `/sis/transfer-equivalencies/${equivalency}/course-versions/`) result = { items: options.unpublished ? [] : [{ version_id: data.cursor ? olderPublication : publication, version: data.cursor ? 1 : 2, code: 'MATH.101', title: 'College Algebra', transcript_title: data.cursor ? 'Earlier <script>algebra</script>' : 'College Algebra', credits_milli: 3000 }], next_cursor: options.more && !data.cursor ? 'frozen-page' : null };
         else if (path.endsWith('/awards/')) result = { items: [], next_after: null };
         else if (path === '/sis/transfer-awards/' && failAward) { status = 409; result = { error: 'This record changed. Reload it before trying again.' }; failAward = false; }
-        else if (path === `/sis/students/${student}/record/`) result = { given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: true, primary_program: { code: 'BS.MATH', title: 'Mathematics' }, entry_term: { code: '26/FA' } };
+        else if (path === `/sis/students/${student}/record/`) {
+            if (options.deferAcademics) await pending;
+            result = { given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: true, primary_program: { code: 'BS.MATH', title: 'Mathematics' }, entry_term: { code: '26/FA' } };
+        }
         else if (path === `/sis/students/${student}/transcript/`) result = { credits: [{ course_code: 'ENG.101', course_title: 'Writing', completed_milli: 3000, grade_code: 'A' }] };
         await route.fulfill({ status, json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    return { institution, external, equivalency, course, student, term, publication, olderPublication, sent, reads, errors };
+    return { institution, external, equivalency, course, student, term, publication, olderPublication, sent, reads, errors, release };
 }
 
 async function accessible(page) {
@@ -158,5 +166,44 @@ test('unpublished receiving course explains the prerequisite without submitting 
     await expect(page.locator('#drawer-error')).toContainText('Catalog staff must publish the institutional course');
     await expect(page.getByRole('button', { name: 'Confirm transfer award', exact: true })).toHaveCount(0);
     expect(f.sent.some(item => item.path === '/sis/transfer-awards/')).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('closing a catalog read skips its related records and keeps the drawer closed', async ({ page }) => {
+    const f = await fixture(page, { deferCatalog: true });
+    await page.goto('/admin/transfer-fixture/');
+    await page.locator('.workspace-nav-link[data-workspace="institutions"]').click();
+    await page.getByRole('button', { name: 'Fictional College', exact: true }).click();
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toBeEmpty();
+    const finished = page.waitForEvent('requestfinished', { predicate: request => new URL(request.url()).pathname === `/sis/ui/transfer/institutions/${f.institution}/` });
+    f.release();
+    await finished;
+    // The isolated fixture has no polling; settle the released read before checking skipped requests.
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('#drawer-body')).toBeEmpty();
+    expect(f.sent.some(call => call.path.endsWith('/children/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('closing student academic review skips the follow-up transcript read', async ({ page }) => {
+    const f = await fixture(page, { deferAcademics: true });
+    await openEquivalency(page);
+    await expect(page.getByRole('group', { name: 'Transfer catalog tasks', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Transfer awards', exact: true })).toContainText('No credit awards');
+    await page.screenshot({ path: 'test-results/workspace-polished-transfer-equivalency.png' });
+    await page.getByRole('button', { name: 'Award transfer credit', exact: true }).click();
+    await page.locator('#drawer-body').getByRole('combobox', { name: /^Student/u }).selectOption(f.student);
+    await page.screenshot({ path: 'test-results/workspace-polished-transfer-award-form.png' });
+    await page.getByRole('button', { name: 'Review student academics', exact: true }).click();
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toBeEmpty();
+    const finished = page.waitForEvent('requestfinished', { predicate: request => new URL(request.url()).pathname === `/sis/students/${f.student}/record/` });
+    f.release();
+    await finished;
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('#drawer-body')).toBeEmpty();
+    expect(f.reads.some(path => path === `/sis/students/${f.student}/transcript/`)).toBe(false);
+    expect(f.sent.some(call => call.path === '/sis/transfer-awards/')).toBe(false);
     expect(f.errors).toEqual([]);
 });

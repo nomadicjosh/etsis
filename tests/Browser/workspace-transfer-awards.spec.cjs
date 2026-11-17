@@ -1,7 +1,10 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
+const { recordAction } = require("./support/workspace-actions.cjs");
 const id = (suffix) => `01K000000000000000000000${String(suffix).padStart(2, "0")}`;
 async function fixture(page, options = {}) {
+    let release;
+    const pending = new Promise(resolve => { release = resolve; });
     const calls = [],
         errors = [],
         operations = new Map();
@@ -120,7 +123,10 @@ async function fixture(page, options = {}) {
                 ],
                 next_after: null,
             };
-        else if (path === endpoint) result = structuredClone(value);
+        else if (path === endpoint) {
+            if (options.deferRecord) await pending;
+            result = structuredClone(value);
+        }
         else if (path === endpoint + "source-period/review/") {
             if (options.rejectPeriod) {
                 status = 409;
@@ -318,10 +324,10 @@ async function fixture(page, options = {}) {
     await page.locator('#directory-tabs [data-workspace="equivalencies"]').click();
     await page.getByRole("button", { name: "Open EXT.101 → MATH.101", exact: true }).click();
     if (!options.limited) await page.getByRole("button", { name: "Review award", exact: true }).click();
-    return { calls, errors, operations, endpoint };
+    return { calls, errors, operations, endpoint, release };
 }
 async function correction(page, action = "Correct credits or grade") {
-    await page.getByRole("button", { name: action, exact: true }).click();
+    await recordAction(page, action);
     if (action !== "Void this award") {
         if (action === "Correct credits or grade")
             await expect(page.getByLabel("Credits awarded", { exact: false })).toHaveValue("3");
@@ -337,6 +343,49 @@ async function correction(page, action = "Correct credits or grade") {
     await page.getByRole("textbox", { name: "Effective date", exact: true }).fill("2026-08-09");
     await page.getByRole("button", { name: "Review proposed correction", exact: true }).click();
 }
+
+test("posted award tasks support keyboard menus, phone layouts and explicit void review", async ({ page }) => {
+    const f = await fixture(page);
+    const tasks = page.getByRole("group", { name: "Transfer award tasks", exact: true });
+    await expect(tasks.getByRole("button", { name: "Correct credits or grade", exact: true })).toBeVisible();
+    const menu = tasks.getByRole("button", { name: "More transfer award actions", exact: true });
+    await menu.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("button", { name: "Correction history", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeFocused();
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 320, height: 812 }]) {
+        await page.setViewportSize(viewport);
+        const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+        expect(scan.violations).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        if (viewport.width === 1440) await page.screenshot({ path: "test-results/workspace-polished-transfer-award.png" });
+    }
+    await page.screenshot({ path: "test-results/workspace-polished-transfer-award-phone.png" });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(scan.violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await recordAction(page, "Void this award");
+    await expect(page.getByRole("button", { name: "Review proposed correction", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Registrar reason", { exact: false })).toBeVisible();
+    expect(f.calls.some(call => call.path.endsWith("/preview/") || call.path.endsWith("/confirm/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("a late posted-award read does not reopen a closed review", async ({ page }) => {
+    const f = await fixture(page, { deferRecord: true });
+    await page.getByRole("button", { name: "Close record", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toBeEmpty();
+    const finished = page.waitForEvent("requestfinished", { predicate: request => new URL(request.url()).pathname === f.endpoint });
+    f.release();
+    await finished;
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#drawer-body")).toBeEmpty();
+    expect(f.calls.some(call => call.path.endsWith("/confirm/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
 
 test("registrar reviews a correction before saving and sees encrypted-history values as escaped text", async ({
     page,
@@ -365,7 +414,7 @@ test("registrar reviews a correction before saving and sees encrypted-history va
         },
         csrf: "fictional-test-token",
     });
-    await page.getByRole("button", { name: "Correction history", exact: true }).click();
+    await recordAction(page, "Correction history");
     await expect(page.locator("#drawer-body")).toContainText("Fictional correction <script>private</script>");
     await expect(page.locator("#drawer-body script")).toHaveCount(0);
     await expect(page.locator("#drawer-body")).toContainText("Effective: 2026-08-09");
@@ -458,7 +507,7 @@ test("earlier saved receipts show their limited provenance without an invented e
     const f = await fixture(page, { legacy: true });
     await expect(page.locator("#drawer-body")).toContainText("Earlier award decisions are unknown");
     await expect(page.locator("#drawer-body")).toContainText("Accepted course publication: unknown");
-    await page.getByRole("button", { name: "Correction history", exact: true }).click();
+    await recordAction(page, "Correction history");
     await expect(page.locator("#drawer-body")).toContainText(
         "Earlier saved receipt · effective time unknown",
     );
@@ -534,7 +583,7 @@ test("clearing source period is explicit and curated history pages preserve the 
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
     await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
-    await page.getByRole("button", { name: "Source period history", exact: true }).click();
+    await recordAction(page, "Source period history");
     await expect(page.locator("#drawer-body")).toContainText("Award established");
     await page.getByRole("button", { name: "Next source history page", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
@@ -557,7 +606,7 @@ test("untracked source history cannot invent a sending period", async ({ page })
     await expect(
         page.getByRole("button", { name: "Review source academic period", exact: true }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Source period history", exact: true }).click();
+    await recordAction(page, "Source period history");
     await expect(page.locator("#drawer-body")).toContainText("Earlier source history is unknown");
     await expect(page.locator("#drawer-body")).toContainText("No recorded source decisions on this page");
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
@@ -650,7 +699,7 @@ test("registrar resolves unknown acceptance with explicit choices, review and in
     expect(writes).toHaveLength(2);
     expect(writes[0].data).toEqual(writes[1].data);
     expect(writes[0].csrf).toBe("fictional-test-token");
-    await page.getByRole("button", { name: "Course definition history", exact: true }).click();
+    await recordAction(page, "Course definition history");
     await expect(page.locator("#drawer-body")).toContainText("Earlier facts observed");
     await page.getByRole("button", { name: "Next course history page", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Reviewed <script>algebra</script>");

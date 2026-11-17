@@ -11,6 +11,7 @@ window.createWorkspaceTransfer = function (ui) {
     table,
     flow,
     showAudit,
+    recordSummary,
   } = ui;
   const button = (label, callback, style = "btn-outline-primary") =>
     node(
@@ -32,14 +33,6 @@ window.createWorkspaceTransfer = function (ui) {
         "aria-label": caption,
       },
       table(headers, rows, caption),
-    );
-  const details = (entries) =>
-    node(
-      "dl",
-      { class: "detail-list" },
-      entries.map(([label, value]) =>
-        node("div", {}, node("dt", {}, label), node("dd", {}, value)),
-      ),
     );
   const rules = [
     ["starts_on", "Effective from", "date"],
@@ -78,6 +71,8 @@ window.createWorkspaceTransfer = function (ui) {
       after = nextAfter;
       await load();
     });
+    previous.disabled = true;
+    next.disabled = true;
     container.append(
       information,
       content,
@@ -96,7 +91,7 @@ window.createWorkspaceTransfer = function (ui) {
     await load();
   }
   function summary(value) {
-    return details([
+    return recordSummary([
       [
         "Sending institution",
         `${value.institution_code} · ${value.institution_name}`,
@@ -121,18 +116,20 @@ window.createWorkspaceTransfer = function (ui) {
     ]);
   }
   async function record(kind, id) {
+    const body = openDrawer("Transfer record", "TRANSFER CATALOG");
+    body.append(node("p", { role: "status" }, "Loading transfer record…"));
     const value = await request(`/sis/ui/transfer/${kind}/${id}/`),
       back = () => record(kind, id);
-    const body = openDrawer(
+    if (!body.isConnected) return;
+    document.getElementById("drawer-title").textContent =
       kind === "equivalencies"
         ? `${value.external_code} → ${value.course_code}`
-        : value.code,
-      "TRANSFER CATALOG",
-    );
+        : value.code;
+    body.replaceChildren();
     if (kind === "equivalencies") body.append(summary(value));
     else
       body.append(
-        details(
+        recordSummary(
           kind === "institutions"
             ? [
                 ["Institution", value.name],
@@ -148,21 +145,28 @@ window.createWorkspaceTransfer = function (ui) {
               ],
         ),
       );
-    if (can("sis:audit:read"))
-      body.append(button("View audit history", () => showAudit(kind, id)));
     if (kind !== "institutions")
-      body.append(
-        button("Back to sending record", () =>
-          record(
-            kind === "external" ? "institutions" : "external",
-            kind === "external"
-              ? value.institution_id
-              : value.external_course_id,
-          ),
+      body.prepend(
+        button(
+          "Back to sending record",
+          () =>
+            record(
+              kind === "external" ? "institutions" : "external",
+              kind === "external"
+                ? value.institution_id
+                : value.external_course_id,
+            ),
+          "btn-link mb-3",
         ),
       );
+    const actions = node("div", {
+      class: "inline-actions",
+      role: "group",
+      "aria-label": "Transfer catalog tasks",
+    });
+    body.append(actions);
     if (kind !== "equivalencies") {
-      body.append(
+      actions.append(
         button(
           kind === "institutions" ? "Edit institution" : "Edit external course",
           async () => {
@@ -180,12 +184,13 @@ window.createWorkspaceTransfer = function (ui) {
               back,
               value,
               "Names and codes stay connected through their existing identities. Existing awarded course snapshots are preserved. Sending-institution links cannot be reassigned.",
+              { layout: "transfer_catalog" },
             );
             form.elements.code.maxLength = 80;
           },
         ),
       );
-      body.append(
+      actions.prepend(
         button(
           kind === "institutions"
             ? "Add course at this institution"
@@ -203,6 +208,7 @@ window.createWorkspaceTransfer = function (ui) {
                 back,
                 {},
                 `Sending institution: ${value.name}. Use the institution's course code as recorded on its transcript.`,
+                { layout: "transfer_catalog" },
               );
               form.elements.code.maxLength = 80;
             } else {
@@ -221,10 +227,12 @@ window.createWorkspaceTransfer = function (ui) {
                 back,
                 {},
                 `Sending course: ${value.code} · ${value.title}. Enter the institution's numeric grade-rank mapping and a passing awarded grade code.`,
+                { layout: "transfer_equivalency" },
               );
               constrain(form);
             }
           },
+          "btn-primary",
         ),
       );
       const panel = node(
@@ -276,7 +284,7 @@ window.createWorkspaceTransfer = function (ui) {
             : node("p", {}, "No related records have been added."),
       );
     } else {
-      body.append(
+      actions.append(
         button("Edit equivalency rules", async () => {
           const form = await flow(
             "Save equivalency rules",
@@ -289,12 +297,13 @@ window.createWorkspaceTransfer = function (ui) {
               credits_milli: Number(value.credits_milli) / 1000,
             },
             "Rule edits affect future award requests, including requests for earlier completion dates. Existing credits retain their awarded values. Source and destination course identities stay fixed.",
+            { layout: "transfer_equivalency" },
           );
           constrain(form);
         }),
       );
       if (can("sis:student:read")) {
-        body.append(
+        actions.prepend(
           button("Award transfer credit", () => award(id), "btn-primary"),
         );
       }
@@ -352,14 +361,32 @@ window.createWorkspaceTransfer = function (ui) {
               ),
       );
     }
+    if (body.isConnected && can("sis:audit:read"))
+      actions.append(
+        button(
+          "View audit history",
+          () => showAudit(kind, id),
+          "btn-outline-secondary",
+        ),
+      );
   }
   async function award(id) {
+    const body = openDrawer("Prepare transfer award", "REGISTRAR REVIEW");
+    body.append(
+      node(
+        "p",
+        { role: "status" },
+        "Loading the reviewed equivalency and course publications…",
+      ),
+    );
     const reviewed = await request(`/sis/ui/transfer/equivalencies/${id}/`);
+    if (!body.isConnected) return;
     const publications = await request(
       `/sis/transfer-equivalencies/${id}/course-versions/`,
       "POST",
       {},
     );
+    if (!body.isConnected) return;
     if (!publications.items.length)
       throw new Error(
         "Catalog staff must publish the institutional course before transfer credit can be awarded.",
@@ -393,7 +420,9 @@ window.createWorkspaceTransfer = function (ui) {
       () => record("equivalencies", id),
       {},
       "Review the recipient, completion date and numeric grade rank using your institution’s mapping. Credits and the grade come from the reviewed equivalency. Changes to that context require a fresh review.",
+      { layout: "transfer_award" },
     );
+    if (!form.isConnected) return;
     form.prepend(summary(reviewed));
     form.prepend(
       node(
@@ -418,6 +447,7 @@ window.createWorkspaceTransfer = function (ui) {
             cursor,
           },
         );
+        if (!form.isConnected) return;
         next.items.forEach((item) =>
           form.elements.course_version_id.append(
             node("option", { value: item.version_id }, label(item)),
@@ -457,6 +487,12 @@ window.createWorkspaceTransfer = function (ui) {
         }
         const token = ++serial;
         const profile = await request(`/sis/students/${student}/record/`);
+        if (
+          !form.isConnected ||
+          serial !== token ||
+          form.elements.student_id.value !== student
+        )
+          return;
         const transcript = await request(
           `/sis/students/${student}/transcript/`,
         );
@@ -468,7 +504,7 @@ window.createWorkspaceTransfer = function (ui) {
           return;
         academics.replaceChildren(
           node("h3", {}, "Student academic record"),
-          details([
+          recordSummary([
             [
               "Student",
               `${profile.given_name} ${profile.family_name} · ${profile.institutional_id}`,

@@ -1,7 +1,7 @@
 /* Registrar corrections preserve the posted award and an encrypted history of every reviewed change. */
 window.createWorkspaceTransferAwards = function (ui) {
     "use strict";
-    const { node, request, task, table, buildForm, formData, openDrawer } = ui;
+    const { node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -33,12 +33,17 @@ window.createWorkspaceTransferAwards = function (ui) {
         return node(
             "div",
             { class: "record-section" },
-            node("h3", {}, `${record.given_name} ${record.family_name} · ${record.institutional_id}`),
-            node("p", {}, `${record.credit.course_code} · ${record.credit.course_title}`),
+            node("h3", {}, `${record.given_name} ${record.family_name}`),
+            recordSummary([
+                ["Institutional ID", record.institutional_id],
+                ["Institutional course", `${record.credit.course_code} · ${record.credit.course_title}`],
+                ["Sending institution", record.institution_name],
+                ["External course", record.external_code],
+            ]),
             node(
                 "p",
                 { class: "form-text" },
-                `${record.institution_name} · ${record.external_code} · Completed ${record.completed_on} · Posting term ${record.term_code}`,
+                `Completed ${record.completed_on} · Posting term ${record.term_code}`,
             ),
             node(
                 "p",
@@ -73,18 +78,26 @@ window.createWorkspaceTransferAwards = function (ui) {
         );
     }
     async function record(student, award) {
-        const value = await request(endpoint(student, award));
         const body = openDrawer("Posted transfer credit", "REGISTRAR REVIEW");
-        body.append(
+        body.append(node("p", { role: "status" }, "Loading the retained award…"));
+        const value = await request(endpoint(student, award));
+        if (!body.isConnected) return;
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Transfer award tasks",
+        });
+        body.replaceChildren(
+            button("Back to equivalency", () => ui.back(value.equivalency_id), "btn-link mb-3"),
             identity(value),
+            actions,
             grid(
-                ["Credits", "Grade", "Status", "Revision"],
+                ["Earned credits", "Grade", "Status"],
                 [
                     [
                         value.credit.completed_milli / 1000,
                         value.credit.status === "V" ? "Voided" : value.grade_code || "—",
                         state(value.credit),
-                        value.credit.version + 1,
                     ],
                 ],
                 "Current transfer award",
@@ -104,10 +117,8 @@ window.createWorkspaceTransferAwards = function (ui) {
                     : "Source details and grading policy are retained with the award’s recorded history.",
             ),
         );
-        const actions = node("div", { class: "inline-actions" });
-        (value.credit.status === "V" ? ["reinstate"] : ["amend", "void"]).forEach((action) =>
-            actions.append(button(title(action), () => edit(student, award, value, action))),
-        );
+        const action = value.credit.status === "V" ? "reinstate" : "amend";
+        actions.append(button(title(action), () => edit(student, award, value, action), "btn-primary"));
         actions.append(
             ...(value.credit.status !== "V" && value.history_recorded
                 ? [button("Review source academic period", () => editPeriod(student, award, value))]
@@ -115,12 +126,17 @@ window.createWorkspaceTransferAwards = function (ui) {
             ...(value.credit.status !== "V"
                 ? [button("Review accepted course", () => editCourse(student, award, value))]
                 : []),
+        );
+        const more = [
+            button("Correction history", () => history(student, award)),
             button("Course definition history", () => courseHistory(student, award)),
             button("Source period history", () => periodHistory(student, award)),
-            button("Correction history", () => history(student, award)),
-            button("Back to equivalency", () => ui.back(value.equivalency_id)),
-        );
-        body.append(actions);
+        ];
+        if (value.credit.status !== "V")
+            more.push(
+                button("Void this award", () => edit(student, award, value, "void"), "btn-outline-danger"),
+            );
+        actions.append(actionMenu("More", more, { context: "More transfer award actions" }));
     }
     async function editCourse(student, award, value) {
         const base = endpoint(student, award) + "accepted-course/";
@@ -159,7 +175,7 @@ window.createWorkspaceTransferAwards = function (ui) {
             ["effective_on", "Effective date", "date"],
             ["reason", "Reason and acceptance evidence", "textarea"],
         ];
-        const form = await buildForm(fields, { effective_on: value.effective_on_default });
+        const form = await buildForm(fields, { effective_on: value.effective_on_default }, { layout: "transfer_course" });
         form.elements.effective_on.min = value.completed_on;
         form.elements.effective_on.max = value.effective_on_default;
         form.elements.reason.maxLength = 1000;
@@ -308,7 +324,7 @@ window.createWorkspaceTransferAwards = function (ui) {
             ["academic_on", "Sending institution's period start (blank marks unknown)", "date", "", false],
             ["reason", "Reason and source evidence", "textarea"],
         ];
-        const form = await buildForm(fields, { academic_on: value.academic_on || "" });
+        const form = await buildForm(fields, { academic_on: value.academic_on || "" }, { layout: "transfer_period" });
         form.elements.academic_on.max =
             value.completed_on < value.effective_on_default ? value.completed_on : value.effective_on_default;
         form.elements.reason.maxLength = 1000;
@@ -447,7 +463,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         const form = await buildForm(fields, {
             ...initial,
             credits_milli: initial.credits_milli == null ? undefined : Number(initial.credits_milli) / 1000,
-        });
+        }, { layout: "transfer_correction" });
         form.elements.effective_on.min = value.completed_on;
         form.elements.effective_on.max = value.effective_on_default;
         if (action !== "void") {

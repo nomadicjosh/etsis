@@ -6,6 +6,8 @@ New transfer awards, reasoned credit/grade amendments, voids and reinstatements 
 
 ## Registrar workflow
 
+Posted awards keep correction and course/source-period review actions above the current award values. **More** groups **Correction history**, **Course definition history**, **Source period history** and **Void this award**. A void still requires its reason, proposed-outcome review and explicit confirmation. A voided award offers **Reinstate this award** directly. These controls use the retained award context and do not change catalog equivalencies.
+
 Use **Transfers → Equivalencies → Review award** or the connected award action on a student's transcript. Initial award entry reviews the equivalency, sending institution, completion date, received grade rank and posting term, and requires an explicitly selected [accepted course publication](transfer-course-publications.md). A repeat submission for the same student, equivalency and completion date returns the same active credit; a different posting term or original opening publication conflicts. Later acceptance corrections do not change the original retry contract. A voided award requires explicit reinstatement.
 
 New awards and corrections require both `sis:transfer:manage` and `sis:student:read`. Catalog management, ordinary staff membership and teaching authority do not imply these registrar duties. Review credits/grade or a void/reinstatement, supply the reason and effective date, then confirm. The effective date defaults to today and must be between the external course's completion date and today. It expresses when the correction applies; it does not claim that the institution knew the decision before its recorded timestamp.

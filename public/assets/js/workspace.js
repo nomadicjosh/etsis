@@ -285,7 +285,7 @@
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money,
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
+    const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
     const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, recordSummary, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer,
@@ -312,7 +312,7 @@
     });
     const reportRequests = window.createWorkspaceReportRequests({ node, request, task, can, table, badge, buildForm, formData, openDrawer, notify, reports: () => reportStudio, builder: () => relationalStudio });
     const reportStudio = window.createWorkspaceReports({ builder: () => relationalStudio, node, request, requestFile, task, can, table, openDrawer, openRecord, flow: operations.flow, enhance: operations.enhance, closeDrawer: () => drawer.hide() });
-    const transferStudio = window.createWorkspaceTransfer({ awards: () => transferAwardStudio, node, request, task, can, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (kind, id) => operations.audit(kind, { id }) });
+    const transferStudio = window.createWorkspaceTransfer({ awards: () => transferAwardStudio, node, request, task, can, recordSummary, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (kind, id) => operations.audit(kind, { id }) });
     datasets.timesheets.columns = [['Team member', 'name'], ['Institutional ID', 'institutional_id'], ['Started (UTC)', 'starts_at'], ['Status', 'status']];
     Object.assign(datasets, operations.datasets);
     datasets.registration = { title: 'Registration', description: 'Register a reviewed group into one section, with eligibility, seats and charges handled together.', icon: 'person-plus', action: 'Register a group', permission: 'sis:registration:manage', columns: [['Section', 'code'], ['Course', 'course_title'], ['Term', 'term_code'], ['Capacity', 'capacity'], ['Status', 'active']] };
@@ -754,6 +754,23 @@
     }
 
     const formLayouts = {
+        transfer_catalog: [{ title: 'Transfer catalog details', fields: ['code', 'name', 'title'], wide: ['name', 'title'] }],
+        transfer_equivalency: [
+            { title: 'Receiving course', fields: ['course_id'], wide: ['course_id'] },
+            { title: 'Effective completion dates', fields: ['starts_on', 'ends_on'] },
+            { title: 'Award rules', fields: ['minimum_grade_rank', 'credits_milli', 'awarded_grade'], wide: ['minimum_grade_rank'] },
+        ],
+        transfer_award: [
+            { title: 'Recipient & posting', fields: ['student_id', 'term_id'], wide: ['student_id', 'term_id'] },
+            { title: 'External course result', fields: ['completed_on', 'grade_rank'] },
+            { title: 'Accepted course', fields: ['course_version_id'], wide: ['course_version_id'] },
+        ],
+        transfer_correction: [
+            { title: 'Award values', fields: ['credits_milli', 'awarded_grade'] },
+            { title: 'Registrar decision', fields: ['effective_on', 'reason'], wide: ['reason'] },
+        ],
+        transfer_course: [{ title: 'Course acceptance', fields: ['course_version_id', 'effective_on', 'reason'], wide: ['course_version_id', 'reason'] }],
+        transfer_period: [{ title: 'Source academic period', fields: ['academic_on', 'reason'], wide: ['academic_on', 'reason'] }],
         registration_group: [{ title: 'Section & students', fields: ['section_id', 'student_id'], wide: ['section_id', 'student_id'] }],
         restriction: [
             { title: 'Hold responsibility', fields: ['office_id', 'code'], wide: ['office_id', 'code'] },
