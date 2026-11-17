@@ -664,6 +664,13 @@
     padding-top: 1.5rem;
     border-top: 1px solid var(--campus-border);
 }
+.campus-application-progress {
+    display: grid;
+    justify-items: start;
+    gap: .5rem;
+    min-width: 12rem;
+    max-width: 22rem;
+}
 .campus-application-answer-heading {
     display: flex;
     flex-wrap: wrap;

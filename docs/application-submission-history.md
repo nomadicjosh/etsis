@@ -16,6 +16,8 @@ Admissions review displays answers under the submitted form's original container
 
 ## Applicant access to submitted answers
 
+**Your applications** also shows the next step alongside each current status. Submitted applications direct the applicant to watch for a decision or contact admissions; accepted applications direct them to the office for the program's next steps. **Not accepted** uses neutral guidance without exposing a private decision reason. **Student record linked** identifies matriculation and offers **My campus**, including when an existing student record was reused. It does not promise registration eligibility, enrollment or access to another person's records. Unknown statuses show a neutral request to contact admissions.
+
 Open **Portal → Start your application → Your applications → View answers**. Applicants can reopen their original answers, including applications entered by admissions staff. The viewer uses the retained form's name, questions, sections and columns. It is read-only. Program and term names in the application list reflect current catalog setup; they do not replace the retained form or original submission history.
 
 Answers load only when requested. **Close answers**, or selecting the same application again, clears the viewer and returns focus to its opener. Reading an earlier application preserves a new application being edited on the same page. Failed reads show an inline **Try again** action. Switching applications, closing the viewer or leaving the screen prevents late responses from restoring discarded answers. A successful submission refreshes the application list without reloading the page.

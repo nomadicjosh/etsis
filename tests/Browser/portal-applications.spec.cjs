@@ -68,6 +68,10 @@ test('owners open retained answers on demand without losing a new application or
     const list = page.getByRole('table', { name: 'Your admissions applications' });
     await expect(list).toContainText('DIP.ART · Studio Arts');
     await expect(list).toContainText('No form answers');
+    await expect(list.getByRole('row').filter({ hasText: 'DIP.ART' })).toContainText('next steps for this program');
+    const studentRow = list.getByRole('row').filter({ hasText: 'BS.SCI' });
+    await expect(studentRow).toContainText('Student record linked');
+    await expect(studentRow.getByRole('link', { name: 'My campus', exact: true })).toHaveAttribute('href', '/portal/student/');
     expect(reads).toHaveLength(0);
     await openNewApplication(page);
     const trigger = list.getByRole('button', { name: /View answers for DIP.ART/ });

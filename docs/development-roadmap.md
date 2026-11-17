@@ -175,6 +175,7 @@ Authoring, exception inputs and [paged academic-work review](student-academic-wo
 - [ ] Add application completeness checklists, protected documents/references, office assignment and follow-up tasks in one application workbench. Define upload scanning and retention before accepting sensitive files.
 - [ ] Add offers, applicant responses, withdrawal/reopening and any additional approval stages as explicit institutional policies and retained transitions. Post-matriculation rescission must coordinate student/program/academic/financial consequences.
 - [ ] Complete applicant/student status and next-action views, advisor/academic-progress access and institution-selected service requests, reusing completed backend rules.
+- [x] Add plain-language, owner-only application progress and next-step guidance, including a student-services link after matriculation. Institution-specific checklists, offers and further service-request workflows remain under the preceding items.
 - [ ] Complete page-builder/content approval and scheduling workflows and verify theme/block accessibility across narrow screens and keyboard use.
 
 **Done when:** applicants and authorized offices can see the appropriate next step, every consequential outcome retains its reason/context, and public intake cannot reveal another person's identity or records.

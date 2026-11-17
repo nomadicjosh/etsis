@@ -14,6 +14,21 @@
     let controlSequence = 0;
     let catalogAfter = '';
     let catalogCount = 0;
+    const applicationProgress = Object.freeze({
+        submitted: Object.freeze({ label: 'Submitted', positive: false,
+            next: 'Admissions has your application. Check here for a decision or contact admissions with questions.' }),
+        accepted: Object.freeze({ label: 'Accepted', positive: true,
+            next: 'Your application was accepted. Contact admissions about the next steps for this program.' }),
+        rejected: Object.freeze({ label: 'Not accepted', positive: false,
+            next: 'Contact admissions if you have questions about the decision.' }),
+        matriculated: Object.freeze({ label: 'Student record linked', positive: true,
+            next: 'This application is linked to your student record. Open My campus to review your services.', href: '/portal/student/' }),
+    });
+    const unknownApplicationProgress = Object.freeze({ label: 'Status unavailable', positive: false,
+        next: 'Contact admissions to check the status of this application.' });
+    // Read-only guidance; it grants no student access, registration eligibility or admissions action.
+    window.campusApplicationProgress = status => typeof status === 'string' && Object.hasOwn(applicationProgress, status)
+        ? applicationProgress[status] : unknownApplicationProgress;
     const icon = (name) =>
         el('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
     const amount = (minor, currency) => {
@@ -732,11 +747,16 @@
                 'aria-expanded': 'false', 'aria-controls': identity,
                 onclick: event => view(application, event.currentTarget) }, 'View answers')
                 : el('span', { class: 'campus-muted' }, 'No form answers');
-            return [programLabel(application), termLabel(application), chip(application.status), answers];
+            const progress = window.campusApplicationProgress(application.status);
+            const next = el('div', { class: 'campus-application-progress' },
+                el('span', { class: `campus-chip${progress.positive ? ' success' : ''}` }, progress.label),
+                el('p', { class: 'campus-muted mb-0' }, progress.next),
+                progress.href ? el('a', { href: progress.href }, 'My campus') : null);
+            return [programLabel(application), termLabel(application), next, answers];
         });
         return surface('Your applications', applications.length === 50
             ? el('p', { class: 'campus-muted' }, 'Showing up to 50 applications.') : null,
-            table(['Program', 'Entry term', 'Progress', 'Answers'], rows,
+            table(['Program', 'Entry term', 'Progress & next step', 'Answers'], rows,
             'Your admissions applications'), detail);
     }
 
