@@ -655,7 +655,7 @@
         if (back) body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
             onclick: () => task(back) }, backLabel));
         if (explanation) body.append(node('p', { class: 'form-text' }, explanation));
-        const form = await buildForm(definition.fields, section === 'billing' ? { pricing_basis: 'term', ...preset } : preset);
+        const form = await buildForm(definition.fields, section === 'billing' ? { pricing_basis: 'term', ...preset } : preset, { layout: section });
         if (!body.isConnected) return;
         if (section === 'billing') {
             const basis = form.elements.namedItem('pricing_basis');
@@ -691,7 +691,7 @@
             deadline.setAttribute('aria-describedby', 'term-deadline-help');
             deadline.after(node('div', { class: 'form-text', id: 'term-deadline-help' }, 'Choose a date between the first and last day of the term.'));
         }
-        form.append(node('p', { class: 'form-text mb-4' }, section === 'people' ? 'Leave the institutional ID blank to have the system assign one. A linked account is created now. A private password-setup email is queued; student, employment and faculty records attach to this same person.' : 'Save here and keep your place in the workspace.'));
+        form.append(node('p', { class: 'form-text mb-4' }, section === 'people' ? 'Saving creates a linked sign-in account and queues a private password-setup email. Student, employment and faculty records share this person.' : 'Save here and keep your place in the workspace.'));
         form.append(node('button', { class: 'btn btn-primary', type: 'submit' }, 'Save and continue ', icon('arrow-right')));
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!form.reportValidity()) return;
@@ -750,7 +750,38 @@
         await load();
     }
 
-    async function buildForm(fields, preset = {}) {
+    const formLayouts = {
+        people: [
+            { title: 'Person details', fields: ['given_name', 'family_name', 'email'], wide: ['email'] },
+            { title: 'Directory privacy', fields: ['directory_restricted'], wide: ['directory_restricted'] },
+            {
+                title: 'Institutional ID',
+                description: 'Leave blank to let etsis assign an ID.',
+                fields: ['institutional_id'],
+                wide: ['institutional_id'],
+            },
+        ],
+        courses: [
+            { title: 'Course essentials', fields: ['code', 'credits_milli', 'title'], wide: ['title'] },
+        ],
+        programs: [
+            { title: 'Program essentials', fields: ['code', 'title', 'description'], wide: ['description'] },
+        ],
+        sections: [
+            {
+                title: 'Course & section',
+                fields: ['course_id', 'term_id', 'code', 'capacity'],
+                wide: ['course_id', 'term_id'],
+            },
+            {
+                title: 'Teaching & registration',
+                fields: ['delivery_mode', 'faculty_user_id', 'web_registration'],
+                wide: ['faculty_user_id', 'web_registration'],
+            },
+            { title: 'Section fee', fields: ['fee_minor', 'currency'] },
+        ],
+    };
+    async function buildForm(fields, preset = {}, { layout = null } = {}) {
         const form = node('form', { class: 'record-form' });
         const serial = ++formSerial;
         for (const [key, label, type = 'text', source = '', required = true] of fields) {
@@ -790,6 +821,45 @@
         }
         form.addEventListener('change', updateMoneyControls);
         updateMoneyControls();
+        const groups = [];
+        for (const [index, definition] of (formLayouts[layout] || []).entries()) {
+            const grid = node('div', { class: 'record-form-grid' });
+            for (const key of definition.fields) {
+                const field = form.elements.namedItem(key)?.closest('.mb-4');
+                if (!field) continue;
+                field.classList.add('record-form-field');
+                field.classList.toggle('record-form-wide', definition.wide?.includes(key) || false);
+                grid.append(field);
+            }
+            if (!grid.childElementCount) continue;
+            const helpId = `form-${serial}-section-${index}-help`;
+            groups.push(
+                node(
+                    'fieldset',
+                    {
+                        class: 'record-form-section',
+                        ...(definition.description ? { 'aria-describedby': helpId } : {}),
+                    },
+                    node('legend', {}, definition.title),
+                    definition.description
+                        ? node('p', { id: helpId, class: 'form-text' }, definition.description)
+                        : null,
+                    grid,
+                ),
+            );
+        }
+        if (groups.length) {
+            form.classList.add('record-form-structured');
+            const required = fields.some(
+                ([, , type = 'text', , required = true]) => required && type !== 'checkbox',
+            );
+            form.prepend(
+                ...(required
+                    ? [node('p', { class: 'record-form-guide' }, 'Fields marked * are required.')]
+                    : []),
+                ...groups,
+            );
+        }
         return form;
     }
 
@@ -908,8 +978,15 @@
             if (key === 'id' || key.endsWith('_id') || ['given_name', 'family_name'].includes(key)) continue;
             const quantity = ['credits_milli', 'points_milli'].includes(key);
             const label = key === 'credits_milli' ? 'Credits' : key === 'points_milli' ? 'Grade points'
+                : key === 'active' ? 'Status' : key === 'web_registration' ? 'Student self-registration'
                 : key.replaceAll('_', ' ').replace(/^./u, value => value.toUpperCase());
-            details.append(node('div', {}, node('dt', {}, label), node('dd', {}, quantity && value !== null ? Number(value) / 1000 : text(value))));
+            const formatted = value === null ? text(value)
+                : quantity ? Number(value) / 1000
+                : key === 'active' ? badge(Number(value) ? 'Active' : 'Inactive')
+                : key === 'web_registration' ? (Number(value) ? 'Allowed' : 'Not enabled')
+                : key === 'fee_minor' && row.currency ? money(value, row.currency)
+                : text(value);
+            details.append(node('div', {}, node('dt', {}, label), node('dd', {}, formatted)));
         }
         body.append(details);
         const actions = node('div', { class: 'inline-actions' });

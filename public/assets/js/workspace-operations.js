@@ -207,12 +207,13 @@ window.createWorkspaceOperations = function (ui) {
         done,
         preset = {},
         explanation = "",
+        formOptions = {},
     ) {
         const body = openDrawer(title, "CAMPUS OPERATIONS");
         if (done) body.append(button("Back to record", done, "btn-link mb-3"));
         if (explanation)
             body.append(node("p", { class: "form-text" }, explanation));
-        const form = await buildForm(descriptors, preset);
+        const form = await buildForm(descriptors, preset, formOptions);
         const save = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -2080,45 +2081,114 @@ window.createWorkspaceOperations = function (ui) {
         );
     }
     async function enhance(sectionName, row, body) {
-        if (sectionName === "programs" && can("sis:catalog:manage"))
-            body.append(
-                button("Program details & publications", () => ui.programs().open(row.id)),
-                button("Degree audit requirements", () => ui.degreeAudit().launch(row.id)),
-                button("Program grading scale", () => ui.degreeAudit().gradingScale(row.id)),
+        const tasks = node("div", { class: "record-task-grid" });
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Record actions",
+        });
+        const taskGroup = (title, description, icon, controls) =>
+            node(
+                "section",
+                { class: "record-task-card", "aria-label": title },
+                node(
+                    "div",
+                    { class: "record-task-heading" },
+                    node(
+                        "span",
+                        { class: "icon-soft", "aria-hidden": "true" },
+                        node("i", { class: `bi bi-${icon}` }),
+                    ),
+                    node("h3", {}, title),
+                ),
+                node("p", { class: "form-text" }, description),
+                node("div", { class: "record-task-actions" }, ...controls),
             );
-        if (sectionName === "programs" && can("sis:catalog:manage"))
-            body.append(button("Academic years", () => ui.calendar().years()));
-        if (sectionName === "courses" && can("sis:catalog:manage"))
-            body.append(button("Clone as a course draft", () => ui.catalog().clone(row.id)));
-        if (sectionName === "courses" && can("sis:catalog:manage"))
-            body.append(button("Published definitions", () => ui.catalog().publications(row.id)));
-        if (sectionName === "courses" && can("sis:catalog:manage"))
-            body.append(
-                button("Course subject", () => ui.catalog().courseSubject(row.id)),
-                button("Departments & levels", () => ui.classifications().course(row.id)),
-                button("Titles & description", () => ui.catalog().courseText(row.id)),
+        if (sectionName === "courses" && can("sis:catalog:manage")) {
+            tasks.append(
+                taskGroup(
+                    "Course content",
+                    "Edit the working titles, description and academic classifications.",
+                    "journal-text",
+                    [
+                        button("Titles & description", () => ui.catalog().courseText(row.id), "btn-primary"),
+                        button("Course subject", () => ui.catalog().courseSubject(row.id)),
+                        button("Departments & levels", () => ui.classifications().course(row.id)),
+                    ],
+                ),
+                taskGroup(
+                    "Publication & reuse",
+                    "Review retained definitions or start a separate course draft.",
+                    "journal-check",
+                    [
+                        button("Published definitions", () => ui.catalog().publications(row.id)),
+                        button(
+                            "Clone as a course draft",
+                            () => ui.catalog().clone(row.id),
+                            "btn-outline-secondary",
+                        ),
+                    ],
+                ),
             );
-        if (sectionName === "sections" && can("sis:catalog:manage"))
-            body.append(button("Course definition", () => ui.catalog().sectionDefinition(row.id)));
-        if (sectionName === "sections" && can("sis:catalog:manage"))
-            body.append(button("Published section details", () => ui.catalog().sectionPublications(row.id)));
+        }
+        if (sectionName === "programs" && can("sis:catalog:manage")) {
+            tasks.append(
+                taskGroup(
+                    "Program catalog",
+                    "Edit the program and review its publications for an academic year.",
+                    "signpost-split",
+                    [
+                        button(
+                            "Program details & publications",
+                            () => ui.programs().open(row.id),
+                            "btn-primary",
+                        ),
+                        button("Academic years", () => ui.calendar().years(), "btn-outline-secondary"),
+                    ],
+                ),
+                taskGroup(
+                    "Requirements & grading",
+                    "Set up degree requirements and any program-specific grading scale.",
+                    "mortarboard",
+                    [
+                        button("Degree audit requirements", () => ui.degreeAudit().launch(row.id)),
+                        button("Program grading scale", () => ui.degreeAudit().gradingScale(row.id)),
+                    ],
+                ),
+            );
+        }
+        if (sectionName === "sections" && can("sis:catalog:manage")) {
+            tasks.append(
+                taskGroup(
+                    "Offering publications",
+                    "Review the course definition and the details retained for this offering.",
+                    "collection",
+                    [
+                        button("Course definition", () => ui.catalog().sectionDefinition(row.id)),
+                        button("Published section details", () => ui.catalog().sectionPublications(row.id)),
+                    ],
+                ),
+            );
+        }
+        if (tasks.childElementCount) body.append(tasks);
         if (["sections", "teaching"].includes(sectionName) && can("sis:registration:manage"))
-            body.append(button("Register a group into this section", () => ui.batchRegistration().start(row.id)));
+            actions.append(button("Register a group into this section", () => ui.batchRegistration().start(row.id)));
         if (
             ["courses", "sections", "programs", "terms"].includes(
                 sectionName,
             ) &&
             can("sis:catalog:manage")
         )
-            body.append(
+            actions.append(
                 button("Edit catalog record", () =>
                     editCatalog(sectionName, row),
                 ),
             );
         if (can("sis:audit:read"))
-            body.append(
+            actions.append(
                 button("View audit history", () => audit(sectionName, row)),
             );
+        if (actions.childElementCount) body.append(actions);
         if (sectionName === "students" && can("sis:registration:manage"))
             await registration(body, row);
         if (sectionName === "students" && can("sis:restrictions:manage"))

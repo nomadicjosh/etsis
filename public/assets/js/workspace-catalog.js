@@ -44,7 +44,7 @@ window.createWorkspaceCatalog = function (ui) {
             ["title", "New course title"],
             ["credits_milli", "Credits", "credits"],
         ];
-        const form = await buildForm(fields, draft);
+        const form = await buildForm(fields, draft, { layout: 'courses' });
         const chosen = new Set(selected);
         const prerequisites = node(
             "fieldset",
@@ -202,13 +202,17 @@ window.createWorkspaceCatalog = function (ui) {
             ["currency", "Currency", "currency"],
             ["web_registration", "Enable self-registration when published", "checkbox"],
         ];
-        const form = await buildForm(fields, {
-                capacity: 25,
-                delivery_mode: "unspecified",
-                fee_minor: 0,
-                currency: "USD",
-                ...preset,
-            }),
+        const form = await buildForm(
+                fields,
+                {
+                    capacity: 25,
+                    delivery_mode: "unspecified",
+                    fee_minor: 0,
+                    currency: "USD",
+                    ...preset,
+                },
+                { layout: "sections" },
+            ),
             save = submit("Keep section in plan");
         form.elements.code.maxLength = 80;
         form.append(save);

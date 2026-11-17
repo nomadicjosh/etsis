@@ -59,6 +59,9 @@ test('staff load defaults into a fresh editable offering plan and still review b
     await expect(page.locator('#drawer-body')).toContainText('MATH.101.A'); await expect(page.locator('#drawer-body')).toContainText('$125.00');
     expect(f.calls.some(call => call.path.endsWith('/save/'))).toBe(false);
     await page.getByRole('button', { name: 'Edit MATH.101.A', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Course & section', exact: true })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Teaching & registration', exact: true })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Section fee', exact: true })).toBeVisible();
     await expect(page.getByLabel('Section fee', { exact: false })).toHaveValue('125');
     await page.getByRole('textbox', { name: 'Section code', exact: true }).fill('MATH.101.27FA.A');
     await page.getByLabel('Seats', { exact: false }).fill('40');

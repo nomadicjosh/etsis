@@ -52,6 +52,7 @@ window.createWorkspacePeople = function (ui) {
                 directory_restricted: current.directoryRestricted,
             },
             "Names stay connected across person, student, employment and sign-in records. Directory restriction does not prevent authorized staff from doing their work.",
+            { layout: "people" },
         );
     }
     async function account(person) {

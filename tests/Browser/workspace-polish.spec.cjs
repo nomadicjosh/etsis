@@ -86,9 +86,53 @@ test('catalog navigation and grouped tools remain distinct with keyboard and ret
     await expect(page.locator('#drawer-title')).toHaveText('Course subjects');
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await expect(toggle).toBeFocused();
+    await page.getByRole('button', { name: 'College Algebra', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Course content', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Publication & reuse', exact: true })).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/workspace-polished-course.png' });
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('#directory-tabs [data-workspace="programs"]').click();
     await expect(page.locator('.workspace-nav-link[data-workspace="courses"]')).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('#topbar-parent')).toContainText('Academic catalog');
+    expect(f.errors).toEqual([]);
+});
+
+test('grouped person fields preserve validation, private submission and phone reflow', async ({ page }) => {
+    const f = await fixture(page);
+    const saves = [];
+    await page.route('**/sis/ui/operation-id/', route => route.fulfill({ json: { id: id(90) } }));
+    await page.route('**/sis/persons/', async route => {
+        expect(route.request().headers()['x-csrf-token']).toBe('fictional-test-token');
+        saves.push(JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json')));
+        await route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.',
+            errors: [{ field: 'email', message: 'Use a different fictional email address.' }] } });
+    });
+    await page.locator('[data-action="new-person"]').click();
+    const form = page.locator('#drawer-body .record-form');
+    await expect(form.getByRole('group', { name: 'Person details', exact: true })).toBeVisible();
+    await expect(form.getByRole('group', { name: 'Institutional ID', exact: true })).toBeVisible();
+    await expect(form.getByRole('group', { name: 'Directory privacy', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save and continue', exact: true }).click();
+    await expect(form.getByRole('textbox', { name: 'Given name', exact: true })).toBeFocused();
+    expect(saves).toHaveLength(0);
+    await form.getByRole('textbox', { name: 'Given name', exact: true }).fill('Alex');
+    await form.getByRole('textbox', { name: 'Family name', exact: true }).fill('Example');
+    await form.getByRole('textbox', { name: 'Email address', exact: true }).fill('alex@example.invalid');
+    await page.screenshot({ path: 'test-results/workspace-polished-person-form.png' });
+    await page.getByRole('button', { name: 'Save and continue', exact: true }).click();
+    await expect(form.getByRole('textbox', { name: 'Email address', exact: true })).toHaveAttribute('aria-invalid', 'true');
+    await expect(form.getByRole('textbox', { name: 'Given name', exact: true })).toHaveValue('Alex');
+    expect(saves).toEqual([{ given_name: 'Alex', family_name: 'Example', email: 'alex@example.invalid', operation_id: id(90) }]);
+    await page.setViewportSize({ width: 320, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/workspace-polished-person-phone.png' });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
 

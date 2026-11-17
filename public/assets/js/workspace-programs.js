@@ -66,7 +66,7 @@ window.createWorkspacePrograms = function (ui) {
                 ["title", "Program title"],
                 ["description", "Program description", "textarea", "", false],
             ];
-            const form = await buildForm(fields, draft);
+            const form = await buildForm(fields, draft, { layout: "programs" });
             form.elements.namedItem("code").maxLength = 80;
             form.elements.namedItem("description").maxLength = 10000;
             const cards = node("div", { class: "row g-3 mb-3" });

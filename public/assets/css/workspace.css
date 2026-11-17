@@ -611,3 +611,42 @@ h3 { font-size: .9rem; font-weight: 650; }
 
 .workspace-tabs :is(a, button):focus-visible, .workspace-menu .workspace-nav-link:focus-visible { outline-offset: -4px !important; }
 .form-check-label { display: inline-flex; align-items: center; min-height: 24px; cursor: pointer; }
+
+/* Related fields and catalog tasks share a readable hierarchy within the record drawer. */
+.record-form-guide { color: var(--campus-muted); font-size: .75rem; margin: 0 0 1rem; }
+.record-form-section {
+    min-width: 0;
+    margin: 0 0 1.5rem;
+    padding: 1rem 1.25rem 1.25rem;
+    border: 1px solid var(--campus-line);
+    border-radius: .75rem;
+}
+.record-form-section > legend {
+    float: none;
+    width: auto;
+    margin: 0;
+    padding: 0 .35rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 650;
+    color: var(--campus-ink);
+}
+.record-form-section > .form-text { margin: .1rem 0 1rem; }
+.record-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.record-form-grid > .record-form-field { min-width: 0; margin-bottom: 0 !important; }
+.record-form-wide { grid-column: 1 / -1; }
+.record-form-section .form-check { display: flex; align-items: flex-start; gap: .6rem; padding: .65rem .75rem; background: #f3f7fb; border-radius: .5rem; }
+.record-form-section .form-check-input { float: none; flex-shrink: 0; margin: .25rem 0 0; }
+.record-form-section .form-check .form-label { margin: 0; font-weight: 500; }
+.record-task-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; margin: 1.25rem 0; }
+.record-task-card { min-width: 0; padding: 1.25rem; border: 1px solid var(--campus-line); border-radius: .75rem; background: #f8fafc; }
+.record-task-heading { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.record-task-heading h3 { font-size: 1rem; margin: 0; }
+.record-task-card > .form-text { margin: 0 0 1rem; }
+.record-task-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem; }
+.record-task-actions .btn { text-align: start; white-space: normal; }
+@media (max-width: 639px) {
+    .record-form-grid { grid-template-columns: minmax(0, 1fr); }
+    .record-form-section { padding: .75rem 1rem 1rem; }
+    .record-task-card { padding: 1rem; }
+}
