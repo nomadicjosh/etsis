@@ -81,6 +81,33 @@ try {
                 throw new RuntimeException('Course details were not persisted.');
             }
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-registration-throttle') {
+            $kernel->bootstrap();
+            $app->configContainer->setConfigKey('throttle', [
+                'max_attempts' => 5, 'ttl' => 600,
+                'registration' => ['max_attempts' => 1, 'ttl' => 600],
+            ]);
+            $middleware = new \Qubus\Routing\Route\InjectorMiddlewareResolver($app)
+                ->resolve('registration.throttle');
+            $calls = 0;
+            $handler = new \Qubus\Routing\Handlers\CallableRequestHandler(
+                static function () use (&$calls): \Psr\Http\Message\ResponseInterface {
+                    $calls++;
+                    return new \Laminas\Diactoros\Response\JsonResponse(['ok' => true]);
+                },
+            );
+            $request = new \Qubus\Http\ServerRequest(['REMOTE_ADDR' => '192.0.2.15'], [], '/create/', 'POST')
+                ->withHeader('Accept', 'text/html');
+            $allowed = $middleware->process($request, $handler);
+            $limited = $middleware->process($request, $handler);
+            if (
+                $allowed->getStatusCode() !== 200 || $limited->getStatusCode() !== 429 || $calls !== 1
+                || !str_contains($limited->getHeaderLine('Cache-Control'), 'private, no-store')
+                || !str_contains((string) $limited->getBody(), 'Please wait before trying again')
+            ) {
+                throw new RuntimeException('The registration throttle alias/cache boundary did not resolve correctly.');
+            }
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-portal') {
             $kernel->bootstrap();
             require __DIR__ . '/PortalBootChecks.php';

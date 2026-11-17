@@ -12,6 +12,10 @@ final class AppServiceProvider extends CodefyServiceProvider
 {
     public function register(): void
     {
+        $this->codefy->alias(
+            'registration.throttle',
+            \Application\Http\Middleware\PublicRegistrationThrottleMiddleware::class,
+        );
         $this->codefy->share(new FileLocker($this->codefy->storagePath() . '/scheduler-locks'));
         $this->codefy->alias(Locker::class, FileLocker::class);
     }

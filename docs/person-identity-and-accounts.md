@@ -8,6 +8,18 @@
 
 Prospects register before applying. Public registration creates the person and basic sign-in account together; it does not create a student record or grant staff access. An accepted applicant becomes a student through the existing reviewed matriculation workflow, retaining the same person and account.
 
+### Public registration request limits
+
+`POST /create/` uses the dedicated `registration.throttle` middleware. Configure `throttle.registration.max_attempts` and `throttle.registration.ttl` in `config/throttle.php`; the defaults allow five attempts per server-reported peer address within ten minutes. The existing top-level throttle settings and counter continue to govern sign-in separately. Requests reaching this guard count whether account creation succeeds or fails; CSRF checks run earlier. A registration limit does not consume or reset the sign-in allowance. Unavailable counter storage stops the request before account creation.
+
+The guard reuses Codefy's cache-backed limiter and PSR-6 cache pool, with a separate registration identifier. The identifier hashes the normalized peer address; it contains no email, password or form answers. Forwarding headers supplied by the caller cannot select another counter. Equivalent IPv6 spellings share a counter, and missing/invalid peer addresses share a limited fallback. CSRF validation and the canonical-person/account transaction remain required.
+
+When limited, browsers receive a readable HTTP 429 page; JSON clients receive the same approved message as an error object. Both responses include `Retry-After`, remain private/no-store and omit submitted values. Wait before retrying, or use sign-in if an account already exists. Returning to the form does not automatically resubmit it.
+
+Set peer-address handling at the trusted web-server/proxy boundary. Shared campus networks can legitimately have many applicants behind one address, so tune the registration settings for the installation. Multi-node deployments need a shared cache for a shared allowance. This is the framework's cache-backed request guard, not an identity-verification system or a guarantee against concurrent/distributed abuse; institutional identity matching and further public-registration controls remain on the roadmap.
+
+### Staff-created accounts
+
 In **People → Add a person**, staff enter a name and required email, plus an optional assigned institutional ID. One transaction creates the linked person, basic account, protected history and queued initial-password invitation. Staff do not choose a password for this flow. Duplicate email is rejected with instructions to find the existing person; the system never adopts another account by matching an email. Duplicate submissions using the same operation return the original person. An audit or projection failure rolls back the whole creation.
 
 ## Expired workspace sign-ins

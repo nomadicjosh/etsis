@@ -26,6 +26,7 @@ final class PrivateErrorResponse
         $title = match ($status) {
             403 => 'This request needs another look', 404 => 'We could not find that record',
             409 => 'Pause and reload this record', 422 => 'Please check the form',
+            429 => 'Please wait before trying again',
             default => 'Something interrupted this request',
         };
         $loader = new NativeLoader(['framework' => dirname(__DIR__, 4) . '/resources/views']);
