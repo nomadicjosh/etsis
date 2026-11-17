@@ -141,9 +141,9 @@ final readonly class ApplicationFormService
         });
     }
 
-    public function disable(EntityId $program, bool $academicLevel = false): void
+    public function disable(EntityId $program, EntityId $expectedForm, bool $academicLevel = false): void
     {
-        $this->transactions->run(function () use ($program, $academicLevel): void {
+        $this->transactions->run(function () use ($program, $expectedForm, $academicLevel): void {
             $actor = $this->access->requirePermission("sis:forms:publish");
             if ($academicLevel) {
                 $this->repository->lockLevel($program);
@@ -154,9 +154,9 @@ final readonly class ApplicationFormService
                 throw new \Domain\Shared\Exception\AccessDeniedException('Access denied.');
             }
             if ($academicLevel) {
-                $this->repository->disableLevel($program);
+                $this->repository->disableLevel($program, $expectedForm);
             } else {
-                $this->repository->disable($program);
+                $this->repository->disable($program, $expectedForm);
             }
             $this->audit->record($actor, "admissions.form_disabled", $program);
         });

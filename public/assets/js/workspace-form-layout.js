@@ -1,4 +1,4 @@
-/* One placement model for pointer sorting, keyboard moves and retained form layouts. */
+/* One working-definition model for field validation, references and retained form layouts. */
 'use strict';
 window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, task, draft, changed, render, announce }) => {
     let sortables = [];
@@ -125,6 +125,37 @@ window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, t
         sortable(root, root, true);
     }
     return {
+        conditionLimits: tree => {
+            let nodes = 0;
+            const valueValid = value => typeof value === 'boolean' || (typeof value === 'number' && Number.isSafeInteger(value))
+                || (typeof value === 'string' && value.trim() !== '' && Array.from(value).length <= 191 && !/[\x00-\x1f\x7f]/.test(value));
+            const valid = (group, depth = 0) => {
+                if (depth > 4 || ++nodes > 50 || !['AND', 'OR'].includes(group?.condition)
+                    || !Array.isArray(group.rules) || !group.rules.length || group.rules.length > 20) return false;
+                return group.rules.every(rule => {
+                    if (rule?.condition) return valid(rule, depth + 1);
+                    if (++nodes > 50 || !rule) return false;
+                    if (['in', 'not_in'].includes(rule.operator))
+                        return Array.isArray(rule.value) && rule.value.length > 0 && rule.value.length <= 20 && rule.value.every(valueValid);
+                    return valueValid(rule.value);
+                });
+            };
+            return valid(tree) ? '' : 'Use 1–20 conditions per group, at most 50 conditions and four nested groups. Lists allow 1–20 values; text values allow up to 191 characters.';
+        },
+        inputProblem: (part, value) => {
+            if (!['label', 'help', 'options'].includes(part)) return '';
+            if (part === 'options') {
+                const options = value.split('\n').filter(option => option.trim());
+                if (!options.length || options.length > 30) return 'Enter between 1 and 30 choices, one per line.';
+                if (options.some(option => Array.from(option).length > 120 || /[\x00-\x1f\x7f]/.test(option)))
+                    return 'Each choice must use up to 120 characters without control characters.';
+                return '';
+            }
+            if (part === 'label' && !value.trim()) return 'Give this question a label.';
+            if (Array.from(value).length > (part === 'label' ? 120 : 300))
+                return `Use up to ${part === 'label' ? 120 : 300} characters.`;
+            return /[\x00-\x1f\x7f]/.test(value) ? 'Remove control characters from this text.' : '';
+        },
         cleanup,
         render: renderContainers,
         addContainer: () => {
@@ -142,7 +173,23 @@ window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, t
             }
         },
         remove,
-        rename: (oldKey, key) => { const place = find(oldKey); if (place) place.column[place.column.indexOf(oldKey)] = key; },
+        rename: (oldKey, key) => {
+            const fields = draft().fields, field = fields.find(item => item.key === oldKey);
+            if (!field || typeof key !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(key)
+                || fields.some(item => item !== field && item.key === key)) return false;
+            if (oldKey === key) return true;
+            const renameReferences = group => {
+                for (const rule of group.rules) {
+                    if (rule.rules) renameReferences(rule);
+                    else if (rule.id === oldKey) rule.id = key;
+                }
+            };
+            const place = find(oldKey);
+            if (place) place.column[place.column.indexOf(oldKey)] = key;
+            for (const item of fields) if (item.show_when) renameReferences(item.show_when);
+            field.key = key;
+            return true;
+        },
         insertAfter: (key, copyKey) => { const place = find(key); if (place) { place.column.splice(place.column.indexOf(key) + 1, 0, copyKey); reorder(); } },
         canMove: (key, delta) => {
             const keys = find(key)?.column || draft().fields.map(field => field.key);

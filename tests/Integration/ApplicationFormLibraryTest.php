@@ -114,7 +114,7 @@ final class ApplicationFormLibraryTest extends TestCase
             [$current->id->value],
             array_column($service->listing($program['title'], 'enabled')['items'], 'id')
         );
-        $service->disable($fixture->program);
+        $service->disable($fixture->program, $current->id);
         self::assertSame([$shared->id->value], array_column($service->listing(state: 'enabled')['items'], 'id'));
         self::assertCount(3, $service->listing(state: 'published')['items']);
     }

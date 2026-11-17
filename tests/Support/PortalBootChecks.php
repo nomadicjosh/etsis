@@ -5987,3 +5987,30 @@ if (
 ) {
     throw new RuntimeException("The native private history lost retained registration pricing.");
 }
+
+// Form availability confirmations name the exact reviewed default through the real HTTP boundary.
+$sis->access->staff = true;
+$sis->access->actor = $originalSubmissionActor;
+$availabilityFields = [['key' => 'statement', 'label' => 'Fictional statement', 'type' => 'text']];
+$earlierDefault = $formApplications->save(null, $sis->program, 'Earlier default', $availabilityFields, null);
+$formApplications->publish($earlierDefault->id, 0);
+$currentDefault = $formApplications->save(null, $sis->program, 'Current default', $availabilityFields, null);
+$formApplications->publish($currentDefault->id, 0);
+$removeDefaultPath = '/sis/forms/programs/' . $sis->program->value . '/disable/';
+if (
+    $teachingPost($removeDefaultPath, [])->getStatusCode() !== 422
+    || $teachingPost($removeDefaultPath, ['form_id' => $earlierDefault->id->value])->getStatusCode() !== 409
+    || $formApplications->active($sis->program)->id->value !== $currentDefault->id->value
+) {
+    throw new RuntimeException('The HTTP removal boundary accepted an omitted or stale reviewed form.');
+}
+$removeDefaultResponse = $teachingPost($removeDefaultPath, ['form_id' => $currentDefault->id->value]);
+if (
+    $removeDefaultResponse->getStatusCode() !== 200
+    || !str_contains($removeDefaultResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $sis->sql->rows('sis_program_forms', ['program_id' => $sis->program->value]) !== []
+    || $formApplications->get($earlierDefault->id)->status !== 'published'
+    || $formApplications->get($currentDefault->id)->status !== 'published'
+) {
+    throw new RuntimeException('The HTTP removal boundary lost its private, retained-definition contract.');
+}

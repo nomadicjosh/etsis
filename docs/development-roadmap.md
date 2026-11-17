@@ -1,6 +1,6 @@
 # Development roadmap
 
-Last reviewed: **2026-11-16**, after adding retained per-credit registration prices in term/program billing rules. New registrations keep their original credits/rates; early drops reverse their own charges, late drops retain them, and flat-fee batch reviews clearly distinguish future registration rates. Retrospective pricing, load bands/caps, refund schedules, installments, financial-aid disbursement and external settlement remain open.
+Last reviewed: **2026-11-17**, after completing the account-based application-form milestone. Broader admissions case management and the remaining academic, financial, security and deployment milestones below remain open.
 
 etSIS has working foundations across the legacy modules, a staff workspace and a student/public portal. The largest remaining work is completing historically reliable academic workflows, evaluating degree progress, expanding office operations and proving recovery and deployment behavior. A working screen or passing isolated test does not make an entire module complete.
 
@@ -169,7 +169,8 @@ Authoring, exception inputs and [paged academic-work review](student-academic-wo
 
 ## 4. Admissions and student services
 
-- [ ] Complete safe anonymous/public application intake where required, with abuse controls, identity matching and a clear route into the existing protected submission workflow.
+- [x] Complete the [account-based application-form workflow](application-submission-history.md#completed-application-form-milestone): institution-defined targets, visual editing, conditions, layouts, reviewed publication/default removal, prospect/staff submission and private retained-answer review.
+- [ ] Extend public account-registration abuse controls and institution-specific identity matching. Application submission requires the person's linked sign-in account; anonymous application records are outside the agreed workflow.
 - [ ] Add institutions attended and actionable correction requests. Current owner/staff ordinary-contact, dated-address and emergency-contact editors are available with restricted visibility.
 - [ ] Add application completeness checklists, protected documents/references, office assignment and follow-up tasks in one application workbench. Define upload scanning and retention before accepting sensitive files.
 - [ ] Add offers, applicant responses, withdrawal/reopening and any additional approval stages as explicit institutional policies and retained transitions. Post-matriculation rescission must coordinate student/program/academic/financial consequences.

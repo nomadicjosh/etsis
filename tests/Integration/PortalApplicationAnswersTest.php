@@ -52,7 +52,7 @@ final class PortalApplicationAnswersTest extends TestCase
             $f->term,
             ['statement' => 'Fictional private statement'],
         );
-        $forms->disable($f->program);
+        $forms->disable($f->program, $form->id);
         $f->sql->update('sis_programs', ['title' => 'Current renamed program'], ['id' => $f->program->value]);
         $f->access->actor = $owner;
         $f->access->staff = false;

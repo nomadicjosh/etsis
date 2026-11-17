@@ -362,7 +362,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
         } catch (ValidationException) {
             self::assertSame([], $f->sql->rows("sis_history_events"));
         }
-        $this->forms($f)->disable($f->program);
+        $this->forms($f)->disable($f->program, $form);
         try {
             $this->forms($f)->submit(EntityId::generate(), $form, $person, $f->term, [
                 "statement" => "Fictional original",
@@ -433,7 +433,7 @@ final class ApplicationSubmissionHistoryTest extends TestCase
                 $answers,
             ),
         );
-        $this->forms($f)->disable($f->program);
+        $this->forms($f)->disable($f->program, $form);
         self::assertSame(
             $a->id->value,
             $this->forms($f)->submit($id, $form, $person, $f->term, $answers)->value,

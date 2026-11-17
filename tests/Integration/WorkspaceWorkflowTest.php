@@ -139,7 +139,7 @@ final class WorkspaceWorkflowTest extends TestCase
         } catch (ValidationException $exception) {
             self::assertCount(0, $fixture->sql->rows('sis_applications'));
         }
-        $service->disable($fixture->program);
+        $service->disable($fixture->program, $form->id);
         $this->expectException(\Domain\Shared\Exception\RecordNotFoundException::class);
         $service->submit(EntityId::generate(), $form->id, $person->id, $fixture->term, ['transfer' => false]);
     }

@@ -90,16 +90,16 @@ final readonly class SisFormBuilderController
         return new JsonResponse(['status' => 'published']);
     }
 
-    public function disable(string $id): ResponseInterface
+    public function disable(ServerRequest $request, string $id): ResponseInterface
     {
-        $this->service->disable(new EntityId($id));
+        $this->service->disable(new EntityId($id), FormInput::from($request)->id('form_id'));
 
         return new JsonResponse(['status' => 'disabled']);
     }
 
-    public function disableLevel(string $id): ResponseInterface
+    public function disableLevel(ServerRequest $request, string $id): ResponseInterface
     {
-        $this->service->disable(new EntityId($id), academicLevel: true);
+        $this->service->disable(new EntityId($id), FormInput::from($request)->id('form_id'), academicLevel: true);
         return new JsonResponse(['status' => 'disabled']);
     }
 

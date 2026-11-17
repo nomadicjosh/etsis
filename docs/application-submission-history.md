@@ -24,6 +24,22 @@ The signed-in overview lists at most fifty applications in descending ULID order
 
 ## Application form studio
 
+### Completed application-form milestone
+
+The account-based application-form workflow is implemented. It covers:
+
+- A searchable, paged form library with institution-defined academic-level defaults and program overrides.
+- Eight question types, visible question labels, hints, required answers, choices and field limits.
+- Containers and responsive columns, pointer/keyboard ordering, direct copy/trash controls and bounded Undo/Redo.
+- Conditional questions with nested rules, stable references and shared preview/submission behavior.
+- Explicit save, preview, reviewed immutable publication and reviewed default removal.
+- Signed-in prospect and staff-assisted submission, answer review before sending, protected retries and retained answers.
+- Private applicant answer access and admissions review using the original submitted definition.
+
+Question-key edits update column placement and every dependent condition in the working draft. Literal choice values are preserved. Invalid duplicate keys leave the definition untouched. Labels, hints and choices are validated before save, including Unicode character limits, and errors open the affected question. Published definitions and earlier submitted answers retain their original keys.
+
+Document checklists/uploads, office assignments, offers and other admissions case-management features remain separate roadmap items. This milestone describes implemented functionality in alpha, rather than production deployment or legal-compliance certification.
+
 Open **Application forms** to build a draft, preview it, save it and then **Review publication → Confirm publication**. Publication reviews the exact saved revision. Unsaved edits must be saved first; opening a published form creates a new draft revision and preserves the original.
 
 Use **Find a form** to search form names, program codes/titles or the institution's academic-level codes/titles. **Show** filters All forms, Drafts, Published forms or Enabled forms. Published includes earlier revisions; Enabled shows the current application defaults. **Previous** and **Next** browse twenty records at a time, including forms beyond the former hundred-record ceiling. Searches and filters run before that page limit. Results contain current metadata, not questions, layouts, submitted answers or event history. They are a live library, so a later publication can change which form is enabled.
@@ -35,6 +51,8 @@ Choose **An academic level** for a reusable default, or **One academic program**
 Applicants still choose their intended program and entry term. A program-specific form takes precedence; otherwise the program uses the form enabled for its current academic level. Programs without either form do not accept form-based applications. Removing a program override exposes the level default if one is enabled. Removing a level default leaves program overrides enabled. Both actions explain this before confirmation. A saved draft's target stays fixed; create a new draft to change its target.
 
 During a first save, the form's application target stays fixed while questions remain editable. Publication review waits for a pending save to finish. If a first save fails, the target choices become available again. Starting a replacement draft after confirming discard gives it its own target choices; the older save's response cannot attach its identity, overwrite edits or show an unrelated failure on that replacement draft.
+
+Removing a default confirms the exact enabled form shown in the review. If another administrator replaces it first, removal is rejected and **Refresh forms** reloads the library without removing the replacement. The form definition and submitted answers remain intact. Both disable endpoints now require `form_id` in the POST body; the service rechecks publication authority and the binding under the existing target lock, and removal and its required audit commit together.
 
 Field cards display their current question label and type. Expand or collapse individual cards or all cards, and reorder them using drag handles or the keyboard-accessible arrow buttons. **Duplicate field** and **Remove field** are always-visible copy and trash icons beside the other field controls. A **Move to another column** icon appears when containers are in use. The controls have accessible names and hover labels, support keyboard use and restore focus after edits. Each question has a label, optional hint and required-answer setting. Dropdown and **Single choice** radio questions provide one choice per line. **Field settings** holds the unique stable key used by conditions and saved answers. Forms support up to 40 questions, with up to 30 choices per choice question.
 
@@ -77,6 +95,10 @@ Migration **20261116000007** makes the existing form's program reference nullabl
 Migration **20261116000008** adds nullable layout storage and widens MySQL's question-definition and encrypted-answer columns to accommodate valid forms exceeding 64 KB. Other supported engines already use large text/LOB types. Existing definitions, encrypted answers, bindings and receipts are preserved. Layout and explicit question settings become part of the retained publication digest; older forms without them keep their original digest and reading order. Changing either later requires a new publication. No additional event table, fabricated history or conversion of earlier answers is introduced. Compiler checks cover the five framework dialects; runtime checks cover SQLite fixtures and the configured MariaDB migration, with broader deployment acceptance still pending.
 
 The paged library needs no schema change. **GET `/sis/forms/`** accepts optional `search` up to 80 characters, `state` as `all`, `draft`, `published` or `enabled`, and an exclusive ULID `after` cursor. Its current response is `{items, next_after}` with at most twenty metadata records. Search terms are bound and SQL wildcards are escaped. Current `sis:forms:manage` authority is required independently of publication or catalog permissions. Private/no-store responses and debug suppression still apply; library reads append no events or audits.
+
+### Lightweight verification
+
+Run `npm run test:forms` for browser-free checks of reference-preserving key edits, placement, restored working definitions, input limits and a forty-question form. This uses one Node process with a 32-MiB heap cap. The focused PHP form/submission suites cover target selection, publication, access, encrypted answers, retries and stale-removal/audit rollback. This completion pass also verifies the removal endpoints through the framework HTTP/CSRF pipeline. Existing browser scenarios cover the interactive builder; they were not rerun in this pass to avoid the reported workstation slowdown.
 
 ## Preserved facts
 

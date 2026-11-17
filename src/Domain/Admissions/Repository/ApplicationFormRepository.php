@@ -13,10 +13,10 @@ interface ApplicationFormRepository
     public function active(EntityId $program): ApplicationForm;
     public function save(ApplicationForm $form, ?int $expectedVersion): void;
     public function publish(ApplicationForm $form): void;
-    public function disable(EntityId $program): void;
+    public function disable(EntityId $program, ?EntityId $expectedForm): void;
     public function lockProgram(EntityId $program): void;
     public function lockLevel(EntityId $level): void;
-    public function disableLevel(EntityId $level): void;
+    public function disableLevel(EntityId $level, ?EntityId $expectedForm): void;
     /** @return list<array<string,mixed>> */
     public function levels(): array;
     /** @return array{items:list<array<string,mixed>>,next_after:?string} */

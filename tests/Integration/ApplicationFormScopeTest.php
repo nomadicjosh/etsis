@@ -41,6 +41,112 @@ final class ApplicationFormScopeTest extends TestCase
         return [['key' => 'statement', 'label' => 'Statement', 'type' => 'textarea', 'required' => true]];
     }
 
+    public function testStaleRemovalPreservesNewerProgramAndAcademicLevelDefaults(): void
+    {
+        foreach ([false, true] as $academicLevel) {
+            $f = new SisFixture();
+            $s = $this->forms($f);
+            $level = $academicLevel ? $this->level($f) : null;
+            if ($level !== null) {
+                $this->assign($f, $f->program, $level);
+            }
+            $old = $s->save(null, $academicLevel ? null : $f->program, 'Earlier form', $this->fields(), null, $level);
+            $s->publish($old->id, 0);
+            $current = $s->save(
+                null,
+                $academicLevel ? null : $f->program,
+                'Current form',
+                $this->fields(),
+                null,
+                $level,
+            );
+            $s->publish($current->id, 0);
+            $audit = $f->sql->rows('sis_audit');
+            $definitions = $f->sql->rows('sis_application_forms');
+            $target = $level ?? $f->program;
+            try {
+                $s->disable($target, $old->id, academicLevel: $academicLevel);
+                self::fail('A stale confirmation removed a newer enabled form.');
+            } catch (ConcurrentModificationException) {
+                self::assertSame($current->id->value, $s->active($f->program)->id->value);
+            }
+            self::assertSame($audit, $f->sql->rows('sis_audit'));
+            self::assertSame($definitions, $f->sql->rows('sis_application_forms'));
+            $s->disable($target, $current->id, academicLevel: $academicLevel);
+            self::assertSame($definitions, $f->sql->rows('sis_application_forms'));
+            self::assertCount(count($audit) + 1, $f->sql->rows('sis_audit'));
+            self::assertSame([], $f->sql->rows($academicLevel ? 'sis_level_forms' : 'sis_program_forms'));
+        }
+    }
+
+    public function testDefaultRemovalRequiresPublicationAuthorityAndAnAtomicAudit(): void
+    {
+        $f = new SisFixture();
+        $s = $this->forms($f);
+        $form = $s->save(null, $f->program, 'Current form', $this->fields(), null);
+        $s->publish($form->id, 0);
+        $f->access->staff = false;
+        $f->access->grants = ['sis:forms:manage'];
+        try {
+            $s->disable($f->program, $form->id);
+            self::fail('Draft editing authority allowed removal of a published default.');
+        } catch (AccessDeniedException) {
+            self::assertSame($form->id->value, $s->active($f->program)->id->value);
+        }
+        $f->access->staff = true;
+        $audit = new class implements \Domain\Audit\Repository\AuditTrail {
+            public function record(EntityId $actor, string $action, EntityId $subject): void
+            {
+                throw new \RuntimeException('Fictional audit failure.');
+            }
+
+            public function forSubject(EntityId $subject): array
+            {
+                return [];
+            }
+        };
+        $service = new ApplicationFormService(
+            new SqlApplicationFormRepository($f->sql),
+            $f->admissionsService(),
+            $f->access,
+            $f->transactions,
+            $audit,
+            $f->submissionService()
+        );
+        try {
+            $service->disable($f->program, $form->id);
+            self::fail('An unaudited removal was committed.');
+        } catch (\RuntimeException $error) {
+            self::assertSame('Fictional audit failure.', $error->getMessage());
+        }
+        self::assertSame($form->id->value, $s->active($f->program)->id->value);
+    }
+
+    public function testRemovalControllersRequireTheReviewedFormForBothTargetScopes(): void
+    {
+        foreach ([false, true] as $academicLevel) {
+            $f = new SisFixture();
+            $service = $this->forms($f);
+            $level = $academicLevel ? $this->level($f) : null;
+            $form = $service->save(null, $academicLevel ? null : $f->program, 'Form', $this->fields(), null, $level);
+            $service->publish($form->id, 0);
+            $controller = new \Application\Http\Controller\SisFormBuilderController($service);
+            $method = $academicLevel ? 'disableLevel' : 'disable';
+            $target = $level ?? $f->program;
+            $request = new \Qubus\Http\ServerRequest([], [], 'https://campus.example.invalid/', 'POST');
+            try {
+                $controller->$method($request->withParsedBody([]), $target->value);
+                self::fail('A default was removed without naming the reviewed form.');
+            } catch (InvalidArgumentException) {
+                self::assertCount(1, $f->sql->rows($academicLevel ? 'sis_level_forms' : 'sis_program_forms'));
+            }
+            $response = $controller->$method($request->withParsedBody(['form_id' => $form->id->value]), $target->value);
+            self::assertSame(200, $response->getStatusCode());
+            self::assertSame([], $f->sql->rows($academicLevel ? 'sis_level_forms' : 'sis_program_forms'));
+            self::assertSame('published', $service->get($form->id)->status);
+        }
+    }
+
     private function level(SisFixture $f, string $code = 'DIP'): EntityId
     {
         $id = EntityId::generate();
@@ -74,12 +180,12 @@ final class ApplicationFormScopeTest extends TestCase
         $programs = new SqlCampusRepository($f->sql)->programs();
         self::assertSame($override->id->value, array_column($programs, 'form_id', 'id')[$f->program->value]);
         self::assertSame($shared->id->value, array_column($programs, 'form_id', 'id')[$other->value]);
-        $s->disable($f->program);
+        $s->disable($f->program, $override->id);
         self::assertSame($shared->id->value, $s->active($f->program)->id->value);
         // Re-publishing uses a new immutable definition.
         $override = $s->save(null, $f->program, 'New program override', $this->fields(), null);
         $s->publish($override->id, 0);
-        $s->disable($level, academicLevel: true);
+        $s->disable($level, $shared->id, academicLevel: true);
         self::assertSame($override->id->value, $s->active($f->program)->id->value);
         self::assertCount(3, $s->listing()['items']);
         $this->expectException(RecordNotFoundException::class);
@@ -105,7 +211,7 @@ final class ApplicationFormScopeTest extends TestCase
         self::assertStringNotContainsString($answers['statement'], $stored['encrypted_answers']);
         $before = $f->sql->rows('sis_history_events');
         $f->access->staff = true;
-        $s->disable($level, academicLevel: true);
+        $s->disable($level, $form->id, academicLevel: true);
         $f->sql->update('sis_program_details', ['academic_level_id' => null], ['id' => $f->program->value]);
         $f->access->staff = false;
         $retry = $s->submit($submission, $form->id, $person, $f->term, $answers, $f->program);

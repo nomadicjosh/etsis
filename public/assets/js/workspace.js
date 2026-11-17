@@ -1370,7 +1370,7 @@
         const serial = ++formLoadSerial, version = generation;
         const record = await request(`/sis/forms/${id}/`);
         if (serial !== formLoadSerial || version !== generation || current !== 'forms' || dirty) return;
-        formDraft = { ...record, id: record.status === 'published' ? null : record.id, version: record.status === 'published' ? null : record.version, status: 'draft', fields: structuredClone(record.fields) };
+        formDraft = { ...record, id: record.status === 'published' ? null : record.id, version: record.status === 'published' ? null : record.version, status: 'draft', fields: structuredClone(record.fields), layout: structuredClone(record.layout || []) };
         $one('#form-name').value = record.name;
         $one('#form-scope').value = record.program_id ? 'program' : 'academic_level';
         for (const [selector, value, fallback] of [['#form-program', record.program_id, 'Selected program'], ['#form-level', record.academic_level_id, 'Selected academic level']]) {
@@ -1455,6 +1455,8 @@
             ...(prior.length ? [node('button', { class: 'btn btn-primary', type: 'button', onclick: () => task(async () => {
                 const rules = formConditions.queryBuilder('getRules');
                 if (!rules) throw new Error('Complete each condition before applying it.');
+                const problem = formLayoutEditor.conditionLimits(rules);
+                if (problem) throw new Error(problem);
                 // Persist only the domain rule language, never plugin metadata or labels.
                 const clean = group => ({ condition: group.condition, rules: group.rules.map(rule => rule.rules ? clean(rule) : { id: rule.id, operator: rule.operator, value: rule.value }) });
                 field.show_when = clean(rules); formChanged(); renderDesigner(index, 'conditions'); drawer.hide();
@@ -1564,6 +1566,17 @@
         formLayoutEditor.cleanup();
         const container = $one('#designer-fields'); clear(container);
         const cards = new Map();
+        const refreshConditionProblems = () => {
+            formDraft.fields.forEach((field, index) => {
+                const visibility = cards.get(field.key)?.querySelector('.field-visibility');
+                if (!visibility) return;
+                const notice = visibility.querySelector('[data-field-condition-problem]');
+                const problem = conditionProblem(field, index);
+                if (!problem) notice?.remove();
+                else if (!notice) visibility.append(node('p', { class: 'text-danger mb-0', role: 'status', 'data-field-condition-problem': '' }, problem));
+                else if (notice.textContent !== problem) notice.textContent = problem;
+            });
+        };
         if (!formDraft.fields.length && !formDraft.layout?.length) container.append(emptyState('A blank canvas, full of possibility.', 'Add the questions your applicants need.', 'layout-text-window'));
         formDraft.fields.forEach((field, index) => {
             const types = window.applicationQuestionTypes;
@@ -1607,14 +1620,27 @@
             controls.append(toggle); heading.append(controls);
             const input = (key, label, type = 'text') => {
                 const id = `designer-${index}-${key}`;
-                const control = node(type === 'textarea' ? 'textarea' : 'input', { class: 'form-control', id, maxlength: key === 'help' ? 300 : key === 'key' ? 40 : type === 'textarea' ? 3630 : 120, ...(type === 'textarea' ? { rows: 3 } : { type: 'text' }) });
+                const control = node(type === 'textarea' ? 'textarea' : 'input', { class: 'form-control', id,
+                    required: ['label', 'key', 'options'].includes(key),
+                    maxlength: key === 'help' ? 600 : key === 'key' ? 40 : type === 'textarea' ? 7260 : 240,
+                    ...(type === 'textarea' ? { rows: 3 } : { type: 'text' }) });
                 control.value = type === 'textarea' ? field.options.join('\n') : field[key] || '';
+                if (key !== 'key') control.setCustomValidity(formLayoutEditor.inputProblem(key, control.value));
                 control.addEventListener('input', event => {
                     if (key === 'key') {
-                        const valid = /^[a-z][a-z0-9_]{0,39}$/.test(control.value) && !formDraft.fields.some(other => other !== field && other.key === control.value);
+                        const previous = field.key;
+                        const valid = formLayoutEditor.rename(previous, control.value);
                         control.setCustomValidity(valid ? '' : 'Use a unique key with lowercase letters, numbers and underscores.');
-                        if (valid) { formLayoutEditor.rename(field.key, control.value); field.key = control.value; card.dataset.fieldKey = control.value; }
-                    } else if (type === 'textarea') field.options = control.value.split('\n').filter(value => value.trim()); else field[key] = control.value;
+                        if (valid && previous !== field.key) {
+                            if (collapsedFormFields.delete(previous)) collapsedFormFields.add(field.key);
+                            cards.delete(previous); cards.set(field.key, card); card.dataset.fieldKey = field.key;
+                            refreshConditionProblems();
+                        }
+                    } else {
+                        if (type === 'textarea') field.options = control.value.split('\n').filter(value => value.trim());
+                        else field[key] = control.value;
+                        control.setCustomValidity(formLayoutEditor.inputProblem(key, control.value));
+                    }
                     if (key === 'label') {
                         title.textContent = field.label || types[field.type];
                         for (const [name, label] of [['arrow-up', 'Move field up'], ['arrow-down', 'Move field down']])
@@ -1632,7 +1658,7 @@
             content.append(node('div', { class: 'col-12 field-visibility' },
                 node('span', { class: 'muted-text' }, field.show_when ? 'Conditional visibility' : 'Always visible'),
                 node('button', { class: 'btn btn-sm btn-outline-primary', type: 'button', 'data-field-conditions': '', 'aria-label': `Edit conditions for field ${index + 1}`, onclick: () => editFormConditions(field) }, 'Edit conditions'),
-                ...(problem ? [node('p', { class: 'text-danger mb-0', role: 'status' }, problem)] : [])));
+                ...(problem ? [node('p', { class: 'text-danger mb-0', role: 'status', 'data-field-condition-problem': '' }, problem)] : [])));
             content.append(node('details', { class: 'designer-settings col-12' }, node('summary', {}, 'Field settings'), node('div', { class: 'row g-3 designer-setting-fields' }, input('key', 'Stable field key'), ...formSettingControls(field, index))));
             const card = node('section', { class: 'designer-field', 'data-field-key': field.key, 'aria-labelledby': title.id }, heading, content);
             cards.set(field.key, card);
@@ -1776,18 +1802,29 @@
     function reviewFormDisable(form) {
         const level = Boolean(form.academic_level_id);
         const body = openDrawer('Remove application default', 'APPLICATION AVAILABILITY');
+        const confirm = node('button', { type: 'button', class: 'btn btn-primary', onclick: event => task(async () => {
+            try {
+                await request(`/sis/forms/${level ? 'academic-levels' : 'programs'}/${level ? form.academic_level_id : form.program_id}/disable/`, 'POST', { form_id: form.id });
+            } catch (error) {
+                if (error.status === 409 && body.isConnected) {
+                    confirm.remove();
+                    body.append(node('button', { type: 'button', class: 'btn btn-outline-primary mt-3', onclick: event => task(async () => {
+                        await formLibrary.load();
+                        if (body.isConnected) drawer.hide();
+                    }, event.currentTarget) }, 'Refresh forms'));
+                }
+                throw error;
+            }
+            if (!body.isConnected) return;
+            notify('Application default removed. Existing submissions are preserved.');
+            drawer.hide(); await formLibrary.load();
+        }, event.currentTarget) }, 'Remove default');
         body.append(
-            recordSummary([[level ? 'Academic level' : 'Academic program', form.program], ['Listed form', form.name]]),
-            node('p', { class: 'alert alert-info' }, (level ? 'Remove the currently enabled default for this academic level. Program-specific forms stay enabled. ' : 'Remove the currently enabled program override. If an academic-level default is enabled, this program will use it. ') + 'Existing applications and answers are preserved.'),
+            recordSummary([[level ? 'Academic level' : 'Academic program', form.program], ['Enabled form', form.name]]),
+            node('p', { class: 'alert alert-info' }, (level ? 'Remove this form as the academic-level default. Program-specific forms stay enabled. ' : 'Remove this form as the program override. If an academic-level default is enabled, this program will use it. ') + 'Existing applications and answers are preserved.'),
             node('div', { class: 'inline-actions' },
                 node('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: () => drawer.hide() }, 'Keep enabled'),
-                node('button', { type: 'button', class: 'btn btn-primary', onclick: event => task(async () => {
-                    await request(`/sis/forms/${level ? 'academic-levels' : 'programs'}/${level ? form.academic_level_id : form.program_id}/disable/`, 'POST', {});
-                    if (!body.isConnected) return;
-                    notify('Application default removed. Existing submissions are preserved.');
-                    drawer.hide();
-                    await formLibrary.load();
-                }, event.currentTarget) }, 'Remove default'),
+                confirm,
             ),
         );
     }

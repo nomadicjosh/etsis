@@ -93,9 +93,9 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
         }
         $level = $form->academicLevelId !== null;
         if ($level) {
-            $this->disableLevel($form->targetId());
+            $this->disableLevel($form->targetId(), null);
         } else {
-            $this->disable($form->targetId());
+            $this->disable($form->targetId(), null);
         }
         $this->sql->insert($level ? 'sis_level_forms' : 'sis_program_forms', [
             "id" => EntityId::generate()->value,
@@ -104,16 +104,9 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
         ]);
     }
 
-    public function disable(EntityId $program): void
+    public function disable(EntityId $program, ?EntityId $expectedForm): void
     {
-        $this->sql->execute(
-            "DELETE FROM " .
-                $this->sql->quote("sis_program_forms") .
-                " WHERE " .
-                $this->sql->quote("program_id") .
-                " = ?",
-            [$program->value],
-        );
+        $this->removeBinding('sis_program_forms', 'program_id', $program, $expectedForm);
     }
 
     public function lockProgram(EntityId $program): void
@@ -127,10 +120,26 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
         $this->sql->one('sis_catalog_classifications', ['id' => $level->value, 'kind' => 'academic_level']);
     }
 
-    public function disableLevel(EntityId $level): void
+    public function disableLevel(EntityId $level, ?EntityId $expectedForm): void
     {
-        $this->sql->execute('DELETE FROM ' . $this->sql->quote('sis_level_forms') . ' WHERE '
-            . $this->sql->quote('academic_level_id') . ' = ?', [$level->value]);
+        $this->removeBinding('sis_level_forms', 'academic_level_id', $level, $expectedForm);
+    }
+
+    private function removeBinding(string $table, string $key, EntityId $target, ?EntityId $expectedForm): void
+    {
+        $q = $this->sql->quote(...);
+        $params = [$target->value];
+        $where = $q($key) . ' = ?';
+        if ($expectedForm !== null) {
+            $where .= ' AND ' . $q('form_id') . ' = ?';
+            $params[] = $expectedForm->value;
+        }
+        $removed = $this->sql->execute('DELETE FROM ' . $q($table) . ' WHERE ' . $where, $params);
+        if ($expectedForm !== null && $removed !== 1) {
+            throw new ConcurrentModificationException(
+                'The enabled form changed. Refresh the form library before removing a default.'
+            );
+        }
     }
 
     public function levels(): array
