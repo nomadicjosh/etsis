@@ -36,6 +36,7 @@ final class SubmissionIntegrity
                 "name" => $form->name,
                 "version" => $form->version,
                 "fields" => $form->fields,
+                ...($form->layout === [] ? [] : ['layout' => $form->layout]),
             ]),
         );
     }

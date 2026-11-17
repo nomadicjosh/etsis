@@ -6,6 +6,7 @@ $fieldTypes = [
     'email' => 'Email address',
     'date' => 'Date',
     'select' => 'Dropdown choice',
+    'radio' => 'Single choice',
     'number' => 'Whole number',
     'checkbox' => 'Confirmation',
 ];
@@ -74,6 +75,9 @@ $fieldTypes = [
             <div class="designer-toolbar">
                 <span class="muted-text">Drag the handles or use the arrows to reorder fields.</span>
                 <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-sm btn-outline-primary" type="button" id="form-add-container">
+                        <i class="bi bi-layout-three-columns" aria-hidden="true"></i> Add container
+                    </button>
                     <button class="btn btn-sm btn-outline-secondary" type="button" id="form-collapse-fields">Collapse all</button>
                     <button class="btn btn-sm btn-outline-secondary" type="button" id="form-expand-fields">Expand all</button>
                 </div>

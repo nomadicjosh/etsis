@@ -193,4 +193,74 @@ final class ApplicationFormScopeTest extends TestCase
             SubmissionIntegrity::fingerprint($form, $person, $f->term, $answers)
         );
     }
+
+    public function testPublishedLayoutAndSettingsRoundTripAndRemainVerifiedAfterLaterDraftChanges(): void
+    {
+        $f = new SisFixture();
+        $service = $this->forms($f);
+        $person = $f->legacyPerson($f->access->actor, 'Fictional', 'Applicant')->id;
+        $fields = [['key' => 'statement', 'label' => 'Statement', 'type' => 'textarea', 'required' => true,
+            'settings' => ['placeholder' => 'Your goals', 'min_length' => 3, 'max_length' => 20]]];
+        $layout = [
+            ['key' => 'about', 'label' => 'About you', 'help' => 'Your plans', 'columns' => [[], ['statement']]],
+        ];
+        $draft = $service->save(null, $f->program, 'Admission', $fields, null, layout: $layout);
+        $service->publish($draft->id, 0);
+        $receipt = EntityId::generate();
+        $service->submit($receipt, $draft->id, $person, $f->term, ['statement' => 'Fictional goals']);
+        $retained = $service->submission($receipt)['form'];
+        self::assertSame($layout, $retained->layout);
+        self::assertSame($fields[0]['settings'], $retained->fields[0]['settings']);
+        $layout[0]['columns'] = [['statement']];
+        $layout[0]['label'] = 'New presentation';
+        $replacement = $service->save(null, $f->program, 'Later admission', $fields, null, layout: $layout);
+        $service->publish($replacement->id, 0);
+        self::assertSame($retained->layout, $service->submission($receipt)['form']->layout);
+        self::assertSame(['Fictional goals'], array_values($service->submission($receipt)['answers']));
+        $f->sql->update(
+            'sis_application_forms',
+            ['layout_json' => json_encode($layout, JSON_THROW_ON_ERROR)],
+            ['id' => $draft->id->value]
+        );
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        $service->submission($receipt);
+    }
+
+    public function testValidLargeFormsAndEncryptedAnswersExceedSmallTextStorageWithoutLosingFacts(): void
+    {
+        $fixture = new SisFixture();
+        $service = $this->forms($fixture);
+        $person = $fixture->legacyPerson($fixture->access->actor, 'Fictional', 'Applicant')->id;
+        $fields = [];
+        $answers = [];
+        $options = array_map(
+            static fn(int $index): string => sprintf('%02d', $index) . str_repeat('x', 118),
+            range(1, 30)
+        );
+        for ($index = 1; $index <= 20; $index++) {
+            $key = 'choice_' . $index;
+            $fields[] = ['key' => $key, 'label' => 'Fictional choice ' . $index, 'type' => 'select',
+                'required' => true, 'options' => $options];
+            $answers[$key] = $options[0];
+        }
+        for ($index = 1; $index <= 10; $index++) {
+            $key = 'statement_' . $index;
+            $fields[] = ['key' => $key, 'label' => 'Fictional statement ' . $index,
+                'type' => 'textarea', 'required' => true];
+            $answers[$key] = str_repeat('x', 4000);
+        }
+        $draft = $service->save(null, $fixture->program, 'Large fictional form', $fields, null);
+        $service->publish($draft->id, 0);
+        $receipt = EntityId::generate();
+        $service->submit($receipt, $draft->id, $person, $fixture->term, $answers);
+        self::assertGreaterThan(65535, strlen($fixture->sql->one(
+            'sis_application_forms',
+            ['id' => $draft->id->value]
+        )['fields_json']));
+        self::assertGreaterThan(65535, strlen($fixture->sql->one(
+            'sis_form_submissions',
+            ['id' => $receipt->value]
+        )['encrypted_answers']));
+        self::assertCount(30, $service->submission($receipt)['answers']);
+    }
 }

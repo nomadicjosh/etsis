@@ -94,6 +94,7 @@
                     'We could not complete that request. Please try again.',
             );
             error.fields = result.errors || [];
+            error.status = response.status;
             if (response.status === 403)
                 error.message =
                     'This service needs a valid sign-in or additional access. Please sign in again if your session has expired.';
@@ -670,96 +671,8 @@
 
     }
 
-    function matches(group, facts) {
-        const conditions = group.rules.map((rule) => {
-            if (rule.condition) return matches(rule, facts);
-            const actual = facts[rule.id];
-            if (actual === undefined || actual === null || actual === '')
-                return false;
-            switch (rule.operator) {
-                case 'equal':
-                    return actual === rule.value;
-                case 'not_equal':
-                    return actual !== rule.value;
-                case 'in':
-                    return rule.value.includes(actual);
-                case 'not_in':
-                    return !rule.value.includes(actual);
-                case 'less':
-                    return Number.isInteger(actual) && actual < rule.value;
-                case 'greater':
-                    return Number.isInteger(actual) && actual > rule.value;
-                default:
-                    return false;
-            }
-        });
-        return group.condition === 'AND'
-            ? conditions.every(Boolean)
-            : conditions.some(Boolean);
-    }
-
     function applicationForm(schema) {
-        const form = el('form');
-        for (const field of schema.fields) {
-            const input = control(
-                form,
-                field.key,
-                `${field.label}${field.required ? ' *' : ''}`,
-                field.type,
-                {
-                    required: field.required,
-                    ...(field.type === 'textarea'
-                        ? { maxlength: 4000 }
-                        : ['text', 'email'].includes(field.type)
-                          ? { maxlength: 191 }
-                          : {}),
-                    ...(field.type === 'number'
-                        ? { step: 1, min: -999999999, max: 999999999 }
-                        : {}),
-                },
-            );
-            if (field.type === 'select')
-                selectOptions(
-                    input,
-                    field.options.map((option) => ({
-                        id: option,
-                        label: option,
-                    })),
-                );
-            if (field.help) {
-                const help = el(
-                    'div',
-                    { class: 'form-text', id: `${input.id}-help` },
-                    field.help,
-                );
-                input.after(help);
-                input.setAttribute('aria-describedby', help.id);
-            }
-        }
-        const answers = () => {
-            const facts = {};
-            for (const field of schema.fields) {
-                const input = form.elements.namedItem(field.key);
-                const visible =
-                    !field.show_when || matches(field.show_when, facts);
-                input.closest('.mb-4').hidden = !visible;
-                input.disabled = !visible;
-                if (visible) {
-                    if (field.type === 'checkbox')
-                        facts[field.key] = input.checked;
-                    else if (input.value !== '')
-                        facts[field.key] =
-                            field.type === 'number'
-                                ? Number(input.value)
-                                : input.value;
-                }
-            }
-            return facts;
-        };
-        form.addEventListener('input', answers);
-        form.addEventListener('change', answers);
-        answers();
-        return { form, answers };
+        return window.createApplicationForm({ fields: schema.fields, layout: schema.layout || [] });
     }
 
     function applications(container) {
@@ -818,8 +731,10 @@
         );
         const next = el('div', { class: 'mt-4' });
         const finder = programFinder(program, next);
-        program.addEventListener('change', () => next.replaceChildren());
-        term.addEventListener('change', () => next.replaceChildren());
+        let applicationRequest = 0;
+        const selectionChanged = () => { applicationRequest++; next.replaceChildren(); };
+        program.addEventListener('change', selectionChanged);
+        term.addEventListener('change', selectionChanged);
         form.addEventListener('submit', (event) => {
             event.preventDefault();
             task(
@@ -871,10 +786,12 @@
                         );
                         return;
                     }
+                    const programId = program.value, termId = term.value, serial = ++applicationRequest;
                     const schema = await request(
-                        `/sis/forms/programs/${program.value}/active/`,
+                        `/sis/forms/programs/${programId}/active/`,
                     );
-                    const { form: answersForm, answers } =
+                    if (serial !== applicationRequest || programId !== program.value || termId !== term.value) return;
+                    const { form: answersForm, answers, reportValidity, showErrors, reset } =
                         applicationForm(schema);
                     answersForm.append(
                         el(
@@ -889,26 +806,29 @@
                             icon('send'),
                         ),
                     );
-                    const programId = program.value;
-                    const termId = term.value;
                     answersForm.addEventListener('submit', (event) => {
                         event.preventDefault();
                         task(
                             async () => {
                                 const data = answers();
-                                if (!answersForm.reportValidity()) return;
-                                await request(
-                                    `/sis/forms/${schema.id}/submissions/`,
-                                    'POST',
-                                    {
-                                        submission_id: schema.submission_id,
-                                        person_id: me.person.id,
-                                        program_id: programId,
-                                        entry_term_id: termId,
-                                        answers: data,
-                                    },
-                                );
-                                answersForm.reset();
+                                if (!reportValidity()) return;
+                                try {
+                                    await request(
+                                        `/sis/forms/${schema.id}/submissions/`,
+                                        'POST',
+                                        {
+                                            submission_id: schema.submission_id,
+                                            person_id: me.person.id,
+                                            program_id: programId,
+                                            entry_term_id: termId,
+                                            answers: data,
+                                        },
+                                    );
+                                } catch (error) {
+                                    if (error.status === 422 && showErrors(error.fields)) return;
+                                    throw error;
+                                }
+                                reset();
                                 next.replaceChildren(
                                     empty(
                                         'You’re one step closer.',

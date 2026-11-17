@@ -27,7 +27,7 @@ async function fixture(page, { levels = [{ id: level, code: 'DIP', title: 'Profe
 }
 async function add(page, type, label) {
     await page.locator('#add-field-menu').click();
-    await page.locator(`[data-add-field="${type}"]`).click();
+    await page.locator(`[data-add-field="${type}"]`).first().click();
     await page.getByLabel('Question or field label').last().fill(label);
 }
 async function accessible(page) {
@@ -158,4 +158,86 @@ test('moving a conditional question ahead of its source blocks saving without de
     await page.getByRole('button', { name: 'Move field down: Prior college', exact: true }).click();
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+});
+
+test('containers retain columns and reading order with keyboard moves, pointer moves and fewer columns', async ({ page }) => {
+    const { writes, errors } = await fixture(page);
+    await page.locator('#form-name').fill('Diploma admission'); await page.locator('#form-level').selectOption(level);
+    await add(page, 'text', 'Preferred name'); await add(page, 'email', 'Contact email');
+    await page.getByRole('button', { name: 'Add container', exact: true }).click();
+    await page.getByLabel('Container title', { exact: true }).fill('About you');
+    await page.getByLabel('Columns', { exact: true }).selectOption('2');
+    await page.getByRole('button', { name: 'Move field 2 to another column', exact: true }).click();
+    await page.getByLabel('Destination', { exact: true }).selectOption({ label: 'About you · Column 2' });
+    await page.getByRole('button', { name: 'Move question', exact: true }).click();
+    await expect(page.locator('.designer-column').nth(1)).toContainText('Contact email');
+    await page.screenshot({ path: 'test-results/application-layout-designer-desktop.png', fullPage: true });
+    await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+    await page.getByText('Container settings', { exact: true }).click();
+    await page.locator('.designer-columns').scrollIntoViewIfNeeded();
+    const first = await page.locator('.designer-column').first().locator('.form-field-drag').boundingBox();
+    const second = await page.locator('.designer-column').nth(1).locator('.designer-field').boundingBox();
+    await page.mouse.move(first.x + 12, first.y + 12); await page.mouse.down();
+    await page.mouse.move(second.x + second.width / 2, second.y + second.height - 12, { steps: 18 }); await page.mouse.up();
+    await expect(page.locator('.designer-column').first().locator('.designer-field')).toHaveCount(0);
+    await expect(page.locator('.designer-column').nth(1).locator('.designer-field')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Add container', exact: true }).click();
+    await page.getByLabel('Container title', { exact: true }).last().fill('Study plans');
+    const columnMenu = page.getByRole('button', { name: 'Add a field to Study plans, column 1', exact: true });
+    const oldToggle = await columnMenu.elementHandle();
+    await columnMenu.click();
+    await page.getByRole('group', { name: 'Study plans, column 1', exact: true })
+        .getByRole('button', { name: 'Single choice', exact: true }).click();
+    expect(await oldToggle.evaluate(toggle => bootstrap.Dropdown.getInstance(toggle) === null)).toBe(true);
+    await page.getByLabel('Question or field label').last().fill('Application route');
+    await page.getByRole('button', { name: 'Move container up: Study plans', exact: true }).click();
+    await expect(page.locator('.designer-container').first()).toContainText('Application route');
+    await page.getByLabel('Columns', { exact: true }).last().selectOption('1');
+    await expect(page.locator('.designer-container').last().locator('.designer-column')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+    const saved = writes.filter(write => write.path === '/sis/forms/').at(-1).input;
+    expect(saved.layout.map(container => container.label)).toEqual(['Study plans', 'About you']);
+    expect(saved.layout.flatMap(container => container.columns.flat())).toEqual(saved.fields.map(field => field.key));
+    expect(new Set(saved.fields.map(field => field.key)).size).toBe(3);
+    await page.getByRole('button', { name: 'Preview form', exact: true }).click();
+    await expect(page.locator('#drawer-body .application-container')).toHaveCount(2);
+    await expect(page.getByRole('radio', { name: 'Option one', exact: true })).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/application-layout-preview.png', fullPage: true });
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    for (const title of await page.locator('.form-container-heading h3').all())
+        expect((await title.boundingBox()).height).toBeLessThan(80);
+    await page.screenshot({ path: 'test-results/application-layout-mobile.png', fullPage: true });
+    expect(errors).toEqual([]);
+});
+
+test('question settings validate preview answers and a saved card keeps later edits', async ({ page }) => {
+    const { writes } = await fixture(page);
+    await page.locator('#form-name').fill('Diploma admission'); await page.locator('#form-level').selectOption(level);
+    await add(page, 'textarea', 'Personal statement');
+    await page.getByLabel('An answer is required').check();
+    await page.getByText('Field settings', { exact: true }).click();
+    await page.getByLabel('Placeholder', { exact: true }).fill('Tell us about your goals');
+    await page.getByLabel('Minimum characters', { exact: true }).fill('3');
+    await page.getByLabel('Maximum characters', { exact: true }).fill('5');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+    await page.getByLabel('Question or field label').fill('Your statement');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.locator('#designer-state')).toHaveText('Draft saved');
+    expect(writes.filter(write => write.path === '/sis/forms/').at(-1).input.fields[0].label).toBe('Your statement');
+    await page.getByRole('button', { name: 'Preview form', exact: true }).click();
+    const answer = page.locator('#drawer-body').getByRole('textbox', { name: 'Your statement', exact: true });
+    await expect(answer).toHaveAttribute('placeholder', 'Tell us about your goals');
+    await answer.fill('hi'); await page.getByRole('button', { name: 'Test answers', exact: true }).click();
+    await expect(page.locator('.application-errors')).toContainText('Use at least 3 characters');
+    await page.locator('.application-errors').getByRole('link').click(); await expect(answer).toBeFocused();
+    await answer.fill('😀😀😀'); await page.getByRole('button', { name: 'Test answers', exact: true }).click();
+    await expect(page.locator('.application-errors')).toBeHidden();
+    await accessible(page);
 });

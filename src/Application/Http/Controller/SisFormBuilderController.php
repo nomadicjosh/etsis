@@ -48,6 +48,10 @@ final readonly class SisFormBuilderController
             throw new InvalidArgumentException('Form fields are required.');
         }
         $fields = [];
+        $layout = $body['layout'] ?? [];
+        if (!is_array($layout) || !array_is_list($layout)) {
+            throw new InvalidArgumentException('The form layout must be a list of containers.');
+        }
         foreach ($body['fields'] as $raw) {
             if (!is_array($raw)) {
                 throw new InvalidArgumentException('Each field must be an object.');
@@ -68,6 +72,7 @@ final readonly class SisFormBuilderController
             $fields,
             $f->optionalInteger('version'),
             $f->optionalId('academic_level_id'),
+            $layout,
         );
 
         return new JsonResponse($this->serialize($form), 201);
@@ -135,6 +140,7 @@ final readonly class SisFormBuilderController
     {
         return ['id' => $form->id->value, 'program_id' => $form->programId?->value,
             'academic_level_id' => $form->academicLevelId?->value, 'name' => $form->name,
-            'fields' => $form->fields, 'status' => $form->status, 'version' => $form->version];
+            'fields' => $form->fields, 'layout' => $form->layout,
+            'status' => $form->status, 'version' => $form->version];
     }
 }

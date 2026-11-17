@@ -28,6 +28,7 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
             $row["status"],
             (int) $row["version"],
             $row['academic_level_id'] === null ? null : new EntityId($row['academic_level_id']),
+            $row['layout_json'] === null ? [] : json_decode($row['layout_json'], true, flags: JSON_THROW_ON_ERROR),
         );
     }
 
@@ -62,6 +63,7 @@ final readonly class SqlApplicationFormRepository implements ApplicationFormRepo
             'academic_level_id' => $form->academicLevelId?->value,
             "name" => $form->name,
             "fields_json" => json_encode($form->fields, JSON_THROW_ON_ERROR),
+            'layout_json' => $form->layout === [] ? null : json_encode($form->layout, JSON_THROW_ON_ERROR),
             "status" => $form->status,
             "version" => $form->version,
         ];

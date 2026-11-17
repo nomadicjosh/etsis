@@ -1,0 +1,19 @@
+.application-fields { display: grid; gap: 1.5rem; }
+.application-fields [hidden] { display: none !important; }
+.application-container { min-width: 0; margin: 0; padding: 1.25rem; border: 1px solid #c6d3df; border-radius: .75rem; background: #fcfdff; }
+.application-container-title { float: none; width: auto; margin: 0 0 1rem; padding: 0; font-size: 1.125rem; font-weight: 650; }
+.application-columns { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); }
+.application-column { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
+.application-question { min-width: 0; margin: 0; border: 0; padding: 0; }
+.application-question-legend { float: none; font-size: 1rem; font-weight: 600; margin-bottom: .5rem; }
+.application-question .form-check + .form-check { margin-top: .5rem; }
+.application-question textarea { resize: vertical; }
+.application-preview-check { justify-self: start; }
+.application-errors { margin: 0; scroll-margin-top: 6rem; }
+.application-errors a { color: #842029; text-decoration: underline; overflow-wrap: anywhere; }
+.application-errors:focus { outline: 3px solid #2864a0; outline-offset: 3px; }
+.application-question input, .application-question select, .application-question textarea { scroll-margin-top: 6rem; }
+@media (min-width: 768px) {
+    .application-columns[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .application-columns[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

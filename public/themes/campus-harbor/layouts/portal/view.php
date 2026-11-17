@@ -29,9 +29,11 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
         <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
         <link rel="stylesheet" href="/assets/css/portal.css" />
+        <link rel="stylesheet" href="/assets/css/application-form.css" />
         <link rel="stylesheet" href="/assets/css/degree-progress.css" />
         <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
+        <script defer src="/assets/js/application-form.js"></script>
         <script defer src="/assets/js/degree-progress-guide.js"></script>
         <script defer src="/assets/js/person-emergency-contacts.js"></script>
         <script defer src="/assets/js/person-addresses.js"></script>

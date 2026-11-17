@@ -62,6 +62,7 @@ final readonly class ApplicationFormService
         array $fields,
         ?int $version,
         ?EntityId $academicLevel = null,
+        array $layout = [],
     ): ApplicationForm {
         return $this->transactions->run(function () use (
             $id,
@@ -70,6 +71,7 @@ final readonly class ApplicationFormService
             $fields,
             $version,
             $academicLevel,
+            $layout,
         ): ApplicationForm {
             $actor = $this->access->requirePermission("sis:forms:manage");
             $form = new ApplicationForm(
@@ -79,7 +81,8 @@ final readonly class ApplicationFormService
                 $fields,
                 'draft',
                 $id === null ? 0 : $version + 1,
-                $academicLevel
+                $academicLevel,
+                $layout,
             );
             if ($program !== null) {
                 $this->repository->lockProgram($program);

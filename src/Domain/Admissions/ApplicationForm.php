@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Domain\Admissions;
 
 use Domain\Rules\RuleSet;
+use Domain\Admissions\ValueObject\ApplicationFieldSettings;
+use Domain\Admissions\ValueObject\ApplicationFormLayout;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
@@ -13,6 +15,8 @@ final readonly class ApplicationForm
 {
     /** @var list<array<string, mixed>> */
     public array $fields;
+    /** @var list<array{key:string,label:string,help:string,columns:list<list<string>>}> */
+    public array $layout;
 
     /** @param array<int, array<string, mixed>> $fields */
     public function __construct(
@@ -23,6 +27,7 @@ final readonly class ApplicationForm
         public string $status = 'draft',
         public int $version = 0,
         public ?EntityId $academicLevelId = null,
+        array $layout = [],
     ) {
         if (
             (($programId === null) === ($academicLevelId === null))
@@ -40,7 +45,9 @@ final readonly class ApplicationForm
             $help = $field['help'] ?? '';
             if (
                 !is_string($key) || preg_match('/^[a-z][a-z0-9_]{0,39}$/D', $key) !== 1 || isset($known[$key])
-                || !in_array($type, ['text', 'textarea', 'email', 'date', 'select', 'number', 'checkbox'], true)
+                || !in_array($type, [
+                    'text', 'textarea', 'email', 'date', 'select', 'radio', 'number', 'checkbox',
+                ], true)
                 || !is_string($label) || trim($label) === '' || mb_strlen($label) > 120
                 || !is_string($help) || mb_strlen($help) > 300 || preg_match('/[\x00-\x1f\x7f]/', $label . $help)
                 || !is_bool($field['required'] ?? false)
@@ -50,7 +57,7 @@ final readonly class ApplicationForm
             $options = $field['options'] ?? [];
             if (
                 !is_array($options) || !array_is_list($options) || count($options) > 30
-                || ($type === 'select' && $options === [])
+                || (in_array($type, ['select', 'radio'], true) && $options === [])
             ) {
                 throw new InvalidArgumentException('Select fields require 1–30 options.');
             }
@@ -72,11 +79,22 @@ final readonly class ApplicationForm
             $known[$key] = match ($type) {
                 'number' => 'integer', 'checkbox' => 'boolean', default => 'string'
             };
-            $clean[] = ['key' => $key, 'type' => $type, 'label' => $label, 'help' => $help,
+            $definition = ['key' => $key, 'type' => $type, 'label' => $label, 'help' => $help,
                 'required' => $field['required'] ?? false, 'options' => array_values(array_unique($options)),
                 'show_when' => $condition];
+            if (array_key_exists('settings', $field)) {
+                if (!is_array($field['settings'])) {
+                    throw new InvalidArgumentException('Question settings must be an object.');
+                }
+                $definition['settings'] = new ApplicationFieldSettings($type, $field['settings'])->values;
+                if ($definition['required'] && ($definition['settings']['max_length'] ?? null) === 0) {
+                    throw new InvalidArgumentException('A required question must allow at least one character.');
+                }
+            }
+            $clean[] = $definition;
         }
         $this->fields = $clean;
+        $this->layout = new ApplicationFormLayout($layout, array_column($clean, 'key'))->containers;
     }
 
     public function targetKind(): string
@@ -125,15 +143,20 @@ final readonly class ApplicationForm
             $valid = match ($field['type']) {
                 'checkbox' => is_bool($value) && (!$field['required'] || $value),
                 'number' => is_int($value) && abs($value) <= 999999999,
-                'select' => is_string($value) && in_array($value, $field['options'], true),
+                'select', 'radio' => is_string($value) && in_array($value, $field['options'], true),
                 'email' => is_string($value) && strlen($value) <= 191
                 && filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
-                'date' => is_string($value) && self::isDate($value),
+                'date' => is_string($value) && ApplicationFieldSettings::isDate($value),
                 default => is_string($value) && mb_strlen($value) <= ($field['type'] === 'textarea' ? 4000 : 191)
                 && preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $value) === 0,
             };
             if (!$valid) {
                 $errors[] = ['field' => $key, 'message' => 'Enter a valid value for this field.'];
+            } elseif (
+                ($message = new ApplicationFieldSettings($field['type'], $field['settings'] ?? [])
+                ->violation($value)) !== null
+            ) {
+                $errors[] = ['field' => $key, 'message' => $message];
             } else {
                 $result[$key] = $value;
             }
@@ -143,12 +166,5 @@ final readonly class ApplicationForm
         }
 
         return $result;
-    }
-
-    private static function isDate(string $value): bool
-    {
-        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-        return $date !== false && $date->format('Y-m-d') === $value;
     }
 }
