@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 
 test('a reviewed office handoff confirms private access, preserves a retry and shows retained office history', async ({ page }) => {
@@ -39,7 +40,7 @@ test('a reviewed office handoff confirms private access, preserves a retry and s
     await page.goto('/admin/hold-handoff-fixture/');
     await page.locator('.workspace-nav-link[data-workspace="holds"]').click();
     await page.getByRole('button', { name: 'Review hold', exact: true }).click();
-    await page.getByRole('button', { name: 'Hand off to another office' }).click();
+    await recordAction(page, 'Hand off to another office');
     await page.getByRole('combobox', { name: /^Receiving office/ }).selectOption(target);
     const reason = 'Fictional handoff <img src=x onerror=alert(1)>.';
     await page.getByLabel('Reason for the handoff').fill(reason);
@@ -64,7 +65,7 @@ test('a reviewed office handoff confirms private access, preserves a retry and s
         { review_token: 'fictional-protected-review', acknowledge_access: true },
         { review_token: 'fictional-protected-review', acknowledge_access: true },
     ]);
-    await page.getByRole('button', { name: 'Review hold history' }).click();
+    await recordAction(page, 'Review hold history');
     await expect(page.getByRole('table', { name: 'Retained hold decisions' })).toContainText('Registrar → Library');
     await page.setViewportSize({ width: 320, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

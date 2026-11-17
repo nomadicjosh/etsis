@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 
 test('registrars review paged holds, retry notes safely and end a restriction without deleting history', async ({ page }) => {
@@ -110,7 +111,7 @@ test('registrars review paged holds, retry notes safely and end a restriction wi
     await expect(page.getByRole('button', { name: 'Set or shorten end date' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add staff note', exact: true })).toBeVisible();
     await accessible();
-    await page.getByRole('button', { name: 'Review hold history' }).click();
+    await recordAction(page, 'Review hold history');
     await expect(page.getByRole('table', { name: 'Retained hold decisions' })).toContainText('Hold placed');
     await accessible();
     await page.setViewportSize({ width: 375, height: 812 });

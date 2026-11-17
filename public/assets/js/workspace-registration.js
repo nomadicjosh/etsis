@@ -1,7 +1,7 @@
 /* Staff batch registration: explicit review, atomic confirmation and durable retry receipts. */
 window.createWorkspaceRegistration = function (ui) {
     "use strict";
-    const { node, request, task, table, money, buildForm, openDrawer, refreshDirectory } = ui;
+    const { node, request, task, table, money, recordSummary, buildForm, openDrawer, refreshDirectory } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -32,7 +32,7 @@ window.createWorkspaceRegistration = function (ui) {
                 `${result.created} ${result.created === 1 ? "registration" : "registrations"} created. ${result.existing} existing ${result.existing === 1 ? "registration" : "registrations"} kept.`,
             ),
             node("p", {}, "The registrations, applicable charges and batch receipt were saved together."),
-            node("p", {}, "Batch reference: ", node("code", {}, result.batch_id)),
+            node("p", { class: "registration-reference" }, "Batch reference: ", node("code", {}, result.batch_id)),
             button("Start another group", again, "btn-primary"),
         );
     }
@@ -49,7 +49,9 @@ window.createWorkspaceRegistration = function (ui) {
                 const id = form.elements.operation_id.value.trim();
                 if (!/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id))
                     throw new Error("Enter a valid batch reference.");
-                receipt(await request(`/sis/registration-batches/${id}/`), () => start());
+                const result = await request(`/sis/registration-batches/${id}/`);
+                if (!body.isConnected) return;
+                receipt(result, () => start());
             }, save);
         });
         body.append(
@@ -63,27 +65,35 @@ window.createWorkspaceRegistration = function (ui) {
     }
     async function start(presetSection = "", presetStudents = [], back = null) {
         if (presetStudents.length > 25) throw new Error("Select no more than 25 students.");
-        const chosen = new Map(presetStudents.map(student => [student.id,
-            `${student.institutional_id || "ID not assigned"} · ${student.name}`]));
+        const chosen = new Map(
+            presetStudents.map((student) => [
+                student.id,
+                `${student.institutional_id || "ID not assigned"} · ${student.name}`,
+            ]),
+        );
         let sectionId = presetSection;
         async function selection() {
             const body = openDrawer("Register a group", "BATCH REGISTRATION");
+            const tools = node("div", { class: "inline-actions mb-3", role: "group", "aria-label": "Registration tools" },
+                button("Find a completed batch", findReceipt, "btn-outline-secondary"));
             body.append(
                 node(
                     "p",
                     { class: "form-text" },
                     "Choose one section and up to 25 students. Review before confirming. Eligibility and capacity are checked on confirmation; one failure rolls back the entire batch.",
                 ),
-                button("Find a completed batch", findReceipt),
+                tools,
             );
-            if (back) body.append(button("Back to report selection", back));
+            if (back) tools.append(button("Back to report selection", back));
             const form = await buildForm(
                 [
                     ["section_id", "Course section", "lookup", "sections"],
                     ["student_id", "Find a student", "lookup", "registrationstudents", false],
                 ],
                 { section_id: sectionId },
+                { layout: "registration_group" },
             );
+            if (!body.isConnected) return;
             const selected = node("section", {
                 class: "record-section",
                 "aria-label": "Selected students",
@@ -97,26 +107,32 @@ window.createWorkspaceRegistration = function (ui) {
                 chosen.set(control.value, control.selectedOptions[0].textContent);
                 render();
             });
-            function render() {
+            function render(focusIndex = null) {
                 selected.replaceChildren(
                     node("h3", {}, `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`),
-                    ...[...chosen].map(([id, label]) =>
-                        node(
-                            "p",
-                            {},
-                            label,
-                            " ",
-                            button(
-                                `Remove ${label}`,
+                    node(
+                        "ul",
+                        { class: "registration-selection" },
+                        ...[...chosen].map(([id, label], index) => {
+                            const remove = button(
+                                "Remove",
                                 async () => {
                                     chosen.delete(id);
-                                    render();
+                                    render(index);
                                 },
-                                "btn-link",
-                            ),
-                        ),
+                                "btn-outline-secondary btn-sm",
+                            );
+                            remove.setAttribute("aria-label", `Remove ${label}`);
+                            return node("li", {}, node("span", {}, label), remove);
+                        }),
                     ),
                 );
+                if (!chosen.size)
+                    selected.append(node("p", { class: "form-text" }, "Add students to build this group."));
+                if (focusIndex !== null) {
+                    const controls = selected.querySelectorAll("button");
+                    (controls[Math.min(focusIndex, controls.length - 1)] || add).focus();
+                }
             }
             render();
             const review = node(
@@ -136,6 +152,7 @@ window.createWorkspaceRegistration = function (ui) {
                         student_ids: [...chosen.keys()],
                     };
                     const reviewed = await request("/sis/registration-batches/review/", "POST", payload);
+                    if (!body.isConnected) return;
                     await confirmation(reviewed, payload);
                 }, review);
             });
@@ -147,49 +164,51 @@ window.createWorkspaceRegistration = function (ui) {
             body.append(
                 button("Change selection", selection, "btn-link"),
                 node("h3", {}, section.code),
-                node(
-                    "p",
-                    {},
-                    `${section.course_code} · ${section.course_title} · ${Number(section.credits_milli) / 1000} credits`,
-                ),
-                node(
-                    "p",
-                    {},
-                    `${section.seats_remaining} seats remaining. Section fee: ${money(section.fee_minor, section.currency)} per new registration.`,
-                ),
+                recordSummary([
+                    ["Course", `${section.course_code} · ${section.course_title}`],
+                    ["Credits", Number(section.credits_milli) / 1000],
+                    ["Seats remaining", section.seats_remaining],
+                    ["Section fee", `${money(section.fee_minor, section.currency)} per new registration`],
+                ]),
                 node(
                     "p",
                     { class: "form-text" },
                     "Configured term fees may also apply. Existing active enrollments are kept without a second charge. Confirmation rechecks activity, holds, prerequisites, course limits and seats. No partial batch is saved.",
                 ),
-                section.active
-                    ? null
-                    : node(
-                          "p",
-                          { class: "alert alert-warning" },
-                          "This section or course is inactive. New registrations cannot be added.",
-                      ),
-                grid(
-                    ["Student", "Institutional ID", "Activity", "Prerequisites", "Registration"],
-                    reviewed.students.map((student) => [
-                        `${student.given_name} ${student.family_name}`,
-                        student.institutional_id,
-                        student.active ? "Active" : "Inactive",
-                        student.prerequisites?.status === "missing"
-                            ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
-                            : ({ met: "Verified for this pursuit", not_required: "No course prerequisites",
-                                not_rechecked: ["A", "N"].includes(student.enrollment_status)
-                                    ? "Existing registration — unchanged" : "Not checked — closed enrollment" }[student.prerequisites?.status]
-                                || "Checked on confirmation"),
-                        ["A", "N"].includes(student.enrollment_status)
-                            ? "Already enrolled — keep"
-                            : student.enrollment_id
-                              ? "Closed enrollment — registrar review required"
-                              : "New registration",
-                    ]),
-                    "Reviewed registration group",
-                ),
-                node("p", {}, "Batch reference: ", node("code", {}, reviewed.operation_id)),
+            );
+            if (!section.active)
+                body.append(
+                    node(
+                        "p",
+                        { class: "alert alert-warning" },
+                        "This section or course is inactive. New registrations cannot be added.",
+                    ),
+                );
+            const students = grid(
+                ["Student", "Institutional ID", "Activity", "Prerequisites", "Registration"],
+                reviewed.students.map((student) => [
+                    `${student.given_name} ${student.family_name}`,
+                    student.institutional_id,
+                    student.active ? "Active" : "Inactive",
+                    student.prerequisites?.status === "missing"
+                        ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
+                        : {
+                              met: "Verified for this pursuit",
+                              not_required: "No course prerequisites",
+                              not_rechecked: ["A", "N"].includes(student.enrollment_status)
+                                  ? "Existing registration — unchanged"
+                                  : "Not checked — closed enrollment",
+                          }[student.prerequisites?.status] || "Checked on confirmation",
+                    ["A", "N"].includes(student.enrollment_status)
+                        ? "Already enrolled — keep"
+                        : student.enrollment_id
+                          ? "Closed enrollment — registrar review required"
+                          : "New registration",
+                ]),
+                "Reviewed registration group",
+            );
+            body.append(
+                node("p", { class: "registration-reference" }, "Batch reference: ", node("code", {}, reviewed.operation_id)),
                 node(
                     "p",
                     { class: "form-text" },
@@ -204,27 +223,39 @@ window.createWorkspaceRegistration = function (ui) {
                         operation_id: reviewed.operation_id,
                         revision: reviewed.revision,
                     });
+                    if (!body.isConnected) return;
                     await refreshDirectory();
+                    if (!body.isConnected) return;
                     receipt(result, () => start(sectionId));
                 },
                 "btn-primary",
             );
-            if (reviewed.students.some(student => student.prerequisites?.status === "missing")) {
+            if (reviewed.students.some((student) => student.prerequisites?.status === "missing")) {
                 submit.disabled = true;
-                body.append(node("p", { class: "alert alert-warning", role: "status" },
-                    "Some selected students do not meet the prerequisites. Change the selection or review their academic records before confirming."));
+                body.append(
+                    node(
+                        "p",
+                        { class: "alert alert-warning", role: "status" },
+                        "Some selected students do not meet the prerequisites. Change the selection or review their academic records before confirming.",
+                    ),
+                );
             }
             body.append(
                 node(
                     "div",
-                    { class: "inline-actions mt-3" },
+                    {
+                        class: "inline-actions my-3",
+                        role: "group",
+                        "aria-label": "Registration confirmation",
+                    },
                     submit,
                     button("Check batch receipt", async () => {
                         try {
-                            receipt(
-                                await request(`/sis/registration-batches/${reviewed.operation_id}/`),
-                                () => start(sectionId),
+                            const result = await request(
+                                `/sis/registration-batches/${reviewed.operation_id}/`,
                             );
+                            if (!body.isConnected) return;
+                            receipt(result, () => start(sectionId));
                         } catch (error) {
                             if (error.status === 404)
                                 throw new Error(
@@ -234,6 +265,7 @@ window.createWorkspaceRegistration = function (ui) {
                         }
                     }),
                 ),
+                students,
             );
         }
         await selection();
@@ -272,12 +304,17 @@ window.createWorkspaceRegistration = function (ui) {
                     ),
                 );
             const prerequisites = record.prerequisites;
-            panel.append(node("p", { class: "form-text" },
-                prerequisites?.status === "verified"
-                    ? `Prerequisites at acceptance: ${prerequisites.required_course_count} required ${prerequisites.required_course_count === 1 ? "course" : "courses"} matched to ${prerequisites.supporting_record_count} verified academic ${prerequisites.supporting_record_count === 1 ? "record" : "records"}.`
-                    : prerequisites?.status === "not_required"
-                        ? "No course prerequisites were required at acceptance."
-                        : "Supporting prerequisite references were not recorded for this earlier decision."));
+            panel.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    prerequisites?.status === "verified"
+                        ? `Prerequisites at acceptance: ${prerequisites.required_course_count} required ${prerequisites.required_course_count === 1 ? "course" : "courses"} matched to ${prerequisites.supporting_record_count} verified academic ${prerequisites.supporting_record_count === 1 ? "record" : "records"}.`
+                        : prerequisites?.status === "not_required"
+                          ? "No course prerequisites were required at acceptance."
+                          : "Supporting prerequisite references were not recorded for this earlier decision.",
+                ),
+            );
             panel.append(
                 grid(
                     ["Decision", "Section order", "Effective", "Recorded"],

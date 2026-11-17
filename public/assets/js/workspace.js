@@ -265,7 +265,7 @@
     const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, publications: course => catalogStudio.publications(course) });
     const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, degreeAudit: () => degreeAuditStudio, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
-    const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, recordSummary, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
@@ -279,7 +279,7 @@
     const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
-    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
+    const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, recordSummary, actionMenu, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: () => classificationStudio.library() });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money,
@@ -754,6 +754,14 @@
     }
 
     const formLayouts = {
+        registration_group: [{ title: 'Section & students', fields: ['section_id', 'student_id'], wide: ['section_id', 'student_id'] }],
+        restriction: [
+            { title: 'Hold responsibility', fields: ['office_id', 'code'], wide: ['office_id', 'code'] },
+            { title: 'Dates & registration', fields: ['starts_on', 'ends_on', 'severity', 'blocks_staff'], wide: ['severity', 'blocks_staff'] },
+            { title: 'Internal explanation', fields: ['note'], wide: ['note'] },
+        ],
+        restriction_end: [{ title: 'End this hold', fields: ['ends_on', 'reason'], wide: ['reason'] }],
+        staff_note: [{ title: 'Internal staff note', fields: ['note'], wide: ['note'] }],
         portal: [
             { title: 'Content details', fields: ['kind', 'code', 'title'], wide: ['title'] },
             { title: 'Wording & audience', fields: ['content', 'audience'], wide: ['content', 'audience'] },

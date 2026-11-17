@@ -24,7 +24,7 @@ An already accepted active-registration retry still returns its original enrollm
 
 ## Holds and restriction history
 
-In **Holds & restrictions**, authorized office staff can find a person, place a hold, review private notes and set or shorten its end date. Staff with student-record read access can use the same tools under **Students → Student record → Restrictions & holds**. End-date changes now require a reason. The reason also appears as an encrypted, append-only staff note. **Review hold history** shows the original placement and later end-date decisions without displaying raw events or protected reasons. Notes remain available in the existing notes panel.
+In **Holds & restrictions**, authorized office staff can find a person, place a hold, review private notes and set or shorten its end date. Staff with student-record read access can use the same tools under **Students → Student record → Restrictions & holds**. End-date changes now require a reason. The reason also appears as an encrypted, append-only staff note. **Review hold history**, available under **More** when there are several secondary actions, shows the original placement and later end-date decisions without displaying raw events or protected reasons. Notes remain available in the existing notes panel.
 
 Dates are institutional calendar dates, including the entire end day. Severity 99 or higher blocks student registration while the hold is active. The separate staff-registration switch determines whether staff may register the student. Shortening an end date does not delete the hold, earlier decisions or notes. An already-ended hold cannot be rewritten through this screen. Creation and ending use actor-bound operation IDs: retrying an accepted form preserves its original decision and never restores an earlier end date after a later change. Changed retry inputs and stale new decisions are refused.
 
@@ -67,7 +67,7 @@ Fictional verification covers cross-office denial on every private path, SQL fil
 An office handoff changes who handles a hold, including access to its private notes and retained history. It does not end the hold, change its dates or change registration eligibility. Scheduled, active and ended holds can be handed off without rewriting their original decisions.
 
 1. Grant designated coordinators **both** `sis:restrictions:manage` and the separate protected `sis:restrictions:handoff` permission. They also need current delegation to both the owning and receiving offices, unless they have explicit `admin:access:manage` authority. Merely assigning an office never grants either permission.
-2. Open **Holds & restrictions → Review hold → Hand off to another office**. Choose a different active receiving office and enter a reason.
+2. Open **Holds & restrictions → Review hold → More → Hand off**. Choose a different active receiving office and enter a reason.
 3. Select **Review office handoff**. Check the person, offices, hold details and number of notes. Review creates no decision, note or audit entry. **Change handoff** returns to the draft without losing its reason.
 4. Acknowledge the receiving office's access to the hold, its notes and its history, then select **Confirm office handoff**. The reason becomes a protected staff note. Confirmation also clears the previous individual assignment and follow-up date, as shown in the review. Source-only delegates lose case access; eligible receiving-office delegates gain it. General student, academic and financial permissions remain separate.
 

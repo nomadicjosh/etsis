@@ -51,7 +51,8 @@ test('office follow-up keeps drafts on interruption, filters the worklist and re
     await expect(page.getByLabel('Follow-up date', { exact: true })).toHaveValue('2026-08-10');
     await expect(page.locator('#drawer-body')).toContainText(`Responsible colleague: ${name}`);
     await page.getByRole('button', { name: 'Save follow-up', exact: true }).click();
-    await expect(page.locator('#drawer-body')).toContainText(`Follow-up: ${name} · 2026-08-10`);
+    await expect(page.getByText('Assigned to', { exact: true }).locator('..').locator('dd')).toHaveText(name);
+    await expect(page.getByText('Follow-up date', { exact: true }).locator('..').locator('dd')).toHaveText('2026-08-10');
     const saves = calls.filter(call => call.path.endsWith('/follow-up/save/'));
     expect(saves.map(call => call.body)).toEqual([0, 1].map(() => ({ office_id: office, work_revision: 0,
         assigned_user_id: colleague, follow_up_on: '2026-08-10' })));

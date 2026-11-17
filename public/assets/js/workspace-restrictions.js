@@ -15,13 +15,16 @@ window.createWorkspaceRestrictions = function (ui) {
         formData,
         notify,
         showAudit,
+        recordSummary,
+        actionMenu,
     } = ui;
-    const button = (label, callback, style = "btn-outline-primary") =>
+    const button = (label, callback, style = "btn-outline-primary", accessibleName = label) =>
         node(
             "button",
             {
                 type: "button",
                 class: `btn ${style}`,
+                "aria-label": accessibleName,
                 onclick: (event) => task(callback, event.currentTarget),
             },
             label,
@@ -57,6 +60,8 @@ window.createWorkspaceRestrictions = function (ui) {
             after = nextAfter;
             await load();
         });
+        previous.disabled = true;
+        next.disabled = true;
         container.append(
             status,
             content,
@@ -173,6 +178,7 @@ window.createWorkspaceRestrictions = function (ui) {
                 office_id: offices.length === 1 ? offices[0].id : "",
             },
             "Explain the reason for the restriction in the internal note. The note is not shown to the student. This form reuses its operation ID when retried. End dates include the entire day.",
+            { layout: "restriction" },
         );
         form.elements.code.maxLength = 22;
         form.elements.note.autocomplete = "off";
@@ -183,15 +189,42 @@ window.createWorkspaceRestrictions = function (ui) {
         dates();
     }
     async function view(id, student) {
+        const body = openDrawer("Hold details", "RESTRICTION & STAFF NOTES");
+        body.append(node("p", { role: "status" }, "Loading hold details…"));
         const record = await request(`/sis/restrictions/${id}/`);
-        const body = openDrawer(record.code, "RESTRICTION & STAFF NOTES");
+        if (!body.isConnected) return;
+        document.getElementById("drawer-title").textContent = record.code;
+        body.replaceChildren(
+            student?.id && can("sis:student:read")
+                ? button("Back to student", () => openRecord("students", student), "btn-link mb-3")
+                : button(
+                      "Back to holds",
+                      async () => {
+                          ui.closeDrawer();
+                          await load();
+                      },
+                      "btn-link mb-3",
+                  ),
+            recordSummary([
+                ["Status", badge(record.state)],
+                ["Severity", record.severity],
+                ["Starts", record.starts_on],
+                ["Ends", record.ends_on || "Open-ended"],
+            ]),
+        );
+        const personName =
+            record.person_name || [student?.given_name, student?.family_name].filter(Boolean).join(" ");
+        if (personName)
+            body.insertBefore(
+                node(
+                    "p",
+                    { class: "hold-person-context" },
+                    node("strong", {}, personName),
+                    node("span", {}, record.institutional_id || student?.institutional_id || ""),
+                ),
+                body.querySelector("dl"),
+            );
         body.append(
-            badge(record.state),
-            node(
-                "p",
-                {},
-                `Severity: ${record.severity} · ${record.starts_on} through ${record.ends_on || "open-ended"}`,
-            ),
             node(
                 "p",
                 { class: "form-text" },
@@ -202,45 +235,32 @@ window.createWorkspaceRestrictions = function (ui) {
                 {},
                 `When active: student registration ${record.severity >= 99 ? "blocked" : "not blocked"}; staff registration ${record.blocks_staff ? "blocked" : "not blocked"}.`,
             ),
-            student?.id && can("sis:student:read")
-                ? button("Back to student", () =>
-                      openRecord("students", student),
-                  )
-                : button("Back to holds", async () => {
-                      ui.closeDrawer();
-                      await load();
-                  }),
-            node(
-                "p",
-                {},
-                `Owning office: ${record.office_name || "Not assigned"}`,
-            ),
-            button("Review hold history", () => history(id, student)),
+            node("p", {}, `Owning office: ${record.office_name || "Not assigned"}`),
         );
+        const actions = node("div", { class: "inline-actions", role: "group", "aria-label": "Hold tasks" });
+        const more = [button("Review hold history", () => history(id, student))];
+        body.append(actions);
         if (can("sis:audit:read"))
-            body.append(
-                button("View restriction audit", () =>
-                    showAudit(student?.id || record.person_id, id),
-                ),
-            );
+            more.push(button("View restriction audit", () => showAudit(student?.id || record.person_id, id)));
         if (record.office_id && can("sis:restrictions:handoff"))
-            body.append(
-                button("Hand off to another office", () =>
-                    handoff(id, student, record),
+            more.push(
+                button(
+                    "Hand off",
+                    () => handoff(id, student, record),
+                    "btn-outline-primary",
+                    "Hand off to another office",
                 ),
             );
         if (record.office_id) {
-            body.append(
-                node(
-                    "p",
-                    {},
-                    `Follow-up: ${record.follow_up?.assignee_name || "Unassigned"} · ${record.follow_up?.follow_up_on || "No date set"}`,
-                ),
-                button("Follow-up & assignment", () => followUp(id, student)),
-            );
+            const followUpSummary = recordSummary([
+                ["Assigned to", record.follow_up?.assignee_name || "Unassigned"],
+                ["Follow-up date", record.follow_up?.follow_up_on || "No date set"],
+            ]);
+            body.insertBefore(followUpSummary, actions);
+            actions.append(button("Follow-up & assignment", () => followUp(id, student)));
         }
         if (!record.office_id && can("admin:access:manage"))
-            body.append(
+            actions.append(
                 button("Set owning office", async () => {
                     const setup = await request("/sis/offices/", "POST", {});
                     const choices = setup.items
@@ -266,42 +286,41 @@ window.createWorkspaceRestrictions = function (ui) {
                 }),
             );
         if (record.state !== "ended" && record.office_id)
-            body.append(
-                button("Set or shorten end date", async () => {
-                    const operation = await request("/sis/ui/operation-id/");
-                    const form = await flow(
-                        "Save restriction end date",
-                        [
-                            ["ends_on", "Ends on", "date"],
+            actions.append(
+                button(
+                    "End date",
+                    async () => {
+                        const operation = await request("/sis/ui/operation-id/");
+                        const form = await flow(
+                            "Save restriction end date",
                             [
-                                "reason",
-                                "Reason for ending the hold",
-                                "textarea",
+                                ["ends_on", "Ends on", "date"],
+                                ["reason", "Reason for ending the hold", "textarea"],
                             ],
-                        ],
-                        `/sis/restrictions/${id}/end/`,
-                        (data) => ({
-                            ...data,
-                            revision: record.revision,
-                            operation_id: operation.id,
-                        }),
-                        () => view(id, student),
-                        {
-                            ends_on:
-                                record.ends_on ||
-                                (record.today < record.starts_on
-                                    ? record.starts_on
-                                    : record.today),
-                        },
-                        "The end date is inclusive. Explain why the hold is ending. Your decision and reason are retained; earlier decisions and notes remain available. This form safely reuses its operation ID when retried.",
-                    );
-                    form.elements.reason.autocomplete = "off";
-                    form.elements.ends_on.min = record.starts_on;
-                    if (record.ends_on)
-                        form.elements.ends_on.max = record.ends_on;
-                }),
+                            `/sis/restrictions/${id}/end/`,
+                            (data) => ({
+                                ...data,
+                                revision: record.revision,
+                                operation_id: operation.id,
+                            }),
+                            () => view(id, student),
+                            {
+                                ends_on:
+                                    record.ends_on ||
+                                    (record.today < record.starts_on ? record.starts_on : record.today),
+                            },
+                            "The end date is inclusive. Explain why the hold is ending. Your decision and reason are retained; earlier decisions and notes remain available. This form safely reuses its operation ID when retried.",
+                            { layout: "restriction_end" },
+                        );
+                        form.elements.reason.autocomplete = "off";
+                        form.elements.ends_on.min = record.starts_on;
+                        if (record.ends_on) form.elements.ends_on.max = record.ends_on;
+                    },
+                    "btn-outline-primary",
+                    "Set or shorten end date",
+                ),
             );
-        body.append(
+        actions.prepend(
             button("Add staff note", async () => {
                 const operation = await request("/sis/ui/operation-id/");
                 const form = await flow(
@@ -312,10 +331,13 @@ window.createWorkspaceRestrictions = function (ui) {
                     () => view(id, student),
                     {},
                     "Notes are appended with your account and a timestamp. Existing notes cannot be edited or deleted. Record only information needed for this restriction.",
+                    { layout: "staff_note" },
                 );
                 form.elements.note.autocomplete = "off";
             }),
         );
+        if (more.length > 1) actions.append(actionMenu("More", more, { context: "More hold actions" }));
+        else actions.append(more[0]);
         const notes = node(
             "section",
             { class: "record-section", "aria-label": "Internal staff notes" },
@@ -330,8 +352,7 @@ window.createWorkspaceRestrictions = function (ui) {
         await pages(
             notes,
             "note",
-            (after) =>
-                request(`/sis/restrictions/${id}/notes/`, "POST", { after }),
+            (after) => request(`/sis/restrictions/${id}/notes/`, "POST", { after }),
             (rows) =>
                 rows.length
                     ? node(
@@ -758,15 +779,15 @@ window.createWorkspaceRestrictions = function (ui) {
         );
         const form = node(
             "form",
-            { class: "inline-actions mb-3" },
-            search,
-            assigned,
-            dueField,
+            { class: "hold-queue-search mb-3" },
+            node("label", { class: "form-label" }, "Find office holds", search),
+            node("label", { class: "form-label" }, "Assignment filter", assigned),
+            node("div", { class: "hold-queue-options" }, dueField,
             node(
                 "button",
                 { type: "submit", class: "btn btn-outline-primary" },
                 "Find holds",
-            ),
+            )),
         );
         const results = node("div");
         form.addEventListener("submit", (event) => {
