@@ -348,6 +348,11 @@ final readonly class SqlCampusRepository implements CampusRepository
         ];
     }
 
+    public function applications(EntityId $user): array
+    {
+        return $this->applicationsForPerson($this->personForUser($user));
+    }
+
     /** List only routing metadata; protected answers are loaded through their independently authorized read.
      * @return list<array<string, mixed>> */
     private function applicationsForPerson(EntityId $person): array

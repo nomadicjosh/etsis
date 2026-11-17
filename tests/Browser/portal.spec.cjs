@@ -27,6 +27,7 @@ async function mockServices(page, options = {}) {
         if (data) { expect(req.headers()['x-csrf-token']).toBe('fictional-test-token'); mutations.push({ path, data }); }
         let result = {};
         if (path === '/portal/api/me/') result = me;
+        else if (path === '/portal/api/applications/') result = { items: me.applications };
         else if (path === '/portal/api/programs/') result = { items: [{ id: program, code: 'BS.CS', title: 'Computer Science', form_id: formId }], next_after: null };
         else if (path === '/portal/api/courses/') result = { items: [course], next_after: null };
         else if (path.includes('/transcript/')) result = { items: transcript };

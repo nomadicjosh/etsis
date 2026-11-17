@@ -113,6 +113,12 @@ final readonly class CampusService
         return $data;
     }
 
+    /** @return list<array<string, mixed>> */
+    public function applications(): array
+    {
+        return $this->repository->applications($this->access->authenticatedUserId());
+    }
+
     public function saveContact(string $preferredName, string $phone, string $address, int $version): void
     {
         $this->contacts->save($preferredName, $phone, $address, $version);

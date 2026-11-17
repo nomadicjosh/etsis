@@ -79,6 +79,8 @@ return static function (Psr7Router $router): void {
         [$progress, "review"],
     )->name("portal.degree.progress");
     $router->map(["GET"], "/portal/api/me/", [Portal::class, "me"])->name("portal.me");
+    $router->map(["GET"], "/portal/api/applications/", [Portal::class, "applications"])
+        ->name("portal.applications");
     $router->map(["POST"], "/portal/api/contact/", [Portal::class, "contact"])->name("portal.contact");
     $router
         ->map(["GET"], "/portal/api/payments/status/", [Payments::class, "status"])

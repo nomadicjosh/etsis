@@ -25,6 +25,8 @@ interface CampusRepository
     public function requireOwnedAccount(EntityId $user, EntityId $account): void;
     /** @return array<string, mixed> */
     public function overview(EntityId $user): array;
+    /** @return list<array<string, mixed>> */
+    public function applications(EntityId $user): array;
     /** @return array<string, mixed> */
     public function ownedStudent(EntityId $user, EntityId $student): array;
     /** @return list<array<string, mixed>> */

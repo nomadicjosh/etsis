@@ -3975,7 +3975,32 @@ if (
 ) {
     throw new RuntimeException("An applicant could bypass the required form through direct entry.");
 }
+$applicationStatusRequest = new \Qubus\Http\ServerRequest(
+    [],
+    [],
+    'https://campus.example.invalid/portal/api/applications/',
+    'GET',
+);
+$applicationStatusResponse = $app->router->match($applicationStatusRequest);
+$applicationStatusBody = (string) $applicationStatusResponse->getBody();
+$applicationStatusRows = json_decode($applicationStatusBody, true, flags: JSON_THROW_ON_ERROR);
+if (
+    $applicationStatusResponse->getStatusCode() !== 200
+    || !str_contains($applicationStatusResponse->getHeaderLine('Cache-Control'), 'private')
+    || !str_contains($applicationStatusResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || ($applicationStatusRows['items'] ?? null) !== $trackedOverview['applications']
+    || str_contains($applicationStatusBody, 'Fictional private submitted statement')
+    || str_contains($applicationStatusBody, 'encrypted_answers')
+) {
+    throw new RuntimeException('Application status refresh did not preserve the private metadata boundary.');
+}
 $sis->access->actor = $sis->user();
+$sis->legacyPerson($sis->access->actor, 'Fictional', 'Unrelated applicant');
+$unrelatedStatusResponse = $app->router->match($applicationStatusRequest);
+$unrelatedStatus = json_decode((string) $unrelatedStatusResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($unrelatedStatusResponse->getStatusCode() !== 200 || ($unrelatedStatus['items'] ?? null) !== []) {
+    throw new RuntimeException('Application status refresh exposed another applicant\'s metadata.');
+}
 if ($app->router->match($trackedOwnerRequest)->getStatusCode() !== 403) {
     throw new RuntimeException("Another person could read private application answers.");
 }

@@ -15,6 +15,7 @@ async function fixture(page, { reject = false, questions = fields, containers = 
         const req = route.request(), path = new URL(req.url()).pathname;
         let json = {};
         if (path === '/portal/api/me/') json = { person: { id: person }, applications: [], students: [], contact: {}, accounts: [], news: [] };
+        else if (path === '/portal/api/applications/') json = { items: [] };
         else if (path === `/sis/forms/programs/${program}/active/`) json = { id: formId, name: 'Diploma application', submission_id: receipt, fields: questions, layout: containers };
         else if (path === `/sis/forms/${formId}/submissions/`) {
             const input = JSON.parse(new URLSearchParams(req.postData()).get('_workspace_json'));

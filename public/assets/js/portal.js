@@ -766,6 +766,27 @@
             saved.replaceChildren(...(me?.applications.length ? [submittedApplications(me.applications)] : []));
         };
         refreshApplications(); container.append(saved);
+        let statusRequest = 0;
+        const status = el('p', { class: 'campus-muted mb-0', role: 'status', 'aria-atomic': 'true' });
+        async function reloadApplications() {
+            const ticket = ++statusRequest;
+            status.textContent = 'Checking your application status…';
+            try {
+                const result = await request('/portal/api/applications/');
+                if (ticket !== statusRequest || pageLeaving || !saved.isConnected || !me) return;
+                if (!Array.isArray(result.items)) throw new Error('Application status is unavailable.');
+                me.applications = result.items;
+                refreshApplications();
+                status.textContent = result.items.length ? 'Your application status is up to date.' : 'No applications found.';
+            } catch {
+                if (ticket !== statusRequest || pageLeaving || !saved.isConnected) return;
+                status.textContent = 'Status could not be refreshed. Your application list is unchanged. Please try again.';
+            }
+        }
+        if (config.signedIn) {
+            container.insertBefore(el('div', { class: 'd-flex flex-wrap gap-3 align-items-center mb-3' },
+                button('Refresh status', reloadApplications), status), saved);
+        }
         const form = el('form');
         const program = control(
             form,
@@ -880,9 +901,8 @@
                                     `Your application to ${programName(programId)} has been submitted. Admissions will review your next steps.`,
                                 ),
                             );
-                            await refreshMe();
+                            await reloadApplications();
                             if (pageLeaving || !saved.isConnected) return;
-                            refreshApplications();
                             notice(
                                 'Application submitted. Here’s to your next chapter.',
                             );
