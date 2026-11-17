@@ -6086,3 +6086,52 @@ if (
 ) {
     throw new RuntimeException('The HTTP removal boundary lost its private, retained-definition contract.');
 }
+// Working admissions casework shares the real private/CSRF pipeline without writing academic events.
+$sis->access->staff = true;
+$sis->access->actor = $originalSubmissionActor;
+$caseworkApplication = $sis->legacyApplication($educationPerson->id, $sis->program, $sis->term)->id;
+$caseworkPath = '/sis/applications/' . $caseworkApplication->value . '/casework/';
+$caseworkItem = ['key' => 'transcript', 'label' => 'Previous transcript', 'instructions' => 'Arrange delivery.',
+    'needed' => true, 'visible' => true, 'status' => 'pending', 'due_on' => ''];
+$caseworkPrivate = array_replace($caseworkItem, ['key' => 'private_task', 'label' => 'Private staff task', 'visible' => false]);
+$caseworkEvents = $sis->sql->rows('sis_history_events');
+$caseworkResponse = $teachingPost($caseworkPath, ['version' => 0, 'claim' => 'me', 'values' => [
+    'office' => 'Admissions', 'private_notes' => 'Fictional private case note.',
+    'next_step' => 'Arrange delivery through admissions.', 'items' => [$caseworkItem, $caseworkPrivate],
+]]);
+if ($caseworkResponse->getStatusCode() !== 200) {
+    throw new RuntimeException('Application casework failed its provider/CSRF write boundary.');
+}
+$caseworkGet = $get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $caseworkPath));
+$caseworkData = json_decode((string) $app->router->match($caseworkGet)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$caseworkPreset = $caseworkData['new_preset_id'];
+$caseworkDefinition = array_intersect_key($caseworkItem,
+    array_flip(['key', 'label', 'instructions', 'needed', 'visible']));
+if ($teachingPost('/sis/admissions/checklists/' . $caseworkPreset . '/', ['version' => 0, 'values' => [
+    'name' => 'Fictional reusable checklist', 'program_id' => $sis->program->value,
+    'enabled' => true, 'items' => [$caseworkDefinition],
+]])->getStatusCode() !== 200) {
+    throw new RuntimeException('Checklist preset management failed through the real provider boundary.');
+}
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$caseworkOwnerPath = '/portal/api/applications/' . $caseworkApplication->value . '/next-steps/';
+$caseworkOwnerRequest = $get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $caseworkOwnerPath));
+$caseworkOwnerResponse = $app->router->match($caseworkOwnerRequest);
+$caseworkOwnerData = json_decode((string) $caseworkOwnerResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($caseworkOwnerResponse->getStatusCode() !== 200 || count($caseworkOwnerData['items'] ?? []) !== 1
+    || !str_contains($caseworkOwnerResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $caseworkOwnerResponse->getBody(), 'Private staff task')
+    || str_contains((string) $caseworkOwnerResponse->getBody(), 'Fictional private case note.')) {
+    throw new RuntimeException('Applicant next steps did not preserve the staff/private data boundary.');
+}
+if ($teachingPost($caseworkPath, ['version' => 1, 'claim' => 'me', 'values' => []])->getStatusCode() !== 403) {
+    throw new RuntimeException('An applicant could write staff casework.');
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+if ($app->router->match($caseworkOwnerRequest)->getStatusCode() !== 403
+    || $caseworkEvents !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Working casework overrode portal ownership or wrote academic history.');
+}

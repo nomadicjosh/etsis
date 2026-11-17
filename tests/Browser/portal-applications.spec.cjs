@@ -22,7 +22,7 @@ async function fixture(page, { applications = [
     row(first, receipt, 'DIP.ART', 'Studio Arts', 'accepted'),
     row(second, otherReceipt, 'BS.SCI', 'Applied Science', 'matriculated'),
     row(direct, null, 'BA.HIST', 'History'),
-], answer = null, refresh = null, education = null } = {}) {
+], answer = null, refresh = null, education = null, nextSteps = null } = {}) {
     const reads = [], writes = [], errors = [], overviewReads = [], statusReads = [];
     const me = { person: { id: person }, applications, students: [], contact: {}, accounts: [], news: [] };
     page.on('pageerror', error => errors.push(error.message));
@@ -30,6 +30,10 @@ async function fixture(page, { applications = [
         const req = route.request(), path = new URL(req.url()).pathname;
         let json = {};
         if (path === '/portal/api/me/') { overviewReads.push(path); json = me; }
+        else if (/^\/portal\/api\/applications\/[^/]+\/next-steps\/$/.test(path)) {
+            if (nextSteps) return nextSteps(route);
+            json = { office: '', next_step: '', items: [] };
+        }
         else if (path === '/portal/api/education/') {
             if (education) return education(route);
             json = { entries: [], version: 0 };
@@ -291,4 +295,26 @@ test('an applicant responds to educational-background feedback without losing an
     await expect(editor.getByText('Review entry', { exact: true })).toHaveCount(0);
     await accessible(page);
     expect(state.errors).toEqual([]); expect(state.overviewReads).toHaveLength(0);
+});
+
+test('applicant next steps load on demand without replacing an unfinished application', async ({ page }) => {
+    const requests = [];
+    const state = await fixture(page, { nextSteps: route => {
+        requests.push(route.request().url());
+        return route.fulfill({ json: { office: 'Admissions', next_step: 'Arrange your previous transcript.', items: [
+            { label: 'Previous transcript', instructions: '<img src=x onerror=alert(1)> Contact admissions for delivery.',
+                needed: true, status: 'pending', due_on: '2026-12-01' },
+        ] } });
+    } });
+    expect(requests).toEqual([]);
+    await openNewApplication(page);
+    await page.getByRole('button', { name: /Next steps for DIP.ART/ }).click();
+    const steps = page.getByRole('region', { name: 'Application next steps', exact: true });
+    await expect(steps).toContainText('Arrange your previous transcript.');
+    await expect(steps).toContainText('Requested for review');
+    await expect(steps).toContainText('<img src=x onerror=alert(1)>');
+    await expect(steps.locator('img')).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
+    expect(requests).toHaveLength(1); expect(state.writes).toEqual([]); expect(state.errors).toEqual([]);
+    await accessible(page);
 });

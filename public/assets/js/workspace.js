@@ -508,6 +508,8 @@
             type: 'button', class: 'btn btn-outline-primary', 'aria-label': name,
             onclick: event => task(run, event.currentTarget),
         }, icon(iconName), node('span', {}, label));
+        if (section === 'applications') tools.append(tool('Follow-up queue', () => peopleStudio.caseQueue(),
+            'Open admissions follow-up queue', 'inboxes'));
         if (family === 'courses' && can('sis:catalog:manage')) {
             tools.append(
                 actionMenu('Curriculum', [

@@ -16,10 +16,23 @@ use Application\Http\Controller\SisRulesController;
 use Qubus\Routing\Interfaces\Mappable;
 use Application\Http\Controller\PersonEmergencyContactsController as Emergency;
 use Application\Http\Controller\PersonEducationController as Education;
+use Application\Http\Controller\AdmissionCaseworkController as Casework;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $router->map(['GET'], '/sis/applications/{id}/casework/', [Casework::class, 'view'])
+        ->name('sis.admissions.casework');
+    $router->map(['POST'], '/sis/applications/{id}/casework/', [Casework::class, 'save'])
+        ->name('sis.admissions.casework.save');
+    $router->map(['GET'], '/sis/admissions/follow-ups/', [Casework::class, 'queue'])
+        ->name('sis.admissions.followups');
+    $router->map(['GET'], '/sis/admissions/checklists/', [Casework::class, 'presets'])
+        ->name('sis.admissions.checklists');
+    $router->map(['GET'], '/sis/admissions/checklists/{id}/', [Casework::class, 'preset'])
+        ->name('sis.admissions.checklist');
+    $router->map(['POST'], '/sis/admissions/checklists/{id}/', [Casework::class, 'savePreset'])
+        ->name('sis.admissions.checklist.save');
     $router->map(['GET'], '/sis/ui/people/{id}/education/', [Education::class, 'staff'])
         ->name('sis.ui.person.education');
     $router->map(['POST'], '/sis/ui/people/{id}/education/', [Education::class, 'saveStaff'])

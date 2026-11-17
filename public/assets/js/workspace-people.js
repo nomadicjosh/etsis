@@ -386,6 +386,10 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
         const submission = review.submission;
+        const casework = node('div', { class: 'record-section mt-3' });
+        window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
+            { managePresets: can('sis:forms:manage') });
+        body.append(casework);
         if (can('sis:person:manage')) {
             const education = node('div', { class: 'record-section mt-3' });
             window.createPersonEducation({ node, request, task, notify }).mount(
@@ -908,5 +912,9 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
-    return { editProfile, account, contact, education, history, application };
+    function caseQueue() {
+        const body = openDrawer('Admissions follow-up', 'APPLICATION WORKBENCH');
+        window.createAdmissionCasework({ node, request, task, notify }).queue(body, row => application(row));
+    }
+    return { editProfile, account, contact, education, history, application, caseQueue };
 };

@@ -16,6 +16,8 @@ Admissions review displays answers under the submitted form's original container
 
 ## Applicant access to submitted answers
 
+The connected [admissions workbench](admissions-workbench.md) also supplies on-demand **Next steps** for each owned application, including staff-selected checklist items, instructions and due dates. It preserves unfinished applications and excludes internal tasks, private notes and assignee information. Working progress is separate from retained admissions decisions.
+
 **Your applications** also shows the next step alongside each current status. Submitted applications direct the applicant to watch for a decision or contact admissions; accepted applications direct them to the office for the program's next steps. **Not accepted** uses neutral guidance without exposing a private decision reason. **Student record linked** identifies matriculation and offers **My campus**, including when an existing student record was reused. It does not promise registration eligibility, enrollment or access to another person's records. Unknown statuses show a neutral request to contact admissions.
 
 Use **Refresh status** to check for a decision while keeping an unfinished application on screen. A live status message announces checking, completion or failure; failed refreshes keep the previous results and can be retried. Refresh runs only when requested or after a successful submission, without automatic polling. Late responses from an older refresh cannot replace newer results.

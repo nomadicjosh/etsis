@@ -763,11 +763,14 @@
                 el('span', { class: `campus-chip${progress.positive ? ' success' : ''}` }, progress.label),
                 el('p', { class: 'campus-muted mb-0' }, progress.next),
                 progress.href ? el('a', { href: progress.href }, 'My campus') : null);
-            return [programLabel(application), termLabel(application), next, answers];
+            const steps = el('div');
+            window.createAdmissionCasework({ node: el, request, task, notify: notice })
+                .applicant(steps, application.id, `${programLabel(application)} · ${termLabel(application)}`);
+            return [programLabel(application), termLabel(application), next, steps, answers];
         });
         return surface('Your applications', applications.length === 50
             ? el('p', { class: 'campus-muted' }, 'Showing up to 50 applications.') : null,
-            table(['Program', 'Entry term', 'Progress & next step', 'Answers'], rows,
+            table(['Program', 'Entry term', 'Progress', 'Next steps', 'Answers'], rows,
             'Your admissions applications'), detail);
     }
 
