@@ -1,3 +1,4 @@
+const { recordAction, revealRecordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -188,9 +189,9 @@ test('recurring class requests use offering dates and preserve the actual sectio
     await expect(page.locator('#drawer-body')).toContainText('Course sections');
     await expect(page.locator('#drawer-body')).toContainText('MATH.101.26FA.A · 26/FA');
     await page.getByRole('button', { name: 'Submit recurring request', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Change category', exact: true })).toBeVisible();
+    await expect(await revealRecordAction(page, 'Change category')).toBeVisible();
     expect(state.calls.find(call => call.path === '/sis/bookings/planning/request/').data).toMatchObject({ category_id: id(1), section_id: id(3) });
-    await page.getByRole('button', { name: 'Change category', exact: true }).click();
+    await recordAction(page, 'Change category');
     await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption('');
     await page.getByRole('button', { name: 'Save category', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Unassigned');

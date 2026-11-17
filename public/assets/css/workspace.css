@@ -613,6 +613,33 @@ h3 { font-size: .9rem; font-weight: 650; }
 .form-check-label { display: inline-flex; align-items: center; min-height: 24px; cursor: pointer; }
 
 /* Related fields and catalog tasks share a readable hierarchy within the record drawer. */
+.record-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    gap: 1.25rem;
+    margin: 0 0 1.25rem;
+    padding: 1.25rem;
+    background: #f5f8fc;
+    border: 1px solid var(--campus-line);
+    border-radius: .75rem;
+}
+.record-summary > div { min-width: 0; }
+.record-summary dt { margin-bottom: .4rem; color: #526a80; font-size: .75rem; font-weight: 500; }
+.record-summary dd { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
+.record-summary .text-secondary { color: #526a80 !important; }
+.record-drawer .btn:disabled { color: #5e7287; background: #f1f4f7; border-color: #b7c4d2; opacity: 1; }
+.booking-meeting-actions { display: flex; align-items: center; gap: .5rem; }
+.booking-meeting-actions .btn { white-space: nowrap; }
+.booking-meeting-actions .btn-outline-danger { color: #a02834; border-color: #a02834; }
+.booking-meeting-actions .btn-outline-danger:is(:hover, :focus-visible, :active) { color: #fff; background: #a02834; }
+.meeting-days { min-width: 0; margin: 0; padding: 0; }
+.meeting-days > legend { float: none; width: auto; font-size: .875rem; font-weight: 600; margin: 0 0 .65rem; }
+.meeting-day-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.25rem), 1fr)); gap: .5rem; }
+.record-form-section .meeting-day-options .form-check { margin: 0; padding: .4rem .45rem; align-items: center; gap: .35rem; border: 1px solid #b7c7d8; }
+.record-form-section .meeting-day-options .form-check-input { margin: 0; }
+.meeting-day-options .form-check-label { flex: 1; min-height: 32px; }
+.meeting-day-options .form-check:has(input:checked) { background: #eaf2fa; border-color: #346d9d; }
+.meeting-day-options .form-check:focus-within { outline: 2px solid #2467a5; outline-offset: 2px; }
 .record-form-guide { color: var(--campus-muted); font-size: .75rem; margin: 0 0 1rem; }
 .record-form-section {
     min-width: 0;
@@ -646,6 +673,7 @@ h3 { font-size: .9rem; font-weight: 650; }
 .record-task-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem; }
 .record-task-actions .btn { text-align: start; white-space: normal; }
 @media (max-width: 639px) {
+    .record-summary { grid-template-columns: minmax(0, 1fr); padding: 1rem; gap: 1rem; }
     .record-form-grid { grid-template-columns: minmax(0, 1fr); }
     .record-form-section { padding: .75rem 1rem 1rem; }
     .record-task-card { padding: 1rem; }

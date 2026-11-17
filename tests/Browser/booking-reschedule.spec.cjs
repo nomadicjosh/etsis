@@ -1,3 +1,4 @@
+const { recordAction, revealRecordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -81,12 +82,12 @@ test('reviewed room moves retain the original reservation through conflicts and 
     await page.getByRole('button', { name: 'Confirm reschedule', exact: true }).click();
     await expect(body).toContainText('SCI.201 · Teaching laboratory');
     await expect(body).toContainText('1 active meeting.');
-    await page.getByRole('button', { name: 'View previous booking', exact: true }).click();
+    await recordAction(page, 'View previous booking');
     await expect(body).toContainText('LIB.101 · Seminar room');
     await expect(body.getByRole('button', { name: /^Reschedule meeting on / })).toHaveCount(1);
     await expect(body.locator('tbody .status-badge').filter({ hasText: /^cancelled$/ })).toHaveCount(1);
     await page.getByRole('button', { name: /^View replacement for / }).click();
-    await expect(page.getByRole('button', { name: 'View previous booking', exact: true })).toBeVisible();
+    await expect(await revealRecordAction(page, 'View previous booking')).toBeVisible();
     const confirmations = state.calls.filter(call => call.path.endsWith('/reschedule/confirm/'));
     expect(confirmations).toHaveLength(2);
     expect(confirmations[1].data).toMatchObject({ id: id(4), room_id: id(3), version: 1, revision: 'fictional-review' });

@@ -16,6 +16,8 @@ window.createWorkspaceEmployment = function (ui) {
         flow,
         showAudit,
         historyPanel,
+        recordSummary,
+        actionMenu,
     } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -46,17 +48,27 @@ window.createWorkspaceEmployment = function (ui) {
     async function employee(id) {
         const record = await request(`/sis/employees/${id}/`);
         const body = openDrawer(name(record), "EMPLOYMENT & TIME");
-        body.append(button('Employment dates', () => employmentDates(id)));
-        if (can("sis:audit:read"))
-            body.append(
-                button("View audit history", () => showAudit("employees", id)),
-            );
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Employment tasks",
+        });
+        const extra = [];
+        actions.append(button("Employment dates", () => employmentDates(id)));
+        if (can("sis:audit:read")) extra.push(button("View audit history", () => showAudit("employees", id)));
         if (can("sis:hr:manage") && can("sis:audit:read"))
-            body.append(button("Employment change history", () => history(record)));
-        if (can("sis:hr:manage")) body.append(button("Position assignments", () => ui.positions().page(id)));
+            extra.push(button("Employment change history", () => history(record)));
+        if (can("sis:hr:manage"))
+            actions.append(button("Position assignments", () => ui.positions().page(id)));
         body.append(
-            node("p", {}, `${record.institutional_id} · ${record.job_title}`),
-            badge(record.active ? "Time submissions enabled" : "Time submissions paused"),
+            recordSummary([
+                ["Institutional ID", record.institutional_id],
+                ["Job title", record.job_title],
+                [
+                    "Time submission setting",
+                    badge(record.active ? "Time submissions enabled" : "Time submissions paused"),
+                ],
+            ]),
         );
         body.append(
             node(
@@ -68,13 +80,9 @@ window.createWorkspaceEmployment = function (ui) {
             ),
         );
         if (can("sis:person:manage"))
-            body.append(
-                button("Open connected person", () =>
-                    openPerson(record.person_id),
-                ),
-            );
-        body.append(
-            button("Weekly time review", () => week(id)),
+            extra.push(button("Open connected person", () => openPerson(record.person_id)));
+        actions.append(button("Weekly time review", () => week(id)));
+        extra.unshift(
             button("Edit employment", () =>
                 flow(
                     "Save employment",
@@ -88,16 +96,15 @@ window.createWorkspaceEmployment = function (ui) {
                     () => employee(id),
                     record,
                     "Inactive employment blocks new time submissions. Historical entries and pending reviews remain available. This does not disable sign-in or change student status.",
+                    { layout: "employment_profile" },
                 ),
             ),
         );
-        if (record.active)
-            body.append(
-                button("Submit time for this employee", () =>
-                    submit({ employee_id: id }),
-                ),
-            );
-        else
+        if (record.active) {
+            const submitTime = button("Submit time", () => submit({ employee_id: id }), "btn-primary");
+            submitTime.setAttribute("aria-label", "Submit time for this employee");
+            actions.append(submitTime);
+        } else
             body.append(
                 node(
                     "p",
@@ -105,6 +112,8 @@ window.createWorkspaceEmployment = function (ui) {
                     "Enable time submissions before entering more time. Recorded employment dates also apply.",
                 ),
             );
+        if (extra.length) actions.append(actionMenu("More", extra, { context: "More employment actions" }));
+        body.append(actions);
         body.append(
             node("h3", { class: "mt-4" }, "Recent time entries"),
             node(
@@ -206,7 +215,7 @@ window.createWorkspaceEmployment = function (ui) {
         const fields = [['from', 'Hire / employment start', 'date'], ['through', 'Last employment day', 'date', '', false],
             ...(period ? [['voided', 'Mark this employment period incorrect', 'checkbox', '', false]] : []),
             ['reason', 'Reason for the employment decision', 'textarea']];
-        const form = await buildForm(fields, period || { from: current.today });
+        const form = await buildForm(fields, period || { from: current.today }, { layout: 'employment_dates' });
         form.elements.namedItem('reason').maxLength = 1000;
         if (!body.isConnected) return;
         const submit = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review employment decision');
@@ -407,7 +416,7 @@ window.createWorkspaceEmployment = function (ui) {
             ["starts_at", "Started", "datetime-local"],
             ["ends_at", "Finished", "datetime-local"],
         ];
-        const form = await buildForm(fields, preset);
+        const form = await buildForm(fields, preset, { layout: 'work_time' });
         if (!body.isConnected) return;
         const positionGroup = node('div', { class: 'mb-3' });
         const position = node('select', { id: 'time-work-position', name: 'position_id', class: 'form-select',

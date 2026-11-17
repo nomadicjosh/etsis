@@ -28,9 +28,24 @@ async function fixture(page, path = '/admin/') {
                 accounts: [{ id: id(3), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', currency: 'USD' }],
                 programs: [{ id: id(4), code: 'BA.ENG', title: 'English' }],
                 terms: [{ id: id(5), code: '26/FA' }],
+                employees: [{ id: id(8), person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', job_title: 'Academic advisor', active: true }],
+                rooms: [{ id: id(9), code: 'LIB.101', name: 'Advising room', building_name: 'Campus library', capacity: 24 }],
+                bookings: [{ id: id(10), title: 'Welcome seminar', status: 'approved' }],
             };
             result = { items: records[dataset] || [], next_after: null };
-        } else if (path === `/sis/accounts/${id(3)}/`) result = {
+        } else if (path === `/sis/employees/${id(8)}/`) result = {
+            id: id(8), person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL',
+            job_title: 'Academic advisor', active: true, earlier_history_unknown: true, revision: 'fictional-revision',
+        };
+        else if (path === `/sis/rooms/${id(9)}/`) result = {
+            id: id(9), code: 'LIB.101', name: 'Advising room', capacity: 24, building_id: id(12),
+            building: { code: 'LIB', name: 'Campus library' },
+        };
+        else if (path === `/sis/bookings/${id(10)}/`) result = {
+            id: id(10), title: 'Welcome seminar', room_id: id(9), status: 'approved', version: 1,
+            occurrences: [{ id: id(11), status: 'approved', starts_at: '2026-11-17T17:00:00Z', ends_at: '2026-11-17T18:00:00Z' }],
+        };
+        else if (path === `/sis/accounts/${id(3)}/`) result = {
             id: id(3), student_id: id(2), term_id: id(5), institutional_id: 'S-FICTIONAL', currency: 'USD', balance_minor: 2500, position: 3,
             entries: [
                 { operation_id: id(6), type: 'charge', minor: 10000, currency: 'USD', reversed: false, can_credit_charge: true, remaining_charge_minor: 10000, credited_minor: 0, linked_credit_count: 0 },
@@ -206,4 +221,59 @@ test('finishing a directory request does not take keyboard focus away from its t
     finish();
     await expect(page.locator('#directory-results')).toContainText('No records yet');
     await expect(years).toBeFocused();
+});
+
+test('employment summaries keep routine tasks visible and secondary actions keyboard accessible', async ({ page }) => {
+    const f = await fixture(page);
+    await page.locator('.workspace-nav-link[data-workspace="employees"]').click();
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    const summary = page.locator('#drawer-body .record-summary');
+    await expect(summary).toContainText('Academic advisor');
+    await expect(summary).toContainText('Time submissions enabled');
+    const toggle = page.getByRole('button', { name: 'More employment actions', exact: true });
+    await toggle.focus(); await page.keyboard.press('ArrowDown');
+    const edit = page.getByRole('button', { name: 'Edit employment', exact: true });
+    await expect(edit).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(toggle).toBeFocused();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/workspace-polished-employment.png' });
+    await toggle.click(); await edit.click();
+    await expect(page.getByRole('group', { name: 'Employment details', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(f.requests.some(r => r.path.endsWith('/edit/'))).toBe(false);
+    expect(f.requests.some(r => r.path.endsWith('/history/'))).toBe(false);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test('booking menus and compact meeting actions retain context and require confirmation', async ({ page }) => {
+    const f = await fixture(page);
+    await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
+    await page.getByRole('button', { name: 'Welcome seminar', exact: true }).click();
+    await expect(page.locator('#drawer-body .record-summary')).toContainText('Campus library');
+    await expect(page.getByRole('button', { name: /^Reschedule meeting on / })).toHaveText('Reschedule');
+    const cancel = page.getByRole('button', { name: /^Cancel meeting on / });
+    await expect(cancel).toHaveText('Cancel meeting');
+    const toggle = page.getByRole('button', { name: 'More booking actions', exact: true });
+    await toggle.focus(); await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('button', { name: 'View audit history', exact: true })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('button', { name: 'Change category', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(toggle).toBeFocused();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/workspace-polished-booking.png' });
+    await page.setViewportSize({ width: 320, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await cancel.click();
+    await expect(page.getByRole('button', { name: 'Confirm meeting cancellation', exact: true })).toBeVisible();
+    expect(f.requests.some(r => r.path.includes('/occurrences/'))).toBe(false);
+    expect(f.errors).toEqual([]);
 });

@@ -1,4 +1,4 @@
-const { recordAction } = require('./support/workspace-actions.cjs');
+const { recordAction, revealRecordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -130,7 +130,7 @@ test('staff maintain employment and review paged time entries without leaving th
     await expect(page.locator('#drawer-body .status-badge')).toHaveText('approved');
     expect(calls.find(call => call.path.endsWith('/decision/'))?.data).toEqual({ approve: true, version: 0 });
     await page.getByRole('button', { name: 'Back to employment' }).click();
-    await page.getByRole('button', { name: 'Edit employment' }).click();
+    await recordAction(page, 'Edit employment');
     await page.getByLabel('Job title').fill('Fictional archivist');
     await page.getByLabel('Time submissions enabled').uncheck();
     await page.getByRole('button', { name: 'Save employment' }).click();
@@ -240,7 +240,7 @@ test('employment change history shares frozen paging, escaped cards and retained
     });
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     expect(reviews).toHaveLength(0);
-    await page.getByRole('button', { name: 'Employment change history', exact: true }).focus();
+    await (await revealRecordAction(page, 'Employment change history')).focus();
     await page.keyboard.press('Enter');
     const list = page.getByRole('list', { name: 'Recorded employment changes' });
     await expect(list.locator('li')).toHaveCount(20);

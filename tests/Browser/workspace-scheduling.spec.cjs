@@ -56,7 +56,7 @@ test('staff plan a room, check availability, edit it and approve or cancel a cur
     await page.getByLabel('Room code').fill('LIBRARY.102');
     await page.getByLabel(/^Capacity/).fill('35');
     await page.getByRole('button', { name: 'Save room details' }).click();
-    await expect(page.locator('#drawer-body')).toContainText('Capacity: 35');
+    await expect(page.locator('#drawer-body .record-summary').getByText('35', { exact: true })).toBeVisible();
     expect(calls.find(item => item.path.endsWith('/edit/'))?.data).toMatchObject({ code: 'LIBRARY.102', capacity: 35, revision: 'fictional-room-revision' });
     await page.getByRole('button', { name: 'Request this room' }).click();
     await page.getByLabel('Meeting purpose').fill('Fictional seminar');
@@ -152,6 +152,11 @@ test('recurring room requests review paged meetings, preserve drafts after a sta
     await page.getByLabel('Monday', { exact: true }).check();
     await page.getByLabel('Wednesday', { exact: true }).check();
     await page.getByLabel('Dates to skip', { exact: true }).fill('2026-03-11');
+    const tuesday = page.getByRole('checkbox', { name: 'Tuesday', exact: true });
+    await tuesday.focus(); await page.keyboard.press('Space');
+    await expect(tuesday).toBeChecked();
+    await page.keyboard.press('Space'); await expect(tuesday).not.toBeChecked();
+    await page.locator('.meeting-days').screenshot({ path: 'test-results/workspace-polished-weekdays.png' });
     await page.getByRole('button', { name: 'Review meetings', exact: true }).focus();
     await page.keyboard.press('Enter');
     const meetings = page.getByRole('table', { name: 'Meetings to request', exact: true });

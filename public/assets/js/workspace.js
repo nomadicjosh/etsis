@@ -224,6 +224,15 @@
         return element;
     }
 
+    function recordSummary(entries) {
+        return node(
+            'dl',
+            { class: 'record-summary' },
+            entries.map(([label, value]) =>
+                node('div', {}, node('dt', {}, label), node('dd', {}, value ?? 'Not recorded')),
+            ),
+        );
+    }
     const deliveryModes = [{ value: 'in_person', label: 'In person' }, { value: 'online', label: 'Online' }, { value: 'hybrid', label: 'Hybrid' }, { value: 'unspecified', label: 'Delivery to be confirmed' }];
     const datasets = {
         people: { title: 'People', description: 'One person. One connected story. Keep admissions, academics, work and access together.', icon: 'people', action: 'Add a person', endpoint: '/sis/persons/', permission: 'sis:person:manage', fields: [ ['given_name', 'Given name'], ['family_name', 'Family name'], ['email', 'Email address', 'email'], ['institutional_id', 'Assigned institutional ID', 'text', '', false] ], columns: [['Person', 'name'], ['Institutional ID', 'institutional_id'], ['Sign-in account', 'account']] },
@@ -263,10 +272,10 @@
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, historyPanel, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
-    const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
+    const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
             explanation: 'Review this copy of the published invitation and dates before saving. Later event changes are not copied into this message. Saving creates an encrypted draft; choose recipients and confirm delivery in Communications.' }) });
-    const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, historyPanel, positions: () => positionStudio, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, historyPanel, positions: () => positionStudio, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
@@ -751,6 +760,59 @@
     }
 
     const formLayouts = {
+        rooms: [
+            {
+                title: 'Room details',
+                fields: ['code', 'capacity', 'name', 'building_id'],
+                wide: ['name', 'building_id'],
+            },
+        ],
+        agenda_window: [{ title: 'Agenda window', fields: ['starts_at', 'ends_at'] }],
+        meeting_request: [
+            {
+                title: 'Meeting details',
+                fields: ['title', 'category_id', 'section_id'],
+                wide: ['title', 'category_id', 'section_id'],
+            },
+            { title: 'Location', fields: ['online', 'room_id'], wide: ['online', 'room_id'] },
+            { title: 'Dates & times', fields: ['starts_at', 'ends_at'] },
+        ],
+        recurring_meeting: [
+            {
+                title: 'Meeting details',
+                fields: ['title', 'category_id', 'section_id'],
+                wide: ['title', 'category_id', 'section_id'],
+            },
+            { title: 'Location', fields: ['online', 'room_id'], wide: ['online', 'room_id'] },
+            {
+                title: 'Meeting pattern',
+                fields: [
+                    'from',
+                    'through',
+                    'start_time',
+                    'end_time',
+                    'overnight',
+                    'interval_weeks',
+                    'excluded_dates',
+                ],
+                wide: ['overnight', 'interval_weeks', 'excluded_dates'],
+            },
+        ],
+        employment_dates: [
+            { title: 'Employment period', fields: ['from', 'through', 'voided'], wide: ['voided'] },
+            { title: 'Decision reason', fields: ['reason'], wide: ['reason'] },
+        ],
+        employment_profile: [
+            { title: 'Employment details', fields: ['job_title', 'active'], wide: ['job_title', 'active'] },
+            { title: 'Decision reason', fields: ['reason'], wide: ['reason'] },
+        ],
+        work_time: [
+            {
+                title: 'Work interval',
+                fields: ['employee_id', 'starts_at', 'ends_at'],
+                wide: ['employee_id'],
+            },
+        ],
         people: [
             { title: 'Person details', fields: ['given_name', 'family_name', 'email'], wide: ['email'] },
             { title: 'Directory privacy', fields: ['directory_restricted'], wide: ['directory_restricted'] },
