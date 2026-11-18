@@ -121,6 +121,20 @@ test("changed academic facts remove approval while leaving rejection available",
         ["rejected"],
     );
 });
+test("withdrawn-grade cases explain the zero-credit boundary and distinct approval duty", async () => {
+    const f = fixture({ withdrawal_grade_correction: true, can_approve: false });
+    await f.component.gradeChangeRecord("request");
+    assert.match(
+        f.body().textContent,
+        /does not reopen the enrollment, award earned credit or change charges/,
+    );
+    assert.match(f.body().textContent, /separate withdrawn-grade correction authority/);
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    assert.deepEqual(
+        JSON.parse(JSON.stringify(form.fields[0][3])).map((o) => o.value),
+        ["rejected"],
+    );
+});
 test("late request reads cannot populate a closed private drawer", async () => {
     const f = fixture();
     let resolve;
@@ -147,4 +161,51 @@ test("policy save carries its revision and uses the shared private transport", a
     await f.done();
     const saved = f.sent.find((r) => r.method === "POST");
     assert.deepEqual(JSON.parse(JSON.stringify(saved.data)), { mode: "approval", revision: 3 });
+});
+test("withdrawn-grade editor and confirmation explain limits without offering completion edits", async () => {
+    const f = fixture();
+    f.ui.request = async (path, method, data) => {
+        f.sent.push({ path, method, data });
+        if (path.endsWith("/review/"))
+            return {
+                withdrawal_grade_correction: true,
+                grade: { code: "D", points_milli: 1000 },
+                reason: data.reason,
+                review_token: "private-proof",
+            };
+        return {
+            withdrawal_grade_correction: true,
+            posted: true,
+            can_amend: true,
+            current_grade_code: "W",
+            current_version: 2,
+            effective_on_default: "2026-09-02",
+            items: [{ id: "grade-d", code: "D", points_milli: 1000 }],
+        };
+    };
+    const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
+    const component = window.createWorkspaceTeaching(f.ui);
+    await component.recordFinalGrade({ id: "section" }, { student_id: "student" }, () => {});
+    assert.match(f.body().textContent, /earned credit stays zero and charges stay unchanged/);
+    assert.equal(
+        walk(f.body()).some((e) => e.tag === "button" && /completion date/.test(e.textContent)),
+        false,
+    );
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    form.elements.grade_id.value = "grade-d";
+    form.elements.reason.value = "Fictional late-drop marking correction.";
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.match(f.body().textContent, /Enrollment remains withdrawn. Earned credit remains zero/);
+    assert.equal(
+        f.sent.some((r) => r.path.endsWith("/commit/")),
+        false,
+    );
+    await f.click("Change review");
+    assert.equal(
+        walk(f.body()).find((e) => e.tag === "form"),
+        form,
+    );
+    assert.equal(form.elements.reason.value, "Fictional late-drop marking correction.");
 });

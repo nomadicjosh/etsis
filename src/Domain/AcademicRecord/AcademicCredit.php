@@ -84,9 +84,9 @@ final class AcademicCredit extends EventSourcedAggregate
         $p = $event->payload();
         $this->assertNext($p);
         if (
-            $this->credit === null ||
+            !$this->allowsGrade($event->metaParam("withdrawal_grade_correction", false)) ||
             $this->pendingGradeChange !== null ||
-            !in_array($this->credit["status"], ["A", "N"], true)
+            $this->credit === null
         ) {
             throw new CorruptHistoryException();
         }
@@ -96,7 +96,10 @@ final class AcademicCredit extends EventSourcedAggregate
     {
         $this->grade = $grade;
         $this->credit["grade_id"] = $grade["id"];
-        $this->credit["completed_milli"] = $grade["passes"] ? $this->credit["attempted_milli"] : 0;
+        $this->credit["completed_milli"] =
+        $grade["passes"] && in_array($this->credit["status"], ["A", "N"], true)
+        ? $this->credit["attempted_milli"]
+        : 0;
         $this->credit["grade_points_milli"] = $grade["counts_gpa"]
         ? intdiv($this->credit["attempted_milli"] * $grade["points_milli"], 1000)
         : 0;
@@ -114,7 +117,7 @@ final class AcademicCredit extends EventSourcedAggregate
             isset($this->gradeChanges[$p["decision_id"]]) ||
             $this->grade === null ||
             $this->credit === null ||
-            !in_array($this->credit["status"], ["A", "N"], true) ||
+            !$this->allowsGrade($event->metaParam("withdrawal_grade_correction", false)) ||
             $p["credit_version"] !== $this->credit["version"] ||
             $p["before_grade"] != $this->grade
         ) {
@@ -125,6 +128,7 @@ final class AcademicCredit extends EventSourcedAggregate
             "details" => $p,
             "status" => "pending",
             "version" => $event->playhead(),
+            "withdrawn" => $event->metaParam("withdrawal_grade_correction", false),
         ];
     }
     public function whenGradeChangeWasResolved(
@@ -143,7 +147,7 @@ final class AcademicCredit extends EventSourcedAggregate
         if ($p["outcome"] === "approved") {
             if (
                 $this->credit === null ||
-                !in_array($this->credit["status"], ["A", "N"], true) ||
+                !$this->allowsGrade($this->gradeChanges[$p["request_id"]]["withdrawn"]) ||
                 $this->decision !== $request["previous_decision_id"] ||
                 $this->credit["version"] !== $request["credit_version"] ||
                 $p["grade"] != $request["grade"] ||
@@ -160,6 +164,17 @@ final class AcademicCredit extends EventSourcedAggregate
     public function pendingGradeChange(): ?array
     {
         return $this->pendingGradeChange === null ? null : $this->gradeChanges[$this->pendingGradeChange];
+    }
+    private function allowsGrade(mixed $withdrawn): bool
+    {
+        if (!is_bool($withdrawn) || $this->credit === null) {
+            return false;
+        }
+        return $withdrawn
+        ? $this->credit["status"] === "W" &&
+        $this->credit["grade_id"] !== null &&
+        $this->credit["completed_milli"] === 0
+        : in_array($this->credit["status"], ["A", "N"], true);
     }
     public function gradeChange(string $id): ?array
     {

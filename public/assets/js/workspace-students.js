@@ -814,11 +814,17 @@ window.createWorkspaceStudents = function (ui) {
                                                         can(
                                                             "sis:gradebook:manage",
                                                         )) &&
-                                                    ["A", "N"].includes(
+                                                    (["A", "N"].includes(
                                                         item.status,
-                                                    )
+                                                    ) ||
+                                                        (item.status === "W" &&
+                                                            !!item.grade_id &&
+                                                            Number(item.completed_milli) === 0 &&
+                                                            can("sis:gradebook:closed")))
                                                     ? button(
-                                                          "Review final grade",
+                                                          item.status === "W"
+                                                              ? "Correct withdrawn grade"
+                                                              : "Review final grade",
                                                           () =>
                                                               ui
                                                                   .teaching()

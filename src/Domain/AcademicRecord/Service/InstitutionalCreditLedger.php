@@ -142,7 +142,14 @@ final readonly class InstitutionalCreditLedger
     ): array {
         $this->readAuthority($section);
         [$id, $root, $facts] = $this->source($enrollment, $student, $section);
-        $this->active($enrollment, $student, $section, new EntityId($facts["term_id"]));
+        $withdrawn = $this->withdrawn($facts);
+        $this->gradeEnrollmentScope(
+            $enrollment,
+            $student,
+            $section,
+            new EntityId($facts["term_id"]),
+            $withdrawn,
+        );
         $policies = $root->policies();
         $pursuits =
         $policies === []
@@ -173,6 +180,7 @@ final readonly class InstitutionalCreditLedger
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
             "can_amend" => $this->canAmend(),
+            "withdrawal_grade_correction" => $withdrawn,
             "requires_approval" => $this->changes->policy()["mode"] === "approval",
             "pending_grade_change" =>
                 $root->pendingGradeChange() === null
@@ -182,6 +190,7 @@ final readonly class InstitutionalCreditLedger
                         "status" => "pending",
                     ],
             "can_accept_course" =>
+                !$withdrawn &&
                 $this->canAmend() &&
                 $root->canAcceptCourse() &&
                 ($root->playhead() > 0 || $facts["course_version_id"] === null),
@@ -189,6 +198,7 @@ final readonly class InstitutionalCreditLedger
             "history_recorded" => $root->playhead() > 0,
             "posted" => new CreditSnapshot($facts)->posted(),
             "can_record_academic_period" =>
+                !$withdrawn &&
                 $this->canAmend() &&
                 $root->sectionVersion() === null &&
                 $root->playhead() > 0 &&
@@ -226,7 +236,14 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             [$id, $root, $facts] = $this->source($enrollment, $student, $section);
-            $this->active($enrollment, $student, $section, new EntityId($facts["term_id"]));
+            $withdrawn = $this->withdrawn($facts);
+            $this->gradeEnrollmentScope(
+                $enrollment,
+                $student,
+                $section,
+                new EntityId($facts["term_id"]),
+                $withdrawn,
+            );
             if ($facts["version"] !== $version) {
                 throw new ConcurrentModificationException(
                     "Reload the academic record before reviewing a grade.",
@@ -238,7 +255,7 @@ final readonly class InstitutionalCreditLedger
                     "Resolve the pending grade correction before requesting another.",
                 );
             }
-            $actor = $this->authority($section, $amend);
+            $actor = $this->authority($section, $amend, $withdrawn);
             $policy = $this->changes->policy();
             $reason = trim($reason);
             if ($reason === "" && !$amend) {
@@ -274,6 +291,7 @@ final readonly class InstitutionalCreditLedger
                 "operation_id" => $op->value,
                 "actor_id" => $actor->value,
                 "amendment" => $amend,
+                "withdrawal_grade_correction" => $withdrawn,
                 "requires_approval" => $amend && $policy["mode"] === "approval",
                 "grade_change_policy" => $policy,
                 "expected_version" => $root->playhead(),
@@ -296,7 +314,7 @@ final readonly class InstitutionalCreditLedger
                             ->facts),
             ];
             $this->actor($actor);
-            $this->authority($section, $amend);
+            $this->authority($section, $amend, $withdrawn);
             return $data + ["review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
         });
     }
@@ -319,7 +337,7 @@ final readonly class InstitutionalCreditLedger
         } catch (Throwable) {
             self::invalid("review_token", "Review the final grade again.");
         }
-        $actor = $this->authority($section, $d["amendment"]);
+        $actor = $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
         if ($actor->value !== $d["actor_id"]) {
             throw new AccessDeniedException("This grade review belongs to another staff member.");
         }
@@ -327,7 +345,7 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             $this->actor($actor);
-            $this->authority($section, $d["amendment"]);
+            $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
             $id = new EntityId($d["credit_id"]);
             $root = $this->load($id);
             $op = new EntityId($d["operation_id"]);
@@ -359,6 +377,9 @@ final readonly class InstitutionalCreditLedger
                 "assignment_id" => $d["assignment_id"],
             ];
             $metadata = ["__aggregate_type" => "academic_credit"];
+            if ($d["withdrawal_grade_correction"] ?? false) {
+                $metadata["withdrawal_grade_correction"] = true;
+            }
             if ($requested) {
                 $payload += [
                     "actor_id" => $actor->value,
@@ -412,11 +433,12 @@ final readonly class InstitutionalCreditLedger
                     );
                 }
                 $current = $this->records->projection($id) ?? throw new CorruptHistoryException();
-                $this->active(
+                $this->gradeEnrollmentScope(
                     new EntityId($d["enrollment_id"]),
                     $student,
                     $section,
                     new EntityId($d["before"]["term_id"]),
+                    $d["withdrawal_grade_correction"] ?? false,
                 );
                 if (!$this->same($current, $d["before"])) {
                     throw new ConcurrentModificationException(
@@ -488,7 +510,7 @@ final readonly class InstitutionalCreditLedger
                 }
             }
             $this->actor($actor);
-            $this->authority($section, $d["amendment"]);
+            $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
             return $receipt;
         });
     }
@@ -555,6 +577,15 @@ final readonly class InstitutionalCreditLedger
             $canReview = $request["actor_id"] !== $actor->value;
         } catch (AccessDeniedException) {
         }
+        $withdrawn = $root->gradeChange($id->value)["withdrawn"];
+        $canApprove = $canReview;
+        if ($withdrawn) {
+            try {
+                $this->access->requirePermission("sis:gradebook:closed");
+            } catch (AccessDeniedException) {
+                $canApprove = false;
+            }
+        }
         $this->audit->record($actor, "academic.grade_change_viewed", $id);
         $this->actor($actor);
         $this->gradeChangeAuthority();
@@ -571,7 +602,8 @@ final readonly class InstitutionalCreditLedger
             "reason" => $request["reason"],
             "effective_at" => $request["effective_at"],
             "stale" => $stale,
-            "can_approve" => $row["status"] === "pending" && $canReview && !$stale,
+            "withdrawal_grade_correction" => $withdrawn,
+            "can_approve" => $row["status"] === "pending" && $canApprove && !$stale,
             "can_reject" => $row["status"] === "pending" && $canReview,
             "can_cancel" => $row["status"] === "pending" && $request["actor_id"] === $actor->value,
         ];
@@ -589,7 +621,7 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             [$root, $row] = $this->gradeChangeRecord($id);
-            $actor = $this->resolutionAuthority($row, $outcome);
+            $actor = $this->resolutionAuthority($row, $outcome, $root->gradeChange($id->value)["withdrawn"]);
             if ($row["status"] !== "pending") {
                 throw new ConcurrentModificationException("This grade correction has already been resolved.");
             }
@@ -627,7 +659,7 @@ final readonly class InstitutionalCreditLedger
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             $this->actor($actor);
-            $this->resolutionAuthority($row, $outcome);
+            $this->resolutionAuthority($row, $outcome, $root->gradeChange($id->value)["withdrawn"]);
             return [
                 "outcome" => $outcome,
                 "reason" => $reason,
@@ -661,7 +693,11 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             [$root, $row] = $this->gradeChangeRecord($id);
-            $actor = $this->resolutionAuthority($row, $d["outcome"]);
+            $actor = $this->resolutionAuthority(
+                $row,
+                $d["outcome"],
+                $root->gradeChange($id->value)["withdrawn"],
+            );
             if (
                 $actor->value !== $d["actor_id"] ||
                 $row["credit_id"] !== $d["credit_id"] ||
@@ -741,7 +777,7 @@ final readonly class InstitutionalCreditLedger
                 }
             }
             $this->actor($actor);
-            $this->resolutionAuthority($row, $d["outcome"]);
+            $this->resolutionAuthority($row, $d["outcome"], $root->gradeChange($id->value)["withdrawn"]);
             return $receipt;
         });
     }
@@ -753,9 +789,12 @@ final readonly class InstitutionalCreditLedger
         }
         return $actor;
     }
-    private function resolutionAuthority(array $row, string $outcome): EntityId
+    private function resolutionAuthority(array $row, string $outcome, bool $withdrawn): EntityId
     {
         $actor = $this->gradeChangeAuthority();
+        if ($outcome === "approved" && $withdrawn) {
+            $this->access->requirePermission("sis:gradebook:closed");
+        }
         if (!in_array($outcome, ["approved", "rejected", "cancelled"], true)) {
             self::invalid("outcome", "Choose approve, reject or cancel.");
         }
@@ -789,11 +828,12 @@ final readonly class InstitutionalCreditLedger
             );
         }
         $student = new EntityId($row["student_id"]);
-        $this->active(
+        $this->gradeEnrollmentScope(
             new EntityId($row["enrollment_id"]),
             $student,
             new EntityId($row["section_id"]),
             new EntityId($facts["term_id"]),
+            $root->gradeChange($row["id"])["withdrawn"],
         );
         $available = $this->gradeChoices(
             $root,
@@ -1207,21 +1247,49 @@ final readonly class InstitutionalCreditLedger
     {
         return PublishedGradeId::forVersion($correlation, "academic." . $kind . "." . $credit->value);
     }
-    private function active(EntityId $enrollment, EntityId $student, EntityId $section, EntityId $term): void
+    private function withdrawn(array $facts): bool
     {
+        if ($facts["status"] !== "W") {
+            return false;
+        }
+        if ($facts["grade_id"] === null || $facts["completed_milli"] !== 0) {
+            self::invalid(
+                "grade_id",
+                "Review this withdrawn record’s earlier grade and earned-credit evidence before correcting it.",
+            );
+        }
+        return true;
+    }
+    private function gradeEnrollmentScope(
+        EntityId $enrollment,
+        EntityId $student,
+        EntityId $section,
+        EntityId $term,
+        bool $withdrawn = false,
+    ): void {
+        if ($withdrawn) {
+            $this->authority($section, true, true);
+        }
         $r = $this->records->enrollment($enrollment);
         if (
             $r === null ||
             $r["student_id"] !== $student->value ||
             $r["section_id"] !== $section->value ||
             $r["term_id"] !== $term->value ||
-            !in_array($r["status"], ["A", "N"], true)
+            ($withdrawn ? $r["status"] !== "W" : !in_array($r["status"], ["A", "N"], true))
         ) {
-            throw new ConcurrentModificationException("The enrollment is no longer active.");
+            throw new ConcurrentModificationException(
+                $withdrawn
+                    ? "The withdrawn enrollment no longer matches this grade review."
+                    : "The enrollment is no longer active.",
+            );
         }
     }
-    private function authority(EntityId $section, bool $amendment): EntityId
+    private function authority(EntityId $section, bool $amendment, bool $withdrawn = false): EntityId
     {
+        if ($withdrawn) {
+            $this->access->requirePermission("sis:gradebook:closed");
+        }
         if ($amendment) {
             $actor = $this->access->requirePermission("sis:gradebook:amend");
             $this->access->requirePermission("sis:student:read");

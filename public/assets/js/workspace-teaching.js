@@ -430,7 +430,7 @@ window.createWorkspaceTeaching = function (ui) {
                     ),
                 ),
             );
-        if (choices.posted && choices.can_amend)
+        if (choices.posted && choices.can_amend && !choices.withdrawal_grade_correction)
             related.append(
                 button("Review actual completion date", () =>
                     academicDate(sectionRow, student, choices, () =>
@@ -461,6 +461,14 @@ window.createWorkspaceTeaching = function (ui) {
             );
             return;
         }
+        if (choices.withdrawal_grade_correction)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "This corrects the withdrawn grade only. Enrollment stays withdrawn, earned credit stays zero and charges stay unchanged. The selected grade definition determines its GPA treatment.",
+                ),
+            );
         const descriptors = [
             [
                 "grade_id",
@@ -524,6 +532,13 @@ window.createWorkspaceTeaching = function (ui) {
                     "REVIEW ACADEMIC DECISION",
                 );
                 confirmation.append(
+                    review.withdrawal_grade_correction
+                        ? node(
+                              "p",
+                              { class: "alert alert-info" },
+                              "Enrollment remains withdrawn. Earned credit remains zero. Charges stay unchanged; the selected grade definition controls GPA treatment.",
+                          )
+                        : null,
                     review.requires_approval
                         ? node(
                               "p",
@@ -571,7 +586,7 @@ window.createWorkspaceTeaching = function (ui) {
     }
     async function gradeChanges() {
         const body = openDrawer("Grade corrections", "ACADEMIC RECORDS");
-        body.append(button('Refresh', gradeChanges, 'btn-outline-secondary btn-sm'));
+        body.append(button("Refresh", gradeChanges, "btn-outline-secondary btn-sm"));
         body.append(
             node(
                 "p",
@@ -643,6 +658,14 @@ window.createWorkspaceTeaching = function (ui) {
         if (!body.isConnected) return;
         const content = node("div");
         body.append(content);
+        if (record.withdrawal_grade_correction)
+            content.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "This request corrects a withdrawn grade. It does not reopen the enrollment, award earned credit or change charges. Approval requires separate withdrawn-grade correction authority.",
+                ),
+            );
         content.append(
             button("Back", back, "btn-link"),
             recordSummary([
