@@ -41,10 +41,14 @@ final readonly class Enrollment
         );
     }
 
-    public function withdrawOnDate(Term $term, DateTimeImmutable $on): self
+    public function withdrawOnDate(EntityId $term, DateTimeImmutable $on, string $graceEndsOn): self
     {
+        $deadline = DateTimeImmutable::createFromFormat('!Y-m-d', $graceEndsOn);
+        if ($deadline === false || $deadline->format('Y-m-d') !== $graceEndsOn) {
+            throw new DomainException('A valid reviewed drop/add deadline is required.');
+        }
         if (
-            !$this->status->isEnrolled() || $term->id->value !== $this->termId->value
+            !$this->status->isEnrolled() || $term->value !== $this->termId->value
             || $on->format('Y-m-d') < $this->registeredAt->setTimezone($on->getTimezone())->format('Y-m-d')
         ) {
             throw new DomainException('A current enrollment and a valid effective date are required.');
@@ -54,7 +58,7 @@ final readonly class Enrollment
             $this->studentId,
             $this->sectionId,
             $this->termId,
-            $term->dropStatusOn($on),
+            $on->format('Y-m-d') <= $graceEndsOn ? RegistrationStatus::Dropped : RegistrationStatus::Withdrawn,
             $this->registeredAt,
             $on,
             $this->version + 1

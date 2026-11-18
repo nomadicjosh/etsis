@@ -111,6 +111,15 @@ final class ConsoleBootstrapTest extends TestCase
             $process->getErrorOutput(),
         );
     }
+    public function testDropPolicyPublicationUsesActualProvidersCsrfAndPrivateHistory(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-drop-policy']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testProfileUpdatesUseTheConfiguredEventStoreThroughTheCommandBus(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

@@ -18,7 +18,8 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
     }
     public function calendar(EntityId $term): array
     {
-        return $this->sql->one("sis_terms", ["id" => $term->value]);
+        return $this->sql->current("sis_terms", $term->value) ??
+        throw new \Domain\Shared\Exception\RecordNotFoundException();
     }
     public function lockTerm(EntityId $term): void
     {
@@ -26,25 +27,59 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
     }
     public function find(EntityId $term): ?array
     {
-        $r = $this->sql->rows("sis_term_drop_policies", ["term_id" => $term->value], 1)[0] ?? null;
+        $r = $this->sql->current(
+            "sis_term_drop_policies",
+            $term->value,
+            "term_id",
+        );
         return $r === null
         ? null
         : [
                 "version" => (int) $r["version"],
-                "windows" => json_decode($r["windows"], true, 16, JSON_THROW_ON_ERROR),
+                "windows" => json_decode(
+                    $r["windows"],
+                    true,
+                    16,
+                    JSON_THROW_ON_ERROR,
+                ),
+                "publication_id" => $r["publication_id"],
+                "calendar" =>
+                    $r["calendar_snapshot"] === null
+                        ? null
+                        : json_decode(
+                            $r["calendar_snapshot"],
+                            true,
+                            16,
+                            JSON_THROW_ON_ERROR,
+                        ),
             ];
     }
-    public function save(EntityId $term, int $version, array $windows): void
-    {
+    public function save(
+        EntityId $term,
+        int $version,
+        array $windows,
+        EntityId $publication,
+        array $calendar,
+    ): void {
         $current = $this->find($term);
         if (($current["version"] ?? -1) !== $version) {
-            throw new ConcurrentModificationException("Reload the drop policy before saving.");
+            throw new ConcurrentModificationException(
+                "Reload the drop policy before saving.",
+            );
         }
-        $values = ["version" => $version + 1, "windows" => json_encode($windows, JSON_THROW_ON_ERROR)];
+        $values = [
+            "version" => $version + 1,
+            "windows" => json_encode($windows, JSON_THROW_ON_ERROR),
+            "publication_id" => $publication->value,
+            "calendar_snapshot" => json_encode($calendar, JSON_THROW_ON_ERROR),
+        ];
         if ($current === null) {
             $this->sql->insert(
                 "sis_term_drop_policies",
-                ["id" => EntityId::generate()->value, "term_id" => $term->value] + $values,
+                [
+                    "id" => EntityId::generate()->value,
+                    "term_id" => $term->value,
+                ] + $values,
             );
         } elseif (
             $this->sql->update("sis_term_drop_policies", $values, [
@@ -52,7 +87,9 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
                 "version" => $version,
             ]) !== 1
         ) {
-            throw new ConcurrentModificationException("The drop policy changed.");
+            throw new ConcurrentModificationException(
+                "The drop policy changed.",
+            );
         }
     }
     public function grade(string $code, ?EntityId $student = null): ?array

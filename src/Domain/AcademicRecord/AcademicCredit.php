@@ -176,6 +176,13 @@ final class AcademicCredit extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $o = $p["outcome"];
+        $reference = $event->metaParam('drop_policy', null);
+        if ($reference !== null) {
+            \Domain\Registration\ValueObject\DropPolicyReference::validate($reference, $o['policy_version']);
+            if ($reference['term_id'] !== $this->credit['term_id']) {
+                throw new CorruptHistoryException();
+            }
+        }
         $this->credit["status"] = $o["delete_records"] ? "D" : "W";
         $this->credit["grade_id"] = $o["grade_id"];
         $this->credit["completed_milli"] = 0;

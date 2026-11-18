@@ -3133,9 +3133,10 @@ if (
     $app->router
         ->match($get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $dropPolicyPath)))
         ->getStatusCode() !== 200 ||
-    $teachingPost($dropPolicyPath, [
+    $teachingPost($dropPolicyPath . "review/", [
         "version" => -1,
         "windows" => [["through" => null, "grade_code" => "MISSING"]],
+        "reason" => "Fictional policy review",
     ])->getStatusCode() !== 422
 ) {
     throw new RuntimeException("Drop policy provider or validation failed.");

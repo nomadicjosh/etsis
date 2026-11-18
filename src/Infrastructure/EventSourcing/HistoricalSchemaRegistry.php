@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\DropPolicyWasPublished::class => [
+                'type' => 'term_drop_policy', 'root' => \Domain\Registration\DropPolicyPublication::class,
+                'fields' => \Domain\Registration\DropPolicyPublication::FIELDS,
+            ],
             \Domain\Student\Event\RestrictionOfficeWasChanged::class => [
                 'type' => 'person_restrictions', 'root' => \Domain\Student\PersonRestrictions::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'restriction_id',
@@ -485,6 +489,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Registration\Event\DropPolicyWasPublished::class) {
+                \Domain\Registration\DropPolicyPublication::validate($payload);
+                if ($payload['definition']['term_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if (
                 in_array($class, [\Domain\Finance\Event\AccountEntryWasCorrected::class,
                     \Domain\Finance\Event\AccountChargeWasCredited::class,
@@ -825,6 +835,12 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 if (str_ends_with((string) $name, "_id")) {
                     if (
+                        $class === \Domain\Registration\Event\DropPolicyWasPublished::class
+                        && $name === 'previous_publication_id' && $value === null
+                    ) {
+                        continue;
+                    }
+                    if (
                         in_array($class, [\Domain\Person\Event\PersonProfileWasRecorded::class,
                             \Domain\Student\Event\PersonRestrictionsWereRecorded::class,
                             \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class,
@@ -880,6 +896,16 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'drop_policy') {
+                    if ($class !== \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Registration\ValueObject\DropPolicyReference::validate(
+                        $value,
+                        $payload['outcome']['policy_version'],
+                    );
+                    continue;
+                }
                 if ($name === 'admission_checklist') {
                     if (
                         !in_array($class, [\Domain\Admissions\Event\AdmissionWasDecided::class,

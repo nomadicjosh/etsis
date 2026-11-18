@@ -137,8 +137,8 @@ final class AcademicPolicyInputsTest extends TestCase
         $student = $f->student()->id;
         $section = $f->section(20, 0);
         $f->service->register($student, $section->id);
-        $f->dropPolicies->save($f->term, -1, new DropWindows([["through" => null, "grade_code" => "D"]]));
-        $f->clock->time = new DateTimeImmutable("2026-08-20T12:00:00Z");
+        $f->publishDropPolicy($f->term, -1, new DropWindows([["through" => null, "grade_code" => "D"]]));
+        $f->clock->time = new DateTimeImmutable("2026-08-20T12:00:00Z")->setTimezone($f->clock->now()->getTimezone());
         $review = $f->drops->review($student, $section->id);
         $f->drops->commit(
             $student,

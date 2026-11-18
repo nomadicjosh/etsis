@@ -104,37 +104,112 @@ window.createWorkspaceCourseDrops = function (ui) {
         );
     }
     async function policy(term, back) {
-        const data = await request(`/sis/terms/${term.id}/drop-policy/`);
-        const body = openDrawer("Drop / withdrawal policy", "ACADEMIC TERM");
+        const path = `/sis/terms/${term.id}/drop-policy/`;
+        const data = await request(path);
+        const drawer = openDrawer("Drop / withdrawal policy", "ACADEMIC TERM");
+        const body = node("div");
+        drawer.append(body);
+        let view = 0;
+        let active = true;
+        const leave = async () => {
+            active = false;
+            await back();
+        };
+        const summary = (definition) =>
+            node(
+                "div",
+                {},
+                node(
+                    "p",
+                    {},
+                    `Drop/add ends ${definition.grace_ends_on}. Dates use ${definition.timezone}.`,
+                ),
+                node(
+                    "ul",
+                    {},
+                    ...definition.windows.map((w) =>
+                        node(
+                            "li",
+                            {},
+                            `${w.through ? `Through ${w.through}` : "All later dates"}: ${w.grade_code}`,
+                        ),
+                    ),
+                ),
+            );
         body.append(
             node("h3", {}, data.term.code),
             node(
                 "p",
                 {},
-                `Through ${data.term.add_drop_ends_on}, courses are removed and their original course charges reversed. After that date, the periods below assign a grade and retain charges. All late drops earn zero credits.`,
+                `Term drop/add deadline: ${data.term.add_drop_ends_on}. During drop/add, courses are removed and original course charges reversed. Later drops retain charges and receive the applicable grade, with zero earned credits.`,
             ),
             node(
                 "p",
                 { class: "form-text" },
-                "Use grade codes already defined in the academic catalog. Their GPA settings apply. Cutoff dates are inclusive in the institution’s timezone. The final period covers all later dates.",
+                "Use catalog grade codes. Each student's retained grading scale determines GPA treatment. Cutoffs are inclusive; the final period covers all later dates.",
             ),
         );
+        if (data.published)
+            body.append(
+                node(
+                    "section",
+                    {
+                        class: "border rounded-3 p-3 mb-3",
+                        "aria-label": "Current published policy",
+                    },
+                    node("h4", {}, `Published revision ${data.version + 1}`),
+                    summary(data.published),
+                ),
+            );
+        if (data.calendar_changed)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning" },
+                    "The term dates or timezone have changed. Date edits do not replace the published deadline. Review and publish the updated setup for future drops. A timezone change requires publication before new drops can proceed. Completed drops remain unchanged.",
+                ),
+            );
         if (data.default_policy)
             body.append(
                 node(
                     "p",
                     { class: "alert alert-info" },
-                    "Currently using the default W marker, excluded from GPA. Save explicit periods to use your catalog grade definitions.",
+                    "The default W marker is excluded from GPA. Publish explicit periods to use catalog grade definitions.",
                 ),
             );
-        let windows = data.windows.map((window) => ({ ...window }));
+        else if (!data.published)
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "These previously saved periods have no retained publication. Their earlier approval details are unknown. Publishing retains a new reviewed definition.",
+                ),
+            );
+        let windows = data.windows.map((w) => ({ ...w }));
         const periods = node("div");
         const status = node("p", { role: "status", "aria-live": "polite" });
+        const reason = node("textarea", {
+            id: "drop-policy-reason",
+            class: "form-control",
+            rows: 3,
+            maxlength: 1000,
+            required: true,
+        });
+        const reasonField = node(
+            "div",
+            { class: "mb-3" },
+            node(
+                "label",
+                { for: "drop-policy-reason", class: "form-label" },
+                "Reason for policy change",
+            ),
+            reason,
+        );
         let forms = [];
         const collect = () =>
-            forms.map((form, index) => ({
+            forms.map((form, i) => ({
                 through:
-                    index === forms.length - 1
+                    i === forms.length - 1
                         ? null
                         : form.elements.namedItem("through").value,
                 grade_code: form.elements
@@ -154,10 +229,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                     ["grade_code", "Catalog grade code"],
                 ];
                 const form = await buildForm(fields, window);
-                // Each period is a field group; a single explicit Save controls submission.
-                form.addEventListener("submit", (event) =>
-                    event.preventDefault(),
-                );
+                form.addEventListener("submit", (e) => e.preventDefault());
                 forms.push(form);
                 const block = node(
                     "section",
@@ -185,9 +257,94 @@ window.createWorkspaceCourseDrops = function (ui) {
             status.textContent = `${windows.length} grade period${windows.length === 1 ? "" : "s"}.`;
         }
         await render();
+        const edit = () => {
+            view++;
+            body.replaceChildren(...editor);
+            reason.focus();
+        };
+        const heading = (text) => {
+            const h = node("h3", { tabindex: "-1" }, text);
+            return h;
+        };
+        async function history() {
+            const currentView = ++view;
+            const result = await request(path + "history/");
+            if (!active || body.isConnected === false || currentView !== view)
+                return;
+            const title = heading("Policy history");
+            const entries = node("div");
+            const count = node("p", { role: "status", "aria-live": "polite" });
+            let shown = 0;
+            function append(page) {
+                for (const item of page.items) {
+                    const section = node(
+                        "section",
+                        { class: "border rounded-3 p-3 mb-3" },
+                        node("h4", {}, `Revision ${item.version + 1}`),
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            `Published ${item.recorded_at}`,
+                        ),
+                        summary(item.definition),
+                    );
+                    if (item.observed_previous_policy)
+                        section.append(
+                            node(
+                                "p",
+                                { class: "form-text" },
+                                "Earlier saved periods were observed at this publication. Their original approval and dates are unknown.",
+                            ),
+                            node(
+                                "ul",
+                                {},
+                                ...item.observed_previous_policy.windows.map(
+                                    (w) =>
+                                        node(
+                                            "li",
+                                            {},
+                                            `${w.through ? `Through ${w.through}` : "All later dates"}: ${w.grade_code}`,
+                                        ),
+                                ),
+                            ),
+                        );
+                    entries.append(section);
+                    shown++;
+                }
+                count.textContent = shown
+                    ? `${shown} retained publication${shown === 1 ? "" : "s"}.`
+                    : "No retained publications yet.";
+            }
+            let cursor = result.next_cursor;
+            const more = button("Load more", async () => {
+                const next = await request(
+                    path + "history/?cursor=" + encodeURIComponent(cursor),
+                );
+                if (
+                    !active ||
+                    body.isConnected === false ||
+                    currentView !== view
+                )
+                    return;
+                append(next);
+                cursor = next.next_cursor;
+                more.hidden = !cursor;
+            });
+            append(result);
+            more.hidden = !cursor;
+            body.replaceChildren(
+                title,
+                count,
+                entries,
+                more,
+                button("Back to policy", edit),
+            );
+            title.focus();
+        }
         body.append(
             periods,
             status,
+            reasonField,
             node(
                 "div",
                 { class: "d-flex flex-wrap gap-2" },
@@ -201,23 +358,71 @@ window.createWorkspaceCourseDrops = function (ui) {
                     return render();
                 }),
                 button(
-                    "Save drop policy",
+                    "Review policy",
                     async () => {
-                        if (!forms.every((form) => form.reportValidity()))
+                        if (
+                            !forms.every((f) => f.reportValidity()) ||
+                            !reason.reportValidity()
+                        )
                             return;
-                        await request(
-                            `/sis/terms/${term.id}/drop-policy/`,
-                            "POST",
-                            { version: data.version, windows: collect() },
+                        const currentView = ++view;
+                        const reviewedReason = reason.value;
+                        const review = await request(path + "review/", "POST", {
+                            version: data.version,
+                            windows: collect(),
+                            reason: reviewedReason,
+                        });
+                        if (
+                            !active ||
+                            body.isConnected === false ||
+                            currentView !== view
+                        )
+                            return;
+                        const title = heading("Review drop policy");
+                        const notes = node(
+                            "p",
+                            {},
+                            "This definition applies to new drop decisions after publication. Completed drops, their grades and financial results remain unchanged.",
                         );
-                        notify("Term drop policy saved.");
-                        await back();
+                        let saved = false;
+                        body.replaceChildren(
+                            title,
+                            summary(review.definition),
+                            notes,
+                            node("p", {}, `Reason: ${reviewedReason}`),
+                            node(
+                                "div",
+                                { class: "d-flex flex-wrap gap-2" },
+                                button("Revise", edit),
+                                button(
+                                    "Publish policy",
+                                    async () => {
+                                        if (saved) return;
+                                        await request(
+                                            path + "commit/",
+                                            "POST",
+                                            {
+                                                review_token:
+                                                    review.review_token,
+                                            },
+                                        );
+                                        saved = true;
+                                        notify("Term drop policy published.");
+                                        await leave();
+                                    },
+                                    true,
+                                ),
+                            ),
+                        );
+                        title.focus();
                     },
                     true,
                 ),
-                button("Back to term", back),
+                button("Policy history", history),
+                button("Back to term", leave),
             ),
         );
+        const editor = Array.from(body.childNodes);
     }
     return { review, policy };
 };

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// Minimal shared HTTP setup for focused admissions checks. Included by the isolated console fixture only.
+// Minimal shared HTTP setup for focused SIS checks. Included by the isolated console fixture only.
 require_once __DIR__ . "/SisFixture.php";
 $sis = new SisFixture();
 $originalSubmissionActor = $sis->access->actor;
@@ -122,7 +122,7 @@ $teachingPost = static function (
     $request->getBody()->rewind();
     if ($app->router->match($request)->getStatusCode() !== 403) {
         throw new RuntimeException(
-            "An admissions mutation bypassed framework CSRF.",
+            "A workspace mutation bypassed framework CSRF.",
         );
     }
     $request->getBody()->rewind();
@@ -134,7 +134,7 @@ $teachingPost = static function (
         $response->hasHeader("phpdebugbar-id")
     ) {
         throw new RuntimeException(
-            "A private admissions response lost cache or debug protections.",
+            "A private workspace response lost cache or debug protections.",
         );
     }
     return $response;

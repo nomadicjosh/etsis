@@ -464,7 +464,8 @@ final readonly class InstitutionalCreditLedger
                 "outcome" => $o,
                 "grade" => $grade,
             ],
-            ["__aggregate_type" => "academic_credit"],
+            ["__aggregate_type" => "academic_credit"] + (isset($outcome['policy_reference'])
+                ? ['drop_policy' => $outcome['policy_reference']] : []),
         )->withPlayhead($root->playhead() + 1);
         $this->history->append($this->stream($id), $op, $root->playhead(), $context, [$event]);
         $root->acceptHistorical($event);

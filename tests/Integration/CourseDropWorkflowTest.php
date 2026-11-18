@@ -206,7 +206,7 @@ final class CourseDropWorkflowTest extends TestCase
             $student = $f->student();
             $section = $f->section();
             $enrollment = $f->service->register($student->id, $section->id);
-            $f->dropPolicies->save(
+            $f->publishDropPolicy(
                 $f->term,
                 -1,
                 new DropWindows([
@@ -305,7 +305,7 @@ final class CourseDropWorkflowTest extends TestCase
             } elseif ($change === "date") {
                 $f->clock->time = $f->clock->time->modify("+1 day");
             } else {
-                $f->dropPolicies->save(
+                $f->publishDropPolicy(
                     $f->term,
                     -1,
                     new DropWindows([["through" => null, "grade_code" => "D"]]),
@@ -352,17 +352,17 @@ final class CourseDropWorkflowTest extends TestCase
         $this->grades($f);
         $windows = new DropWindows([["through" => null, "grade_code" => "W"]]);
         self::assertSame(-1, $f->dropPolicies->show($f->term)["version"]);
-        $f->dropPolicies->save($f->term, -1, $windows);
+        $f->publishDropPolicy($f->term, -1, $windows);
         self::assertSame(0, $f->dropPolicies->show($f->term)["version"]);
         try {
-            $f->dropPolicies->save($f->term, -1, $windows);
+            $f->publishDropPolicy($f->term, -1, $windows);
             self::fail("Stale policy saved.");
         } catch (ConcurrentModificationException) {
             self::assertCount(1, $f->sql->rows("sis_term_drop_policies"));
         }
         $f->access->staff = false;
         $f->access->grants = ["sis:registration:manage"];
-        $cases3 = [fn() => $f->dropPolicies->show($f->term), fn() => $f->dropPolicies->save($f->term, 0, $windows)];
+        $cases3 = [fn() => $f->dropPolicies->show($f->term), fn() => $f->publishDropPolicy($f->term, 0, $windows)];
         foreach ($cases3 as $call) {
             try {
                 $call();
@@ -383,7 +383,7 @@ final class CourseDropWorkflowTest extends TestCase
             ];
         foreach ($cases4 as $windows) {
             try {
-                $f->dropPolicies->save($f->term, -1, new DropWindows($windows));
+                $f->publishDropPolicy($f->term, -1, new DropWindows($windows));
                 self::fail("Invalid policy saved.");
             } catch (ValidationException) {
                 self::assertSame([], $f->sql->rows("sis_term_drop_policies"));
@@ -421,6 +421,8 @@ final class CourseDropWorkflowTest extends TestCase
     {
         $h = new HiatusFixture();
         $f = $h->sis;
+        $this->grades($f);
+        $f->publishDropPolicy($f->term, -1, new DropWindows([["through" => null, "grade_code" => "W"]]));
         $student = $f->student();
         $a = $f->section();
         $b = $f->section();

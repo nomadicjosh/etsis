@@ -8,7 +8,7 @@ return [
     'path' => env(key: 'COOKIE_PATH', default: '/'),
     'domain' => env(key: 'COOKIE_DOMAIN', default: ''),
     // Authentication envelopes require positive lifetimes (seconds).
-    'lifetime' => 3600,
+    'lifetime' => 86400,
     'remember' => 2592000,
     'secure' => env(key: 'COOKIE_SECURE', default: true),
     'samesite' => env(key: 'COOKIE_SAMESITE', default: 'lax'),

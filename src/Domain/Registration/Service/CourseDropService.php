@@ -136,7 +136,7 @@ final readonly class CourseDropService
                 $this->registration->enrollment($student, $section) ??
                 throw new RecordNotFoundException("Enrollment not found.");
             $when = new DateTimeImmutable($effective, $this->clock->now()->getTimezone());
-            $closed = $current->withdrawOnDate($this->registration->term($current->termId), $when);
+            $closed = $current->withdrawOnDate($current->termId, $when, $context["outcome"]["grace_ends_on"]);
             $this->credits->drop(
                 $closed,
                 $context["outcome"],

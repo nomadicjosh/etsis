@@ -22,18 +22,56 @@ final readonly class SisDropPolicyController
     {
         return new JsonResponse($this->service->show(new EntityId($term)));
     }
-    public function save(ServerRequest $request, string $term): ResponseInterface
-    {
+    public function review(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $term,
+    ): ResponseInterface {
         $body = $request->getParsedBody();
         $windows = is_array($body) ? $body["windows"] ?? null : null;
         if (!is_array($windows) || !array_is_list($windows)) {
-            throw new ValidationException([["field" => "windows", "message" => "Provide the dated grade periods."]]);
+            throw new ValidationException([
+                [
+                    "field" => "windows",
+                    "message" => "Provide the dated grade periods.",
+                ],
+            ]);
         }
-        $this->service->save(
-            new EntityId($term),
-            FormInput::from($request)->integer("version", -1),
-            new DropWindows($windows),
+        return new JsonResponse(
+            $this->service->review(
+                new EntityId($term),
+                FormInput::from($request)->integer("version", -1),
+                new DropWindows($windows),
+                is_string($body["reason"] ?? null) ? $body["reason"] : "",
+            ),
         );
-        return new JsonResponse(["status" => "saved"]);
+    }
+    public function commit(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $term,
+    ): ResponseInterface {
+        return new JsonResponse(
+            $this->service->commit(
+                new EntityId($term),
+                FormInput::from($request)->text("review_token", 65536),
+            ),
+        );
+    }
+
+    public function history(
+        ServerRequest $request,
+        string $term,
+    ): ResponseInterface {
+        $cursor = $request->getQueryParams()["cursor"] ?? null;
+        if (
+            $cursor !== null &&
+            (!is_string($cursor) || strlen($cursor) > 8192)
+        ) {
+            throw new \InvalidArgumentException(
+                "A valid history cursor is required.",
+            );
+        }
+        return new JsonResponse(
+            $this->service->history(new EntityId($term), $cursor),
+        );
     }
 }

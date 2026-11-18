@@ -24,6 +24,8 @@ async function fixture(page, late = false) {
         else if (path === '/sis/registrations/drop/' || path === '/portal/api/drop/') {
             committed = true; status = 500; result = { error: 'Fictional interrupted connection. Check saved drop.' };
         } else if (path.includes('/course-drops/') || path.includes('/drop-receipts/')) result = receipt;
+        else if (path.endsWith('/drop-policy/review/')) result = { definition: { grace_ends_on: '2026-08-15', timezone: 'America/Los_Angeles', windows: data.windows }, review_token: 'fictional-review' };
+        else if (path.endsWith('/drop-policy/commit/')) result = { publication_id: operation, version: 0 };
         else if (path.endsWith('/drop-policy/')) result = data ? { status: 'saved' } : { term: { code: '26/FA', add_drop_ends_on: '2026-08-15' }, version: -1, default_policy: true, windows: [{ through: null, grade_code: 'W' }] };
         else if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/students/') result = { items: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: 1 }], next_after: null };
@@ -70,9 +72,12 @@ test('catalog staff build dated grade periods in a responsive term policy editor
     await page.getByLabel('Through date (inclusive)').fill('2026-09-01');
     await page.getByLabel('Catalog grade code').first().fill('D');
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
-    await page.getByRole('button', { name: 'Save drop policy' }).click();
-    await expect(page.locator('#workspace-status')).toContainText('Term drop policy saved');
-    expect(f.sent.find(r => r.path.endsWith('/drop-policy/'))?.data).toEqual({ version: -1, windows: [{ through: '2026-09-01', grade_code: 'D' }, { through: null, grade_code: 'W' }] });
+    await page.getByLabel('Reason for policy change').fill('Fictional institutional approval');
+    await page.getByRole('button', { name: 'Review policy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Completed drops');
+    await page.getByRole('button', { name: 'Publish policy', exact: true }).click();
+    await expect(page.locator('#workspace-status')).toContainText('Term drop policy published');
+    expect(f.sent.find(r => r.path.endsWith('/drop-policy/review/'))?.data).toEqual({ reason: 'Fictional institutional approval', version: -1, windows: [{ through: '2026-09-01', grade_code: 'D' }, { through: null, grade_code: 'W' }] });
     expect(f.errors).toEqual([]);
 });
 

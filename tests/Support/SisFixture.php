@@ -99,6 +99,21 @@ final class SisFixture
     public EntityId $term;
     public EntityId $program;
 
+    public function publishDropPolicy(
+        EntityId $term,
+        int $version,
+        \Domain\Registration\ValueObject\DropWindows $windows,
+    ): array
+    {
+        $review = $this->dropPolicies->review(
+            $term,
+            $version,
+            $windows,
+            'Fictional institutional policy review.',
+        );
+        return $this->dropPolicies->commit($term, $review['review_token']);
+    }
+
     public function saveAccount(\Domain\Finance\StudentAccount $account): void
     {
         $actor = $this->access->actor;
@@ -297,6 +312,9 @@ final class SisFixture
             $this->transactions,
             $this->audit,
             $this->academicCredits(),
+            EventStoreFixture::history($db),
+            $this->dropCipher,
+            $this->clock,
         );
         $this->drops = $this->dropService($billing);
         $this->service = new RegistrationService(

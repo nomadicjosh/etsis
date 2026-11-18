@@ -242,12 +242,15 @@ return static function (Psr7Router $router): void {
             "show",
         ])
         ->name("sis.drop.policy");
-    $router
-        ->map(["POST"], "/sis/terms/{term}/drop-policy/", [
-            \Application\Http\Controller\SisDropPolicyController::class,
-            "save",
-        ])
-        ->name("sis.drop.policy.save");
+    $router->map(['POST'], '/sis/terms/{term}/drop-policy/review/', [
+        \Application\Http\Controller\SisDropPolicyController::class, 'review',
+    ])->name('sis.drop.policy.review');
+    $router->map(['POST'], '/sis/terms/{term}/drop-policy/commit/', [
+        \Application\Http\Controller\SisDropPolicyController::class, 'commit',
+    ])->name('sis.drop.policy.commit');
+    $router->map(['GET'], '/sis/terms/{term}/drop-policy/history/', [
+        \Application\Http\Controller\SisDropPolicyController::class, 'history',
+    ])->name('sis.drop.policy.history');
     $router
         ->map(["GET"], "/sis/students/{student}/transfer-awards/{award}/", [
             \Application\Http\Controller\SisTransferAwardController::class,

@@ -33,7 +33,7 @@ try {
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
     if (in_array(($argv[1] ?? ''), [
-        'check-portal', 'check-admission-readiness', 'check-profile-command', 'check-login-sessions',
+        'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-profile-command', 'check-login-sessions',
         'check-moodle-resolution', 'check-course-rules', 'check-degree-trials',
     ], true)) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
@@ -113,8 +113,13 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-admission-readiness') {
             $kernel->bootstrap();
-            require __DIR__ . '/AdmissionsHttpFixture.php';
+            require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/AdmissionReadinessBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-drop-policy') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/DropPolicyBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-portal') {
             $kernel->bootstrap();

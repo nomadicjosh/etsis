@@ -271,7 +271,7 @@ final class VersionedGradeWorkflowTest extends TestCase
         $program[0]["points_milli"] = 500;
         $published = $f->gradeScale($program, $f->program);
         $student = $f->student();
-        $f->dropPolicies->save(
+        $f->publishDropPolicy(
             $f->term,
             -1,
             new \Domain\Registration\ValueObject\DropWindows([["through" => null, "grade_code" => "D"]]),
