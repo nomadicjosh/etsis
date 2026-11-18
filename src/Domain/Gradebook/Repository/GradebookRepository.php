@@ -28,6 +28,16 @@ interface GradebookRepository
     public function assignment(EntityId $id): Assignment;
     public function saveAssignment(Assignment $assignment): void;
     public function highestScore(EntityId $assignment): ?int;
+    /** Active enrollment and optional saved score, bounded to one assignment and one page.
+     * @return list<array<string, mixed>>
+     */
+    public function scoreRoster(
+        Assignment $assignment,
+        string $search,
+        string $state,
+        ?EntityId $after,
+        int $limit,
+    ): array;
     /** @return array<string, mixed>|null */
     public function attendanceRecord(EntityId $section, EntityId $student, string $on): ?array;
     /** @return list<array<string, mixed>> */

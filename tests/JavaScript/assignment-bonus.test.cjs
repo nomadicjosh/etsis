@@ -14,6 +14,7 @@ Element.prototype.querySelector = function (selector) {
 async function fixture(excused = false) {
     const window = {};
     vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
+    vm.runInNewContext(fs.readFileSync("public/assets/js/assignment-worksheet.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
     let body, pending, lastFlow, delayed, release;
     const score = {
@@ -65,6 +66,31 @@ async function fixture(excused = false) {
             return form;
         },
         request: async (path) => {
+            if (path.endsWith("/score-roster/"))
+                return {
+                    assignment: {
+                        id: "task",
+                        title: score.title,
+                        possible_hundredths: 10000,
+                        bonus_hundredths: 2000,
+                        score_limit_hundredths: 12000,
+                        revision: "current",
+                        due_on: "2026-09-01",
+                    },
+                    items: [
+                        {
+                            student_id: "student",
+                            enrollment_id: "enrollment",
+                            given_name: "Fictional",
+                            family_name: "Student",
+                            institutional_id: "TEST-42",
+                            earned_hundredths: score.earned_hundredths,
+                            excused,
+                            version: 1,
+                        },
+                    ],
+                    next_after: null,
+                };
             if (path.includes("/roster/"))
                 return {
                     items: [
@@ -116,6 +142,7 @@ async function fixture(excused = false) {
         },
         release: () => release(),
         close: openDrawer,
+        canLeave: component.canLeave,
     };
 }
 test("assignment creation exposes an optional default-zero bonus limit", async () => {
@@ -127,6 +154,18 @@ test("assignment creation exposes an optional default-zero bonus limit", async (
     assert.equal(field[4], false);
     assert.equal(flow.args[5].bonus_hundredths, 0);
     assert.match(flow.args[6], /without adding possible points to the average/);
+});
+test("the assignment list opens the integrated grading worksheet", async () => {
+    const f = await fixture(true);
+    await f.click(f.section, "Grade assignment");
+    assert.match(f.body().textContent, /Fictional Student/);
+    assert.match(f.body().textContent, /Maximum earned: 120 points/);
+    assert.ok(walk(f.body()).some((e) => e.tag === "button" && e.textContent === "Save changes"));
+    assert.equal(f.canLeave(), true);
+    const input = walk(f.body()).find((e) => e.id === "worksheet-student-mark");
+    input.value = "100";
+    input.events.input({});
+    assert.equal(f.canLeave(), false);
 });
 test("assignment editing preserves the bonus in points and its revision", async () => {
     const f = await fixture();

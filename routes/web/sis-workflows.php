@@ -760,6 +760,8 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/assignments/{id}/scores/", [SisGradebookController::class, "score"])
         ->name("sis.gradebook.score");
+    $router->post('/sis/assignments/{id}/score-roster/', [SisGradebookController::class, 'scoreRoster'])
+        ->name('sis.gradebook.score-roster');
     $router
         ->map(["POST"], "/sis/sections/{id}/final-grades/review/", [
             SisGradebookController::class,

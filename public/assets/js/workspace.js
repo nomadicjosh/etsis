@@ -339,6 +339,7 @@
     }
 
     async function navigate(section, push = true) {
+        if (!teachingStudio.canLeave()) return;
         if (dirty && current === 'forms' && section !== 'forms') { pendingNavigation = () => navigate(section, push); leaveModal.show(); return; }
         if (section !== 'moodle') moodleStudio.leave();
         if (current !== section) $one('#directory-search').value = '';
@@ -398,7 +399,7 @@
     window.addEventListener('popstate', () => task(() => navigate(location.pathname.match(/workspace\/([^/]+)/)?.[1] || 'overview', false)));
     window.addEventListener('pagehide', () => { cleanupFormConditions(); formLayoutEditor.cleanup(); disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; collapsedFormFields.clear(); formEdits.past = []; formEdits.future = []; formEdits.current = null; formEdits.group = null; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
-    window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if (dirty || !teachingStudio.canLeave()) { event.preventDefault(); event.returnValue = ''; } });
     listen('#discard-draft', 'click', async () => {
         const destination = pendingNavigation; pendingNavigation = null;
         resetFormStudio(false); leaveModal.hide(); await destination?.();
@@ -644,6 +645,7 @@
     document.addEventListener('click', event => { if (event.target.closest('[data-action="new-person"]')) task(() => createRecord('people')); });
 
     function openDrawer(title, eyebrow = 'CONNECTED RECORD') {
+        if (!teachingStudio.canLeave()) throw new Error('Save or discard your worksheet changes before opening another task.');
         cleanupFormConditions();
         relationalStudio?.cleanup();
         $one('#workspace-alert').hidden = true;
@@ -659,11 +661,15 @@
         }
         return content;
     }
+    $one('#record-drawer').addEventListener('hide.bs.offcanvas', event => {
+        if (!teachingStudio.canLeave()) event.preventDefault();
+    });
     $one('#record-drawer').addEventListener('hidden.bs.offcanvas', () => {
         cleanupFormConditions();
         if (!relationalStudio?.isOpen()) relationalStudio?.cleanup();
         disposeActionMenus($one('#drawer-body'));
         $one('#drawer-body').replaceChildren();
+        teachingStudio.canLeave();
         if (relationalStudio?.isOpen()) return;
         if (drawerOpener?.isConnected && !drawerOpener.disabled) drawerOpener.focus();
         else $one('#workspace-main').focus({ preventScroll: true });

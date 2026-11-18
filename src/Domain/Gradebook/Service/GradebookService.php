@@ -136,8 +136,14 @@ final readonly class GradebookService
         $assignment = $this->repository->assignment($id);
         $this->faculty($assignment->sectionId);
 
+        return $this->assignmentData($assignment);
+    }
+
+    /** @return array<string, mixed> */
+    private function assignmentData(Assignment $assignment): array
+    {
         return [
-            "id" => $id->value,
+            "id" => $assignment->id->value,
             "section_id" => $assignment->sectionId->value,
             "title" => $assignment->title,
             "possible_hundredths" => $assignment->possibleHundredths,
@@ -145,6 +151,39 @@ final readonly class GradebookService
             "score_limit_hundredths" => $assignment->possibleHundredths + $assignment->bonusHundredths,
             "due_on" => $assignment->dueOn->format("Y-m-d"),
             "revision" => $this->assignmentRevision($assignment),
+        ];
+    }
+
+    /** Faculty worksheet: current indexed rows only, with no academic replay or write lock.
+     * @return array<string, mixed>
+     */
+    public function scoreRoster(
+        EntityId $id,
+        string $search = "",
+        string $state = "all",
+        ?EntityId $after = null,
+    ): array {
+        $this->access->authenticatedUserId();
+        $assignment = $this->repository->assignment($id);
+        $actor = $this->faculty($assignment->sectionId);
+        if (
+            !mb_check_encoding($search, "UTF-8") ||
+            mb_strlen($search) > 100 ||
+            preg_match('/[\x00-\x1F\x7F]/', $search) ||
+            !in_array($state, ["all", "pending", "scored", "excused"], true)
+        ) {
+            throw new ValidationException([
+                ["field" => "search", "message" => "Use a student name or ID and a valid score filter."],
+            ]);
+        }
+        $rows = $this->repository->scoreRoster($assignment, trim($search), $state, $after, 51);
+        $more = count($rows) > 50;
+        $rows = array_slice($rows, 0, 50);
+        $this->sameFaculty($assignment->sectionId, $actor);
+        return [
+            "assignment" => $this->assignmentData($assignment),
+            "items" => $rows,
+            "next_after" => $more ? $rows[49]["enrollment_id"] : null,
         ];
     }
 
@@ -214,6 +253,8 @@ final readonly class GradebookService
         ?int $earned,
         int $expectedVersion,
         ?bool $excused = null,
+        ?string $assignmentRevision = null,
+        ?EntityId $enrollmentId = null,
     ): void {
         $this->access->authenticatedUserId();
         $initial = $this->repository->assignment($assignmentId);
@@ -225,10 +266,25 @@ final readonly class GradebookService
             $earned,
             $expectedVersion,
             $excused,
+            $assignmentRevision,
+            $enrollmentId,
         ): void {
-            $this->enrolled($student, $initial->sectionId);
+            $enrollment = $this->enrolled($student, $initial->sectionId);
+            if ($enrollmentId !== null && $enrollment->id->value !== $enrollmentId->value) {
+                throw new ConcurrentModificationException(
+                    "The registration changed. Refresh the worksheet before saving.",
+                );
+            }
             $assignment = $this->repository->assignment($assignmentId);
             $actor = $this->faculty($assignment->sectionId);
+            if (
+                $assignmentRevision !== null &&
+                !hash_equals($this->assignmentRevision($assignment), $assignmentRevision)
+            ) {
+                throw new ConcurrentModificationException(
+                    "The assignment changed. Refresh the worksheet before saving.",
+                );
+            }
             $current = $this->repository->scoreRecord($assignmentId, $student);
             $score = new AssignmentScore(
                 $assignmentId,

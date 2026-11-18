@@ -143,6 +143,114 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         return $row["maximum"] === null ? null : (int) $row["maximum"];
     }
 
+    public function scoreRoster(
+        Assignment $assignment,
+        string $search,
+        string $state,
+        ?EntityId $after,
+        int $limit,
+    ): array {
+        $q = $this->sql->quote(...);
+        $col = static fn(string $alias, string $field): string => $alias . "." . $q($field);
+        $parameters = [$assignment->id->value, $assignment->sectionId->value];
+        $where = [$col("e", "section_id") . " = ?", $col("e", "status") . " IN ('A', 'N')"];
+        if ($after !== null) {
+            $where[] = $col("e", "id") . " < ?";
+            $parameters[] = $after->value;
+        }
+        if ($state !== "all") {
+            $where[] = match ($state) {
+                "excused" => $col("m", "excused") . " = 1",
+                "pending" => $col("m", "earned_hundredths") .
+                " IS NULL AND COALESCE(" .
+                $col("m", "excused") .
+                ", 0) = 0",
+                "scored" => $col("m", "earned_hundredths") .
+                " IS NOT NULL AND COALESCE(" .
+                $col("m", "excused") .
+                ", 0) = 0",
+            };
+        }
+        foreach (preg_split("/\s+/u", mb_strtolower($search), flags: PREG_SPLIT_NO_EMPTY) as $word) {
+            $pattern = "%" . strtr($word, ["!" => "!!", "%" => "!%", "_" => "!_"]) . "%";
+            $fields = [$col("p", "given_name"), $col("p", "family_name"), $col("i", "institutional_id")];
+            $where[] =
+            "(" .
+            implode(
+                " OR ",
+                array_map(
+                    static fn(string $field): string => "LOWER(" . $field . ") LIKE ? ESCAPE '!'",
+                    $fields,
+                ),
+            ) .
+            ")";
+            array_push($parameters, $pattern, $pattern, $pattern);
+        }
+        $rows = $this->sql->fetch(
+            "SELECT " .
+                $col("e", "id") .
+                " AS " .
+                $q("enrollment_id") .
+                ", " .
+                $col("e", "student_id") .
+                ", " .
+                $col("p", "given_name") .
+                ", " .
+                $col("p", "family_name") .
+                ", " .
+                $col("i", "institutional_id") .
+                ", " .
+                $col("m", "earned_hundredths") .
+                ", " .
+                $col("m", "excused") .
+                ", " .
+                $col("m", "version") .
+                " FROM " .
+                $q("sis_enrollments") .
+                " e JOIN " .
+                $q("sis_students") .
+                " s ON " .
+                $col("s", "id") .
+                " = " .
+                $col("e", "student_id") .
+                " JOIN " .
+                $q("sis_persons") .
+                " p ON " .
+                $col("p", "id") .
+                " = " .
+                $col("s", "person_id") .
+                " JOIN " .
+                $q("sis_person_identifiers") .
+                " i ON " .
+                $col("i", "person_id") .
+                " = " .
+                $col("p", "id") .
+                " LEFT JOIN " .
+                $q("sis_scores") .
+                " m ON " .
+                $col("m", "student_id") .
+                " = " .
+                $col("e", "student_id") .
+                " AND " .
+                $col("m", "assignment_id") .
+                " = ? WHERE " .
+                implode(" AND ", $where) .
+                " ORDER BY " .
+                $col("e", "id") .
+                " DESC",
+            $parameters,
+            $limit,
+        );
+        foreach ($rows as &$row) {
+            $row["earned_hundredths"] =
+            $row["earned_hundredths"] === null ? null : (int) $row["earned_hundredths"];
+            $row["excused"] = (bool) $row["excused"];
+            $row["version"] = (int) $row["version"];
+        }
+        unset($row);
+        return $rows;
+    }
+
     public function attendanceRecord(EntityId $section, EntityId $student, string $on): ?array
     {
         return $this->sql->rows(

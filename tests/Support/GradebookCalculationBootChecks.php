@@ -124,6 +124,7 @@ $categories = [
         "drop_lowest" => "1",
     ],
 ];
+
 if (
     $teachingPost($base . "/gradebook/calculation/", [
         "mode" => "category",
@@ -204,9 +205,50 @@ if (
 ) {
     throw new RuntimeException("Malformed weights bypassed server validation.");
 }
+$rosterPath = "/sis/assignments/" . $secondId . "/score-roster/";
+$rosterResponse = $teachingPost($rosterPath, ["state" => "excused", "search" => "Alex Example"]);
+$roster = json_decode((string) $rosterResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $rosterResponse->getStatusCode() !== 200 ||
+    count($roster["items"] ?? []) !== 1 ||
+    ($roster["items"][0]["student_id"] ?? null) !== $student->id->value ||
+    ($roster["items"][0]["earned_hundredths"] ?? null) !== 1100 ||
+    ($roster["items"][0]["excused"] ?? null) !== true ||
+    ($roster["assignment"]["score_limit_hundredths"] ?? null) !== 1200 ||
+    $teachingPost($rosterPath, ["state" => "invalid"])->getStatusCode() !== 422
+) {
+    throw new RuntimeException(
+        "The private assignment worksheet failed filtering or retained score presentation.",
+    );
+}
+$worksheetScore = [
+    "student_id" => $student->id->value,
+    "earned_hundredths" => 1100,
+    "version" => 5,
+    "excused" => true,
+    "assignment_revision" => $roster["assignment"]["revision"],
+    "enrollment_id" => $roster["items"][0]["enrollment_id"],
+];
+$outdated = $worksheetScore;
+$outdated["assignment_revision"] = str_repeat("0", 64);
+if (
+    $teachingPost($scorePath, $outdated)->getStatusCode() !== 409 ||
+    $teachingPost($scorePath, $worksheetScore)->getStatusCode() !== 200 ||
+    $teachingPost($scorePath, $worksheetScore)->getStatusCode() !== 409 ||
+    $protected !== [
+        $sis->sql->rows("sis_history_events"),
+        $sis->sql->rows("sis_academic_credits"),
+        $sis->financialEvents(),
+    ]
+) {
+    throw new RuntimeException("Worksheet scoring failed concurrency or changed protected academic facts.");
+}
 $sis->access->staff = false;
 $sis->access->grants = [];
 $sis->access->actor = $sis->admissions->person($student->personId)->ownerUserId;
+if ($teachingPost($rosterPath, [])->getStatusCode() !== 403) {
+    throw new RuntimeException("A student owner read classmates' marks through the worksheet.");
+}
 if (
     $teachingPost($base . "/gradebook/calculation/", [
         "mode" => "points",

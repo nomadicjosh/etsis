@@ -104,6 +104,19 @@ final readonly class SisGradebookController
         );
     }
 
+    public function scoreRoster(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->scoreRoster(
+                new EntityId($id),
+                $f->search(),
+                $f->optionalText("state", 8) ?? "all",
+                $f->optionalId("after"),
+            ),
+        );
+    }
+
     public function attendanceHistory(ServerRequest $request, string $id, string $student): ResponseInterface
     {
         return new JsonResponse(
@@ -124,6 +137,8 @@ final readonly class SisGradebookController
             $f->optionalInteger("earned_hundredths"),
             $f->integer("version"),
             $this->excusal($f),
+            $f->optionalText("assignment_revision", 64),
+            $f->optionalId("enrollment_id"),
         );
 
         return new JsonResponse(["status" => "graded"]);

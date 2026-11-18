@@ -46,6 +46,12 @@ window.createWorkspaceTeaching = function (ui) {
             },
             table(headers, rows, caption),
         );
+    let worksheet = null;
+    const canLeave = () => worksheet?.canLeave() ?? true;
+    const gradeAssignment = (id, row, back) => {
+        worksheet ??= window.createAssignmentWorksheet(ui);
+        return worksheet.open(id, row, back);
+    };
 
     async function pages(container, fetchPage, render) {
         let after = "";
@@ -202,7 +208,20 @@ window.createWorkspaceTeaching = function (ui) {
                               Number(item.possible_hundredths) / 100,
                               Number(item.bonus_hundredths || 0) / 100,
                               item.due_on,
-                              button("Edit assignment", () => editAssignment(item.id, back)),
+                              node(
+                                  "div",
+                                  { class: "inline-actions" },
+                                  button(
+                                      "Grade assignment",
+                                      () => gradeAssignment(item.id, row, back),
+                                      "btn-primary btn-sm",
+                                  ),
+                                  button(
+                                      "Edit assignment",
+                                      () => editAssignment(item.id, back),
+                                      "btn-outline-secondary btn-sm",
+                                  ),
+                              ),
                           ]),
                           "Assignments",
                       )
@@ -1296,6 +1315,7 @@ window.createWorkspaceTeaching = function (ui) {
         }
     }
     return {
+        canLeave,
         section,
         recordFinalGrade,
         gradeHistory,
