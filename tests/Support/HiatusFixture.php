@@ -75,7 +75,7 @@ final class HiatusFixture
             $f->clock,
             $f->activityLedger(),
             $this->ledger(),
-            new \Domain\Student\Service\HiatusReview($this->cipher, $f->clock),
+            new \Domain\Shared\Service\ReviewProof($this->cipher, $f->clock),
         );
     }
 
@@ -98,7 +98,7 @@ final class HiatusFixture
             $f->drops,
             $f->dropPolicies,
             $f->activityLedger(),
-            new \Domain\Student\Service\HiatusReview($this->cipher, $f->clock),
+            new \Domain\Shared\Service\ReviewProof($this->cipher, $f->clock),
         );
     }
 }

@@ -16,6 +16,7 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
+use Domain\Shared\Service\ReviewProof;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\HiatusRepository;
 use Domain\Student\Repository\StudentRecordRepository;
@@ -36,7 +37,7 @@ final readonly class HiatusReturnService
         private Clock $clock,
         private StudentActivityLedger $activity,
         private HiatusLedger $ledger,
-        private HiatusReview $reviews,
+        private ReviewProof $reviews,
     ) {
     }
 
@@ -64,6 +65,7 @@ final readonly class HiatusReturnService
                 "revision" => $revision,
                 "operation_id" => $operation->value,
                 "review_token" => $this->reviews->issue(
+                    "hiatus.review",
                     "return",
                     $hiatus,
                     $actor,
@@ -115,6 +117,7 @@ final readonly class HiatusReturnService
             $previous = $this->history->action($plan->operation);
             $this->reviews->validate(
                 $plan->reviewToken,
+                "hiatus.review",
                 "return",
                 $hiatus,
                 $actor,
@@ -150,6 +153,7 @@ final readonly class HiatusReturnService
             $context = $this->context($current, $plan->on);
             $this->reviews->validate(
                 $plan->reviewToken,
+                "hiatus.review",
                 "return",
                 $hiatus,
                 $actor,
@@ -235,6 +239,7 @@ final readonly class HiatusReturnService
             $this->audit->record($actor, "student.hiatus_returned", $hiatus);
             $this->reviews->validate(
                 $plan->reviewToken,
+                "hiatus.review",
                 "return",
                 $hiatus,
                 $actor,

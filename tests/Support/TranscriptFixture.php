@@ -37,12 +37,13 @@ final class TranscriptFixture
     }
 
     public function service(?TranscriptDocumentRenderer $renderer = null, ?AuditTrail $audit = null,
-        ?TranscriptIssuer $issuer = null): TranscriptFulfillmentService
+        ?TranscriptIssuer $issuer = null, ?\Domain\Transcript\Repository\TranscriptRepository $records = null): TranscriptFulfillmentService
     {
         $f = $this->sis;
-        return new TranscriptFulfillmentService($this->repository, $f->admissions,
+        return new TranscriptFulfillmentService($records ?? $this->repository, $f->admissions,
             new SqlStudentRecordRepository($f->sql), $renderer ?? new ProtectedTranscriptRenderer(),
             $issuer ?? new TranscriptIssuer('Fictional University', 'Fictional campus address'),
-            $f->access, $f->transactions, $audit ?? $f->audit, $this->campus->cipher, $f->clock);
+            $f->access, $f->transactions, $audit ?? $f->audit, $this->campus->cipher, $f->clock,
+            new \Domain\Shared\Service\ReviewProof($this->campus->cipher, $f->clock));
     }
 }

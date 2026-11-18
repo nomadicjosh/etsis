@@ -15,8 +15,9 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisTranscriptFulfillmentController
 {
-    public function __construct(private TranscriptFulfillmentService $service)
-    {
+    public function __construct(
+        private TranscriptFulfillmentService $service,
+    ) {
     }
 
     public function current(string $id): ResponseInterface
@@ -29,8 +30,10 @@ final readonly class SisTranscriptFulfillmentController
         return new JsonResponse($this->service->review(new EntityId($id)));
     }
 
-    public function prepare(ServerRequest $request, string $id): ResponseInterface
-    {
+    public function prepare(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $id,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->service->prepare(
@@ -38,6 +41,7 @@ final readonly class SisTranscriptFulfillmentController
                 $f->id("operation_id"),
                 $f->text("revision", 64),
                 $f->requiredBoolean("release_reviewed"),
+                $f->optionalText("review_token", 8192) ?? "",
             ),
             201,
         );
@@ -45,25 +49,37 @@ final readonly class SisTranscriptFulfillmentController
 
     public function show(string $id, string $document): ResponseInterface
     {
-        return new JsonResponse($this->service->view(new EntityId($id), new EntityId($document)));
+        return new JsonResponse(
+            $this->service->view(new EntityId($id), new EntityId($document)),
+        );
     }
 
     public function html(string $id, string $document): ResponseInterface
     {
-        return new HtmlResponse($this->service->html(new EntityId($id), new EntityId($document)), 200, [
-            "Content-Security-Policy" =>
-                "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
-                . "frame-ancestors 'none'; form-action 'none'",
-            "X-Content-Type-Options" => "nosniff",
-        ]);
+        return new HtmlResponse(
+            $this->service->html(new EntityId($id), new EntityId($document)),
+            200,
+            [
+                "Content-Security-Policy" =>
+                    "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; " .
+                    "frame-ancestors 'none'; form-action 'none'",
+                "X-Content-Type-Options" => "nosniff",
+            ],
+        );
     }
 
     public function pdf(string $id, string $document): ResponseInterface
     {
-        $bytes = $this->service->pdf(new EntityId($id), new EntityId($document));
+        $bytes = $this->service->pdf(
+            new EntityId($id),
+            new EntityId($document),
+        );
         $response = new Response("php://temp", 200, [
             "Content-Type" => "application/pdf",
-            "Content-Disposition" => 'attachment; filename="transcript-' . new EntityId($document)->value . '.pdf"',
+            "Content-Disposition" =>
+                'attachment; filename="transcript-' .
+                new EntityId($document)->value .
+                '.pdf"',
             "X-Content-Type-Options" => "nosniff",
         ]);
         $response->getBody()->write($bytes);
@@ -71,8 +87,28 @@ final readonly class SisTranscriptFulfillmentController
         return $response;
     }
 
-    public function deliver(ServerRequest $request, string $id, string $document): ResponseInterface
-    {
+    public function reviewDelivery(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $id,
+        string $document,
+    ): ResponseInterface {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->reviewDelivery(
+                new EntityId($id),
+                new EntityId($document),
+                $f->integer("version"),
+                $f->instant("delivered_at"),
+                $f->bodyText("evidence"),
+            ),
+        );
+    }
+
+    public function deliver(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $id,
+        string $document,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->service->deliver(
@@ -82,6 +118,7 @@ final readonly class SisTranscriptFulfillmentController
                 $f->integer("version"),
                 $f->instant("delivered_at"),
                 $f->bodyText("evidence"),
+                $f->optionalText("review_token", 8192) ?? "",
             ),
         );
     }

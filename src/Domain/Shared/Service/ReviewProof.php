@@ -2,18 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Domain\Student\Service;
+namespace Domain\Shared\Service;
 
 use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
-use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Throwable;
 
 /** Shared short-lived review grant; command services still recheck live context and authority. */
-final readonly class HiatusReview
+final readonly class ReviewProof
 {
     public function __construct(
         private MessageCipher $cipher,
@@ -22,6 +21,7 @@ final readonly class HiatusReview
     }
 
     public function issue(
+        string $kind,
         string $purpose,
         EntityId $scope,
         EntityId $actor,
@@ -31,7 +31,7 @@ final readonly class HiatusReview
         return $this->cipher->seal(
             json_encode(
                 [
-                    "kind" => "hiatus.review",
+                    "kind" => $kind,
                     "purpose" => $purpose,
                     "scope" => $scope->value,
                     "actor" => $actor->value,
@@ -46,6 +46,7 @@ final readonly class HiatusReview
 
     public function validate(
         #[\SensitiveParameter] string $token,
+        string $kind,
         string $purpose,
         EntityId $scope,
         EntityId $actor,
@@ -66,7 +67,7 @@ final readonly class HiatusReview
             if (
                 !is_array($data) ||
                 count($data) !== 7 ||
-                ($data["kind"] ?? null) !== "hiatus.review" ||
+                ($data["kind"] ?? null) !== $kind ||
                 ($data["purpose"] ?? null) !== $purpose ||
                 ($data["scope"] ?? null) !== $scope->value ||
                 ($data["operation"] ?? null) !== $operation->value ||
@@ -80,7 +81,7 @@ final readonly class HiatusReview
             throw new ValidationException([
                 [
                     "field" => "review_token",
-                    "message" => "Review this case again before confirming.",
+                    "message" => "Review this task again before confirming.",
                 ],
             ]);
         }
@@ -92,7 +93,7 @@ final readonly class HiatusReview
         $age = $this->clock->now()->getTimestamp() - $data["issued_at"];
         if (!$accepted && ($age < 0 || $age >= 1200)) {
             throw new ConcurrentModificationException(
-                "This review expired. Review the current case again.",
+                "This review expired. Review the current task again.",
             );
         }
     }

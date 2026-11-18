@@ -678,6 +678,12 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.transcript.fulfillment.pdf");
     $router
+        ->map(["POST"], "/sis/transcript-requests/{id}/documents/{document}/delivery-review/", [
+            SisTranscriptFulfillmentController::class,
+            "reviewDelivery",
+        ])
+        ->name("sis.transcript.fulfillment.delivery-review");
+    $router
         ->map(["POST"], "/sis/transcript-requests/{id}/documents/{document}/deliver/", [
             SisTranscriptFulfillmentController::class,
             "deliver",

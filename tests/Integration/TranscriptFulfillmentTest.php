@@ -32,8 +32,8 @@ final class TranscriptFulfillmentTest extends TestCase
         $review = $service->review($request);
         $id = new EntityId($review['operation_id']);
         self::assertSame('pending', $t->repository->request($request)['status']);
-        $saved = $service->prepare($request, $id, $review['revision'], true);
-        self::assertSame($saved, $service->prepare($request, $id, $review['revision'], true));
+        $saved = $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
+        self::assertSame($saved, $service->prepare($request, $id, $review['revision'], true, $review['review_token']));
         self::assertSame('ready', $t->repository->request($request)['status']);
         $pdf = $service->pdf($request, $id);
         self::assertStringStartsWith('%PDF-', $pdf);
@@ -43,10 +43,11 @@ final class TranscriptFulfillmentTest extends TestCase
         self::assertStringNotContainsString('Fictional University', $raw);
         self::assertStringNotContainsString('%PDF-', $raw);
         self::assertSame([], $f->sql->rows('sis_transcript_deliveries'));
-        $operation = EntityId::generate();
         $at = $f->clock->now()->modify('-1 minute');
-        $delivered = $service->deliver($request, $id, $operation, 1, $at, 'Fictional pickup receipt 123');
-        self::assertSame($delivered, $service->deliver($request, $id, $operation, 1, $at, 'Fictional pickup receipt 123'));
+        $delivery = $service->reviewDelivery($request, $id, 1, $at, 'Fictional pickup receipt 123');
+        $operation = new EntityId($delivery['operation_id']);
+        $delivered = $service->deliver($request, $id, $operation, 1, $at, 'Fictional pickup receipt 123', $delivery['review_token']);
+        self::assertSame($delivered, $service->deliver($request, $id, $operation, 1, $at, 'Fictional pickup receipt 123', $delivery['review_token']));
         self::assertSame('fulfilled', $t->repository->request($request)['status']);
         self::assertSame('Fictional pickup receipt 123', $service->view($request, $id)['delivery']['evidence']);
         self::assertStringNotContainsString('Fictional pickup receipt', json_encode($f->sql->rows('sis_transcript_deliveries')));
@@ -61,25 +62,26 @@ final class TranscriptFulfillmentTest extends TestCase
         $service = $t->service($this->renderer());
         $review = $service->review($request);
         $id = new EntityId($review['operation_id']);
-        $service->prepare($request, $id, $review['revision'], true);
+        $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
         $originalPdf = $service->pdf($request, $id);
         $student = $t->repository->request($request)['student_id'];
         $f->sql->update('sis_academic_credits', ['course_title' => 'Fictional corrected course', 'version' => 1], ['student_id' => $student]);
         self::assertTrue($service->view($request, $id)['academic_changed']);
         try {
-            $service->deliver($request, $id, EntityId::generate(), 1, $f->clock->now(), 'Fictional stale delivery');
+            $service->deliver($request, $id, EntityId::generate(), 1, $f->clock->now(), 'Fictional stale delivery', '');
             self::fail('A stale document was delivered.');
         } catch (ConcurrentModificationException) {
             self::assertSame('ready', $t->repository->request($request)['status']);
         }
         $fresh = $service->review($request);
         $replacement = new EntityId($fresh['operation_id']);
-        $service->prepare($request, $replacement, $fresh['revision'], true);
+        $service->prepare($request, $replacement, $fresh['revision'], true, $fresh['review_token']);
         self::assertFalse($service->view($request, $id)['is_latest']);
         self::assertSame($originalPdf, $service->pdf($request, $id));
         self::assertSame('Fictional corrected course', $service->view($request, $replacement)['snapshot']['credits'][0]['course_title']);
         self::assertCount(2, $f->sql->rows('sis_transcript_documents'));
-        $service->deliver($request, $replacement, EntityId::generate(), 2, $f->clock->now(), 'Fictional corrected delivery');
+        $delivery = $service->reviewDelivery($request, $replacement, 2, $f->clock->now(), 'Fictional corrected delivery');
+        $service->deliver($request, $replacement, new EntityId($delivery['operation_id']), 2, $f->clock->now(), 'Fictional corrected delivery', $delivery['review_token']);
         self::assertSame('fulfilled', $t->repository->request($request)['status']);
     }
 
@@ -96,7 +98,7 @@ final class TranscriptFulfillmentTest extends TestCase
         $service = $t->service($renderer);
         $review = $service->review($request);
         try {
-            $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], true);
+            $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], true, $review['review_token']);
             self::fail('An unreviewed academic change was saved into a prepared request.');
         } catch (ConcurrentModificationException) {
             self::assertSame('pending', $t->repository->request($request)['status']);
@@ -112,7 +114,7 @@ final class TranscriptFulfillmentTest extends TestCase
         $service = $t->service($this->renderer());
         $review = $service->review($request);
         $id = new EntityId($review['operation_id']);
-        $service->prepare($request, $id, $review['revision'], true);
+        $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
         $other = $t->request();
         try {
             $service->pdf($other, $id);
@@ -145,7 +147,7 @@ final class TranscriptFulfillmentTest extends TestCase
         $review = $service->review($request);
         foreach ([false, true] as $confirmed) {
             try {
-                $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], $confirmed);
+                $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], $confirmed, $review['review_token']);
                 self::fail('An unconfigured or unreviewed official document was issued.');
             } catch (ValidationException) {
                 self::assertNull($t->repository->latest($request));
@@ -204,7 +206,7 @@ final class TranscriptFulfillmentTest extends TestCase
         $service = $t->service($this->renderer());
         $review = $service->review($request);
         $id = new EntityId($review['operation_id']);
-        $service->prepare($request, $id, $review['revision'], true);
+        $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
         $bytes = $service->pdf($request, $id);
         $audit = $this->createStub(AuditTrail::class);
         $audit->method('record')->willReturnCallback(static function (EntityId $actor, string $action, EntityId $subject): void {
@@ -212,14 +214,16 @@ final class TranscriptFulfillmentTest extends TestCase
                 throw new RuntimeException('Fictional delivery audit failure');
             }
         });
+        $delivery = $service->reviewDelivery($request, $id, 1, $t->sis->clock->now(), 'Fictional failed collection');
         try {
             $t->service($this->renderer(), $audit)->deliver(
                 $request,
                 $id,
-                EntityId::generate(),
+                new EntityId($delivery['operation_id']),
                 1,
                 $t->sis->clock->now(),
-                'Fictional failed collection'
+                'Fictional failed collection',
+                $delivery['review_token'],
             );
             self::fail('Partially audited delivery was marked fulfilled.');
         } catch (RuntimeException $error) {
@@ -243,7 +247,7 @@ final class TranscriptFulfillmentTest extends TestCase
         $service = $t->service($this->renderer(), $audit);
         $review = $service->review($request);
         try {
-            $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], true);
+            $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], true, $review['review_token']);
             self::fail('A partially audited document was issued.');
         } catch (RuntimeException $error) {
             self::assertSame('Fictional document audit failure', $error->getMessage());

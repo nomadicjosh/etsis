@@ -1587,6 +1587,7 @@ if ($officialReviewResponse->getStatusCode() !== 200 || !isset($officialReview["
 $officialPrepare = [
     "operation_id" => $officialReview["operation_id"],
     "revision" => $officialReview["revision"],
+    "review_token" => $officialReview["review_token"],
     "release_reviewed" => true,
 ];
 $officialPrepared = $teachingPost($officialPath . "/prepare/", $officialPrepare);
@@ -1616,6 +1617,10 @@ $officialDelivery = [
         ->format(DATE_ATOM),
     "evidence" => "Fictional collection evidence",
 ];
+$officialDeliveryReviewResponse = $teachingPost($officialDocumentPath . "/delivery-review/", $officialDelivery);
+$officialDeliveryReview = json_decode((string) $officialDeliveryReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$officialDelivery["operation_id"] = $officialDeliveryReview["operation_id"];
+$officialDelivery["review_token"] = $officialDeliveryReview["review_token"];
 if (
     $teachingPost($officialDocumentPath . "/deliver/", $officialDelivery)->getStatusCode() !== 200 ||
     $teachingPost($officialDocumentPath . "/deliver/", $officialDelivery)->getStatusCode() !== 200

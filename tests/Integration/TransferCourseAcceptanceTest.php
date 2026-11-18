@@ -285,7 +285,7 @@ final class TransferCourseAcceptanceTest extends TestCase
         $service = $documents->service($renderer);
         $preparation = $service->review($request);
         $id = new EntityId($preparation["operation_id"]);
-        $service->prepare($request, $id, $preparation["revision"], true);
+        $service->prepare($request, $id, $preparation["revision"], true, $preparation['review_token']);
         $before = $documents->repository->document($id);
         $publication = $this->publish($t, "Corrected accepted transcript title");
         $review = $this->review($t, $publication);
@@ -300,6 +300,7 @@ final class TransferCourseAcceptanceTest extends TestCase
                 1,
                 $t->sis->clock->now(),
                 "Fictional stale dispatch.",
+                "",
             );
             self::fail("A stale prepared transcript was delivered after a course acceptance correction.");
         } catch (ConcurrentModificationException) {
@@ -307,7 +308,7 @@ final class TransferCourseAcceptanceTest extends TestCase
         }
         $fresh = $service->review($request);
         $replacement = new EntityId($fresh["operation_id"]);
-        $service->prepare($request, $replacement, $fresh["revision"], true);
+        $service->prepare($request, $replacement, $fresh["revision"], true, $fresh['review_token']);
         self::assertStringContainsString(
             "Corrected accepted transcript title",
             json_encode($service->view($request, $replacement)["snapshot"], JSON_THROW_ON_ERROR),

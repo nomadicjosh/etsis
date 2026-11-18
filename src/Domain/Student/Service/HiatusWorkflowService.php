@@ -14,6 +14,7 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
+use Domain\Shared\Service\ReviewProof;
 use Domain\Shared\ValueObject\DateRange;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Enum\HiatusCode;
@@ -39,7 +40,7 @@ final readonly class HiatusWorkflowService
         private \Domain\Registration\Service\CourseDropService $drops,
         private \Domain\Registration\Service\DropPolicyService $dropPolicies,
         private StudentActivityLedger $activity,
-        private HiatusReview $reviews,
+        private ReviewProof $reviews,
     ) {
     }
 
@@ -69,6 +70,7 @@ final readonly class HiatusWorkflowService
                 "revision" => $revision,
                 "operation_id" => $operation->value,
                 "review_token" => $this->reviews->issue(
+                    "hiatus.review",
                     "start",
                     $student,
                     $actor,
@@ -107,6 +109,7 @@ final readonly class HiatusWorkflowService
         $actor = $this->access->requirePermission("sis:registration:manage");
         $this->reviews->validate(
             $reviewToken,
+            "hiatus.review",
             "start",
             $hiatus->studentId,
             $actor,
@@ -132,6 +135,7 @@ final readonly class HiatusWorkflowService
             }
             $this->reviews->validate(
                 $reviewToken,
+                "hiatus.review",
                 "start",
                 $hiatus->studentId,
                 $actor,
@@ -237,6 +241,7 @@ final readonly class HiatusWorkflowService
             );
             $this->reviews->validate(
                 $reviewToken,
+                "hiatus.review",
                 "start",
                 $hiatus->studentId,
                 $actor,
@@ -267,6 +272,7 @@ final readonly class HiatusWorkflowService
             }
             $this->reviews->validate(
                 $reviewToken,
+                "hiatus.review",
                 "start",
                 $hiatus->studentId,
                 $actor,

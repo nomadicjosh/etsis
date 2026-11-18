@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infrastructure\Persistence\Repository;
 
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transcript\Repository\TranscriptRepository;
 use Infrastructure\Persistence\SqlRecords;
@@ -29,7 +30,11 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
     }
     public function request(EntityId $id): array
     {
-        return $this->sql->one("sis_transcript_requests", ["id" => $id->value]);
+        $row = $this->sql->current("sis_transcript_requests", $id->value);
+        if ($row === null) {
+            throw new RecordNotFoundException("Transcript request not found.");
+        }
+        return $row;
     }
 
     public function credits(EntityId $student): array
@@ -109,7 +114,7 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
 
     public function document(EntityId $id): ?array
     {
-        return $this->sql->rows("sis_transcript_documents", ["id" => $id->value], 1)[0] ?? null;
+        return $this->sql->current("sis_transcript_documents", $id->value);
     }
 
     public function latest(EntityId $request): ?array
@@ -130,7 +135,7 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
         )[0] ?? null;
     }
 
-    public function addDocument(EntityId $id, array $data): void
+    public function addDocument(EntityId $id, #[\SensitiveParameter] array $data): void
     {
         $this->sql->insert("sis_transcript_documents", ["id" => $id->value] + $data);
     }
@@ -150,7 +155,7 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
 
     public function delivery(EntityId $operation): ?array
     {
-        return $this->sql->rows("sis_transcript_deliveries", ["id" => $operation->value], 1)[0] ?? null;
+        return $this->sql->current("sis_transcript_deliveries", $operation->value);
     }
 
     public function documentDelivery(EntityId $document): ?array
@@ -158,7 +163,7 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
         return $this->sql->rows("sis_transcript_deliveries", ["document_id" => $document->value], 1)[0] ?? null;
     }
 
-    public function addDelivery(EntityId $operation, array $data): void
+    public function addDelivery(EntityId $operation, #[\SensitiveParameter] array $data): void
     {
         $this->sql->insert("sis_transcript_deliveries", ["id" => $operation->value] + $data);
     }

@@ -120,6 +120,15 @@ final class ConsoleBootstrapTest extends TestCase
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
 
+    public function testTranscriptReviewsUseActualProvidersCsrfAndPrivateDocuments(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-transcript-reviews']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testHiatusHistoryAndReturnUseActualProvidersCsrfAndPrivateEvidence(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
