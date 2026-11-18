@@ -16,7 +16,7 @@ final readonly class GradebookCalculation
     private array $categoryByAssignment;
 
     /** @param array<string, int> $weights Hundredths of a percent, keyed by assignment ULID.
-     * @param list<array{title: string, weight_hundredths: int, assignments: list<string>}> $categories
+     * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int}> $categories
      */
     public function __construct(
         public string $mode = "points",
@@ -58,12 +58,24 @@ final readonly class GradebookCalculation
         foreach ($categories as $index => $category) {
             if (
                 !is_array($category) ||
-                count($category) !== 3 ||
+                array_diff(array_keys($category), [
+                    "title",
+                    "weight_hundredths",
+                    "assignments",
+                    "drop_lowest",
+                ]) !== [] ||
                 !is_string($category["title"] ?? null) ||
                 !is_int($category["weight_hundredths"] ?? null) ||
-                !is_array($category["assignments"] ?? null)
+                !is_array($category["assignments"] ?? null) ||
+                (array_key_exists("drop_lowest", $category) &&
+                    (!is_int($category["drop_lowest"]) ||
+                        $category["drop_lowest"] < 0 ||
+                        $category["drop_lowest"] >= self::LIMIT))
             ) {
-                self::invalid("Supply a name, weight and assignment list for each category.", "categories");
+                self::invalid(
+                    "Supply a name, weight, assignment list and optional drop count from 0 to 499 for each category.",
+                    "categories",
+                );
             }
             $name = $category["title"];
             $weight = $category["weight_hundredths"];
@@ -127,6 +139,7 @@ final readonly class GradebookCalculation
             "weight_hundredths" => $weight,
             "category_title" => $category["title"] ?? null,
             "category_weight_hundredths" => $category["weight_hundredths"] ?? null,
+            "category_drop_lowest" => $category === null ? null : $category["drop_lowest"] ?? 0,
             "excluded" =>
                 $this->mode === "category"
                     ? $category === null || $category["weight_hundredths"] === 0
@@ -213,13 +226,21 @@ final readonly class GradebookCalculation
         $included = 0;
         $pending = 0;
         $awaiting = 0;
+        $dropped = [];
         foreach ($this->categories as $category) {
             $possible = 0;
             $gradedPossible = 0;
             $earned = 0;
             $graded = 0;
+            $weight = $category["weight_hundredths"];
+            $omitted = $weight === 0 ? [] : $this->dropped($category, $scores);
+            $omittedIds = array_fill_keys(array_column($omitted, "assignment_id"), true);
+            array_push($dropped, ...$omitted);
             foreach ($category["assignments"] as $id) {
                 $score = $scores[$id];
+                if (isset($omittedIds[$id])) {
+                    continue;
+                }
                 $possible += $score["possible_hundredths"];
                 if ($score["earned_hundredths"] !== null) {
                     $gradedPossible += $score["possible_hundredths"];
@@ -227,10 +248,9 @@ final readonly class GradebookCalculation
                     ++$graded;
                 }
             }
-            $weight = $category["weight_hundredths"];
             if ($weight > 0) {
                 $included += count($category["assignments"]);
-                $pending += count($category["assignments"]) - $graded;
+                $pending += count($category["assignments"]) - $graded - count($omitted);
                 if ($gradedPossible > 0) {
                     $activeWeight += $weight;
                     $contribution += $weight * ($earned / $gradedPossible);
@@ -247,7 +267,9 @@ final readonly class GradebookCalculation
                 "coverage_hundredths" =>
                     $possible === 0 ? 0 : (int) round(($gradedPossible / $possible) * 10000),
                 "assignments" => count($category["assignments"]),
-                "graded" => $graded,
+                "graded" => $graded + count($omitted),
+                "dropped" => count($omitted),
+                "drop_lowest" => $category["drop_lowest"] ?? 0,
             ];
         }
         return [
@@ -255,12 +277,48 @@ final readonly class GradebookCalculation
             "percent_hundredths" =>
                 $activeWeight === 0 ? null : (int) round(($contribution / $activeWeight) * 10000),
             "coverage_hundredths" => (int) round($coverage),
-            "graded" => $included - $pending,
+            "graded" => $included - $pending - count($dropped),
             "pending" => $pending,
             "excluded" => count($scores) - $included,
+            "dropped" => count($dropped),
+            "dropped_assignments" => $dropped,
             "awaiting_categories" => $awaiting,
             "categories" => $items,
         ];
+    }
+
+    /** Drop by exact percentage; equal percentages drop the larger-point task, then stable assignment ID.
+     * Always retain at least one graded task. Pending tasks and stored scores remain untouched.
+     * @param array<string,mixed> $category
+     * @param array<string,array<string,mixed>> $scores
+     * @return list<array{assignment_id:string,title:string,earned_hundredths:int,possible_hundredths:int}>
+     */
+    private function dropped(array $category, array $scores): array
+    {
+        $count = $category["drop_lowest"] ?? 0;
+        if ($count === 0) {
+            return [];
+        }
+        $graded = [];
+        foreach ($category["assignments"] as $id) {
+            $score = $scores[$id];
+            if ($score["earned_hundredths"] !== null) {
+                $graded[] = [
+                    "assignment_id" => $id,
+                    "title" => is_string($score["title"] ?? null) ? $score["title"] : $id,
+                    "earned_hundredths" => $score["earned_hundredths"],
+                    "possible_hundredths" => $score["possible_hundredths"],
+                ];
+            }
+        }
+        usort(
+            $graded,
+            static fn(array $a, array $b): int => $a["earned_hundredths"] * $b["possible_hundredths"] <=>
+            $b["earned_hundredths"] * $a["possible_hundredths"] ?:
+            $b["possible_hundredths"] <=> $a["possible_hundredths"] ?:
+            strcmp($a["assignment_id"], $b["assignment_id"]),
+        );
+        return array_slice($graded, 0, min($count, max(0, count($graded) - 1)));
     }
 
     private static function invalid(string $message, string $field = "weights"): never

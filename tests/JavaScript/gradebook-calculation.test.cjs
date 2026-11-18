@@ -309,6 +309,9 @@ test("the full setup form saves categories and assignment membership through the
         );
     }
     const save = walk(form).find((n) => n.attributes.type === "submit");
+    const drop = walk(form).find((n) => n.id === "category-0-drop");
+    drop.value = "1";
+    drop.events.input();
     assert.equal(save.disabled, false);
     form.events.submit({ preventDefault() {} });
     await e.done();
@@ -317,8 +320,8 @@ test("the full setup form saves categories and assignment membership through the
         weights: {},
         revision: "revision",
         categories: [
-            { title: "Quizzes", weight_hundredths: 4000, assignments: ["one"] },
-            { title: "Exams", weight_hundredths: 6000, assignments: ["two"] },
+            { title: "Quizzes", weight_hundredths: 4000, assignments: ["one"], drop_lowest: 1 },
+            { title: "Exams", weight_hundredths: 6000, assignments: ["two"], drop_lowest: 0 },
         ],
     });
 });
@@ -347,7 +350,98 @@ test("category names must be unique and deleting an earlier category preserves l
         .events.click();
     assert.equal(e.valid(), true);
     assert.deepEqual(JSON.parse(JSON.stringify(e.serialize())), [
-        { title: "Exams", weight_hundredths: 10000, assignments: ["two"] },
+        { title: "Exams", weight_hundredths: 10000, assignments: ["two"], drop_lowest: 0 },
     ]);
     assert.equal(walk(e.element).find((n) => n.id === "gradebook-category-two").value, "category-1");
+});
+
+test("drop count is optional by default, labeled and retained through mode changes", () => {
+    let changes = 0;
+    const e = presenter().editor(
+        [{ id: "one", title: "Quiz" }],
+        [{ title: "Tasks", weight_hundredths: 10000, assignments: ["one"] }],
+        () => {
+            changes++;
+        },
+    );
+    e.setEnabled(true);
+    const drop = walk(e.element).find((n) => n.id === "category-0-drop");
+    assert.equal(drop.value, "0");
+    assert.equal(drop.attributes.required, true);
+    assert.match(drop.getAttribute("aria-describedby"), /gradebook-drop-help category-0-drop-error/);
+    assert.ok(walk(e.element).some((n) => n.tag === "label" && n.getAttribute("for") === drop.id));
+    drop.value = "2";
+    drop.events.input();
+    assert.equal(changes, 1);
+    assert.equal(e.serialize()[0].drop_lowest, 2);
+    e.setEnabled(false);
+    e.setEnabled(true);
+    assert.equal(e.serialize()[0].drop_lowest, 2);
+    assert.equal(e.valid(), true);
+});
+test("invalid drop counts block setup before a request is sent", () => {
+    const e = presenter().editor(
+        [],
+        [{ title: "Tasks", weight_hundredths: 10000, assignments: [], drop_lowest: 1 }],
+        () => {},
+    );
+    e.setEnabled(true);
+    const input = walk(e.element).find((n) => n.id === "category-0-drop");
+    for (const value of ["", "-1", "500", "1.5", "invalid"]) {
+        input.value = value;
+        assert.equal(e.valid(), false, value);
+        assert.equal(input.getAttribute("aria-invalid"), "true");
+        assert.equal(walk(e.element).find((n) => n.id === "category-0-drop-error").hidden, false);
+    }
+    input.value = "499";
+    assert.equal(e.valid(), true);
+    assert.equal(input.getAttribute("aria-invalid"), "false");
+    assert.equal(walk(e.element).find((n) => n.id === "category-0-drop-error").hidden, true);
+});
+test("shared feedback explains dropped scores without interpreting their titles as markup", () => {
+    const p = presenter();
+    const body = p.panel({
+        mode: "category",
+        percent_hundredths: 9000,
+        coverage_hundredths: 10000,
+        graded: 1,
+        pending: 0,
+        excluded: 0,
+        dropped: 1,
+        categories: [
+            {
+                title: "Tasks",
+                weight_hundredths: 10000,
+                percent_hundredths: 9000,
+                coverage_hundredths: 10000,
+                graded: 2,
+                assignments: 2,
+                drop_lowest: 1,
+                dropped: 1,
+            },
+        ],
+        dropped_assignments: [
+            { assignment_id: "one", title: "Quiz <img>", earned_hundredths: 0, possible_hundredths: 1000 },
+        ],
+    });
+    assert.match(body.textContent, /1 dropped from average/);
+    assert.match(body.textContent, /Drop up to 1 lowest graded score/);
+    assert.match(body.textContent, /Quiz <img> · 0\/10 points/);
+    assert.match(body.textContent, /Ungraded work is never dropped/);
+    assert.ok(walk(body).some((n) => n.tag === "details"));
+    assert.ok(walk(body).some((n) => n.tag === "summary" && /View 1 dropped score/.test(n.textContent)));
+    assert.equal(
+        walk(body).some((n) => n.tag === "img"),
+        false,
+    );
+    assert.match(
+        p.assignmentLabel({
+            category_title: "Tasks",
+            category_weight_hundredths: 10000,
+            category_drop_lowest: 1,
+            dropped: true,
+        }),
+        /^Dropped from average/,
+    );
+    assert.match(body.textContent, /official final grade is recorded separately/);
 });

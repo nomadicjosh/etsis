@@ -42,7 +42,7 @@ final readonly class GradebookService
     }
 
     /** @param array<string, int> $weights
-     * @param list<array{title: string, weight_hundredths: int, assignments: list<string>}> $categories
+     * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int}> $categories
      * @return array<string, mixed>
      */
     public function saveCalculation(
@@ -81,6 +81,11 @@ final readonly class GradebookService
                 $calculation->categories,
             );
             $this->audit->record($actor, "gradebook.calculation.updated", $section);
+            if ($this->faculty($section)->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException(
+                    "The gradebook staff account changed. Review setup again.",
+                );
+            }
             return $this->calculationContext($section);
         });
     }
@@ -378,13 +383,19 @@ final readonly class GradebookService
             $settings["weights"],
             $settings["categories"],
         );
+        $summary = $calculation->summarize($scores);
+        $dropped = array_fill_keys(
+            array_column($summary["dropped_assignments"] ?? [], "assignment_id"),
+            true,
+        );
         foreach ($scores as &$score) {
             $score["institutional_id"] = $person->institutionalId->value;
             $score += $calculation->assignmentPresentation($score["assignment_id"]);
+            $score["dropped"] = isset($dropped[$score["assignment_id"]]);
         }
         unset($score);
 
-        return ["items" => $scores, "summary" => $calculation->summarize($scores)];
+        return ["items" => $scores, "summary" => $summary];
     }
 
     /** @return array<string, mixed> */

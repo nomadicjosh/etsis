@@ -5,7 +5,7 @@ window.createGradebookCalculation = function (ui) {
     const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
     function assignmentLabel(score) {
         if (score.category_title != null) {
-            return `${score.category_title} · ${percent(score.category_weight_hundredths)} category${score.category_weight_hundredths === 0 ? " · Excluded" : ""}`;
+            return `${score.dropped ? "Dropped from average · " : ""}${score.category_title} · ${percent(score.category_weight_hundredths)} category${score.category_weight_hundredths === 0 ? " · Excluded" : ""}${score.category_drop_lowest ? ` · Drop lowest ${score.category_drop_lowest}` : ""}`;
         }
         if (score.excluded && score.weight_hundredths == null) return "Excluded";
         if (score.weight_hundredths === 0) return "Excluded · 0.00%";
@@ -26,7 +26,7 @@ window.createGradebookCalculation = function (ui) {
             node(
                 "p",
                 { class: "mb-1" },
-                `${{ weighted: "Assignment weights", category: "Category weights", points: "Total points" }[summary.mode]} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excluded ? ` · ${summary.excluded} excluded` : ""}`,
+                `${{ weighted: "Assignment weights", category: "Category weights", points: "Total points" }[summary.mode]} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excluded ? ` · ${summary.excluded} excluded` : ""}${summary.dropped ? ` · ${summary.dropped} dropped from average` : ""}`,
             ),
             summary.mode === "category"
                 ? node(
@@ -35,7 +35,7 @@ window.createGradebookCalculation = function (ui) {
                       node(
                           "p",
                           { class: "small" },
-                          "Each category uses total points from its graded assignments. The average uses categories with scores; coverage also accounts for ungraded assignments and empty categories.",
+                          "Each category uses total points from its graded assignments after any drop rule. The average uses categories with scores; coverage also accounts for ungraded assignments and empty categories.",
                       ),
                       summary.awaiting_categories
                           ? node(
@@ -63,7 +63,7 @@ window.createGradebookCalculation = function (ui) {
                                       node(
                                           "p",
                                           { class: "small mb-0" },
-                                          `${category.graded}/${category.assignments} assignments graded · ${percent(category.coverage_hundredths)} of points graded`,
+                                          `${category.graded}/${category.assignments} assignments graded · ${percent(category.coverage_hundredths)} of counted points graded`,
                                       ),
                                       category.assignments === 0
                                           ? node(
@@ -79,7 +79,41 @@ window.createGradebookCalculation = function (ui) {
                                                 "Excluded",
                                             )
                                           : null,
+                                      category.drop_lowest
+                                          ? node(
+                                                "p",
+                                                { class: "small mb-0 mt-1" },
+                                                `Drop up to ${category.drop_lowest} lowest graded ${category.drop_lowest === 1 ? "score" : "scores"} · ${category.dropped || 0} currently dropped. At least one graded score stays included.`,
+                                            )
+                                          : null,
                                   ),
+                              ),
+                          ),
+                      ),
+                  )
+                : null,
+            summary.dropped_assignments?.length
+                ? node(
+                      "details",
+                      { class: "mb-3" },
+                      node(
+                          "summary",
+                          { class: "fw-semibold" },
+                          `View ${summary.dropped_assignments.length} dropped ${summary.dropped_assignments.length === 1 ? "score" : "scores"}`,
+                      ),
+                      node(
+                          "p",
+                          { class: "small mt-2" },
+                          "Lowest percentages are omitted from the average, including their possible points. Scores stay recorded. Ungraded work is never dropped. Equal percentages drop the larger-point task first, then use a fixed assignment order.",
+                      ),
+                      node(
+                          "ul",
+                          { class: "mb-0" },
+                          summary.dropped_assignments.map((score) =>
+                              node(
+                                  "li",
+                                  { class: "text-break" },
+                                  `${score.title} · ${score.earned_hundredths / 100}/${score.possible_hundredths / 100} points · ${percent((10000 * score.earned_hundredths) / score.possible_hundredths)}`,
                               ),
                           ),
                       ),
@@ -88,7 +122,7 @@ window.createGradebookCalculation = function (ui) {
             node(
                 "p",
                 { class: "small mb-0" },
-                "Ungraded work is excluded from this running average. Recorded zero scores count. This is coursework feedback; your official final grade is recorded separately.",
+                "Ungraded work is excluded from this running average. Recorded zero scores count unless a configured drop rule omits them. This is coursework feedback; your official final grade is recorded separately.",
             ),
         );
     }
@@ -189,6 +223,22 @@ window.createGradebookCalculation = function (ui) {
                 step: "0.01",
             });
             weight.value = (value.weight_hundredths / 100).toFixed(2);
+            const drop = node("input", {
+                id: `${key}-drop`,
+                type: "number",
+                class: "form-control",
+                min: "0",
+                max: "499",
+                step: "1",
+                required: true,
+                "aria-describedby": `gradebook-drop-help ${key}-drop-error`,
+            });
+            drop.value = String(value.drop_lowest ?? 0);
+            const dropError = node(
+                "div",
+                { id: `${key}-drop-error`, class: "invalid-feedback", role: "alert", hidden: true },
+                "Use a whole number from 0 to 499.",
+            );
             const remove = node(
                 "button",
                 {
@@ -206,20 +256,27 @@ window.createGradebookCalculation = function (ui) {
                     { class: "row g-2 align-items-end" },
                     node(
                         "div",
-                        { class: "col-md-7" },
+                        { class: "col-md-5" },
                         node("label", { for: title.id, class: "form-label" }, "Category name"),
                         title,
                     ),
                     node(
                         "div",
-                        { class: "col-md-3" },
+                        { class: "col-md-2" },
                         node("label", { for: weight.id, class: "form-label" }, "Weight %"),
                         weight,
+                    ),
+                    node(
+                        "div",
+                        { class: "col-md-3" },
+                        node("label", { for: drop.id, class: "form-label" }, "Drop lowest"),
+                        drop,
+                        dropError,
                     ),
                     node("div", { class: "col-md-2" }, remove),
                 ),
             );
-            const entry = { key, title, weight, remove, row };
+            const entry = { key, title, weight, drop, dropError, remove, row };
             categories.push(entry);
             value.assignments.forEach((id) => {
                 if (members.has(id)) members.set(id, key);
@@ -230,6 +287,7 @@ window.createGradebookCalculation = function (ui) {
                 changed();
             });
             weight.addEventListener("input", changed);
+            drop.addEventListener("input", changed);
             remove.addEventListener("click", () => {
                 const removed = [...members.values()].filter((value) => value === key).length;
                 for (const [id, group] of members) if (group === key) members.set(id, "");
@@ -265,6 +323,11 @@ window.createGradebookCalculation = function (ui) {
                 "Use up to 20 categories with weights totaling 100%. Choose a category for each included assignment. New or unassigned work is excluded. Within a category, assignments contribute by possible points.",
             ),
             rows,
+            node(
+                "p",
+                { id: "gradebook-drop-help", class: "form-text" },
+                "Drop lowest is optional: 0 keeps every score. A category can omit up to this many lowest graded percentages while retaining at least one graded score. Pending work is never dropped. Stored scores and official final grades stay unchanged.",
+            ),
             add,
             announcement,
             node("label", { for: search.id, class: "form-label" }, "Find assignments"),
@@ -277,6 +340,7 @@ window.createGradebookCalculation = function (ui) {
             return categories.map((c) => ({
                 title: c.title.value.trim(),
                 weight_hundredths: Math.round(Number(c.weight.value) * 100),
+                drop_lowest: c.drop.value.trim() === "" ? NaN : Number(c.drop.value),
                 assignments: assignments.filter((a) => members.get(a.id) === c.key).map((a) => a.id),
             }));
         }
@@ -294,6 +358,14 @@ window.createGradebookCalculation = function (ui) {
         }
         function valid() {
             const values = serialize();
+            categories.forEach((category, index) => {
+                const count = values[index].drop_lowest;
+                const valid = Number.isInteger(count) && count >= 0 && count <= 499;
+                category.drop.setAttribute("aria-invalid", String(!valid));
+                category.drop.setAttribute("class", `form-control${valid ? "" : " is-invalid"}`);
+                category.drop.setCustomValidity(valid ? "" : "Use a whole number from 0 to 499.");
+                category.dropError.hidden = valid;
+            });
             const titles = values.map((c) => c.title.toLocaleLowerCase());
             return (
                 values.length > 0 &&
@@ -305,7 +377,10 @@ window.createGradebookCalculation = function (ui) {
                         c.title.length <= 80 &&
                         Number.isInteger(c.weight_hundredths) &&
                         c.weight_hundredths >= 0 &&
-                        c.weight_hundredths <= 10000,
+                        c.weight_hundredths <= 10000 &&
+                        Number.isInteger(c.drop_lowest) &&
+                        c.drop_lowest >= 0 &&
+                        c.drop_lowest <= 499,
                 ) &&
                 values.reduce((sum, c) => sum + c.weight_hundredths, 0) === 10000
             );

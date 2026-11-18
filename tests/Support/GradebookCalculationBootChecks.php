@@ -62,6 +62,68 @@ $summary = json_decode((string) $read($path)->getBody(), true, flags: JSON_THROW
 if (($summary["percent_hundredths"] ?? null) !== 7500) {
     throw new RuntimeException("The real summary route returned the wrong percentage.");
 }
+$second = $teachingPost($base . "/assignments/", [
+    "title" => "Fictional second quiz",
+    "possible_hundredths" => 1000,
+    "due_on" => "2026-09-02",
+]);
+if ($second->getStatusCode() !== 201) {
+    throw new RuntimeException("The second fictional assignment failed.");
+}
+$secondId = json_decode((string) $second->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+if (
+    $teachingPost("/sis/assignments/" . $secondId . "/scores/", [
+        "student_id" => $student->id->value,
+        "earned_hundredths" => 900,
+        "version" => 0,
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("The second fictional score failed.");
+}
+$dropSetup = json_decode(
+    (string) $read($base . "/gradebook/calculation/")->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$categories = [
+    [
+        "title" => "Coursework",
+        "weight_hundredths" => 10000,
+        "assignments" => [$id, $secondId],
+        "drop_lowest" => "1",
+    ],
+];
+if (
+    $teachingPost($base . "/gradebook/calculation/", [
+        "mode" => "category",
+        "weights" => [],
+        "categories" => $categories,
+        "revision" => $dropSetup["revision"],
+    ])->getStatusCode() !== 422
+) {
+    throw new RuntimeException("A string drop count bypassed controller/domain validation.");
+}
+$categories[0]["drop_lowest"] = 1;
+$preserved = [
+    $sis->sql->rows("sis_history_events"),
+    $sis->sql->rows("sis_academic_credits"),
+    $sis->sql->rows("sis_scores"),
+];
+if (
+    $teachingPost($base . "/gradebook/calculation/", [
+        "mode" => "category",
+        "weights" => [],
+        "categories" => $categories,
+        "revision" => $dropSetup["revision"],
+    ])->getStatusCode() !== 200 ||
+    $preserved !== [
+        $sis->sql->rows("sis_history_events"),
+        $sis->sql->rows("sis_academic_credits"),
+        $sis->sql->rows("sis_scores"),
+    ]
+) {
+    throw new RuntimeException("Saving the drop rule changed authoritative facts or scores.");
+}
 if (
     $teachingPost($base . "/gradebook/calculation/", [
         "mode" => "weighted",
@@ -94,7 +156,10 @@ $portal = $read($portalPath);
 $body = json_decode((string) $portal->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $portal->getStatusCode() !== 200 ||
-    ($body["summary"]["percent_hundredths"] ?? null) !== 7500 ||
+    ($body["summary"]["percent_hundredths"] ?? null) !== 9000 ||
+    ($body["summary"]["dropped"] ?? null) !== 1 ||
+    ($body["summary"]["dropped_assignments"][0]["assignment_id"] ?? null) !== $id ||
+    (array_column($body["items"], "dropped", "assignment_id")[$id] ?? null) !== true ||
     ($body["items"][0]["category_weight_hundredths"] ?? null) !== 10000 ||
     ($body["summary"]["categories"][0]["title"] ?? null) !== "Coursework"
 ) {

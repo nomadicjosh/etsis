@@ -298,7 +298,7 @@ window.createWorkspaceTeaching = function (ui) {
             const groups = categoryEditor.serialize();
             const empty = groups.filter((c) => c.weight_hundredths > 0 && !c.assignments.length).length;
             status.textContent = category
-                ? `Assigned ${(groups.reduce((sum, c) => sum + c.weight_hundredths, 0) / 100).toFixed(2)}% of 100%. Use unique category names. ${empty} positive-weight ${empty === 1 ? "category has" : "categories have"} no assignments.`
+                ? `Assigned ${(groups.reduce((sum, c) => sum + c.weight_hundredths, 0) / 100).toFixed(2)}% of 100%. Use unique names and whole drop counts from 0 to 499. ${empty} positive-weight ${empty === 1 ? "category has" : "categories have"} no assignments.`
                 : weighted
                   ? `Assigned ${(total / 100).toFixed(2)}% of 100%. Ungraded assignments are excluded from the running average.`
                   : "All assignments contribute according to their possible points.";

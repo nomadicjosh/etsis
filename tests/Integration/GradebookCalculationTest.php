@@ -94,6 +94,122 @@ final class GradebookCalculationTest extends TestCase
         self::assertSame(2, $service->summary($student->id, $section->id)["pending"]);
     }
 
+    public function testDroppedScoreFeedbackIsSharedWithTheOwnerAndPreservesScoresFinalGradesAndHistory(): void
+    {
+        [$f, $service, $student, $section, $a, $b] = $this->fixture();
+        $f->gradeScale([
+            [
+                "code" => "B",
+                "min_score_milli" => 80000,
+                "max_score_milli" => 89999,
+                "points_milli" => 3000,
+                "passes" => true,
+                "counts_gpa" => true,
+            ],
+        ]);
+        $grade = new EntityId($f->sql->rows("sis_grades")[0]["id"]);
+        $review = $service->reviewFinalGrade($student->id, $section->id, $grade, 0);
+        $service->commitFinalGrade($student->id, $section->id, $review["review_token"]);
+        $service->score($a->id, $student->id, 500, 0);
+        $service->score($b->id, $student->id, 9000, 0);
+        $tables = [
+            "sis_scores",
+            "sis_academic_credits",
+            "sis_enrollments",
+            "sis_history_events",
+            "sis_history_operations",
+        ];
+        $before = array_map($f->sql->rows(...), $tables);
+        $finance = $f->financialEvents();
+        $setup = $service->calculationSetup($section->id);
+        $categories = [
+            [
+                "title" => "Coursework",
+                "weight_hundredths" => 10000,
+                "assignments" => [$a->id->value, $b->id->value],
+                "drop_lowest" => 1,
+            ],
+        ];
+        $saved = $service->saveCalculation($section->id, "category", [], $setup["revision"], $categories);
+        self::assertSame($categories, $saved["categories"]);
+        $overview = $service->scoreOverview($student->id, $section->id);
+        self::assertSame(9000, $overview["summary"]["percent_hundredths"]);
+        self::assertSame(
+            [$a->id->value],
+            array_column($overview["summary"]["dropped_assignments"], "assignment_id"),
+        );
+        $items = array_column($overview["items"], null, "assignment_id");
+        self::assertTrue($items[$a->id->value]["dropped"]);
+        self::assertFalse($items[$a->id->value]["excluded"]);
+        self::assertFalse($items[$b->id->value]["dropped"]);
+        self::assertSame(1, $items[$a->id->value]["category_drop_lowest"]);
+        $f->access->actor = $f->admissions->person($student->personId)->ownerUserId;
+        $f->access->staff = false;
+        $f->access->grants = [];
+        self::assertSame($overview, $service->scoreOverview($student->id, $section->id));
+        self::assertSame($before, array_map($f->sql->rows(...), $tables));
+        self::assertSame($finance, $f->financialEvents());
+        $f->access->actor = $f->user();
+        $this->expectException(AccessDeniedException::class);
+        $service->scoreOverview($student->id, $section->id);
+    }
+
+    public function testDropRuleSaveRollsBackWhenTheStaffAccountChangesDuringAudit(): void
+    {
+        [$f, , , $section, $a, $b] = $this->fixture();
+        $other = $f->user();
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willReturnCallback(function () use ($f, $other): void {
+            $f->access->actor = $other;
+        });
+        $service = $this->service($f, $audit);
+        $setup = $service->calculationSetup($section->id);
+        $before = $f->sql->rows("sis_history_events");
+        try {
+            $service->saveCalculation($section->id, "category", [], $setup["revision"], [
+                [
+                    "title" => "Coursework",
+                    "weight_hundredths" => 10000,
+                    "assignments" => [$a->id->value, $b->id->value],
+                    "drop_lowest" => 1,
+                ],
+            ]);
+            self::fail("A changed staff account committed grading settings.");
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows("sis_gradebook_calculations"));
+            self::assertSame($before, $f->sql->rows("sis_history_events"));
+        }
+    }
+
+    public function testDroppedSelectionChangesWithScoresWithoutChangingTheSavedRule(): void
+    {
+        [$f, $service, $student, $section, $a, $b] = $this->fixture();
+        $service->score($a->id, $student->id, 500, 0);
+        $service->score($b->id, $student->id, 9000, 0);
+        $setup = $service->calculationSetup($section->id);
+        $service->saveCalculation($section->id, "category", [], $setup["revision"], [
+            [
+                "title" => "Coursework",
+                "weight_hundredths" => 10000,
+                "assignments" => [$a->id->value, $b->id->value],
+                "drop_lowest" => 1,
+            ],
+        ]);
+        $stored = $f->sql->rows("sis_gradebook_calculations");
+        $events = $f->sql->rows("sis_history_events");
+        $service->score($a->id, $student->id, 1000, 1);
+        $summary = $service->summary($student->id, $section->id);
+        self::assertSame(10000, $summary["percent_hundredths"]);
+        self::assertSame([$b->id->value], array_column($summary["dropped_assignments"], "assignment_id"));
+        $service->score($a->id, $student->id, null, 2);
+        $summary = $service->summary($student->id, $section->id);
+        self::assertSame(9000, $summary["percent_hundredths"]);
+        self::assertSame(1, $summary["pending"]);
+        self::assertSame(0, $summary["dropped"]);
+        self::assertSame($stored, $f->sql->rows("sis_gradebook_calculations"));
+        self::assertSame($events, $f->sql->rows("sis_history_events"));
+    }
+
     public function testSetupRejectsAssignmentChangesAndConcurrentSaves(): void
     {
         [$f, $service, , $section, $a] = $this->fixture();
