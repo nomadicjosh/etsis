@@ -66,6 +66,21 @@ final readonly class AdmissionApplication
         return new self($this->id, $this->personId, $this->programId, $term, $this->status, $this->version + 1);
     }
 
+    public function resubmitAnswers(): self
+    {
+        if ($this->status !== ApplicationStatus::Submitted) {
+            throw new DomainException('Only an application awaiting a decision can receive revised answers.');
+        }
+        return new self(
+            $this->id,
+            $this->personId,
+            $this->programId,
+            $this->entryTermId,
+            $this->status,
+            $this->version + 1
+        );
+    }
+
     public function recordOffer(): self
     {
         if ($this->status !== ApplicationStatus::Accepted) {

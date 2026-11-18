@@ -140,6 +140,57 @@ final readonly class AdmissionDecisionLedger
             $evidence
         );
     }
+    public function answerReview(AdmissionApplication $a): ?array
+    {
+        $refs = $this->load($a)['root']->answerRevisions();
+        $reference = $refs[array_key_last($refs)] ?? null;
+        return $reference === null ? null : $this->context->revisionReview($a, $reference);
+    }
+    public function revisionState(AdmissionApplication $a): array
+    {
+        $root = $this->load($a)['root'];
+        return ['birth' => $root->submission(), 'revisions' => $root->answerRevisions(),
+            'head' => $root->playhead(), 'initial_entry_term' => $root->initialEntryTerm()];
+    }
+    /** Artifact/projection CAS already succeeded in the same complete transaction. */
+    public function resubmitted(
+        AdmissionApplication $before,
+        AdmissionApplication $after,
+        #[\SensitiveParameter] array $reference,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason,
+        \DateTimeImmutable $at
+    ): array {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException('The resubmission actor changed.');
+        }
+        $root = $this->load($before)['root'];
+        $version = $root->playhead();
+        $p = ['decision_id' => $operation->value, 'previous_decision_id' => $root->decision(),
+            'application_version' => $after->version, 'revision' => $reference];
+        $e = \Domain\Admissions\Event\ApplicationAnswersWereResubmitted::occur(
+            new AdmissionDecisionId($before->id->value),
+            $p,
+            ['__aggregate_type' => 'admission_decision']
+        )->withPlayhead($version + 1);
+        $root->acceptHistorical($e);
+        $this->history->append(
+            $this->stream($before->id),
+            $operation,
+            $version,
+            new EventContext($actor, $at, $operation, reason: $reason),
+            [$e]
+        );
+        $this->verify($after);
+        return $this->revisionResult($after->id, $p);
+    }
+    private function revisionResult(EntityId $id, array $p): array
+    {
+        return ['application_id' => $id->value, 'revision_id' => $p['revision']['id'],
+            'status' => 'submitted', 'version' => $p['application_version'],
+            'submitted_at' => $p['revision']['submitted_at']];
+    }
     /** Verified, selected-application reads only; never replayed for a listing. */
     public function offer(AdmissionApplication $a): ?array
     {
@@ -445,9 +496,11 @@ final readonly class AdmissionDecisionLedger
             $correction = $e instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected;
             $reviewState = $e instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged;
             $offer = $e instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded;
+            $revision = $e instanceof \Domain\Admissions\Event\ApplicationAnswersWereResubmitted;
             $entry = $e instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved;
             $items[] = [
-                "kind" => $entry ? "entry_" . $p["kind"] : ($offer ? "offer_" . $p["action"] : ($observed
+                "kind" => $revision ? "resubmission"
+                    : ($entry ? "entry_" . $p["kind"] : ($offer ? "offer_" . $p["action"] : ($observed
                     ? "observation"
                     : ($initial
                         ? "submission"
@@ -455,9 +508,10 @@ final readonly class AdmissionDecisionLedger
                             ? "correction"
                             : ($reviewState
                                 ? ($p['status'] === 'withdrawn' ? 'withdrawal' : 'review_resumed')
-                                : "decision"))))),
-                "status" => $entry ? "accepted"
-                    : ($offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"])),
+                                : "decision")))))),
+                "status" => $revision ? "submitted" : ($entry ? "accepted"
+                    : ($offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]))),
+                "answer_revision_id" => $revision ? $p["revision"]["id"] : null,
                 "entry" => $entry ? ["before" => $p["before"], "after" => $p["after"]] : null,
                 "offer" => $offer ? $p["offer"] : null,
                 "previous_status" => $p["previous_status"] ?? null,
@@ -515,6 +569,23 @@ final readonly class AdmissionDecisionLedger
             $page = $budget->page($this->history, $this->stream($a->id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
+                if ($stored->event instanceof \Domain\Admissions\Event\ApplicationAnswersWereResubmitted) {
+                    $p = $stored->event->payload();
+                    $ref = $p['revision'];
+                    $this->context->verifyRevision($a, $ref);
+                    if (
+                        $stored->context->actor?->value !== $ref['submitted_by']
+                        || $stored->context->effectiveAt?->format(DATE_ATOM) !== $ref['submitted_at']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    if ($p['decision_id'] === $operation?->value) {
+                        if ($ref['submitted_by'] !== $receiptActor?->value) {
+                            throw new AccessDeniedException('This resubmission receipt belongs to another actor.');
+                        }
+                        $receipt = $this->revisionResult($a->id, $p);
+                    }
+                }
                 $withdrawal = $stored->event->metaParam('admission_withdrawal');
                 if (
                     $withdrawal !== null && $withdrawal['channel'] === 'applicant'

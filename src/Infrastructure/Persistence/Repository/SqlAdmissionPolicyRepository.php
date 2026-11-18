@@ -35,6 +35,21 @@ final readonly class SqlAdmissionPolicyRepository implements AdmissionPolicyRepo
         }
         return ['mode' => $r['withdrawal_mode'], 'revision' => $this->revision($r['withdrawal_revision'])];
     }
+    public function answers(): array
+    {
+        $r = $this->sql->one('sis_admission_policy', ['id' => self::ID]);
+        if (!in_array($r['answer_mode'], ['request', 'before_decision'], true)) {
+            throw new CorruptHistoryException();
+        }
+        return ['mode' => $r['answer_mode'], 'revision' => $this->revision($r['answer_revision'])];
+    }
+    public function saveAnswers(string $mode, int $expectedRevision): void
+    {
+        if (!in_array($mode, ['request', 'before_decision'], true)) {
+            throw new \InvalidArgumentException('Choose a valid application answer revision policy.');
+        }
+        $this->save(['answer_mode' => $mode], 'answer_revision', $expectedRevision);
+    }
     private function revision(mixed $value): int
     {
         $v = filter_var($value, FILTER_VALIDATE_INT);

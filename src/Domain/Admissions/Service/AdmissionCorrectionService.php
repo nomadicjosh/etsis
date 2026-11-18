@@ -75,11 +75,13 @@ final readonly class AdmissionCorrectionService
                     JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
                 ),
             );
+            $answersReview = $this->ledger->answerReview($a);
             $this->authorize($actor);
             return [
                 "before" => $this->ledger->current($a),
                 "status" => $accept ? "accepted" : "rejected",
                 "source" => AdmissionDecisionSchema::displaySource($source),
+                "answers_review" => $answersReview,
                 "effective_on" => $this->clock->now()->format("Y-m-d"),
                 "person" => [
                     "given_name" => $person->givenName,

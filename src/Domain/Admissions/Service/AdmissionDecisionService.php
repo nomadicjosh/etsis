@@ -32,6 +32,7 @@ final readonly class AdmissionDecisionService
         private MessageCipher $cipher,
         private Clock $clock,
         private AdmissionEvidenceService $evidence,
+        private \Domain\Admissions\Repository\ApplicationRevisionRepository $answerRevisions,
     ) {
     }
 
@@ -76,10 +77,12 @@ final readonly class AdmissionDecisionService
                     JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
                 ),
             );
+            $answersReview = $this->ledger->answerReview($a);
             $this->authorize($actor);
             return [
                 "status" => $accept ? "accepted" : "rejected",
                 "source" => AdmissionDecisionSchema::displaySource($source),
+                "answers_review" => $answersReview,
                 "person" => [
                     "given_name" => $person->givenName,
                     "family_name" => $person->familyName,
@@ -201,6 +204,10 @@ final readonly class AdmissionDecisionService
     }
     private function eligible(AdmissionApplication $a): void
     {
+        if ($this->answerRevisions->pending($a->id) !== null) {
+            throw new ValidationException([['field' => 'application',
+                'message' => 'Wait for revised answers or close the correction request before deciding.']]);
+        }
         if ($a->status !== ApplicationStatus::Submitted) {
             throw new ValidationException([
                 [
@@ -228,6 +235,7 @@ final readonly class AdmissionDecisionService
                     $r === null ? null : hash("sha256", $r["encrypted_answers"]),
                     $this->clock->now()->format("Y-m-d"),
                     $this->ledger->verify($a),
+                    $this->answerRevisions->revision($a->id),
                 ],
                 JSON_THROW_ON_ERROR,
             ),

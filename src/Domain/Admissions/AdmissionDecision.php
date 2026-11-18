@@ -24,6 +24,33 @@ final class AdmissionDecision extends EventSourcedAggregate
     private ?array $offer = null;
     private bool $acceptanceKnown = false;
 
+    /** @var list<array<string,mixed>> */
+    private array $answerRevisions = [];
+    public function answerRevisions(): array
+    {
+        return $this->answerRevisions;
+    }
+    public function whenApplicationAnswersWereResubmitted(
+        #[\SensitiveParameter] \Domain\Admissions\Event\ApplicationAnswersWereResubmitted $event
+    ): void {
+        $p = $event->payload();
+        $r = $p['revision'];
+        if (
+            $this->submission === null || $this->application['status'] !== 'submitted'
+            || $p['previous_decision_id'] !== $this->decision
+            || $p['application_version'] !== $this->application['version'] + 1
+            || $r['original_submission_id'] !== ($this->submission['source']['submission']['id'] ?? null)
+            || $r['form_id'] !== ($this->submission['source']['submission']['form_id'] ?? null)
+            || $r['form_hash'] !== $this->submission['form_definition_hash'] || count($this->answerRevisions) >= 20
+            || in_array($r['id'], array_column($this->answerRevisions, 'id'), true)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->answerRevisions[] = $r;
+        $this->application['version'] = $p['application_version'];
+        $this->decision = $p['decision_id'];
+    }
+
     /** Only an offer issued under the current admissions decision is actionable. */
     public function offer(): ?array
     {
@@ -121,7 +148,9 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        if ($event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved) {
+        if ($event instanceof \Domain\Admissions\Event\ApplicationAnswersWereResubmitted) {
+            \Domain\Admissions\ValueObject\ApplicationRevisionSchema::validate($event->payload());
+        } elseif ($event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved) {
             \Domain\Admissions\ValueObject\AdmissionDeferralSchema::validate($event->payload());
         } elseif ($event instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded) {
             \Domain\Admissions\ValueObject\AdmissionOfferSchema::validate($event->payload());

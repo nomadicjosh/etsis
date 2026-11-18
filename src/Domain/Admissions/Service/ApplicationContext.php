@@ -19,6 +19,7 @@ final readonly class ApplicationContext
         private ApplicationFormRepository $forms,
         private StudentRecordRepository $records,
         private MessageCipher $cipher,
+        private \Domain\Admissions\Repository\ApplicationRevisionRepository $revisions,
     ) {
     }
     /** @return array<string,mixed>|null */
@@ -57,6 +58,44 @@ final readonly class ApplicationContext
         ];
         AdmissionDecisionSchema::source($source);
         return $source;
+    }
+
+    public function revisionReview(AdmissionApplication $a, array $reference): array
+    {
+        $artifact = $this->verifyRevision($a, $reference);
+        return ['form' => $this->forms->get(new EntityId($reference['form_id'])),
+            'answers' => $artifact['answers'], 'submitted_at' => $reference['submitted_at']];
+    }
+    public function verifyRevision(AdmissionApplication $a, #[\SensitiveParameter] array $ref): array
+    {
+        try {
+            $row = $this->revisions->find(new EntityId($ref['id'])) ?? throw new CorruptHistoryException();
+            $artifact = $row['artifact'];
+            if (
+                $row['status'] !== 'submitted' || $row['application_id'] !== $a->id->value
+                || !is_array($artifact) || count($artifact) !== 13 || !is_array($artifact['answers'] ?? null)
+                || !\Domain\Admissions\ValueObject\AdmissionOfferSchema::text($artifact['reason'] ?? null, 2000)
+                || $artifact['application_id'] !== $a->id->value
+                || !hash_equals(
+                    $ref['fingerprint'],
+                    \Domain\Admissions\ValueObject\ApplicationRevisionSchema::fingerprint($artifact)
+                )
+            ) {
+                throw new CorruptHistoryException();
+            }
+            foreach ($ref as $key => $value) {
+                if ($key !== 'fingerprint' && ($artifact[$key] ?? null) != $value) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            $form = $this->forms->get(new EntityId($ref['form_id']));
+            if (SubmissionIntegrity::formHash($form) !== $ref['form_hash']) {
+                throw new CorruptHistoryException();
+            }
+            return $artifact;
+        } catch (\Throwable) {
+            throw new CorruptHistoryException();
+        }
     }
 
     /** Older submissions retain explicit provenance gaps; verify their existing artifact without inventing a birth. */

@@ -227,6 +227,16 @@
                 for (const item of relevant) remote.set(item.field, item.message);
                 showValidation = true; update(); summary.focus(); return true;
             },
+            fill: answers => {
+                for (const [key, entry] of entries) {
+                    const value = answers[key];
+                    for (const control of entry.controls) {
+                        if (control.type === 'radio' || control.type === 'checkbox') control.checked = control.type === 'checkbox' ? value === true : value === control.value;
+                        else control.value = value === null || value === undefined ? '' : String(value);
+                    }
+                }
+                remote.clear(); showValidation = false; update();
+            },
             reset: () => { HTMLFormElement.prototype.reset.call(form); remote.clear(); showValidation = false; summary.hidden = true; update(); },
         };
     };

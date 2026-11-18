@@ -857,12 +857,46 @@ final class SisFixture
         return $id;
     }
 
+    public function applicationRevisionService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Admissions\Service\ApplicationRevisionService {
+        return new \Domain\Admissions\Service\ApplicationRevisionService(
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository(
+                $this->sql,
+            ),
+            $this->applicationRevisions(),
+            $this->admissionPolicy(),
+            $this->withdrawalRepository(),
+            new \Infrastructure\Persistence\Repository\SqlAdmissionUpdatesRepository(
+                $this->sql,
+            ),
+            $this->decisionLedger(),
+            $this->applicationContext(),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository(
+                $this->sql,
+            ),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+        );
+    }
+    public function applicationRevisions(): \Domain\Admissions\Repository\ApplicationRevisionRepository
+    {
+        return new \Infrastructure\Persistence\Repository\SqlApplicationRevisionRepository(
+            $this->sql,
+            $this->dropCipher,
+        );
+    }
     public function applicationContext(): \Domain\Admissions\Service\ApplicationContext
     {
         return new \Domain\Admissions\Service\ApplicationContext(
             new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
             $this->dropCipher,
+            $this->applicationRevisions(),
         );
     }
     public function submissionService(
@@ -974,6 +1008,7 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             $evidence ?? $this->admissionEvidenceService(),
+            $this->applicationRevisions(),
         );
     }
     /** Explicit current-state decision fixture predating tracked acceptance/rejection. */

@@ -199,6 +199,14 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
         $this->transition($after, $before->version, $before->status, $after->status);
     }
 
+    public function saveResubmission(AdmissionApplication $before, AdmissionApplication $after): void
+    {
+        if ($before->resubmitAnswers() != $after) {
+            throw new DomainException('Resubmission must preserve application identity and advance one revision.');
+        }
+        $this->transition($after, $before->version, ApplicationStatus::Submitted, ApplicationStatus::Submitted);
+    }
+
     public function saveEntryTerm(AdmissionApplication $before, AdmissionApplication $after): void
     {
         if ($before->approveEntryTerm($after->entryTermId) != $after) {

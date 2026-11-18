@@ -12,17 +12,17 @@ function fixture() {
         request: async (url, method, body) => {
             calls.push({ url, method, body });
             if (method === 'POST') return body.area === 'offers' ? { require_acceptance: body.require_acceptance, revision: 4 } : { mode: body.mode, revision: 8 };
-            return { offers: { require_acceptance: true, revision: 3 }, withdrawals: { mode: 'request', revision: 7 } };
+            return { offers: { require_acceptance: true, revision: 3 }, withdrawals: { mode: 'request', revision: 7 }, answers: { mode: 'request', revision: 0 } };
         }, task: run => { const p = Promise.resolve().then(run).catch(e => errors.push(e)); tasks.push(p); return p; } }).mount(root);
     const flush = async () => { let n; do { n = tasks.length; await Promise.all(tasks); } while (n !== tasks.length); };
     return { root, guard, calls, errors, flush };
 }
-test('one setup request loads both independent policies without an application', async () => {
+test('one setup request loads all independent policies without an application', async () => {
     const f = fixture(); await f.flush();
     assert.equal(f.calls.length, 1); assert.equal(f.calls[0].url, '/sis/admission-policy/');
     assert.match(f.root.textContent, /Staff approval required/);
     assert.match(f.root.textContent, /Applicants may withdraw directly/);
-    assert.equal(walk(f.root).filter(e => e.tag === 'select').length, 1);
+    assert.equal(walk(f.root).filter(e => e.tag === 'select').length, 2);
 });
 test('saving one policy preserves the other policy choice and its unsaved guard', async () => {
     const f = fixture(); await f.flush();

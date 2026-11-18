@@ -34,6 +34,7 @@ interface AdmissionsRepository
     public function saveOffer(AdmissionApplication $before, AdmissionApplication $after): void;
 
     /** Projection CAS only; the entry-term service owns authorization, locks and the transaction. */
+    public function saveResubmission(AdmissionApplication $before, AdmissionApplication $after): void;
     public function saveEntryTerm(AdmissionApplication $before, AdmissionApplication $after): void;
     /** @return list<array<string,mixed>> */
     public function defermentTerms(string $afterStart, string $today, string $search, ?EntityId $after = null): array;

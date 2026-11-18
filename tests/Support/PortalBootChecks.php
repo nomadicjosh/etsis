@@ -6612,3 +6612,5 @@ $sis->access->actor = $originalSubmissionActor;
 $sis->access->staff = true;
 
 require __DIR__ . "/AdmissionDeferralBootChecks.php";
+
+require __DIR__ . "/ApplicationRevisionsBootChecks.php";

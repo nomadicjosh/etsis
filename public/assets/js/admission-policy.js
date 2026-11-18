@@ -13,10 +13,10 @@
                     const data = await request('/sis/admission-policy/');
                     if (!container.isConnected || ticket !== generation) return;
                     body.replaceChildren();
-                    for (const area of ['offers', 'withdrawals']) {
+                    for (const area of ['offers', 'withdrawals', 'answers']) {
                         const form = node('form', { class: 'record-section mb-3' });
                         const identity = `admission-policy-${++sequence}`;
-                        const title = area === 'offers' ? 'Offer acceptance' : 'Applicant withdrawal';
+                        const title = area === 'offers' ? 'Offer acceptance' : area === 'answers' ? 'Application revisions' : 'Applicant withdrawal';
                         form.append(node('h3', { class: 'h5' }, title));
                         let input;
                         if (area === 'offers') {
@@ -24,6 +24,12 @@
                             form.append(node('div', { class: 'form-check mb-3' }, input,
                                 node('label', { for: identity, class: 'form-check-label' }, 'Require applicant acceptance before matriculation')),
                             node('p', { class: 'form-text' }, 'New offers retain this policy. Issued letters and completed matriculations stay unchanged.'));
+                        } else if (area === 'answers') {
+                            input = node('select', { id: identity, class: 'form-select mb-3' },
+                                ...[['request', 'Only after staff request corrections'], ['before_decision', 'Anytime before an admissions decision']]
+                                    .map(([value, label]) => node('option', { value, selected: data.answers.mode === value }, label)));
+                            form.append(node('label', { for: identity, class: 'form-label' }, 'When applicants may revise answers'), input,
+                                node('p', { class: 'form-text' }, 'Each resubmission retains earlier answers and uses the original form. Accepted, rejected, withdrawn and matriculated applications cannot be edited.'));
                         } else {
                             input = node('select', { id: identity, class: 'form-select mb-3' },
                                 ...[['request', 'Staff approval required'], ['direct', 'Applicants may withdraw directly'], ['staff_only', 'Staff-only withdrawal']]
@@ -32,7 +38,7 @@
                                 node('p', { class: 'form-text' }, 'Applies before matriculation. Pending requests pause matriculation and offer responses. Applicants may cancel an existing request even if the policy changes.'));
                         }
                         input.addEventListener('change', () => { dirty.add(area); });
-                        const save = node('button', { type: 'submit', class: 'btn btn-primary' }, area === 'offers' ? 'Save offer policy' : 'Save withdrawal policy');
+                        const save = node('button', { type: 'submit', class: 'btn btn-primary' }, area === 'offers' ? 'Save offer policy' : area === 'answers' ? 'Save revision policy' : 'Save withdrawal policy');
                         form.append(save); body.append(form);
                         form.addEventListener('submit', event => {
                             event.preventDefault(); if (busy) return;

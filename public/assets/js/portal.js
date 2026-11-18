@@ -703,13 +703,14 @@
         const identity = `submitted-answers-${++controlSequence}`;
         const detail = el('section', { id: identity, class: 'campus-application-answers mt-4', hidden: true,
             'aria-labelledby': `${identity}-title` });
-        let serial = 0, opener = null, loading = false;
+        let serial = 0, opener = null, loading = false, revisionEditor = null;
         const programLabel = application => application.program_title
             ? [application.program_code, application.program_title].filter(Boolean).join(' · ')
             : programName(application.program_id);
         const termLabel = application => application.term_code || termName(application.entry_term_id);
         function close() {
-            serial++; loading = false;
+            if (revisionEditor && !revisionEditor.beforeLeave()) return;
+            revisionEditor = null; serial++; loading = false;
             detail.replaceChildren(); detail.hidden = true;
             opener?.setAttribute('aria-expanded', 'false'); opener?.removeAttribute('aria-busy');
             if (opener?.isConnected) opener.focus();
@@ -718,6 +719,8 @@
         async function view(application, trigger, retry = false) {
             if (opener === trigger && !retry) { close(); return; }
             if (opener === trigger && loading) return;
+            if (revisionEditor && !revisionEditor.beforeLeave()) return;
+            revisionEditor = null;
             const ticket = ++serial;
             opener?.setAttribute('aria-expanded', 'false'); opener?.removeAttribute('aria-busy');
             opener = trigger; loading = true;
@@ -735,15 +738,10 @@
                 const record = await request(`/sis/form-submissions/${application.submission_id}/`);
                 if (ticket !== serial || pageLeaving || !detail.isConnected) return;
                 if (record.application_id !== application.id) throw new Error('Application reference mismatch.');
-                const answers = window.createApplicationAnswerReview({ fields: record.form.fields,
-                    layout: record.form.layout || [], answers: record.answers });
                 title.textContent = record.form.name;
-                content.replaceChildren(
-                    el('p', { class: 'campus-muted' }, record.submitted_term_code
-                        ? `Submitted intake: ${record.submitted_term_code}. Your current planned intake is shown in the application list.`
-                        : 'The original submitted intake was not recorded.'),
-                    el('p', { class: 'campus-muted' }, 'These answers use the original form. They cannot be edited here.'), answers,
-                );
+                content.replaceChildren();
+                revisionEditor = window.createApplicationRevisions({ node: el, request, task, notify: notice })
+                    .mount(content, application.id, { initiallyOpen: true });
                 status.className = 'visually-hidden'; status.textContent = 'Your submitted answers are ready.';
             } catch {
                 if (ticket !== serial || pageLeaving || !detail.isConnected) return;
@@ -757,6 +755,7 @@
                 if (ticket === serial) { loading = false; trigger.removeAttribute('aria-busy'); }
             }
         }
+        documentGuards?.push({ beforeLeave: () => revisionEditor?.beforeLeave() ?? true });
         const documentArea = el('div');
         const rows = applications.map(application => {
             const answers = application.submission_id ? el('button', { class: 'btn campus-button-outline btn-sm', type: 'button',

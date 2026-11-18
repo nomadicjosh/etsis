@@ -404,7 +404,7 @@ window.createWorkspacePeople = function (ui) {
         const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, row.id, { staff: true });
         body.append(documents);
         const offerArea = node('div'), withdrawalArea = node('div'); body.append(offerArea, withdrawalArea);
-        let background = null, withdrawalEditor = null;
+        let background = null, withdrawalEditor = null, answerEditor = null;
         const otherForms = () => workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true);
         const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, row.id,
             { staff: true, canIssue: can('sis:admissions:offers'), canPolicy: can('sis:admissions:policy'),
@@ -417,7 +417,7 @@ window.createWorkspacePeople = function (ui) {
                     else { try { await offerEditor.refresh(); } catch { notify('Request saved. Reopen the offer to refresh its status.'); } }
                 } });
         function mayLeave() {
-            return otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true);
+            return otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) && (answerEditor?.beforeLeave() ?? true);
         }
         if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
@@ -432,25 +432,11 @@ window.createWorkspacePeople = function (ui) {
             body.append(education);
         }
         if (submission) {
-            const section = node(
-                "section",
-                { class: "record-section" },
-                node("h3", {}, submission.form.name),
-                node(
-                    "p",
-                    { class: "form-text" },
-                    "These answers use the form revision submitted by the applicant. Later form changes do not alter this application.",
-                ),
-            );
-            section.append(node('p', { class: 'form-text' }, submission.submitted_term_code
-                ? `Submitted intake: ${submission.submitted_term_code}. The current planned intake is shown above.`
-                : 'The original submitted intake was not recorded.'));
-            section.append(window.createApplicationAnswerReview({
-                fields: submission.form.fields,
-                layout: submission.form.layout || [],
-                answers: submission.answers,
-            }));
+            const section = node('section', { class: 'record-section' });
             body.append(section);
+            answerEditor = window.createApplicationRevisions({ node, request, task, notify }).mount(section, row.id,
+                { staff: true, canAmend: can('sis:admissions:amend'), initiallyOpen: true,
+                    beforeChange: () => otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) });
         } else
             body.append(
                 node(
@@ -559,6 +545,14 @@ window.createWorkspacePeople = function (ui) {
                             "btn-primary",
                         ),
                     );
+                    if (preview.answers_review) {
+                        const retained = preview.answers_review;
+                        confirmation.insertBefore(node('section', { class: 'record-section' },
+                            node('h4', { class: 'h6' }, 'Current revised answers'),
+                            node('p', { class: 'form-text' }, `Resubmitted: ${retained.submitted_at}. Review these answers before confirming.`),
+                            window.createApplicationAnswerReview({ fields: retained.form.fields,
+                                layout: retained.form.layout || [], answers: retained.answers })), confirmation.lastElementChild);
+                    }
                     const evidenceSummary = node("div");
                     evidenceEditor.summary(evidenceSummary, preview.evidence ?? null);
                     confirmation.insertBefore(evidenceSummary, confirmation.lastElementChild);
@@ -667,6 +661,14 @@ window.createWorkspacePeople = function (ui) {
                             "btn-primary",
                         ),
                     );
+                    if (preview.answers_review) {
+                        const retained = preview.answers_review;
+                        confirmation.insertBefore(node('section', { class: 'record-section' },
+                            node('h4', { class: 'h6' }, 'Current revised answers'),
+                            node('p', { class: 'form-text' }, `Resubmitted: ${retained.submitted_at}. Review these answers before confirming.`),
+                            window.createApplicationAnswerReview({ fields: retained.form.fields,
+                                layout: retained.form.layout || [], answers: retained.answers })), confirmation.lastElementChild);
+                    }
                     const evidenceSummary = node("div");
                     evidenceEditor.summary(evidenceSummary, preview.evidence ?? null);
                     confirmation.insertBefore(evidenceSummary, confirmation.lastElementChild);
@@ -788,13 +790,14 @@ window.createWorkspacePeople = function (ui) {
                 const reviewState = ['withdrawal', 'review_resumed'].includes(item.kind);
                 const offer = item.kind.startsWith('offer_');
                 const entry = item.kind.startsWith('entry_');
+                const resubmission = item.kind === 'resubmission';
                 const section = node(
                     "section",
                     { class: "record-section" },
                     node(
                         "h3",
                         {},
-                        entry ? (item.kind === 'entry_defer' ? 'Entry deferred' : 'Updated intake approved')
+                        resubmission ? 'Application answers resubmitted' : entry ? (item.kind === 'entry_defer' ? 'Entry deferred' : 'Updated intake approved')
                         : offer ? `Admission offer: ${item.status}` : observed
                             ? "Observed current application"
                             : reviewState ? (item.kind === 'withdrawal' ? (item.withdrawal_channel === 'applicant' ? 'Applicant withdrew application' : 'Application withdrawn') : 'Returned to review')
@@ -829,7 +832,7 @@ window.createWorkspacePeople = function (ui) {
                 if (entry) section.append(node('p', { class: 'text-break' },
                     `${item.entry.before.code} → ${item.entry.after.code} · ${item.entry.after.year_code}`),
                     node('p', { class: 'form-text' }, `${item.entry.after.starts_on} through ${item.entry.after.ends_on}`));
-                if (!observed && !reviewState && !offer && !entry) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
+                if (!observed && !reviewState && !offer && !entry && !resubmission) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
                 body.append(section);
             }
             body.append(

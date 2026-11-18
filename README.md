@@ -113,7 +113,7 @@ The [application form studio](docs/application-submission-history.md#application
 
 [Term types, academic years and terms](docs/academic-calendar-setup.md) explains calendar setup and automatically derived matriculation cohorts. [Initial student matriculation](docs/student-matriculation.md) explains the admissions review, first-program history and retry behavior.
 
-[Application submission history](docs/application-submission-history.md), [admissions decisions](docs/admissions-decisions.md), and [outcome corrections](docs/admissions-corrections.md) describe retained history, staff permissions and reviewed corrections before matriculation.
+[Application submission history and answer revisions](docs/application-submission-history.md), [admissions decisions](docs/admissions-decisions.md), and [outcome corrections](docs/admissions-corrections.md) describe retained history, staff permissions and reviewed corrections before matriculation.
 
 [Admissions workbench](docs/admissions-workbench.md) covers shared checklists, office routing, handoffs, follow-up queues, private applicant next steps, an admissions inbox and protected documents. [Application withdrawal and return to review](docs/admissions-decisions.md#withdraw-an-application-or-return-it-to-review) preserve earlier outcomes. [Admission offers](docs/admissions-offers.md) provide private letters and applicant responses. [Applicant withdrawal](docs/admissions-decisions.md#applicant-withdrawal) adds institutional policy, a shared request panel and staff resolution before matriculation. [Deferment](docs/admissions-decisions.md#defer-an-accepted-application) retains the original application and answers while approving a later intake and fresh offer.
 

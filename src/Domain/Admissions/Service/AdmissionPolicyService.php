@@ -26,7 +26,8 @@ final readonly class AdmissionPolicyService
     public function current(): array
     {
         $actor = $this->access->requirePermission('sis:admissions:manage');
-        $data = ['offers' => $this->policy->offers(), 'withdrawals' => $this->policy->withdrawals()];
+        $data = ['offers' => $this->policy->offers(), 'withdrawals' => $this->policy->withdrawals(),
+            'answers' => $this->policy->answers()];
         $this->authorize($actor, false);
         return $data;
     }
@@ -41,6 +42,8 @@ final readonly class AdmissionPolicyService
                 $this->policy->saveOffers($value, $revision);
             } elseif ($area === 'withdrawals' && is_string($value)) {
                 $this->policy->saveWithdrawals($value, $revision);
+            } elseif ($area === 'answers' && is_string($value)) {
+                $this->policy->saveAnswers($value, $revision);
             } else {
                 throw new \InvalidArgumentException('Choose an admissions policy and valid value.');
             }
@@ -50,7 +53,11 @@ final readonly class AdmissionPolicyService
                 new EntityId(AdmissionPolicyRepository::ID)
             );
             $this->authorize($actor, true);
-            return $area === 'offers' ? $this->policy->offers() : $this->policy->withdrawals();
+            return match ($area) {
+                'offers' => $this->policy->offers(),
+                'answers' => $this->policy->answers(),
+                default => $this->policy->withdrawals(),
+            };
         });
     }
     private function authorize(EntityId $actor, bool $write): void

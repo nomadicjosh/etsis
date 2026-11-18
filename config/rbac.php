@@ -5,6 +5,9 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:admissions:amend" => [
+            "description" => "Request corrections and assist with application answer resubmission.",
+        ],
         "sis:admissions:defer" => ["description" => "Approve deferred and changed entry terms before matriculation."],
         'sis:admissions:offers' => [
             'description' => 'Issue admission offers and record documented applicant responses.',
