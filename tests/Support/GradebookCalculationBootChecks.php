@@ -378,3 +378,93 @@ if (
 ) {
     throw new RuntimeException("The student's private attendance feedback lost its confirmed mark.");
 }
+
+// Bonus-only work shares assignment, class worksheet and owner-only feedback routes.
+$sis->access->actor = $section->facultyUserId;
+$sis->access->staff = true;
+$bonusSection = $sis->section(faculty: $sis->access->actor);
+$sis->service->register($student->id, $bonusSection->id, true);
+$sis->access->staff = false;
+$bonusBase = "/sis/sections/" . $bonusSection->id->value;
+$bonusProtected = [
+    $sis->sql->rows("sis_history_events"),
+    $sis->sql->rows("sis_academic_credits"),
+    $sis->sql->rows("sis_enrollments"),
+    $sis->financialEvents(),
+];
+$regularResponse = $teachingPost($bonusBase . "/assignments/", [
+    "title" => "Fictional final exam", "possible_hundredths" => 10000, "due_on" => "2026-09-01",
+]);
+$extraResponse = $teachingPost($bonusBase . "/assignments/", [
+    "title" => "Optional reflection", "possible_hundredths" => 0, "bonus_hundredths" => 1000,
+    "due_on" => "2026-09-01",
+]);
+if ($regularResponse->getStatusCode() !== 201 || $extraResponse->getStatusCode() !== 201) {
+    throw new RuntimeException("Bonus-only assignment creation failed through the real controller.");
+}
+$regularId = json_decode((string) $regularResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+$extraId = json_decode((string) $extraResponse->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+if (
+    $teachingPost($bonusBase . "/assignments/", [
+        "title" => "Empty points", "possible_hundredths" => 0, "bonus_hundredths" => 0,
+        "due_on" => "2026-09-01",
+    ])->getStatusCode() !== 422 ||
+    $teachingPost("/sis/assignments/" . $regularId . "/scores/", [
+        "student_id" => $student->id->value, "earned_hundredths" => 9200, "version" => 0,
+    ])->getStatusCode() !== 200 ||
+    $teachingPost("/sis/assignments/" . $extraId . "/scores/", [
+        "student_id" => $student->id->value, "earned_hundredths" => 500, "version" => 0,
+    ])->getStatusCode() !== 200 ||
+    $teachingPost("/sis/assignments/" . $extraId . "/scores/", [
+        "student_id" => $student->id->value, "earned_hundredths" => 1001, "version" => 1,
+    ])->getStatusCode() !== 422
+) {
+    throw new RuntimeException("Actual bonus-only routes did not enforce positive limits and saved scores.");
+}
+$bonusSetup = json_decode(
+    (string) $read($bonusBase . "/gradebook/calculation/")->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$bonusSave = $teachingPost($bonusBase . "/gradebook/calculation/", [
+    "mode" => "weighted", "weights" => [$regularId => 10000, $extraId => 1000],
+    "revision" => $bonusSetup["revision"],
+]);
+$bonusSummary = json_decode(
+    (string) $read($bonusBase . "/students/" . $student->id->value . "/gradebook-summary/")->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$bonusRoster = $teachingPost("/sis/assignments/" . $extraId . "/score-roster/", []);
+if (
+    $bonusSave->getStatusCode() !== 200 ||
+    ($bonusSummary["percent_hundredths"] ?? null) !== 9700 ||
+    ($bonusSummary["coverage_hundredths"] ?? null) !== 10000 ||
+    $bonusRoster->getStatusCode() !== 200
+) {
+    throw new RuntimeException("Weighted bonus-only review and the class worksheet disagree.");
+}
+$sis->access->actor = $sis->admissions->person($student->personId)->ownerUserId;
+$bonusPortal = "/portal/api/students/" . $student->id->value . "/sections/" . $bonusSection->id->value . "/scores/";
+$bonusOwnerResponse = $read($bonusPortal);
+$bonusOwner = json_decode((string) $bonusOwnerResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$bonusRows = array_column($bonusOwner["items"] ?? [], null, "assignment_id");
+if (
+    $bonusOwnerResponse->getStatusCode() !== 200 ||
+    ($bonusOwner["summary"]["percent_hundredths"] ?? null) !== 9700 ||
+    ($bonusRows[$extraId]["bonus_only"] ?? null) !== true ||
+    ($bonusRows[$extraId]["score_limit_hundredths"] ?? null) !== 1000 ||
+    $teachingPost("/sis/assignments/" . $extraId . "/score-roster/", [])->getStatusCode() !== 403 ||
+    $bonusProtected !== [
+        $sis->sql->rows("sis_history_events"),
+        $sis->sql->rows("sis_academic_credits"),
+        $sis->sql->rows("sis_enrollments"),
+        $sis->financialEvents(),
+    ]
+) {
+    throw new RuntimeException("Private bonus-only feedback changed official facts or exposed class authority.");
+}
+$sis->access->actor = $sis->admissions->person($other->personId)->ownerUserId;
+if ($read($bonusPortal)->getStatusCode() !== 403) {
+    throw new RuntimeException("Another person read the student's bonus-only coursework.");
+}

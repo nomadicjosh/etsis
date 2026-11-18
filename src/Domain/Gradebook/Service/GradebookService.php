@@ -54,11 +54,14 @@ final readonly class GradebookService
     ): array {
         $this->access->authenticatedUserId();
         $this->faculty($section);
-        $calculation = new GradebookCalculation($mode, $weights, $categories);
-        return $this->transactions->run(function () use ($section, $calculation, $revision): array {
+        return $this->transactions->run(function () use ($section, $mode, $weights, $categories, $revision): array {
             $this->registration->lockSection($section);
             $actor = $this->faculty($section);
             $context = $this->calculationContext($section);
+            $calculation = $this->calculation(
+                ["mode" => $mode, "weights" => $weights, "categories" => $categories],
+                $context["assignments"],
+            );
             if (!hash_equals($context["revision"], $revision)) {
                 throw new ConcurrentModificationException(
                     "The assignments or calculation changed. Reload gradebook setup.",
@@ -90,7 +93,6 @@ final readonly class GradebookService
     private function calculationContext(EntityId $section): array
     {
         $settings = $this->repository->calculation($section);
-        new GradebookCalculation($settings["mode"], $settings["weights"], $settings["categories"]);
         $assignments = $this->repository->assignments($section, GradebookCalculation::LIMIT + 1);
         if (count($assignments) > GradebookCalculation::LIMIT) {
             throw new ValidationException([
@@ -100,6 +102,7 @@ final readonly class GradebookService
                 ],
             ]);
         }
+        $this->calculation($settings, $assignments);
         return [
             "mode" => $settings["mode"],
             "weights" => $settings["weights"],
@@ -108,6 +111,20 @@ final readonly class GradebookService
             "assignments" => $assignments,
             "revision" => hash("sha256", json_encode([$settings, $assignments], JSON_THROW_ON_ERROR)),
         ];
+    }
+
+    /** @param array<string,mixed> $settings
+     * @param list<array<string,mixed>> $assignments
+     */
+    private function calculation(array $settings, array $assignments): GradebookCalculation
+    {
+        $bonus = [];
+        foreach ($assignments as $assignment) {
+            if ($assignment["possible_hundredths"] === 0) {
+                $bonus[] = $assignment["assignment_id"] ?? $assignment["id"];
+            }
+        }
+        return new GradebookCalculation($settings["mode"], $settings["weights"], $settings["categories"], $bonus);
     }
 
     /** @return array<string, mixed> */
@@ -214,6 +231,18 @@ final readonly class GradebookService
                 throw new ConcurrentModificationException("Reload the assignment before editing.");
             }
             $changed = new Assignment($id, $current->sectionId, $title, $possible, $due, $bonus);
+            if (($possible === 0) !== ($current->possibleHundredths === 0)) {
+                $settings = $this->repository->calculation($current->sectionId);
+                if ($settings["mode"] === "weighted" && ($settings["weights"][$id->value] ?? 0) > 0) {
+                    throw new ValidationException([
+                        [
+                            "field" => "possible_hundredths",
+                            "message" => "Set this assignment's weight to zero and rebalance regular weights " .
+                                "in Gradebook setup before changing between regular and bonus-only work.",
+                        ],
+                    ]);
+                }
+            }
             if (($this->repository->highestScore($id) ?? 0) > $possible + $bonus) {
                 throw new ValidationException([
                     [
@@ -556,11 +585,7 @@ final readonly class GradebookService
             ]);
         }
         $settings = $this->repository->calculation($section);
-        $calculation = new GradebookCalculation(
-            $settings["mode"],
-            $settings["weights"],
-            $settings["categories"],
-        );
+        $calculation = $this->calculation($settings, $scores);
         $summary = $calculation->summarize($scores);
         $dropped = array_fill_keys(
             array_column($summary["dropped_assignments"] ?? [], "assignment_id"),
@@ -584,10 +609,17 @@ final readonly class GradebookService
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
         $settings = $this->repository->calculation($section);
+        $bonus = $settings["mode"] === "weighted"
+        ? $this->repository->bonusAssignmentIds($section, array_keys($settings["weights"]))
+        : array_column(
+            array_filter($rows, static fn(array $row): bool => $row["possible_hundredths"] === 0),
+            "assignment_id",
+        );
         $calculation = new GradebookCalculation(
             $settings["mode"],
             $settings["weights"],
             $settings["categories"],
+            $bonus,
         );
         foreach ($rows as &$row) {
             $row += $calculation->assignmentPresentation($row["assignment_id"]);

@@ -24,6 +24,11 @@ interface GradebookRepository
     ): void;
     /** @return list<array<string, mixed>> */
     public function assignments(EntityId $section, int $limit): array;
+    /** Classify only the configured weighted IDs, without loading an entire gradebook.
+     * @param list<string> $ids
+     * @return list<string>
+     */
+    public function bonusAssignmentIds(EntityId $section, array $ids): array;
     public function addAssignment(Assignment $assignment): void;
     public function assignment(EntityId $id): Assignment;
     public function saveAssignment(Assignment $assignment): void;

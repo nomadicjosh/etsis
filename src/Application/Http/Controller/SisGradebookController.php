@@ -64,7 +64,7 @@ final readonly class SisGradebookController
             EntityId::generate(),
             new EntityId($id),
             $f->text("title"),
-            $f->integer("possible_hundredths", 1, 1000000),
+            $f->integer("possible_hundredths", 0, 1000000),
             $f->date("due_on"),
             $this->bonus($f),
         );
@@ -84,7 +84,7 @@ final readonly class SisGradebookController
         $this->service->editAssignment(
             new EntityId($id),
             $f->text("title"),
-            $f->integer("possible_hundredths", 1, 1000000),
+            $f->integer("possible_hundredths", 0, 1000000),
             $f->date("due_on"),
             $f->text("revision", 64),
             $this->bonus($f),

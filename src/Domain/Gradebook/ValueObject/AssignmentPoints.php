@@ -6,7 +6,7 @@ namespace Domain\Gradebook\ValueObject;
 
 use Domain\Shared\Exception\ValidationException;
 
-/** Base points remain the denominator; an explicit bonus extends only the allowed earned score. */
+/** Zero base points with a positive bonus limit describe optional, bonus-only work. */
 final readonly class AssignmentPoints
 {
     public const int LIMIT = 1000000;
@@ -14,11 +14,11 @@ final readonly class AssignmentPoints
 
     public function __construct(public int $possibleHundredths, public int $bonusHundredths = 0)
     {
-        if ($possibleHundredths < 1 || $possibleHundredths > self::LIMIT) {
+        if ($possibleHundredths < 0 || $possibleHundredths > self::LIMIT) {
             throw new ValidationException([
                 [
                     "field" => "possible_hundredths",
-                    "message" => "Possible points must be between 0.01 and 10,000.",
+                    "message" => "Possible points must be between zero and 10,000; zero requires a bonus limit.",
                 ],
             ]);
         }
@@ -29,6 +29,11 @@ final readonly class AssignmentPoints
                     "message" =>
                         "Enter a non-negative bonus limit; possible points plus bonus cannot exceed 10,000 points.",
                 ],
+            ]);
+        }
+        if ($possibleHundredths === 0 && $bonusHundredths === 0) {
+            throw new ValidationException([
+                ["field" => "bonus_hundredths", "message" => "Bonus-only work needs a positive bonus limit."],
             ]);
         }
         $this->maximumHundredths = $possibleHundredths + $bonusHundredths;

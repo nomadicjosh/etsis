@@ -486,7 +486,7 @@ window.createTeachingWorksheet = function (ui) {
                     : assignment.title;
                 limits.textContent = attendance
                     ? `Term: ${page.term.starts_on} through ${page.term.ends_on}. Attendance uses one mark per student and date.`
-                    : `Base: ${assignment.possible_hundredths / 100} points · Bonus limit: ${assignment.bonus_hundredths / 100} · Maximum earned: ${assignment.score_limit_hundredths / 100} points · Due ${assignment.due_on}`;
+                    : `${assignment.possible_hundredths === 0 ? "Bonus only · Optional work" : `Base: ${assignment.possible_hundredths / 100} points`} · Bonus limit: ${assignment.bonus_hundredths / 100} · Maximum earned: ${assignment.score_limit_hundredths / 100} points · Due ${assignment.due_on}`;
                 content.replaceChildren(
                     session.rows.length
                         ? node(

@@ -818,7 +818,7 @@
         teaching_assignment: [
             {
                 title: 'Assignment details',
-                fields: ['title', 'possible_hundredths', 'bonus_hundredths', 'due_on'],
+                fields: ['title', 'assignment_kind', 'possible_hundredths', 'bonus_hundredths', 'due_on'],
                 wide: ['title'],
             },
         ],

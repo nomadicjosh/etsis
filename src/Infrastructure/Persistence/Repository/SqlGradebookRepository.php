@@ -81,6 +81,24 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         return $rows;
     }
 
+    public function bonusAssignmentIds(EntityId $section, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        if (count($ids) > \Domain\Gradebook\ValueObject\GradebookCalculation::LIMIT) {
+            throw new \InvalidArgumentException("Use at most 500 configured assignment identities.");
+        }
+        $q = $this->sql->quote(...);
+        return array_column($this->sql->fetch(
+            "SELECT " . $q("id") . " FROM " . $q("sis_assignments") .
+                " WHERE " . $q("section_id") . " = ? AND " . $q("possible_hundredths") .
+                " = 0 AND " . $q("id") . " IN (" . implode(",", array_fill(0, count($ids), "?")) . ")",
+            [$section->value, ...$ids],
+            count($ids),
+        ), "id");
+    }
+
     public function addAssignment(Assignment $assignment): void
     {
         $this->sql->insert("sis_assignments", [

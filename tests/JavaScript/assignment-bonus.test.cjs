@@ -11,7 +11,7 @@ const originalQuery = Element.prototype.querySelector;
 Element.prototype.querySelector = function (selector) {
     return walk(this).find((e) => e.tag === selector) || originalQuery.call(this, selector);
 };
-async function fixture(excused = false) {
+async function fixture(excused = false, bonusOnly = false) {
     const window = {};
     vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/teaching-worksheet.js", "utf8"), { window });
@@ -20,10 +20,10 @@ async function fixture(excused = false) {
     const score = {
         assignment_id: "task",
         title: "Fictional bonus task",
-        possible_hundredths: 10000,
-        bonus_hundredths: 2000,
-        score_limit_hundredths: 12000,
-        earned_hundredths: 11500,
+        possible_hundredths: bonusOnly ? 0 : 10000,
+        bonus_hundredths: bonusOnly ? 1000 : 2000,
+        score_limit_hundredths: bonusOnly ? 1000 : 12000,
+        earned_hundredths: bonusOnly ? 500 : 11500,
         version: 1,
         excused,
     };
@@ -78,9 +78,9 @@ async function fixture(excused = false) {
                     assignment: {
                         id: "task",
                         title: score.title,
-                        possible_hundredths: 10000,
-                        bonus_hundredths: 2000,
-                        score_limit_hundredths: 12000,
+                        possible_hundredths: score.possible_hundredths,
+                        bonus_hundredths: score.bonus_hundredths,
+                        score_limit_hundredths: score.score_limit_hundredths,
                         revision: "current",
                         due_on: "2026-09-01",
                     },
@@ -118,8 +118,8 @@ async function fixture(excused = false) {
                 id: "task",
                 section_id: "section",
                 title: score.title,
-                possible_hundredths: 10000,
-                bonus_hundredths: 2000,
+                possible_hundredths: score.possible_hundredths,
+                bonus_hundredths: score.bonus_hundredths,
                 due_on: "2026-09-01",
                 revision: "current",
             };
@@ -227,4 +227,52 @@ test("the score editor retains an excused mark and submits inclusion as an expli
     assert.equal(included.excused, false);
     assert.equal(included.earned_hundredths, 11500);
     assert.equal(included.version, 1);
+});
+
+test("assignment type controls bonus-only limits and preserves regular points while switching", async () => {
+    const f = await fixture();
+    await f.click(f.section, "Add assignment");
+    const flow = f.flow();
+    const { assignment_kind: kind, possible_hundredths: base, bonus_hundredths: bonus } = flow.form.elements;
+    assert.equal(kind.value, "regular");
+    assert.equal(base.min, "0.01");
+    base.value = "75";
+    kind.value = "bonus";
+    kind.events.change();
+    assert.equal(base.value, "0");
+    assert.equal(base.readOnly, true);
+    assert.equal(bonus.required, true);
+    assert.equal(bonus.min, "0.01");
+    assert.match(f.body().textContent, /no possible points or missing-work penalty/);
+    assert.equal(base.getAttribute("aria-describedby"), "assignment-points-help");
+    const payload = flow.args[3]({
+        title: "Optional task",
+        assignment_kind: "bonus",
+        possible_hundredths: 7500,
+        bonus_hundredths: 500,
+    });
+    assert.equal(payload.possible_hundredths, 0);
+    assert.equal(payload.bonus_hundredths, 500);
+    assert.equal("assignment_kind" in payload, false);
+    kind.value = "regular";
+    kind.events.change();
+    assert.equal(base.value, "75");
+    assert.equal(base.readOnly, false);
+    assert.equal(bonus.required, false);
+});
+test("bonus-only editing and class scoring explain optional points without a zero divisor", async () => {
+    const f = await fixture(false, true);
+    await f.click(f.section, "Edit assignment");
+    const flow = f.flow();
+    assert.equal(flow.args[5].assignment_kind, "bonus");
+    assert.equal(flow.form.elements.possible_hundredths.value, "0");
+    assert.equal(flow.form.elements.bonus_hundredths.required, true);
+    await f.click(f.section, "Grade assignment");
+    assert.match(f.body().textContent, /Bonus only · Optional work/);
+    assert.match(f.body().textContent, /Maximum earned: 10 points/);
+    await f.click(f.section, "Grade & attendance");
+    assert.match(f.body().textContent, /5 bonus points/);
+    assert.doesNotMatch(f.body().textContent, /5 \/ 0|Infinity|NaN/);
+    await f.click(f.body(), "Enter score");
+    assert.equal(f.flow().form.elements.earned_hundredths.max, 10);
 });

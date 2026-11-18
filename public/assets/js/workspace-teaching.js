@@ -186,23 +186,7 @@ window.createWorkspaceTeaching = function (ui) {
         body.append(assignments);
         assignments.append(
             button("Gradebook setup", () => calculationSetup(row, back)),
-            button("Add assignment", () =>
-                flow(
-                    "Add assignment",
-                    [
-                        ["title", "Assignment title"],
-                        ["possible_hundredths", "Possible points", "hundredths"],
-                        ["bonus_hundredths", "Bonus limit (optional)", "hundredths", "", false],
-                        ["due_on", "Due on", "date"],
-                    ],
-                    `/sis/sections/${row.id}/assignments/`,
-                    null,
-                    back,
-                    { bonus_hundredths: 0 },
-                    "Possible points set the base score. An optional bonus raises the score limit without adding possible points to the average. Official final grades are recorded separately.",
-                    { layout: "teaching_assignment" },
-                ),
-            ),
+            button("Add assignment", () => assignmentForm(null, row, back)),
         );
         await pages(
             assignments,
@@ -215,8 +199,10 @@ window.createWorkspaceTeaching = function (ui) {
                     ? grid(
                           ["Assignment", "Possible points", "Bonus limit", "Due", "Action"],
                           page.items.map((item) => [
-                              item.title,
-                              Number(item.possible_hundredths) / 100,
+                              item.possible_hundredths === 0 ? `${item.title} · Bonus only` : item.title,
+                              item.possible_hundredths === 0
+                                  ? "No base points"
+                                  : Number(item.possible_hundredths) / 100,
                               Number(item.bonus_hundredths || 0) / 100,
                               item.due_on,
                               node(
@@ -262,16 +248,18 @@ window.createWorkspaceTeaching = function (ui) {
         const equal = button(
             "Equal weights",
             () => {
-                const base = Math.floor(10000 / inputs.length);
-                const remainder = 10000 % inputs.length;
-                inputs.forEach(([, input], index) => {
+                const regular = inputs.filter(([, , bonusOnly]) => !bonusOnly);
+                if (!regular.length) return;
+                const base = Math.floor(10000 / regular.length);
+                const remainder = 10000 % regular.length;
+                regular.forEach(([, input], index) => {
                     input.value = ((base + (index < remainder ? 1 : 0)) / 100).toFixed(2);
                 });
                 update();
             },
             "btn-outline-secondary btn-sm mb-3",
         );
-        equal.disabled = setup.assignments.length === 0;
+        equal.disabled = !setup.assignments.some((a) => a.possible_hundredths !== 0);
         fields.append(equal);
         const weightGrid = node("div", { class: "row g-3" });
         fields.append(weightGrid);
@@ -288,12 +276,17 @@ window.createWorkspaceTeaching = function (ui) {
                 "aria-describedby": "gradebook-weight-help",
             });
             input.value = ((setup.weights[assignment.id] || 0) / 100).toFixed(2);
-            inputs.push([assignment.id, input]);
+            const bonusOnly = assignment.possible_hundredths === 0;
+            inputs.push([assignment.id, input, bonusOnly]);
             weightGrid.append(
                 node(
                     "div",
                     { class: "col-md-6" },
-                    node("label", { for: id, class: "form-label" }, `${assignment.title} · Weight %`),
+                    node(
+                        "label",
+                        { for: id, class: "form-label" },
+                        `${assignment.title} · ${bonusOnly ? "Bonus percentage points" : "Weight %"}`,
+                    ),
                     input,
                 ),
             );
@@ -322,20 +315,23 @@ window.createWorkspaceTeaching = function (ui) {
             const category = mode.value === "category";
             categoryEditor.setEnabled(category);
             fields.hidden = !weighted;
-            let total = 0;
-            for (const [, input] of inputs) {
+            let total = 0,
+                bonusTotal = 0;
+            for (const [, input, bonusOnly] of inputs) {
                 input.disabled = !weighted;
-                total += Math.round(Number(input.value) * 100);
+                if (bonusOnly) bonusTotal += Math.round(Number(input.value) * 100);
+                else total += Math.round(Number(input.value) * 100);
             }
             const groups = categoryEditor.serialize();
             const empty = groups.filter((c) => c.weight_hundredths > 0 && !c.assignments.length).length;
             status.textContent = category
                 ? `Assigned ${(groups.reduce((sum, c) => sum + c.weight_hundredths, 0) / 100).toFixed(2)}% of 100%. Use unique names and whole drop counts from 0 to 499. ${empty} positive-weight ${empty === 1 ? "category has" : "categories have"} no assignments.`
                 : weighted
-                  ? `Assigned ${(total / 100).toFixed(2)}% of 100%. Ungraded assignments are excluded from the running average.`
-                  : "All assignments contribute according to their possible points.";
+                  ? `Assigned ${(total / 100).toFixed(2)}% of 100% regular weights. Bonus-only limits add up to ${(bonusTotal / 100).toFixed(2)} percentage points, separately. Ungraded bonus work never lowers the average; combined bonus limits cannot exceed 100 points.`
+                  : "Regular work supplies possible points. Bonus-only work adds earned points without a denominator or missing-work penalty.";
             save.disabled =
-                (weighted && (total !== 10000 || !inputs.length)) || (category && !categoryEditor.valid());
+                (weighted && (total !== 10000 || bonusTotal > 10000 || !inputs.length)) ||
+                (category && !categoryEditor.valid());
         }
         mode.addEventListener("change", update);
         inputs.forEach(([, input]) => input.addEventListener("input", update));
@@ -366,26 +362,72 @@ window.createWorkspaceTeaching = function (ui) {
         loading.append(node("p", { role: "status" }, "Loading assignment…"));
         const record = await request(`/sis/assignments/${id}/`);
         if (!loading.isConnected) return;
-        await flow(
-            "Save assignment changes",
+        await assignmentForm(record, { id: record.section_id }, back);
+    }
+    async function assignmentForm(record, section, back) {
+        const form = await flow(
+            record ? "Save assignment" : "Add assignment",
             [
                 ["title", "Assignment title"],
+                [
+                    "assignment_kind",
+                    "Assignment type",
+                    "choice",
+                    [
+                        { value: "regular", label: "Regular assignment" },
+                        { value: "bonus", label: "Bonus-only assignment" },
+                    ],
+                ],
                 ["possible_hundredths", "Possible points", "hundredths"],
-                ["bonus_hundredths", "Bonus limit (optional)", "hundredths", "", false],
+                ["bonus_hundredths", "Bonus limit", "hundredths", "", false],
                 ["due_on", "Due on", "date"],
             ],
-            `/sis/assignments/${id}/edit/`,
-            (data) => ({ ...data, revision: record.revision }),
+            record ? `/sis/assignments/${record.id}/edit/` : `/sis/sections/${section.id}/assignments/`,
+            ({ assignment_kind, ...data }) => ({
+                ...data,
+                ...(assignment_kind === "bonus" ? { possible_hundredths: 0 } : {}),
+                ...(record ? { revision: record.revision } : {}),
+            }),
             back,
             {
-                ...record,
-                possible_hundredths: Number(record.possible_hundredths) / 100,
-                bonus_hundredths: Number(record.bonus_hundredths) / 100,
+                ...(record || {}),
+                assignment_kind: record?.possible_hundredths === 0 ? "bonus" : "regular",
+                possible_hundredths: record ? Number(record.possible_hundredths) / 100 : 100,
+                bonus_hundredths: Number(record?.bonus_hundredths || 0) / 100,
             },
-            "Possible points remain the average’s denominator. Bonus points raise only the allowed score. The combined limit cannot be below a recorded mark. Changing possible points changes existing percentages; official final grades remain separate.",
+            "Regular assignments have base possible points. A bonus raises the score limit without adding possible points to the average. Bonus-only work has no base points and never lowers the average. The combined limit cannot be below a recorded mark. Official final grades are recorded separately.",
             { layout: "teaching_assignment" },
         );
+        if (!form.isConnected) return;
+        const kind = form.elements.assignment_kind;
+        const possible = form.elements.possible_hundredths;
+        const bonus = form.elements.bonus_hundredths;
+        const help = node("p", {
+            id: "assignment-points-help",
+            class: "form-text",
+            role: "status",
+        });
+        possible.setAttribute("aria-describedby", help.id);
+        bonus.setAttribute("aria-describedby", help.id);
+        form.append(help);
+        let regularPoints = Number(possible.value) > 0 ? possible.value : "100";
+        function update() {
+            const onlyBonus = kind.value === "bonus";
+            if (onlyBonus && Number(possible.value) > 0) regularPoints = possible.value;
+            possible.readOnly = onlyBonus;
+            possible.min = onlyBonus ? "0" : "0.01";
+            possible.value = onlyBonus ? "0" : regularPoints;
+            bonus.min = onlyBonus ? "0.01" : "0";
+            bonus.required = onlyBonus;
+            bonus.setAttribute("aria-required", String(onlyBonus));
+            help.textContent = onlyBonus
+                ? "Enter the maximum bonus points. This optional work adds no possible points or missing-work penalty. In Gradebook setup, place it with regular work in a category, or set its separate bonus percentage-point limit for assignment weights."
+                : "Possible points set the denominator. An optional bonus extends the earned-score limit. Changing base points changes existing percentages. Before converting weighted work to another type, set its weight to zero and rebalance regular weights in Gradebook setup.";
+        }
+        kind.addEventListener("change", update);
+        update();
     }
+
     async function recordFinalGrade(sectionRow, student, back, assignment = null) {
         const loading = openDrawer("Review final grade", "ACADEMIC RECORD");
         loading.append(
@@ -1250,7 +1292,7 @@ window.createWorkspaceTeaching = function (ui) {
                           ["Assignment", "Earned / possible", "Calculation", "Action"],
                           page.items.map((item) => [
                               item.title,
-                              `${item.earned_hundredths == null ? "Not graded" : Number(item.earned_hundredths) / 100} / ${Number(item.possible_hundredths) / 100}`,
+                              window.createGradebookCalculation({ node }).scoreLabel(item),
                               window.createGradebookCalculation({ node }).assignmentLabel(item),
                               button("Enter score", async () => {
                                   const form = await flow(

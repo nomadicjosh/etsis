@@ -22,10 +22,10 @@ final readonly class AssignmentScore
         )->assertEarned($earnedHundredths);
     }
 
-    /** Null feedback for ungraded/excused work; the saved mark is retained. Otherwise hundredths of a percent. */
+    /** Ungraded, excused and zero-base bonus work have no standalone percentage; marks remain recorded. */
     public function percentageHundredths(): ?int
     {
-        return $this->excused || $this->earnedHundredths === null
+        return $this->excused || $this->earnedHundredths === null || $this->possibleHundredths === 0
         ? null
         : intdiv(
             $this->earnedHundredths * 10000 + intdiv($this->possibleHundredths, 2),

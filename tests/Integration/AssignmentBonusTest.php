@@ -23,7 +23,7 @@ final class AssignmentBonusTest extends TestCase
         return $f->gradebook($audit);
     }
 
-    private function fixture(int $bonus = 2000): array
+    private function fixture(int $bonus = 2000, bool $bonusOnly = false): array
     {
         require_once dirname(__DIR__) . "/Support/SisFixture.php";
         $f = new SisFixture();
@@ -35,7 +35,7 @@ final class AssignmentBonusTest extends TestCase
             EntityId::generate(),
             $section->id,
             "Fictional bonus assignment",
-            10000,
+            $bonusOnly ? 0 : 10000,
             new DateTimeImmutable("2026-09-01"),
             $bonus,
         );
@@ -136,22 +136,24 @@ final class AssignmentBonusTest extends TestCase
 
     public static function failures(): array
     {
-        return [
-            ["add", "audit"],
-            ["add", "actor"],
-            ["edit", "audit"],
-            ["edit", "actor"],
-            ["score", "audit"],
-            ["score", "actor"],
-        ];
+        $cases = [];
+        foreach (["add", "edit", "score"] as $action) {
+            foreach (["audit", "actor"] as $failure) {
+                foreach ([false, true] as $bonusOnly) {
+                    $cases[] = [$action, $failure, $bonusOnly];
+                }
+            }
+        }
+        return $cases;
     }
 
     #[DataProvider("failures")]
     public function testAssignmentAndScoreMutationsRollBackAfterAuditOrAuthorityFailure(
         string $action,
         string $failure,
+        bool $bonusOnly,
     ): void {
-        [$f, $service, $student, $section, $a] = $this->fixture();
+        [$f, $service, $student, $section, $a] = $this->fixture(bonusOnly: $bonusOnly);
         $other = $f->user();
         $record = $service->assignment($a->id);
         $tables = ["sis_assignments", "sis_scores", "sis_history_events", "sis_academic_credits"];
@@ -171,7 +173,7 @@ final class AssignmentBonusTest extends TestCase
                         EntityId::generate(),
                         $section->id,
                         "Fictional added work",
-                        1000,
+                        $bonusOnly ? 0 : 1000,
                         $a->dueOn,
                         100,
                     ),
@@ -179,7 +181,7 @@ final class AssignmentBonusTest extends TestCase
             } elseif ($action === "edit") {
                 $service->editAssignment($a->id, $a->title, 10000, $a->dueOn, $record["revision"], 3000);
             } else {
-                $service->score($a->id, $student->id, 11500, 0);
+                $service->score($a->id, $student->id, $bonusOnly ? 1500 : 11500, 0);
             }
             self::fail("The mutation survived a required completion-time check.");
         } catch (\RuntimeException $error) {

@@ -3,13 +3,26 @@ window.createGradebookCalculation = function (ui) {
     "use strict";
     const { node } = ui;
     const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
+    function scoreLabel(score) {
+        if (score.earned_hundredths == null) return "Not graded";
+        return score.possible_hundredths === 0
+            ? `${score.earned_hundredths / 100} bonus points`
+            : `${score.earned_hundredths / 100} / ${score.possible_hundredths / 100} points`;
+    }
     function assignmentLabel(score) {
         let label;
         if (score.category_title != null) {
             label = `${score.dropped ? "Dropped from average · " : ""}${score.category_title} · ${percent(score.category_weight_hundredths)} category${score.category_weight_hundredths === 0 ? " · Excluded" : ""}${score.category_drop_lowest ? ` · Drop lowest ${score.category_drop_lowest}` : ""}`;
         } else if (score.excluded && score.weight_hundredths == null) label = "Excluded";
         else if (score.weight_hundredths === 0) label = "Excluded · 0.00%";
-        else label = score.weight_hundredths == null ? "By points" : percent(score.weight_hundredths);
+        else
+            label =
+                score.weight_hundredths == null
+                    ? "By points"
+                    : score.possible_hundredths === 0
+                      ? `Up to ${Number(score.weight_hundredths) / 100} bonus percentage points`
+                      : percent(score.weight_hundredths);
+        if (score.possible_hundredths === 0) label = `Bonus only · ${label}`;
         if (score.excused) label = `Excused · ${label}`;
         if (score.bonus_hundredths > 0) label += ` · Bonus limit +${score.bonus_hundredths / 100} points`;
         if (score.earned_hundredths > score.possible_hundredths)
@@ -25,7 +38,9 @@ window.createGradebookCalculation = function (ui) {
                 "p",
                 { class: "mb-1 fw-semibold" },
                 summary.percent_hundredths == null
-                    ? "No included scores yet"
+                    ? summary.bonus_only
+                        ? "No graded regular work yet"
+                        : "No included scores yet"
                     : percent(summary.percent_hundredths),
             ),
             node(
@@ -38,6 +53,20 @@ window.createGradebookCalculation = function (ui) {
                       "p",
                       { class: "small" },
                       `${Number(summary.bonus_earned_hundredths || 0) / 100} bonus points in counted work. Possible points remain the denominator, so this running average can exceed 100%. Official grades are recorded separately.`,
+                  )
+                : null,
+            summary.bonus_only
+                ? node(
+                      "p",
+                      { class: "small" },
+                      `${summary.bonus_only} bonus-only ${summary.bonus_only === 1 ? "assignment" : "assignments"}${summary.bonus_pending ? ` · ${summary.bonus_pending} optional scores not entered` : ""}. These add no possible points or required grading coverage. Bonus-only work is never dropped by a drop-lowest rule.`,
+                  )
+                : null,
+            summary.unapplied_bonus_hundredths
+                ? node(
+                      "p",
+                      { class: "small fw-semibold" },
+                      `${summary.unapplied_bonus_hundredths / 100} recorded bonus points are not applied yet. Grade regular work in the same points pool or category first; bonus-only work cannot establish an average by itself.`,
                   )
                 : null,
             summary.mode === "category"
@@ -89,6 +118,13 @@ window.createGradebookCalculation = function (ui) {
                                                 "span",
                                                 { class: "badge text-bg-light border mt-2" },
                                                 "Excluded",
+                                            )
+                                          : null,
+                                      category.unapplied_bonus_hundredths
+                                          ? node(
+                                                "p",
+                                                { class: "small fw-semibold mb-0" },
+                                                `${category.unapplied_bonus_hundredths / 100} bonus points awaiting graded regular work in this category.`,
                                             )
                                           : null,
                                       category.drop_lowest
@@ -161,7 +197,7 @@ window.createGradebookCalculation = function (ui) {
                               node(
                                   "li",
                                   { class: "text-break" },
-                                  `${score.title} · ${score.earned_hundredths == null ? "No mark recorded" : `Saved mark ${score.earned_hundredths / 100}/${score.possible_hundredths / 100}`} · omitted from average`,
+                                  `${score.title} · ${score.earned_hundredths == null ? "No mark recorded" : `Saved mark ${scoreLabel(score)}`} · omitted from average`,
                               ),
                           ),
                       ),
@@ -182,7 +218,11 @@ window.createGradebookCalculation = function (ui) {
         let sequence = 0,
             page = 0,
             enabled;
-        const announcement = node("p", { class: "form-text", role: "status", "aria-live": "polite" });
+        const announcement = node("p", {
+            class: "form-text",
+            role: "status",
+            "aria-live": "polite",
+        });
         const list = node("div", { class: "vstack gap-2" });
         const search = node("input", {
             id: "gradebook-assignment-search",
@@ -190,7 +230,11 @@ window.createGradebookCalculation = function (ui) {
             class: "form-control mb-3",
             placeholder: "Find an assignment",
         });
-        const paging = node("p", { class: "form-text", role: "status", "aria-live": "polite" });
+        const paging = node("p", {
+            class: "form-text",
+            role: "status",
+            "aria-live": "polite",
+        });
         const previous = node(
             "button",
             { type: "button", class: "btn btn-outline-secondary btn-sm" },
@@ -225,7 +269,11 @@ window.createGradebookCalculation = function (ui) {
                         node(
                             "div",
                             { class: "col-md-7" },
-                            node("label", { for: id, class: "form-label mb-0" }, a.title),
+                            node(
+                                "label",
+                                { for: id, class: "form-label mb-0" },
+                                a.possible_hundredths === 0 ? `${a.title} · Bonus only` : a.title,
+                            ),
                         ),
                         node("div", { class: "col-md-5" }, select),
                     );
@@ -284,7 +332,12 @@ window.createGradebookCalculation = function (ui) {
             drop.value = String(value.drop_lowest ?? 0);
             const dropError = node(
                 "div",
-                { id: `${key}-drop-error`, class: "invalid-feedback", role: "alert", hidden: true },
+                {
+                    id: `${key}-drop-error`,
+                    class: "invalid-feedback",
+                    role: "alert",
+                    hidden: true,
+                },
                 "Use a whole number from 0 to 499.",
             );
             const remove = node(
@@ -357,7 +410,11 @@ window.createGradebookCalculation = function (ui) {
         );
         add.addEventListener("click", () => {
             if (categories.length >= 20) return;
-            const entry = addCategory({ title: "", weight_hundredths: 0, assignments: [] });
+            const entry = addCategory({
+                title: "",
+                weight_hundredths: 0,
+                assignments: [],
+            });
             renderAssignments();
             add.disabled = categories.length >= 20;
             entry.title.focus();
@@ -368,7 +425,7 @@ window.createGradebookCalculation = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "Use up to 20 categories with weights totaling 100%. Choose a category for each included assignment. New or unassigned work is excluded. Within a category, assignments contribute by possible points.",
+                "Use up to 20 categories with weights totaling 100%. Choose a category for each included assignment. New or unassigned work is excluded. Within a category, regular assignments contribute by possible points. Place bonus-only work with regular assignments; its earned points add no denominator or required coverage.",
             ),
             rows,
             node(
@@ -436,5 +493,5 @@ window.createGradebookCalculation = function (ui) {
         setEnabled(false);
         return { element, serialize, setEnabled, valid };
     }
-    return { panel, assignmentLabel, editor };
+    return { panel, assignmentLabel, scoreLabel, editor };
 };

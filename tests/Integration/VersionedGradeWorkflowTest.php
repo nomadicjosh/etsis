@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . "/Support/SisFixture.php";
-require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+namespace Tests\Integration;
+
+use DateTimeImmutable;
 use Domain\Gradebook\Service\GradebookService;
 use Domain\Gradebook\ValueObject\PublishedGradeId;
 use Domain\Shared\Exception\ValidationException;
@@ -11,8 +12,17 @@ use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\Repository\SqlGradebookRepository;
 use Infrastructure\Persistence\Repository\SqlWorkspaceRepository;
 use PHPUnit\Framework\TestCase;
+use SisFixture;
+use TransferAwardFixture;
+
 final class VersionedGradeWorkflowTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . "/Support/SisFixture.php";
+        require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+    }
+
     private function rows(int $points = 4000): array
     {
         return [
@@ -245,7 +255,14 @@ final class VersionedGradeWorkflowTest extends TestCase
             "Fictional retained grading-policy correction",
         );
         $review = $t->service()->preview($student->id, $award, $change);
-        $t->service()->confirm($student->id, $award, EntityId::generate(), $change, $review["revision"]);
+        $t->service()->confirm(
+            $student->id,
+            $award,
+            new EntityId($review["operation_id"]),
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
         $after = $f->sql->one("sis_academic_credits", ["id" => $credit->value]);
         self::assertSame(12000, (int) $after["grade_points_milli"]);
         self::assertSame(

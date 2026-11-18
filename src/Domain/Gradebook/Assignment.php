@@ -19,7 +19,7 @@ final readonly class Assignment
         public int $bonusHundredths = 0,
     ) {
         if (trim($title) === "" || mb_strlen($title) > 191) {
-            throw new InvalidArgumentException("An assignment requires a title and positive maximum score.");
+            throw new InvalidArgumentException("An assignment requires a title of up to 191 characters.");
         }
         new \Domain\Gradebook\ValueObject\AssignmentPoints($possibleHundredths, $bonusHundredths);
     }

@@ -1656,7 +1656,7 @@
                                                           : Number(
                                                                 score.earned_hundredths,
                                                             ) / 100,
-                                                      Number(
+                                                      score.possible_hundredths === 0 ? 'Bonus only' : Number(
                                                           score.possible_hundredths,
                                                       ) / 100,
                                                       window.createGradebookCalculation({ node }).assignmentLabel(score),

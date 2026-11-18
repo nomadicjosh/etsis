@@ -62,7 +62,7 @@ final class BonusPointsTest extends TestCase
 
     public static function invalidLimits(): array
     {
-        return [[0, 100], [100, -1], [1000000, 1], [1000001, 0], [1, 1000000]];
+        return [[0, 0], [-1, 100], [100, -1], [1000000, 1], [1000001, 0], [1, 1000000]];
     }
 
     #[DataProvider("invalidLimits")]

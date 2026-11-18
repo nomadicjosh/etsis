@@ -27,7 +27,7 @@ test("feedback distinguishes zero from ungraded and explains official grade boun
     assert.match(p.panel(summary).textContent, /official final grade is recorded separately/);
     assert.match(p.panel({ ...summary, percent_hundredths: null }).textContent, /No included scores yet/);
 });
-async function editor() {
+async function editor(bonus = false) {
     const window = {};
     vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
@@ -41,6 +41,7 @@ async function editor() {
         assignments: [
             { id: "one", title: "Quiz <img>" },
             { id: "two", title: "Exam" },
+            ...(bonus ? [{ id: "extra", title: "Reflection", possible_hundredths: 0 }] : []),
         ],
     };
     const teaching = window.createWorkspaceTeaching({
@@ -209,14 +210,20 @@ test("category feedback explains partial coverage and renders names as text", ()
         false,
     );
     assert.equal(
-        p.assignmentLabel({ category_title: "Tasks", category_weight_hundredths: 4000 }),
+        p.assignmentLabel({
+            category_title: "Tasks",
+            category_weight_hundredths: 4000,
+        }),
         "Tasks · 40.00% category",
     );
     assert.equal(p.assignmentLabel({ excluded: true, weight_hundredths: null }), "Excluded");
 });
 
 test("category assignment paging and search keep choices and bounded DOM nodes", () => {
-    const assignments = Array.from({ length: 73 }, (_, i) => ({ id: `a${i}`, title: `Task ${i}` }));
+    const assignments = Array.from({ length: 73 }, (_, i) => ({
+        id: `a${i}`,
+        title: `Task ${i}`,
+    }));
     let changes = 0;
     const editor = presenter().editor(
         assignments,
@@ -320,8 +327,18 @@ test("the full setup form saves categories and assignment membership through the
         weights: {},
         revision: "revision",
         categories: [
-            { title: "Quizzes", weight_hundredths: 4000, assignments: ["one"], drop_lowest: 1 },
-            { title: "Exams", weight_hundredths: 6000, assignments: ["two"], drop_lowest: 0 },
+            {
+                title: "Quizzes",
+                weight_hundredths: 4000,
+                assignments: ["one"],
+                drop_lowest: 1,
+            },
+            {
+                title: "Exams",
+                weight_hundredths: 6000,
+                assignments: ["two"],
+                drop_lowest: 0,
+            },
         ],
     });
 });
@@ -350,7 +367,12 @@ test("category names must be unique and deleting an earlier category preserves l
         .events.click();
     assert.equal(e.valid(), true);
     assert.deepEqual(JSON.parse(JSON.stringify(e.serialize())), [
-        { title: "Exams", weight_hundredths: 10000, assignments: ["two"], drop_lowest: 0 },
+        {
+            title: "Exams",
+            weight_hundredths: 10000,
+            assignments: ["two"],
+            drop_lowest: 0,
+        },
     ]);
     assert.equal(walk(e.element).find((n) => n.id === "gradebook-category-two").value, "category-1");
 });
@@ -382,7 +404,14 @@ test("drop count is optional by default, labeled and retained through mode chang
 test("invalid drop counts block setup before a request is sent", () => {
     const e = presenter().editor(
         [],
-        [{ title: "Tasks", weight_hundredths: 10000, assignments: [], drop_lowest: 1 }],
+        [
+            {
+                title: "Tasks",
+                weight_hundredths: 10000,
+                assignments: [],
+                drop_lowest: 1,
+            },
+        ],
         () => {},
     );
     e.setEnabled(true);
@@ -421,7 +450,12 @@ test("shared feedback explains dropped scores without interpreting their titles 
             },
         ],
         dropped_assignments: [
-            { assignment_id: "one", title: "Quiz <img>", earned_hundredths: 0, possible_hundredths: 1000 },
+            {
+                assignment_id: "one",
+                title: "Quiz <img>",
+                earned_hundredths: 0,
+                possible_hundredths: 1000,
+            },
         ],
     });
     assert.match(body.textContent, /1 dropped from average/);
@@ -506,12 +540,16 @@ test("shared feedback distinguishes excused work from pending work and retains s
         ],
         excused_assignments: [
             { title: "Quiz <img>", earned_hundredths: 0, possible_hundredths: 1000 },
-            { title: "Other task", earned_hundredths: null, possible_hundredths: 1000 },
+            {
+                title: "Other task",
+                earned_hundredths: null,
+                possible_hundredths: 1000,
+            },
         ],
     });
     assert.match(panel.textContent, /0 awaiting scores · 2 excused/);
     assert.match(panel.textContent, /Excused for this student/);
-    assert.match(panel.textContent, /Saved mark 0\/10/);
+    assert.match(panel.textContent, /Saved mark 0 \/ 10 points/);
     assert.match(panel.textContent, /No mark recorded/);
     assert.match(panel.textContent, /remaining weights are normalized/);
     assert.ok(walk(panel).some((n) => n.tag === "summary" && n.textContent === "View 2 excused assignments"));
@@ -520,7 +558,76 @@ test("shared feedback distinguishes excused work from pending work and retains s
         false,
     );
     assert.match(
-        p.assignmentLabel({ excused: true, possible_hundredths: 1000, earned_hundredths: 0 }),
+        p.assignmentLabel({
+            excused: true,
+            possible_hundredths: 1000,
+            earned_hundredths: 0,
+        }),
         /^Excused · By points/,
     );
+});
+
+test("bonus weights stay separate from the required 100 percent and equal weights preserve them", async () => {
+    const e = await editor(true);
+    e.click();
+    await e.done();
+    const body = e.body();
+    const mode = walk(body).find((x) => x.id === "gradebook-mode");
+    mode.value = "weighted";
+    mode.events.change();
+    const inputs = walk(body).filter((x) => x.tag === "input" && x.id.startsWith("weight-"));
+    const submit = walk(body).find((x) => x.attributes.type === "submit");
+    inputs[0].value = "40";
+    inputs[1].value = "60";
+    inputs[2].value = "10";
+    inputs[2].events.input();
+    assert.equal(submit.disabled, false);
+    assert.match(body.textContent, /100.00% of 100% regular weights/);
+    assert.match(body.textContent, /10.00 percentage points, separately/);
+    assert.match(body.textContent, /Reflection · Bonus percentage points/);
+    walk(body)
+        .find((x) => x.tag === "button" && x.textContent === "Equal weights")
+        .attributes.onclick({ currentTarget: node("button") });
+    await e.done();
+    assert.equal(inputs[0].value, "50.00");
+    assert.equal(inputs[1].value, "50.00");
+    assert.equal(inputs[2].value, "10");
+    const form = walk(body).find((x) => x.tag === "form");
+    form.events.submit({ preventDefault() {} });
+    await e.done();
+    assert.deepEqual(JSON.parse(JSON.stringify(e.sent[0].weights)), {
+        one: 5000,
+        two: 5000,
+        extra: 1000,
+    });
+    inputs[2].value = "100.01";
+    inputs[2].events.input();
+    assert.equal(submit.disabled, true);
+});
+test("shared bonus-only feedback explains optional work and points that cannot yet apply", () => {
+    const p = presenter();
+    const score = {
+        possible_hundredths: 0,
+        bonus_hundredths: 1000,
+        earned_hundredths: 500,
+        weight_hundredths: 1000,
+    };
+    assert.equal(p.scoreLabel(score), "5 bonus points");
+    assert.equal(p.scoreLabel({ ...score, earned_hundredths: null }), "Not graded");
+    assert.match(p.assignmentLabel(score), /Bonus only · Up to 10 bonus percentage points/);
+    const panel = p.panel({
+        mode: "points",
+        percent_hundredths: null,
+        coverage_hundredths: 0,
+        pending: 1,
+        bonus_only: 2,
+        bonus_pending: 1,
+        bonus_enabled: true,
+        bonus_earned_hundredths: 0,
+        unapplied_bonus_hundredths: 500,
+    });
+    assert.match(panel.textContent, /No graded regular work yet/);
+    assert.match(panel.textContent, /1 optional scores not entered/);
+    assert.match(panel.textContent, /5 recorded bonus points are not applied yet/);
+    assert.doesNotMatch(panel.textContent, /Infinity|NaN/);
 });
