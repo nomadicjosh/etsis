@@ -31,10 +31,17 @@ final readonly class RegistrationPrice
             );
         }
         // Round each registration once, to the nearest currency minor unit, with halves rounded up.
-        $this->amount = new Money(
-            intdiv($rate->minor * $creditsMilli + 500, 1000),
-            $rate->currency,
-        );
+        $this->amount = self::amountForCredits($creditsMilli, $rate);
+    }
+
+    public static function amountForCredits(int $creditsMilli, Money $rate): Money
+    {
+        if ($creditsMilli < 0 || $creditsMilli > 999999 || $rate->minor < 1) {
+            throw new InvalidArgumentException(
+                "A recorded rate and valid registration credits are required.",
+            );
+        }
+        return new Money(intdiv($rate->minor * $creditsMilli + 500, 1000), $rate->currency);
     }
 
     /** @return array{enrollment_id:string,rule_id:string,name:string,credits_milli:int,rate_minor:int,currency:string,rounding:string} */

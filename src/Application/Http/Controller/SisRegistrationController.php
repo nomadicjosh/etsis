@@ -22,6 +22,7 @@ final readonly class SisRegistrationController
     public function __construct(
         private RegistrationService $service,
         private RegistrarCatalogService $catalog,
+        private \Domain\Registration\Service\RegistrationBatchService $reviews,
     ) {
     }
 
@@ -107,18 +108,36 @@ final readonly class SisRegistrationController
     public function register(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        $enrollment = $this->service->register(
-            $f->id("student_id"),
-            $f->id("section_id"),
+        $result = $this->reviews->commit(
+            $f->id("operation_id"),
+            new \Domain\Registration\ValueObject\RegistrationBatchSelection(
+                $f->id("section_id"),
+                $f->id("student_id"),
+            ),
+            $f->text("revision", 64),
+            $f->text("review_token", 8192),
             $f->boolean("by_staff"),
         );
-
         return new JsonResponse(
-            [
-                "id" => $enrollment->id->value,
-                "status" => $enrollment->status->value,
+            $result + [
+                "id" => $result["registrations"][0]["enrollment_id"],
+                "status" => $result["registrations"][0]["status"],
             ],
             201,
+        );
+    }
+
+    public function reviewRegistration(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->reviews->review(
+                new \Domain\Registration\ValueObject\RegistrationBatchSelection(
+                    $f->id("section_id"),
+                    $f->id("student_id"),
+                ),
+                $f->boolean("by_staff"),
+            ),
         );
     }
 

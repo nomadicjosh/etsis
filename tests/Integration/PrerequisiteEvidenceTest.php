@@ -62,20 +62,7 @@ final class PrerequisiteEvidenceTest extends TestCase
 
     private function batch(SisFixture $s, ?\Domain\Registration\Service\PrerequisiteService $prerequisites = null): RegistrationBatchService
     {
-        return new RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($s->sql),
-            $s->registration,
-            $s->admissions,
-            $s->service,
-            $s->access,
-            $s->transactions,
-            $s->audit,
-            $s->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
-            $s->workPursuits(),
-            $prerequisites ?? $s->prerequisites(),
-            $s->schedules(),
-        );
+        return $s->registrationBatches(prerequisites: $prerequisites);
     }
 
     public function testAcceptanceRetainsTheExactInstitutionalReferencesAndDoesNotReinterpretThemAfterGradeCorrection(): void
@@ -141,14 +128,24 @@ final class PrerequisiteEvidenceTest extends TestCase
         $this->grade($s, $student, $required->id, $previous->id, 'P', 1);
         $before = $s->sql->rows('sis_history_events');
         try {
-            $batch->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $batch->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('A batch used academic evidence changed after its review.');
         } catch (ConcurrentModificationException) {
             self::assertSame($before, $s->sql->rows('sis_history_events'));
             self::assertNull($s->registration->enrollment($student, $next->id));
         }
         $fresh = $batch->review($selection);
-        $result = $batch->commit(new EntityId($fresh['operation_id']), $selection, $fresh['revision']);
+        $result = $batch->commit(
+            new EntityId($fresh["operation_id"]),
+            $selection,
+            $fresh["revision"],
+            $fresh["review_token"],
+        );
         self::assertSame(1, $result['created']);
         self::assertSame(3, $this->events($s, new EntityId($result['registrations'][0]['enrollment_id']))[0]
             ->metaParam('prerequisite_evidence')['support'][0]['academic_version']);
@@ -176,10 +173,10 @@ final class PrerequisiteEvidenceTest extends TestCase
         $selection = new RegistrationBatchSelection($next->id, $student);
         $review = $batch->review($selection);
         $operation = new EntityId($review['operation_id']);
-        $result = $batch->commit($operation, $selection, $review['revision']);
+        $result = $batch->commit($operation, $selection, $review['revision'], $review['review_token']);
         $this->grade($s, $student, $required->id, $previous->id, 'F', 1);
         $before = $s->sql->rows('sis_history_events');
-        self::assertSame($result, $batch->commit($operation, $selection, $review['revision']));
+        self::assertSame($result, $batch->commit($operation, $selection, $review['revision'], $review['review_token']));
         self::assertSame($before, $s->sql->rows('sis_history_events'));
     }
 
@@ -237,7 +234,12 @@ final class PrerequisiteEvidenceTest extends TestCase
         $revoke = $s->workPursuits()->review($student, $credit, $assignment, 'revoke_reuse', 'Fictional approval revocation.');
         $s->workPursuits()->commit($student, $credit, $revoke['review_token']);
         try {
-            $batch->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $batch->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('A batch retained permission to use revoked coursework.');
         } catch (ConcurrentModificationException) {
             self::assertNull($s->registration->enrollment($student, $next->id));

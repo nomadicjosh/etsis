@@ -378,20 +378,7 @@ final class SectionCourseBindingTest extends TestCase
     {
         $version = $this->publish();
         $student = $this->f->student();
-        $batch = new \Domain\Registration\Service\RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($this->f->sql),
-            $this->f->registration,
-            $this->f->admissions,
-            $this->f->service,
-            $this->f->access,
-            $this->f->transactions,
-            $this->f->audit,
-            $this->f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql),
-            $this->f->workPursuits(),
-            $this->f->prerequisites(),
-            $this->f->schedules(),
-        );
+        $batch = $this->f->registrationBatches();
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $this->section->id,
             $student->id,
@@ -399,7 +386,7 @@ final class SectionCourseBindingTest extends TestCase
         $old = $batch->review($selection);
         $this->bind($version);
         try {
-            $batch->commit(new EntityId($old["operation_id"]), $selection, $old["revision"]);
+            $batch->commit(new EntityId($old["operation_id"]), $selection, $old["revision"], $old['review_token']);
             self::fail("A new binding bypassed the group review.");
         } catch (ConcurrentModificationException) {
             self::assertNull($this->f->registration->enrollment($student->id, $this->section->id));
@@ -409,7 +396,7 @@ final class SectionCourseBindingTest extends TestCase
         $revision = $this->editor->view("courses", $this->course)["revision"];
         $this->editor->course(new Course($this->course, "MATH.201", "Advanced Algebra", 4000), $revision);
         self::assertSame("Algebra", $batch->review($selection)["section"]["course_title"]);
-        $batch->commit(new EntityId($review["operation_id"]), $selection, $review["revision"]);
+        $batch->commit(new EntityId($review["operation_id"]), $selection, $review["revision"], $review['review_token']);
         self::assertSame("Algebra", $this->f->sql->rows("sis_academic_credits")[0]["course_title"]);
     }
 

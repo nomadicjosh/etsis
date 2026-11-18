@@ -396,20 +396,7 @@ final class RegistrationCompletionBoundaryTest extends TestCase
                 }
             }
         );
-        $batch = new \Domain\Registration\Service\RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($s->sql),
-            $s->registration,
-            $s->admissions,
-            $this->service($s, $audit),
-            $s->access,
-            $s->transactions,
-            $s->audit,
-            $s->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
-            $s->workPursuits(),
-            $s->prerequisites(),
-            $s->schedules(),
-        );
+        $batch = $s->registrationBatches(registration: $this->service($s, $audit));
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $section->id,
             $first->id,
@@ -418,7 +405,12 @@ final class RegistrationCompletionBoundaryTest extends TestCase
         $review = $batch->review($selection);
         $before = $this->facts($s);
         try {
-            $batch->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $batch->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('A group kept earlier registrations after the final student lost authority.');
         } catch (AccessDeniedException) {
             self::assertSame($before, $this->facts($s));

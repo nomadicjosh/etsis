@@ -52,6 +52,7 @@ final readonly class RegistrationService
         ?EntityId $assignment = null,
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
         ?RegistrationScheduleRead $scheduleRead = null,
+        ?\Domain\Finance\ValueObject\RegistrationChargeQuote $chargeQuote = null,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -68,6 +69,7 @@ final readonly class RegistrationService
             $assignment,
             $budget,
             $scheduleRead,
+            $chargeQuote,
         ): Enrollment {
             // Acquire all eligibility locks before consistent reads: student, person holds, then section seats.
             $this->repository->lockStudent($studentId);
@@ -215,6 +217,7 @@ final readonly class RegistrationService
                     $enrollment->id,
                     reason: "Account charges caused by accepted course registration.",
                 ),
+                $chargeQuote,
             );
             $this->audit->record(
                 $actor,

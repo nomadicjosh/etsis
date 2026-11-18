@@ -166,6 +166,7 @@ final class CampusFixture
             $f->audit,
             $f->clock,
             $this->contacts,
+            $f->registrationBatches(),
         );
         $posts = new SqlPortalRepository($f->sql);
         $this->posts = new PortalService($posts, $f->access, $f->transactions, $f->audit);

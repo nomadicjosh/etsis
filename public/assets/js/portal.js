@@ -1812,41 +1812,29 @@
         if (me.students.length === 1) student.value = me.students[0].id;
         const schedulePanel = el('div');
         const confirmation = el('button', { class: 'btn campus-button', type: 'submit', disabled: true }, 'Confirm registration');
-        let serial = 0, reviewedStudent = '', dialogGeneration = 0;
+        let serial = 0, reviewedStudent = '', reviewed = null, dialogGeneration = 0;
         const presenter = window.createRegistrationSchedule({ node: el });
         async function checkSchedule() {
             const turn = ++serial, selected = student.value;
             reviewedStudent = '';
+            reviewed = null;
             confirmation.disabled = true;
-            schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Checking published meetings…'));
+            schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Reviewing eligibility, timetable and fees…'));
             if (!selected) {
-                schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Choose a student program to check its timetable.'));
+                schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Choose a student record to review registration.'));
                 return;
             }
-            const result = await request('/sis/registration-schedule/review/', 'POST', { student_id: selected, section_id: course.id });
+            const result = await request('/portal/api/registration/review/', 'POST', { student_id: selected, section_id: course.id });
             if (!form.isConnected || turn !== serial || student.value !== selected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
             reviewedStudent = selected;
-            schedulePanel.replaceChildren(presenter.panel(result));
-            confirmation.disabled = result.blocked;
+            reviewed = result;
+            schedulePanel.replaceChildren(presenter.registration(result, amount));
+            confirmation.disabled = !presenter.canConfirm(result);
         }
         student.addEventListener('change', () => task(checkSchedule));
         form.append(
-            el(
-                'p',
-                {},
-                `${course.course_code} · ${course.title} · Section ${course.section_code}`,
-            ),
-            el(
-                'p',
-                {},
-                `Section fee: ${amount(course.fee_minor, course.currency)}`,
-            ),
-            el(
-                'p',
-                { class: 'campus-muted' },
-                'Registration may add course and institutional fees to your account. Review your institution’s billing policy before continuing. Eligibility and seat availability are checked when you register.',
-            ),
             schedulePanel,
+            el('button', { type: 'button', class: 'btn btn-outline-secondary', onclick: (event) => task(checkSchedule, event.currentTarget) }, 'Refresh review'),
             confirmation,
         );
         form.addEventListener('submit', (event) => {
@@ -1854,10 +1842,13 @@
             task(
                 async () => {
                     if (!form.reportValidity()) return;
-                    if (reviewedStudent !== student.value) throw new Error('Review the selected student timetable before registering.');
+                    if (reviewedStudent !== student.value || !reviewed || !presenter.canConfirm(reviewed)) throw new Error('Review the selected registration before confirming.');
                     await request('/portal/api/register/', 'POST', {
                         student_id: student.value,
                         section_id: course.id,
+                        operation_id: reviewed.operation_id,
+                        revision: reviewed.revision,
+                        review_token: reviewed.review_token,
                     });
                     if (!form.isConnected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
                     bootstrap.Modal.getInstance(one('#campus-dialog')).hide();

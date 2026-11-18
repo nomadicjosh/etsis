@@ -37,6 +37,7 @@ final readonly class CampusService
         private AuditTrail $audit,
         private Clock $clock,
         private \Domain\Person\Service\PersonContactService $contacts,
+        private \Domain\Registration\Service\RegistrationBatchService $registrations,
     ) {
     }
 
@@ -124,10 +125,30 @@ final readonly class CampusService
         $this->contacts->save($preferredName, $phone, $address, $version);
     }
 
-    public function register(EntityId $student, EntityId $section): void
+    public function reviewRegistration(EntityId $student, EntityId $section): array
     {
         $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
-        $this->registration->register($student, $section, false);
+        return $this->registrations->review(
+            new \Domain\Registration\ValueObject\RegistrationBatchSelection($section, $student),
+            false,
+        );
+    }
+
+    public function register(
+        EntityId $student,
+        EntityId $section,
+        EntityId $operation,
+        string $revision,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
+        return $this->registrations->commit(
+            $operation,
+            new \Domain\Registration\ValueObject\RegistrationBatchSelection($section, $student),
+            $revision,
+            $token,
+            false,
+        );
     }
 
     public function drop(EntityId $student, EntityId $section): void
@@ -166,7 +187,10 @@ final readonly class CampusService
     public function dropReceipt(EntityId $operation): array
     {
         $receipt = $this->registration->dropReceipt($operation);
-        $this->repository->ownedStudent($this->access->authenticatedUserId(), new EntityId($receipt["student_id"]));
+        $this->repository->ownedStudent(
+            $this->access->authenticatedUserId(),
+            new EntityId($receipt["student_id"]),
+        );
         return $receipt;
     }
 
@@ -206,8 +230,12 @@ final readonly class CampusService
         ];
     }
 
-    public function requestTranscript(EntityId $request, EntityId $student, string $delivery, string $recipient): void
-    {
+    public function requestTranscript(
+        EntityId $request,
+        EntityId $student,
+        string $delivery,
+        string $recipient,
+    ): void {
         $user = $this->access->authenticatedUserId();
         $this->repository->ownedStudent($user, $student);
         if (

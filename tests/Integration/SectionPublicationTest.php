@@ -995,24 +995,11 @@ final class SectionPublicationTest extends TestCase
             $this->f->student()->id
         );
         $f = $this->f;
-        $batch = new \Domain\Registration\Service\RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($f->sql),
-            $f->registration,
-            $f->admissions,
-            $f->service,
-            $f->access,
-            $f->transactions,
-            $f->audit,
-            $f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
-            $f->workPursuits(),
-            $f->prerequisites(),
-            $f->schedules(),
-        );
+        $batch = $f->registrationBatches();
         $before = $batch->review($selection);
         $this->service->select($this->section->id, $review['review_token']);
         $this->expectException(ConcurrentModificationException::class);
-        $batch->commit(new EntityId($before['operation_id']), $selection, $before['revision']);
+        $batch->commit(new EntityId($before['operation_id']), $selection, $before['revision'], $before['review_token']);
     }
 
     public function testSelfServiceKeepsTheSameOfferingReferenceAsStaffRegistration(): void
@@ -1356,20 +1343,7 @@ final class SectionPublicationTest extends TestCase
         [$first, $initial] = $this->selectedOffering();
         $this->service->select($this->section->id, $initial["review_token"]);
         $f = $this->f;
-        $batch = new \Domain\Registration\Service\RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($f->sql),
-            $f->registration,
-            $f->admissions,
-            $f->service,
-            $f->access,
-            $f->transactions,
-            $f->audit,
-            $f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
-            $f->workPursuits(),
-            $f->prerequisites(),
-            $f->schedules(),
-        );
+        $batch = $f->registrationBatches();
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $this->section->id,
             $f->student()->id,
@@ -1386,7 +1360,12 @@ final class SectionPublicationTest extends TestCase
             $batch->review($selection)["section"]["section_version_id"],
         );
         try {
-            $batch->commit(new EntityId($pending["operation_id"]), $selection, $pending["revision"]);
+            $batch->commit(
+                new EntityId($pending["operation_id"]),
+                $selection,
+                $pending["revision"],
+                $pending["review_token"],
+            );
             self::fail("An intervening selection must require a fresh group review.");
         } catch (ConcurrentModificationException) {
             self::assertSame([], $f->sql->rows("sis_enrollments"));
@@ -1394,7 +1373,7 @@ final class SectionPublicationTest extends TestCase
         $fresh = $batch->review($selection);
         self::assertSame(
             1,
-            $batch->commit(new EntityId($fresh["operation_id"]), $selection, $fresh["revision"])["created"],
+            $batch->commit(new EntityId($fresh["operation_id"]), $selection, $fresh["revision"], $fresh['review_token'])["created"],
         );
     }
 

@@ -139,3 +139,22 @@ $teachingPost = static function (
     }
     return $response;
 };
+
+// Single registration uses the same private review/confirmation contract as grouped entry.
+$registrationPost = static function (array $data) use (
+    $teachingPost,
+): \Psr\Http\Message\ResponseInterface {
+    $review = $teachingPost("/sis/registrations/review/", $data);
+    if ($review->getStatusCode() !== 200) {
+        return $review;
+    }
+    $proof = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    return $teachingPost(
+        "/sis/registrations/",
+        $data + [
+            "operation_id" => $proof["operation_id"],
+            "revision" => $proof["revision"],
+            "review_token" => $proof["review_token"],
+        ],
+    );
+};

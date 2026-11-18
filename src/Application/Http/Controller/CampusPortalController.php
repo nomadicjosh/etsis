@@ -199,8 +199,23 @@ final readonly class CampusPortalController
     public function register(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->register($f->id("student_id"), $f->id("section_id"));
-        return new JsonResponse(["status" => "registered"]);
+        return new JsonResponse(
+            $this->service->register(
+                $f->id("student_id"),
+                $f->id("section_id"),
+                $f->id("operation_id"),
+                $f->text("revision", 64),
+                $f->text("review_token", 8192),
+            ) + ["status" => "registered"],
+        );
+    }
+
+    public function reviewRegistration(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->reviewRegistration($f->id("student_id"), $f->id("section_id")),
+        );
     }
 
     public function reviewDrop(ServerRequest $request): ResponseInterface

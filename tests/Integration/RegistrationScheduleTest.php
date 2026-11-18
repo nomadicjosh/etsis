@@ -208,8 +208,8 @@ final class RegistrationScheduleTest extends TestCase
             $batch->commit(
                 new EntityId($review["operation_id"]),
                 $selection,
-                $review["revision"],
-            );
+                $review["revision"], $review['review_token'],
+        );
             self::fail("A conflicting batch partially registered students.");
         } catch (ValidationException) {
             self::assertSame($before, $t->digest());
@@ -222,8 +222,8 @@ final class RegistrationScheduleTest extends TestCase
             $batch->commit(
                 new EntityId($review["operation_id"]),
                 $selection,
-                $review["revision"],
-            );
+                $review["revision"], $review['review_token'],
+        );
             self::fail("A new meeting plan escaped the review fingerprint.");
         } catch (ConcurrentModificationException) {
             self::assertSame($before, $t->digest());

@@ -93,6 +93,7 @@ final class SisFixture
     public SqlRegistrationRepository $registration;
     public EventSourcedAccountRepository $accounts;
     public RegistrationService $service;
+    public \Domain\Registration\Service\RegistrationBilling $registrationBilling;
     public \Domain\Registration\Service\CourseDropService $drops;
     public \Infrastructure\Communications\DefuseMessageCipher $dropCipher;
     public \Domain\Registration\Service\DropPolicyService $dropPolicies;
@@ -316,6 +317,7 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
         );
+        $this->registrationBilling = $billing;
         $this->drops = $this->dropService($billing);
         $this->service = new RegistrationService(
             $this->registration,
@@ -1417,6 +1419,31 @@ final class SisFixture
             new \Domain\Person\ValueObject\InstitutionalId('T-' . bin2hex(random_bytes(6))));
         $this->admissions->addPerson($p);
         return $p;
+    }
+
+    public function registrationBatches(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Registration\Repository\RegistrationRepository $repository = null,
+        ?\Domain\Registration\Repository\RegistrationBatchRepository $receipts = null,
+        ?\Domain\Registration\Service\PrerequisiteService $prerequisites = null,
+        ?\Domain\Registration\Service\RegistrationService $registration = null,
+    ): \Domain\Registration\Service\RegistrationBatchService {
+        return new \Domain\Registration\Service\RegistrationBatchService(
+            $receipts ?? new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($this->sql),
+            $repository ?? $this->registration,
+            $this->admissions,
+            $registration ?? $this->service,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            $this->workPursuits(),
+            $prerequisites ?? $this->prerequisites(),
+            $this->schedules(),
+            $this->registrationBilling,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+        );
     }
 
     /** Indexed read fixture only. No earlier enrollment/profile decisions are invented. */

@@ -400,31 +400,31 @@ final class ReportPopulationTest extends TestCase
         $selection = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
         self::assertSame($before, $this->facts($s));
         $section = $s->section();
-        $batch = new \Domain\Registration\Service\RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($s->sql),
-            $s->registration,
-            $s->admissions,
-            $s->service,
-            $s->access,
-            $s->transactions,
-            $s->audit,
-            $s->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
-            $s->workPursuits(),
-            $s->prerequisites(),
-            $s->schedules(),
-        );
+        $batch = $s->registrationBatches();
         $group = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $section->id,
             ...array_map(static fn(array $row): EntityId => new EntityId($row['id']), $selection['items'])
         );
         $review = $batch->review($group);
         self::assertSame([], $s->sql->rows('sis_enrollments'));
-        $receipt = $batch->commit(new EntityId($review['operation_id']), $group, $review['revision']);
+        $receipt = $batch->commit(
+            new EntityId($review["operation_id"]),
+            $group,
+            $review["revision"],
+            $review["review_token"],
+        );
         self::assertSame(2, $receipt['created']);
         self::assertCount(2, $s->sql->rows('sis_student_accounts'));
         $events = $s->sql->rows('sis_history_events');
-        self::assertSame($receipt, $batch->commit(new EntityId($review['operation_id']), $group, $review['revision']));
+        self::assertSame(
+            $receipt,
+            $batch->commit(
+                new EntityId($review["operation_id"]),
+                $group,
+                $review["revision"],
+                $review["review_token"],
+            ),
+        );
         self::assertSame($events, $s->sql->rows('sis_history_events'));
     }
 

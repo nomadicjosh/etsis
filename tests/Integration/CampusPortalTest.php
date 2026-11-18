@@ -127,7 +127,7 @@ final class CampusPortalTest extends TestCase
         $student = $f->student($f->user());
         $f->student();
         $section = $f->section();
-        foreach (['register', 'drop', 'scores'] as $operation) {
+        foreach (['reviewRegistration', 'drop', 'scores'] as $operation) {
             try {
                 $c->service->$operation($student->id, $section->id);
                 self::fail('Another student was accessible.');
@@ -137,7 +137,14 @@ final class CampusPortalTest extends TestCase
         }
         $own = $f->admissions->student(new EntityId($c->service->me()['students'][0]['id']));
         $f->access->staff = false;
-        $c->service->register($own->id, $section->id);
+        $review = $c->service->reviewRegistration($own->id, $section->id);
+        $c->service->register(
+            $own->id,
+            $section->id,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["review_token"],
+        );
         self::assertCount(1, $c->service->transcript($own->id));
         self::assertCount(1, $c->service->me()['students'][0]['enrollments']);
         $c->service->drop($own->id, $section->id);

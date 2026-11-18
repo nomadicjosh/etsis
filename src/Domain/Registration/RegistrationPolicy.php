@@ -23,22 +23,54 @@ final class RegistrationPolicy
         int $courseLimit,
         bool $prerequisitesMet,
     ): void {
+        $issues = $this->issues(
+            $student,
+            $restrictions,
+            $on,
+            $byStaff,
+            $registrationOpen,
+            $sectionAllowsWebRegistration,
+            $enrolledCourses,
+            $courseLimit,
+            $prerequisitesMet,
+        );
+        if ($issues !== []) {
+            throw new DomainException($issues[0]);
+        }
+    }
+
+    /** @param list<Restriction> $restrictions
+     * @return list<string>
+     */
+    public function issues(
+        Student $student,
+        array $restrictions,
+        DateTimeImmutable $on,
+        bool $byStaff,
+        bool $registrationOpen,
+        bool $sectionAllowsWebRegistration,
+        int $enrolledCourses,
+        int $courseLimit,
+        bool $prerequisitesMet,
+    ): array {
+        $issues = [];
         if (!$student->active || !$prerequisitesMet) {
-            throw new DomainException('An active student meeting course prerequisites is required.');
+            $issues[] = "An active student meeting course prerequisites is required.";
         }
         foreach ($restrictions as $restriction) {
             if ($restriction->personId->value !== $student->personId->value) {
-                throw new DomainException('Restrictions must belong to the student.');
+                throw new DomainException("Restrictions must belong to the student.");
             }
             if ($restriction->blocksRegistration($on, $byStaff)) {
-                throw new DomainException('An active restriction prevents registration.');
+                $issues[] = "An active restriction prevents registration.";
             }
         }
         if (!$byStaff && (!$registrationOpen || !$sectionAllowsWebRegistration)) {
-            throw new DomainException('Self-service registration is closed.');
+            $issues[] = "Self-service registration is closed.";
         }
         if ($enrolledCourses < 0 || $courseLimit < 1 || $enrolledCourses >= $courseLimit) {
-            throw new DomainException('The term course limit has been reached.');
+            $issues[] = "The term course limit has been reached.";
         }
+        return array_values(array_unique($issues));
     }
 }

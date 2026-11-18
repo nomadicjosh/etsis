@@ -24,20 +24,7 @@ final class RegistrationBatchTest extends TestCase
         ?RegistrationRepository $repository = null,
         ?\Domain\Registration\Repository\RegistrationBatchRepository $batches = null
     ): RegistrationBatchService {
-        return new RegistrationBatchService(
-            $batches ?? new SqlRegistrationBatchRepository($f->sql),
-            $repository ?? $f->registration,
-            $f->admissions,
-            $f->service,
-            $f->access,
-            $f->transactions,
-            $audit ?? $f->audit,
-            $f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
-            $f->workPursuits(),
-            $f->prerequisites(),
-            $f->schedules(),
-        );
+        return $f->registrationBatches(audit: $audit, repository: $repository, receipts: $batches);
     }
 
     public function testReviewedBatchKeepsExistingEnrollmentsAndChargesEachNewStudentOnlyOnce(): void
@@ -54,7 +41,7 @@ final class RegistrationBatchTest extends TestCase
         self::assertSame(19, $review['section']['seats_remaining']);
         self::assertSame(1250, $review['section']['fee_minor']);
         $operation = new EntityId($review['operation_id']);
-        $receipt = $service->commit($operation, $selection, $review['revision']);
+        $receipt = $service->commit($operation, $selection, $review['revision'], $review['review_token']);
         self::assertSame(1, $receipt['created']);
         self::assertSame(1, $receipt['existing']);
         self::assertSame($existing->id->value, $f->registration->enrollment($a->id, $section->id)->id->value);
@@ -70,7 +57,7 @@ final class RegistrationBatchTest extends TestCase
         self::assertSame($receipt, $service->commit(
             $operation,
             new RegistrationBatchSelection($section->id, ...[$a->id, $b->id]),
-            $review['revision']
+            $review['revision'], $review['review_token']
         ));
         self::assertSame($receipt, $service->receipt($operation));
         self::assertSame($events, $f->sql->rows('sis_history_events'));
@@ -91,7 +78,12 @@ final class RegistrationBatchTest extends TestCase
         $review = $service->review($selection);
         $audit = $f->sql->rows('sis_audit');
         try {
-            $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $service->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('An over-capacity batch partially committed.');
         } catch (ValidationException $error) {
             self::assertStringContainsString('No changes in this batch were saved', $error->errors[0]['message']);
@@ -115,9 +107,14 @@ final class RegistrationBatchTest extends TestCase
         $f->sql->insert('sis_restrictions', ['id' => EntityId::generate()->value, 'person_id' => $student->personId->value,
             'code' => 'ADVISING', 'severity' => 99, 'starts_on' => '2026-08-01', 'ends_on' => null, 'blocks_staff' => 1]);
         try {
-            $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $service->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('A preceding staff-blocking restriction was ignored.');
-        } catch (ValidationException) {
+        } catch (ConcurrentModificationException) {
             self::assertSame([], $f->sql->rows('sis_enrollments'));
             self::assertSame([], $f->sql->rows('sis_history_events'));
             self::assertSame([], $f->sql->rows('sis_registration_batches'));
@@ -152,7 +149,12 @@ final class RegistrationBatchTest extends TestCase
             $selection = new RegistrationBatchSelection($section->id, ...[$student->id]);
             $review = $service->review($selection);
             try {
-                $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+                $service->commit(
+                    new EntityId($review["operation_id"]),
+                    $selection,
+                    $review["revision"],
+                    $review["review_token"],
+                );
                 self::fail('Batch ignored ' . $policy);
             } catch (ValidationException) {
                 self::assertSame($before, $f->sql->rows('sis_enrollments'));
@@ -181,7 +183,12 @@ final class RegistrationBatchTest extends TestCase
             };
             $events = $f->sql->rows('sis_history_events');
             try {
-                $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+                $service->commit(
+                    new EntityId($review["operation_id"]),
+                    $selection,
+                    $review["revision"],
+                    $review["review_token"],
+                );
                 self::fail('A stale review survived a ' . $change . ' change.');
             } catch (ConcurrentModificationException) {
                 self::assertNull($f->registration->enrollment($student->id, $section->id));
@@ -200,11 +207,13 @@ final class RegistrationBatchTest extends TestCase
         $review = $service->review($selection);
         $op = new EntityId($review['operation_id']);
         $owner = $f->access->actor;
-        $service->commit($op, $selection, $review['revision']);
+        $service->commit($op, $selection, $review['revision'], $review['review_token']);
         $f->access->actor = $f->user();
         foreach (['receipt', 'commit'] as $action) {
             try {
-                $action === 'receipt' ? $service->receipt($op) : $service->commit($op, $selection, $review['revision']);
+                $action === "receipt"
+                    ? $service->receipt($op)
+                    : $service->commit($op, $selection, $review["revision"], $review["review_token"]);
                 self::fail('Another registrar read or replayed a private receipt.');
             } catch (AccessDeniedException) {
                 self::assertCount(1, $f->sql->rows('sis_registration_batches'));
@@ -217,7 +226,7 @@ final class RegistrationBatchTest extends TestCase
             try {
                 match ($action) {
                     'receipt' => $service->receipt($op), 'review' => $service->review($selection),
-                    'commit' => $service->commit($op, $selection, $review['revision']),
+                    'commit' => $service->commit($op, $selection, $review['revision'], $review['review_token']),
                 };
                 self::fail('Student-read alone granted batch registration.');
             } catch (AccessDeniedException) {
@@ -235,14 +244,14 @@ final class RegistrationBatchTest extends TestCase
         $service = $this->service($f);
         $review = $service->review($selection);
         $op = new EntityId($review['operation_id']);
-        $receipt = $service->commit($op, $selection, $review['revision']);
+        $receipt = $service->commit($op, $selection, $review['revision'], $review['review_token']);
         $f->service->drop($student->id, $section->id);
         $events = $f->sql->rows('sis_history_events');
-        self::assertSame($receipt, $service->commit($op, $selection, $review['revision']));
+        self::assertSame($receipt, $service->commit($op, $selection, $review['revision'], $review['review_token']));
         self::assertNull($f->registration->enrollment($student->id, $section->id));
         self::assertSame($events, $f->sql->rows('sis_history_events'));
-        $this->expectException(ConcurrentModificationException::class);
-        $service->commit($op, $selection, str_repeat('0', 64));
+        $this->expectException(ValidationException::class);
+        $service->commit($op, $selection, str_repeat('0', 64), $review['review_token']);
     }
 
     public function testAuditFailureRollsBackTheReceiptAndFinancialEvents(): void
@@ -256,7 +265,12 @@ final class RegistrationBatchTest extends TestCase
         $audit = $this->createStub(AuditTrail::class);
         $audit->method('record')->willThrowException(new RuntimeException('Fictional audit failure'));
         try {
-            $this->service($f, $audit)->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $this->service($f, $audit)->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('An unaudited batch committed.');
         } catch (RuntimeException) {
             foreach (['sis_enrollments', 'sis_academic_credits', 'sis_student_accounts', 'sis_history_events', 'sis_registration_batches'] as $table) {
@@ -274,7 +288,21 @@ final class RegistrationBatchTest extends TestCase
         $selection = new RegistrationBatchSelection($section->id, ...[$b->id, $a->id]);
         $calls = [];
         $repository = $this->createStub(RegistrationRepository::class);
-        foreach (['lockStudent', 'lockPerson', 'lockSection', 'lockCourse', 'section', 'courseForSection', 'enrollment', 'sectionCount'] as $method) {
+        $methods = [
+            'lockStudent',
+            'lockPerson',
+            'lockSection',
+            'lockCourse',
+            'section',
+            'courseForSection',
+            'enrollment',
+            'sectionCount',
+            'window',
+            'term',
+            'blockingRestriction',
+            'enrolledCount',
+        ];
+        foreach ($methods as $method) {
             $repository->method($method)->willReturnCallback(static function (...$args) use ($f, $method, &$calls) {
                 $calls[] = $method . ':' . ($method === 'courseForSection' ? $args[0]->id->value : $args[0]->value);
                 return $f->registration->$method(...$args);
@@ -316,7 +344,12 @@ final class RegistrationBatchTest extends TestCase
             $section = $f->section(20, 1250);
             $selection = new RegistrationBatchSelection($section->id, ...$students);
             $review = $service->review($selection);
-            $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $service->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
         }
         foreach ([[$a, 3000], [$b, 1750]] as [$student, $expected]) {
             $account = $f->sql->one('sis_student_accounts', ['student_id' => $student->id->value]);
@@ -339,7 +372,12 @@ final class RegistrationBatchTest extends TestCase
         $service = $this->service($f);
         $review = $service->review($selection);
         try {
-            $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $service->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('A later currency mismatch left earlier registrations committed.');
         } catch (ValidationException) {
             self::assertSame([], $f->sql->rows('sis_enrollments'));
@@ -396,7 +434,15 @@ final class RegistrationBatchTest extends TestCase
         $service = $this->service($f);
         $selection = new RegistrationBatchSelection($section->id, ...[$student->id]);
         $review = $service->review($selection);
-        self::assertSame(1, $service->commit(new EntityId($review['operation_id']), $selection, $review['revision'])['created']);
+        self::assertSame(
+            1,
+            $service->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            )["created"],
+        );
     }
 
     public function testReceiptMigrationRollbackDoesNotDeleteRegistrationsOrFinancialHistory(): void
@@ -407,7 +453,12 @@ final class RegistrationBatchTest extends TestCase
         $service = $this->service($f);
         $selection = new RegistrationBatchSelection($section->id, ...[$student->id]);
         $review = $service->review($selection);
-        $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+        $service->commit(
+            new EntityId($review["operation_id"]),
+            $selection,
+            $review["revision"],
+            $review["review_token"],
+        );
         $enrollments = $f->sql->rows('sis_enrollments');
         $events = $f->sql->rows('sis_history_events');
         $migration = new CreateSisRegistrationBatchesTable('batch');
@@ -431,7 +482,12 @@ final class RegistrationBatchTest extends TestCase
         $selection = new RegistrationBatchSelection($section->id, ...$students);
         $service = $this->service($f);
         $review = $service->review($selection);
-        $receipt = $service->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+        $receipt = $service->commit(
+            new EntityId($review["operation_id"]),
+            $selection,
+            $review["revision"],
+            $review["review_token"],
+        );
         self::assertSame(25, $receipt['created']);
         self::assertSame(0, $receipt['existing']);
         self::assertCount(25, $f->sql->rows('sis_enrollments'));
@@ -449,7 +505,7 @@ final class RegistrationBatchTest extends TestCase
         $first = new RegistrationBatchSelection($section->id, $a->id);
         $review = $service->review($first);
         $operation = new EntityId($review['operation_id']);
-        $original = $service->commit($operation, $first, $review['revision']);
+        $original = $service->commit($operation, $first, $review['revision'], $review['review_token']);
         $events = $f->sql->rows('sis_history_events');
         $second = new RegistrationBatchSelection($section->id, $b->id);
         $fresh = $service->review($second);
@@ -458,8 +514,10 @@ final class RegistrationBatchTest extends TestCase
         // Simulate an operation completed by another request after our existence checks.
         $racing->method('receipt')->willReturn(null);
         $racing->method('save')->willReturnCallback($actual->save(...));
+        $collisionToken = new \Domain\Shared\Service\ReviewProof($f->dropCipher, $f->clock)->issue(
+            'registration', 'staff', $section->id, $f->access->actor, $operation, $fresh['revision']);
         try {
-            $this->service($f, batches: $racing)->commit($operation, $second, $fresh['revision']);
+            $this->service($f, batches: $racing)->commit($operation, $second, $fresh['revision'], $collisionToken);
             self::fail('A receipt collision left a partially committed second request.');
         } catch (ConcurrentModificationException) {
             self::assertNull($f->registration->enrollment($b->id, $section->id));
@@ -477,7 +535,20 @@ final class RegistrationBatchTest extends TestCase
         $selection = new RegistrationBatchSelection($section->id, $student->id);
         $review = $this->service($f)->review($selection);
         $guarded = $this->createStub(RegistrationRepository::class);
-        foreach (['lockStudent', 'lockPerson', 'lockSection', 'section', 'courseForSection', 'enrollment', 'sectionCount'] as $method) {
+        $methods = [
+            'lockStudent',
+            'lockPerson',
+            'lockSection',
+            'section',
+            'courseForSection',
+            'enrollment',
+            'sectionCount',
+            'window',
+            'term',
+            'blockingRestriction',
+            'enrolledCount',
+        ];
+        foreach ($methods as $method) {
             $guarded->method($method)->willReturnCallback($f->registration->$method(...));
         }
         $guarded->method('lockCourse')->willReturnCallback(static function (EntityId $id) use ($f, $student): void {
@@ -489,7 +560,12 @@ final class RegistrationBatchTest extends TestCase
             $f->registration->lockCourse($id);
         });
         try {
-            $this->service($f, repository: $guarded)->commit(new EntityId($review['operation_id']), $selection, $review['revision']);
+            $this->service($f, repository: $guarded)->commit(
+                new EntityId($review["operation_id"]),
+                $selection,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail('A context read before the locks survived a preceding writer.');
         } catch (ConcurrentModificationException) {
             self::assertSame([], $f->sql->rows('sis_enrollments'));

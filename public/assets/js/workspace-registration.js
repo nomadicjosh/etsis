@@ -1,17 +1,7 @@
 /* Staff batch registration: explicit review, atomic confirmation and durable retry receipts. */
 window.createWorkspaceRegistration = function (ui) {
     "use strict";
-    const {
-        node,
-        request,
-        task,
-        table,
-        money,
-        recordSummary,
-        buildForm,
-        openDrawer,
-        refreshDirectory,
-    } = ui;
+    const { node, request, task, table, money, recordSummary, buildForm, openDrawer, refreshDirectory } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -38,20 +28,12 @@ window.createWorkspaceRegistration = function (ui) {
         const body = openDrawer("Timetable policy", "REGISTRATION SETTINGS");
         const value = await request("/sis/registration-policy/");
         if (!body.isConnected) return;
-        const choices = [
-            "block — Block confirmed overlaps",
-            "warn — Warn and allow registration",
-        ];
-        const form = await buildForm(
-            [["mode", "When published meetings overlap", "choice", choices]],
-            { mode: choices.find((item) => item.startsWith(value.mode)) },
-        );
+        const choices = ["block — Block confirmed overlaps", "warn — Warn and allow registration"];
+        const form = await buildForm([["mode", "When published meetings overlap", "choice", choices]], {
+            mode: choices.find((item) => item.startsWith(value.mode)),
+        });
         if (!body.isConnected) return;
-        const save = node(
-            "button",
-            { type: "submit", class: "btn btn-primary" },
-            "Save policy",
-        );
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save policy");
         form.append(save);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -75,68 +57,60 @@ window.createWorkspaceRegistration = function (ui) {
         );
     }
     async function single(student, back, draft = {}) {
-        const body = openDrawer(
-            "Register student",
-            "SECTION → TIMETABLE → CONFIRM",
-        );
-        const form = await buildForm(
-            [["section_id", "Course section", "lookup", "sections"]],
-            draft,
-        );
+        let body = openDrawer("Register student", "SECTION → ELIGIBILITY & FEES → CONFIRM");
+        const form = await buildForm([["section_id", "Course section", "lookup", "sections"]], draft);
         if (!body.isConnected) return;
-        const review = node(
-            "button",
-            { type: "submit", class: "btn btn-primary" },
-            "Review registration",
-        );
+        let generation = 0,
+            confirmation = null;
+        async function reviewSelection(section) {
+            const source = body,
+                turn = ++generation;
+            if (confirmation) confirmation.disabled = true;
+            const reviewed = await request("/sis/registrations/review/", "POST", {
+                student_id: student,
+                section_id: section,
+                by_staff: true,
+            });
+            if (!source.isConnected || turn !== generation) return;
+            const panel = openDrawer("Review registration", "SECTION → ELIGIBILITY & FEES → CONFIRM");
+            body = panel;
+            const confirm = button(
+                "Confirm registration",
+                async () => {
+                    await request("/sis/registrations/", "POST", {
+                        student_id: student,
+                        section_id: section,
+                        by_staff: true,
+                        operation_id: reviewed.operation_id,
+                        revision: reviewed.revision,
+                        review_token: reviewed.review_token,
+                    });
+                    if (!panel.isConnected) return;
+                    await back();
+                    await refreshDirectory();
+                },
+                "btn-primary",
+            );
+            confirmation = confirm;
+            confirm.disabled = !schedule.canConfirm(reviewed);
+            panel.append(
+                schedule.registration(reviewed, money),
+                node(
+                    "div",
+                    { class: "inline-actions" },
+                    confirm,
+                    button("Refresh review", () => reviewSelection(section)),
+                    button("Change section", () => single(student, back, { section_id: section })),
+                ),
+                button("Back to student", back, "btn-link"),
+            );
+        }
+        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review registration");
         form.append(review);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
-                if (!form.reportValidity()) return;
-                const section = form.elements.section_id.value;
-                const sectionLabel =
-                    form.elements.section_id.selectedOptions?.[0]
-                        ?.textContent || section;
-                const reviewed = await request(
-                    "/sis/registration-schedule/review/",
-                    "POST",
-                    { student_id: student, section_id: section },
-                );
-                if (!body.isConnected) return;
-                const panel = openDrawer(
-                    "Review registration",
-                    "SECTION → TIMETABLE → CONFIRM",
-                );
-                const confirm = button(
-                    "Confirm registration",
-                    async () => {
-                        await request("/sis/registrations/", "POST", {
-                            student_id: student,
-                            section_id: section,
-                            by_staff: true,
-                        });
-                        if (!panel.isConnected) return;
-                        await back();
-                        await refreshDirectory();
-                    },
-                    "btn-primary",
-                );
-                confirm.disabled = reviewed.blocked;
-                panel.append(
-                    node("h3", {}, sectionLabel),
-                    schedule.panel(reviewed),
-                    node(
-                        "p",
-                        {},
-                        "Confirmation also checks seats, prerequisites, activity, holds and course limits. Applicable fees may be posted.",
-                    ),
-                    confirm,
-                    button("Change section", () =>
-                        single(student, back, { section_id: section }),
-                    ),
-                    button("Back to student", back, "btn-link"),
-                );
+                if (form.reportValidity()) await reviewSelection(form.elements.section_id.value);
             }, review);
         });
         body.append(form, button("Back to student", back, "btn-link"));
@@ -149,11 +123,7 @@ window.createWorkspaceRegistration = function (ui) {
                 { role: "status" },
                 `${result.created} ${result.created === 1 ? "registration" : "registrations"} created. ${result.existing} existing ${result.existing === 1 ? "registration" : "registrations"} kept.`,
             ),
-            node(
-                "p",
-                {},
-                "The registrations, applicable charges and batch receipt were saved together.",
-            ),
+            node("p", {}, "The registrations, applicable charges and batch receipt were saved together."),
             node(
                 "p",
                 { class: "registration-reference" },
@@ -164,17 +134,10 @@ window.createWorkspaceRegistration = function (ui) {
         );
     }
     async function findReceipt() {
-        const body = openDrawer(
-            "Find a completed batch",
-            "REGISTRATION RECEIPT",
-        );
+        const body = openDrawer("Find a completed batch", "REGISTRATION RECEIPT");
         const form = await buildForm([["operation_id", "Batch reference"]]);
         form.elements.operation_id.maxLength = 26;
-        const save = node(
-            "button",
-            { type: "submit", class: "btn btn-primary" },
-            "Check completed batch",
-        );
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Check completed batch");
         form.append(save);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -183,9 +146,7 @@ window.createWorkspaceRegistration = function (ui) {
                 const id = form.elements.operation_id.value.trim();
                 if (!/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id))
                     throw new Error("Enter a valid batch reference.");
-                const result = await request(
-                    `/sis/registration-batches/${id}/`,
-                );
+                const result = await request(`/sis/registration-batches/${id}/`);
                 if (!body.isConnected) return;
                 receipt(result, () => start());
             }, save);
@@ -200,8 +161,7 @@ window.createWorkspaceRegistration = function (ui) {
         );
     }
     async function start(presetSection = "", presetStudents = [], back = null) {
-        if (presetStudents.length > 25)
-            throw new Error("Select no more than 25 students.");
+        if (presetStudents.length > 25) throw new Error("Select no more than 25 students.");
         const chosen = new Map(
             presetStudents.map((student) => [
                 student.id,
@@ -218,11 +178,7 @@ window.createWorkspaceRegistration = function (ui) {
                     role: "group",
                     "aria-label": "Registration tools",
                 },
-                button(
-                    "Find a completed batch",
-                    findReceipt,
-                    "btn-outline-secondary",
-                ),
+                button("Find a completed batch", findReceipt, "btn-outline-secondary"),
             );
             if (ui.can?.("sis:registration:policy"))
                 tools.append(button("Timetable policy", () => policy(selection)));
@@ -238,13 +194,7 @@ window.createWorkspaceRegistration = function (ui) {
             const form = await buildForm(
                 [
                     ["section_id", "Course section", "lookup", "sections"],
-                    [
-                        "student_id",
-                        "Find a student",
-                        "lookup",
-                        "registrationstudents",
-                        false,
-                    ],
+                    ["student_id", "Find a student", "lookup", "registrationstudents", false],
                 ],
                 { section_id: sectionId },
                 { layout: "registration_group" },
@@ -260,19 +210,12 @@ window.createWorkspaceRegistration = function (ui) {
                 if (!control.value) throw new Error("Choose a student to add.");
                 if (!chosen.has(control.value) && chosen.size >= 25)
                     throw new Error("Select no more than 25 students.");
-                chosen.set(
-                    control.value,
-                    control.selectedOptions[0].textContent,
-                );
+                chosen.set(control.value, control.selectedOptions[0].textContent);
                 render();
             });
             function render(focusIndex = null) {
                 selected.replaceChildren(
-                    node(
-                        "h3",
-                        {},
-                        `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`,
-                    ),
+                    node("h3", {}, `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`),
                     node(
                         "ul",
                         { class: "registration-selection" },
@@ -285,33 +228,16 @@ window.createWorkspaceRegistration = function (ui) {
                                 },
                                 "btn-outline-secondary btn-sm",
                             );
-                            remove.setAttribute(
-                                "aria-label",
-                                `Remove ${label}`,
-                            );
-                            return node(
-                                "li",
-                                {},
-                                node("span", {}, label),
-                                remove,
-                            );
+                            remove.setAttribute("aria-label", `Remove ${label}`);
+                            return node("li", {}, node("span", {}, label), remove);
                         }),
                     ),
                 );
                 if (!chosen.size)
-                    selected.append(
-                        node(
-                            "p",
-                            { class: "form-text" },
-                            "Add students to build this group.",
-                        ),
-                    );
+                    selected.append(node("p", { class: "form-text" }, "Add students to build this group."));
                 if (focusIndex !== null) {
                     const controls = selected.querySelectorAll("button");
-                    (
-                        controls[Math.min(focusIndex, controls.length - 1)] ||
-                        add
-                    ).focus();
+                    (controls[Math.min(focusIndex, controls.length - 1)] || add).focus();
                 }
             }
             render();
@@ -325,20 +251,13 @@ window.createWorkspaceRegistration = function (ui) {
                 event.preventDefault();
                 task(async () => {
                     if (!form.reportValidity()) return;
-                    if (!chosen.size)
-                        throw new Error(
-                            "Add at least one student to the group.",
-                        );
+                    if (!chosen.size) throw new Error("Add at least one student to the group.");
                     sectionId = form.elements.section_id.value;
                     const payload = {
                         section_id: sectionId,
                         student_ids: [...chosen.keys()],
                     };
-                    const reviewed = await request(
-                        "/sis/registration-batches/review/",
-                        "POST",
-                        payload,
-                    );
+                    const reviewed = await request("/sis/registration-batches/review/", "POST", payload);
                     if (!body.isConnected) return;
                     await confirmation(reviewed, payload);
                 }, review);
@@ -347,29 +266,20 @@ window.createWorkspaceRegistration = function (ui) {
         }
         async function confirmation(reviewed, payload) {
             const section = reviewed.section;
-            const body = openDrawer(
-                "Review group registration",
-                "CONFIRM THE SELECTION",
-            );
+            const body = openDrawer("Review group registration", "CONFIRM THE SELECTION");
             body.append(
                 button("Change selection", selection, "btn-link"),
                 node("h3", {}, section.code),
                 recordSummary([
-                    [
-                        "Course",
-                        `${section.course_code} · ${section.course_title}`,
-                    ],
+                    ["Course", `${section.course_code} · ${section.course_title}`],
                     ["Credits", Number(section.credits_milli) / 1000],
                     ["Seats remaining", section.seats_remaining],
-                    [
-                        "Section fee",
-                        `${money(section.fee_minor, section.currency)} per new registration`,
-                    ],
+                    ["Section fee", `${money(section.fee_minor, section.currency)} per new registration`],
                 ]),
                 node(
                     "p",
                     { class: "form-text" },
-                    "Configured term fees may also apply. Existing active enrollments are kept without a second charge. Confirmation rechecks activity, holds, prerequisites, course limits and seats. No partial batch is saved.",
+                    "Review each student’s proposed charges below. Existing active enrollments are kept without a second charge. This review expires after 20 minutes; confirmation rechecks the selection and saves the group atomically.",
                 ),
             );
             if (!section.active)
@@ -381,14 +291,7 @@ window.createWorkspaceRegistration = function (ui) {
                     ),
                 );
             const students = grid(
-                [
-                    "Student",
-                    "Institutional ID",
-                    "Activity",
-                    "Prerequisites",
-                    "Timetable",
-                    "Registration",
-                ],
+                ["Student", "Institutional ID", "Activity", "Prerequisites", "Timetable", "Registration"],
                 reviewed.students.map((student) => [
                     `${student.given_name} ${student.family_name}`,
                     student.institutional_id,
@@ -398,13 +301,10 @@ window.createWorkspaceRegistration = function (ui) {
                         : {
                               met: "Verified for this pursuit",
                               not_required: "No course prerequisites",
-                              not_rechecked: ["A", "N"].includes(
-                                  student.enrollment_status,
-                              )
+                              not_rechecked: ["A", "N"].includes(student.enrollment_status)
                                   ? "Existing registration — unchanged"
                                   : "Not checked — closed enrollment",
-                          }[student.prerequisites?.status] ||
-                          "Checked on confirmation",
+                          }[student.prerequisites?.status] || "Checked on confirmation",
                     schedule.text(student.schedule),
                     ["A", "N"].includes(student.enrollment_status)
                         ? "Already enrolled — keep"
@@ -430,26 +330,51 @@ window.createWorkspaceRegistration = function (ui) {
             for (const student of reviewed.students) {
                 if (student.schedule?.conflict_count)
                     body.append(
-                        node(
-                            "h3",
-                            { class: "h6" },
-                            `${student.given_name} ${student.family_name}`,
-                        ),
+                        node("h3", { class: "h6" }, `${student.given_name} ${student.family_name}`),
                         schedule.panel(student.schedule),
                     );
+            }
+            for (const student of reviewed.students) {
+                if (student.issues.length)
+                    body.append(
+                        node(
+                            "div",
+                            { class: "alert alert-warning" },
+                            node("strong", {}, `${student.given_name} ${student.family_name}`),
+                            node(
+                                "ul",
+                                { class: "mb-0" },
+                                student.issues.map((issue) => node("li", {}, issue)),
+                            ),
+                        ),
+                    );
+                const details = node(
+                    "details",
+                    { class: "mb-3" },
+                    node(
+                        "summary",
+                        { class: "fw-semibold" },
+                        `${student.given_name} ${student.family_name} · ${student.charges.total_minor == null ? "Pricing needs review" : money(student.charges.total_minor, student.charges.currency)}`,
+                    ),
+                );
+                const content = node("div", { class: "mt-2" });
+                details.append(content);
+                details.addEventListener("toggle", () =>
+                    content.replaceChildren(
+                        ...(details.open ? [schedule.charges(student.charges, money)] : []),
+                    ),
+                );
+                body.append(details);
             }
             const submit = button(
                 "Confirm group registration",
                 async () => {
-                    const result = await request(
-                        "/sis/registration-batches/commit/",
-                        "POST",
-                        {
-                            ...payload,
-                            operation_id: reviewed.operation_id,
-                            revision: reviewed.revision,
-                        },
-                    );
+                    const result = await request("/sis/registration-batches/commit/", "POST", {
+                        ...payload,
+                        operation_id: reviewed.operation_id,
+                        revision: reviewed.revision,
+                        review_token: reviewed.review_token,
+                    });
                     if (!body.isConnected) return;
                     await refreshDirectory();
                     if (!body.isConnected) return;
@@ -457,9 +382,8 @@ window.createWorkspaceRegistration = function (ui) {
                 },
                 "btn-primary",
             );
-            if (
-                reviewed.students.some((student) => student.schedule?.blocked)
-            ) {
+            submit.disabled = !schedule.canConfirm(reviewed);
+            if (reviewed.students.some((student) => student.schedule?.blocked)) {
                 submit.disabled = true;
                 body.append(
                     node(
@@ -469,11 +393,7 @@ window.createWorkspaceRegistration = function (ui) {
                     ),
                 );
             }
-            if (
-                reviewed.students.some(
-                    (student) => student.prerequisites?.status === "missing",
-                )
-            ) {
+            if (reviewed.students.some((student) => student.prerequisites?.status === "missing")) {
                 submit.disabled = true;
                 body.append(
                     node(
@@ -492,6 +412,11 @@ window.createWorkspaceRegistration = function (ui) {
                         "aria-label": "Registration confirmation",
                     },
                     submit,
+                    button("Refresh review", async () => {
+                        submit.disabled = true;
+                        const next = await request("/sis/registration-batches/review/", "POST", payload);
+                        if (body.isConnected) await confirmation(next, payload);
+                    }),
                     button("Check batch receipt", async () => {
                         try {
                             const result = await request(
@@ -514,15 +439,8 @@ window.createWorkspaceRegistration = function (ui) {
         await selection();
     }
     async function history(student, back, after = "", stack = []) {
-        const page = await request(
-            `/sis/students/${student}/registration-history/`,
-            "POST",
-            { after },
-        );
-        const body = openDrawer(
-            "Registration history",
-            "RESTRICTED REGISTRAR HISTORY",
-        );
+        const page = await request(`/sis/students/${student}/registration-history/`, "POST", { after });
+        const body = openDrawer("Registration history", "RESTRICTED REGISTRAR HISTORY");
         if (back) body.append(button("Back to student", back, "btn-link"));
         body.append(
             node(
@@ -608,9 +526,7 @@ window.createWorkspaceRegistration = function (ui) {
             );
         if (page.next_after)
             nav.append(
-                button("Next history page", () =>
-                    history(student, back, page.next_after, [...stack, after]),
-                ),
+                button("Next history page", () => history(student, back, page.next_after, [...stack, after])),
             );
         body.append(nav);
     }

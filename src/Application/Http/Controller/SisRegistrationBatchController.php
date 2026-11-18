@@ -27,11 +27,14 @@ final readonly class SisRegistrationBatchController
     public function commit(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        return new JsonResponse($this->service->commit(
-            $f->id('operation_id'),
-            $this->selection($request),
-            $f->text('revision', 64)
-        ));
+        return new JsonResponse(
+            $this->service->commit(
+                $f->id("operation_id"),
+                $this->selection($request),
+                $f->text("revision", 64),
+                $f->text("review_token", 8192),
+            ),
+        );
     }
 
     public function show(string $id): ResponseInterface

@@ -239,7 +239,7 @@ final class RegistrationPricingTest extends TestCase
         try {
             $f->service->register($student->id, $section->id);
             self::fail("Mismatched registration currencies were accepted.");
-        } catch (\DomainException) {
+        } catch (\Domain\Shared\Exception\ValidationException) {
             self::assertSame($before, array_map($f->sql->rows(...), $tables));
         }
     }

@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . "/Support/SisFixture.php";
 
 use Domain\Registration\Enum\RegistrationStatus;
 use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\DateRange;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Restriction;
@@ -76,7 +77,7 @@ final class RegistrationWorkflowTest extends TestCase
         try {
             $f->service->register($student->id, $section->id, true);
             self::fail("Currency mismatch must reject registration.");
-        } catch (DomainException) {
+        } catch (ValidationException) {
             self::assertCount(0, $f->sql->rows("sis_enrollments"));
             self::assertCount(0, $f->sql->rows("sis_academic_credits"));
             self::assertCount(1, $f->sql->rows("sis_history_events"));
@@ -237,15 +238,30 @@ final class RegistrationWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
         );
-        $container->share(new \Application\Http\Controller\SisRegistrationController($f->service, $catalog));
+        $container->share(
+            new \Application\Http\Controller\SisRegistrationController(
+                $f->service,
+                $catalog,
+                $f->registrationBatches(),
+            ),
+        );
         $router = new \Qubus\Routing\Router(new \Qubus\Routing\Route\RouteCollector(), $container);
         $register = require dirname(__DIR__, 2) . "/routes/web/sis-workflows.php";
         $register($router);
         $request = new \Qubus\Http\ServerRequest([], [], "/sis/registrations/", "POST");
+        $review = $f
+            ->registrationBatches()
+            ->review(
+                new \Domain\Registration\ValueObject\RegistrationBatchSelection($section->id, $student->id),
+                false,
+            );
         $response = $router->match(
             $request->withParsedBody([
                 "student_id" => $student->id->value,
                 "section_id" => $section->id->value,
+                "operation_id" => $review["operation_id"],
+                "revision" => $review["revision"],
+                "review_token" => $review["review_token"],
             ]),
         );
         self::assertSame(201, $response->getStatusCode());
@@ -281,13 +297,16 @@ final class RegistrationWorkflowTest extends TestCase
             $f->officeScope(),
             new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql),
         );
-        new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql)->bind($restriction->id, $f->office);
+        new \Infrastructure\Persistence\Repository\SqlOfficeRepository($f->sql)->bind(
+            $restriction->id,
+            $f->office,
+        );
         $holds->end(
             $restriction->id,
             new DateTimeImmutable("2026-08-09"),
             $holds->view($restriction->id)["revision"],
             EntityId::generate(),
-            'Fictional resolution reviewed.',
+            "Fictional resolution reviewed.",
         );
         $section = $f->section();
         self::assertSame("A", $f->service->register($student->id, $section->id, true)->status->value);

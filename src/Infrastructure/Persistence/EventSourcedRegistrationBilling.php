@@ -77,11 +77,42 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         Money $fee,
         int $creditsMilli,
         EventContext $context,
+        ?\Domain\Finance\ValueObject\RegistrationChargeQuote $quote = null,
     ): void {
-        $budget = new HistoryReadBudget();
+        $quote ??= $this->registrationQuote($student, $term, $fee, $creditsMilli, new HistoryReadBudget());
+        if (
+            $quote->termQuote->student->value !== $student->value ||
+            $quote->termQuote->term->value !== $term->value ||
+            $quote->creditsMilli !== $creditsMilli ||
+            $quote->sectionFee != $fee
+        ) {
+            throw new \LogicException("Registration pricing must match its accepted section and student.");
+        }
+        if ($quote->summary()["problems"] !== []) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "students",
+                    "message" => "Resolve the registration pricing shown in the review before confirming.",
+                ],
+            ]);
+        }
+        $this->applyQuote($quote->termQuote, $context, $operation, $fee, $creditsMilli);
+    }
+
+    public function registrationQuote(
+        EntityId $student,
+        EntityId $term,
+        Money $fee,
+        int $creditsMilli,
+        HistoryReadBudget $budget,
+        ?array $rules = null,
+    ): \Domain\Finance\ValueObject\RegistrationChargeQuote {
         $program = $this->admissions->student($student)->programId;
-        $quote = $this->quote($student, $term, $this->rules($term, $budget, [$program]), $budget);
-        $this->applyQuote($quote, $context, $operation, $fee, $creditsMilli);
+        return new \Domain\Finance\ValueObject\RegistrationChargeQuote(
+            $this->quote($student, $term, $rules ?? $this->rules($term, $budget, [$program]), $budget),
+            $fee,
+            $creditsMilli,
+        );
     }
 
     public function rules(EntityId $term, HistoryReadBudget $budget, array $programs): array
@@ -115,10 +146,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         if (count($existing) > 1) {
             throw new CorruptHistoryException();
         }
-        $account =
-        $existing === []
-        ? null
-        : $this->accounts->get(new AccountId($existing[0]["id"]), $budget);
+        $account = $existing === [] ? null : $this->accounts->get(new AccountId($existing[0]["id"]), $budget);
         return new TermFeeQuote(
             $student,
             $term,
@@ -148,8 +176,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
             throw new \Domain\Shared\Exception\ValidationException([
                 [
                     "field" => "students",
-                    "message" =>
-                        "Resolve the billing configuration shown in the review before confirming.",
+                    "message" => "Resolve the billing configuration shown in the review before confirming.",
                 ],
             ]);
         }
@@ -163,8 +190,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                     $courseOperation,
                     new EntityId((string) $rule->aggregateId()),
                     $rule->name(),
-                    $creditsMilli ??
-                        throw new \LogicException("Registration credits are required."),
+                    $creditsMilli ?? throw new \LogicException("Registration credits are required."),
                     $rule->amount(),
                 );
                 if ($price->amount->minor > 0) {
@@ -180,12 +206,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                 $currency = $hasCourseFee
                 ? $courseFee->currency
                 : ($prices[0] ?? null)?->amount->currency ?? $facts["currency"];
-                $account = StudentAccount::open(
-                    new AccountId(),
-                    $quote->student,
-                    $quote->term,
-                    $currency,
-                );
+                $account = StudentAccount::open(new AccountId(), $quote->student, $quote->term, $currency);
                 $created = true;
             }
         } else {
@@ -210,8 +231,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         }
         if ($hasCourseFee) {
             $account->post(
-                $courseOperation ??
-                    throw new \LogicException("A course charge needs its enrollment."),
+                $courseOperation ?? throw new \LogicException("A course charge needs its enrollment."),
                 EntryType::Charge,
                 $courseFee,
                 $actor,

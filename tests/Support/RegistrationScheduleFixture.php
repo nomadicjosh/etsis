@@ -113,24 +113,7 @@ final class RegistrationScheduleFixture
     public function batch(): \Domain\Registration\Service\RegistrationBatchService
     {
         $f = $this->sis;
-        return new \Domain\Registration\Service\RegistrationBatchService(
-            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository(
-                $f->sql,
-            ),
-            $f->registration,
-            $f->admissions,
-            $f->service,
-            $f->access,
-            $f->transactions,
-            $f->audit,
-            $f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository(
-                $f->sql,
-            ),
-            $f->workPursuits(),
-            $f->prerequisites(),
-            $f->schedules(),
-        );
+        return $f->registrationBatches();
     }
     public function service(
         \Domain\Audit\Repository\AuditTrail $audit,

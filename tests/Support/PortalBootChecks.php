@@ -1196,6 +1196,7 @@ if (
 }
 $batchCommit = $batchData + [
     "revision" => $batchReview["revision"],
+    "review_token" => $batchReview["review_token"],
     "operation_id" => $batchReview["operation_id"],
 ];
 $batchCommitted = $teachingPost("/sis/registration-batches/commit/", $batchCommit);
@@ -2802,7 +2803,6 @@ if (
 
 // Exercise Vihzhuo's real block renderer and theme inheritance, using only an in-memory CMS.
 $config = $app->configContainer->array("vihzhuo");
-ini_set("session.save_path", $fixture);
 $builder = new \Application\Service\CodefyPageBuilder($config);
 global $phpb_db;
 $phpb_db->query(
@@ -2907,10 +2907,11 @@ if (
 ) {
     throw new RuntimeException("Transfer correction preview failed.");
 }
-$correctionOperation = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$correctionOperation = $correctionReview["operation_id"];
 $correctionPayload = $correctionData + [
     "operation_id" => $correctionOperation,
     "revision" => $correctionReview["revision"],
+    "review_token" => $correctionReview["review_token"],
 ];
 $correctionSaved = $teachingPost($correctionPath . "confirm/", $correctionPayload);
 $correctionRetry = $teachingPost($correctionPath . "confirm/", $correctionPayload);
