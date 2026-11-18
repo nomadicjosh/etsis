@@ -74,7 +74,7 @@ final class GradeChangeSchema
         if ($class === GradeChangeWasRequested::class) {
             if (
                 !is_array($payload["grade"]) ||
-                !is_array($payload["before_grade"]) ||
+                ($payload["before_grade"] !== null && !is_array($payload["before_grade"])) ||
                 !is_array($payload["policy"]) ||
                 !is_int($payload["credit_version"]) ||
                 $payload["credit_version"] < 0 ||
@@ -88,12 +88,14 @@ final class GradeChangeSchema
             ) {
                 throw new CorruptHistoryException();
             }
-            $when = \DateTimeImmutable::createFromFormat(DATE_ATOM, $payload['effective_at']);
-            if ($when->format(DATE_ATOM) !== $payload['effective_at']) {
+            $when = \DateTimeImmutable::createFromFormat(DATE_ATOM, $payload["effective_at"]);
+            if ($when->format(DATE_ATOM) !== $payload["effective_at"]) {
                 throw new CorruptHistoryException();
             }
             new GradeSnapshot($payload["grade"]);
-            new GradeSnapshot($payload["before_grade"]);
+            if ($payload["before_grade"] !== null) {
+                new GradeSnapshot($payload["before_grade"]);
+            }
             self::policy($payload["policy"]);
             if ($payload["policy"]["mode"] !== "approval") {
                 throw new CorruptHistoryException();

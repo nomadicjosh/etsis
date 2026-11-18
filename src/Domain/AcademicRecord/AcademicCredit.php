@@ -115,7 +115,7 @@ final class AcademicCredit extends EventSourcedAggregate
         if (
             $this->pendingGradeChange !== null ||
             isset($this->gradeChanges[$p["decision_id"]]) ||
-            $this->grade === null ||
+            ($this->grade === null && !$event->metaParam("withdrawal_grade_correction", false)) ||
             $this->credit === null ||
             !$this->allowsGrade($event->metaParam("withdrawal_grade_correction", false)) ||
             $p["credit_version"] !== $this->credit["version"] ||
@@ -172,8 +172,8 @@ final class AcademicCredit extends EventSourcedAggregate
         }
         return $withdrawn
         ? $this->credit["status"] === "W" &&
-        $this->credit["grade_id"] !== null &&
-        $this->credit["completed_milli"] === 0
+        $this->credit["completed_milli"] === 0 &&
+        ($this->credit["grade_id"] !== null || $this->credit["grade_points_milli"] === 0)
         : in_array($this->credit["status"], ["A", "N"], true);
     }
     public function gradeChange(string $id): ?array

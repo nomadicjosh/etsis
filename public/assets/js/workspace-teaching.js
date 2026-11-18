@@ -392,13 +392,21 @@ window.createWorkspaceTeaching = function (ui) {
                 "Catalog staff must publish the applicable grading scale before a grade can be recorded.",
             );
         const body = openDrawer(
-            choices.posted ? "Correct final grade" : "Record final grade",
+            choices.missing_withdrawal_grade
+                ? "Resolve withdrawn grade"
+                : choices.posted
+                  ? "Correct final grade"
+                  : "Record final grade",
             "ACADEMIC RECORD",
         );
         body.append(
             button("Back to record", back, "btn-link"),
             recordSummary([
-                ["Final grade", choices.current_grade_code || "Not graded"],
+                [
+                    "Final grade",
+                    choices.current_grade_code ||
+                        (choices.missing_withdrawal_grade ? "Unknown definition" : "Not graded"),
+                ],
                 ["Actual completion date", choices.completed_on || "Unknown"],
                 ...(choices.can_record_academic_period
                     ? [["Recorded academic period start", choices.academic_on || "Unknown"]]
@@ -469,6 +477,13 @@ window.createWorkspaceTeaching = function (ui) {
                     "This corrects the withdrawn grade only. Enrollment stays withdrawn, earned credit stays zero and charges stay unchanged. The selected grade definition determines its GPA treatment.",
                 ),
             );
+        const evidenceNotice = choices.missing_withdrawal_grade
+            ? node(
+                  "p",
+                  { id: "grade-evidence-help", class: "alert alert-warning" },
+                  "The earlier withdrawal has no saved grading definition. Verify the grade against institutional records and explain the evidence in your reason. This records a decision now; it does not identify the unknown earlier definition. If no grading policy was retained, the available grades come from the selected current policy.",
+              )
+            : null;
         const descriptors = [
             [
                 "grade_id",
@@ -488,6 +503,12 @@ window.createWorkspaceTeaching = function (ui) {
                 !!choices.posted,
             ],
         ];
+        if (choices.missing_withdrawal_grade)
+            descriptors.push([
+                "grade_evidence",
+                "I verified the grade against institutional records",
+                "checkbox",
+            ]);
         const form = await buildForm(
             descriptors,
             { effective_on: choices.effective_on_default },
@@ -495,6 +516,11 @@ window.createWorkspaceTeaching = function (ui) {
         );
         form.elements.reason.maxLength = 1000;
         form.elements.effective_on.max = choices.effective_on_default;
+        if (evidenceNotice) {
+            form.elements.grade_evidence.required = true;
+            form.elements.grade_evidence.setAttribute("aria-describedby", "grade-evidence-help");
+            form.append(evidenceNotice);
+        }
         const reviewButton = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -539,6 +565,13 @@ window.createWorkspaceTeaching = function (ui) {
                               "Enrollment remains withdrawn. Earned credit remains zero. Charges stay unchanged; the selected grade definition controls GPA treatment.",
                           )
                         : null,
+                    review.missing_withdrawal_grade
+                        ? node(
+                              "p",
+                              { class: "alert alert-warning" },
+                              "The earlier grading definition remains unknown. This confirms a new, evidence-reviewed grade decision.",
+                          )
+                        : null,
                     review.requires_approval
                         ? node(
                               "p",
@@ -549,7 +582,7 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "p",
                         {},
-                        `${choices.current_grade_code || "Not graded"} → ${review.grade.code} · ${Number(review.grade.points_milli) / 1000} grade points`,
+                        `${choices.current_grade_code || (choices.missing_withdrawal_grade ? "Unknown definition" : "Not graded")} → ${review.grade.code} · ${Number(review.grade.points_milli) / 1000} grade points`,
                     ),
                     node("p", {}, `Effective date: ${payload.effective_on}`),
                     node("p", {}, review.reason),
@@ -672,13 +705,21 @@ window.createWorkspaceTeaching = function (ui) {
                 ["Student ID", record.institutional_id || "Unavailable"],
                 ["Course", record.course_code || "Unavailable"],
                 ["Status", record.status],
-                ["Grade before request", record.before.code],
+                ["Grade before request", record.before?.code || "Unknown definition"],
                 ["Proposed grade", record.grade.code],
                 ["Effective date", record.effective_at.slice(0, 10)],
             ]),
             node("h3", { class: "h6" }, "Reason for request"),
             node("p", { class: "text-break" }, record.reason),
         );
+        if (record.missing_withdrawal_grade)
+            content.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning" },
+                    "No earlier grading definition was saved. Review the requester's evidence and selected grade before approving a new decision. The earlier definition will remain unknown.",
+                ),
+            );
         if (record.stale)
             content.append(
                 node(
@@ -716,7 +757,11 @@ window.createWorkspaceTeaching = function (ui) {
                 if (!form.isConnected || sequence !== reviewSequence) return;
                 const confirmation = openDrawer("Confirm grade decision", "REGISTRAR REVIEW");
                 confirmation.append(
-                    node("p", {}, `${record.before.code} → ${record.grade.code} · ${result.outcome}`),
+                    node(
+                        "p",
+                        {},
+                        `${record.before?.code || "Unknown definition"} → ${record.grade.code} · ${result.outcome}`,
+                    ),
                     node("p", { class: "text-break" }, result.reason),
                     node(
                         "p",

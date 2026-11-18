@@ -148,6 +148,7 @@ final readonly class SisGradebookController
                 $f->optionalId("assignment_id"),
                 $this->reason($request, $f),
                 $f->optionalText("effective_on", 10),
+                $f->boolean("grade_evidence"),
             ),
         );
     }

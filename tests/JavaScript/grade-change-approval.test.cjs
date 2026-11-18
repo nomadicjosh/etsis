@@ -50,15 +50,24 @@ function fixture(overrides = {}) {
             form.elements = {};
             form.fields = fields;
             for (const [name, label, type, choices] of fields) {
-                const input = node(type === "choice" ? "select" : "textarea", { name });
+                const input = node(
+                    type === "choice" ? "select" : type === "checkbox" ? "input" : "textarea",
+                    { name },
+                );
                 input.value = initial[name] || (choices && choices[0]?.value) || "";
+                input.checked = initial[name] === true;
                 form.elements[name] = input;
                 form.append(node("label", {}, label), input);
             }
             return form;
         },
         formData: (form, fields) =>
-            Object.fromEntries(fields.map(([name]) => [name, form.elements[name].value])),
+            Object.fromEntries(
+                fields.map(([name, , type]) => [
+                    name,
+                    type === "checkbox" ? form.elements[name].checked : form.elements[name].value,
+                ]),
+            ),
     };
     const component = window.createWorkspaceTeaching(ui);
     const click = async (label) => {
@@ -162,22 +171,24 @@ test("policy save carries its revision and uses the shared private transport", a
     const saved = f.sent.find((r) => r.method === "POST");
     assert.deepEqual(JSON.parse(JSON.stringify(saved.data)), { mode: "approval", revision: 3 });
 });
-test("withdrawn-grade editor and confirmation explain limits without offering completion edits", async () => {
+test("missing withdrawn-grade editor requires evidence and explains limits without completion edits", async () => {
     const f = fixture();
     f.ui.request = async (path, method, data) => {
         f.sent.push({ path, method, data });
         if (path.endsWith("/review/"))
             return {
                 withdrawal_grade_correction: true,
+                missing_withdrawal_grade: true,
                 grade: { code: "D", points_milli: 1000 },
                 reason: data.reason,
                 review_token: "private-proof",
             };
         return {
             withdrawal_grade_correction: true,
+            missing_withdrawal_grade: true,
             posted: true,
             can_amend: true,
-            current_grade_code: "W",
+            current_grade_code: null,
             current_version: 2,
             effective_on_default: "2026-09-02",
             items: [{ id: "grade-d", code: "D", points_milli: 1000 }],
@@ -188,6 +199,8 @@ test("withdrawn-grade editor and confirmation explain limits without offering co
     const component = window.createWorkspaceTeaching(f.ui);
     await component.recordFinalGrade({ id: "section" }, { student_id: "student" }, () => {});
     assert.match(f.body().textContent, /earned credit stays zero and charges stay unchanged/);
+    assert.match(f.body().textContent, /Unknown definition/);
+    assert.match(f.body().textContent, /Verify the grade against institutional records/);
     assert.equal(
         walk(f.body()).some((e) => e.tag === "button" && /completion date/.test(e.textContent)),
         false,
@@ -195,9 +208,14 @@ test("withdrawn-grade editor and confirmation explain limits without offering co
     const form = walk(f.body()).find((e) => e.tag === "form");
     form.elements.grade_id.value = "grade-d";
     form.elements.reason.value = "Fictional late-drop marking correction.";
+    form.elements.grade_evidence.checked = true;
+    assert.equal(form.elements.grade_evidence.required, true);
+    assert.equal(form.elements.grade_evidence.getAttribute("aria-describedby"), "grade-evidence-help");
     form.events.submit({ preventDefault() {} });
     await f.done();
     assert.match(f.body().textContent, /Enrollment remains withdrawn. Earned credit remains zero/);
+    assert.match(f.body().textContent, /earlier grading definition remains unknown/);
+    assert.equal(f.sent.at(-1).data.grade_evidence, true);
     assert.equal(
         f.sent.some((r) => r.path.endsWith("/commit/")),
         false,
@@ -208,4 +226,19 @@ test("withdrawn-grade editor and confirmation explain limits without offering co
         form,
     );
     assert.equal(form.elements.reason.value, "Fictional late-drop marking correction.");
+    assert.equal(form.elements.grade_evidence.checked, true);
+    assert.match(f.body().textContent, /Verify the grade against institutional records/);
+});
+test("missing-grade approval shows the unknown definition and preserves its evidence notice", async () => {
+    const f = fixture({ before: null, withdrawal_grade_correction: true, missing_withdrawal_grade: true });
+    await f.component.gradeChangeRecord("request");
+    assert.match(f.body().textContent, /Unknown definition/);
+    assert.match(f.body().textContent, /Review the requester's evidence/);
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    form.elements.reason.value = "Fictional independent evidence review.";
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.match(f.body().textContent, /Unknown definition → A/);
+    await f.click("Change review");
+    assert.match(f.body().textContent, /earlier definition will remain unknown/);
 });

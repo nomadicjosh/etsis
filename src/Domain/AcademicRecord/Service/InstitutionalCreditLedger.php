@@ -181,6 +181,7 @@ final readonly class InstitutionalCreditLedger
             "academic_on" => $root->academicOn(),
             "can_amend" => $this->canAmend(),
             "withdrawal_grade_correction" => $withdrawn,
+            "missing_withdrawal_grade" => $withdrawn && $facts["grade_id"] === null,
             "requires_approval" => $this->changes->policy()["mode"] === "approval",
             "pending_grade_change" =>
                 $root->pendingGradeChange() === null
@@ -196,7 +197,7 @@ final readonly class InstitutionalCreditLedger
                 ($root->playhead() > 0 || $facts["course_version_id"] === null),
             "course_version_id" => $facts["course_version_id"],
             "history_recorded" => $root->playhead() > 0,
-            "posted" => new CreditSnapshot($facts)->posted(),
+            "posted" => $withdrawn || new CreditSnapshot($facts)->posted(),
             "can_record_academic_period" =>
                 !$withdrawn &&
                 $this->canAmend() &&
@@ -221,6 +222,7 @@ final readonly class InstitutionalCreditLedger
         ?EntityId $assignment = null,
         #[\SensitiveParameter] string $reason = "",
         ?string $effective = null,
+        bool $gradeEvidence = false,
     ): array {
         $this->readAuthority($section);
         return $this->transactions->run(function () use (
@@ -232,6 +234,7 @@ final readonly class InstitutionalCreditLedger
             $assignment,
             $reason,
             $effective,
+            $gradeEvidence,
         ): array {
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
@@ -249,13 +252,19 @@ final readonly class InstitutionalCreditLedger
                     "Reload the academic record before reviewing a grade.",
                 );
             }
-            $amend = new CreditSnapshot($facts)->posted();
+            $amend = $withdrawn || new CreditSnapshot($facts)->posted();
             if ($root->pendingGradeChange() !== null) {
                 throw new ConcurrentModificationException(
                     "Resolve the pending grade correction before requesting another.",
                 );
             }
             $actor = $this->authority($section, $amend, $withdrawn);
+            if ($withdrawn && $facts["grade_id"] === null && !$gradeEvidence) {
+                self::invalid(
+                    "grade_evidence",
+                    "Confirm that you verified this grade against institutional records.",
+                );
+            }
             $policy = $this->changes->policy();
             $reason = trim($reason);
             if ($reason === "" && !$amend) {
@@ -292,6 +301,7 @@ final readonly class InstitutionalCreditLedger
                 "actor_id" => $actor->value,
                 "amendment" => $amend,
                 "withdrawal_grade_correction" => $withdrawn,
+                "missing_withdrawal_grade" => $withdrawn && $facts["grade_id"] === null,
                 "requires_approval" => $amend && $policy["mode"] === "approval",
                 "grade_change_policy" => $policy,
                 "expected_version" => $root->playhead(),
@@ -552,7 +562,7 @@ final readonly class InstitutionalCreditLedger
                 "institutional_id" => $row["institutional_id"],
                 "course_code" => $row["course_code"],
                 "course_title" => $row["course_title"],
-                "before" => $row["details"]["before_grade"]["code"],
+                "before" => $row["details"]["before_grade"]["code"] ?? "Unknown definition",
                 "proposed" => $row["details"]["grade"]["code"],
             ];
         }
@@ -603,6 +613,7 @@ final readonly class InstitutionalCreditLedger
             "effective_at" => $request["effective_at"],
             "stale" => $stale,
             "withdrawal_grade_correction" => $withdrawn,
+            "missing_withdrawal_grade" => $withdrawn && $request["before_grade"] === null,
             "can_approve" => $row["status"] === "pending" && $canApprove && !$stale,
             "can_reject" => $row["status"] === "pending" && $canReview,
             "can_cancel" => $row["status"] === "pending" && $request["actor_id"] === $actor->value,
@@ -1252,10 +1263,13 @@ final readonly class InstitutionalCreditLedger
         if ($facts["status"] !== "W") {
             return false;
         }
-        if ($facts["grade_id"] === null || $facts["completed_milli"] !== 0) {
+        if (
+            $facts["completed_milli"] !== 0 ||
+            ($facts["grade_id"] === null && $facts["grade_points_milli"] !== 0)
+        ) {
             self::invalid(
                 "grade_id",
-                "Review this withdrawn record’s earlier grade and earned-credit evidence before correcting it.",
+                "Resolve this withdrawn record’s inconsistent earned-credit or GPA evidence before correcting it.",
             );
         }
         return true;

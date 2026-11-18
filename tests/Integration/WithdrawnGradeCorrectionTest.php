@@ -16,11 +16,11 @@ use SisFixture;
 
 final class WithdrawnGradeCorrectionTest extends TestCase
 {
-    private function fixture(bool $earlier = false): array
+    private function fixture(bool $earlier = false, bool $missing = false): array
     {
         require_once dirname(__DIR__) . "/Support/SisFixture.php";
         $f = new SisFixture();
-        $f->gradeScale([
+        $definitions = [
             [
                 "code" => "D",
                 "min_score_milli" => 65000,
@@ -45,7 +45,10 @@ final class WithdrawnGradeCorrectionTest extends TestCase
                 "passes" => false,
                 "counts_gpa" => false,
             ],
-        ]);
+        ];
+        if (!$missing) {
+            $f->gradeScale($definitions);
+        }
         $student = $f->student($f->user());
         $section = $f->section(faculty: $f->access->actor);
         $f->clock->time = new DateTimeImmutable("2026-09-02T12:00:00-07:00");
@@ -74,7 +77,7 @@ final class WithdrawnGradeCorrectionTest extends TestCase
                 "attempted_milli" => 3000,
                 "completed_milli" => 0,
                 "grade_points_milli" => 0,
-                "grade_id" => $ids["W"],
+                "grade_id" => $missing ? null : $ids["W"],
                 "status" => "W",
                 "version" => 4,
             ]);
@@ -83,9 +86,18 @@ final class WithdrawnGradeCorrectionTest extends TestCase
             // Registration occurs while its normal window is open; the later command is the withdrawal.
             $f->clock->time = new DateTimeImmutable("2026-08-10T12:00:00-07:00");
             $enrollment = $f->service->register($student->id, $section->id, true);
-            $f->publishDropPolicy($f->term, -1, new DropWindows([["through" => null, "grade_code" => "W"]]));
+            if (!$missing) {
+                $f->publishDropPolicy(
+                    $f->term,
+                    -1,
+                    new DropWindows([["through" => null, "grade_code" => "W"]]),
+                );
+            }
             $f->clock->time = new DateTimeImmutable("2026-09-02T12:00:00-07:00");
             $f->service->drop($student->id, $section->id);
+        }
+        if ($missing) {
+            $f->gradeScale($definitions);
         }
         $ledger = $f->academicCredits();
         $choices = $ledger->choices($student->id, $section->id, $enrollment->id);
@@ -104,6 +116,7 @@ final class WithdrawnGradeCorrectionTest extends TestCase
             new EntityId($grades[$grade]),
             $credit["version"],
             reason: "Fictional review establishes the correct late-withdrawal grade.",
+            gradeEvidence: $credit["grade_id"] === null,
         );
     }
 
@@ -336,12 +349,248 @@ final class WithdrawnGradeCorrectionTest extends TestCase
         $f->clock->time = new DateTimeImmutable("2026-09-02T12:00:00-07:00");
         $f->service->drop($student->id, $section->id);
         $before = $f->sql->rows("sis_history_events");
+        $choices = $f->academicCredits()->choices($student->id, $section->id, $enrollment->id);
+        self::assertTrue($choices["missing_withdrawal_grade"]);
+        self::assertTrue($choices["posted"]);
+        self::assertNull($choices["current_grade_code"]);
+        self::assertNull($f->sql->rows("sis_academic_credits")[0]["grade_id"]);
+        self::assertSame($before, $f->sql->rows("sis_history_events"));
+    }
+
+    public static function missingGrades(): array
+    {
+        return [
+            "tracked direct" => [false, false],
+            "tracked approval" => [false, true],
+            "older direct" => [true, false],
+            "older approval" => [true, true],
+        ];
+    }
+
+    public function testMissingGradeUsesRetainedPolicyAfterTheCurrentScaleChanges(): void
+    {
+        require_once dirname(__DIR__) . "/Support/SisFixture.php";
+        $f = new SisFixture();
+        $definition = [
+            "code" => "D",
+            "min_score_milli" => 65000,
+            "max_score_milli" => 69999,
+            "points_milli" => 1000,
+            "passes" => true,
+            "counts_gpa" => true,
+        ];
+        $f->gradeScale([$definition]);
+        $old = $f->sql->rows("sis_grades")[0]["id"];
+        $student = $f->student($f->user());
+        $section = $f->section();
+        $enrollment = $f->service->register($student->id, $section->id);
+        $f->clock->time = new DateTimeImmutable("2026-09-02T12:00:00-07:00");
+        $f->service->drop($student->id, $section->id);
+        $f->gradeScale([array_replace($definition, ["points_milli" => 2000])]);
+        $ledger = $f->academicCredits();
+        $choices = $ledger->choices($student->id, $section->id, $enrollment->id);
+        self::assertTrue($choices["missing_withdrawal_grade"]);
+        self::assertSame([$old], array_column($choices["items"], "id"));
+        self::assertSame(1000, $choices["items"][0]["points_milli"]);
+        $current = array_values(
+            array_filter($f->sql->rows("sis_grades"), static fn(array $r): bool => $r["id"] !== $old),
+        )[0]["id"];
+        $version = $f->sql->rows("sis_academic_credits")[0]["version"];
         try {
-            $f->academicCredits()->choices($student->id, $section->id, $enrollment->id);
-            self::fail("An unknown earlier grade was silently assigned a definition.");
+            $ledger->review(
+                $student->id,
+                $section->id,
+                $enrollment->id,
+                new EntityId($current),
+                $version,
+                reason: "Fictional records were checked.",
+                gradeEvidence: true,
+            );
+            self::fail("A current definition replaced the retained policy.");
         } catch (\Domain\Shared\Exception\ValidationException) {
             self::assertNull($f->sql->rows("sis_academic_credits")[0]["grade_id"]);
-            self::assertSame($before, $f->sql->rows("sis_history_events"));
         }
+        $review = $ledger->review(
+            $student->id,
+            $section->id,
+            $enrollment->id,
+            new EntityId($old),
+            $version,
+            reason: "Fictional record supports D under the retained scale.",
+            gradeEvidence: true,
+        );
+        $ledger->commit($student->id, $section->id, $review["review_token"]);
+        self::assertSame(3000, $f->sql->rows("sis_academic_credits")[0]["grade_points_milli"]);
+    }
+
+    public function testMissingGradeRequiresClosedAuthorityAndRollsBackAnOlderObservationOnAuditFailure(): void
+    {
+        $fixture = $this->fixture(earlier: true, missing: true);
+        [$f, $ledger, $student, $section, $enrollment, $grades] = $fixture;
+        $review = $this->review($fixture);
+        $before = [
+            $f->sql->rows("sis_history_events"),
+            $f->sql->rows("sis_academic_credits"),
+            $f->sql->rows("sis_history_operations"),
+            $f->sql->rows("sis_academic_credit_streams"),
+        ];
+        $f->access->staff = false;
+        $f->access->grants = ["sis:gradebook:amend", "sis:student:read"];
+        try {
+            $ledger->review(
+                $student->id,
+                $section->id,
+                $enrollment->id,
+                new EntityId($grades["D"]),
+                4,
+                reason: "Fictional evidence does not replace authority.",
+                gradeEvidence: true,
+            );
+            self::fail("Evidence confirmation replaced closed-record authority.");
+        } catch (AccessDeniedException) {
+            self::assertNull($f->sql->rows("sis_academic_credits")[0]["grade_id"]);
+        }
+        $f->access->grants[] = "sis:gradebook:closed";
+        $audit = $this->createStub(AuditTrail::class);
+        $audit
+            ->method("record")
+            ->willThrowException(new \RuntimeException("Fictional missing-grade audit failure."));
+        try {
+            $f->academicCredits($audit)->commit($student->id, $section->id, $review["review_token"]);
+            self::fail("A missing-grade decision survived a required audit failure.");
+        } catch (\RuntimeException $error) {
+            self::assertSame("Fictional missing-grade audit failure.", $error->getMessage());
+            self::assertSame($before, [
+                $f->sql->rows("sis_history_events"),
+                $f->sql->rows("sis_academic_credits"),
+                $f->sql->rows("sis_history_operations"),
+                $f->sql->rows("sis_academic_credit_streams"),
+            ]);
+        }
+    }
+
+    public function testMissingDefinitionDoesNotPermitInconsistentEarnedCreditOrQualityPoints(): void
+    {
+        $fixture = $this->fixture(earlier: true, missing: true);
+        [$f, $ledger, $student, $section, $enrollment] = $fixture;
+        $id = $f->sql->rows("sis_academic_credits")[0]["id"];
+        foreach (["completed_milli", "grade_points_milli"] as $field) {
+            $f->sql->update(
+                "sis_academic_credits",
+                ["completed_milli" => 0, "grade_points_milli" => 0, $field => 1],
+                ["id" => $id],
+            );
+            $before = $f->sql->rows("sis_history_events");
+            try {
+                $ledger->choices($student->id, $section->id, $enrollment->id);
+                self::fail("Conflicting evidence was silently normalized.");
+            } catch (\Domain\Shared\Exception\ValidationException) {
+                self::assertSame($before, $f->sql->rows("sis_history_events"));
+            }
+        }
+    }
+
+    public function testUnflaggedGradeRequestCannotResolveAnUnknownWithdrawal(): void
+    {
+        [$f, $ledger, $student, $section, $enrollment, $grades] = $this->fixture(missing: true);
+        [$id, $root, $facts] = $ledger->decisionRecord($student->id, $section->id, $enrollment->id);
+        $event = \Domain\AcademicRecord\Event\GradeChangeWasRequested::occur(
+            new \Domain\AcademicRecord\ValueObject\AcademicCreditId($id->value),
+            [
+                "decision_id" => EntityId::generate()->value,
+                "previous_decision_id" => $root->decision(),
+                "actor_id" => $f->access->actor->value,
+                "grade" => \Domain\AcademicRecord\ValueObject\GradeSnapshot::fromRow(
+                    $f->sql->one("sis_grades", ["id" => $grades["D"]]),
+                )->facts,
+                "before_grade" => null,
+                "assignment_id" => null,
+                "reason" => "Fictional invalid scope.",
+                "effective_at" => $f->clock->now()->format(DATE_ATOM),
+                "policy" => ["mode" => "approval", "revision" => 0],
+                "credit_version" => $facts["version"],
+            ],
+            ["__aggregate_type" => "academic_credit"],
+        )->withPlayhead($root->playhead() + 1);
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        $root->acceptHistorical($event);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider("missingGrades")]
+    public function testEvidenceReviewedMissingGradePreservesTheUnknownEarlierFact(
+        bool $earlier,
+        bool $approval,
+    ): void {
+        $fixture = $this->fixture(earlier: $earlier, missing: true);
+        [$f, $ledger, $student, $section, $enrollment, $grades] = $fixture;
+        if ($approval) {
+            $ledger->saveGradeChangePolicy("approval", 0);
+        }
+        $before = $f->sql->rows("sis_academic_credits");
+        $preserved = [
+            $f->financialEvents(),
+            $f->sql->rows("sis_enrollments"),
+            $f->sql->rows("sis_work_pursuit_scopes"),
+        ];
+        $events = $f->sql->rows("sis_history_events");
+        try {
+            $ledger->review(
+                $student->id,
+                $section->id,
+                $enrollment->id,
+                new EntityId($grades["D"]),
+                $before[0]["version"],
+                reason: "Fictional records confirm this grade.",
+            );
+            self::fail("Missing evidence confirmation was accepted.");
+        } catch (\Domain\Shared\Exception\ValidationException $error) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+        try {
+            $ledger->review(
+                $student->id,
+                $section->id,
+                $enrollment->id,
+                new EntityId($grades["D"]),
+                $before[0]["version"],
+                gradeEvidence: true,
+            );
+            self::fail("An initial-grade default reason was used for a missing withdrawn grade.");
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+        $review = $this->review($fixture);
+        self::assertTrue($review["missing_withdrawal_grade"]);
+        self::assertSame($approval, $review["requires_approval"]);
+        $receipt = $ledger->commit($student->id, $section->id, $review["review_token"]);
+        if ($approval) {
+            self::assertSame($before, $f->sql->rows("sis_academic_credits"));
+            self::assertSame("Unknown definition", $ledger->gradeChangePage()["items"][0]["before"]);
+            $id = new EntityId($receipt["operation_id"]);
+            self::assertNull($ledger->gradeChangeRequest($id)["before"]);
+            self::assertTrue($ledger->gradeChangeRequest($id)["missing_withdrawal_grade"]);
+            $f->access->actor = $f->user();
+            $resolution = $ledger->reviewGradeChange(
+                $id,
+                "approved",
+                "Fictional independent verification of institutional evidence.",
+            );
+            $ledger->resolveGradeChange($id, $resolution["review_token"]);
+        } else {
+            self::assertSame($receipt, $ledger->commit($student->id, $section->id, $review["review_token"]));
+        }
+        $credit = $f->sql->rows("sis_academic_credits")[0];
+        self::assertSame($grades["D"], $credit["grade_id"]);
+        self::assertSame("W", $credit["status"]);
+        self::assertSame(0, $credit["completed_milli"]);
+        self::assertSame(3000, $credit["grade_points_milli"]);
+        self::assertSame($preserved, [
+            $f->financialEvents(),
+            $f->sql->rows("sis_enrollments"),
+            $f->sql->rows("sis_work_pursuit_scopes"),
+        ]);
+        self::assertSame($events, array_slice($f->sql->rows("sis_history_events"), 0, count($events)));
+        $facts = $ledger->auditFacts(new EntityId($credit["id"]), $student->id);
+        self::assertSame($earlier, $facts["earlier_history_unknown"]);
     }
 }

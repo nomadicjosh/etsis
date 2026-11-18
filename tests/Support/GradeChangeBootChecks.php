@@ -164,6 +164,95 @@ if (
 ) {
     throw new RuntimeException("The browser workflow changed protected withdrawal facts.");
 }
+// Older withdrawn projections may have a W marker without a retained definition.
+$sis->access->staff = true;
+$student = $sis->student($sis->user());
+$section = $sis->section();
+$enrollmentId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$creditId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$sis->sql->insert("sis_enrollments", [
+    "id" => $enrollmentId,
+    "student_id" => $student->id->value,
+    "section_id" => $section->id->value,
+    "term_id" => $sis->term->value,
+    "status" => "W",
+    "registered_at" => "2026-08-01T17:00:00.000000Z",
+    "status_at" => "2026-09-02T17:00:00.000000Z",
+    "version" => 3,
+]);
+$sis->sql->insert("sis_academic_credits", [
+    "id" => $creditId,
+    "student_id" => $student->id->value,
+    "course_id" => $section->courseId->value,
+    "term_id" => $sis->term->value,
+    "source_id" => $enrollmentId,
+    "credit_type" => "institutional",
+    "course_code" => "TEST.101",
+    "course_title" => "Fictional earlier withdrawal",
+    "attempted_milli" => 3000,
+    "completed_milli" => 0,
+    "grade_points_milli" => 0,
+    "grade_id" => null,
+    "status" => "W",
+    "version" => 4,
+]);
+$sis->access->staff = false;
+$preserved = [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")];
+$base = "/sis/sections/" . $section->id->value . "/final-grades";
+$data = [
+    "student_id" => $student->id->value,
+    "grade_id" => $grades["B"],
+    "version" => 4,
+    "reason" => "Fictional institutional records establish B; earlier definition unknown.",
+];
+if ($teachingPost($base . "/review/", $data)->getStatusCode() !== 422) {
+    throw new RuntimeException("Missing withdrawal evidence confirmation was not required.");
+}
+$data["grade_evidence"] = true;
+$review = $teachingPost($base . "/review/", $data);
+$body = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $review->getStatusCode() !== 200 ||
+    ($body["missing_withdrawal_grade"] ?? null) !== true ||
+    ($body["requires_approval"] ?? null) !== true
+) {
+    throw new RuntimeException("The real route did not preserve missing-grade scope and approval policy.");
+}
+$submitted = $teachingPost($base . "/commit/", [
+    "student_id" => $student->id->value,
+    "review_token" => $body["review_token"],
+]);
+$receipt = json_decode((string) $submitted->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $submitted->getStatusCode() !== 200 ||
+    $sis->sql->one("sis_academic_credits", ["id" => $creditId])["grade_id"] !== null
+) {
+    throw new RuntimeException("Missing-grade submission bypassed independent approval.");
+}
+$id = $receipt["operation_id"];
+$sis->access->actor = $sis->user();
+$review = $teachingPost("/sis/grade-changes/" . $id . "/review/", [
+    "outcome" => "approved",
+    "reason" => "Fictional independent verification of retained evidence.",
+]);
+$body = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $review->getStatusCode() !== 200 ||
+    $teachingPost("/sis/grade-changes/" . $id . "/commit/", [
+        "review_token" => $body["review_token"],
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("The real missing-grade approval failed.");
+}
+$credit = $sis->sql->one("sis_academic_credits", ["id" => $creditId]);
+if (
+    $credit["grade_id"] !== $grades["B"] ||
+    $credit["status"] !== "W" ||
+    $credit["completed_milli"] !== 0 ||
+    $preserved !== [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")]
+) {
+    throw new RuntimeException("Resolving the missing grade changed protected withdrawal facts.");
+}
 $sis->access->grants = [];
 $sis->access->actor = $sis->admissions->person($student->personId)->ownerUserId;
 if ($teachingPost("/sis/grade-changes/", [])->getStatusCode() !== 403) {

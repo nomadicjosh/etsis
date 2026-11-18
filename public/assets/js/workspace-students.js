@@ -818,12 +818,15 @@ window.createWorkspaceStudents = function (ui) {
                                                         item.status,
                                                     ) ||
                                                         (item.status === "W" &&
-                                                            !!item.grade_id &&
                                                             Number(item.completed_milli) === 0 &&
+                                                            (item.grade_id ||
+                                                                Number(item.grade_points_milli) === 0) &&
                                                             can("sis:gradebook:closed")))
                                                     ? button(
                                                           item.status === "W"
-                                                              ? "Correct withdrawn grade"
+                                                              ? item.grade_id
+                                                                  ? "Correct withdrawn grade"
+                                                                  : "Resolve withdrawn grade"
                                                               : "Review final grade",
                                                           () =>
                                                               ui
