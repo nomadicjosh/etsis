@@ -168,6 +168,7 @@ window.createWorkspaceTeaching = function (ui) {
         const assignments = area("Assignments");
         body.append(assignments);
         assignments.append(
+            button("Gradebook setup", () => calculationSetup(row, back)),
             button("Add assignment", () =>
                 flow(
                     "Add assignment",
@@ -205,6 +206,115 @@ window.createWorkspaceTeaching = function (ui) {
                       )
                     : node("p", { class: "muted-text mt-3" }, "Add an assignment to begin recording scores."),
         );
+    }
+    async function calculationSetup(row, back) {
+        const body = openDrawer("Gradebook setup", `${row.code} · Coursework calculation`);
+        const setup = await request(`/sis/sections/${row.id}/gradebook/calculation/`);
+        if (!body.isConnected) return;
+        const mode = node(
+            "select",
+            { class: "form-select", id: "gradebook-mode" },
+            node("option", { value: "points" }, "Total points"),
+            node("option", { value: "weighted" }, "Assignment weights"),
+        );
+        mode.value = setup.mode;
+        const status = node("p", {
+            class: "form-text",
+            role: "status",
+            "aria-live": "polite",
+            id: "gradebook-weight-help",
+        });
+        const fields = node("fieldset", {}, node("legend", { class: "h6" }, "Assignment weights"));
+        const inputs = [];
+        const equal = button(
+            "Equal weights",
+            () => {
+                const base = Math.floor(10000 / inputs.length);
+                const remainder = 10000 % inputs.length;
+                inputs.forEach(([, input], index) => {
+                    input.value = ((base + (index < remainder ? 1 : 0)) / 100).toFixed(2);
+                });
+                update();
+            },
+            "btn-outline-secondary btn-sm mb-3",
+        );
+        equal.disabled = setup.assignments.length === 0;
+        fields.append(equal);
+        const weightGrid = node("div", { class: "row g-3" });
+        fields.append(weightGrid);
+        for (const assignment of setup.assignments) {
+            const id = `weight-${assignment.id}`;
+            const input = node("input", {
+                id,
+                type: "number",
+                class: "form-control",
+                min: "0",
+                max: "100",
+                step: "0.01",
+                required: true,
+                "aria-describedby": "gradebook-weight-help",
+            });
+            input.value = ((setup.weights[assignment.id] || 0) / 100).toFixed(2);
+            inputs.push([assignment.id, input]);
+            weightGrid.append(
+                node(
+                    "div",
+                    { class: "col-md-6" },
+                    node("label", { for: id, class: "form-label" }, `${assignment.title} · Weight %`),
+                    input,
+                ),
+            );
+        }
+        const form = node(
+            "form",
+            {},
+            node(
+                "p",
+                { class: "form-text" },
+                "Total points uses each assignment's possible points. Assignment weights must total 100%. A 0% assignment is excluded, including new assignments added later. Official final grades stay unchanged.",
+            ),
+            node("label", { for: "gradebook-mode", class: "form-label" }, "Calculate using"),
+            mode,
+            status,
+            fields,
+        );
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save setup");
+        form.append(node("div", { class: "inline-actions" }, save, button("Back to section", back)));
+        function update() {
+            const weighted = mode.value === "weighted";
+            fields.hidden = !weighted;
+            let total = 0;
+            for (const [, input] of inputs) {
+                input.disabled = !weighted;
+                total += Math.round(Number(input.value) * 100);
+            }
+            status.textContent = weighted
+                ? `Assigned ${(total / 100).toFixed(2)}% of 100%. Ungraded assignments are excluded from the running average.`
+                : "All assignments contribute according to their possible points.";
+            save.disabled = weighted && (total !== 10000 || !inputs.length);
+        }
+        mode.addEventListener("change", update);
+        inputs.forEach(([, input]) => input.addEventListener("input", update));
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            if (!form.reportValidity() || save.disabled) return;
+            const weights =
+                mode.value === "weighted"
+                    ? Object.fromEntries(
+                          inputs.map(([id, input]) => [id, Math.round(Number(input.value) * 100)]),
+                      )
+                    : {};
+            task(async () => {
+                await request(`/sis/sections/${row.id}/gradebook/calculation/`, "POST", {
+                    mode: mode.value,
+                    weights,
+                    revision: setup.revision,
+                });
+                if (body.isConnected) await back();
+            }, save);
+        });
+        update();
+        body.append(form);
     }
     async function editAssignment(id, back) {
         const record = await request(`/sis/assignments/${id}/`);
@@ -422,7 +532,8 @@ window.createWorkspaceTeaching = function (ui) {
             "POST",
             {},
         );
-        if (!choices.can_amend) throw new Error("This review requires current academic-amendment and student-record access.");
+        if (!choices.can_amend)
+            throw new Error("This review requires current academic-amendment and student-record access.");
         if (!choices.can_accept_course) {
             const body = openDrawer("Course publication", "RETAINED ACADEMIC REFERENCE");
             body.append(
@@ -440,7 +551,9 @@ window.createWorkspaceTeaching = function (ui) {
 
     async function coursePublication(sectionRow, student, gradeChoices, back) {
         const base = `/sis/sections/${sectionRow.id}/students/${student.student_id}/course-publication/`;
-        const choices = await request(base + "choices/", "POST", { enrollment_id: gradeChoices.enrollment_id });
+        const choices = await request(base + "choices/", "POST", {
+            enrollment_id: gradeChoices.enrollment_id,
+        });
         const body = openDrawer("Course publication acceptance", "REASONED ACADEMIC CORRECTION");
         body.append(
             node(
@@ -467,12 +580,17 @@ window.createWorkspaceTeaching = function (ui) {
                 "course_version_id",
                 "Accepted course publication",
                 "choice",
-                choices.items.map((item) => ({ value: item.version_id, label: label(item) })),
+                choices.items.map((item) => ({
+                    value: item.version_id,
+                    label: label(item),
+                })),
             ],
             ["effective_on", "Acceptance effective date", "date", "", true],
             ["reason", "Reason and course-publication evidence", "textarea", "", true],
         ];
-        const form = await buildForm(fields, { effective_on: choices.effective_on_default });
+        const form = await buildForm(fields, {
+            effective_on: choices.effective_on_default,
+        });
         form.elements.effective_on.max = choices.effective_on_default;
         form.elements.reason.maxLength = 1000;
         let cursor = choices.next_cursor;
@@ -484,7 +602,9 @@ window.createWorkspaceTeaching = function (ui) {
                 });
                 if (!form.isConnected) return;
                 for (const item of page.items)
-                    form.elements.course_version_id.append(node("option", { value: item.version_id }, label(item)));
+                    form.elements.course_version_id.append(
+                        node("option", { value: item.version_id }, label(item)),
+                    );
                 cursor = page.next_cursor;
                 if (!cursor) {
                     more.remove();
@@ -510,7 +630,10 @@ window.createWorkspaceTeaching = function (ui) {
                     enrollment_id: gradeChoices.enrollment_id,
                     version: choices.current_version,
                 });
-                const confirmation = openDrawer("Confirm course publication acceptance", "PRESERVE ORIGINAL FACTS");
+                const confirmation = openDrawer(
+                    "Confirm course publication acceptance",
+                    "PRESERVE ORIGINAL FACTS",
+                );
                 confirmation.append(
                     node(
                         "p",
@@ -526,13 +649,19 @@ window.createWorkspaceTeaching = function (ui) {
                     ),
                     button(
                         "Change course publication review",
-                        () => openDrawer("Course publication acceptance", "REASONED ACADEMIC CORRECTION").append(form),
+                        () =>
+                            openDrawer(
+                                "Course publication acceptance",
+                                "REASONED ACADEMIC CORRECTION",
+                            ).append(form),
                         "btn-link",
                     ),
                     button(
                         "Confirm course publication acceptance",
                         async () => {
-                            await request(base + "commit/", "POST", { review_token: review.review_token });
+                            await request(base + "commit/", "POST", {
+                                review_token: review.review_token,
+                            });
                             await back();
                         },
                         "btn-primary",
@@ -599,7 +728,11 @@ window.createWorkspaceTeaching = function (ui) {
                 });
                 const confirmation = openDrawer(`Confirm ${action}`, "PRESERVE THE ORIGINAL ACADEMIC FACTS");
                 confirmation.append(
-                    node("p", {}, `${review[`previous_${field}`] || "Unknown"} → ${review[field] || "Unknown"}`),
+                    node(
+                        "p",
+                        {},
+                        `${review[`previous_${field}`] || "Unknown"} → ${review[field] || "Unknown"}`,
+                    ),
                     node("p", {}, review.reason),
                     node(
                         "p",
@@ -616,7 +749,9 @@ window.createWorkspaceTeaching = function (ui) {
                     button(
                         `Confirm ${action}`,
                         async () => {
-                            await request(`${base}commit/`, "POST", { review_token: review.review_token });
+                            await request(`${base}commit/`, "POST", {
+                                review_token: review.review_token,
+                            });
                             await back();
                         },
                         "btn-primary",
@@ -651,7 +786,13 @@ window.createWorkspaceTeaching = function (ui) {
                         : null,
                     page.items.length
                         ? grid(
-                              ["Decision", "Grade or course", "Academic date change", "Effective", "Recorded"],
+                              [
+                                  "Decision",
+                                  "Grade or course",
+                                  "Academic date change",
+                                  "Effective",
+                                  "Recorded",
+                              ],
                               page.items.map((item) => [
                                   {
                                       registration: "Registration accepted",
@@ -662,7 +803,9 @@ window.createWorkspaceTeaching = function (ui) {
                                       course_accepted: "Course publication accepted",
                                       dropped: "Course dropped",
                                   }[item.action] || "Academic decision",
-                                  item.action === "course_accepted" ? `${item.course_code} · ${item.course_title}` : item.grade_code || "—",
+                                  item.action === "course_accepted"
+                                      ? `${item.course_code} · ${item.course_title}`
+                                      : item.grade_code || "—",
                                   item.action === "completion_recorded"
                                       ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
                                       : item.action === "period_recorded"
@@ -684,7 +827,10 @@ window.createWorkspaceTeaching = function (ui) {
         const final = area("Final grade");
         const attendance = area("Attendance");
         const scores = area("Assignment scores");
-        const navigation = node("nav", { class: "record-section-nav", "aria-label": "Gradebook sections" });
+        const navigation = node("nav", {
+            class: "record-section-nav",
+            "aria-label": "Gradebook sections",
+        });
         for (const [title, target] of [
             ["Final grade", final],
             ["Attendance", attendance],
@@ -697,7 +843,10 @@ window.createWorkspaceTeaching = function (ui) {
                     title,
                     () => {
                         heading.focus({ preventScroll: true });
-                        heading.scrollIntoView({ block: "start", behavior: "instant" });
+                        heading.scrollIntoView({
+                            block: "start",
+                            behavior: "instant",
+                        });
                     },
                     "record-jump-link",
                 ),
@@ -769,6 +918,23 @@ window.createWorkspaceTeaching = function (ui) {
         );
         if (!body.isConnected) return;
         scoresLoading.remove();
+        try {
+            const summary = await request(
+                `/sis/sections/${sectionRow.id}/students/${student.student_id}/gradebook-summary/`,
+            );
+            if (!body.isConnected) return;
+            scores.append(window.createGradebookCalculation({ node }).panel(summary));
+        } catch (error) {
+            if (!body.isConnected) return;
+            if (error.status === 403 || error.status === 401) throw error;
+            scores.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning", role: "status" },
+                    "The running average is unavailable. You can still review individual scores and official grades.",
+                ),
+            );
+        }
         await pages(
             scores,
             (after) =>
@@ -778,10 +944,13 @@ window.createWorkspaceTeaching = function (ui) {
             (page) =>
                 page.items.length
                     ? grid(
-                          ["Assignment", "Earned / possible", "Action"],
+                          ["Assignment", "Earned / possible", "Weight", "Action"],
                           page.items.map((item) => [
                               item.title,
                               `${item.earned_hundredths == null ? "Not graded" : Number(item.earned_hundredths) / 100} / ${Number(item.possible_hundredths) / 100}`,
+                              item.weight_hundredths == null
+                                  ? "By points"
+                                  : `${(item.weight_hundredths / 100).toFixed(2)}%`,
                               button("Enter score", async () => {
                                   const form = await flow(
                                       "Save score",

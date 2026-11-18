@@ -235,7 +235,7 @@ final readonly class CampusPortalController
 
     public function scores(string $id, string $section): ResponseInterface
     {
-        return new JsonResponse(["items" => $this->service->scores(new EntityId($id), new EntityId($section))]);
+        return new JsonResponse($this->service->gradebookOverview(new EntityId($id), new EntityId($section)));
     }
 
     public function statement(string $id): ResponseInterface

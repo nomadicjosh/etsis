@@ -101,7 +101,8 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [ ] Add waitlists with an explicit institutional ordering/allocation policy, accepted server ordering and atomic seat/billing decisions. Browser click time is not a fairness guarantee.
 - [ ] Extend reviewed enrollment actions to multi-section schedules and explicit re-enrollment after closure; preserve distinct attempt and billing identities. The saved-report population handoff is implemented below.
 - [ ] Add dated academic standing, load/classification determinations, advisor relationships and registrar review workflows. Advising appointments/check-ins remain distinct from degree audits.
-- [ ] Complete optional grade-change approval chains, closed-record corrections and weighted gradebook aggregation.
+- [x] Add [section gradebook calculations](academic-credit-history.md#coursework-averages): default total points or assignment weights, validated 100% totals, explicit ungraded/zero/excluded handling, owner-only portal feedback, stale-setup protection and audited atomic saves. Keep posted academic grades/events intact and bound calculation reads to the selected section.
+- [ ] Complete optional grade-change approval chains and closed-record corrections. Category weighting, extra-credit/drop rules and automatic final-grade recommendations remain separate gradebook extensions.
 - [ ] Complete institution-specific transcript release rules, template selection and electronic delivery/signature integrations where selected.
 
 **Done when:** staff can complete an authorized academic case in one connected flow; corrections preserve original facts, repeated confirmations cannot overwrite newer decisions, and academic/seat/financial effects commit together where required.

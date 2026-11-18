@@ -22,6 +22,39 @@ final readonly class SisGradebookController
     ) {
     }
 
+    public function calculationSetup(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->calculationSetup(new EntityId($id)));
+    }
+
+    public function saveCalculation(ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $body = $request->getParsedBody();
+        $weights = is_array($body) ? $body["weights"] ?? null : null;
+        if (!is_array($weights)) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "weights",
+                    "message" => "Supply the assignment weights.",
+                ],
+            ]);
+        }
+        return new JsonResponse(
+            $this->service->saveCalculation(
+                new EntityId($id),
+                $f->text("mode", 8),
+                $weights,
+                $f->text("revision", 64),
+            ),
+        );
+    }
+
+    public function summary(string $id, string $student): ResponseInterface
+    {
+        return new JsonResponse($this->service->summary(new EntityId($student), new EntityId($id)));
+    }
+
     public function assignment(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
@@ -141,8 +174,11 @@ final readonly class SisGradebookController
     {
         return $this->reviewDate($request, $id, $student, AcademicDateKind::Completion);
     }
-    public function reviewAcademicPeriod(ServerRequest $request, string $id, string $student): ResponseInterface
-    {
+    public function reviewAcademicPeriod(
+        ServerRequest $request,
+        string $id,
+        string $student,
+    ): ResponseInterface {
         return $this->reviewDate($request, $id, $student, AcademicDateKind::Period);
     }
     private function reviewDate(
@@ -155,7 +191,10 @@ final readonly class SisGradebookController
         $body = $request->getParsedBody();
         if (!is_array($body) || !array_key_exists($kind->value, $body)) {
             throw new \Domain\Shared\Exception\ValidationException([
-                ["field" => $kind->value, "message" => "Enter the " . $kind->label() . ", or explicitly clear it."],
+                [
+                    "field" => $kind->value,
+                    "message" => "Enter the " . $kind->label() . ", or explicitly clear it.",
+                ],
             ]);
         }
         return new JsonResponse(
@@ -181,8 +220,11 @@ final readonly class SisGradebookController
         );
     }
 
-    public function commitAcademicPeriod(ServerRequest $request, string $id, string $student): ResponseInterface
-    {
+    public function commitAcademicPeriod(
+        ServerRequest $request,
+        string $id,
+        string $student,
+    ): ResponseInterface {
         return new JsonResponse(
             $this->dates->commit(
                 new EntityId($student),
@@ -205,8 +247,11 @@ final readonly class SisGradebookController
             ),
         );
     }
-    public function reviewCoursePublication(ServerRequest $request, string $id, string $student): ResponseInterface
-    {
+    public function reviewCoursePublication(
+        ServerRequest $request,
+        string $id,
+        string $student,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->courses->review(
@@ -220,8 +265,11 @@ final readonly class SisGradebookController
             ),
         );
     }
-    public function commitCoursePublication(ServerRequest $request, string $id, string $student): ResponseInterface
-    {
+    public function commitCoursePublication(
+        ServerRequest $request,
+        string $id,
+        string $student,
+    ): ResponseInterface {
         return new JsonResponse(
             $this->courses->commit(
                 new EntityId($student),

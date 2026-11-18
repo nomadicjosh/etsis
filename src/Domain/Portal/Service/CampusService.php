@@ -185,6 +185,13 @@ final readonly class CampusService
     }
 
     /** @return array<string, mixed> */
+    public function gradebookOverview(EntityId $student, EntityId $section): array
+    {
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
+        return $this->grades->scoreOverview($student, $section);
+    }
+
+    /** @return array<string, mixed> */
     public function statement(AccountId $id): array
     {
         $user = $this->access->authenticatedUserId();

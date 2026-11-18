@@ -10,6 +10,12 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface GradebookRepository
 {
+    /** @return array{mode: string, weights: array<string, int>, revision: int} */
+    public function calculation(EntityId $section): array;
+    /** @param array<string, int> $weights */
+    public function saveCalculation(EntityId $section, string $mode, array $weights, int $revision): void;
+    /** @return list<array<string, mixed>> */
+    public function assignments(EntityId $section, int $limit): array;
     public function addAssignment(Assignment $assignment): void;
     public function assignment(EntityId $id): Assignment;
     public function saveAssignment(Assignment $assignment): void;

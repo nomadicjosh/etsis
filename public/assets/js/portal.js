@@ -1628,17 +1628,25 @@
                             button(
                                 `${item.course_code} · ${item.section_code}: assignment scores`,
                                 async () => {
+                                    const generation = portalDialogGeneration;
                                     const scores = await request(
                                         `/portal/api/students/${student.id}/sections/${item.section_id}/scores/`,
                                     );
+                                    if (
+                                        pageLeaving ||
+                                        !container.isConnected ||
+                                        generation !== portalDialogGeneration
+                                    ) return;
                                     dialog(
                                         `${item.course_code} — assignment scores`,
+                                        window.createGradebookCalculation({ node }).panel(scores.summary),
                                         scores.items.length
                                             ? table(
                                                   [
                                                       'Assignment',
                                                       'Earned',
                                                       'Possible',
+                                                      'Weight',
                                                   ],
                                                   scores.items.map((score) => [
                                                       score.title,
@@ -1651,6 +1659,9 @@
                                                       Number(
                                                           score.possible_hundredths,
                                                       ) / 100,
+                                                      score.weight_hundredths == null
+                                                          ? 'By points'
+                                                          : `${(score.weight_hundredths / 100).toFixed(2)}%`,
                                                   ]),
                                                   'Your assignment scores',
                                               )

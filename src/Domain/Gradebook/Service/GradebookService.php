@@ -11,6 +11,7 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Gradebook\Assignment;
 use Domain\Gradebook\AssignmentScore;
 use Domain\Gradebook\Repository\GradebookRepository;
+use Domain\Gradebook\ValueObject\GradebookCalculation;
 use Domain\Registration\Enrollment;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -30,6 +31,80 @@ final readonly class GradebookService
         private AuditTrail $audit,
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
     ) {
+    }
+
+    /** @return array<string, mixed> */
+    public function calculationSetup(EntityId $section): array
+    {
+        $this->access->authenticatedUserId();
+        $this->faculty($section);
+        return $this->calculationContext($section);
+    }
+
+    /** @param array<string, int> $weights
+     * @return array<string, mixed>
+     */
+    public function saveCalculation(EntityId $section, string $mode, array $weights, string $revision): array
+    {
+        $this->access->authenticatedUserId();
+        $this->faculty($section);
+        $calculation = new GradebookCalculation($mode, $weights);
+        return $this->transactions->run(function () use ($section, $calculation, $revision): array {
+            $this->registration->lockSection($section);
+            $actor = $this->faculty($section);
+            $context = $this->calculationContext($section);
+            if (!hash_equals($context["revision"], $revision)) {
+                throw new ConcurrentModificationException(
+                    "The assignments or calculation changed. Reload gradebook setup.",
+                );
+            }
+            $known = array_fill_keys(array_column($context["assignments"], "id"), true);
+            if (array_diff_key($calculation->weights, $known) !== []) {
+                throw new ValidationException([
+                    [
+                        "field" => "weights",
+                        "message" => "Choose assignments from this section only.",
+                    ],
+                ]);
+            }
+            $this->repository->saveCalculation(
+                $section,
+                $calculation->mode,
+                $calculation->weights,
+                $context["version"],
+            );
+            $this->audit->record($actor, "gradebook.calculation.updated", $section);
+            return $this->calculationContext($section);
+        });
+    }
+
+    /** @return array<string, mixed> */
+    private function calculationContext(EntityId $section): array
+    {
+        $settings = $this->repository->calculation($section);
+        new GradebookCalculation($settings["mode"], $settings["weights"]);
+        $assignments = $this->repository->assignments($section, GradebookCalculation::LIMIT + 1);
+        if (count($assignments) > GradebookCalculation::LIMIT) {
+            throw new ValidationException([
+                [
+                    "field" => "weights",
+                    "message" => "This gradebook exceeds the 500-assignment calculation limit.",
+                ],
+            ]);
+        }
+        return [
+            "mode" => $settings["mode"],
+            "weights" => $settings["weights"],
+            "version" => $settings["revision"],
+            "assignments" => $assignments,
+            "revision" => hash("sha256", json_encode([$settings, $assignments], JSON_THROW_ON_ERROR)),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function summary(EntityId $student, EntityId $section): array
+    {
+        return $this->scoreOverview($student, $section)["summary"];
     }
 
     public function addAssignment(Assignment $assignment): void
@@ -159,8 +234,11 @@ final readonly class GradebookService
         );
     }
     /** @return array<string,mixed> */
-    public function commitFinalGrade(EntityId $student, EntityId $section, #[\SensitiveParameter] string $token): array
-    {
+    public function commitFinalGrade(
+        EntityId $student,
+        EntityId $section,
+        #[\SensitiveParameter] string $token,
+    ): array {
         return $this->credits->commit($student, $section, $token);
     }
     /** Internal command convenience; browser writes use explicit reviewed tokens. */
@@ -257,6 +335,14 @@ final readonly class GradebookService
     /** @return list<array<string, mixed>> */
     public function scores(EntityId $studentId, EntityId $section): array
     {
+        return $this->scoreOverview($studentId, $section)["items"];
+    }
+
+    /** Scores and feedback use the same bounded assignment/score result and calculation settings.
+     * @return array<string, mixed>
+     */
+    public function scoreOverview(EntityId $studentId, EntityId $section): array
+    {
         $actor = $this->access->authenticatedUserId();
         $student = $this->admissions->student($studentId);
         $person = $this->admissions->person($student->personId);
@@ -267,13 +353,27 @@ final readonly class GradebookService
             throw new DomainException("The student is not registered for this section.");
         }
 
-        $scores = $this->repository->scores($studentId, $section);
+        $scores = $this->repository->scores($studentId, $section, limit: GradebookCalculation::LIMIT + 1);
+        if (count($scores) > GradebookCalculation::LIMIT) {
+            throw new ValidationException([
+                [
+                    "field" => "weights",
+                    "message" => "This gradebook exceeds the 500-assignment calculation limit.",
+                ],
+            ]);
+        }
+        $settings = $this->repository->calculation($section);
+        $calculation = new GradebookCalculation($settings["mode"], $settings["weights"]);
         foreach ($scores as &$score) {
             $score["institutional_id"] = $person->institutionalId->value;
+            $score["weight_hundredths"] =
+            $calculation->mode === "weighted"
+            ? $calculation->weights[$score["assignment_id"]] ?? 0
+            : null;
         }
         unset($score);
 
-        return $scores;
+        return ["items" => $scores, "summary" => $calculation->summarize($scores)];
     }
 
     /** @return array<string, mixed> */
@@ -283,8 +383,18 @@ final readonly class GradebookService
         $rows = $this->repository->scores($student, $section, $after, 51);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
+        $settings = $this->repository->calculation($section);
+        $calculation = new GradebookCalculation($settings["mode"], $settings["weights"]);
+        foreach ($rows as &$row) {
+            $row["weight_hundredths"] =
+            $calculation->mode === "weighted" ? $calculation->weights[$row["assignment_id"]] ?? 0 : null;
+        }
+        unset($row);
 
-        return ["items" => $rows, "next_after" => $more ? (string) $rows[49]["assignment_id"] : null];
+        return [
+            "items" => $rows,
+            "next_after" => $more ? (string) $rows[49]["assignment_id"] : null,
+        ];
     }
 
     /** @return array<string, mixed> */

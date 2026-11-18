@@ -18,6 +18,58 @@ final readonly class SqlGradebookRepository implements GradebookRepository
     {
     }
 
+    public function calculation(EntityId $section): array
+    {
+        $row = $this->sql->rows("sis_gradebook_calculations", ["id" => $section->value], 1)[0] ?? null;
+        if ($row === null) {
+            return ["mode" => "points", "weights" => [], "revision" => 0];
+        }
+        return [
+            "mode" => $row["mode"],
+            "weights" => json_decode($row["weights"], true, 4, JSON_THROW_ON_ERROR),
+            "revision" => (int) $row["revision"],
+        ];
+    }
+
+    public function saveCalculation(EntityId $section, string $mode, array $weights, int $revision): void
+    {
+        $data = [
+            "mode" => $mode,
+            "weights" => json_encode($weights, JSON_THROW_ON_ERROR),
+            "revision" => $revision + 1,
+        ];
+        if ($revision === 0) {
+            $this->sql->insert("sis_gradebook_calculations", ["id" => $section->value] + $data);
+        } elseif (
+            $this->sql->update("sis_gradebook_calculations", $data, [
+                "id" => $section->value,
+                "revision" => $revision,
+            ]) !== 1
+        ) {
+            throw new ConcurrentModificationException("Reload the gradebook setup before saving.");
+        }
+    }
+
+    public function assignments(EntityId $section, int $limit): array
+    {
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch(
+            "SELECT * FROM " .
+                $q("sis_assignments") .
+                " WHERE " .
+                $q("section_id") .
+                " = ? ORDER BY " .
+                $q("id"),
+            [$section->value],
+            $limit,
+        );
+        foreach ($rows as &$row) {
+            $row["possible_hundredths"] = (int) $row["possible_hundredths"];
+        }
+        unset($row);
+        return $rows;
+    }
+
     public function addAssignment(Assignment $assignment): void
     {
         $this->sql->insert("sis_assignments", [
@@ -51,7 +103,10 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 "possible_hundredths" => $assignment->possibleHundredths,
                 "due_on" => $assignment->dueOn->format("Y-m-d"),
             ],
-            ["id" => $assignment->id->value, "section_id" => $assignment->sectionId->value],
+            [
+                "id" => $assignment->id->value,
+                "section_id" => $assignment->sectionId->value,
+            ],
         );
     }
 
@@ -78,7 +133,11 @@ final readonly class SqlGradebookRepository implements GradebookRepository
     {
         return $this->sql->rows(
             "sis_attendance",
-            ["section_id" => $section->value, "student_id" => $student->value, "held_on" => $on],
+            [
+                "section_id" => $section->value,
+                "student_id" => $student->value,
+                "held_on" => $on,
+            ],
             1,
         )[0] ?? null;
     }
@@ -147,12 +206,18 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             $this->sql->insert(
                 "sis_scores",
                 ["id" => EntityId::generate()->value] +
-                    $criteria + ["earned_hundredths" => $score->earnedHundredths, "version" => 1],
+                    $criteria + [
+                        "earned_hundredths" => $score->earnedHundredths,
+                        "version" => 1,
+                    ],
             );
         } elseif (
             $this->sql->update(
                 "sis_scores",
-                ["earned_hundredths" => $score->earnedHundredths, "version" => $expectedVersion + 1],
+                [
+                    "earned_hundredths" => $score->earnedHundredths,
+                    "version" => $expectedVersion + 1,
+                ],
                 $criteria + ["version" => $expectedVersion],
             ) !== 1
         ) {
@@ -162,7 +227,11 @@ final readonly class SqlGradebookRepository implements GradebookRepository
 
     public function attendance(EntityId $section, EntityId $student, string $on, string $status): void
     {
-        $criteria = ["section_id" => $section->value, "student_id" => $student->value, "held_on" => $on];
+        $criteria = [
+            "section_id" => $section->value,
+            "student_id" => $student->value,
+            "held_on" => $on,
+        ];
         if ($this->sql->rows("sis_attendance", $criteria) === []) {
             $this->sql->insert(
                 "sis_attendance",
