@@ -298,6 +298,15 @@ final readonly class HistoricalSchemaRegistry
                     "completed_on",
                 ],
             ],
+            \Domain\Transfer\Event\TransferPostingTermWasChanged::class => [
+                "type" => "transfer_credit",
+                "root" => \Domain\Transfer\TransferCredit::class,
+                "fields" => [
+                    "decision_id", "previous_decision_id", "previous_academic_on", "academic_on",
+                    "previous_completed_on", "completed_on", "previous_term_id", "term_id",
+                    "previous_term_code", "term_code",
+                ],
+            ],
             \Domain\Transfer\Event\TransferCreditWasChanged::class => [
                 "type" => "transfer_credit",
                 "root" => \Domain\Transfer\TransferCredit::class,

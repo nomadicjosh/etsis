@@ -39,6 +39,7 @@ async function fixture(page, options = {}) {
         external_code: "EXT.101",
         completed_on: "2026-05-01",
         term_code: "26/FA",
+        term_id: "01K00000000000000000000060",
         effective_on_default: "2026-08-10",
         earlier_history_unknown: !!options.legacy || !!options.untracked,
         history_recorded: !options.legacy && !options.untracked,
@@ -116,7 +117,17 @@ async function fixture(page, options = {}) {
         if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === "/sis/ui/operation-id/") result = { id: id(serial++) };
         else if (path.startsWith("/sis/ui/data/"))
-            result = { items: path.includes("/equivalencies/") ? [entry] : [], next_after: null };
+            result = {
+                items: path.includes("/equivalencies/")
+                    ? [entry]
+                    : path.includes("/terms/")
+                      ? [
+                            { id: "01K00000000000000000000060", code: "26/FA" },
+                            { id: "01K00000000000000000000061", code: "27/SP" },
+                        ]
+                      : [],
+                next_after: null,
+            };
         else if (path === `/sis/ui/transfer/equivalencies/${equivalency}/`) result = entry;
         else if (path.endsWith("/awards/"))
             result = {
@@ -136,7 +147,10 @@ async function fixture(page, options = {}) {
                 periodReview = {
                     previous_academic_on: value.academic_on,
                     academic_on: data.academic_on,
+                    term_id: data.term_id,
                     previous_completed_on: value.completed_on,
+                    previous_term_code: value.term_code,
+                    term_code: data.term_id === value.term_id ? value.term_code : "27/SP",
                     completed_on: data.completed_on,
                     effective_at: data.effective_on,
                     earlier_history_unknown: !!options.untracked,
@@ -234,7 +248,12 @@ async function fixture(page, options = {}) {
                 periodDecisions.push({
                     previous_academic_on: periodReview.previous_academic_on,
                     academic_on: periodReview.academic_on,
-                    action: "dates_recorded",
+                    action:
+                        periodReview.term_code === value.term_code
+                            ? "dates_recorded"
+                            : "posting_term_changed",
+                    previous_term_code: value.term_code,
+                    term_code: periodReview.term_code,
                     previous_completed_on: periodReview.previous_completed_on,
                     completed_on: periodReview.completed_on,
                     effective_at: periodReview.academic_on || "2026-08-10",
@@ -242,6 +261,8 @@ async function fixture(page, options = {}) {
                 });
                 value.academic_on = periodReview.academic_on;
                 value.completed_on = periodReview.completed_on;
+                value.term_code = periodReview.term_code;
+                value.term_id = periodReview.term_id;
                 value.credit.version++;
                 periodCommitted = true;
             }
@@ -543,7 +564,7 @@ test("registrar reviews a source period independently from completion, credits a
 }) => {
     const f = await fixture(page);
     await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
-    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
     const date = page.getByLabel("Source period start", { exact: true });
     await expect(date).toHaveJSProperty("required", false);
     await expect(date).toHaveAttribute("max", "2026-05-01");
@@ -551,15 +572,15 @@ test("registrar reviews a source period independently from completion, credits a
     const reason = page.getByRole("textbox", { name: "Reason and source evidence", exact: true });
     await expect(reason).toHaveJSProperty("required", true);
     await reason.fill("Fictional <b>source</b> transcript verification.");
-    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Unknown → 2026-01-12");
     await expect(page.locator("#drawer-body b")).toHaveCount(0);
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
-    await page.getByRole("button", { name: "Revise dates", exact: true }).click();
+    await page.getByRole("button", { name: "Revise details", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Reason and source evidence", exact: true })).toHaveValue(
         "Fictional <b>source</b> transcript verification.",
     );
-    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const audit = await new AxeBuilder({ page })
@@ -567,7 +588,7 @@ test("registrar reviews a source period independently from completion, credits a
         .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
         .analyze();
     expect(audit.violations).toEqual([]);
-    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm details", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText(
         "Sending institution's period start: 2026-01-12",
     );
@@ -594,16 +615,16 @@ test("clearing source period is explicit and curated history pages preserve the 
     page,
 }) => {
     const f = await fixture(page, { periodKnown: true });
-    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
     await page.getByLabel("Source period start", { exact: true }).fill("");
     await page
         .getByRole("textbox", { name: "Reason and source evidence", exact: true })
         .fill("Fictional source evidence withdrawn.");
-    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
-    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm details", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
-    await recordAction(page, "Date history");
+    await recordAction(page, "Academic history");
     await expect(page.locator("#drawer-body")).toContainText("Award established");
     await page.getByRole("button", { name: "Next source history page", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
@@ -623,8 +644,8 @@ test("clearing source period is explicit and curated history pages preserve the 
 
 test("untracked source history stays unknown before a reviewed date decision", async ({ page }) => {
     const f = await fixture(page, { untracked: true });
-    await expect(page.getByRole("button", { name: "Academic dates", exact: true })).toHaveCount(1);
-    await recordAction(page, "Date history");
+    await expect(page.getByRole("button", { name: "Academic details", exact: true })).toHaveCount(1);
+    await recordAction(page, "Academic history");
     await expect(page.locator("#drawer-body")).toContainText("Earlier source history is unknown");
     await expect(page.locator("#drawer-body")).toContainText("No recorded source decisions on this page");
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
@@ -633,12 +654,12 @@ test("untracked source history stays unknown before a reviewed date decision", a
 
 test("a stale source review keeps entered fields and never confirms the date", async ({ page }) => {
     const f = await fixture(page, { rejectPeriod: true });
-    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
     await page.getByLabel("Source period start", { exact: true }).fill("2026-01-12");
     await page
         .getByRole("textbox", { name: "Reason and source evidence", exact: true })
         .fill("Fictional concurrent source review.");
-    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
     await expect(page.locator("#drawer-error")).toContainText("The transfer award changed");
     await expect(page.getByLabel("Source period start", { exact: true })).toHaveValue("2026-01-12");
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
@@ -647,15 +668,15 @@ test("a stale source review keeps entered fields and never confirms the date", a
 
 test("an interrupted confirmation reuses the same reviewed source-period command", async ({ page }) => {
     const f = await fixture(page, { interruptPeriod: true });
-    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
     await page.getByLabel("Source period start", { exact: true }).fill("2026-01-12");
     await page
         .getByRole("textbox", { name: "Reason and source evidence", exact: true })
         .fill("Fictional reviewed source.");
-    await page.getByRole("button", { name: "Review dates", exact: true }).click();
-    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm details", exact: true }).click();
     await expect(page.locator("#drawer-error")).toBeVisible();
-    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm details", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText(
         "Sending institution's period start: 2026-01-12",
     );
@@ -745,5 +766,31 @@ test("course acceptance explains missing publications without creating a review"
     await page.getByRole("button", { name: "Review accepted course", exact: true }).click();
     await expect(page.locator("#drawer-error")).toContainText("Catalog staff must publish");
     expect(f.calls.some((c) => c.path.endsWith("accepted-course/review/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("registrar corrects posting term and completion in one academic review", async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
+    await page
+        .getByRole("combobox", { name: "Posting term", exact: true })
+        .selectOption("01K00000000000000000000061");
+    await page.getByRole("textbox", { name: "External completion date", exact: true }).fill("2026-05-12");
+    await page
+        .getByRole("textbox", { name: "Reason and source evidence", exact: true })
+        .fill("Fictional term correction.");
+    const accessibility = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(accessibility.violations).toEqual([]);
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Posting term: 26/FA → 27/SP");
+    await page.getByRole("button", { name: "Confirm details", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Completed 2026-05-12 · Posting term 27/SP");
+    await recordAction(page, "Academic history");
+    await page.getByRole("button", { name: "Next source history page", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Posting term corrected");
+    expect(f.calls.filter((c) => c.path.endsWith("source-period/commit/"))).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });

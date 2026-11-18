@@ -2969,7 +2969,13 @@ $sis->access->staff = true;
 
 // Transfer academic dates share real providers and browser privacy guards.
 $periodPath = $correctionPath . "source-period/";
+$transferPostingTerm = \Domain\Shared\ValueObject\EntityId::generate();
+$sis->sql->insert("sis_terms", [
+    "id" => $transferPostingTerm->value, "code" => "TR.POST",
+    "starts_on" => "2027-01-04", "ends_on" => "2027-05-20", "add_drop_ends_on" => "2027-01-15",
+]);
 $periodData = [
+    "term_id" => $transferPostingTerm->value,
     "academic_on" => $postedTransfer["completed_on"],
     "completed_on" => new DateTimeImmutable($postedTransfer["completed_on"])->modify("+1 day")->format("Y-m-d"),
     "version" => 1,
@@ -2993,8 +2999,9 @@ $periodHistory = json_decode((string) $periodHistoryResponse->getBody(), true, f
 if ($periodSaved->getStatusCode() !== 200 || (string) $periodSaved->getBody() !== (string) $periodRetry->getBody() ||
     $periodHistoryResponse->getStatusCode() !== 200 || !str_contains($periodHistoryResponse->getHeaderLine("Cache-Control"), "no-store") ||
     str_contains((string) $periodHistoryResponse->getBody(), "Fictional confirmed sending dates") ||
-    ($periodHistory["items"][array_key_last($periodHistory["items"])]["action"] ?? null) !== "dates_recorded" ||
-    ($periodHistory["items"][array_key_last($periodHistory["items"])]["completed_on"] ?? null) !== $periodData["completed_on"]) {
+    ($periodHistory["items"][array_key_last($periodHistory["items"])]["action"] ?? null) !== "posting_term_changed" ||
+    ($periodHistory["items"][array_key_last($periodHistory["items"])]["completed_on"] ?? null) !== $periodData["completed_on"] ||
+    $sis->sql->one("sis_transfer_awards", ["id" => $postedTransfer["id"]])["term_id"] !== $transferPostingTerm->value) {
     throw new RuntimeException("Source period confirmation, retry or curated history failed.");
 }
 $sis->access->staff = false;

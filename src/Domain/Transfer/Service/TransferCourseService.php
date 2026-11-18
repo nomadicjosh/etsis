@@ -185,7 +185,7 @@ final readonly class TransferCourseService
             $record = array_replace($this->awards->get($student, $award), $root->source() ?? []);
             if ($root->playhead() === 0) {
                 $this->fresh($d, $record, $facts);
-                $root = $this->credits->observe($record, $actor, $operation);
+                $root = $this->credits->observe($record, $actor, $operation, $budget);
             }
             $event = TransferCourseWasAccepted::occur(
                 new TransferCreditId($award->value),
@@ -242,6 +242,11 @@ final readonly class TransferCourseService
                 $this->records->project($current, $facts["version"]);
                 $this->records->track($root->source() ?? throw new CorruptHistoryException(), $current);
                 $this->audit->record($actor, "transfer.course_accepted", $award);
+                if ($d["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                    throw new ConcurrentModificationException(
+                        "The accepted-course review expired during confirmation.",
+                    );
+                }
             }
             $this->actor($actor);
             return $receipt;

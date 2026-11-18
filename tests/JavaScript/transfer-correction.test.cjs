@@ -12,7 +12,8 @@ async function fixture() {
         failure,
         deferred,
         release,
-        reviews = 0;
+        reviews = 0,
+        reviewedDates;
     const sent = [];
     const value = {
         given_name: "Fictional",
@@ -21,6 +22,7 @@ async function fixture() {
         institution_name: "Fictional Sending College",
         external_code: "EXT.101",
         term_code: "26/FA",
+        term_id: "01K00000000000000000000060",
         completed_on: "2026-05-01",
         academic_on: null,
         effective_on_default: "2026-08-10",
@@ -76,9 +78,12 @@ async function fixture() {
                     ...data,
                     previous_academic_on: value.academic_on,
                     previous_completed_on: value.completed_on,
+                    previous_term_code: value.term_code,
+                    term_code: data.term_id === value.term_id ? value.term_code : "27/SP",
                     effective_at: data.effective_on,
                     review_token: "private-date-proof-" + ++reviews,
                 };
+                reviewedDates = review;
                 if (deferred)
                     return new Promise((resolve) => {
                         release = () => resolve(review);
@@ -91,6 +96,12 @@ async function fixture() {
                     failure = null;
                     throw error;
                 }
+                Object.assign(value, {
+                    term_id: reviewedDates.term_id,
+                    term_code: reviewedDates.term_code,
+                    completed_on: reviewedDates.completed_on,
+                    academic_on: reviewedDates.academic_on,
+                });
                 return { operation_id: "date-operation" };
             }
             if (path.endsWith("/preview/")) {
@@ -238,7 +249,7 @@ test("late review responses cannot reopen a closed private drawer", async () => 
 
 test("academic dates share one review, retain edited values and apply completion bounds", async () => {
     const f = await fixture();
-    await f.click("Academic dates");
+    await f.click("Academic details");
     let form = walk(f.body()).find((e) => e.tag === "form");
     assert.equal(form.elements.completed_on.value, "2026-05-01");
     assert.equal(form.elements.academic_on.max, "2026-05-01");
@@ -254,18 +265,18 @@ test("academic dates share one review, retain edited values and apply completion
         walk(f.body()).some((e) => e.tag === "img"),
         false,
     );
-    await f.click("Revise dates");
+    await f.click("Revise details");
     form = walk(f.body()).find((e) => e.tag === "form");
     assert.equal(form.elements.completed_on.value, "2026-05-12");
     assert.equal(form.elements.reason.value, "Fictional <img> evidence.");
     f.value.credit.version = 2;
-    await f.click("Refresh dates");
+    await f.click("Refresh details");
     assert.equal(walk(f.body()).find((e) => e.tag === "form").elements.completed_on.value, "2026-05-12");
     await f.submit();
     assert.equal(f.sent.filter((r) => r.path.endsWith("/source-period/review/")).at(-1).data.version, 2);
     f.fail(0);
-    await assert.rejects(f.click("Confirm dates"), /Fictional/);
-    await f.click("Confirm dates");
+    await assert.rejects(f.click("Confirm details"), /Fictional/);
+    await f.click("Confirm details");
     const commands = f.sent.filter((r) => r.path.endsWith("/source-period/commit/"));
     assert.equal(commands.length, 2);
     assert.deepEqual(commands[0].data, commands[1].data);
@@ -274,7 +285,7 @@ test("academic dates share one review, retain edited values and apply completion
 
 test("a closed academic dates editor is not replaced by its late review", async () => {
     const f = await fixture();
-    await f.click("Academic dates");
+    await f.click("Academic details");
     const form = walk(f.body()).find((e) => e.tag === "form");
     form.elements.reason.value = "Fictional pending review.";
     f.defer();
@@ -285,4 +296,31 @@ test("a closed academic dates editor is not replaced by its late review", async 
     await pending;
     assert.equal(f.body(), replacement);
     assert.equal(f.body().textContent, "");
+});
+
+test("posting term and source dates share one proof and survive revising and refreshing", async () => {
+    const f = await fixture();
+    await f.click("Academic details");
+    let form = walk(f.body()).find((e) => e.tag === "form");
+    assert.equal(form.elements.term_id.value, f.value.term_id);
+    form.elements.term_id.value = "01K00000000000000000000061";
+    form.elements.completed_on.value = "2026-05-12";
+    form.elements.reason.value = "Fictional posting correction.";
+    await f.submit();
+    assert.match(f.body().textContent, /Posting term: 26\/FA → 27\/SP/);
+    await f.click("Revise details");
+    form = walk(f.body()).find((e) => e.tag === "form");
+    assert.equal(form.elements.term_id.value, "01K00000000000000000000061");
+    await f.click("Refresh details");
+    assert.equal(
+        walk(f.body()).find((e) => e.tag === "form").elements.term_id.value,
+        "01K00000000000000000000061",
+    );
+    await f.submit();
+    await f.click("Confirm details");
+    assert.equal(f.value.term_code, "27/SP");
+    assert.equal(f.value.completed_on, "2026-05-12");
+    const commands = f.sent.filter((r) => r.path.endsWith("/source-period/commit/"));
+    assert.equal(commands.length, 1);
+    assert.deepEqual(Object.keys(commands[0].data), ["review_token"]);
 });

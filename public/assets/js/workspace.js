@@ -800,7 +800,7 @@
             { title: 'Registrar decision', fields: ['effective_on', 'reason'], wide: ['reason'] },
         ],
         transfer_course: [{ title: 'Course acceptance', fields: ['course_version_id', 'effective_on', 'reason'], wide: ['course_version_id', 'reason'] }],
-        transfer_period: [{ title: 'Transfer academic dates', fields: ['completed_on', 'academic_on', 'effective_on', 'reason'], wide: ['reason'] }],
+        transfer_details: [{ title: 'Transfer academic details', fields: ['term_id', 'completed_on', 'academic_on', 'effective_on', 'reason'], wide: ['reason'] }],
         registration_group: [{ title: 'Section & students', fields: ['section_id', 'student_id'], wide: ['section_id', 'student_id'] }],
         restriction: [
             { title: 'Hold responsibility', fields: ['office_id', 'code'], wide: ['office_id', 'code'] },

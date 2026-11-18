@@ -16,7 +16,7 @@ final readonly class SisTransferAwardController
 {
     public function __construct(
         private TransferAwardService $service,
-        private \Domain\Transfer\Service\TransferPeriodService $periods,
+        private \Domain\Transfer\Service\TransferAcademicDetailsService $academicDetails,
         private \Domain\Transfer\Service\TransferCourseService $courses,
     ) {
     }
@@ -73,7 +73,7 @@ final readonly class SisTransferAwardController
             ]);
         }
         return new JsonResponse(
-            $this->periods->review(
+            $this->academicDetails->review(
                 new EntityId($student),
                 new EntityId($award),
                 $f->optionalText("academic_on", 10),
@@ -81,13 +81,14 @@ final readonly class SisTransferAwardController
                 $f->bodyText("reason"),
                 $f->text("completed_on", 10),
                 $f->optionalText("effective_on", 10),
+                $f->id("term_id"),
             ),
         );
     }
     public function commitPeriod(ServerRequest $request, string $student, string $award): ResponseInterface
     {
         return new JsonResponse(
-            $this->periods->commit(
+            $this->academicDetails->commit(
                 new EntityId($student),
                 new EntityId($award),
                 FormInput::from($request)->text("review_token", 16384),
@@ -97,7 +98,7 @@ final readonly class SisTransferAwardController
     public function periodHistory(ServerRequest $request, string $student, string $award): ResponseInterface
     {
         return new JsonResponse(
-            $this->periods->history(
+            $this->academicDetails->history(
                 new EntityId($student),
                 new EntityId($award),
                 FormInput::from($request)->optionalText("cursor", 16384),

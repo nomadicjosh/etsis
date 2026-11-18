@@ -147,10 +147,10 @@ final class TransferAwardFixture
             $history, $f->transactions, $f->access, $this->cipher, $f->clock, $audit ?? $f->audit,
         );
     }
-    public function periods(?AuditTrail $audit = null): \Domain\Transfer\Service\TransferPeriodService
+    public function periods(?AuditTrail $audit = null): \Domain\Transfer\Service\TransferAcademicDetailsService
     {
         $f = $this->sis;
-        return new \Domain\Transfer\Service\TransferPeriodService(
+        return new \Domain\Transfer\Service\TransferAcademicDetailsService(
             $f->transferCredits(), new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository($f->sql),
             $this->repository, $f->registration,
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(

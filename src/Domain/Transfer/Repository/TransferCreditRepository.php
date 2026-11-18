@@ -28,7 +28,7 @@ interface TransferCreditRepository
     public function courseVersion(EntityId $credit): ?EntityId;
     public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void;
     /** @return array<string,mixed> */
-    public function term(EntityId $term): array;
+    public function term(EntityId $term, bool $lock = false): array;
     /** @param array<string,mixed> $source
      * @param array<string,mixed> $credit Unknown definitions are reserved for historical projection reconstruction.
      */

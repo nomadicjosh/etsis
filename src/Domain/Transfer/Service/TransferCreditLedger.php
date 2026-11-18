@@ -88,7 +88,7 @@ final readonly class TransferCreditLedger
                 ) {
                     throw new CorruptHistoryException();
                 }
-                if ($existing["term_id"] !== $term->value) {
+                if ($retained->originalTermId() !== $term->value) {
                     throw new DomainException("This transfer award already belongs to another term.");
                 }
                 if ($credit["status"] === "V") {
@@ -231,6 +231,7 @@ final readonly class TransferCreditLedger
                         "external_code",
                         "external_title",
                         "course_id",
+                        "term_id",
                         "term_code",
                         "completed_on",
                     ]),

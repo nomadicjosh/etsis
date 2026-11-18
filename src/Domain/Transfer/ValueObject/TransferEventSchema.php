@@ -12,6 +12,7 @@ use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
 use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
+use Domain\Transfer\Event\TransferPostingTermWasChanged;
 use InvalidArgumentException;
 
 final class TransferEventSchema
@@ -34,6 +35,18 @@ final class TransferEventSchema
                 "academic_on",
                 "previous_completed_on",
                 "completed_on",
+            ],
+            TransferPostingTermWasChanged::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_academic_on",
+                "academic_on",
+                "previous_completed_on",
+                "completed_on",
+                "previous_term_id",
+                "term_id",
+                "previous_term_code",
+                "term_code",
             ],
             TransferCourseWasAccepted::class => [
                 "decision_id",
@@ -157,7 +170,36 @@ final class TransferEventSchema
                 }
                 return;
             }
-            if ($class === TransferAcademicDatesWereRecorded::class) {
+            if (
+                in_array(
+                    $class,
+                    [TransferAcademicDatesWereRecorded::class, TransferPostingTermWasChanged::class],
+                    true,
+                )
+            ) {
+                $termChange = $class === TransferPostingTermWasChanged::class;
+                if ($termChange) {
+                    foreach (["previous_term_id", "term_id"] as $key) {
+                        if (!is_string($p[$key])) {
+                            self::invalid();
+                        }
+                        new EntityId($p[$key]);
+                    }
+                    if ($p["previous_term_id"] === $p["term_id"]) {
+                        self::invalid();
+                    }
+                    foreach (["previous_term_code", "term_code"] as $key) {
+                        if (
+                            !is_string($p[$key]) ||
+                            trim($p[$key]) === "" ||
+                            mb_strlen($p[$key]) > 191 ||
+                            !mb_check_encoding($p[$key], "UTF-8") ||
+                            preg_match('/[\x00-\x1F\x7F]/', $p[$key])
+                        ) {
+                            self::invalid();
+                        }
+                    }
+                }
                 foreach (["previous_completed_on", "completed_on"] as $key) {
                     self::date($p[$key]);
                 }
@@ -168,8 +210,10 @@ final class TransferEventSchema
                 }
                 if (
                     ($p["academic_on"] !== null && $p["academic_on"] > $p["completed_on"]) ||
-                    ($p["previous_academic_on"] !== null && $p["previous_academic_on"] > $p["previous_completed_on"]) ||
-                    ($p["previous_academic_on"] === $p["academic_on"] &&
+                    ($p["previous_academic_on"] !== null &&
+                        $p["previous_academic_on"] > $p["previous_completed_on"]) ||
+                    (!$termChange &&
+                        $p["previous_academic_on"] === $p["academic_on"] &&
                         $p["previous_completed_on"] === $p["completed_on"])
                 ) {
                     self::invalid();

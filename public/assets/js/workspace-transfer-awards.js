@@ -121,7 +121,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         actions.append(button(title(action), () => edit(student, award, value, action), "btn-primary"));
         actions.append(
             ...(value.credit.status !== "V"
-                ? [button("Academic dates", () => editPeriod(student, award, value))]
+                ? [button("Academic details", () => editDetails(student, award, value))]
                 : []),
             ...(value.credit.status !== "V"
                 ? [button("Review accepted course", () => editCourse(student, award, value))]
@@ -130,7 +130,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         const more = [
             button("Correction history", () => history(student, award)),
             button("Course definition history", () => courseHistory(student, award)),
-            button("Date history", () => periodHistory(student, award)),
+            button("Academic history", () => periodHistory(student, award)),
         ];
         if (value.credit.status !== "V")
             more.push(
@@ -313,18 +313,19 @@ window.createWorkspaceTransferAwards = function (ui) {
             );
         body.append(actions);
     }
-    async function editPeriod(student, award, value, draft = null) {
-        const body = openDrawer("Transfer academic dates", "REVIEWED SENDING-INSTITUTION FACT");
+    async function editDetails(student, award, value, draft = null) {
+        const body = openDrawer("Transfer academic details", "REVIEWED SENDING-INSTITUTION FACT");
         body.append(
             identity(value),
             node(
                 "p",
                 {},
-                "Record the sending institution's actual course completion and optional period start. The period must not start after completion. A blank start explicitly marks it unknown; the local posting term stays unchanged.",
+                "Record the sending institution's actual course completion and optional period start. The period must not start after completion. A blank start explicitly marks it unknown. Choose the receiving institution's posting term independently from these source dates.",
             ),
             button("Back to award", () => record(student, award)),
         );
         const fields = [
+            ["term_id", "Posting term", "lookup", "terms"],
             ["completed_on", "External completion date", "date"],
             ["academic_on", "Source period start", "date", "", false],
             ["effective_on", "Effective date", "date"],
@@ -333,12 +334,13 @@ window.createWorkspaceTransferAwards = function (ui) {
         const form = await buildForm(
             fields,
             {
+                term_id: value.term_id,
                 academic_on: value.academic_on || "",
                 completed_on: value.completed_on,
                 effective_on: value.effective_on_default,
                 ...(draft || {}),
             },
-            { layout: "transfer_period" },
+            { layout: "transfer_details" },
         );
         if (!body.isConnected) return;
         form.elements.completed_on.max = value.effective_on_default;
@@ -351,17 +353,17 @@ window.createWorkspaceTransferAwards = function (ui) {
         bounds();
         body.append(
             button(
-                "Refresh dates",
+                "Refresh details",
                 async () => {
                     const fresh = await request(endpoint(student, award));
                     if (!form.isConnected) return;
-                    await editPeriod(student, award, fresh, formData(form, fields));
+                    await editDetails(student, award, fresh, formData(form, fields));
                 },
                 "btn-outline-secondary btn-sm",
             ),
         );
         form.elements.reason.maxLength = 1000;
-        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review dates");
+        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review details");
         form.append(submit);
         body.append(form);
         form.addEventListener("submit", (event) => {
@@ -371,6 +373,7 @@ window.createWorkspaceTransferAwards = function (ui) {
                 const data = formData(form, fields);
                 const base = endpoint(student, award) + "source-period/";
                 const review = await request(base + "review/", "POST", {
+                    term_id: data.term_id,
                     academic_on: data.academic_on || null,
                     completed_on: data.completed_on,
                     effective_on: data.effective_on,
@@ -378,13 +381,14 @@ window.createWorkspaceTransferAwards = function (ui) {
                     version: value.credit.version,
                 });
                 if (!form.isConnected) return;
-                const confirm = openDrawer("Confirm academic dates", "PRESERVE EARLIER SOURCE EVIDENCE");
+                const confirm = openDrawer("Confirm academic details", "PRESERVE EARLIER SOURCE EVIDENCE");
                 confirm.append(
                     node(
                         "p",
                         {},
                         `Period start: ${review.previous_academic_on || "Unknown"} → ${review.academic_on || "Unknown"}`,
                     ),
+                    node("p", {}, `Posting term: ${review.previous_term_code} → ${review.term_code}`),
                     node("p", {}, `Completion: ${review.previous_completed_on} → ${review.completed_on}`),
                     node("p", {}, `Effective: ${review.effective_at}`),
                     node("p", {}, review.reason),
@@ -398,16 +402,16 @@ window.createWorkspaceTransferAwards = function (ui) {
                     node(
                         "p",
                         {},
-                        "Credits, grade, pursuit, posting term and charges stay unchanged. Corrected dates can change repeat-course ordering and require fresh transcript preparation. Check institutional award policy when changing completion.",
+                        "Credits, grade, course, pursuit and charges stay unchanged. Corrected dates can change repeat-course ordering and require fresh transcript preparation. Check institutional award policy when changing completion.",
                     ),
                     node(
                         "p",
                         { class: "text-muted small" },
                         "This review expires after 20 minutes. An interrupted confirmation retries the same review.",
                     ),
-                    button("Revise dates", () => editPeriod(student, award, value, data)),
+                    button("Revise details", () => editDetails(student, award, value, data)),
                     button(
-                        "Confirm dates",
+                        "Confirm details",
                         async () => {
                             await request(base + "commit/", "POST", { review_token: review.review_token });
                             if (confirm.isConnected) await record(student, award);
@@ -420,7 +424,7 @@ window.createWorkspaceTransferAwards = function (ui) {
     }
     async function periodHistory(student, award, cursor = null, stack = []) {
         const data = await request(endpoint(student, award) + "source-period/history/", "POST", { cursor });
-        const body = openDrawer("Date history", "PRIVATE TRANSFER CHRONOLOGY");
+        const body = openDrawer("Academic history", "PRIVATE TRANSFER CHRONOLOGY");
         body.append(
             button("Back to award", () => record(student, award)),
             node(
@@ -440,28 +444,32 @@ window.createWorkspaceTransferAwards = function (ui) {
         body.append(
             data.items.length
                 ? grid(
-                      ["Decision", "Period start", "Completion", "Effective", "Recorded"],
+                      ["Decision", "Posting term", "Period start", "Completion", "Effective", "Recorded"],
                       data.items.map((item) => [
                           {
                               course_accepted: "Accepted course reviewed",
                               period_recorded: "Source period recorded",
                               dates_recorded: "Academic dates recorded",
+                              posting_term_changed: "Posting term corrected",
                               award: "Award established",
                               observed_existing: "Earlier facts observed",
                               amend: "Award corrected",
                               void: "Award voided",
                               reinstate: "Award reinstated",
                           }[item.action],
-                          ["period_recorded", "dates_recorded"].includes(item.action)
+                          item.action === "posting_term_changed"
+                              ? `${item.previous_term_code} → ${item.term_code}`
+                              : "No term change",
+                          ["period_recorded", "dates_recorded", "posting_term_changed"].includes(item.action)
                               ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
                               : "No period change",
-                          item.action === "dates_recorded"
+                          ["dates_recorded", "posting_term_changed"].includes(item.action)
                               ? `${item.previous_completed_on} → ${item.completed_on}`
                               : "No completion change",
                           item.effective_at || "Unknown",
                           item.recorded_at,
                       ]),
-                      "Transfer academic-date decisions",
+                      "Transfer academic decisions",
                   )
                 : node("p", {}, "No recorded source decisions on this page."),
         );

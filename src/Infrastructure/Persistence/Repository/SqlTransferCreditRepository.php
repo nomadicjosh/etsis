@@ -88,8 +88,11 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
             throw new ConcurrentModificationException("Review the accepted course publication again.");
         }
     }
-    public function term(EntityId $term): array
+    public function term(EntityId $term, bool $lock = false): array
     {
+        if ($lock) {
+            $this->sql->lock("sis_terms", $term->value, "id");
+        }
         return $this->sql->one("sis_terms", ["id" => $term->value]);
     }
     public function create(
@@ -149,6 +152,20 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
             throw new CorruptHistoryException();
         }
         $award = $this->award(new EntityId($source["award_id"]));
+        if ($source["term_id"] !== $credit["term_id"]) {
+            throw new CorruptHistoryException();
+        }
+        if ($award["term_id"] !== $source["term_id"]) {
+            if (
+                $this->sql->update(
+                    "sis_transfer_awards",
+                    ["term_id" => $source["term_id"]],
+                    ["id" => $source["award_id"], "term_id" => $award["term_id"]]
+                ) !== 1
+            ) {
+                throw new ConcurrentModificationException("Review the transfer placement again.");
+            }
+        }
         if (($award["corrected_completed_on"] ?? $award["completed_on"]) !== $source["completed_on"]) {
             $this->sql->update(
                 "sis_transfer_awards",

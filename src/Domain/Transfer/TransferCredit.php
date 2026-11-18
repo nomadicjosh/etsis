@@ -12,6 +12,7 @@ use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
 use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
+use Domain\Transfer\Event\TransferPostingTermWasChanged;
 use Domain\Transfer\ValueObject\TransferEventSchema;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
 
@@ -30,6 +31,7 @@ final class TransferCredit extends EventSourcedAggregate
     private ?string $courseVersion = null;
     private ?string $originalCourseVersion = null;
     private ?string $originalCompletedOn = null;
+    private ?string $originalTermId = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -59,6 +61,7 @@ final class TransferCredit extends EventSourcedAggregate
         $this->credit = $p["credit"];
         $this->source = $p["source"];
         $this->originalCompletedOn = $p["source"]["completed_on"];
+        $this->originalTermId = $p["source"]["term_id"];
         $this->grade = $p["grade"];
         $this->decision = $p["decision_id"];
         $this->provenance = $p["provenance"];
@@ -140,9 +143,37 @@ final class TransferCredit extends EventSourcedAggregate
 
     public function whenTransferAcademicDatesWereRecorded(TransferAcademicDatesWereRecorded $event): void
     {
+        $this->changeDates($event->payload());
+    }
+
+    public function whenTransferPostingTermWasChanged(TransferPostingTermWasChanged $event): void
+    {
         $p = $event->payload();
         if (
-            $this->credit === null || $this->source === null ||
+            $this->source === null ||
+            $p["previous_term_id"] !== $this->source["term_id"] ||
+            $p["previous_term_code"] !== $this->source["term_code"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->changeDates($p);
+        $this->source["term_id"] = $p["term_id"];
+        $this->source["term_code"] = $p["term_code"];
+        $this->credit["term_id"] = $p["term_id"];
+        new TransferCreditFacts($this->credit);
+    }
+
+    public function originalTermId(): ?string
+    {
+        return $this->originalTermId;
+    }
+
+    /** @param array<string,mixed> $p */
+    private function changeDates(array $p): void
+    {
+        if (
+            $this->credit === null ||
+            $this->source === null ||
             !in_array($this->credit["status"], ["A", "N"], true) ||
             $p["previous_decision_id"] !== $this->decision ||
             $p["previous_academic_on"] !== $this->academicOn ||
