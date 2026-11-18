@@ -79,3 +79,41 @@ New submissions and deliberately selected document evidence now retain their act
 ## Offers after an admissions acceptance
 
 The [offer workflow](admissions-offers.md) separates the institution’s acceptance decision from the applicant’s response to a private letter. Institutional policy requires applicant acceptance by default. Staff can configure that policy, issue or replace a letter and record documented responses in the same application history. Matriculation checks the retained offer policy; cancelling an offer does not withdraw an application or close a student record.
+
+## Applicant withdrawal
+
+This workflow withdraws an **application before matriculation**. It is separate from institutional withdrawal, academic leave, a program change or ending employment. It never closes the person, sign-in account, existing student record or program pursuits.
+
+### Institutional setup
+
+Open **Admissions → Policies**. The shared screen contains offer acceptance and applicant withdrawal settings, with independent revisions so saving one does not discard or invalidate unrelated work in the other.
+
+Choose one applicant withdrawal policy:
+
+- **Staff approval required** is the default. An applicant submits a reason and confirms a request. Their application remains open while admissions reviews it.
+- **Applicants may withdraw directly** permits the current owner to review and confirm withdrawal of a submitted or accepted application.
+- **Staff-only withdrawal** directs applicants to contact admissions. It prevents new owner requests and direct withdrawals. Owners can still cancel their own existing pending requests.
+
+Reading setup requires `sis:admissions:manage`; changing it also requires the protected `sis:admissions:policy` permission. The migration consolidates the earlier offer setting into `sis_admission_policy`, verifies its value and revision before removing the superseded configuration table, and defaults only the new withdrawal setting to staff approval. Issued offer wording and retained offer policies remain unchanged.
+
+### Applicant and staff flow
+
+Applicants open **Withdrawal** beside their portal application. Under the default policy, they choose **Request withdrawal**, enter a reason, review it and confirm. They may cancel a pending request through the same review/confirmation flow. A pending request pauses matriculation, new offers and offer responses until it is resolved; it does not itself change the admissions decision. Staff may still cancel an offer.
+
+Staff open **Admissions → Withdrawal requests**. This paged worklist shows applicant names and application status without loading private reasons or replaying event streams. **Review application** opens the application with its withdrawal panel expanded. Staff can **Approve withdrawal** or **Close request** after entering the response the applicant will see, reviewing the proposed action and confirming it. Approval records the formal application withdrawal. Closing the request leaves the application's current status unchanged. The latter is also available when another legitimate action has already closed or matriculated an older application.
+
+Approval and closure require both `sis:admissions:manage` and the independent `sis:admissions:withdraw` permission. A direct staff withdrawal cannot bypass a pending applicant request; resolve the request first. Returning a withdrawn application to review remains a separate staff action that requires a new admissions decision.
+
+Applicants see the response in their request panel and receive a reference in the existing private admissions inbox when staff resolve their request. No email is sent. Direct withdrawal updates their visible application status after confirmation. A person/account relink does not transfer earlier private request wording or response authority to another account; staff must close the former owner's pending request and obtain fresh instructions from the current owner.
+
+### Working records and formal history
+
+`sis_admission_withdrawal_requests` contains encrypted operational requests, their original wording, one resolution and bounded confirmation receipts. It is an ordinary working-case table, not an additional domain event journal. Its routing/status fields support indexed, bounded worklists; private wording and responses are excluded from those lists. Pending requests and earlier resolved requests remain separate records.
+
+Only an actual approved or direct withdrawal appends the existing `AdmissionReviewStateWasChanged` event in the application's current stream. Protected provenance identifies the applicant/staff channel, request, original requester/time and the policy that permitted the request. An approval retains the original applicant wording and staff response in protected decision context. Earlier decisions, offers, submitted answers and evidence remain intact.
+
+The application's `withdrawal_revision` is an operational concurrency counter. It is not a journal playhead, an academic record version or a claim about earlier requests. It prevents an old unconfirmed review from becoming valid again after a request-and-cancellation cycle. Formal application versions continue to advance only with their recorded application transitions. Working requests and responses follow institutional case retention; this feature does not automatically purge them or erase their independently retained formal withdrawal facts.
+
+Every mutation uses an expiring review bound to the current actor, route, owner/staff channel, application, request state and relevant policy. Confirmation rechecks authority under locks and commits the working record, any formal outcome, audit and inbox reference atomically. Repeating a completed confirmation returns its original result, even after later request resolutions or return to review, without applying the old action again. Current authority still applies. A new or changed request requires a new review.
+
+Apply migration `20261117000007_CreateSisAdmissionWithdrawalRequests`. Fictional checks cover both policies and owner/staff boundaries, unchanged person/student facts, cancellation cycles, stale/expired reviews, policy isolation, required-audit rollback, request encryption, existing offer behavior, original retries, and the real private/CSRF HTTP pipeline. Browser regression coverage is prepared separately; it is not run during workstation-safe checks.

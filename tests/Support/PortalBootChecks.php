@@ -6452,12 +6452,12 @@ if (
     throw new RuntimeException('The offer fixture could not record its actual fresh admission decision.');
 }
 $offerPolicy = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
-    'https://campus.example.invalid/sis/admission-offer-policy/'
+    'https://campus.example.invalid/sis/admission-policy/'
 )));
 $offerPolicyData = json_decode((string) $offerPolicy->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
-    $offerPolicy->getStatusCode() !== 200 || $teachingPost('/sis/admission-offer-policy/', [
-    'require_acceptance' => true, 'revision' => $offerPolicyData['revision'],
+    $offerPolicy->getStatusCode() !== 200 || $teachingPost('/sis/admission-policy/', [
+    'area' => 'offers', 'require_acceptance' => true, 'revision' => $offerPolicyData['offers']['revision'],
     ])->getStatusCode() !== 200
 ) {
     throw new RuntimeException('The institutional offer policy routes did not resolve or save.');
@@ -6510,6 +6510,102 @@ if (
 ) {
     throw new RuntimeException(
         'An owner could not accept their offer, or the response changed the admission decision.'
+    );
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+
+// Applicant withdrawal requests use owner-only routes, independent staff authority and the existing journal.
+$withdrawalOwnerBase = '/portal/api/applications/' . $caseworkApplication->value . '/withdrawal/';
+$withdrawalStaffBase = '/sis/applications/' . $caseworkApplication->value . '/withdrawal/';
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$withdrawalNoCsrf = $post->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $withdrawalOwnerBase . 'review/'
+))->withParsedBody(['action' => 'request', 'reason' => 'Fictional private applicant request.']);
+if ($app->router->match($withdrawalNoCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('An applicant withdrawal request bypassed CSRF.');
+}
+$withdrawalEvents = $sis->sql->rows('sis_history_events');
+$withdrawalReviewResponse = $teachingPost($withdrawalOwnerBase . 'review/', [
+    'action' => 'request', 'request_id' => null, 'reason' => 'Fictional private applicant request.',
+]);
+$withdrawalReviewData = json_decode((string) $withdrawalReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($withdrawalReviewResponse->getStatusCode() !== 200 || !isset($withdrawalReviewData['review_token'])) {
+    throw new RuntimeException('The real applicant withdrawal review could not be prepared.');
+}
+$withdrawalSentResponse = $teachingPost($withdrawalOwnerBase . 'commit/', [
+    'review_token' => $withdrawalReviewData['review_token'],
+]);
+$withdrawalSent = json_decode((string) $withdrawalSentResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $withdrawalSentResponse->getStatusCode() !== 200 || ($withdrawalSent['status'] ?? null) !== 'pending'
+    || $withdrawalEvents !== $sis->sql->rows('sis_history_events')
+    || $sis->admissions->application($caseworkApplication)->status->value !== 'accepted'
+) {
+    throw new RuntimeException('A working withdrawal request changed formal application history or failed to save.');
+}
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->grants = ['sis:admissions:manage'];
+$withdrawalUnauthorized = $teachingPost($withdrawalStaffBase . 'review/', [
+    'action' => 'approve', 'request_id' => $withdrawalSent['request_id'], 'reason' => 'Fictional approval.',
+]);
+if (
+    $withdrawalUnauthorized->getStatusCode() !== 403 || $app->router->match($get->withUri(
+        new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $withdrawalOwnerBase)
+    ))->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Ordinary admissions duties bypassed withdrawal or owner authority.');
+}
+$sis->access->staff = true;
+$withdrawalQueueResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/admissions/withdrawal-requests/'
+)));
+$withdrawalQueue = json_decode((string) $withdrawalQueueResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $withdrawalQueueResponse->getStatusCode() !== 200
+    || !in_array($withdrawalSent['request_id'], array_column($withdrawalQueue['items'] ?? [], 'id'), true)
+    || str_contains((string) $withdrawalQueueResponse->getBody(), 'private applicant request')
+    || !str_contains($withdrawalQueueResponse->getHeaderLine('Cache-Control'), 'no-store')
+    || $withdrawalQueueResponse->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('The withdrawal worklist leaked private wording or lost its private response contract.');
+}
+$withdrawalApprovalResponse = $teachingPost($withdrawalStaffBase . 'review/', [
+    'action' => 'approve', 'request_id' => $withdrawalSent['request_id'],
+    'reason' => 'Your fictional withdrawal request was approved.',
+]);
+$withdrawalApproval = json_decode((string) $withdrawalApprovalResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $withdrawalApprovalResponse->getStatusCode() !== 200 || $teachingPost($withdrawalStaffBase . 'commit/', [
+    'review_token' => $withdrawalApproval['review_token'],
+    ])->getStatusCode() !== 200 || $sis->admissions->application($caseworkApplication)->status->value !== 'withdrawn'
+) {
+    throw new RuntimeException('The real request approval did not record the formal application withdrawal.');
+}
+$sis->access->actor = $educationOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$withdrawalOwnerRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $withdrawalOwnerBase
+)));
+$withdrawalOwnerData = json_decode((string) $withdrawalOwnerRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$withdrawalBeforeRetry = $sis->sql->rows('sis_history_events');
+$withdrawalRetry = $teachingPost(
+    $withdrawalOwnerBase . 'commit/',
+    ['review_token' => $withdrawalReviewData['review_token']]
+);
+if (
+    $withdrawalOwnerRead->getStatusCode() !== 200
+    || ($withdrawalOwnerData['items'][0]['response'] ?? null) !== 'Your fictional withdrawal request was approved.'
+    || !str_contains($withdrawalOwnerRead->getHeaderLine('Cache-Control'), 'no-store')
+    || $withdrawalOwnerRead->hasHeader('phpdebugbar-id')
+    || json_decode((string) $withdrawalRetry->getBody(), true, flags: JSON_THROW_ON_ERROR) !== $withdrawalSent
+    || $withdrawalBeforeRetry !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException(
+        'The applicant response or its original retry result lost ownership or historical integrity.'
     );
 }
 $sis->access->actor = $originalSubmissionActor;

@@ -48,18 +48,6 @@ final readonly class AdmissionOfferController
             true
         ));
     }
-    public function policy(): ResponseInterface
-    {
-        return new JsonResponse($this->service->policy());
-    }
-    public function savePolicy(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        return new JsonResponse($this->service->savePolicy(
-            $f->requiredBoolean('require_acceptance'),
-            $f->integer('revision')
-        ));
-    }
     private function input(#[\SensitiveParameter] ServerRequest $request): array
     {
         $input = $request->getParsedBody();

@@ -3,8 +3,8 @@
     'use strict';
     let sequence = 0;
     window.createAdmissionOffers = ({ node, request, task, notify }) => ({
-        mount(container, application, { staff = false, canIssue = false, canPolicy = false, toggleTarget = null, label = '', policyOnly = false } = {}) {
-            const base = policyOnly ? '/sis/admission-offer-policy/' : `${staff ? '/sis' : '/portal/api'}/applications/${application}/offer/`;
+        mount(container, application, { staff = false, canIssue = false, canPolicy = false, toggleTarget = null, label = '', beforeChange = () => true } = {}) {
+            const base = `${staff ? '/sis' : '/portal/api'}/applications/${application}/offer/`;
             const id = `admission-offer-${++sequence}`;
             const content = node('section', { id, hidden: true, class: 'record-section mt-3', 'aria-label': 'Admission offer' });
             const status = node('p', { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true', class: 'form-text mt-2' });
@@ -12,9 +12,9 @@
             const toggle = node('button', { type: 'button', class: 'btn btn-outline-secondary',
                 'aria-expanded': 'false', 'aria-controls': id, ...(label ? { 'aria-label': `Admission offer for ${label}` } : {}) }, 'Admission offer');
             (toggleTarget || container).append(toggle); container.append(content);
-            let expanded = false, busy = false, dirty = false, generation = 0;
+            let expanded = false, busy = false, dirty = false, generation = 0, policyPanel = null;
             const alive = ticket => ticket === generation && container.isConnected;
-            const leave = () => !busy && (!dirty || window.confirm('Leave the unfinished admission offer form?'));
+            const leave = () => !busy && (!dirty || window.confirm('Leave the unfinished admission offer form?')) && (policyPanel?.beforeLeave() ?? true);
             const button = (text, action, style = 'btn-outline-secondary') => {
                 const b = node('button', { type: 'button', class: `btn ${style}` }, text);
                 b.addEventListener('click', () => { if (!busy) task(action); }); return b;
@@ -34,30 +34,32 @@
                 if (offer.respond_by) target.append(node('p', { class: 'form-text' }, `Respond by: ${offer.respond_by}`));
             };
             async function load() {
+                const restoreFocus = !!body.querySelector(':focus');
                 const ticket = ++generation; busy = true; toggle.disabled = true;
                 status.textContent = 'Loading admission offer…';
                 try {
-                    const response = await request(base);
-                    const data = policyOnly ? { policy: response } : response;
+                    const data = await request(base);
                     if (!alive(ticket)) return;
                     render(data); status.textContent = '';
+                    if (restoreFocus) body.querySelector('h2')?.focus();
                 } catch (error) {
                     if (alive(ticket)) status.textContent = 'The offer could not be loaded. Close and reopen it to try again.';
                     throw error;
                 } finally { if (alive(ticket)) { busy = false; toggle.disabled = false; } }
             }
             function render(data) {
-                dirty = false; body.replaceChildren(node('h2', { class: 'h5' }, policyOnly ? 'Offer policy' : 'Admission offer'));
-                const current = node('div'); if (!policyOnly) body.append(current);
+                dirty = false; policyPanel = null; body.replaceChildren(node('h2', { class: 'h5', tabindex: '-1' }, 'Admission offer'));
+                const current = node('div'); body.append(current);
                 if (data.offer) summary(current, data.offer);
                 else current.append(node('p', {}, data.application_status === 'accepted'
                     ? 'No current offer has been issued.' : 'An offer becomes available after the admissions decision.'));
-                if (data.offer?.status === 'pending' && !data.response_open) current.append(
+                if (data.withdrawal_pending) current.append(node('p', { class: 'alert alert-info' }, 'A withdrawal request is awaiting review. Resolve it before issuing or responding to an offer.'));
+                if (data.offer?.status === 'pending' && !data.response_open && !data.withdrawal_pending) current.append(
                     node('p', { class: 'form-text' }, 'This offer is no longer open for a response. Contact admissions for help.'));
                 const editor = node('div', { class: 'mt-3' }), actions = node('div', { class: 'd-flex flex-wrap gap-2 mt-3' });
                 body.append(actions, editor);
                 const start = action => {
-                    if (!leave()) return;
+                    if (!beforeChange() || !leave()) return;
                     dirty = false; editor.replaceChildren(); status.textContent = '';
                     const form = node('form'), controls = node('fieldset'), preview = node('div', { class: 'mt-3' });
                     controls.append(node('legend', { class: 'h6' }, ({ issue: 'Issue admission offer', accept: 'Accept offer', decline: 'Decline offer', cancel: 'Cancel offer' })[action]));
@@ -67,7 +69,7 @@
                         fields.message = field(controls, 'message', 'Offer letter', { textarea: true, value: data.offer?.message || '', rows: 8, required: true, maxlength: 10000 });
                         fields.respond_by = field(controls, 'respond_by', 'Response deadline', { type: 'date' });
                         controls.append(node('p', { class: 'form-text' }, 'The deadline is optional and includes the full day in the institution’s timezone. A replacement keeps the earlier letter and responses in history.'),
-                            node('p', { class: 'form-text' }, data.policy.require_acceptance ? 'New offers require applicant acceptance.' : 'New offers make applicant acceptance optional.'));
+                            node('p', { class: 'form-text' }, 'The review shows the acceptance policy for this offer.'));
                     }
                     if (staff) {
                         fields.reason = field(controls, 'reason', action === 'accept' || action === 'decline' ? 'Documented response and reason' : 'Reason',
@@ -119,41 +121,18 @@
                     }
                     if (staff && canIssue && ['pending', 'accepted'].includes(data.offer?.status)) actions.append(button('Cancel offer', () => start('cancel')));
                 }
-                const editPolicy = () => {
-                    if (!policyOnly && !leave()) return;
+                if (staff && canPolicy) actions.append(button('Admissions policy', () => {
+                    if (!beforeChange() || !leave()) return;
                     dirty = false; editor.replaceChildren();
-                    const form = node('form'), identity = `offer-policy-${++sequence}`;
-                    const required = node('input', { type: 'checkbox', id: identity, class: 'form-check-input', checked: data.policy.require_acceptance });
-                    required.addEventListener('change', () => { dirty = true; });
-                    const submit = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Save policy');
-                    form.append(node('h3', { class: 'h6' }, 'Institutional offer policy'), node('div', { class: 'form-check mb-3' }, required,
-                        node('label', { for: identity, class: 'form-check-label' }, 'Require applicant acceptance before matriculation')),
-                    node('p', { class: 'form-text' }, 'Applies to new offers and applications without an issued offer. Issued letters retain their policy. Previously confirmed matriculations stay unchanged.'), submit);
-                    editor.append(form); form.addEventListener('submit', event => {
-                        event.preventDefault(); if (busy) return;
-                        const ticket = generation; busy = true; submit.disabled = true;
-                        task(async () => {
-                            try {
-                                await request('/sis/admission-offer-policy/', 'POST', { require_acceptance: required.checked, revision: data.policy.revision });
-                                if (alive(ticket)) { dirty = false; notify('Offer policy saved.'); await load(); }
-                            } finally { if (alive(ticket)) { busy = false; submit.disabled = false; } }
-                        });
-                    });
-                };
-                if (staff && canPolicy) {
-                    if (policyOnly) editPolicy();
-                    else actions.append(button('Offer policy', editPolicy));
-                }
+                    policyPanel = window.createAdmissionPolicy({ node, request, task, notify }).mount(editor);
+                }));
             }
             toggle.addEventListener('click', () => {
                 if (!leave()) return;
                 if (expanded) { generation++; dirty = false; expanded = false; body.replaceChildren(); content.hidden = true; toggle.setAttribute('aria-expanded', 'false'); return; }
                 expanded = true; content.hidden = false; toggle.setAttribute('aria-expanded', 'true'); task(load);
             });
-            if (policyOnly && staff && canPolicy) {
-                toggle.hidden = true; expanded = true; content.hidden = false; task(load);
-            }
-            return { beforeLeave: leave };
+            return { beforeLeave: leave, refresh: () => expanded && !busy && !dirty && !policyPanel ? load() : Promise.resolve() };
         },
     });
 })();

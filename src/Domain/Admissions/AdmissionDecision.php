@@ -65,6 +65,15 @@ final class AdmissionDecision extends EventSourcedAggregate
     }
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
+        if (array_key_exists('admission_withdrawal', $event->metadata())) {
+            if (!$event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged) {
+                throw new CorruptHistoryException();
+            }
+            \Domain\Admissions\ValueObject\AdmissionWithdrawalFact::validate(
+                $event->metaParam('admission_withdrawal'),
+                $event->payload()
+            );
+        }
         if (array_key_exists('admission_evidence', $event->metadata())) {
             if (
                 !$event instanceof AdmissionWasDecided

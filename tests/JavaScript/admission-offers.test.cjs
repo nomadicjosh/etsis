@@ -58,20 +58,7 @@ test('applicant confirmation retries the same review and unfinished responses bl
     assert.equal(f.notifications.length, 1);
 });
 
-test('staff policy saves typed choices with the reviewed revision', async () => {
-    const f = fixture(async (url, method, body) => {
-        if (method === 'POST') {
-            assert.equal(url, '/sis/admission-offer-policy/');
-            assert.equal(body.require_acceptance, false); assert.equal(body.revision, 3); return {};
-        }
-        return packet();
-    }, true);
-    await f.click('Admission offer'); await f.click('Offer policy');
-    const checkbox = f.find(e => e.attributes.type === 'checkbox'); checkbox.checked = false; checkbox.events.change();
-    assert.equal(f.guard.beforeLeave(), false);
-    await f.submit(); assert.equal(f.errors.length, 0); assert.equal(f.guard.beforeLeave(), true);
-    assert.match(f.root.textContent, /Earlier|Applicant|Offer/);
-});
+
 
 test('a response arriving after the application closes cannot recreate its confirmation', async () => {
     let resolve;
@@ -85,23 +72,4 @@ test('a response arriving after the application closes cannot recreate its confi
     resolve({ action: 'decline', offer: { ...offer, status: 'declined' }, review_token: 'late-review' });
     await f.flush(); assert.equal(f.button('Confirm'), undefined);
     assert.equal(f.calls.some(call => call[0].endsWith('/commit/')), false);
-});
-
-
-test('institutional policy setup opens without an application or letter request', async () => {
-    const f = fixture(async (url, method, body) => {
-        assert.equal(url, '/sis/admission-offer-policy/');
-        if (method === 'POST') {
-            assert.equal(body.require_acceptance, false);
-            assert.equal(body.revision, 7);
-        }
-        return { require_acceptance: true, revision: 7 };
-    }, true, { policyOnly: true });
-    await f.flush();
-    const checkbox = f.find(e => e.attributes.type === 'checkbox');
-    assert.ok(checkbox); checkbox.checked = false; checkbox.events.change();
-    await f.submit();
-    assert.equal(f.errors.length, 0);
-    assert.equal(f.calls.length, 3);
-    assert.equal(f.button('Issue offer'), undefined);
 });

@@ -177,8 +177,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlEmergencyContactsRepository::class,
             \Domain\Person\Repository\EducationBackgroundRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlEducationBackgroundRepository::class,
-            \Domain\Admissions\Repository\AdmissionOfferPolicyRepository::class =>
-                \Infrastructure\Persistence\Repository\SqlAdmissionOfferPolicyRepository::class,
+            \Domain\Admissions\Repository\AdmissionWithdrawalRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAdmissionWithdrawalRepository::class,
+            \Domain\Admissions\Repository\AdmissionPolicyRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAdmissionPolicyRepository::class,
             \Domain\Admissions\Repository\AdmissionCaseworkRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAdmissionCaseworkRepository::class,
             \Domain\Admissions\Repository\AdmissionUpdatesRepository::class =>

@@ -761,14 +761,20 @@
                 'aria-expanded': 'false', 'aria-controls': identity,
                 onclick: event => view(application, event.currentTarget) }, 'View answers')
                 : el('span', { class: 'campus-muted' }, 'No form answers');
-            const progress = window.campusApplicationProgress(application.status);
-            const next = el('div', { class: 'campus-application-progress' },
-                el('span', { class: `campus-chip${progress.positive ? ' success' : ''}` }, progress.label),
-                el('p', { class: 'campus-muted mb-0' }, progress.next),
-                progress.href ? el('a', { href: progress.href }, 'My campus') : null);
+            const next = el('div', { class: 'campus-application-progress' });
+            const showProgress = status => {
+                const progress = window.campusApplicationProgress(status);
+                const children = [el('span', { class: `campus-chip${progress.positive ? ' success' : ''}` }, progress.label),
+                    el('p', { class: 'campus-muted mb-0' }, progress.next)];
+                if (progress.href) children.push(el('a', { href: progress.href }, 'My campus'));
+                next.replaceChildren(...children);
+            };
+            showProgress(application.status);
             const steps = el('div');
             const guard = window.createAdmissionCasework({ node: el, request, task, notify: notice })
-                .applicant(steps, application.id, `${programLabel(application)} · ${termLabel(application)}`, documentArea);
+                .applicant(steps, application.id, `${programLabel(application)} · ${termLabel(application)}`, documentArea, result => {
+                    application.status = result.application_status; showProgress(application.status);
+                });
             documentGuards?.push(guard);
             return [programLabel(application), termLabel(application), next, steps, answers];
         });

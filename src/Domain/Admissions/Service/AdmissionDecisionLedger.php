@@ -291,6 +291,7 @@ final readonly class AdmissionDecisionLedger
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?array $withdrawal = null,
     ): array {
         return $this->append(
             $before,
@@ -299,7 +300,9 @@ final readonly class AdmissionDecisionLedger
             $operation,
             $actor,
             $reason,
-            \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class
+            \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class,
+            [],
+            $withdrawal
         );
     }
     /** @param array<string,mixed> $source @param list<array<string,mixed>> $evidence
@@ -314,6 +317,7 @@ final readonly class AdmissionDecisionLedger
         #[\SensitiveParameter] string $reason,
         string $class,
         #[\SensitiveParameter] array $evidence = [],
+        #[\SensitiveParameter] ?array $withdrawal = null,
     ): array {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
             throw new AccessDeniedException('The admissions actor changed.');
@@ -328,6 +332,9 @@ final readonly class AdmissionDecisionLedger
             $payload['previous_status'] = $before->status->value;
         }
         $metadata = ['__aggregate_type' => 'admission_decision'];
+        if ($withdrawal !== null) {
+            $metadata['admission_withdrawal'] = $withdrawal;
+        }
         if ($class !== \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class) {
             $metadata['admission_evidence'] = $evidence;
         }
@@ -385,6 +392,7 @@ final readonly class AdmissionDecisionLedger
                 "status" => $offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]),
                 "offer" => $offer ? $p["offer"] : null,
                 "previous_status" => $p["previous_status"] ?? null,
+                "withdrawal_channel" => $e->metaParam('admission_withdrawal')['channel'] ?? null,
                 "source" => isset($p["source"]) ? AdmissionDecisionSchema::displaySource($p["source"]) : null,
                 "effective_at" => $observed ? null : $stored->context->effectiveAt?->format(DATE_ATOM),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
@@ -436,6 +444,13 @@ final readonly class AdmissionDecisionLedger
             $page = $budget->page($this->history, $this->stream($a->id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
+                $withdrawal = $stored->event->metaParam('admission_withdrawal');
+                if (
+                    $withdrawal !== null && $withdrawal['channel'] === 'applicant'
+                    && $stored->context->actor?->value !== $withdrawal['requested_by']
+                ) {
+                    throw new CorruptHistoryException();
+                }
                 foreach ($stored->event->metaParam('admission_evidence', []) as $file) {
                     $evidence[$file['id']] = true;
                 }

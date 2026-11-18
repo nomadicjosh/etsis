@@ -8,7 +8,7 @@ return [
         'sis:admissions:offers' => [
             'description' => 'Issue admission offers and record documented applicant responses.',
         ],
-        'sis:admissions:policy' => ['description' => 'Configure institutional applicant acceptance policy.'],
+        'sis:admissions:policy' => ['description' => 'Configure institutional admissions policies.'],
         'sis:admissions:withdraw' => [
             'description' => 'Withdraw pre-matriculation applications and return withdrawn applications to review.',
         ],

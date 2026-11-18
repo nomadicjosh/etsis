@@ -20,7 +20,7 @@ final class AdmissionOffersTest extends TestCase
     private function fixture(bool $required = true): array
     {
         $f = new SisFixture();
-        $f->offerService()->savePolicy($required, 0);
+        $f->admissionPolicyService()->save('offers', $required, 0);
         $person = $f->legacyPerson($f->access->actor, 'Fictional', 'Applicant');
         $id = $f->legacyApplication($person->id, $f->program, $f->term)->id;
         $s = $f->decisionService();
@@ -71,7 +71,7 @@ final class AdmissionOffersTest extends TestCase
         [$f, $id] = $this->fixture();
         $s = $f->offerService();
         $s->commit($id, $this->issue($f, $id)['review_token'], false);
-        $s->savePolicy(false, 1);
+        $f->admissionPolicyService()->save('offers', false, 1);
         try {
             $f->matriculate($id);
             self::fail('A policy edit changed the issued offer.');
@@ -118,7 +118,7 @@ final class AdmissionOffersTest extends TestCase
             } elseif ($case === 'replacement') {
                 $s->commit($id, $this->issue($f, $id)['review_token'], false);
             } else {
-                $s->savePolicy(false, 1);
+                $f->admissionPolicyService()->save('offers', false, 1);
             }
             $before = $f->sql->rows('sis_history_events');
             try {
@@ -237,7 +237,7 @@ final class AdmissionOffersTest extends TestCase
                 if ($action === 'issue') {
                     $this->issue($f, $id);
                 } else {
-                    $f->offerService()->savePolicy(false, 1);
+                    $f->admissionPolicyService()->save('offers', false, 1);
                 }
                 self::fail('Ordinary admissions authority performed an independently authorized write.');
             } catch (AccessDeniedException) {
@@ -255,10 +255,10 @@ final class AdmissionOffersTest extends TestCase
         $s = $f->offerService($audit);
         $before = $f->sql->rows('sis_history_events');
         try {
-            $s->savePolicy(false, 1);
+            $f->admissionPolicyService($audit)->save('offers', false, 1);
             self::fail('An unaudited policy was committed.');
         } catch (\RuntimeException) {
-            self::assertSame(['require_acceptance' => true, 'revision' => 1], $f->offerPolicy()->get());
+            self::assertSame(['require_acceptance' => true, 'revision' => 1], $f->admissionPolicy()->offers());
         }
         $issue = $this->issue($f, $id);
         try {

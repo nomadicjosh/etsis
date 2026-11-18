@@ -243,8 +243,8 @@ final class SisFixture
         $this->access = new FixtureAccess($actor ?? $this->user());
         if ($initialize) {
             // Earlier workflow fixtures deliberately exercise institutions without mandatory offer acceptance.
-            $this->sql->update('sis_admission_offer_policy', ['require_acceptance' => 0],
-                ['id' => \Domain\Admissions\Repository\AdmissionOfferPolicyRepository::ID]);
+            $this->sql->update('sis_admission_policy', ['require_acceptance' => 0],
+                ['id' => \Domain\Admissions\Repository\AdmissionPolicyRepository::ID]);
         }
         $this->clock = new FixtureClock();
         if ($initialize) {
@@ -936,7 +936,8 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
-            $permissions ?? new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql)
+            $permissions ?? new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->withdrawalRepository()
         );
     }
     public function correctionService(
@@ -1171,17 +1172,23 @@ final class SisFixture
             ),
         );
     }
-    public function offerPolicy(): \Domain\Admissions\Repository\AdmissionOfferPolicyRepository
+    public function withdrawalRepository(): \Domain\Admissions\Repository\AdmissionWithdrawalRepository
     {
-        return new \Infrastructure\Persistence\Repository\SqlAdmissionOfferPolicyRepository($this->sql);
+        return new \Infrastructure\Persistence\Repository\SqlAdmissionWithdrawalRepository(
+            $this->sql,
+            $this->dropCipher
+        );
     }
-    public function offerService(
+    public function withdrawalService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null
-    ): \Domain\Admissions\Service\AdmissionOfferService {
-        return new \Domain\Admissions\Service\AdmissionOfferService(
+    ): \Domain\Admissions\Service\AdmissionWithdrawalService {
+        return new \Domain\Admissions\Service\AdmissionWithdrawalService(
             $this->admissions,
+            $this->withdrawalRepository(),
+            $this->admissionPolicy(),
             $this->decisionLedger(),
-            $this->offerPolicy(),
+            $this->applicationContext(),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
             $this->access,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
             $this->transactions,
@@ -1189,6 +1196,38 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             new \Infrastructure\Persistence\Repository\SqlAdmissionUpdatesRepository($this->sql)
+        );
+    }
+    public function admissionPolicyService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\Admissions\Service\AdmissionPolicyService {
+        return new \Domain\Admissions\Service\AdmissionPolicyService(
+            $this->admissionPolicy(),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit
+        );
+    }
+    public function admissionPolicy(): \Domain\Admissions\Repository\AdmissionPolicyRepository
+    {
+        return new \Infrastructure\Persistence\Repository\SqlAdmissionPolicyRepository($this->sql);
+    }
+    public function offerService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\Admissions\Service\AdmissionOfferService {
+        return new \Domain\Admissions\Service\AdmissionOfferService(
+            $this->admissions,
+            $this->decisionLedger(),
+            $this->admissionPolicy(),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlAdmissionUpdatesRepository($this->sql),
+            $this->withdrawalRepository()
         );
     }
     public function matriculationService(
@@ -1220,10 +1259,11 @@ final class SisFixture
             $this->clock,
             $this->decisionLedger(),
             new \Domain\Admissions\Service\AdmissionOfferGate(
-                policy: $this->offerPolicy(),
+                policy: $this->admissionPolicy(),
                 ledger: $this->decisionLedger(),
                 admissions: $repository ?? $this->admissions,
-                clock: $this->clock
+                clock: $this->clock,
+                requests: $this->withdrawalRepository()
             ),
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
         );

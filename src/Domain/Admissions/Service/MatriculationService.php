@@ -293,6 +293,7 @@ final readonly class MatriculationService
                     $a->status->value,
                     $a->version,
                     $offer,
+                    $this->offers->requestRevision($a),
                     $p->identityVersion,
                     $p->givenName,
                     $p->familyName,

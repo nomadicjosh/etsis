@@ -26,12 +26,12 @@ final class CreateSisAdmissionOfferPolicy extends Migration
         $sql = new SqlRecords($db);
         PortableTransactions::run($db, static function () use ($sql): void {
             $sql->insert('sis_admission_offer_policy', [
-                'id' => \Domain\Admissions\Repository\AdmissionOfferPolicyRepository::ID,
+                'id' => \Domain\Admissions\Repository\AdmissionPolicyRepository::ID,
                 'require_acceptance' => 1, 'revision' => 0,
             ]);
             foreach (
                 ['sis:admissions:offers' => 'Issue admission offers and record documented applicant responses.',
-                'sis:admissions:policy' => 'Configure institutional applicant acceptance policy.',
+                'sis:admissions:policy' => 'Configure institutional admissions policies.',
                 ] as $name => $description
             ) {
                 $p = $sql->rows("sis_access_permissions", ["name" => $name], 1)[0] ?? null;

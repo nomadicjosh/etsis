@@ -7,7 +7,7 @@ namespace Domain\Admissions\Service;
 use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\AdmissionApplication;
 use Domain\Admissions\Enum\ApplicationStatus;
-use Domain\Admissions\Repository\AdmissionOfferPolicyRepository;
+use Domain\Admissions\Repository\AdmissionPolicyRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Admissions\ValueObject\AdmissionOfferSchema;
 use Domain\Audit\Repository\AuditTrail;
@@ -27,7 +27,7 @@ final readonly class AdmissionOfferService
     public function __construct(
         private AdmissionsRepository $admissions,
         private AdmissionDecisionLedger $ledger,
-        private AdmissionOfferPolicyRepository $policy,
+        private AdmissionPolicyRepository $policy,
         private StudentAccess $access,
         private AccessRepository $permissions,
         private UnitOfWork $transactions,
@@ -35,40 +35,8 @@ final readonly class AdmissionOfferService
         private MessageCipher $cipher,
         private Clock $clock,
         private \Domain\Admissions\Repository\AdmissionUpdatesRepository $updates,
+        private \Domain\Admissions\Repository\AdmissionWithdrawalRepository $requests,
     ) {
-    }
-    public function policy(): array
-    {
-        $actor = $this->access->requirePermission('sis:admissions:manage');
-        $result = $this->policy->get();
-        $this->authorize(null, $actor, false, false);
-        return $result;
-    }
-    public function savePolicy(bool $required, int $revision): array
-    {
-        $actor = $this->access->requirePermission('sis:admissions:policy');
-        return $this->transactions->run(function () use ($required, $revision, $actor): array {
-            $this->permissions->lock();
-            $this->policy->lock();
-            $this->policyActor($actor);
-            $this->policy->save($required, $revision);
-            $this->audit->record(
-                $actor,
-                'admissions.offer_policy_changed',
-                new EntityId(AdmissionOfferPolicyRepository::ID)
-            );
-            $this->policyActor($actor);
-            return $this->policy->get();
-        });
-    }
-    private function policyActor(EntityId $actor): void
-    {
-        if (
-            $this->access->requirePermission('sis:admissions:policy')->value !== $actor->value
-            || $this->access->requirePermission('sis:admissions:manage')->value !== $actor->value
-        ) {
-            throw new AccessDeniedException('The policy actor changed.');
-        }
     }
     public function current(EntityId $id, bool $mine): array
     {
@@ -78,12 +46,14 @@ final readonly class AdmissionOfferService
             $a = $this->lock($route, $actor, $mine, false);
             $record = $this->ledger->offer($a);
             $offer = $record['offer'] ?? null;
+            $withdrawalPending = $this->requests->pending($a->id) !== null;
             // A person/account relink does not transfer a previously addressed private letter.
             if ($mine && $offer !== null && $offer['owner_id'] !== $actor->value) {
                 $offer = null;
             }
             $result = ['offer' => $offer, 'application_status' => $a->status->value,
-                'policy' => $this->policy->get(), 'response_open' => $offer !== null
+                'policy' => $this->policy->offers(), 'withdrawal_pending' => $withdrawalPending,
+                'response_open' => !$withdrawalPending && $offer !== null
                     && $a->status === ApplicationStatus::Accepted && $this->open($offer)];
             $this->authorize($a, $actor, $mine, false);
             return $result;
@@ -191,6 +161,10 @@ final readonly class AdmissionOfferService
         bool $mine
     ): array {
         $a->recordOffer();
+        if ($action !== 'cancel' && $this->requests->pending($a->id) !== null) {
+            throw new ValidationException([['field' => 'withdrawal_request',
+                'message' => 'Resolve the withdrawal request before issuing or responding to an offer.']]);
+        }
         $owner = $this->admissions->person($a->personId)->ownerUserId;
         if ($owner === null) {
             throw new ValidationException([
@@ -222,7 +196,7 @@ final readonly class AdmissionOfferService
                     ['field' => 'respond_by', 'message' => 'Choose today or a later response date.'],
                 ]);
             }
-            $policy = $this->policy->get();
+            $policy = $this->policy->offers();
             return ['id' => $operation->value, 'owner_id' => $owner->value,
                 'title' => trim($input['title']), 'message' => trim($input['message']),
                 'respond_by' => $date?->setTime(23, 59, 59)->format(DATE_ATOM),
@@ -289,6 +263,7 @@ final readonly class AdmissionOfferService
     {
         $p = $this->admissions->person($a->personId);
         return hash('sha256', json_encode([$a, $this->ledger->verify($a), $p->ownerUserId?->value,
-            $p->identityVersion, $this->policy->get(), $this->clock->now()->format('Y-m-d')], JSON_THROW_ON_ERROR));
+            $p->identityVersion, $this->policy->offers(), $this->requests->revision($a->id),
+            $this->clock->now()->format('Y-m-d')], JSON_THROW_ON_ERROR));
     }
 }

@@ -99,8 +99,14 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.applications.decision.review");
     $offers = \Application\Http\Controller\AdmissionOfferController::class;
-    $router->map(['GET'], '/sis/admission-offer-policy/', [$offers, 'policy']);
-    $router->map(['POST'], '/sis/admission-offer-policy/', [$offers, 'savePolicy']);
+    $admissionPolicy = \Application\Http\Controller\AdmissionPolicyController::class;
+    $router->map(['GET'], '/sis/admission-policy/', [$admissionPolicy, 'current']);
+    $router->map(['POST'], '/sis/admission-policy/', [$admissionPolicy, 'save']);
+    $withdrawals = \Application\Http\Controller\AdmissionWithdrawalController::class;
+    $router->map(['GET'], '/sis/admissions/withdrawal-requests/', [$withdrawals, 'queue']);
+    $router->map(['GET'], '/sis/applications/{id}/withdrawal/', [$withdrawals, 'current']);
+    $router->map(['POST'], '/sis/applications/{id}/withdrawal/review/', [$withdrawals, 'review']);
+    $router->map(['POST'], '/sis/applications/{id}/withdrawal/commit/', [$withdrawals, 'commit']);
     $router->map(['GET'], '/sis/applications/{id}/offer/', [$offers, 'current']);
     $router->map(['POST'], '/sis/applications/{id}/offer/review/', [$offers, 'review']);
     $router->map(['POST'], '/sis/applications/{id}/offer/commit/', [$offers, 'commit']);

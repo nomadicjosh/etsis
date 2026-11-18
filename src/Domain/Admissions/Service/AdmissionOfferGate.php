@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Domain\Admissions\Service;
 
 use Domain\Admissions\AdmissionApplication;
-use Domain\Admissions\Repository\AdmissionOfferPolicyRepository;
+use Domain\Admissions\Repository\AdmissionPolicyRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Service\Clock;
@@ -14,17 +14,26 @@ use Domain\Shared\Service\Clock;
 final readonly class AdmissionOfferGate
 {
     public function __construct(
-        private AdmissionOfferPolicyRepository $policy,
+        private AdmissionPolicyRepository $policy,
         private AdmissionDecisionLedger $ledger,
         private AdmissionsRepository $admissions,
         private Clock $clock,
+        private \Domain\Admissions\Repository\AdmissionWithdrawalRepository $requests,
     ) {
+    }
+    public function requestRevision(AdmissionApplication $a): int
+    {
+        return $this->requests->revision($a->id);
     }
     /** @return array<string,mixed> */
     public function proof(AdmissionApplication $a): array
     {
+        if ($this->requests->pending($a->id) !== null) {
+            throw new ValidationException([['field' => 'withdrawal_request',
+                'message' => 'Resolve the applicant withdrawal request before matriculation.']]);
+        }
         $this->policy->lock();
-        $policy = $this->policy->get();
+        $policy = $this->policy->offers();
         $record = $this->ledger->offer($a);
         $offer = $record['offer'] ?? null;
         $required = $offer['require_acceptance'] ?? $policy['require_acceptance'];

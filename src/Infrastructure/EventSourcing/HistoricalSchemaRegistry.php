@@ -868,6 +868,13 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'admission_withdrawal') {
+                    if ($class !== \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Admissions\ValueObject\AdmissionWithdrawalFact::validate($value, $payload);
+                    continue;
+                }
                 if ($name === 'admission_offer') {
                     if (
                         $class !== \Domain\Admissions\Event\StudentWasMatriculated::class || !is_array($value)

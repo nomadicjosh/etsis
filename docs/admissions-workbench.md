@@ -132,3 +132,7 @@ Endpoints are:
 The additive schema compiles for the framework's five database dialects. Runtime checks cover fictional SQLite data and the configured MariaDB installation. Broader driver deployment acceptance remains separate.
 
 Explicit file bindings for acceptance, rejection and outcome correction now use the existing decision journal. Institution-wide retention/disposition policy, optional automatic email/push delivery and any policy that gates an admissions decision remain later work. New uploads remain disabled until the operator completes scanner and retention setup; use established delivery channels until then.
+
+## Applicant withdrawal requests
+
+[Applicant withdrawal](admissions-decisions.md#applicant-withdrawal) has a dedicated **Admissions → Withdrawal requests** worklist beside the ordinary follow-up queue. Opening a request expands its shared owner/staff panel on the application. Staff can approve withdrawal or close the working request under independent withdrawal authority. Institutional **Policies** default to staff approval. Pending requests pause matriculation and offers, while actual withdrawals preserve person/student capabilities and use the existing protected application history.

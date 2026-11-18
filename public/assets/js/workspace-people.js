@@ -401,12 +401,21 @@ window.createWorkspacePeople = function (ui) {
         const documents = node('div', { class: 'record-section mt-3' });
         const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, row.id, { staff: true });
         body.append(documents);
-        const offerArea = node('div'); body.append(offerArea);
+        const offerArea = node('div'), withdrawalArea = node('div'); body.append(offerArea, withdrawalArea);
+        let background = null, withdrawalEditor = null;
+        const otherForms = () => workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true);
         const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, row.id,
-            { staff: true, canIssue: can('sis:admissions:offers'), canPolicy: can('sis:admissions:policy') });
-        let background = null;
+            { staff: true, canIssue: can('sis:admissions:offers'), canPolicy: can('sis:admissions:policy'),
+                beforeChange: () => otherForms() && (withdrawalEditor?.beforeLeave() ?? true) });
+        withdrawalEditor = window.createAdmissionWithdrawals({ node, request, task, notify }).mount(withdrawalArea, row.id,
+            { staff: true, canResolve: can('sis:admissions:withdraw'), initiallyOpen: row.openWithdrawal === true,
+                beforeChange: () => otherForms() && offerEditor.beforeLeave(),
+                onOutcome: async result => {
+                    if (result.application_status !== app.status && body.isConnected && mayLeave()) await application(row);
+                    else { try { await offerEditor.refresh(); } catch { notify('Request saved. Reopen the offer to refresh its status.'); } }
+                } });
         function mayLeave() {
-            return workbench.beforeLeave() && documentEditor.beforeLeave() && offerEditor.beforeLeave() && (background?.beforeLeave() ?? true);
+            return otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true);
         }
         if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
@@ -774,7 +783,7 @@ window.createWorkspacePeople = function (ui) {
                         {},
                         offer ? `Admission offer: ${item.status}` : observed
                             ? "Observed current application"
-                            : reviewState ? (item.kind === 'withdrawal' ? 'Application withdrawn' : 'Returned to review')
+                            : reviewState ? (item.kind === 'withdrawal' ? (item.withdrawal_channel === 'applicant' ? 'Applicant withdrew application' : 'Application withdrawn') : 'Returned to review')
                             : item.kind === "correction"
                               ? `Decision corrected: ${item.previous_status} → ${item.status}`
                               : item.status === "accepted"
@@ -1006,14 +1015,17 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
-    function offerPolicy() {
-        const body = openDrawer('Offer policy', 'ADMISSIONS');
-        window.createAdmissionOffers({ node, request, task, notify }).mount(body, null,
-            { staff: true, canPolicy: can('sis:admissions:policy'), policyOnly: true });
+    function admissionPolicy() {
+        const body = openDrawer('Admissions policy', 'INSTITUTIONAL SETUP');
+        window.createAdmissionPolicy({ node, request, task, notify }).mount(body);
+    }
+    function withdrawalQueue() {
+        const body = openDrawer('Withdrawal requests', 'ADMISSIONS WORKLIST');
+        window.createAdmissionWithdrawals({ node, request, task, notify }).queue(body, row => application(row));
     }
     function caseQueue() {
         const body = openDrawer('Admissions follow-up', 'APPLICATION WORKBENCH');
         window.createAdmissionCasework({ node, request, task, notify }).queue(body, row => application(row));
     }
-    return { editProfile, account, contact, education, history, application, caseQueue, offerPolicy };
+    return { editProfile, account, contact, education, history, application, caseQueue, admissionPolicy, withdrawalQueue };
 };

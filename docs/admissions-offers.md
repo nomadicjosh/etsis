@@ -16,13 +16,13 @@ Staff with offer authority can record an acceptance or decline received outside 
 
 ## Institutional policy
 
-Applicant acceptance is **required by default**. Authorized staff open **Admissions → Offer policy**, or **Admission offer → Offer policy** on an application, to change whether new offers require acceptance before matriculation. The setting is database controlled, revision checked and audited. It applies institution-wide; a letter retains the policy under which it was issued. Changing the default does not change an already issued letter or a completed matriculation.
+Applicant acceptance is **required by default**. Authorized staff open **Admissions → Policies**, or **Admission offer → Admissions policy** on an application, to change whether new offers require acceptance before matriculation. The setting shares institutional Admissions policy setup with applicant withdrawal, with independent revisions. It is database controlled, revision checked and audited. It applies institution-wide; a letter retains the policy under which it was issued. Changing the default does not change an already issued letter or a completed matriculation.
 
 Where acceptance is optional, staff may matriculate an accepted application without issuing an offer or waiting for a pending, unexpired offer response. An explicit decline, cancellation, expired pending letter or changed recipient still requires offer review. To change the acceptance requirement for an existing letter, issue a replacement under the new policy and obtain any newly required response.
 
 Staff need `sis:admissions:manage` to read letters and review matriculation. Issuing, replacing, cancelling and recording responses also require the independent `sis:admissions:offers` permission. Changing policy also requires `sis:admissions:policy`. The protected system permission definitions do not automatically grant these duties to ordinary admissions users or the regular admin role. Super administrators retain their existing all-access authority; other assignments are deliberate.
 
-Apply migration `20261117000006_CreateSisAdmissionOfferPolicy` before using this feature. It adds one small institutional settings table and the two protected permissions. It does not convert applications or create a new event journal.
+Run the current database migrations before using this feature. Migration `20261117000006_CreateSisAdmissionOfferPolicy` introduces offer settings and permissions; `20261117000007_CreateSisAdmissionWithdrawalRequests` consolidates settings into `sis_admission_policy` while preserving the original offer value and revision. Neither migration converts application facts or creates another event journal.
 
 ## History and concurrent work
 
@@ -36,4 +36,4 @@ Review makes no writes. Confirmation checks the selected application, current pe
 
 Offers load only when staff or an applicant opens the offer panel. Ordinary application lists continue using bounded read-model queries. Selected histories use the existing bounded replay; no per-row replay, browser storage, background email or antivirus process is added.
 
-Applicant-initiated withdrawal, deferment, editing/resubmission, deposits, financial awards and additional institutional approval stages remain separate workflows. A post-matriculation rescission must coordinate student/program and financial consequences and cannot be performed by cancelling an admissions offer.
+[Applicant withdrawal and staff resolution](admissions-decisions.md#applicant-withdrawal) now pause offers and matriculation while a request is pending. Deferment, editing/resubmission, deposits, financial awards and additional institutional approval stages remain separate workflows. A post-matriculation rescission must coordinate student/program and financial consequences and cannot be performed by cancelling an admissions offer.

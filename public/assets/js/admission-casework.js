@@ -326,7 +326,7 @@
                     item.due_on ? node('p', { class: 'form-text' }, `Due: ${item.due_on}`) : null)),
                 node('p', { class: 'form-text' }, 'Checklist progress does not itself mean that admission or registration has been approved.'));
         }
-        function applicant(container, applicationId, label = '', documentTarget = null) {
+        function applicant(container, applicationId, label = '', documentTarget = null, onOutcome = () => {}) {
             const identity = `casework-applicant-${++sequence}`;
             const content = node('section', { id: identity, class: 'mt-3', hidden: true, 'aria-label': 'Application next steps' });
             let generation = 0, expanded = false;
@@ -345,9 +345,17 @@
             const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, applicationId,
                 { toggleTarget: documentTarget ? container : null, label });
             const offerArea = node('div'); (documentTarget || container).append(offerArea);
+            let withdrawalEditor = null;
             const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, applicationId,
-                { toggleTarget: container, label });
-            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() };
+                { toggleTarget: container, label, beforeChange: () => documentEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) });
+            const withdrawalArea = node('div'); (documentTarget || container).append(withdrawalArea);
+            withdrawalEditor = window.createAdmissionWithdrawals({ node, request, task, notify }).mount(withdrawalArea, applicationId,
+                { toggleTarget: container, label, beforeChange: () => documentEditor.beforeLeave() && offerEditor.beforeLeave(),
+                    onOutcome: async result => {
+                        onOutcome(result);
+                        try { await offerEditor.refresh(); } catch { notify('Request saved. Reopen the offer to refresh its status.'); }
+                    } });
+            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave() };
         }
         function queue(container, openApplication) {
             const filters = node('div', { class: 'd-flex flex-wrap gap-3 align-items-end mb-3' });
@@ -411,7 +419,7 @@
                     const data = await request(`/portal/api/applications/${item.application_id}/next-steps/`);
                     if (ticket !== detailRequest || !container.isConnected) return;
                     guidance(body, data);
-                    body.append(node('a', { href: '/portal/apply/', class: 'btn btn-outline-primary mt-3' }, 'View application and offer'));
+                    body.append(node('a', { href: '/portal/apply/', class: 'btn btn-outline-primary mt-3' }, 'View application'));
                     loaded = true; progress.textContent = 'Your current next steps are ready.';
                     const result = await request(`/portal/api/admissions-updates/${item.id}/read/`, 'POST', { revision: item.revision });
                     if (ticket !== detailRequest || !container.isConnected) return;

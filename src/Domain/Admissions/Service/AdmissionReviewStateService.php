@@ -34,6 +34,7 @@ final readonly class AdmissionReviewStateService
         private MessageCipher $cipher,
         private Clock $clock,
         private AccessRepository $permissions,
+        private \Domain\Admissions\Repository\AdmissionWithdrawalRepository $requests,
     ) {
     }
 
@@ -52,6 +53,7 @@ final readonly class AdmissionReviewStateService
         $route = $this->admissions->application($application);
         return $this->transactions->run(function () use ($route, $actor, $withdraw, $reason): array {
             $a = $this->lock($route, $actor);
+            $this->noPendingRequest($a, $withdraw);
             $after = $a->changeReviewState($withdraw);
             $source = $this->context->source($a);
             $person = $this->admissions->person($a->personId);
@@ -101,6 +103,7 @@ final readonly class AdmissionReviewStateService
                 $this->authorize($actor);
                 return $receipt;
             }
+            $this->noPendingRequest($a, $p['withdraw']);
             $after = $a->changeReviewState($p['withdraw']);
             $source = $this->context->source($a);
             if (
@@ -119,6 +122,13 @@ final readonly class AdmissionReviewStateService
         });
     }
 
+    private function noPendingRequest(AdmissionApplication $a, bool $withdraw): void
+    {
+        if ($withdraw && $this->requests->pending($a->id) !== null) {
+            throw new ValidationException([['field' => 'request',
+                'message' => 'Open Withdrawal to approve or close the applicant’s pending request first.']]);
+        }
+    }
     private function actor(): EntityId
     {
         $actor = $this->access->requirePermission('sis:admissions:manage');
@@ -161,7 +171,8 @@ final readonly class AdmissionReviewStateService
         $submission = $this->context->submission($a->id);
         return hash('sha256', json_encode([AdmissionDecisionSchema::facts($a), $this->ledger->verify($a),
             $person->identityVersion, $person->givenName, $person->familyName, $person->institutionalId->value,
-            $source, $submission === null ? null : hash('sha256', $submission['encrypted_answers']),
+            $source, $this->requests->revision($a->id),
+            $submission === null ? null : hash('sha256', $submission['encrypted_answers']),
             $this->clock->now()->format('Y-m-d')], JSON_THROW_ON_ERROR));
     }
 }
