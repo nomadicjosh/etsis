@@ -11,12 +11,20 @@ use Domain\Shared\ValueObject\EntityId;
 final readonly class GradebookCalculation
 {
     public const int LIMIT = 500;
+    public const int CATEGORY_LIMIT = 20;
+    /** @var array<string, int> */
+    private array $categoryByAssignment;
 
-    /** @param array<string, int> $weights Hundredths of a percent, keyed by assignment ULID. */
-    public function __construct(public string $mode = "points", public array $weights = [])
-    {
-        if (!in_array($mode, ["points", "weighted"], true) || count($weights) > self::LIMIT) {
-            self::invalid("Choose total points or assignment weights.");
+    /** @param array<string, int> $weights Hundredths of a percent, keyed by assignment ULID.
+     * @param list<array{title: string, weight_hundredths: int, assignments: list<string>}> $categories
+     */
+    public function __construct(
+        public string $mode = "points",
+        public array $weights = [],
+        public array $categories = [],
+    ) {
+        if (!in_array($mode, ["points", "weighted", "category"], true) || count($weights) > self::LIMIT) {
+            self::invalid("Choose total points, assignment weights or category weights.");
         }
         foreach ($weights as $id => $weight) {
             if (!is_string($id)) {
@@ -32,11 +40,98 @@ final readonly class GradebookCalculation
             }
         }
         if (
-            ($mode === "points" && $weights !== []) ||
+            ($mode !== "weighted" && $weights !== []) ||
             ($mode === "weighted" && array_sum($weights) !== 10000)
         ) {
             self::invalid("Assignment weights must total 100%.");
         }
+        if (
+            !array_is_list($categories) ||
+            count($categories) > self::CATEGORY_LIMIT ||
+            ($mode !== "category" && $categories !== [])
+        ) {
+            self::invalid("Use up to 20 categories in category-weight mode.", "categories");
+        }
+        $members = [];
+        $names = [];
+        $categoryTotal = 0;
+        foreach ($categories as $index => $category) {
+            if (
+                !is_array($category) ||
+                count($category) !== 3 ||
+                !is_string($category["title"] ?? null) ||
+                !is_int($category["weight_hundredths"] ?? null) ||
+                !is_array($category["assignments"] ?? null)
+            ) {
+                self::invalid("Supply a name, weight and assignment list for each category.", "categories");
+            }
+            $name = $category["title"];
+            $weight = $category["weight_hundredths"];
+            if (
+                !mb_check_encoding($name, "UTF-8") ||
+                $name === "" ||
+                trim($name) !== $name ||
+                mb_strlen($name) > 80 ||
+                preg_match('/[\x00-\x1F\x7F]/', $name) ||
+                isset($names[mb_strtolower($name)]) ||
+                $weight < 0 ||
+                $weight > 10000 ||
+                !array_is_list($category["assignments"]) ||
+                count($category["assignments"]) > self::LIMIT
+            ) {
+                self::invalid(
+                    "Use unique category names, valid weights and bounded assignment lists.",
+                    "categories",
+                );
+            }
+            $names[mb_strtolower($name)] = true;
+            $categoryTotal += $weight;
+            foreach ($category["assignments"] as $id) {
+                if (!is_string($id)) {
+                    self::invalid("Choose valid assignments for each category.", "categories");
+                }
+                try {
+                    new EntityId($id);
+                } catch (\InvalidArgumentException) {
+                    self::invalid("Choose valid assignments for each category.", "categories");
+                }
+                if (isset($members[$id]) || count($members) >= self::LIMIT) {
+                    self::invalid(
+                        "Each assignment can belong to only one category, up to 500 assignments.",
+                        "categories",
+                    );
+                }
+                $members[$id] = $index;
+            }
+        }
+        if ($mode === "category" && $categoryTotal !== 10000) {
+            self::invalid("Category weights must total 100%.", "categories");
+        }
+        $this->categoryByAssignment = $members;
+    }
+
+    /** @return list<string> */
+    public function assignmentIds(): array
+    {
+        return array_keys($this->mode === "category" ? $this->categoryByAssignment : $this->weights);
+    }
+
+    /** @return array<string, mixed> */
+    public function assignmentPresentation(string $id): array
+    {
+        $category = isset($this->categoryByAssignment[$id])
+        ? $this->categories[$this->categoryByAssignment[$id]]
+        : null;
+        $weight = $this->mode === "weighted" ? $this->weights[$id] ?? 0 : null;
+        return [
+            "weight_hundredths" => $weight,
+            "category_title" => $category["title"] ?? null,
+            "category_weight_hundredths" => $category["weight_hundredths"] ?? null,
+            "excluded" =>
+                $this->mode === "category"
+                    ? $category === null || $category["weight_hundredths"] === 0
+                    : $weight === 0,
+        ];
     }
 
     /** @param list<array<string, mixed>> $scores
@@ -47,11 +142,6 @@ final readonly class GradebookCalculation
         if (count($scores) > self::LIMIT) {
             self::invalid("This gradebook exceeds the 500-assignment calculation limit.");
         }
-        $total = 0;
-        $graded = 0;
-        $contribution = 0.0;
-        $pending = 0;
-        $included = 0;
         $seen = [];
         foreach ($scores as $score) {
             $id = (string) $score["assignment_id"];
@@ -66,7 +156,26 @@ final readonly class GradebookCalculation
             ) {
                 self::invalid("An assignment score needs review before calculating this gradebook.");
             }
-            $seen[$id] = true;
+            $seen[$id] = $score;
+        }
+        if (array_diff_key(array_fill_keys($this->assignmentIds(), true), $seen) !== []) {
+            self::invalid(
+                "The weighted assignment list changed. Review the gradebook setup.",
+                $this->mode === "category" ? "categories" : "weights",
+            );
+        }
+        if ($this->mode === "category") {
+            return $this->categorySummary($seen);
+        }
+        $total = 0;
+        $graded = 0;
+        $contribution = 0.0;
+        $pending = 0;
+        $included = 0;
+        foreach ($scores as $score) {
+            $id = (string) $score["assignment_id"];
+            $possible = $score["possible_hundredths"];
+            $earned = $score["earned_hundredths"];
             $weight = $this->mode === "points" ? $possible : $this->weights[$id] ?? 0;
             if ($weight === 0) {
                 continue;
@@ -80,9 +189,6 @@ final readonly class GradebookCalculation
             $graded += $weight;
             $contribution += $weight * ($earned / $possible);
         }
-        if (array_diff_key($this->weights, $seen) !== []) {
-            self::invalid("The weighted assignment list changed. Review the gradebook setup.");
-        }
 
         return [
             "mode" => $this->mode,
@@ -95,8 +201,70 @@ final readonly class GradebookCalculation
         ];
     }
 
-    private static function invalid(string $message): never
+    /** @param array<string, array<string, mixed>> $scores
+     * @return array<string, mixed>
+     */
+    private function categorySummary(array $scores): array
     {
-        throw new ValidationException([["field" => "weights", "message" => $message]]);
+        $items = [];
+        $contribution = 0.0;
+        $activeWeight = 0;
+        $coverage = 0.0;
+        $included = 0;
+        $pending = 0;
+        $awaiting = 0;
+        foreach ($this->categories as $category) {
+            $possible = 0;
+            $gradedPossible = 0;
+            $earned = 0;
+            $graded = 0;
+            foreach ($category["assignments"] as $id) {
+                $score = $scores[$id];
+                $possible += $score["possible_hundredths"];
+                if ($score["earned_hundredths"] !== null) {
+                    $gradedPossible += $score["possible_hundredths"];
+                    $earned += $score["earned_hundredths"];
+                    ++$graded;
+                }
+            }
+            $weight = $category["weight_hundredths"];
+            if ($weight > 0) {
+                $included += count($category["assignments"]);
+                $pending += count($category["assignments"]) - $graded;
+                if ($gradedPossible > 0) {
+                    $activeWeight += $weight;
+                    $contribution += $weight * ($earned / $gradedPossible);
+                } else {
+                    ++$awaiting;
+                }
+                $coverage += $possible === 0 ? 0 : $weight * ($gradedPossible / $possible);
+            }
+            $items[] = [
+                "title" => $category["title"],
+                "weight_hundredths" => $weight,
+                "percent_hundredths" =>
+                    $gradedPossible === 0 ? null : (int) round(($earned / $gradedPossible) * 10000),
+                "coverage_hundredths" =>
+                    $possible === 0 ? 0 : (int) round(($gradedPossible / $possible) * 10000),
+                "assignments" => count($category["assignments"]),
+                "graded" => $graded,
+            ];
+        }
+        return [
+            "mode" => "category",
+            "percent_hundredths" =>
+                $activeWeight === 0 ? null : (int) round(($contribution / $activeWeight) * 10000),
+            "coverage_hundredths" => (int) round($coverage),
+            "graded" => $included - $pending,
+            "pending" => $pending,
+            "excluded" => count($scores) - $included,
+            "awaiting_categories" => $awaiting,
+            "categories" => $items,
+        ];
+    }
+
+    private static function invalid(string $message, string $field = "weights"): never
+    {
+        throw new ValidationException([["field" => $field, "message" => $message]]);
     }
 }

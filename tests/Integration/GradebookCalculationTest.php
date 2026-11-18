@@ -145,12 +145,14 @@ final class GradebookCalculationTest extends TestCase
 
     public function testAuditFailureRollsBackWorkingSetup(): void
     {
-        [$f, $service, , $section] = $this->fixture();
+        [$f, $service, , $section, $a] = $this->fixture();
         $setup = $service->calculationSetup($section->id);
         $audit = $this->createStub(AuditTrail::class);
         $audit->method("record")->willThrowException(new \RuntimeException("Fictional audit failure."));
         try {
-            $this->service($f, $audit)->saveCalculation($section->id, "points", [], $setup["revision"]);
+            $this->service($f, $audit)->saveCalculation($section->id, "category", [], $setup["revision"], [
+                ["title" => "Tasks", "weight_hundredths" => 10000, "assignments" => [$a->id->value]],
+            ]);
             self::fail("A failed audit must roll back setup.");
         } catch (\RuntimeException $error) {
             self::assertSame("Fictional audit failure.", $error->getMessage());
@@ -166,7 +168,15 @@ final class GradebookCalculationTest extends TestCase
         $service->finalGrade($student->id, $section->id, $grade->id, 0);
         $before = [$f->sql->rows("sis_history_events"), $f->sql->rows("sis_academic_credits")];
         $setup = $service->calculationSetup($section->id);
-        $service->saveCalculation($section->id, "weighted", [$a->id->value => 10000], $setup["revision"]);
+        $saved = $service->saveCalculation(
+            $section->id,
+            "weighted",
+            [$a->id->value => 10000],
+            $setup["revision"],
+        );
+        $service->saveCalculation($section->id, "category", [], $saved["revision"], [
+            ["title" => "Tasks", "weight_hundredths" => 10000, "assignments" => [$a->id->value]],
+        ]);
         $service->score($a->id, $student->id, 0, 0);
         self::assertSame(0, $service->summary($student->id, $section->id)["percent_hundredths"]);
         self::assertSame($before, [
@@ -247,6 +257,131 @@ final class GradebookCalculationTest extends TestCase
             ["weighted", [$id => 10001]],
             ["weighted", [$id => "10000"]],
             ["weighted", ["bad" => 10000]],
+        ];
+    }
+
+    public function testCategorySetupCalculationPresentationAndReturningToPoints(): void
+    {
+        [$f, $service, $student, $section, $a, $b] = $this->fixture();
+        $service->score($a->id, $student->id, 500, 0);
+        $service->score($b->id, $student->id, 8000, 0);
+        $before = [$f->sql->rows("sis_history_events"), $f->sql->rows("sis_academic_credits")];
+        $groups = [
+            ["title" => "Quizzes", "weight_hundredths" => 4000, "assignments" => [$a->id->value]],
+            ["title" => "Exams", "weight_hundredths" => 6000, "assignments" => [$b->id->value]],
+        ];
+        $setup = $service->calculationSetup($section->id);
+        $saved = $service->saveCalculation($section->id, "category", [], $setup["revision"], $groups);
+        self::assertSame($groups, $saved["categories"]);
+        $overview = $service->scoreOverview($student->id, $section->id);
+        self::assertSame(6800, $overview["summary"]["percent_hundredths"]);
+        self::assertSame(10000, $overview["summary"]["coverage_hundredths"]);
+        self::assertSame("Quizzes", $overview["items"][0]["category_title"]);
+        self::assertNull($overview["items"][0]["weight_hundredths"]);
+        self::assertFalse($overview["items"][0]["excluded"]);
+        self::assertSame(4000, $overview["items"][0]["category_weight_hundredths"]);
+        self::assertSame(
+            "Quizzes",
+            $service->scorePage($student->id, $section->id)["items"][0]["category_title"],
+        );
+        $service->score($b->id, $student->id, null, 1);
+        $summary = $service->summary($student->id, $section->id);
+        self::assertSame(5000, $summary["percent_hundredths"]);
+        self::assertSame(4000, $summary["coverage_hundredths"]);
+        self::assertSame(1, $summary["awaiting_categories"]);
+        $service->saveCalculation($section->id, "points", [], $saved["revision"]);
+        self::assertSame([], $service->calculationSetup($section->id)["categories"]);
+        self::assertSame($before, [
+            $f->sql->rows("sis_history_events"),
+            $f->sql->rows("sis_academic_credits"),
+        ]);
+    }
+
+    public function testPartlyGradedCategoriesUsePointsAndDoNotClaimCompleteCoverage(): void
+    {
+        $a = EntityId::generate()->value;
+        $b = EntityId::generate()->value;
+        $c = EntityId::generate()->value;
+        $d = EntityId::generate()->value;
+        $calculator = new GradebookCalculation(
+            "category",
+            [],
+            [
+                ["title" => "Tasks", "weight_hundredths" => 4000, "assignments" => [$a, $b]],
+                ["title" => "Exam", "weight_hundredths" => 5000, "assignments" => [$c]],
+                ["title" => "Final", "weight_hundredths" => 1000, "assignments" => []],
+                ["title" => "Practice", "weight_hundredths" => 0, "assignments" => [$d]],
+            ],
+        );
+        $scores = [
+            ["assignment_id" => $a, "possible_hundredths" => 1000, "earned_hundredths" => 500],
+            ["assignment_id" => $b, "possible_hundredths" => 9000, "earned_hundredths" => null],
+            ["assignment_id" => $c, "possible_hundredths" => 10000, "earned_hundredths" => 8000],
+            ["assignment_id" => $d, "possible_hundredths" => 10000, "earned_hundredths" => 0],
+        ];
+        $summary = $calculator->summarize($scores);
+        self::assertSame(6667, $summary["percent_hundredths"]);
+        self::assertSame(5400, $summary["coverage_hundredths"]);
+        self::assertSame(1, $summary["pending"]);
+        self::assertSame(1, $summary["excluded"]);
+        self::assertSame(1, $summary["awaiting_categories"]);
+        self::assertSame(1000, $summary["categories"][0]["coverage_hundredths"]);
+        self::assertNull($summary["categories"][2]["percent_hundredths"]);
+        $scores[1]["earned_hundredths"] = 0;
+        $summary = $calculator->summarize($scores);
+        self::assertSame(4667, $summary["percent_hundredths"]);
+        self::assertSame(9000, $summary["coverage_hundredths"]);
+        self::assertSame(500, $summary["categories"][0]["percent_hundredths"]);
+    }
+
+    public function testCategoryMembershipMustStayInTheSelectedSectionAndRejectStaleEdits(): void
+    {
+        [$f, $service, , $section, $a] = $this->fixture();
+        $setup = $service->calculationSetup($section->id);
+        try {
+            $service->saveCalculation($section->id, "category", [], $setup["revision"], [
+                [
+                    "title" => "Wrong section",
+                    "weight_hundredths" => 10000,
+                    "assignments" => [EntityId::generate()->value],
+                ],
+            ]);
+            self::fail("Cross-section category membership was accepted.");
+        } catch (ValidationException) {
+            self::assertSame([], $f->sql->rows("sis_gradebook_calculations"));
+        }
+        $groups = [["title" => "Coursework", "weight_hundredths" => 10000, "assignments" => [$a->id->value]]];
+        $saved = $service->saveCalculation($section->id, "category", [], $setup["revision"], $groups);
+        self::assertNotSame($setup["revision"], $saved["revision"]);
+        $this->expectException(ConcurrentModificationException::class);
+        $service->saveCalculation($section->id, "category", [], $setup["revision"], $groups);
+    }
+
+    #[DataProvider("invalidCategories")]
+    public function testCategoryStructureAndOwnershipAreStrict(array $categories): void
+    {
+        $this->expectException(ValidationException::class);
+        new GradebookCalculation("category", [], $categories);
+    }
+
+    public static function invalidCategories(): array
+    {
+        $a = "01J00000000000000000000001";
+        $group = ["title" => "Tasks", "weight_hundredths" => 10000, "assignments" => [$a]];
+        return [
+            [[]],
+            [["named" => $group]],
+            [[array_replace($group, ["title" => ""])]],
+            [[array_replace($group, ["title" => "Line\nBreak"])]],
+            [[array_replace($group, ["weight_hundredths" => 9999])]],
+            [[array_replace($group, ["weight_hundredths" => "10000"])]],
+            [[array_replace($group, ["assignments" => [$a, $a]])]],
+            [[array_replace($group, ["assignments" => ["bad"]])]],
+            [[array_replace($group, ["assignments" => ["key" => $a]])]],
+            [[$group, ["title" => "tasks", "weight_hundredths" => 0, "assignments" => []]]],
+            [[$group, ["title" => "Other", "weight_hundredths" => 0, "assignments" => [$a]]]],
+            [[array_replace($group, ["extra" => true])]],
+            [array_fill(0, 21, $group)],
         ];
     }
 }

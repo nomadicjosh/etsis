@@ -42,13 +42,19 @@ final readonly class GradebookService
     }
 
     /** @param array<string, int> $weights
+     * @param list<array{title: string, weight_hundredths: int, assignments: list<string>}> $categories
      * @return array<string, mixed>
      */
-    public function saveCalculation(EntityId $section, string $mode, array $weights, string $revision): array
-    {
+    public function saveCalculation(
+        EntityId $section,
+        string $mode,
+        array $weights,
+        string $revision,
+        array $categories = [],
+    ): array {
         $this->access->authenticatedUserId();
         $this->faculty($section);
-        $calculation = new GradebookCalculation($mode, $weights);
+        $calculation = new GradebookCalculation($mode, $weights, $categories);
         return $this->transactions->run(function () use ($section, $calculation, $revision): array {
             $this->registration->lockSection($section);
             $actor = $this->faculty($section);
@@ -59,10 +65,10 @@ final readonly class GradebookService
                 );
             }
             $known = array_fill_keys(array_column($context["assignments"], "id"), true);
-            if (array_diff_key($calculation->weights, $known) !== []) {
+            if (array_diff_key(array_fill_keys($calculation->assignmentIds(), true), $known) !== []) {
                 throw new ValidationException([
                     [
-                        "field" => "weights",
+                        "field" => $calculation->mode === "category" ? "categories" : "weights",
                         "message" => "Choose assignments from this section only.",
                     ],
                 ]);
@@ -72,6 +78,7 @@ final readonly class GradebookService
                 $calculation->mode,
                 $calculation->weights,
                 $context["version"],
+                $calculation->categories,
             );
             $this->audit->record($actor, "gradebook.calculation.updated", $section);
             return $this->calculationContext($section);
@@ -82,7 +89,7 @@ final readonly class GradebookService
     private function calculationContext(EntityId $section): array
     {
         $settings = $this->repository->calculation($section);
-        new GradebookCalculation($settings["mode"], $settings["weights"]);
+        new GradebookCalculation($settings["mode"], $settings["weights"], $settings["categories"]);
         $assignments = $this->repository->assignments($section, GradebookCalculation::LIMIT + 1);
         if (count($assignments) > GradebookCalculation::LIMIT) {
             throw new ValidationException([
@@ -95,6 +102,7 @@ final readonly class GradebookService
         return [
             "mode" => $settings["mode"],
             "weights" => $settings["weights"],
+            "categories" => $settings["categories"],
             "version" => $settings["revision"],
             "assignments" => $assignments,
             "revision" => hash("sha256", json_encode([$settings, $assignments], JSON_THROW_ON_ERROR)),
@@ -363,13 +371,14 @@ final readonly class GradebookService
             ]);
         }
         $settings = $this->repository->calculation($section);
-        $calculation = new GradebookCalculation($settings["mode"], $settings["weights"]);
+        $calculation = new GradebookCalculation(
+            $settings["mode"],
+            $settings["weights"],
+            $settings["categories"],
+        );
         foreach ($scores as &$score) {
             $score["institutional_id"] = $person->institutionalId->value;
-            $score["weight_hundredths"] =
-            $calculation->mode === "weighted"
-            ? $calculation->weights[$score["assignment_id"]] ?? 0
-            : null;
+            $score += $calculation->assignmentPresentation($score["assignment_id"]);
         }
         unset($score);
 
@@ -384,10 +393,13 @@ final readonly class GradebookService
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
         $settings = $this->repository->calculation($section);
-        $calculation = new GradebookCalculation($settings["mode"], $settings["weights"]);
+        $calculation = new GradebookCalculation(
+            $settings["mode"],
+            $settings["weights"],
+            $settings["categories"],
+        );
         foreach ($rows as &$row) {
-            $row["weight_hundredths"] =
-            $calculation->mode === "weighted" ? $calculation->weights[$row["assignment_id"]] ?? 0 : null;
+            $row += $calculation->assignmentPresentation($row["assignment_id"]);
         }
         unset($row);
 

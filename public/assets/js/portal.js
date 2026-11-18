@@ -1646,7 +1646,7 @@
                                                       'Assignment',
                                                       'Earned',
                                                       'Possible',
-                                                      'Weight',
+                                                      'Calculation',
                                                   ],
                                                   scores.items.map((score) => [
                                                       score.title,
@@ -1659,9 +1659,7 @@
                                                       Number(
                                                           score.possible_hundredths,
                                                       ) / 100,
-                                                      score.weight_hundredths == null
-                                                          ? 'By points'
-                                                          : `${(score.weight_hundredths / 100).toFixed(2)}%`,
+                                                      window.createGradebookCalculation({ node }).assignmentLabel(score),
                                                   ]),
                                                   'Your assignment scores',
                                               )

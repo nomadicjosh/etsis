@@ -2,8 +2,16 @@
 window.createGradebookCalculation = function (ui) {
     "use strict";
     const { node } = ui;
+    const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
+    function assignmentLabel(score) {
+        if (score.category_title != null) {
+            return `${score.category_title} · ${percent(score.category_weight_hundredths)} category${score.category_weight_hundredths === 0 ? " · Excluded" : ""}`;
+        }
+        if (score.excluded && score.weight_hundredths == null) return "Excluded";
+        if (score.weight_hundredths === 0) return "Excluded · 0.00%";
+        return score.weight_hundredths == null ? "By points" : percent(score.weight_hundredths);
+    }
     function panel(summary) {
-        const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
         return node(
             "section",
             { class: "alert alert-light border", "aria-label": "Gradebook average" },
@@ -18,8 +26,65 @@ window.createGradebookCalculation = function (ui) {
             node(
                 "p",
                 { class: "mb-1" },
-                `${summary.mode === "weighted" ? "Assignment weights" : "Total points"} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excluded ? ` · ${summary.excluded} excluded` : ""}`,
+                `${{ weighted: "Assignment weights", category: "Category weights", points: "Total points" }[summary.mode]} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excluded ? ` · ${summary.excluded} excluded` : ""}`,
             ),
+            summary.mode === "category"
+                ? node(
+                      "div",
+                      {},
+                      node(
+                          "p",
+                          { class: "small" },
+                          "Each category uses total points from its graded assignments. The average uses categories with scores; coverage also accounts for ungraded assignments and empty categories.",
+                      ),
+                      summary.awaiting_categories
+                          ? node(
+                                "p",
+                                { class: "small fw-semibold" },
+                                `${summary.awaiting_categories} positive-weight ${summary.awaiting_categories === 1 ? "category has" : "categories have"} no scores yet.`,
+                            )
+                          : null,
+                      node(
+                          "ul",
+                          { class: "row list-unstyled g-2 mb-3" },
+                          summary.categories.map((category) =>
+                              node(
+                                  "li",
+                                  { class: "col-md-6" },
+                                  node(
+                                      "div",
+                                      { class: "border rounded p-2 bg-body text-body h-100" },
+                                      node("h5", { class: "h6 mb-1 text-break" }, category.title),
+                                      node(
+                                          "p",
+                                          { class: "mb-1 fw-semibold small" },
+                                          `${category.percent_hundredths == null ? "No scores" : `${percent(category.percent_hundredths)} average`} · ${percent(category.weight_hundredths)} of grade`,
+                                      ),
+                                      node(
+                                          "p",
+                                          { class: "small mb-0" },
+                                          `${category.graded}/${category.assignments} assignments graded · ${percent(category.coverage_hundredths)} of points graded`,
+                                      ),
+                                      category.assignments === 0
+                                          ? node(
+                                                "span",
+                                                { class: "badge text-bg-light border mt-2" },
+                                                "No assignments",
+                                            )
+                                          : null,
+                                      category.weight_hundredths === 0
+                                          ? node(
+                                                "span",
+                                                { class: "badge text-bg-light border mt-2" },
+                                                "Excluded",
+                                            )
+                                          : null,
+                                  ),
+                              ),
+                          ),
+                      ),
+                  )
+                : null,
             node(
                 "p",
                 { class: "small mb-0" },
@@ -27,5 +92,226 @@ window.createGradebookCalculation = function (ui) {
             ),
         );
     }
-    return { panel };
+    function editor(assignments, initial, changed) {
+        const element = node("fieldset", {}, node("legend", { class: "h6" }, "Category weights"));
+        const rows = node("div", { class: "vstack gap-3 mb-3" });
+        const categories = [];
+        const members = new Map(assignments.map((a) => [a.id, ""]));
+        let sequence = 0,
+            page = 0,
+            enabled;
+        const announcement = node("p", { class: "form-text", role: "status", "aria-live": "polite" });
+        const list = node("div", { class: "vstack gap-2" });
+        const search = node("input", {
+            id: "gradebook-assignment-search",
+            type: "search",
+            class: "form-control mb-3",
+            placeholder: "Find an assignment",
+        });
+        const paging = node("p", { class: "form-text", role: "status", "aria-live": "polite" });
+        const previous = node(
+            "button",
+            { type: "button", class: "btn btn-outline-secondary btn-sm" },
+            "Previous",
+        );
+        const next = node("button", { type: "button", class: "btn btn-outline-secondary btn-sm" }, "Next");
+        function renderAssignments() {
+            const term = search.value.trim().toLocaleLowerCase();
+            const matches = assignments.filter((a) => a.title.toLocaleLowerCase().includes(term));
+            page = Math.max(0, Math.min(page, Math.ceil(matches.length / 50) - 1));
+            const visible = matches.slice(page * 50, (page + 1) * 50);
+            list.replaceChildren(
+                ...visible.map((a) => {
+                    const id = `gradebook-category-${a.id}`;
+                    const select = node(
+                        "select",
+                        { id, class: "form-select" },
+                        node("option", { value: "" }, "Excluded"),
+                        categories.map((c) =>
+                            node("option", { value: c.key }, c.title.value.trim() || "Unnamed category"),
+                        ),
+                    );
+                    select.value = members.get(a.id) || "";
+                    select.disabled = !enabled;
+                    select.addEventListener("change", () => {
+                        members.set(a.id, select.value);
+                        changed();
+                    });
+                    return node(
+                        "div",
+                        { class: "row align-items-center g-2 border-bottom pb-2" },
+                        node(
+                            "div",
+                            { class: "col-md-7" },
+                            node("label", { for: id, class: "form-label mb-0" }, a.title),
+                        ),
+                        node("div", { class: "col-md-5" }, select),
+                    );
+                }),
+            );
+            paging.textContent = matches.length
+                ? `${page * 50 + 1}–${page * 50 + visible.length} of ${matches.length} assignments`
+                : "No matching assignments.";
+            previous.disabled = !enabled || page === 0;
+            next.disabled = !enabled || (page + 1) * 50 >= matches.length;
+        }
+        search.addEventListener("input", () => {
+            page = 0;
+            renderAssignments();
+        });
+        previous.addEventListener("click", () => {
+            --page;
+            renderAssignments();
+            list.querySelectorAll("select")[0]?.focus();
+        });
+        next.addEventListener("click", () => {
+            ++page;
+            renderAssignments();
+            list.querySelectorAll("select")[0]?.focus();
+        });
+        function addCategory(value) {
+            const key = `category-${sequence++}`;
+            const title = node("input", {
+                id: `${key}-name`,
+                type: "text",
+                class: "form-control",
+                required: true,
+                maxlength: "80",
+            });
+            title.value = value.title;
+            const weight = node("input", {
+                id: `${key}-weight`,
+                type: "number",
+                class: "form-control",
+                required: true,
+                min: "0",
+                max: "100",
+                step: "0.01",
+            });
+            weight.value = (value.weight_hundredths / 100).toFixed(2);
+            const remove = node(
+                "button",
+                {
+                    type: "button",
+                    class: "btn btn-outline-danger btn-sm",
+                    "aria-label": `Remove category ${value.title || "new category"}`,
+                },
+                "Remove",
+            );
+            const row = node(
+                "div",
+                { class: "border rounded p-3" },
+                node(
+                    "div",
+                    { class: "row g-2 align-items-end" },
+                    node(
+                        "div",
+                        { class: "col-md-7" },
+                        node("label", { for: title.id, class: "form-label" }, "Category name"),
+                        title,
+                    ),
+                    node(
+                        "div",
+                        { class: "col-md-3" },
+                        node("label", { for: weight.id, class: "form-label" }, "Weight %"),
+                        weight,
+                    ),
+                    node("div", { class: "col-md-2" }, remove),
+                ),
+            );
+            const entry = { key, title, weight, remove, row };
+            categories.push(entry);
+            value.assignments.forEach((id) => {
+                if (members.has(id)) members.set(id, key);
+            });
+            title.addEventListener("input", () => {
+                remove.setAttribute("aria-label", `Remove category ${title.value.trim() || "new category"}`);
+                renderAssignments();
+                changed();
+            });
+            weight.addEventListener("input", changed);
+            remove.addEventListener("click", () => {
+                const removed = [...members.values()].filter((value) => value === key).length;
+                for (const [id, group] of members) if (group === key) members.set(id, "");
+                categories.splice(categories.indexOf(entry), 1);
+                row.remove();
+                renderAssignments();
+                add.disabled = !enabled || categories.length >= 20;
+                announcement.textContent = `${title.value || "Category"} removed. ${removed} ${removed === 1 ? "assignment is" : "assignments are"} now excluded until reassigned.`;
+                add.focus();
+                changed();
+            });
+            rows.append(row);
+            return entry;
+        }
+        const add = node(
+            "button",
+            { type: "button", class: "btn btn-outline-primary btn-sm mb-3" },
+            "Add category",
+        );
+        add.addEventListener("click", () => {
+            if (categories.length >= 20) return;
+            const entry = addCategory({ title: "", weight_hundredths: 0, assignments: [] });
+            renderAssignments();
+            add.disabled = categories.length >= 20;
+            entry.title.focus();
+            changed();
+        });
+        initial.forEach(addCategory);
+        element.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "Use up to 20 categories with weights totaling 100%. Choose a category for each included assignment. New or unassigned work is excluded. Within a category, assignments contribute by possible points.",
+            ),
+            rows,
+            add,
+            announcement,
+            node("label", { for: search.id, class: "form-label" }, "Find assignments"),
+            search,
+            list,
+            paging,
+            node("div", { class: "inline-actions" }, previous, next),
+        );
+        function serialize() {
+            return categories.map((c) => ({
+                title: c.title.value.trim(),
+                weight_hundredths: Math.round(Number(c.weight.value) * 100),
+                assignments: assignments.filter((a) => members.get(a.id) === c.key).map((a) => a.id),
+            }));
+        }
+        function setEnabled(value) {
+            if (enabled === value) return;
+            enabled = value;
+            element.hidden = !enabled;
+            for (const tag of ["input", "select", "button"]) {
+                element.querySelectorAll(tag).forEach((input) => {
+                    input.disabled = !enabled;
+                });
+            }
+            add.disabled = !enabled || categories.length >= 20;
+            renderAssignments();
+        }
+        function valid() {
+            const values = serialize();
+            const titles = values.map((c) => c.title.toLocaleLowerCase());
+            return (
+                values.length > 0 &&
+                values.length <= 20 &&
+                new Set(titles).size === titles.length &&
+                values.every(
+                    (c) =>
+                        c.title.length > 0 &&
+                        c.title.length <= 80 &&
+                        Number.isInteger(c.weight_hundredths) &&
+                        c.weight_hundredths >= 0 &&
+                        c.weight_hundredths <= 10000,
+                ) &&
+                values.reduce((sum, c) => sum + c.weight_hundredths, 0) === 10000
+            );
+        }
+        setEnabled(false);
+        return { element, serialize, setEnabled, valid };
+    }
+    return { panel, assignmentLabel, editor };
 };

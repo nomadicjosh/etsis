@@ -216,6 +216,7 @@ window.createWorkspaceTeaching = function (ui) {
             { class: "form-select", id: "gradebook-mode" },
             node("option", { value: "points" }, "Total points"),
             node("option", { value: "weighted" }, "Assignment weights"),
+            node("option", { value: "category" }, "Category weights"),
         );
         mode.value = setup.mode;
         const status = node("p", {
@@ -265,33 +266,44 @@ window.createWorkspaceTeaching = function (ui) {
                 ),
             );
         }
+        const categoryEditor = window
+            .createGradebookCalculation({ node })
+            .editor(setup.assignments, setup.categories || [], update);
         const form = node(
             "form",
             {},
             node(
                 "p",
                 { class: "form-text" },
-                "Total points uses each assignment's possible points. Assignment weights must total 100%. A 0% assignment is excluded, including new assignments added later. Official final grades stay unchanged.",
+                "Choose total points, individual assignment weights or category weights. Zero-weight and unassigned work is excluded from weighted calculations. Official final grades stay unchanged.",
             ),
             node("label", { for: "gradebook-mode", class: "form-label" }, "Calculate using"),
             mode,
             status,
             fields,
+            categoryEditor.element,
         );
         const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save setup");
         form.append(node("div", { class: "inline-actions" }, save, button("Back to section", back)));
         function update() {
             const weighted = mode.value === "weighted";
+            const category = mode.value === "category";
+            categoryEditor.setEnabled(category);
             fields.hidden = !weighted;
             let total = 0;
             for (const [, input] of inputs) {
                 input.disabled = !weighted;
                 total += Math.round(Number(input.value) * 100);
             }
-            status.textContent = weighted
-                ? `Assigned ${(total / 100).toFixed(2)}% of 100%. Ungraded assignments are excluded from the running average.`
-                : "All assignments contribute according to their possible points.";
-            save.disabled = weighted && (total !== 10000 || !inputs.length);
+            const groups = categoryEditor.serialize();
+            const empty = groups.filter((c) => c.weight_hundredths > 0 && !c.assignments.length).length;
+            status.textContent = category
+                ? `Assigned ${(groups.reduce((sum, c) => sum + c.weight_hundredths, 0) / 100).toFixed(2)}% of 100%. Use unique category names. ${empty} positive-weight ${empty === 1 ? "category has" : "categories have"} no assignments.`
+                : weighted
+                  ? `Assigned ${(total / 100).toFixed(2)}% of 100%. Ungraded assignments are excluded from the running average.`
+                  : "All assignments contribute according to their possible points.";
+            save.disabled =
+                (weighted && (total !== 10000 || !inputs.length)) || (category && !categoryEditor.valid());
         }
         mode.addEventListener("change", update);
         inputs.forEach(([, input]) => input.addEventListener("input", update));
@@ -309,6 +321,7 @@ window.createWorkspaceTeaching = function (ui) {
                     mode: mode.value,
                     weights,
                     revision: setup.revision,
+                    categories: mode.value === "category" ? categoryEditor.serialize() : [],
                 });
                 if (body.isConnected) await back();
             }, save);
@@ -944,13 +957,11 @@ window.createWorkspaceTeaching = function (ui) {
             (page) =>
                 page.items.length
                     ? grid(
-                          ["Assignment", "Earned / possible", "Weight", "Action"],
+                          ["Assignment", "Earned / possible", "Calculation", "Action"],
                           page.items.map((item) => [
                               item.title,
                               `${item.earned_hundredths == null ? "Not graded" : Number(item.earned_hundredths) / 100} / ${Number(item.possible_hundredths) / 100}`,
-                              item.weight_hundredths == null
-                                  ? "By points"
-                                  : `${(item.weight_hundredths / 100).toFixed(2)}%`,
+                              window.createGradebookCalculation({ node }).assignmentLabel(item),
                               button("Enter score", async () => {
                                   const form = await flow(
                                       "Save score",

@@ -48,6 +48,16 @@ if (
     throw new RuntimeException("The real gradebook calculation or scoring route failed.");
 }
 $path = $base . "/students/" . $student->id->value . "/gradebook-summary/";
+$current = json_decode((string) $saved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$categorySetup = $teachingPost($base . "/gradebook/calculation/", [
+    "mode" => "category",
+    "weights" => [],
+    "revision" => $current["revision"],
+    "categories" => [["title" => "Coursework", "weight_hundredths" => 10000, "assignments" => [$id]]],
+]);
+if ($categorySetup->getStatusCode() !== 200) {
+    throw new RuntimeException("Category setup failed through the real private controller.");
+}
 $summary = json_decode((string) $read($path)->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (($summary["percent_hundredths"] ?? null) !== 7500) {
     throw new RuntimeException("The real summary route returned the wrong percentage.");
@@ -85,7 +95,8 @@ $body = json_decode((string) $portal->getBody(), true, flags: JSON_THROW_ON_ERRO
 if (
     $portal->getStatusCode() !== 200 ||
     ($body["summary"]["percent_hundredths"] ?? null) !== 7500 ||
-    ($body["items"][0]["weight_hundredths"] ?? null) !== 10000
+    ($body["items"][0]["category_weight_hundredths"] ?? null) !== 10000 ||
+    ($body["summary"]["categories"][0]["title"] ?? null) !== "Coursework"
 ) {
     throw new RuntimeException("The owner portal did not share the gradebook feedback.");
 }

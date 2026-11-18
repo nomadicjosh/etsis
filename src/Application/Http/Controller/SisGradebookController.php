@@ -32,11 +32,12 @@ final readonly class SisGradebookController
         $f = FormInput::from($request);
         $body = $request->getParsedBody();
         $weights = is_array($body) ? $body["weights"] ?? null : null;
-        if (!is_array($weights)) {
+        $categories = is_array($body) ? $body["categories"] ?? [] : [];
+        if (!is_array($weights) || !is_array($categories)) {
             throw new \Domain\Shared\Exception\ValidationException([
                 [
-                    "field" => "weights",
-                    "message" => "Supply the assignment weights.",
+                    "field" => !is_array($categories) ? "categories" : "weights",
+                    "message" => "Supply valid assignment weights and category lists.",
                 ],
             ]);
         }
@@ -46,6 +47,7 @@ final readonly class SisGradebookController
                 $f->text("mode", 8),
                 $weights,
                 $f->text("revision", 64),
+                $categories,
             ),
         );
     }

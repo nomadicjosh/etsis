@@ -22,21 +22,31 @@ final readonly class SqlGradebookRepository implements GradebookRepository
     {
         $row = $this->sql->rows("sis_gradebook_calculations", ["id" => $section->value], 1)[0] ?? null;
         if ($row === null) {
-            return ["mode" => "points", "weights" => [], "revision" => 0];
+            return ["mode" => "points", "weights" => [], "revision" => 0, "categories" => []];
         }
         return [
             "mode" => $row["mode"],
             "weights" => json_decode($row["weights"], true, 4, JSON_THROW_ON_ERROR),
             "revision" => (int) $row["revision"],
+            "categories" =>
+                $row["categories"] === null
+                    ? []
+                    : json_decode($row["categories"], true, 6, JSON_THROW_ON_ERROR),
         ];
     }
 
-    public function saveCalculation(EntityId $section, string $mode, array $weights, int $revision): void
-    {
+    public function saveCalculation(
+        EntityId $section,
+        string $mode,
+        array $weights,
+        int $revision,
+        array $categories = [],
+    ): void {
         $data = [
             "mode" => $mode,
             "weights" => json_encode($weights, JSON_THROW_ON_ERROR),
             "revision" => $revision + 1,
+            "categories" => json_encode($categories, JSON_THROW_ON_ERROR),
         ];
         if ($revision === 0) {
             $this->sql->insert("sis_gradebook_calculations", ["id" => $section->value] + $data);
