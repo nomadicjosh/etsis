@@ -25,7 +25,11 @@ final readonly class AdmissionPolicyController
         $area = $f->text('area', 20);
         return new JsonResponse($this->service->save(
             $area,
-            $area === 'offers' ? $f->requiredBoolean('require_acceptance') : $f->text('mode', 20),
+            match ($area) {
+                'offers' => $f->requiredBoolean('require_acceptance'),
+                'checklist' => $f->requiredBoolean('required'),
+                default => $f->text('mode', 20),
+            },
             $f->integer('revision')
         ));
     }

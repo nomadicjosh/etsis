@@ -39,6 +39,7 @@ final class AdmissionCaseworkFixture
             $f->clock,
             $permissions ?? new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql),
             $updates,
+            $f->admissionPolicy(),
         );
         $this->updates = new \Domain\Admissions\Service\AdmissionUpdatesService(
             $updates,

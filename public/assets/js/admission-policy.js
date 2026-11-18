@@ -13,17 +13,18 @@
                     const data = await request('/sis/admission-policy/');
                     if (!container.isConnected || ticket !== generation) return;
                     body.replaceChildren();
-                    for (const area of ['offers', 'withdrawals', 'answers']) {
+                    for (const area of ['offers', 'withdrawals', 'answers', 'checklist']) {
                         const form = node('form', { class: 'record-section mb-3' });
                         const identity = `admission-policy-${++sequence}`;
-                        const title = area === 'offers' ? 'Offer acceptance' : area === 'answers' ? 'Application revisions' : 'Applicant withdrawal';
+                        const title = area === 'offers' ? 'Offer acceptance' : area === 'answers' ? 'Application revisions' : area === 'checklist' ? 'Acceptance checklist' : 'Applicant withdrawal';
+                        const checkbox = ['offers', 'checklist'].includes(area);
                         form.append(node('h3', { class: 'h5' }, title));
                         let input;
-                        if (area === 'offers') {
-                            input = node('input', { type: 'checkbox', id: identity, class: 'form-check-input', checked: data.offers.require_acceptance });
+                        if (checkbox) {
+                            input = node('input', { type: 'checkbox', id: identity, class: 'form-check-input', checked: area === 'offers' ? data.offers.require_acceptance : data.checklist.required });
                             form.append(node('div', { class: 'form-check mb-3' }, input,
-                                node('label', { for: identity, class: 'form-check-label' }, 'Require applicant acceptance before matriculation')),
-                            node('p', { class: 'form-text' }, 'New offers retain this policy. Issued letters and completed matriculations stay unchanged.'));
+                                node('label', { for: identity, class: 'form-check-label' }, area === 'offers' ? 'Require applicant acceptance before matriculation' : 'Require checklist completion before acceptance')),
+                            node('p', { class: 'form-text' }, area === 'offers' ? 'New offers retain this policy. Issued letters and completed matriculations stay unchanged.' : 'Needed items must be Complete or Not needed. If no items are needed, save casework as Done to record that review. Earlier admissions decisions remain unchanged.'));
                         } else if (area === 'answers') {
                             input = node('select', { id: identity, class: 'form-select mb-3' },
                                 ...[['request', 'Only after staff request corrections'], ['before_decision', 'Anytime before an admissions decision']]
@@ -38,19 +39,19 @@
                                 node('p', { class: 'form-text' }, 'Applies before matriculation. Pending requests pause matriculation and offer responses. Applicants may cancel an existing request even if the policy changes.'));
                         }
                         input.addEventListener('change', () => { dirty.add(area); });
-                        const save = node('button', { type: 'submit', class: 'btn btn-primary' }, area === 'offers' ? 'Save offer policy' : area === 'answers' ? 'Save revision policy' : 'Save withdrawal policy');
+                        const save = node('button', { type: 'submit', class: 'btn btn-primary' }, area === 'offers' ? 'Save offer policy' : area === 'answers' ? 'Save revision policy' : area === 'checklist' ? 'Save checklist policy' : 'Save withdrawal policy');
                         form.append(save); body.append(form);
                         form.addEventListener('submit', event => {
                             event.preventDefault(); if (busy) return;
                             // Keep another policy's unsaved choice instead of discarding it on refresh.
                             busy = true; save.disabled = true; status.textContent = 'Saving policy…';
-                            const value = area === 'offers' ? { require_acceptance: input.checked } : { mode: input.value };
+                            const value = area === 'offers' ? { require_acceptance: input.checked } : area === 'checklist' ? { required: input.checked } : { mode: input.value };
                             task(async () => {
                                 try {
                                     const saved = await request('/sis/admission-policy/', 'POST', { area, ...value, revision: data[area].revision });
                                     if (!container.isConnected || ticket !== generation) return;
                                     data[area] = saved;
-                                    if (area === 'offers' ? input.checked === value.require_acceptance : input.value === value.mode) dirty.delete(area); status.textContent = `${title} policy saved.`; notify(`${title} policy saved.`);
+                                    if (checkbox ? input.checked === (value.require_acceptance ?? value.required) : input.value === value.mode) dirty.delete(area); status.textContent = `${title} policy saved.`; notify(`${title} policy saved.`);
                                 } catch (error) {
                                     if (container.isConnected && ticket === generation) status.textContent = 'The policy could not be saved. Your choice is still shown. Reload if someone else changed it.';
                                     throw error;

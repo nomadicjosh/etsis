@@ -8,6 +8,7 @@ use Domain\Admissions\AdmissionApplication;
 use Domain\Admissions\Enum\ApplicationStatus;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Admissions\ValueObject\AdmissionDecisionSchema;
+use Domain\Admissions\ValueObject\AdmissionChecklistProof;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogYearRepository;
 use Domain\Communications\Service\MessageCipher;
@@ -32,6 +33,7 @@ final readonly class AdmissionCorrectionService
         private MessageCipher $cipher,
         private Clock $clock,
         private AdmissionEvidenceService $evidence,
+        private AdmissionReadinessService $readiness,
     ) {
     }
     /** @return array<string,mixed> */
@@ -56,6 +58,8 @@ final readonly class AdmissionCorrectionService
         return $this->transactions->run(function () use ($route, $actor, $accept, $reason, $documents): array {
             $a = $this->lock($route, $actor);
             $this->eligible($a, $accept);
+            $checklist = $this->readiness->capture($a->id);
+            AdmissionChecklistProof::assertAcceptance($checklist, $accept);
             $source = $this->context->source($a);
             $files = $this->evidence->capture($a, $documents);
             $person = $this->admissions->person($a->personId);
@@ -68,6 +72,7 @@ final readonly class AdmissionCorrectionService
                         "operation" => EntityId::generate()->value,
                         "accept" => $accept,
                         "evidence" => $files,
+                        "checklist" => AdmissionChecklistProof::digest($checklist),
                         "reason" => trim($reason),
                         "context" => $this->fingerprint($a, $source),
                         "expires" => $this->clock->now()->getTimestamp() + 1200,
@@ -82,6 +87,7 @@ final readonly class AdmissionCorrectionService
                 "status" => $accept ? "accepted" : "rejected",
                 "source" => AdmissionDecisionSchema::displaySource($source),
                 "answers_review" => $answersReview,
+                "checklist" => AdmissionChecklistProof::staff($checklist),
                 "effective_on" => $this->clock->now()->format("Y-m-d"),
                 "person" => [
                     "given_name" => $person->givenName,
@@ -104,7 +110,7 @@ final readonly class AdmissionCorrectionService
             $p = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($p) ||
-                !in_array(count($p), [8, 9], true) ||
+                !in_array(count($p), [8, 9, 10], true) ||
                 ($p["purpose"] ?? null) !== "admission-correction.v1" ||
                 ($p["application"] ?? null) !== $application->value ||
                 ($p["actor"] ?? null) !== $actor->value ||
@@ -118,6 +124,12 @@ final readonly class AdmissionCorrectionService
             }
             if (array_key_exists("evidence", $p)) {
                 \Domain\Admissions\ValueObject\AdmissionEvidence::validate($p["evidence"]);
+            }
+            if (
+                array_key_exists('checklist', $p)
+                && (!is_string($p['checklist']) || preg_match('/^[a-f0-9]{64}$/D', $p['checklist']) !== 1)
+            ) {
+                throw new \InvalidArgumentException();
             }
             $operation = new EntityId($p["operation"]);
         } catch (\Throwable) {
@@ -133,13 +145,16 @@ final readonly class AdmissionCorrectionService
                 $this->authorize($actor);
                 return $receipt;
             }
-            if (!array_key_exists("evidence", $p)) {
+            if (!array_key_exists("evidence", $p) || !array_key_exists("checklist", $p)) {
                 throw new ConcurrentModificationException("Review the current decision form before confirming.");
             }
             $this->eligible($a, $p["accept"]);
+            $checklist = $this->readiness->capture($a->id);
+            AdmissionChecklistProof::assertAcceptance($checklist, $p['accept']);
             $source = $this->context->source($a);
             if (
                 $p["expires"] < $this->clock->now()->getTimestamp() ||
+                !hash_equals($p["checklist"], AdmissionChecklistProof::digest($checklist)) ||
                 !hash_equals($p["context"], $this->fingerprint($a, $source))
             ) {
                 throw new ConcurrentModificationException(
@@ -155,7 +170,16 @@ final readonly class AdmissionCorrectionService
             $this->evidence->retain($p["evidence"], $operation);
             $after = $a->correctDecision($p["accept"]);
             $this->admissions->saveCorrection($a, $after);
-            $result = $this->ledger->correct($a, $after, $source, $operation, $actor, $p["reason"], $p["evidence"]);
+            $result = $this->ledger->correct(
+                $a,
+                $after,
+                $source,
+                $operation,
+                $actor,
+                $p["reason"],
+                $checklist,
+                $p["evidence"]
+            );
             $this->audit->record($actor, "admissions.decision_corrected", $a->id);
             $this->authorize($actor);
             return $result;

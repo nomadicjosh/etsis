@@ -124,6 +124,18 @@ final class AdmissionDecision extends EventSourcedAggregate
     }
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
+        if (array_key_exists('admission_checklist', $event->metadata())) {
+            if (
+                !$event instanceof AdmissionWasDecided
+                && !$event instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected
+            ) {
+                throw new CorruptHistoryException();
+            }
+            \Domain\Admissions\ValueObject\AdmissionChecklistProof::validate(
+                $event->metaParam('admission_checklist'),
+                $event->payload()['status'] ?? null
+            );
+        }
         if (array_key_exists('admission_withdrawal', $event->metadata())) {
             if (!$event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged) {
                 throw new CorruptHistoryException();

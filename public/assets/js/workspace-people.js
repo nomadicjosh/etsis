@@ -553,6 +553,8 @@ window.createWorkspacePeople = function (ui) {
                             window.createApplicationAnswerReview({ fields: retained.form.fields,
                                 layout: retained.form.layout || [], answers: retained.answers })), confirmation.lastElementChild);
                     }
+                    if (preview.checklist) confirmation.insertBefore(
+                        window.createAdmissionReadiness({ node }).staff(preview.checklist), confirmation.lastElementChild);
                     const evidenceSummary = node("div");
                     evidenceEditor.summary(evidenceSummary, preview.evidence ?? null);
                     confirmation.insertBefore(evidenceSummary, confirmation.lastElementChild);
@@ -669,6 +671,8 @@ window.createWorkspacePeople = function (ui) {
                             window.createApplicationAnswerReview({ fields: retained.form.fields,
                                 layout: retained.form.layout || [], answers: retained.answers })), confirmation.lastElementChild);
                     }
+                    if (preview.checklist) confirmation.insertBefore(
+                        window.createAdmissionReadiness({ node }).staff(preview.checklist), confirmation.lastElementChild);
                     const evidenceSummary = node("div");
                     evidenceEditor.summary(evidenceSummary, preview.evidence ?? null);
                     confirmation.insertBefore(evidenceSummary, confirmation.lastElementChild);
@@ -825,6 +829,9 @@ window.createWorkspacePeople = function (ui) {
                             : `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}.`,
                     ),
                 );
+                if (item.checklist) section.append(window.createAdmissionReadiness({ node }).history(item.checklist));
+                else if (['decision', 'correction'].includes(item.kind)) section.append(
+                    node('p', { class: 'form-text' }, 'The checklist used for this earlier decision was not recorded.'));
                 if (offer) {
                     section.append(node('h4', { class: 'h6 text-break' }, item.offer.title),
                         node('p', { class: 'private-text text-break', style: 'white-space: pre-wrap' }, item.offer.message));

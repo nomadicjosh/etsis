@@ -974,6 +974,16 @@ final class SisFixture
             $this->withdrawalRepository()
         );
     }
+    public function readinessService(): \Domain\Admissions\Service\AdmissionReadinessService
+    {
+        return new \Domain\Admissions\Service\AdmissionReadinessService(
+            new \Infrastructure\Persistence\Repository\SqlAdmissionCaseworkRepository(
+                $this->sql,
+                $this->dropCipher,
+            ),
+            $this->admissionPolicy(),
+        );
+    }
     public function correctionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
@@ -990,6 +1000,7 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             $evidence ?? $this->admissionEvidenceService(),
+            $this->readinessService(),
         );
     }
     public function decisionService(
@@ -1009,6 +1020,7 @@ final class SisFixture
             $this->clock,
             $evidence ?? $this->admissionEvidenceService(),
             $this->applicationRevisions(),
+            $this->readinessService(),
         );
     }
     /** Explicit current-state decision fixture predating tracked acceptance/rejection. */

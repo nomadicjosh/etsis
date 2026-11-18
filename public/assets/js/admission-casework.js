@@ -120,13 +120,14 @@
                 const wrapper = node('fieldset', { class: 'mt-3' }, node('legend', { class: 'h5' }, 'Checklist & follow-up'));
                 const status = node('p', { role: 'status', class: 'form-text', 'aria-atomic': 'true' });
                 const form = node('form');
+                if (packet.readiness) wrapper.append(window.createAdmissionReadiness({ node }).staff(packet.readiness));
                 const value = packet.case;
                 const editor = itemEditor(form, value.items);
                 const details = node('details', { class: 'border-top pt-3 mt-3' }, node('summary', { class: 'fw-semibold mb-3' }, 'Routing & next steps'));
                 const office = field(details, 'office', 'Office shown to applicant', value.office);
                 const nextStep = field(details, 'next_step', 'Next step shown to applicant', value.next_step, 'textarea', 2000);
                 const privateNotes = field(details, 'private_notes', 'Private staff notes', value.private_notes, 'textarea', 5000);
-                const workStatus = select(details, 'work_status', 'Work status', value.work_status,
+                const workStatus = select(form, 'work_status', 'Casework status', value.work_status,
                     [['open', 'Open'], ['waiting', 'Waiting'], ['done', 'Done']]);
                 const due = field(details, 'follow_up_on', 'Follow up on', value.follow_up_on, 'date');
                 details.append(node('p', { class: 'form-text' }, `Assigned to: ${packet.assignee_name}`));
@@ -309,7 +310,7 @@
                     version: 0, values: { name: '', program_id: packet.program_id, enabled: true,
                         items: window.admissionChecklistDefinition(editor.read()) } }); }));
                 library.append(presetEditor);
-                wrapper.append(node('p', { class: 'form-text' }, 'Working checklists and follow-up do not change the formal admissions decision. Keep confidential notes in the staff-only field.'), form, library);
+                wrapper.append(node('p', { class: 'form-text' }, 'Save checklist progress before reviewing acceptance. Institutional policy may require completion of needed items. Working edits never rewrite an earlier admissions decision. Keep confidential notes in the staff-only field.'), form, library);
                 content.replaceChildren(wrapper, status);
             }
             return { beforeLeave: () => !expanded || leave() };
@@ -324,6 +325,7 @@
                     node('p', { class: 'form-text' }, item.needed ? 'Requested for review' : 'Additional item'),
                     item.instructions ? node('p', {}, item.instructions) : null,
                     item.due_on ? node('p', { class: 'form-text' }, `Due: ${item.due_on}`) : null)),
+                data.readiness ? node('p', { class: 'alert alert-info', role: 'status' }, data.readiness.message) : null,
                 node('p', { class: 'form-text' }, 'Checklist progress does not itself mean that admission or registration has been approved.'));
         }
         function applicant(container, applicationId, label = '', documentTarget = null, onOutcome = () => {}) {

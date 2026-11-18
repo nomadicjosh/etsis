@@ -6,12 +6,14 @@ namespace Domain\Admissions\Service;
 
 use DateTimeZone;
 use Domain\Admissions\AdmissionCasework;
+use Domain\Admissions\Enum\ApplicationStatus;
 use Domain\Admissions\AdmissionChecklistPreset;
 use Domain\Admissions\Repository\AdmissionCaseworkRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Admissions\Repository\AdmissionUpdatesRepository;
 use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\ValueObject\CaseworkChecklist;
+use Domain\Admissions\ValueObject\AdmissionChecklistProof;
 use Domain\Audit\Repository\ActorDirectory;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Person\Repository\PersonAccountRepository;
@@ -36,6 +38,7 @@ final readonly class AdmissionCaseworkService
         private Clock $clock,
         private AccessRepository $permissions,
         private AdmissionUpdatesRepository $updates,
+        private \Domain\Admissions\Repository\AdmissionPolicyRepository $policy,
     ) {
     }
 
@@ -80,11 +83,14 @@ final readonly class AdmissionCaseworkService
     {
         $actor = $this->manager();
         $app = $this->admissions->application($application);
-        $case = $this->cases->find($application)['case'] ?? AdmissionCasework::fromInput($application, [], null, 0);
+        $stored = $this->cases->find($application)['case'] ?? null;
+        $case = $stored ?? AdmissionCasework::fromInput($application, [], null, 0);
         $name = $case->assignedTo === null ? 'Unassigned'
         : ($this->actors->names([$case->assignedTo])[$case->assignedTo->value] ?? 'Unavailable account');
+        $readiness = AdmissionChecklistProof::capture($stored, $this->policy->checklist());
         $this->manager($actor);
-        return ['case' => $case->facts(), 'assignee_name' => $name,
+        return ['readiness' => AdmissionChecklistProof::staff($readiness),
+            'case' => $case->facts(), 'assignee_name' => $name,
             'program_id' => $app->programId->value, 'new_preset_id' => EntityId::generate()->value];
     }
 
@@ -93,8 +99,13 @@ final readonly class AdmissionCaseworkService
     {
         $actor = $this->access->authenticatedUserId();
         $this->owner($actor, $application);
-        $case = $this->cases->find($application)['case'] ?? AdmissionCasework::fromInput($application, [], null, 0);
+        $stored = $this->cases->find($application)['case'] ?? null;
+        $case = $stored ?? AdmissionCasework::fromInput($application, [], null, 0);
         $view = $case->applicantView();
+        $app = $this->admissions->application($application);
+        $readiness = AdmissionChecklistProof::capture($stored, $this->policy->checklist());
+        $view['readiness'] = $app->status === ApplicationStatus::Submitted
+        ? AdmissionChecklistProof::applicant($readiness) : null;
         $this->owner($actor, $application);
         return $view;
     }
@@ -183,7 +194,18 @@ final readonly class AdmissionCaseworkService
             if ($next->values !== $before->values || $next->assignedTo?->value !== $before->assignedTo?->value) {
                 $at = $this->at();
                 $this->cases->save($next, $version, $actor, $at, $hash);
-                if ($next->applicantView() !== $before->applicantView()) {
+                $beforePublic = $before->applicantView();
+                $nextPublic = $next->applicantView();
+                if ($this->admissions->application($route->id)->status === ApplicationStatus::Submitted) {
+                    $policy = $this->policy->checklist();
+                    $beforePublic['readiness'] = AdmissionChecklistProof::applicant(
+                        AdmissionChecklistProof::capture($stored['case'] ?? null, $policy)
+                    );
+                    $nextPublic['readiness'] = AdmissionChecklistProof::applicant(
+                        AdmissionChecklistProof::capture($next, $policy)
+                    );
+                }
+                if ($nextPublic !== $beforePublic) {
                     $owner = $this->admissions->person($route->personId)->ownerUserId;
                     if ($owner !== null) {
                         $this->updates->record($route->id, $owner, $at);

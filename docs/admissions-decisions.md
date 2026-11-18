@@ -147,3 +147,42 @@ Apply migration `20261117000008_CreateSisAdmissionDeferral`. It adds nullable or
 Fictional tests cover original answers and intake, new offer/acceptance policy, new matriculation cohort, calendar reapproval, permission and actor boundaries, competing/expired confirmations, withdrawal-request cycles, audit/authority rollback, exact retries after later actions, bounded search, authentic index reconstruction, unknown earlier decisions, and the actual CSRF/private HTTP pipeline. JavaScript checks cover term selection, review/revise, preserved input, retry tokens, pending requests and detached responses. Browser accessibility/layout verification remains a separate acceptance check; no browser is started by the workstation-safe checks.
 
 [Application answer corrections and resubmission](application-submission-history.md#corrections-and-resubmission) now preserve separate answer versions under the same application. Open correction requests pause decisions; acceptance/rejection and outcome-correction previews show the current revised answers when present.
+
+
+## Checklist policy before acceptance
+
+Open **Admissions → Policies → Acceptance checklist**. Check **Require checklist completion before acceptance** to enforce the application's needed checklist items. It is **off by default**, leaving checklists advisory. Saving requires both `sis:admissions:manage` and the existing protected `sis:admissions:policy` authority. The setting has an independent revision; saving it preserves offer, withdrawal and answer-revision policies and their unsaved screen choices.
+
+The gate uses the application's saved **Checklist & follow-up**, including items copied from reusable global/program presets and any authorized case-specific changes. A reusable preset is a library entry, not an automatically imposed requirement on every application. Staff continue to determine which items apply to a particular case under their existing admissions authority. There is no additional academic-waiver or exception role in this workflow.
+
+When checklist completion is required:
+
+- Needed items marked **Pending** or **Received** block acceptance. Received means the material still needs review.
+- **Complete** and **Not needed** resolve a needed item. Not needed is the staff determination that this working checklist item does not apply; it is not a course waiver or academic-credit decision.
+- Optional items do not block acceptance. Casework may remain Open or Waiting for separate follow-up when its needed items are resolved.
+- A missing checklist does not silently count as complete. If no items are needed, review the case and save **Casework status → Done** to record that determination. If follow-up must remain open, a completed needed application-review item can record the review without closing the working case.
+- Rejection remains available. A rejected-to-accepted outcome correction must satisfy the current checklist policy, just like a first acceptance.
+
+Open an application, expand **Checklist & follow-up**, resolve its needed items and **Save casework**. The saved-readiness summary lists remaining items and distinguishes required/advisory policy. **Casework status** is alongside the checklist, while routing and private notes remain in their existing panel. Return to the application's acceptance action after saving; its confirmation displays the exact saved checklist summary used for that review. Under advisory policy, staff see unresolved items but may still decide.
+
+This is a working-case quality gate. Admissions staff can edit applicability, labels and progress under existing audited casework authority; it is not a separately published institutional curriculum or immutable prerequisite catalog. The formal admissions decision retains what was actually reviewed. Adding a working task never changes an earlier acceptance.
+
+### Retained checklist evidence
+
+New acceptance/rejection and outcome-correction events retain `admission_checklist` metadata in the existing protected application stream. It records the effective setting/revision, saved case revision/status, and the needed item references, labels, progress and applicant visibility seen for that decision. Private notes, instructions, routing and assignee details are excluded. The usual trusted decision actor, reason and effective/recording time remain in protected context. Working checklist saves and configuration changes stay audited CRUD; there is no new event type or journal table.
+
+The application aggregate and shared store validate this frozen evidence. A required checklist cannot claim an accepted outcome while needed items remain unresolved. Ordinary history pages show retained counts and the recorded required/advisory setting, without item names or private task details. Missing evidence on an earlier event remains explicitly unknown; the migration does not infer its checklist from today's casework.
+
+Reviews bind a compact digest of the saved checklist and policy. A changed case revision or policy revision requires a fresh review, including an advisory → required → advisory cycle. Confirmation reads current case/policy state under the application's existing lock order and records the event, projection, receipt and required audit atomically. The review token contains the digest rather than another copy of checklist labels.
+
+An already completed confirmation returns its original result despite later checklist/policy edits or matriculation. Earlier accepted decisions remain effective; enabling this setting does not retroactively revoke an acceptance, offer or matriculation. Pending reviews from before checklist capture was added need a new review, while previously completed receipts remain readable with current authority.
+
+### Applicant guidance and setup
+
+Applicants' **Next steps** explain whether they should finish visible requested items or wait for admissions review. Hidden staff tasks, their names/counts, private notes, assignee identities and policy/case revisions stay private. Guidance is shown while an application is submitted; later policy changes do not present an already accepted or matriculated applicant as needing a new admissions decision. Checklist completion itself is never presented as an admission approval. A casework save that changes this public readiness message coalesces an update in the existing private admissions inbox; other private-only edits remain silent. Changing institution-wide policy does not fan out a notification to every applicant.
+
+Apply migration **`20261117000010_AddSisAdmissionChecklistPolicy`**. It adds only `require_checklist` and `checklist_revision` to the existing institutional policy row, defaulting to advisory/revision zero. It changes no existing decisions, casework, answers, grants or other policy values, and is safe to rerun after partial additive DDL. Compiler checks cover the framework's five database dialects; SQLite and the configured MariaDB receive runtime checks.
+
+Fictional checks cover required/advisory behavior, received-versus-complete states, explicit empty-case review, optional/not-needed items, first and corrected acceptance, immutable summaries, stale policy/case cycles, exact earlier receipts, independent setting authority, atomic rollback, owner privacy and the real Codefy CSRF/private HTTP pipeline. Browser visual/accessibility acceptance remains outstanding.
+
+For a focused low-memory HTTP check, run the configured interpreter against `tests/Support/ConsoleStatusSmoke.php check-admission-readiness`. It uses a fresh fictional database and the shared admissions HTTP fixture, with no browser, scanner, mailbox or institutional connection. The shared request-body reader now reads bounded 8 KiB chunks instead of preallocating its full 2/6 MiB allowance on small requests. Exact JSON/form size limits and form stream positions are unchanged; boundary tests cover acceptance and rejection at those limits.

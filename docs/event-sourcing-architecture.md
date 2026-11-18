@@ -4,6 +4,8 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Optional checklist enforcement](admissions-decisions.md#checklist-policy-before-acceptance) now retains reviewed checklist/policy evidence in new admissions decisions and outcome corrections. Working progress and the institutional setting remain audited CRUD; earlier decisions and unknown earlier checklists remain unchanged. Required acceptance, stale review, privacy and rollback checks share the existing application boundary and single protected journal.
+
 [Application answer resubmissions](application-submission-history.md#corrections-and-resubmission) now append to the existing application stream, pinning protected immutable answer artifacts and their original form lineage. Operational correction requests and institutional editing policy remain audited CRUD. The original submission and earlier answers are preserved; selected decisions/matriculation verify retained artifacts. Ordinary application lists do not replay these streams.
 
 [Admission offers](admissions-offers.md) now retain published private letters, replacements, applicant or documented staff responses and cancellations within the existing application decision stream. Application revisions serialize those operations with outcome changes and matriculation. A small audited CRUD setting controls the institutional acceptance default; each letter retains its policy, and matriculation retains its applicable offer proof. Earlier decisions remain unknown where they were never recorded. Read lists do not replay offer streams.

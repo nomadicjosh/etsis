@@ -12,6 +12,7 @@ use Domain\Admissions\Event\AdmissionWasDecided;
 use Domain\Admissions\Matriculation;
 use Domain\Admissions\ValueObject\AdmissionDecisionId;
 use Domain\Admissions\ValueObject\AdmissionDecisionSchema;
+use Domain\Admissions\ValueObject\AdmissionChecklistProof;
 use Domain\Admissions\ValueObject\MatriculationId;
 use Domain\Gradebook\ValueObject\PublishedGradeId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
@@ -127,6 +128,7 @@ final readonly class AdmissionDecisionLedger
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] array $checklist,
         #[\SensitiveParameter] array $evidence = [],
     ): array {
         return $this->append(
@@ -137,6 +139,7 @@ final readonly class AdmissionDecisionLedger
             $actor,
             $reason,
             AdmissionWasDecided::class,
+            $checklist,
             $evidence
         );
     }
@@ -387,6 +390,7 @@ final readonly class AdmissionDecisionLedger
         EntityId $operation,
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] array $checklist,
         #[\SensitiveParameter] array $evidence = [],
     ): array {
         return $this->append(
@@ -397,6 +401,7 @@ final readonly class AdmissionDecisionLedger
             $actor,
             $reason,
             \Domain\Admissions\Event\AdmissionDecisionWasCorrected::class,
+            $checklist,
             $evidence
         );
     }
@@ -418,6 +423,7 @@ final readonly class AdmissionDecisionLedger
             $actor,
             $reason,
             \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class,
+            null,
             [],
             $withdrawal
         );
@@ -433,6 +439,7 @@ final readonly class AdmissionDecisionLedger
         EntityId $actor,
         #[\SensitiveParameter] string $reason,
         string $class,
+        #[\SensitiveParameter] ?array $checklist,
         #[\SensitiveParameter] array $evidence = [],
         #[\SensitiveParameter] ?array $withdrawal = null,
     ): array {
@@ -449,6 +456,9 @@ final readonly class AdmissionDecisionLedger
             $payload['previous_status'] = $before->status->value;
         }
         $metadata = ['__aggregate_type' => 'admission_decision'];
+        if ($checklist !== null) {
+            $metadata['admission_checklist'] = $checklist;
+        }
         if ($withdrawal !== null) {
             $metadata['admission_withdrawal'] = $withdrawal;
         }
@@ -511,6 +521,8 @@ final readonly class AdmissionDecisionLedger
                                 : "decision")))))),
                 "status" => $revision ? "submitted" : ($entry ? "accepted"
                     : ($offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]))),
+                "checklist" => array_key_exists('admission_checklist', $e->metadata())
+                    ? AdmissionChecklistProof::summary($e->metaParam('admission_checklist')) : null,
                 "answer_revision_id" => $revision ? $p["revision"]["id"] : null,
                 "entry" => $entry ? ["before" => $p["before"], "after" => $p["after"]] : null,
                 "offer" => $offer ? $p["offer"] : null,

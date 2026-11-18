@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use JsonException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\StreamInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
@@ -24,13 +25,13 @@ final readonly class WorkspaceJsonBodyMiddleware implements MiddlewareInterface
         $type = strtolower(trim(explode(';', $request->getHeaderLine('Content-Type'))[0]));
         $raw = null;
         if ($type === 'application/json') {
-            $raw = $request->getBody()->read(self::MAX_JSON_BYTES + 1);
+            $raw = $this->readBounded($request->getBody(), self::MAX_JSON_BYTES);
         } elseif ($type === 'application/x-www-form-urlencoded') {
             // A single form string avoids the router's eager, scalar-incompatible JSON parser.
             // Decode from the stream for PUT/PATCH/DELETE too; PHP only populates $_POST for POST.
             $stream = $request->getBody();
             $position = $stream->isSeekable() ? $stream->tell() : null;
-            $encoded = $stream->read(self::MAX_FORM_BYTES + 1);
+            $encoded = $this->readBounded($stream, self::MAX_FORM_BYTES);
             if ($position !== null) {
                 $stream->seek($position);
             }
@@ -61,5 +62,18 @@ final readonly class WorkspaceJsonBodyMiddleware implements MiddlewareInterface
         }
 
         return $handler->handle($request);
+    }
+    /** Do not preallocate the entire request allowance for an ordinary small form body. */
+    private function readBounded(StreamInterface $stream, int $maximum): string
+    {
+        $body = '';
+        while (!$stream->eof() && strlen($body) <= $maximum) {
+            $chunk = $stream->read(min(8192, $maximum + 1 - strlen($body)));
+            if ($chunk === '') {
+                break;
+            }
+            $body .= $chunk;
+        }
+        return $body;
     }
 }

@@ -18,9 +18,27 @@ final readonly class SqlAdmissionPolicyRepository implements AdmissionPolicyRepo
     {
         $this->sql->lock('sis_admission_policy', self::ID, 'id');
     }
+    private function current(): array
+    {
+        return $this->sql->current('sis_admission_policy', self::ID)
+        ?? throw new CorruptHistoryException();
+    }
+    public function checklist(): array
+    {
+        $r = $this->current();
+        if (!in_array((string) $r['require_checklist'], ['0', '1'], true)) {
+            throw new CorruptHistoryException();
+        }
+        return ['required' => (int) $r['require_checklist'] === 1,
+            'revision' => $this->revision($r['checklist_revision'])];
+    }
+    public function saveChecklist(bool $required, int $expectedRevision): void
+    {
+        $this->save(['require_checklist' => (int) $required], 'checklist_revision', $expectedRevision);
+    }
     public function offers(): array
     {
-        $r = $this->sql->one('sis_admission_policy', ['id' => self::ID]);
+        $r = $this->current();
         if (!in_array((string) $r['require_acceptance'], ['0', '1'], true)) {
             throw new CorruptHistoryException();
         }
@@ -29,7 +47,7 @@ final readonly class SqlAdmissionPolicyRepository implements AdmissionPolicyRepo
     }
     public function withdrawals(): array
     {
-        $r = $this->sql->one('sis_admission_policy', ['id' => self::ID]);
+        $r = $this->current();
         if (!in_array($r['withdrawal_mode'], ['request', 'direct', 'staff_only'], true)) {
             throw new CorruptHistoryException();
         }
@@ -37,7 +55,7 @@ final readonly class SqlAdmissionPolicyRepository implements AdmissionPolicyRepo
     }
     public function answers(): array
     {
-        $r = $this->sql->one('sis_admission_policy', ['id' => self::ID]);
+        $r = $this->current();
         if (!in_array($r['answer_mode'], ['request', 'before_decision'], true)) {
             throw new CorruptHistoryException();
         }
@@ -71,7 +89,7 @@ final readonly class SqlAdmissionPolicyRepository implements AdmissionPolicyRepo
     }
     private function save(array $values, string $field, int $expected): void
     {
-        $before = $this->sql->one('sis_admission_policy', ['id' => self::ID]);
+        $before = $this->current();
         if ($expected < 0 || $expected >= 2000000000 || $this->revision($before[$field]) !== $expected) {
             throw new ConcurrentModificationException('This admissions policy changed. Reload it.');
         }

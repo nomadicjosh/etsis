@@ -27,7 +27,7 @@ final readonly class AdmissionPolicyService
     {
         $actor = $this->access->requirePermission('sis:admissions:manage');
         $data = ['offers' => $this->policy->offers(), 'withdrawals' => $this->policy->withdrawals(),
-            'answers' => $this->policy->answers()];
+            'answers' => $this->policy->answers(), 'checklist' => $this->policy->checklist()];
         $this->authorize($actor, false);
         return $data;
     }
@@ -40,6 +40,8 @@ final readonly class AdmissionPolicyService
             $this->authorize($actor, true);
             if ($area === 'offers' && is_bool($value)) {
                 $this->policy->saveOffers($value, $revision);
+            } elseif ($area === 'checklist' && is_bool($value)) {
+                $this->policy->saveChecklist($value, $revision);
             } elseif ($area === 'withdrawals' && is_string($value)) {
                 $this->policy->saveWithdrawals($value, $revision);
             } elseif ($area === 'answers' && is_string($value)) {
@@ -56,6 +58,7 @@ final readonly class AdmissionPolicyService
             return match ($area) {
                 'offers' => $this->policy->offers(),
                 'answers' => $this->policy->answers(),
+                'checklist' => $this->policy->checklist(),
                 default => $this->policy->withdrawals(),
             };
         });

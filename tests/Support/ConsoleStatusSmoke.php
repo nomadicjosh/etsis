@@ -32,7 +32,10 @@ try {
         $_POST = ['_workspace_json' => json_encode(['code' => 'Math-101', 'title' => 'Algebra',
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
-    if (in_array(($argv[1] ?? ''), ['check-portal', 'check-profile-command', 'check-login-sessions', 'check-moodle-resolution', 'check-course-rules', 'check-degree-trials'], true)) {
+    if (in_array(($argv[1] ?? ''), [
+        'check-portal', 'check-admission-readiness', 'check-profile-command', 'check-login-sessions',
+        'check-moodle-resolution', 'check-course-rules', 'check-degree-trials',
+    ], true)) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
         $_SERVER['SCRIPT_NAME'] = '/index.php';
         $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -107,6 +110,11 @@ try {
             ) {
                 throw new RuntimeException('The registration throttle alias/cache boundary did not resolve correctly.');
             }
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-admission-readiness') {
+            $kernel->bootstrap();
+            require __DIR__ . '/AdmissionsHttpFixture.php';
+            require __DIR__ . '/AdmissionReadinessBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-portal') {
             $kernel->bootstrap();

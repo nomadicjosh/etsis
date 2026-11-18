@@ -7,7 +7,7 @@ namespace Domain\Admissions;
 use Domain\Admissions\ValueObject\CaseworkChecklist;
 use Domain\Shared\ValueObject\EntityId;
 
-/** Current working case data; it does not change an application's formal status or admission requirements. */
+/** Working case data; formal decisions separately retain any enforced checklist evidence. */
 final readonly class AdmissionCasework
 {
     public const array FIELDS = ['office', 'work_status', 'follow_up_on', 'private_notes', 'next_step', 'items'];

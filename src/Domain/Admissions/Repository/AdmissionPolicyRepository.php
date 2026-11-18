@@ -12,6 +12,8 @@ interface AdmissionPolicyRepository
     public function offers(): array;
     public function saveOffers(bool $required, int $expectedRevision): void;
     /** @return array{mode:string,revision:int} */
+    public function checklist(): array;
+    public function saveChecklist(bool $required, int $expectedRevision): void;
     public function answers(): array;
     public function saveAnswers(string $mode, int $expectedRevision): void;
     public function withdrawals(): array;

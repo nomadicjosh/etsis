@@ -22,7 +22,7 @@ final readonly class SqlAdmissionCaseworkRepository implements AdmissionCasework
 
     public function find(EntityId $application): ?array
     {
-        $row = $this->sql->rows('sis_admission_cases', ['application_id' => $application->value], 1)[0] ?? null;
+        $row = $this->sql->current('sis_admission_cases', $application->value, 'application_id');
         if ($row === null) {
             return null;
         }
