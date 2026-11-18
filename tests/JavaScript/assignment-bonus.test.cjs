@@ -1,0 +1,159 @@
+"use strict";
+const test = require("node:test"),
+    assert = require("node:assert/strict");
+const fs = require("node:fs"),
+    vm = require("node:vm");
+const { Element, node, walk } = require("./support/elements.cjs");
+Element.prototype.removeAttribute = function (key) {
+    delete this.attributes[key];
+};
+const originalQuery = Element.prototype.querySelector;
+Element.prototype.querySelector = function (selector) {
+    return walk(this).find((e) => e.tag === selector) || originalQuery.call(this, selector);
+};
+async function fixture() {
+    const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
+    vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
+    let body, pending, lastFlow, delayed, release;
+    const score = {
+        assignment_id: "task",
+        title: "Fictional bonus task",
+        possible_hundredths: 10000,
+        bonus_hundredths: 2000,
+        score_limit_hundredths: 12000,
+        earned_hundredths: 11500,
+        version: 1,
+    };
+    const summary = {
+        mode: "points",
+        percent_hundredths: 11500,
+        coverage_hundredths: 10000,
+        graded: 1,
+        pending: 0,
+        excluded: 0,
+        bonus_enabled: true,
+        bonus_earned_hundredths: 1500,
+    };
+    const openDrawer = () => {
+        if (body) for (const e of walk(body)) e.isConnected = false;
+        return (body = node("div"));
+    };
+    const ui = {
+        node,
+        openDrawer,
+        task: (run) => (pending = Promise.resolve().then(run)),
+        table: (headers, rows) => node("table", {}, rows.flat()),
+        badge: (text) => node("span", {}, text),
+        recordSummary: () => node("dl"),
+        flow: async (...args) => {
+            const [title, fields, endpoint, map, back, preset] = args;
+            const parent = openDrawer();
+            const form = node("form");
+            form.elements = {};
+            for (const [name] of fields) {
+                const input = node("input", { name });
+                input.value = preset[name] ?? "";
+                form.elements[name] = input;
+                form.append(input);
+            }
+            parent.append(form);
+            lastFlow = { args, form };
+            return form;
+        },
+        request: async (path) => {
+            if (path.includes("/roster/"))
+                return {
+                    items: [
+                        {
+                            student_id: "student",
+                            status: "A",
+                            given_name: "Fictional",
+                            family_name: "Student",
+                        },
+                    ],
+                    can_grade: true,
+                };
+            if (path.includes("/context/assignments/")) return { items: [{ id: "task", ...score }] };
+            if (path.endsWith("/attendance/")) return { items: [], counts: {} };
+            if (path.endsWith("/gradebook-summary/")) return summary;
+            if (path.endsWith("/score-page/")) return { items: [score] };
+            const record = {
+                id: "task",
+                section_id: "section",
+                title: score.title,
+                possible_hundredths: 10000,
+                bonus_hundredths: 2000,
+                due_on: "2026-09-01",
+                revision: "current",
+            };
+            if (delayed)
+                return new Promise((resolve) => {
+                    release = () => resolve(record);
+                });
+            return record;
+        },
+    };
+    const component = window.createWorkspaceTeaching(ui);
+    const section = node("div");
+    await component.section(section, { id: "section", code: "TEST.101" }, "teaching");
+    const click = async (container, label) => {
+        const button = walk(container).find((e) => e.tag === "button" && e.textContent === label);
+        assert.ok(button, label);
+        button.attributes.onclick({ currentTarget: button });
+        await pending;
+    };
+    return {
+        section,
+        click,
+        body: () => body,
+        flow: () => lastFlow,
+        defer: () => {
+            delayed = true;
+        },
+        release: () => release(),
+        close: openDrawer,
+    };
+}
+test("assignment creation exposes an optional default-zero bonus limit", async () => {
+    const f = await fixture();
+    await f.click(f.section, "Add assignment");
+    const flow = f.flow();
+    const field = flow.args[1].find(([name]) => name === "bonus_hundredths");
+    assert.equal(field[2], "hundredths");
+    assert.equal(field[4], false);
+    assert.equal(flow.args[5].bonus_hundredths, 0);
+    assert.match(flow.args[6], /without adding possible points to the average/);
+});
+test("assignment editing preserves the bonus in points and its revision", async () => {
+    const f = await fixture();
+    await f.click(f.section, "Edit assignment");
+    const flow = f.flow();
+    assert.equal(flow.args[5].bonus_hundredths, 20);
+    assert.equal(flow.args[5].possible_hundredths, 100);
+    assert.equal(flow.args[3]({ bonus_hundredths: 3000 }).revision, "current");
+});
+test("score editing permits only the explicit combined limit and explains the denominator", async () => {
+    const f = await fixture();
+    await f.click(f.section, "Grade & attendance");
+    assert.match(f.body().textContent, /115.00%/);
+    assert.match(f.body().textContent, /15 bonus points in counted work/);
+    await f.click(f.body(), "Enter score");
+    assert.equal(f.flow().form.elements.earned_hundredths.max, 120);
+    assert.match(f.body().textContent, /Maximum earned: 120 points/);
+    assert.equal(
+        f.flow().form.elements.earned_hundredths.getAttribute("aria-describedby"),
+        "score-point-limit",
+    );
+});
+test("a late assignment read cannot reopen a closed private drawer", async () => {
+    const f = await fixture();
+    f.defer();
+    const pending = f.click(f.section, "Edit assignment");
+    await Promise.resolve();
+    const other = f.close();
+    f.release();
+    await pending;
+    assert.equal(f.body(), other);
+    assert.equal(f.flow(), undefined);
+});

@@ -160,14 +160,21 @@ final readonly class GradebookCalculation
             $id = (string) $score["assignment_id"];
             $possible = $score["possible_hundredths"];
             $earned = $score["earned_hundredths"];
+            $bonus = array_key_exists("bonus_hundredths", $score) ? $score["bonus_hundredths"] : 0;
             if (
                 isset($seen[$id]) ||
                 !is_int($possible) ||
-                $possible < 1 ||
-                $possible > 1000000 ||
-                ($earned !== null && (!is_int($earned) || $earned < 0 || $earned > $possible))
+                !is_int($bonus) ||
+                ($earned !== null && !is_int($earned))
             ) {
                 self::invalid("An assignment score needs review before calculating this gradebook.");
+            }
+            try {
+                new AssignmentPoints($possible, $bonus)->assertEarned($earned);
+            } catch (ValidationException) {
+                self::invalid(
+                    "An assignment score or bonus limit needs review before calculating this gradebook.",
+                );
             }
             $seen[$id] = $score;
         }
@@ -185,6 +192,8 @@ final readonly class GradebookCalculation
         $contribution = 0.0;
         $pending = 0;
         $included = 0;
+        $bonusEarned = 0;
+        $bonusEnabled = false;
         foreach ($scores as $score) {
             $id = (string) $score["assignment_id"];
             $possible = $score["possible_hundredths"];
@@ -194,12 +203,14 @@ final readonly class GradebookCalculation
                 continue;
             }
             ++$included;
+            $bonusEnabled = $bonusEnabled || ($score["bonus_hundredths"] ?? 0) > 0;
             $total += $weight;
             if ($earned === null) {
                 ++$pending;
                 continue;
             }
             $graded += $weight;
+            $bonusEarned += max(0, $earned - $possible);
             $contribution += $weight * ($earned / $possible);
         }
 
@@ -211,6 +222,8 @@ final readonly class GradebookCalculation
             "graded" => $included - $pending,
             "pending" => $pending,
             "excluded" => count($scores) - $included,
+            "bonus_earned_hundredths" => $bonusEarned,
+            "bonus_enabled" => $bonusEnabled,
         ];
     }
 
@@ -227,11 +240,15 @@ final readonly class GradebookCalculation
         $pending = 0;
         $awaiting = 0;
         $dropped = [];
+        $bonusTotal = 0;
+        $bonusEnabled = false;
         foreach ($this->categories as $category) {
             $possible = 0;
             $gradedPossible = 0;
             $earned = 0;
             $graded = 0;
+            $bonusEarned = 0;
+            $categoryBonus = false;
             $weight = $category["weight_hundredths"];
             $omitted = $weight === 0 ? [] : $this->dropped($category, $scores);
             $omittedIds = array_fill_keys(array_column($omitted, "assignment_id"), true);
@@ -242,13 +259,17 @@ final readonly class GradebookCalculation
                     continue;
                 }
                 $possible += $score["possible_hundredths"];
+                $categoryBonus = $categoryBonus || ($score["bonus_hundredths"] ?? 0) > 0;
                 if ($score["earned_hundredths"] !== null) {
                     $gradedPossible += $score["possible_hundredths"];
                     $earned += $score["earned_hundredths"];
+                    $bonusEarned += max(0, $score["earned_hundredths"] - $score["possible_hundredths"]);
                     ++$graded;
                 }
             }
             if ($weight > 0) {
+                $bonusTotal += $bonusEarned;
+                $bonusEnabled = $bonusEnabled || $categoryBonus;
                 $included += count($category["assignments"]);
                 $pending += count($category["assignments"]) - $graded - count($omitted);
                 if ($gradedPossible > 0) {
@@ -270,6 +291,7 @@ final readonly class GradebookCalculation
                 "graded" => $graded + count($omitted),
                 "dropped" => count($omitted),
                 "drop_lowest" => $category["drop_lowest"] ?? 0,
+                "bonus_earned_hundredths" => $bonusEarned,
             ];
         }
         return [
@@ -282,6 +304,8 @@ final readonly class GradebookCalculation
             "excluded" => count($scores) - $included,
             "dropped" => count($dropped),
             "dropped_assignments" => $dropped,
+            "bonus_earned_hundredths" => $bonusTotal,
+            "bonus_enabled" => $bonusEnabled,
             "awaiting_categories" => $awaiting,
             "categories" => $items,
         ];

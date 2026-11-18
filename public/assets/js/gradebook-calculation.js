@@ -4,12 +4,16 @@ window.createGradebookCalculation = function (ui) {
     const { node } = ui;
     const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
     function assignmentLabel(score) {
+        let label;
         if (score.category_title != null) {
-            return `${score.dropped ? "Dropped from average · " : ""}${score.category_title} · ${percent(score.category_weight_hundredths)} category${score.category_weight_hundredths === 0 ? " · Excluded" : ""}${score.category_drop_lowest ? ` · Drop lowest ${score.category_drop_lowest}` : ""}`;
-        }
-        if (score.excluded && score.weight_hundredths == null) return "Excluded";
-        if (score.weight_hundredths === 0) return "Excluded · 0.00%";
-        return score.weight_hundredths == null ? "By points" : percent(score.weight_hundredths);
+            label = `${score.dropped ? "Dropped from average · " : ""}${score.category_title} · ${percent(score.category_weight_hundredths)} category${score.category_weight_hundredths === 0 ? " · Excluded" : ""}${score.category_drop_lowest ? ` · Drop lowest ${score.category_drop_lowest}` : ""}`;
+        } else if (score.excluded && score.weight_hundredths == null) label = "Excluded";
+        else if (score.weight_hundredths === 0) label = "Excluded · 0.00%";
+        else label = score.weight_hundredths == null ? "By points" : percent(score.weight_hundredths);
+        if (score.bonus_hundredths > 0) label += ` · Bonus limit +${score.bonus_hundredths / 100} points`;
+        if (score.earned_hundredths > score.possible_hundredths)
+            label += ` · ${(score.earned_hundredths - score.possible_hundredths) / 100} bonus points recorded`;
+        return label;
     }
     function panel(summary) {
         return node(
@@ -28,6 +32,13 @@ window.createGradebookCalculation = function (ui) {
                 { class: "mb-1" },
                 `${{ weighted: "Assignment weights", category: "Category weights", points: "Total points" }[summary.mode]} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excluded ? ` · ${summary.excluded} excluded` : ""}${summary.dropped ? ` · ${summary.dropped} dropped from average` : ""}`,
             ),
+            summary.bonus_enabled
+                ? node(
+                      "p",
+                      { class: "small" },
+                      `${Number(summary.bonus_earned_hundredths || 0) / 100} bonus points in counted work. Possible points remain the denominator, so this running average can exceed 100%. Official grades are recorded separately.`,
+                  )
+                : null,
             summary.mode === "category"
                 ? node(
                       "div",

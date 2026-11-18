@@ -66,6 +66,7 @@ final readonly class SisGradebookController
             $f->text("title"),
             $f->integer("possible_hundredths", 1, 1000000),
             $f->date("due_on"),
+            $this->bonus($f),
         );
         $this->service->addAssignment($assignment);
 
@@ -86,6 +87,7 @@ final readonly class SisGradebookController
             $f->integer("possible_hundredths", 1, 1000000),
             $f->date("due_on"),
             $f->text("revision", 64),
+            $this->bonus($f),
         );
 
         return new JsonResponse(["status" => "saved"]);
@@ -308,5 +310,18 @@ final readonly class SisGradebookController
         return !is_array($body) || !array_key_exists("reason", $body) || $body["reason"] === ""
         ? ""
         : $f->bodyText("reason");
+    }
+    private function bonus(FormInput $input): int
+    {
+        try {
+            return $input->optionalInteger("bonus_hundredths") ?? 0;
+        } catch (\InvalidArgumentException) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "bonus_hundredths",
+                    "message" => "Enter a non-negative bonus limit in hundredths of a point.",
+                ],
+            ]);
+        }
     }
 }

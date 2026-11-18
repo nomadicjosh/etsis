@@ -65,20 +65,51 @@ if (($summary["percent_hundredths"] ?? null) !== 7500) {
 $second = $teachingPost($base . "/assignments/", [
     "title" => "Fictional second quiz",
     "possible_hundredths" => 1000,
+    "bonus_hundredths" => 200,
     "due_on" => "2026-09-02",
 ]);
 if ($second->getStatusCode() !== 201) {
     throw new RuntimeException("The second fictional assignment failed.");
 }
 $secondId = json_decode((string) $second->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+$assignmentResponse = $teachingPost("/sis/ui/context/assignments/" . $section->id->value . "/", []);
+$assignmentPage = json_decode((string) $assignmentResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ((int) (array_column($assignmentPage["items"], "bonus_hundredths", "id")[$secondId] ?? -1) !== 200) {
+    throw new RuntimeException("The paged assignment directory omitted its bonus limit.");
+}
 if (
     $teachingPost("/sis/assignments/" . $secondId . "/scores/", [
         "student_id" => $student->id->value,
-        "earned_hundredths" => 900,
+        "earned_hundredths" => 1100,
         "version" => 0,
     ])->getStatusCode() !== 200
 ) {
     throw new RuntimeException("The second fictional score failed.");
+}
+$bonusRecord = json_decode(
+    (string) $read("/sis/assignments/" . $secondId . "/")->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    ($bonusRecord["bonus_hundredths"] ?? null) !== 200 ||
+    ($bonusRecord["score_limit_hundredths"] ?? null) !== 1200 ||
+    $teachingPost("/sis/assignments/" . $secondId . "/scores/", [
+        "student_id" => $student->id->value,
+        "earned_hundredths" => 1201,
+        "version" => 1,
+    ])->getStatusCode() !== 422 ||
+    $teachingPost("/sis/assignments/" . $secondId . "/edit/", [
+        "title" => "Fictional second quiz",
+        "possible_hundredths" => 1000,
+        "bonus_hundredths" => 50,
+        "due_on" => "2026-09-02",
+        "revision" => $bonusRecord["revision"],
+    ])->getStatusCode() !== 422
+) {
+    throw new RuntimeException(
+        "The actual score/assignment routes did not protect bonus limits and recorded marks.",
+    );
 }
 $dropSetup = json_decode(
     (string) $read($base . "/gradebook/calculation/")->getBody(),
@@ -156,7 +187,8 @@ $portal = $read($portalPath);
 $body = json_decode((string) $portal->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $portal->getStatusCode() !== 200 ||
-    ($body["summary"]["percent_hundredths"] ?? null) !== 9000 ||
+    ($body["summary"]["percent_hundredths"] ?? null) !== 11000 ||
+    ($body["summary"]["bonus_earned_hundredths"] ?? null) !== 100 ||
     ($body["summary"]["dropped"] ?? null) !== 1 ||
     ($body["summary"]["dropped_assignments"][0]["assignment_id"] ?? null) !== $id ||
     (array_column($body["items"], "dropped", "assignment_id")[$id] ?? null) !== true ||

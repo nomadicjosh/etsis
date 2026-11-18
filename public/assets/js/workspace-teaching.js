@@ -175,13 +175,14 @@ window.createWorkspaceTeaching = function (ui) {
                     [
                         ["title", "Assignment title"],
                         ["possible_hundredths", "Possible points", "hundredths"],
+                        ["bonus_hundredths", "Bonus limit (optional)", "hundredths", "", false],
                         ["due_on", "Due on", "date"],
                     ],
                     `/sis/sections/${row.id}/assignments/`,
                     null,
                     back,
-                    {},
-                    "Assignments and scores are separate from the official final grade.",
+                    { bonus_hundredths: 0 },
+                    "Possible points set the base score. An optional bonus raises the score limit without adding possible points to the average. Official final grades are recorded separately.",
                     { layout: "teaching_assignment" },
                 ),
             ),
@@ -195,10 +196,11 @@ window.createWorkspaceTeaching = function (ui) {
             (page) =>
                 page.items.length
                     ? grid(
-                          ["Assignment", "Possible points", "Due", "Action"],
+                          ["Assignment", "Possible points", "Bonus limit", "Due", "Action"],
                           page.items.map((item) => [
                               item.title,
                               Number(item.possible_hundredths) / 100,
+                              Number(item.bonus_hundredths || 0) / 100,
                               item.due_on,
                               button("Edit assignment", () => editAssignment(item.id, back)),
                           ]),
@@ -330,12 +332,16 @@ window.createWorkspaceTeaching = function (ui) {
         body.append(form);
     }
     async function editAssignment(id, back) {
+        const loading = openDrawer("Edit assignment", "COURSEWORK");
+        loading.append(node("p", { role: "status" }, "Loading assignment…"));
         const record = await request(`/sis/assignments/${id}/`);
+        if (!loading.isConnected) return;
         await flow(
             "Save assignment changes",
             [
                 ["title", "Assignment title"],
                 ["possible_hundredths", "Possible points", "hundredths"],
+                ["bonus_hundredths", "Bonus limit (optional)", "hundredths", "", false],
                 ["due_on", "Due on", "date"],
             ],
             `/sis/assignments/${id}/edit/`,
@@ -344,8 +350,9 @@ window.createWorkspaceTeaching = function (ui) {
             {
                 ...record,
                 possible_hundredths: Number(record.possible_hundredths) / 100,
+                bonus_hundredths: Number(record.bonus_hundredths) / 100,
             },
-            "Changing possible points changes the percentage represented by existing scores. Recorded earned scores are preserved; the new maximum cannot be below any earned score. Final grades remain separate.",
+            "Possible points remain the average’s denominator. Bonus points raise only the allowed score. The combined limit cannot be below a recorded mark. Changing possible points changes existing percentages; official final grades remain separate.",
             { layout: "teaching_assignment" },
         );
     }
@@ -1243,7 +1250,14 @@ window.createWorkspaceTeaching = function (ui) {
                                       },
                                   );
                                   form.elements.earned_hundredths.max =
-                                      Number(item.possible_hundredths) / 100;
+                                      Number(item.score_limit_hundredths) / 100;
+                                  const help = node(
+                                      "p",
+                                      { class: "form-text", id: "score-point-limit" },
+                                      `Base: ${Number(item.possible_hundredths) / 100} points. Bonus limit: ${Number(item.bonus_hundredths) / 100} points. Maximum earned: ${Number(item.score_limit_hundredths) / 100} points. The base stays in the average’s denominator.`,
+                                  );
+                                  form.elements.earned_hundredths.setAttribute("aria-describedby", help.id);
+                                  form.append(help);
                               }),
                           ]),
                           "Assignment scores",

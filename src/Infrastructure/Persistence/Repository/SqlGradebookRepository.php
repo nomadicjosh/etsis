@@ -75,6 +75,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         );
         foreach ($rows as &$row) {
             $row["possible_hundredths"] = (int) $row["possible_hundredths"];
+            $row["bonus_hundredths"] = (int) $row["bonus_hundredths"];
         }
         unset($row);
         return $rows;
@@ -87,6 +88,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             "section_id" => $assignment->sectionId->value,
             "title" => $assignment->title,
             "possible_hundredths" => $assignment->possibleHundredths,
+            "bonus_hundredths" => $assignment->bonusHundredths,
             "due_on" => $assignment->dueOn->format("Y-m-d"),
         ]);
     }
@@ -101,6 +103,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             $r["title"],
             (int) $r["possible_hundredths"],
             new DateTimeImmutable($r["due_on"]),
+            (int) $r["bonus_hundredths"],
         );
     }
 
@@ -111,6 +114,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             [
                 "title" => $assignment->title,
                 "possible_hundredths" => $assignment->possibleHundredths,
+                "bonus_hundredths" => $assignment->bonusHundredths,
                 "due_on" => $assignment->dueOn->format("Y-m-d"),
             ],
             [
@@ -269,6 +273,8 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 ", a." .
                 $q("possible_hundredths") .
                 ", a." .
+                $q("bonus_hundredths") .
+                ", a." .
                 $q("due_on") .
                 ", s." .
                 $q("earned_hundredths") .
@@ -298,6 +304,8 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         );
         foreach ($rows as &$row) {
             $row["possible_hundredths"] = (int) $row["possible_hundredths"];
+            $row["bonus_hundredths"] = (int) $row["bonus_hundredths"];
+            $row["score_limit_hundredths"] = $row["possible_hundredths"] + $row["bonus_hundredths"];
             $row["earned_hundredths"] =
             $row["earned_hundredths"] === null ? null : (int) $row["earned_hundredths"];
             $row["version"] = (int) ($row["version"] ?? 0);

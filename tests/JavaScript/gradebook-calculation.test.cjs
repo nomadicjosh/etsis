@@ -445,3 +445,28 @@ test("shared feedback explains dropped scores without interpreting their titles 
     );
     assert.match(body.textContent, /official final grade is recorded separately/);
 });
+
+test("bonus feedback keeps over-100 averages visible and explains recorded bonus points", () => {
+    const p = presenter();
+    const panel = p.panel({
+        mode: "weighted",
+        percent_hundredths: 11500,
+        coverage_hundredths: 10000,
+        graded: 1,
+        pending: 0,
+        excluded: 0,
+        bonus_enabled: true,
+        bonus_earned_hundredths: 1500,
+    });
+    assert.match(panel.textContent, /115.00%/);
+    assert.match(panel.textContent, /15 bonus points in counted work/);
+    assert.match(panel.textContent, /running average can exceed 100%/);
+    assert.match(panel.textContent, /Official grades are recorded separately/);
+    const label = p.assignmentLabel({
+        possible_hundredths: 10000,
+        earned_hundredths: 11500,
+        bonus_hundredths: 2000,
+    });
+    assert.match(label, /Bonus limit \+20 points/);
+    assert.match(label, /15 bonus points recorded/);
+});

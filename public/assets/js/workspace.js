@@ -812,7 +812,7 @@
         teaching_assignment: [
             {
                 title: 'Assignment details',
-                fields: ['title', 'possible_hundredths', 'due_on'],
+                fields: ['title', 'possible_hundredths', 'bonus_hundredths', 'due_on'],
                 wide: ['title'],
             },
         ],
@@ -938,7 +938,7 @@
             } else if (type === 'textarea') control = node('textarea', { class: 'form-control', id, name: key, rows: 5, maxlength: 10000, required });
             else if (type === 'checkbox') control = node('input', { class: 'form-check-input', id, name: key, type: 'checkbox' });
             else control = node('input', { class: 'form-control', id, name: key, type: ['credits', 'money', 'hundredths', 'signedmoney'].includes(type) ? 'number' : type === 'signed' ? 'number' : type, required, maxlength: 191, ...(type === 'signed' ? { min: -2000000000, max: 2000000000, step: 1 } : {}), ...(type === 'number' ? { min: 0, max: 100000, step: 1 } : {}), ...(['credits', 'money', 'hundredths', 'signedmoney'].includes(type) ? { min: type === 'signedmoney' ? -1000000 : 0, max: type === 'credits' ? 999 : 1000000, step: type === 'credits' ? '.001' : '.01', value: 0 } : {}) });
-            const limits = { points_milli: [0, 10], severity: [0, 1000], course_limit: [1, 1000], minimum_grade_rank: [0, 10000], grade_rank: [0, 10000], possible_hundredths: [0.01, 10000], capacity: [1, 100000], amount_minor: [0.01, 1000000] };
+            const limits = { points_milli: [0, 10], severity: [0, 1000], course_limit: [1, 1000], minimum_grade_rank: [0, 10000], grade_rank: [0, 10000], possible_hundredths: [0.01, 10000], bonus_hundredths: [0, 10000], capacity: [1, 100000], amount_minor: [0.01, 1000000] };
             if (limits[key] && control.type === 'number') [control.min, control.max] = limits[key];
             if (['money', 'signedmoney'].includes(type)) control.dataset.money = key === 'amount_minor' ? 'positive' : type;
             if (preset[key] !== undefined) {

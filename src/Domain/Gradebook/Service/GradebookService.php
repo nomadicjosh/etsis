@@ -81,11 +81,7 @@ final readonly class GradebookService
                 $calculation->categories,
             );
             $this->audit->record($actor, "gradebook.calculation.updated", $section);
-            if ($this->faculty($section)->value !== $actor->value) {
-                throw new \Domain\Shared\Exception\AccessDeniedException(
-                    "The gradebook staff account changed. Review setup again.",
-                );
-            }
+            $this->sameFaculty($section, $actor);
             return $this->calculationContext($section);
         });
     }
@@ -129,6 +125,7 @@ final readonly class GradebookService
             $actor = $this->faculty($assignment->sectionId);
             $this->repository->addAssignment($assignment);
             $this->audit->record($actor, "assignment.created", $assignment->id);
+            $this->sameFaculty($assignment->sectionId, $actor);
         });
     }
 
@@ -144,6 +141,8 @@ final readonly class GradebookService
             "section_id" => $assignment->sectionId->value,
             "title" => $assignment->title,
             "possible_hundredths" => $assignment->possibleHundredths,
+            "bonus_hundredths" => $assignment->bonusHundredths,
+            "score_limit_hundredths" => $assignment->possibleHundredths + $assignment->bonusHundredths,
             "due_on" => $assignment->dueOn->format("Y-m-d"),
             "revision" => $this->assignmentRevision($assignment),
         ];
@@ -155,28 +154,39 @@ final readonly class GradebookService
         int $possible,
         DateTimeImmutable $due,
         string $revision,
+        int $bonus = 0,
     ): void {
         $this->access->authenticatedUserId();
         $initial = $this->repository->assignment($id);
         $this->faculty($initial->sectionId);
-        $this->transactions->run(function () use ($id, $initial, $title, $possible, $due, $revision): void {
+        $this->transactions->run(function () use (
+            $id,
+            $initial,
+            $title,
+            $possible,
+            $due,
+            $revision,
+            $bonus,
+        ): void {
             $this->registration->lockSection($initial->sectionId);
             $actor = $this->faculty($initial->sectionId);
             $current = $this->repository->assignment($id);
             if (!hash_equals($this->assignmentRevision($current), $revision)) {
                 throw new ConcurrentModificationException("Reload the assignment before editing.");
             }
-            if (($this->repository->highestScore($id) ?? 0) > $possible) {
+            $changed = new Assignment($id, $current->sectionId, $title, $possible, $due, $bonus);
+            if (($this->repository->highestScore($id) ?? 0) > $possible + $bonus) {
                 throw new ValidationException([
                     [
                         "field" => "possible_hundredths",
-                        "message" => "Possible points cannot be lower than a recorded earned score.",
+                        "message" =>
+                            "Possible points plus the bonus limit cannot be lower than a recorded earned score.",
                     ],
                 ]);
             }
-            $changed = new Assignment($id, $current->sectionId, $title, $possible, $due);
             $this->repository->saveAssignment($changed);
             $this->audit->record($actor, "assignment.updated", $id);
+            $this->sameFaculty($current->sectionId, $actor);
         });
     }
 
@@ -190,6 +200,7 @@ final readonly class GradebookService
                     $assignment->sectionId->value,
                     $assignment->title,
                     $assignment->possibleHundredths,
+                    $assignment->bonusHundredths,
                     $assignment->dueOn->format("Y-m-d"),
                 ],
                 JSON_THROW_ON_ERROR,
@@ -212,9 +223,16 @@ final readonly class GradebookService
             $this->enrolled($student, $initial->sectionId);
             $assignment = $this->repository->assignment($assignmentId);
             $actor = $this->faculty($assignment->sectionId);
-            $score = new AssignmentScore($assignmentId, $student, $earned, $assignment->possibleHundredths);
+            $score = new AssignmentScore(
+                $assignmentId,
+                $student,
+                $earned,
+                $assignment->possibleHundredths,
+                $assignment->bonusHundredths,
+            );
             $this->repository->score($score, $expectedVersion);
             $this->audit->record($actor, "assignment.graded", $assignmentId);
+            $this->sameFaculty($assignment->sectionId, $actor);
         });
     }
 
@@ -487,5 +505,13 @@ final readonly class GradebookService
         }
 
         return $enrollment;
+    }
+    private function sameFaculty(EntityId $section, EntityId $actor): void
+    {
+        if ($this->faculty($section)->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The teaching staff account changed. Reload this task.",
+            );
+        }
     }
 }
