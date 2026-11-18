@@ -689,6 +689,15 @@ return static function (Psr7Router $router): void {
             "deliver",
         ])
         ->name("sis.transcript.fulfillment.deliver");
+    $router->map(["POST"], "/sis/registration-schedule/review/", [
+        \Application\Http\Controller\SisRegistrationController::class, "reviewSchedule",
+    ])->name("sis.registration.schedule.review");
+    $router->map(["GET"], "/sis/registration-policy/", [
+        \Application\Http\Controller\SisRegistrationPolicyController::class, "current",
+    ])->name("sis.registration.policy.current");
+    $router->map(["POST"], "/sis/registration-policy/", [
+        \Application\Http\Controller\SisRegistrationPolicyController::class, "save",
+    ])->name("sis.registration.policy.save");
     $router
         ->map(["POST"], "/sis/courses/", [SisRegistrationController::class, "course"])
         ->name("sis.registration.course");

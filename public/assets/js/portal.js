@@ -10,6 +10,7 @@
         : {};
     let me = null;
     let dialogOpener = null;
+    let portalDialogGeneration = 0;
     let pageLeaving = false;
     let controlSequence = 0;
     let catalogAfter = '';
@@ -290,6 +291,7 @@
 
     function dialog(title, ...children) {
         if (pageLeaving) return;
+        portalDialogGeneration++;
         if (!dialogOpener?.isConnected) dialogOpener = document.activeElement;
         one('#campus-dialog-title').textContent = title;
         one('#campus-dialog-body').replaceChildren(...children);
@@ -297,6 +299,7 @@
     }
 
     one('#campus-dialog')?.addEventListener('hidden.bs.modal', () => {
+        portalDialogGeneration++;
         const destination = dialogOpener?.isConnected
             ? dialogOpener
             : one('#campus-main');
@@ -1798,6 +1801,26 @@
             })),
         );
         if (me.students.length === 1) student.value = me.students[0].id;
+        const schedulePanel = el('div');
+        const confirmation = el('button', { class: 'btn campus-button', type: 'submit', disabled: true }, 'Confirm registration');
+        let serial = 0, reviewedStudent = '', dialogGeneration = 0;
+        const presenter = window.createRegistrationSchedule({ node: el });
+        async function checkSchedule() {
+            const turn = ++serial, selected = student.value;
+            reviewedStudent = '';
+            confirmation.disabled = true;
+            schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Checking published meetings…'));
+            if (!selected) {
+                schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Choose a student program to check its timetable.'));
+                return;
+            }
+            const result = await request('/sis/registration-schedule/review/', 'POST', { student_id: selected, section_id: course.id });
+            if (!form.isConnected || turn !== serial || student.value !== selected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
+            reviewedStudent = selected;
+            schedulePanel.replaceChildren(presenter.panel(result));
+            confirmation.disabled = result.blocked;
+        }
+        student.addEventListener('change', () => task(checkSchedule));
         form.append(
             el(
                 'p',
@@ -1814,21 +1837,20 @@
                 { class: 'campus-muted' },
                 'Registration may add course and institutional fees to your account. Review your institution’s billing policy before continuing. Eligibility and seat availability are checked when you register.',
             ),
-            el(
-                'button',
-                { class: 'btn campus-button', type: 'submit' },
-                'Confirm registration',
-            ),
+            schedulePanel,
+            confirmation,
         );
         form.addEventListener('submit', (event) => {
             event.preventDefault();
             task(
                 async () => {
                     if (!form.reportValidity()) return;
+                    if (reviewedStudent !== student.value) throw new Error('Review the selected student timetable before registering.');
                     await request('/portal/api/register/', 'POST', {
                         student_id: student.value,
                         section_id: course.id,
                     });
+                    if (!form.isConnected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
                     bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
                     notice('You’re registered. Your semester is taking shape.');
                     await renderService();
@@ -1837,6 +1859,8 @@
             );
         });
         dialog('A new possibility, on your schedule.', form);
+        dialogGeneration = portalDialogGeneration;
+        task(checkSchedule);
     }
 
     function transcripts(container) {

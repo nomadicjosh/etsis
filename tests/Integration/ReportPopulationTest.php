@@ -411,7 +411,8 @@ final class ReportPopulationTest extends TestCase
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
             $s->workPursuits(),
-            $s->prerequisites()
+            $s->prerequisites(),
+            $s->schedules(),
         );
         $group = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $section->id,

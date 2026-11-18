@@ -19,8 +19,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisRegistrationController
 {
-    public function __construct(private RegistrationService $service, private RegistrarCatalogService $catalog)
-    {
+    public function __construct(
+        private RegistrationService $service,
+        private RegistrarCatalogService $catalog,
+    ) {
     }
 
     public function course(ServerRequest $request): ResponseInterface
@@ -50,20 +52,27 @@ final readonly class SisRegistrationController
             true,
             $f->boolean("web_registration"),
             new Money($f->integer("fee_minor"), $f->text("currency", 3)),
-            \Domain\Registration\Enum\DeliveryMode::parse($f->optionalText("delivery_mode", 24) ?? "unspecified"),
+            \Domain\Registration\Enum\DeliveryMode::parse(
+                $f->optionalText("delivery_mode", 24) ?? "unspecified",
+            ),
         );
         $this->catalog->offer($section);
 
         return new JsonResponse(["id" => $section->id->value], 201);
     }
 
-    public function window(ServerRequest $request, string $id): ResponseInterface
-    {
+    public function window(
+        ServerRequest $request,
+        string $id,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $this->catalog->configureWindow(
             new EntityId($id),
             new RegistrationWindow(
-                new DateRange($f->instant("opens_at"), $f->instant("closes_at")),
+                new DateRange(
+                    $f->instant("opens_at"),
+                    $f->instant("closes_at"),
+                ),
                 $f->integer("course_limit", 1, 1000),
             ),
         );
@@ -71,16 +80,26 @@ final readonly class SisRegistrationController
         return new JsonResponse(["status" => "configured"]);
     }
 
-    public function prerequisite(ServerRequest $request, string $id): ResponseInterface
-    {
-        $this->catalog->requireCourse(new EntityId($id), FormInput::from($request)->id("required_course_id"));
+    public function prerequisite(
+        ServerRequest $request,
+        string $id,
+    ): ResponseInterface {
+        $this->catalog->requireCourse(
+            new EntityId($id),
+            FormInput::from($request)->id("required_course_id"),
+        );
 
         return new JsonResponse(["status" => "added"], 201);
     }
 
-    public function removePrerequisite(string $id, string $required): ResponseInterface
-    {
-        $this->catalog->removeRequiredCourse(new EntityId($id), new EntityId($required));
+    public function removePrerequisite(
+        string $id,
+        string $required,
+    ): ResponseInterface {
+        $this->catalog->removeRequiredCourse(
+            new EntityId($id),
+            new EntityId($required),
+        );
 
         return new JsonResponse(["status" => "removed"]);
     }
@@ -88,18 +107,50 @@ final readonly class SisRegistrationController
     public function register(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
-        $enrollment = $this->service->register($f->id("student_id"), $f->id("section_id"), $f->boolean("by_staff"));
+        $enrollment = $this->service->register(
+            $f->id("student_id"),
+            $f->id("section_id"),
+            $f->boolean("by_staff"),
+        );
 
-        return new JsonResponse(["id" => $enrollment->id->value, "status" => $enrollment->status->value], 201);
+        return new JsonResponse(
+            [
+                "id" => $enrollment->id->value,
+                "status" => $enrollment->status->value,
+            ],
+            201,
+        );
     }
 
-    public function reviewDrop(ServerRequest $request, string $student, string $section): ResponseInterface
-    {
-        return new JsonResponse($this->service->reviewDrop(new EntityId($student), new EntityId($section)));
+    public function reviewSchedule(
+        #[\SensitiveParameter] ServerRequest $request,
+    ): ResponseInterface {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->reviewSchedule(
+                $f->id("student_id"),
+                $f->id("section_id"),
+            ),
+        );
+    }
+
+    public function reviewDrop(
+        ServerRequest $request,
+        string $student,
+        string $section,
+    ): ResponseInterface {
+        return new JsonResponse(
+            $this->service->reviewDrop(
+                new EntityId($student),
+                new EntityId($section),
+            ),
+        );
     }
     public function dropReceipt(string $operation): ResponseInterface
     {
-        return new JsonResponse($this->service->dropReceipt(new EntityId($operation)));
+        return new JsonResponse(
+            $this->service->dropReceipt(new EntityId($operation)),
+        );
     }
     public function drop(ServerRequest $request): ResponseInterface
     {

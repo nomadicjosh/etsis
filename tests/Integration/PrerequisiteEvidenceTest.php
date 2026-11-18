@@ -74,6 +74,7 @@ final class PrerequisiteEvidenceTest extends TestCase
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
             $s->workPursuits(),
             $prerequisites ?? $s->prerequisites(),
+            $s->schedules(),
         );
     }
 

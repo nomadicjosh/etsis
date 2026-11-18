@@ -1,7 +1,17 @@
 /* Staff batch registration: explicit review, atomic confirmation and durable retry receipts. */
 window.createWorkspaceRegistration = function (ui) {
     "use strict";
-    const { node, request, task, table, money, recordSummary, buildForm, openDrawer, refreshDirectory } = ui;
+    const {
+        node,
+        request,
+        task,
+        table,
+        money,
+        recordSummary,
+        buildForm,
+        openDrawer,
+        refreshDirectory,
+    } = ui;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -23,6 +33,114 @@ window.createWorkspaceRegistration = function (ui) {
             },
             table(headers, rows, caption),
         );
+    const schedule = window.createRegistrationSchedule({ node });
+    async function policy(back = null) {
+        const body = openDrawer("Timetable policy", "REGISTRATION SETTINGS");
+        const value = await request("/sis/registration-policy/");
+        if (!body.isConnected) return;
+        const choices = [
+            "block — Block confirmed overlaps",
+            "warn — Warn and allow registration",
+        ];
+        const form = await buildForm(
+            [["mode", "When published meetings overlap", "choice", choices]],
+            { mode: choices.find((item) => item.startsWith(value.mode)) },
+        );
+        if (!body.isConnected) return;
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save policy",
+        );
+        form.append(save);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request("/sis/registration-policy/", "POST", {
+                    mode: form.elements.mode.value.split(" — ")[0],
+                    revision: value.revision,
+                });
+                if (body.isConnected) await policy(back);
+            }, save);
+        });
+        body.append(
+            node(
+                "p",
+                {},
+                "Applies to new student, staff and group registrations. Unpublished schedules remain not checked. Existing registrations and charges are unchanged.",
+            ),
+            form,
+            back ? button("Back to registration", back, "btn-link") : null,
+        );
+    }
+    async function single(student, back, draft = {}) {
+        const body = openDrawer(
+            "Register student",
+            "SECTION → TIMETABLE → CONFIRM",
+        );
+        const form = await buildForm(
+            [["section_id", "Course section", "lookup", "sections"]],
+            draft,
+        );
+        if (!body.isConnected) return;
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review registration",
+        );
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const section = form.elements.section_id.value;
+                const sectionLabel =
+                    form.elements.section_id.selectedOptions?.[0]
+                        ?.textContent || section;
+                const reviewed = await request(
+                    "/sis/registration-schedule/review/",
+                    "POST",
+                    { student_id: student, section_id: section },
+                );
+                if (!body.isConnected) return;
+                const panel = openDrawer(
+                    "Review registration",
+                    "SECTION → TIMETABLE → CONFIRM",
+                );
+                const confirm = button(
+                    "Confirm registration",
+                    async () => {
+                        await request("/sis/registrations/", "POST", {
+                            student_id: student,
+                            section_id: section,
+                            by_staff: true,
+                        });
+                        if (!panel.isConnected) return;
+                        await back();
+                        await refreshDirectory();
+                    },
+                    "btn-primary",
+                );
+                confirm.disabled = reviewed.blocked;
+                panel.append(
+                    node("h3", {}, sectionLabel),
+                    schedule.panel(reviewed),
+                    node(
+                        "p",
+                        {},
+                        "Confirmation also checks seats, prerequisites, activity, holds and course limits. Applicable fees may be posted.",
+                    ),
+                    confirm,
+                    button("Change section", () =>
+                        single(student, back, { section_id: section }),
+                    ),
+                    button("Back to student", back, "btn-link"),
+                );
+            }, review);
+        });
+        body.append(form, button("Back to student", back, "btn-link"));
+    }
     function receipt(result, again) {
         const body = openDrawer("Batch completed", "REGISTRATION RECEIPT");
         body.append(
@@ -31,16 +149,32 @@ window.createWorkspaceRegistration = function (ui) {
                 { role: "status" },
                 `${result.created} ${result.created === 1 ? "registration" : "registrations"} created. ${result.existing} existing ${result.existing === 1 ? "registration" : "registrations"} kept.`,
             ),
-            node("p", {}, "The registrations, applicable charges and batch receipt were saved together."),
-            node("p", { class: "registration-reference" }, "Batch reference: ", node("code", {}, result.batch_id)),
+            node(
+                "p",
+                {},
+                "The registrations, applicable charges and batch receipt were saved together.",
+            ),
+            node(
+                "p",
+                { class: "registration-reference" },
+                "Batch reference: ",
+                node("code", {}, result.batch_id),
+            ),
             button("Start another group", again, "btn-primary"),
         );
     }
     async function findReceipt() {
-        const body = openDrawer("Find a completed batch", "REGISTRATION RECEIPT");
+        const body = openDrawer(
+            "Find a completed batch",
+            "REGISTRATION RECEIPT",
+        );
         const form = await buildForm([["operation_id", "Batch reference"]]);
         form.elements.operation_id.maxLength = 26;
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Check completed batch");
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Check completed batch",
+        );
         form.append(save);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -49,7 +183,9 @@ window.createWorkspaceRegistration = function (ui) {
                 const id = form.elements.operation_id.value.trim();
                 if (!/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id))
                     throw new Error("Enter a valid batch reference.");
-                const result = await request(`/sis/registration-batches/${id}/`);
+                const result = await request(
+                    `/sis/registration-batches/${id}/`,
+                );
                 if (!body.isConnected) return;
                 receipt(result, () => start());
             }, save);
@@ -64,7 +200,8 @@ window.createWorkspaceRegistration = function (ui) {
         );
     }
     async function start(presetSection = "", presetStudents = [], back = null) {
-        if (presetStudents.length > 25) throw new Error("Select no more than 25 students.");
+        if (presetStudents.length > 25)
+            throw new Error("Select no more than 25 students.");
         const chosen = new Map(
             presetStudents.map((student) => [
                 student.id,
@@ -74,8 +211,21 @@ window.createWorkspaceRegistration = function (ui) {
         let sectionId = presetSection;
         async function selection() {
             const body = openDrawer("Register a group", "BATCH REGISTRATION");
-            const tools = node("div", { class: "inline-actions mb-3", role: "group", "aria-label": "Registration tools" },
-                button("Find a completed batch", findReceipt, "btn-outline-secondary"));
+            const tools = node(
+                "div",
+                {
+                    class: "inline-actions mb-3",
+                    role: "group",
+                    "aria-label": "Registration tools",
+                },
+                button(
+                    "Find a completed batch",
+                    findReceipt,
+                    "btn-outline-secondary",
+                ),
+            );
+            if (ui.can?.("sis:registration:policy"))
+                tools.append(button("Timetable policy", () => policy(selection)));
             body.append(
                 node(
                     "p",
@@ -88,7 +238,13 @@ window.createWorkspaceRegistration = function (ui) {
             const form = await buildForm(
                 [
                     ["section_id", "Course section", "lookup", "sections"],
-                    ["student_id", "Find a student", "lookup", "registrationstudents", false],
+                    [
+                        "student_id",
+                        "Find a student",
+                        "lookup",
+                        "registrationstudents",
+                        false,
+                    ],
                 ],
                 { section_id: sectionId },
                 { layout: "registration_group" },
@@ -104,12 +260,19 @@ window.createWorkspaceRegistration = function (ui) {
                 if (!control.value) throw new Error("Choose a student to add.");
                 if (!chosen.has(control.value) && chosen.size >= 25)
                     throw new Error("Select no more than 25 students.");
-                chosen.set(control.value, control.selectedOptions[0].textContent);
+                chosen.set(
+                    control.value,
+                    control.selectedOptions[0].textContent,
+                );
                 render();
             });
             function render(focusIndex = null) {
                 selected.replaceChildren(
-                    node("h3", {}, `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`),
+                    node(
+                        "h3",
+                        {},
+                        `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`,
+                    ),
                     node(
                         "ul",
                         { class: "registration-selection" },
@@ -122,16 +285,33 @@ window.createWorkspaceRegistration = function (ui) {
                                 },
                                 "btn-outline-secondary btn-sm",
                             );
-                            remove.setAttribute("aria-label", `Remove ${label}`);
-                            return node("li", {}, node("span", {}, label), remove);
+                            remove.setAttribute(
+                                "aria-label",
+                                `Remove ${label}`,
+                            );
+                            return node(
+                                "li",
+                                {},
+                                node("span", {}, label),
+                                remove,
+                            );
                         }),
                     ),
                 );
                 if (!chosen.size)
-                    selected.append(node("p", { class: "form-text" }, "Add students to build this group."));
+                    selected.append(
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            "Add students to build this group.",
+                        ),
+                    );
                 if (focusIndex !== null) {
                     const controls = selected.querySelectorAll("button");
-                    (controls[Math.min(focusIndex, controls.length - 1)] || add).focus();
+                    (
+                        controls[Math.min(focusIndex, controls.length - 1)] ||
+                        add
+                    ).focus();
                 }
             }
             render();
@@ -145,13 +325,20 @@ window.createWorkspaceRegistration = function (ui) {
                 event.preventDefault();
                 task(async () => {
                     if (!form.reportValidity()) return;
-                    if (!chosen.size) throw new Error("Add at least one student to the group.");
+                    if (!chosen.size)
+                        throw new Error(
+                            "Add at least one student to the group.",
+                        );
                     sectionId = form.elements.section_id.value;
                     const payload = {
                         section_id: sectionId,
                         student_ids: [...chosen.keys()],
                     };
-                    const reviewed = await request("/sis/registration-batches/review/", "POST", payload);
+                    const reviewed = await request(
+                        "/sis/registration-batches/review/",
+                        "POST",
+                        payload,
+                    );
                     if (!body.isConnected) return;
                     await confirmation(reviewed, payload);
                 }, review);
@@ -160,15 +347,24 @@ window.createWorkspaceRegistration = function (ui) {
         }
         async function confirmation(reviewed, payload) {
             const section = reviewed.section;
-            const body = openDrawer("Review group registration", "CONFIRM THE SELECTION");
+            const body = openDrawer(
+                "Review group registration",
+                "CONFIRM THE SELECTION",
+            );
             body.append(
                 button("Change selection", selection, "btn-link"),
                 node("h3", {}, section.code),
                 recordSummary([
-                    ["Course", `${section.course_code} · ${section.course_title}`],
+                    [
+                        "Course",
+                        `${section.course_code} · ${section.course_title}`,
+                    ],
                     ["Credits", Number(section.credits_milli) / 1000],
                     ["Seats remaining", section.seats_remaining],
-                    ["Section fee", `${money(section.fee_minor, section.currency)} per new registration`],
+                    [
+                        "Section fee",
+                        `${money(section.fee_minor, section.currency)} per new registration`,
+                    ],
                 ]),
                 node(
                     "p",
@@ -185,7 +381,14 @@ window.createWorkspaceRegistration = function (ui) {
                     ),
                 );
             const students = grid(
-                ["Student", "Institutional ID", "Activity", "Prerequisites", "Registration"],
+                [
+                    "Student",
+                    "Institutional ID",
+                    "Activity",
+                    "Prerequisites",
+                    "Timetable",
+                    "Registration",
+                ],
                 reviewed.students.map((student) => [
                     `${student.given_name} ${student.family_name}`,
                     student.institutional_id,
@@ -195,10 +398,14 @@ window.createWorkspaceRegistration = function (ui) {
                         : {
                               met: "Verified for this pursuit",
                               not_required: "No course prerequisites",
-                              not_rechecked: ["A", "N"].includes(student.enrollment_status)
+                              not_rechecked: ["A", "N"].includes(
+                                  student.enrollment_status,
+                              )
                                   ? "Existing registration — unchanged"
                                   : "Not checked — closed enrollment",
-                          }[student.prerequisites?.status] || "Checked on confirmation",
+                          }[student.prerequisites?.status] ||
+                          "Checked on confirmation",
+                    schedule.text(student.schedule),
                     ["A", "N"].includes(student.enrollment_status)
                         ? "Already enrolled — keep"
                         : student.enrollment_id
@@ -208,21 +415,41 @@ window.createWorkspaceRegistration = function (ui) {
                 "Reviewed registration group",
             );
             body.append(
-                node("p", { class: "registration-reference" }, "Batch reference: ", node("code", {}, reviewed.operation_id)),
+                node(
+                    "p",
+                    { class: "registration-reference" },
+                    "Batch reference: ",
+                    node("code", {}, reviewed.operation_id),
+                ),
                 node(
                     "p",
                     { class: "form-text" },
                     "If a response is interrupted, check this receipt or retry this same confirmation. Keep the reference to find a completed batch later.",
                 ),
             );
+            for (const student of reviewed.students) {
+                if (student.schedule?.conflict_count)
+                    body.append(
+                        node(
+                            "h3",
+                            { class: "h6" },
+                            `${student.given_name} ${student.family_name}`,
+                        ),
+                        schedule.panel(student.schedule),
+                    );
+            }
             const submit = button(
                 "Confirm group registration",
                 async () => {
-                    const result = await request("/sis/registration-batches/commit/", "POST", {
-                        ...payload,
-                        operation_id: reviewed.operation_id,
-                        revision: reviewed.revision,
-                    });
+                    const result = await request(
+                        "/sis/registration-batches/commit/",
+                        "POST",
+                        {
+                            ...payload,
+                            operation_id: reviewed.operation_id,
+                            revision: reviewed.revision,
+                        },
+                    );
                     if (!body.isConnected) return;
                     await refreshDirectory();
                     if (!body.isConnected) return;
@@ -230,7 +457,23 @@ window.createWorkspaceRegistration = function (ui) {
                 },
                 "btn-primary",
             );
-            if (reviewed.students.some((student) => student.prerequisites?.status === "missing")) {
+            if (
+                reviewed.students.some((student) => student.schedule?.blocked)
+            ) {
+                submit.disabled = true;
+                body.append(
+                    node(
+                        "p",
+                        { class: "alert alert-warning", role: "status" },
+                        "Resolve overlapping meetings or change the selected group before confirming.",
+                    ),
+                );
+            }
+            if (
+                reviewed.students.some(
+                    (student) => student.prerequisites?.status === "missing",
+                )
+            ) {
                 submit.disabled = true;
                 body.append(
                     node(
@@ -271,8 +514,15 @@ window.createWorkspaceRegistration = function (ui) {
         await selection();
     }
     async function history(student, back, after = "", stack = []) {
-        const page = await request(`/sis/students/${student}/registration-history/`, "POST", { after });
-        const body = openDrawer("Registration history", "RESTRICTED REGISTRAR HISTORY");
+        const page = await request(
+            `/sis/students/${student}/registration-history/`,
+            "POST",
+            { after },
+        );
+        const body = openDrawer(
+            "Registration history",
+            "RESTRICTED REGISTRAR HISTORY",
+        );
         if (back) body.append(button("Back to student", back, "btn-link"));
         body.append(
             node(
@@ -303,6 +553,13 @@ window.createWorkspaceRegistration = function (ui) {
                         "Earlier enrollment decisions are unknown; existing facts were observed at the recorded action.",
                     ),
                 );
+            panel.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    `Timetable at acceptance: ${schedule.text(record.schedule)}.`,
+                ),
+            );
             const prerequisites = record.prerequisites;
             panel.append(
                 node(
@@ -351,9 +608,11 @@ window.createWorkspaceRegistration = function (ui) {
             );
         if (page.next_after)
             nav.append(
-                button("Next history page", () => history(student, back, page.next_after, [...stack, after])),
+                button("Next history page", () =>
+                    history(student, back, page.next_after, [...stack, after]),
+                ),
             );
         body.append(nav);
     }
-    return { start, history };
+    return { single, policy, start, history };
 };

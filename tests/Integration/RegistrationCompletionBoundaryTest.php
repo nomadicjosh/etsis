@@ -62,7 +62,8 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $s->activityLedger(),
             $s->primaryProgramLedger(),
             $s->workPursuits(),
-            $prerequisites ?? new PrerequisiteService($s->inputVerifier(), $s->workPursuits())
+            $prerequisites ?? new PrerequisiteService($s->inputVerifier(), $s->workPursuits()),
+            $s->schedules(),
         );
     }
 
@@ -406,7 +407,8 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
             $s->workPursuits(),
-            $s->prerequisites()
+            $s->prerequisites(),
+            $s->schedules(),
         );
         $selection = new \Domain\Registration\ValueObject\RegistrationBatchSelection(
             $section->id,

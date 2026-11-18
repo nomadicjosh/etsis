@@ -21,12 +21,13 @@ async function mockServices(page, options = {}) {
         applications: [], restrictions: [], accounts: [{ id: account, student_id: student, term_id: term, currency: 'USD', balance_minor: 15000 }],
         news: [{ title: 'A fictional campus update', content: 'A welcoming place to connect.' }],
         transcript_requests: [], request_id: requestId, payment_id: id(14) };
-    await page.route(/\/(?:portal\/api|sis\/forms)\//, async route => {
+    await page.route(/\/(?:portal\/api|sis\/forms|sis\/registration-schedule)\//, async route => {
         const req = route.request(), path = new URL(req.url()).pathname;
         const data = req.method() === 'POST' ? JSON.parse(new URLSearchParams(req.postData()).get('_workspace_json')) : null;
         if (data) { expect(req.headers()['x-csrf-token']).toBe('fictional-test-token'); mutations.push({ path, data }); }
         let result = {};
         if (path === '/portal/api/me/') result = me;
+        else if (path === '/sis/registration-schedule/review/') result = { status: 'not_rechecked', mode: 'block', blocked: false, conflict_count: 0, unpublished_count: 0, conflicts: [] };
         else if (path === '/portal/api/applications/') result = { person_id: person, items: me.applications };
         else if (path === '/portal/api/programs/') result = { items: [{ id: program, code: 'BS.CS', title: 'Computer Science', form_id: formId }], next_after: null };
         else if (path === '/portal/api/courses/') result = { items: [course], next_after: null };

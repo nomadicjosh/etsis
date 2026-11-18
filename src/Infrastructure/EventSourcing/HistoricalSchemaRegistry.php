@@ -1084,6 +1084,22 @@ final readonly class HistoricalSchemaRegistry
                 if ($name === "schema_version" && $value === $version) {
                     continue;
                 }
+                if ($name === 'schedule_evidence') {
+                    if (
+                        $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class
+                        || $payload['provenance'] !== 'registered' || !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $decision = new \Domain\Registration\ValueObject\RegistrationScheduleDecision($value);
+                    if (
+                        $decision->blocked() || $value['student_id'] !== $payload['enrollment']['student_id']
+                        || $value['target_section_id'] !== $payload['enrollment']['section_id']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'prerequisite_evidence') {
                     if (
                         $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class ||

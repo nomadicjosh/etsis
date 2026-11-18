@@ -35,19 +35,30 @@ final readonly class RegistrationBatchService
         private SectionVersionRepository $versions,
         private \Domain\AcademicRecord\Service\WorkPursuitService $pursuits,
         private PrerequisiteService $prerequisites,
+        private RegistrationScheduleService $schedules,
     ) {
     }
 
     /** @return array<string, mixed> */
     public function review(RegistrationBatchSelection $selection): array
     {
-        $actor = $this->access->requirePermission('sis:registration:manage');
+        $actor = $this->access->requirePermission("sis:registration:manage");
         $routing = $this->routing($selection);
-        return $this->transactions->run(function () use ($selection, $routing, $actor): array {
+        return $this->transactions->run(function () use (
+            $selection,
+            $routing,
+            $actor,
+        ): array {
             $this->lock($selection, $routing);
-            $context = $this->context($selection, new \Domain\Shared\EventSourcing\HistoryReadBudget());
+            $context = $this->context(
+                $selection,
+                new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+            );
             $this->actor($actor);
-            return $context + ['revision' => $this->revision($context), 'operation_id' => EntityId::generate()->value];
+            return $context + [
+                "revision" => $this->revision($context),
+                "operation_id" => EntityId::generate()->value,
+            ];
         });
     }
 
@@ -55,9 +66,12 @@ final readonly class RegistrationBatchService
      * @return array<string, mixed>
      * @throws JsonException
      */
-    public function commit(EntityId $operation, RegistrationBatchSelection $selection, string $revision): array
-    {
-        $actor = $this->access->requirePermission('sis:registration:manage');
+    public function commit(
+        EntityId $operation,
+        RegistrationBatchSelection $selection,
+        string $revision,
+    ): array {
+        $actor = $this->access->requirePermission("sis:registration:manage");
         $hash = $selection->requestHash($revision);
         if (($receipt = $this->batches->receipt($operation)) !== null) {
             return $this->replay($receipt, $actor, $hash);
@@ -69,7 +83,7 @@ final readonly class RegistrationBatchService
             $revision,
             $hash,
             $actor,
-            $routing
+            $routing,
         ): array {
             $this->lock($selection, $routing);
             // A matching concurrent request may have committed while these locks were being acquired.
@@ -80,43 +94,81 @@ final readonly class RegistrationBatchService
             $context = $this->context($selection, $budget);
             $this->actor($actor);
             if (!hash_equals($this->revision($context), $revision)) {
-                throw new ConcurrentModificationException('Review the current batch before confirming.');
+                throw new ConcurrentModificationException(
+                    "Review the current batch before confirming.",
+                );
             }
             $items = [];
             $created = 0;
-            foreach ($context['students'] as $row) {
-                if ($row['prerequisites']['status'] === 'missing') {
-                    throw new ValidationException([['field' => 'students',
-                        'message' => 'A selected student does not meet the prerequisites. '
-                            . 'Review the group before confirming.']]);
+            $scheduleRead = new RegistrationScheduleRead();
+            foreach ($context["students"] as $row) {
+                if ($row["schedule"]["blocked"]) {
+                    throw new ValidationException([
+                        [
+                            "field" => "students",
+                            "message" =>
+                                "A selected student has overlapping published meetings. Review " .
+                                "the group before confirming.",
+                        ],
+                    ]);
+                }
+                if ($row["prerequisites"]["status"] === "missing") {
+                    throw new ValidationException([
+                        [
+                            "field" => "students",
+                            "message" =>
+                                "A selected student does not meet the prerequisites. " .
+                                "Review the group before confirming.",
+                        ],
+                    ]);
                 }
                 try {
                     $enrollment = $this->registration->register(
-                        new EntityId($row['id']),
+                        new EntityId($row["id"]),
                         $selection->section,
                         true,
-                        budget: $budget
+                        budget: $budget,
+                        scheduleRead: $scheduleRead,
                     );
                 } catch (DomainException) {
-                    throw new ValidationException([['field' => 'students', 'message' => $row['institutional_id']
-                        . ': Registration could not be completed. Check activity, holds, prerequisites, course limits '
-                        . 'available seats and billing configuration. No changes in this batch were saved.']]);
+                    throw new ValidationException([
+                        [
+                            "field" => "students",
+                            "message" =>
+                                $row["institutional_id"] .
+                                ": Registration could not be completed. Check activity, holds, prerequisites, " .
+                                "timetable, course limits, seats and billing. No changes in this batch were saved.",
+                        ],
+                    ]);
                 }
-                $new = $row['enrollment_id'] === null;
+                $new = $row["enrollment_id"] === null;
                 $created += (int) $new;
-                $items[] = ['student_id' => $row['id'], 'enrollment_id' => $enrollment->id->value, 'created' => $new];
+                $items[] = [
+                    "student_id" => $row["id"],
+                    "enrollment_id" => $enrollment->id->value,
+                    "created" => $new,
+                ];
             }
-            $result = ['batch_id' => $operation->value, 'section_id' => $selection->section->value,
-                'created' => $created, 'existing' => count($items) - $created, 'registrations' => $items];
+            $result = [
+                "batch_id" => $operation->value,
+                "section_id" => $selection->section->value,
+                "created" => $created,
+                "existing" => count($items) - $created,
+                "registrations" => $items,
+            ];
             $this->batches->save(
                 $operation,
                 $actor,
                 $selection->section,
                 $hash,
                 $result,
-                $this->clock->now()->format('Y-m-d\TH:i:sP')
+                $this->clock->now()->format("Y-m-d\TH:i:sP"),
             );
-            $this->audit->record($actor, 'registration.batch_completed', $operation);
+            $this->audit->record(
+                $actor,
+                "registration.batch_completed",
+                $operation,
+            );
             $this->actor($actor);
             return $result;
         });
@@ -125,35 +177,47 @@ final readonly class RegistrationBatchService
     /** @return array<string, mixed> */
     public function receipt(EntityId $id): array
     {
-        $actor = $this->access->requirePermission('sis:registration:manage');
-        $receipt = $this->batches->receipt($id) ?? throw new RecordNotFoundException('Batch receipt not found.');
-        $this->owner($receipt['actor_id'], $actor);
-        return $receipt['result'];
+        $actor = $this->access->requirePermission("sis:registration:manage");
+        $receipt =
+        $this->batches->receipt($id) ??
+        throw new RecordNotFoundException("Batch receipt not found.");
+        $this->owner($receipt["actor_id"], $actor);
+        return $receipt["result"];
     }
 
     /** @param array{actor_id: string, request_hash: string, result: array<string, mixed>} $receipt
      * @return array<string, mixed>
      */
-    private function replay(array $receipt, EntityId $actor, string $hash): array
-    {
-        $this->owner($receipt['actor_id'], $actor);
-        if (!hash_equals($receipt['request_hash'], $hash)) {
-            throw new ConcurrentModificationException('This operation belongs to a different batch request.');
+    private function replay(
+        array $receipt,
+        EntityId $actor,
+        string $hash,
+    ): array {
+        $this->owner($receipt["actor_id"], $actor);
+        if (!hash_equals($receipt["request_hash"], $hash)) {
+            throw new ConcurrentModificationException(
+                "This operation belongs to a different batch request.",
+            );
         }
-        return $receipt['result'];
+        return $receipt["result"];
     }
 
     private function actor(EntityId $actor): void
     {
-        if ($this->access->requirePermission('sis:registration:manage')->value !== $actor->value) {
-            throw new AccessDeniedException('The batch registration actor changed.');
+        if (
+            $this->access->requirePermission("sis:registration:manage")
+                ->value !== $actor->value
+        ) {
+            throw new AccessDeniedException(
+                "The batch registration actor changed.",
+            );
         }
     }
 
     private function owner(string $owner, EntityId $actor): void
     {
         if ($owner !== $actor->value) {
-            throw new AccessDeniedException('Access denied.');
+            throw new AccessDeniedException("Access denied.");
         }
     }
 
@@ -166,22 +230,27 @@ final readonly class RegistrationBatchService
             $people[$person->value] = $person;
         }
         ksort($people, SORT_STRING);
-        return ['people' => array_values($people),
-            'course' => $this->repository->section($selection->section)->courseId];
+        return [
+            "people" => array_values($people),
+            "course" => $this->repository->section($selection->section)
+                ->courseId,
+        ];
     }
 
     /** @param array{people: list<EntityId>, course: EntityId} $routing */
-    private function lock(RegistrationBatchSelection $selection, array $routing): void
-    {
+    private function lock(
+        RegistrationBatchSelection $selection,
+        array $routing,
+    ): void {
         // Sorted students, sorted people, section, course: acquire every eligibility lock before any consistent read.
         foreach ($selection->students as $id) {
             $this->repository->lockStudent($id);
         }
-        foreach ($routing['people'] as $id) {
+        foreach ($routing["people"] as $id) {
             $this->repository->lockPerson($id);
         }
         $this->repository->lockSection($selection->section);
-        $this->repository->lockCourse($routing['course']);
+        $this->repository->lockCourse($routing["course"]);
     }
 
     /** @return array<string, mixed> */
@@ -192,32 +261,90 @@ final readonly class RegistrationBatchService
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
         $students = [];
-        $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+        $scheduleRead = new RegistrationScheduleRead();
+        $required =
+        $course->publishedPrerequisites ??
+        $this->repository->requiredCourses($course->id);
         foreach ($selection->students as $id) {
             $student = $this->admissions->student($id);
             $person = $this->admissions->person($student->personId);
             $enrollment = $this->repository->enrollment($id, $section->id);
-            $assignment = $enrollment === null ? $this->pursuits->activePursuit($id) : null;
-            $decision = $assignment === null ? null :
-            $this->prerequisites->evaluate($id, $assignment, $required, $budget);
-            $students[] = ['id' => $id->value, 'given_name' => $person->givenName, 'family_name' => $person->familyName,
-                'institutional_id' => $person->institutionalId->value, 'active' => $student->active,
-                'assignment_id' => $assignment?->value,
-                'prerequisites' => ['status' => $decision === null ? 'not_rechecked' :
-                    ($required === [] ? 'not_required' : ($decision->isMet() ? 'met' : 'missing')),
-                    'missing_count' => $decision?->missingCount(), 'revision' => $decision?->revision()],
-                'enrollment_id' => $enrollment?->id->value, 'enrollment_status' => $enrollment?->status->value];
+            $assignment =
+            $enrollment === null
+            ? $this->pursuits->activePursuit($id)
+            : null;
+            $decision =
+            $assignment === null
+            ? null
+            : $this->prerequisites->evaluate(
+                $id,
+                $assignment,
+                $required,
+                $budget,
+            );
+            $schedule =
+            $enrollment === null
+            ? $this->schedules->evaluate(
+                $id,
+                $section->id,
+                $scheduleRead,
+            )
+            : null;
+            $students[] = [
+                "id" => $id->value,
+                "given_name" => $person->givenName,
+                "family_name" => $person->familyName,
+                "institutional_id" => $person->institutionalId->value,
+                "active" => $student->active,
+                "assignment_id" => $assignment?->value,
+                "schedule" =>
+                    $schedule === null
+                        ? ["status" => "not_rechecked", "blocked" => false]
+                        : $schedule->summary() + [
+                                "revision" => $schedule->revision(),
+                                "conflicts" => $schedule->facts["conflicts"],
+                            ],
+                "prerequisites" => [
+                    "status" =>
+                        $decision === null
+                            ? "not_rechecked"
+                            : ($required === []
+                                ? "not_required"
+                                : ($decision->isMet()
+                                    ? "met"
+                                    : "missing")),
+                    "missing_count" => $decision?->missingCount(),
+                    "revision" => $decision?->revision(),
+                ],
+                "enrollment_id" => $enrollment?->id->value,
+                "enrollment_status" => $enrollment?->status->value,
+            ];
         }
-        return ['section' => ['id' => $section->id->value, 'code' => $section->code,
-            'term_id' => $section->termId->value,
-            'section_version_id' => $section->publicationVersionId?->value,
-            'selection_position' => $this->versions->selectionPosition($section->id),
-            'course_version_id' => $course->publicationVersionId?->value,
-            'course_code' => $course->code, 'course_title' => $course->title, 'credits_milli' => $course->creditsMilli,
-            'active' => $section->active && $course->active, 'fee_minor' => $section->fee->minor,
-            'currency' => $section->fee->currency, 'capacity' => $section->capacity,
-            'seats_remaining' => max(0, $section->capacity - $this->repository->sectionCount($section->id))],
-            'students' => $students];
+        return [
+            "section" => [
+                "id" => $section->id->value,
+                "code" => $section->code,
+                "term_id" => $section->termId->value,
+                "section_version_id" => $section->publicationVersionId?->value,
+                "selection_position" => $this->versions->selectionPosition(
+                    $section->id,
+                ),
+                "course_version_id" => $course->publicationVersionId?->value,
+                "course_code" => $course->code,
+                "course_title" => $course->title,
+                "credits_milli" => $course->creditsMilli,
+                "active" => $section->active && $course->active,
+                "fee_minor" => $section->fee->minor,
+                "currency" => $section->fee->currency,
+                "capacity" => $section->capacity,
+                "seats_remaining" => max(
+                    0,
+                    $section->capacity -
+                        $this->repository->sectionCount($section->id),
+                ),
+            ],
+            "students" => $students,
+        ];
     }
 
     /**
@@ -226,6 +353,6 @@ final readonly class RegistrationBatchService
      */
     private function revision(array $context): string
     {
-        return hash('sha256', json_encode($context, JSON_THROW_ON_ERROR));
+        return hash("sha256", json_encode($context, JSON_THROW_ON_ERROR));
     }
 }

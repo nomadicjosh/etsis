@@ -26,8 +26,10 @@ final class EnrollmentHistory extends EventSourcedAggregate
     private ?string $provenance = null;
     private ?string $sectionVersion = null;
     private ?\Domain\Registration\ValueObject\PrerequisiteDecision $prerequisites = null;
-    public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
-    {
+    private ?\Domain\Registration\ValueObject\RegistrationScheduleDecision $schedule = null;
+    public function acceptHistorical(
+        #[\SensitiveParameter] DomainEvent $event,
+    ): void {
         if (
             !$event->aggregateId()->equals($this->aggregateId()) ||
             $event->playhead() !== $this->playhead() + 1
@@ -38,29 +40,55 @@ final class EnrollmentHistory extends EventSourcedAggregate
         $this->applyThat($event);
         $this->playhead = $event->playhead();
     }
-    public function whenEnrollmentWasEstablished(EnrollmentWasEstablished $event): void
-    {
+    public function whenEnrollmentWasEstablished(
+        EnrollmentWasEstablished $event,
+    ): void {
         $p = $event->payload();
-        if ($this->facts !== null || $p["enrollment"]["id"] !== (string) $this->aggregateId()) {
+        if (
+            $this->facts !== null ||
+            $p["enrollment"]["id"] !== (string) $this->aggregateId()
+        ) {
             throw new CorruptHistoryException();
         }
-        $this->sectionVersion = $event->metaParam('section_version_id', null);
+        $this->sectionVersion = $event->metaParam("section_version_id", null);
         if ($this->sectionVersion !== null) {
             new \Domain\Shared\ValueObject\EntityId($this->sectionVersion);
-            if ($p['provenance'] !== 'registered') {
+            if ($p["provenance"] !== "registered") {
                 throw new CorruptHistoryException();
             }
         }
-        $evidence = $event->metaParam('prerequisite_evidence', null);
-        if (array_key_exists('prerequisite_evidence', $event->metadata())) {
-            if (!is_array($evidence) || $p['provenance'] !== 'registered') {
+        $evidence = $event->metaParam("prerequisite_evidence", null);
+        if (array_key_exists("prerequisite_evidence", $event->metadata())) {
+            if (!is_array($evidence) || $p["provenance"] !== "registered") {
                 throw new CorruptHistoryException();
             }
-            $decision = \Domain\Registration\ValueObject\PrerequisiteDecision::fromRetained($evidence);
-            if ($decision->required !== $p['eligibility']['required_course_ids']) {
+            $decision = \Domain\Registration\ValueObject\PrerequisiteDecision::fromRetained(
+                $evidence,
+            );
+            if (
+                $decision->required !== $p["eligibility"]["required_course_ids"]
+            ) {
                 throw new CorruptHistoryException();
             }
             $this->prerequisites = $decision;
+        }
+        if (array_key_exists("schedule_evidence", $event->metadata())) {
+            $evidence = $event->metaParam("schedule_evidence");
+            if (!is_array($evidence) || $p["provenance"] !== "registered") {
+                throw new CorruptHistoryException();
+            }
+            $decision = new \Domain\Registration\ValueObject\RegistrationScheduleDecision(
+                $evidence,
+            );
+            if (
+                $decision->blocked() ||
+                $evidence["student_id"] !== $p["enrollment"]["student_id"] ||
+                $evidence["target_section_id"] !==
+                    $p["enrollment"]["section_id"]
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $this->schedule = $decision;
         }
         $this->facts = $p["enrollment"];
         $this->source = $p["source"];
@@ -78,7 +106,8 @@ final class EnrollmentHistory extends EventSourcedAggregate
             $this->facts === null ||
             !in_array($this->facts["status"], ["A", "N"], true) ||
             $p["previous_decision_id"] !== $this->decision ||
-            ($this->seat !== null && $p["seat"]["sequence"] <= $this->seat["sequence"])
+            ($this->seat !== null &&
+                $p["seat"]["sequence"] <= $this->seat["sequence"])
         ) {
             throw new CorruptHistoryException();
         }
@@ -135,10 +164,33 @@ final class EnrollmentHistory extends EventSourcedAggregate
     /** @return array{status:string,required_course_count:?int,supporting_record_count:?int} */
     public function prerequisiteSummary(): array
     {
-        return ['status' => $this->prerequisites === null ? 'not_recorded' :
-                ($this->prerequisites->required === [] ? 'not_required' : 'verified'),
-            'required_course_count' => $this->prerequisites === null ? null : count($this->prerequisites->required),
-            'supporting_record_count' => $this->prerequisites === null ? null : count($this->prerequisites->support)];
+        return [
+            "status" =>
+                $this->prerequisites === null
+                    ? "not_recorded"
+                    : ($this->prerequisites->required === []
+                        ? "not_required"
+                        : "verified"),
+            "required_course_count" =>
+                $this->prerequisites === null
+                    ? null
+                    : count($this->prerequisites->required),
+            "supporting_record_count" =>
+                $this->prerequisites === null
+                    ? null
+                    : count($this->prerequisites->support),
+        ];
+    }
+
+    public function scheduleSummary(): array
+    {
+        return $this->schedule?->summary() ?? [
+            "status" => "not_recorded",
+            "mode" => null,
+            "blocked" => false,
+            "conflict_count" => null,
+            "unpublished_count" => null,
+        ];
     }
 
     public function sectionVersion(): ?string

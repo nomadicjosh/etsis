@@ -17,26 +17,44 @@ use Domain\Shared\ValueObject\EntityId;
 /** Internal verified current read. Every calling workflow must establish and recheck its own authority. */
 final readonly class PublishedSectionMeetingPlanReader
 {
-    public function __construct(private SectionMeetingPlanRepository $plans, private HistoricalEventStore $history)
-    {
+    public function __construct(
+        private SectionMeetingPlanRepository $plans,
+        private HistoricalEventStore $history,
+    ) {
     }
 
     public function read(EntityId $section): ?StoredEvent
     {
-        $head = $this->history->latest(new StreamReference(
-            new SectionMeetingPlanId($section->value),
-            'section_meeting_plan'
-        ));
+        $head = $this->history->latest(
+            new StreamReference(
+                new SectionMeetingPlanId($section->value),
+                "section_meeting_plan",
+            ),
+        );
         $projection = $this->plans->current($section);
         if ($head === null && $projection === null) {
             return null;
         }
+        $version = $projection["version"] ?? null;
         if (
-            $head === null || $projection === null || !$head->event instanceof SectionMeetingPlanWasPublished
-            || $head->event->playhead() !== (int) $projection['version']
-            || $head->event->payload()['version_id'] !== $projection['publication_id']
-            || new SectionMeetingPlanDefinition($head->event->payload()['definition'])->fingerprint() !==
-                $projection['definition_hash']
+            (!is_int($version) &&
+                (!is_string($version) ||
+                    (string) (int) $version !== $version)) ||
+            (int) $version < 1 ||
+            (int) $version > 2000000000
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if (
+            $head === null ||
+            $projection === null ||
+            !($head->event instanceof SectionMeetingPlanWasPublished) ||
+            $head->event->playhead() !== (int) $version ||
+            $head->event->payload()["version_id"] !==
+                $projection["publication_id"] ||
+            new SectionMeetingPlanDefinition(
+                $head->event->payload()["definition"],
+            )->fingerprint() !== $projection["definition_hash"]
         ) {
             throw new CorruptHistoryException();
         }

@@ -332,6 +332,7 @@ final class SisFixture
             $this->primaryProgramLedger(),
             $this->workPursuits(),
             new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits()),
+            $this->schedules(),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -496,6 +497,17 @@ final class SisFixture
         $review = $service->review($student, $credit, $assignment, 'attribute', 'Fictional source evidence identifies this pursuit.');
         $service->commit($student, $credit, $review['review_token']);
     }
+    public function schedules(): \Domain\Registration\Service\RegistrationScheduleService
+    {
+        $history = EventStoreFixture::history($this->connection->queryBuilder());
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql);
+        $sections = new \Infrastructure\Persistence\Repository\SqlBookingSectionRepository($this->sql, $versions, $history);
+        $plans = new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository($this->sql, $sections);
+        return new \Domain\Registration\Service\RegistrationScheduleService(
+            new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($this->sql),
+            new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history));
+    }
+
     public function prerequisites(): \Domain\Registration\Service\PrerequisiteService
     {
         return new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits());

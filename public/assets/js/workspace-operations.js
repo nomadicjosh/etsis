@@ -281,26 +281,7 @@ window.createWorkspaceOperations = function (ui) {
         if (row.active !== false && row.active !== 0)
             actions.append(
                 button("Register for a section", () =>
-                    flow(
-                        "Register student",
-                        [
-                            [
-                                "section_id",
-                                "Course section",
-                                "lookup",
-                                "sections",
-                            ],
-                        ],
-                        "/sis/registrations/",
-                        (data) => ({
-                            ...data,
-                            student_id: row.id,
-                            by_staff: true,
-                        }),
-                        back,
-                        {},
-                        "This checks seats, prerequisites and staff-blocking restrictions. Section and institutional fees may be posted.",
-                    ),
+                    ui.batchRegistration().single(row.id, back),
                 ),
             );
         await paged(actions, "enrollments", row.id, (rows) =>

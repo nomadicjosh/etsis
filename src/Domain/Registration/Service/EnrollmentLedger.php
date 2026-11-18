@@ -43,6 +43,8 @@ final readonly class EnrollmentLedger
         #[\SensitiveParameter] array $eligibility,
         EntityId $actor,
         PrerequisiteDecision $prerequisites,
+        #[\SensitiveParameter]
+        \Domain\Registration\ValueObject\RegistrationScheduleDecision $schedule,
     ): void {
         $this->actor($actor);
         if (
@@ -52,16 +54,39 @@ final readonly class EnrollmentLedger
         ) {
             throw new CorruptHistoryException();
         }
-        $selected = SectionOfferingSelection::verify($section->id, $this->versions, $this->history);
-        if ($selected?->publication->value !== $section->publicationVersionId?->value) {
+        $selected = SectionOfferingSelection::verify(
+            $section->id,
+            $this->versions,
+            $this->history,
+        );
+        if (
+            $selected?->publication->value !==
+            $section->publicationVersionId?->value
+        ) {
             throw new CorruptHistoryException();
         }
-        if ($selected !== null && !$selected->matchesOffering($section, $course)) {
-            throw new \DomainException('This offering changed after version selection. Registrar review is required.');
+        if (
+            $selected !== null &&
+            !$selected->matchesOffering($section, $course)
+        ) {
+            throw new \DomainException(
+                "This offering changed after version selection. Registrar review is required.",
+            );
         }
-        $metadata = ['__aggregate_type' => 'enrollment', 'prerequisite_evidence' => $prerequisites->retained()];
+        if (
+            $schedule->blocked() ||
+            $schedule->facts["student_id"] !== $enrollment->studentId->value ||
+            $schedule->facts["target_section_id"] !== $section->id->value
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $metadata = [
+            "__aggregate_type" => "enrollment",
+            "prerequisite_evidence" => $prerequisites->retained(),
+            "schedule_evidence" => $schedule->facts,
+        ];
         if ($selected !== null) {
-            $metadata['section_version_id'] = $selected->publication->value;
+            $metadata["section_version_id"] = $selected->publication->value;
         }
         $seat = $this->nextSeat($section, 1);
         $event = EnrollmentWasEstablished::occur(
@@ -69,8 +94,13 @@ final readonly class EnrollmentLedger
             [
                 "decision_id" => $enrollment->id->value,
                 "provenance" => "registered",
-                "enrollment" => EnrollmentFacts::fromEnrollment($enrollment)->facts,
-                "source" => $this->source($section, $enrollment->termId, $course->publicationVersionId),
+                "enrollment" => EnrollmentFacts::fromEnrollment($enrollment)
+                    ->facts,
+                "source" => $this->source(
+                    $section,
+                    $enrollment->termId,
+                    $course->publicationVersionId,
+                ),
                 "eligibility" => $eligibility,
                 "seat" => $seat,
             ],
@@ -88,24 +118,36 @@ final readonly class EnrollmentLedger
             ),
             [$event],
         );
-        $root = EnrollmentHistory::root(new EnrollmentHistoryId($enrollment->id->value));
+        $root = EnrollmentHistory::root(
+            new EnrollmentHistoryId($enrollment->id->value),
+        );
         $root->acceptHistorical($event);
         $this->project($root, null);
     }
-    public function verifyExisting(Enrollment $enrollment, Section $section): void
-    {
+    public function verifyExisting(
+        Enrollment $enrollment,
+        Section $section,
+    ): void {
         $this->load($enrollment->id);
         $this->head($section);
     }
     /** @param array<string,mixed> $outcome */
-    public function close(Enrollment $closed, Section $section, array $outcome, EventContext $context): void
-    {
+    public function close(
+        Enrollment $closed,
+        Section $section,
+        array $outcome,
+        EventContext $context,
+    ): void {
         if ($context->actor === null || $context->correlation === null) {
-            throw new \InvalidArgumentException("A trusted registration context is required.");
+            throw new \InvalidArgumentException(
+                "A trusted registration context is required.",
+            );
         }
         $this->actor($context->actor);
         $root = $this->load($closed->id);
-        $before = $this->records->current($closed->id) ?? throw new CorruptHistoryException();
+        $before =
+        $this->records->current($closed->id) ??
+        throw new CorruptHistoryException();
         if ($root->playhead() === 0) {
             $op = PublishedGradeId::forVersion(
                 $context->correlation,
@@ -166,21 +208,30 @@ final readonly class EnrollmentLedger
                 $context->actor,
                 $context->effectiveAt,
                 $context->correlation,
-                new EntityId($root->decision() ?? throw new CorruptHistoryException()),
+                new EntityId(
+                    $root->decision() ?? throw new CorruptHistoryException(),
+                ),
                 $context->reason,
             ),
             [$event],
         );
         $root->acceptHistorical($event);
-        if (!$this->same($root->facts(), EnrollmentFacts::fromEnrollment($closed)->facts)) {
+        if (
+            !$this->same(
+                $root->facts(),
+                EnrollmentFacts::fromEnrollment($closed)->facts,
+            )
+        ) {
             throw new CorruptHistoryException();
         }
         $this->project($root, $before["version"]);
     }
     /** Restricted curated read, after caller authorizes and locks the student/section.
      * @return array<string,mixed> */
-    public function summary(EntityId $id, ?HistoryReadBudget $budget = null): array
-    {
+    public function summary(
+        EntityId $id,
+        ?HistoryReadBudget $budget = null,
+    ): array {
         $budget ??= new HistoryReadBudget();
         $root = $this->load($id, $budget);
         $f = $root->facts() ?? throw new CorruptHistoryException();
@@ -206,13 +257,15 @@ final readonly class EnrollmentLedger
             "enrollment_id" => $id->value,
             "section_version_id" => $root->sectionVersion(),
             "prerequisites" => $root->prerequisiteSummary(),
+            "schedule" => $root->scheduleSummary(),
             "student_id" => $f["student_id"],
             "section_id" => $f["section_id"],
             "section_code" => $s["section_code"],
             "term_code" => $s["term_code"],
             "status" => $f["status"],
             "current_records_removed" => $f["status"] === "D",
-            "earlier_history_unknown" => $root->provenance() === "observed_existing",
+            "earlier_history_unknown" =>
+                $root->provenance() === "observed_existing",
             "items" => $items,
         ];
     }
@@ -220,22 +273,32 @@ final readonly class EnrollmentLedger
      * Includes removed enrollment facts for cross-checking, never for ordinary display.
      * @return array<string,mixed>
      */
-    public function evaluationFacts(EntityId $enrollment, EntityId $student, HistoryReadBudget $budget): array
-    {
+    public function evaluationFacts(
+        EntityId $enrollment,
+        EntityId $student,
+        HistoryReadBudget $budget,
+    ): array {
         $root = $this->load($enrollment, $budget);
-        $facts = $root->facts() ?? $this->records->current($enrollment) ?? throw new CorruptHistoryException();
+        $facts =
+        $root->facts() ??
+        ($this->records->current($enrollment) ??
+        throw new CorruptHistoryException());
         if ($facts["student_id"] !== $student->value) {
             throw new CorruptHistoryException();
         }
         return [
             "facts" => $facts,
             "history_recorded" => $root->playhead() > 0,
-            "earlier_history_unknown" => $root->playhead() === 0 || $root->provenance() === "observed_existing",
+            "earlier_history_unknown" =>
+                $root->playhead() === 0 ||
+                $root->provenance() === "observed_existing",
             "history_version" => $root->playhead(),
         ];
     }
-    private function load(EntityId $id, ?HistoryReadBudget $budget = null): EnrollmentHistory
-    {
+    private function load(
+        EntityId $id,
+        ?HistoryReadBudget $budget = null,
+    ): EnrollmentHistory {
         $budget ??= new HistoryReadBudget();
         $root = EnrollmentHistory::root(new EnrollmentHistoryId($id->value));
         $cursor = null;
@@ -265,11 +328,18 @@ final readonly class EnrollmentLedger
         ) {
             throw new CorruptHistoryException();
         }
-        if ($this->versions->enrollmentVersion($id)?->value !== $root->sectionVersion()) {
+        if (
+            $this->versions->enrollmentVersion($id)?->value !==
+            $root->sectionVersion()
+        ) {
             throw new CorruptHistoryException();
         }
         $current = $this->records->current($id);
-        if ($f["status"] === "D" ? $current !== null : !$this->same($f, $current)) {
+        if (
+            $f["status"] === "D"
+                ? $current !== null
+                : !$this->same($f, $current)
+        ) {
             throw new CorruptHistoryException();
         }
         $indices = $this->records->decisions($id);
@@ -302,7 +372,9 @@ final readonly class EnrollmentLedger
         if (
             $root->decision() !== $last["id"] ||
             $root->playhead() !== $last["stream_version"] ||
-            ($root->facts() ?? throw new CorruptHistoryException())["section_id"] !== $section->id->value ||
+            ($root->facts() ?? throw new CorruptHistoryException())[
+                "section_id"
+            ] !== $section->id->value ||
             $seat === null ||
             $seat["sequence"] !== $last["sequence"] ||
             $seat["used_after"] !== $this->records->usedSeats($section->id)
@@ -317,7 +389,8 @@ final readonly class EnrollmentLedger
         $last = $this->head($section);
         $before = $this->records->usedSeats($section->id);
         if (
-            ($delta === 1 && ($before >= $section->capacity || !$section->active)) ||
+            ($delta === 1 &&
+                ($before >= $section->capacity || !$section->active)) ||
             ($delta === -1 && $before < 1)
         ) {
             throw new \Domain\Shared\Exception\ConcurrentModificationException(
@@ -333,8 +406,11 @@ final readonly class EnrollmentLedger
         ];
     }
     /** @return array<string,mixed> */
-    private function source(Section $s, EntityId $term, ?EntityId $courseVersion): array
-    {
+    private function source(
+        Section $s,
+        EntityId $term,
+        ?EntityId $courseVersion,
+    ): array {
         return [
             "course_id" => $s->courseId->value,
             "course_version_id" => $courseVersion?->value,
@@ -349,26 +425,35 @@ final readonly class EnrollmentLedger
             "faculty_user_id" => $s->facultyUserId?->value,
         ];
     }
-    private function project(EnrollmentHistory $root, ?int $expectedVersion): void
-    {
+    private function project(
+        EnrollmentHistory $root,
+        ?int $expectedVersion,
+    ): void {
         $f = $root->facts() ?? throw new CorruptHistoryException();
         $seat = $root->seat() ?? throw new CorruptHistoryException();
         $this->records->project($f, $seat["sequence"], $expectedVersion);
         $this->versions->retainEnrollmentVersion(
-            new EntityId($f['id']),
-            $root->sectionVersion() === null ? null : new EntityId($root->sectionVersion())
+            new EntityId($f["id"]),
+            $root->sectionVersion() === null
+                ? null
+                : new EntityId($root->sectionVersion()),
         );
         $last = $root->decisions();
         $this->records->index($last[count($last) - 1]);
     }
     private function stream(EntityId $id): StreamReference
     {
-        return new StreamReference(new EnrollmentHistoryId($id->value), "enrollment");
+        return new StreamReference(
+            new EnrollmentHistoryId($id->value),
+            "enrollment",
+        );
     }
     private function actor(EntityId $actor): void
     {
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
-            throw new \Domain\Shared\Exception\AccessDeniedException("The registration actor changed.");
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The registration actor changed.",
+            );
         }
     }
     /** @param array<string,mixed>|null $a

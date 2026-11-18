@@ -4,6 +4,8 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Registration timetable assessments](registration-history.md#timetable-checks-before-registration) now retain the exact published plan references and institution-selected conflict mode in accepted enrollment metadata. The setting remains audited CRUD; current enrollment and publication inputs stay bounded to the selected student. Existing accepted retries and earlier unknown assessments remain unchanged. Independent later schedule publications can create new conflicts; the retained evidence describes the acceptance check rather than a global promise about future timetables.
+
 [Optional checklist enforcement](admissions-decisions.md#checklist-policy-before-acceptance) now retains reviewed checklist/policy evidence in new admissions decisions and outcome corrections. Working progress and the institutional setting remain audited CRUD; earlier decisions and unknown earlier checklists remain unchanged. Required acceptance, stale review, privacy and rollback checks share the existing application boundary and single protected journal.
 
 [Application answer resubmissions](application-submission-history.md#corrections-and-resubmission) now append to the existing application stream, pinning protected immutable answer artifacts and their original form lineage. Operational correction requests and institutional editing policy remain audited CRUD. The original submission and earlier answers are preserved; selected decisions/matriculation verify retained artifacts. Ordinary application lists do not replay these streams.

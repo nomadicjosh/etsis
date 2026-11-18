@@ -554,6 +554,7 @@
         if (section === 'accounts' && can('sis:finance:post')) tools.append(tool('Finance reviews', () => financeReviewStudio.queue(), 'Finance review queue', 'inboxes'));
         if (section === 'billing' && can('sis:finance:post') && can('sis:finance:read') && can('sis:student:read')) tools.append(tool('Review bills', () => operations.billingBatch(), 'Review student bills', 'receipt'));
         if (section === 'registration' && can('sis:registration:manage')) tools.append(tool('Hiatus history', () => hiatusStudio.choose(), 'Student hiatus history', 'clock-history'));
+        if (section === 'registration' && can('sis:registration:policy')) tools.append(tool('Timetable policy', () => batchRegistration.policy(), 'Registration timetable policy', 'calendar-check'));
         tabs.hidden = visibleRelated.length === 0;
         tools.hidden = tools.childElementCount === 0;
         $one('#directory-navigation').hidden = tabs.hidden && tools.hidden;
