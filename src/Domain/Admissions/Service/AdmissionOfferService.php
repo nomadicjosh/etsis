@@ -34,6 +34,7 @@ final readonly class AdmissionOfferService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private AdmissionEntryTerms $entryTerms,
         private \Domain\Admissions\Repository\AdmissionUpdatesRepository $updates,
         private \Domain\Admissions\Repository\AdmissionWithdrawalRepository $requests,
     ) {
@@ -44,7 +45,14 @@ final readonly class AdmissionOfferService
         $route = $this->admissions->application($id);
         return $this->transactions->run(function () use ($route, $actor, $mine): array {
             $a = $this->lock($route, $actor, $mine, false);
-            $record = $this->ledger->offer($a);
+            $state = $this->ledger->offerState($a);
+            $record = $state['offer'];
+            $entryReviewRequired = false;
+            try {
+                $this->entryTerms->verify($a, $state['entry']);
+            } catch (ValidationException) {
+                $entryReviewRequired = true;
+            }
             $offer = $record['offer'] ?? null;
             $withdrawalPending = $this->requests->pending($a->id) !== null;
             // A person/account relink does not transfer a previously addressed private letter.
@@ -52,8 +60,9 @@ final readonly class AdmissionOfferService
                 $offer = null;
             }
             $result = ['offer' => $offer, 'application_status' => $a->status->value,
-                'policy' => $this->policy->offers(), 'withdrawal_pending' => $withdrawalPending,
-                'response_open' => !$withdrawalPending && $offer !== null
+                'policy' => $this->policy->offers(), 'entry_review_required' => $entryReviewRequired,
+                'withdrawal_pending' => $withdrawalPending,
+                'response_open' => !$entryReviewRequired && !$withdrawalPending && $offer !== null
                     && $a->status === ApplicationStatus::Accepted && $this->open($offer)];
             $this->authorize($a, $actor, $mine, false);
             return $result;
@@ -161,6 +170,9 @@ final readonly class AdmissionOfferService
         bool $mine
     ): array {
         $a->recordOffer();
+        if ($action !== 'cancel') {
+            $this->entryTerms->verify($a, $this->ledger->entryApproval($a));
+        }
         if ($action !== 'cancel' && $this->requests->pending($a->id) !== null) {
             throw new ValidationException([['field' => 'withdrawal_request',
                 'message' => 'Resolve the withdrawal request before issuing or responding to an offer.']]);
@@ -238,6 +250,9 @@ final readonly class AdmissionOfferService
         }
         $this->authorize($a, $actor, $mine, $write);
         if ($write) {
+            if ($this->ledger->entryApproval($a) !== null) {
+                $this->entryTerms->lock($a);
+            }
             $this->policy->lock();
         }
         $this->ledger->verify($a);

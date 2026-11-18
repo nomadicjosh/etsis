@@ -246,6 +246,7 @@ final readonly class MatriculationService
             throw new ConcurrentModificationException("The application changed. Review it again.");
         }
         if ($a->status === ApplicationStatus::Accepted) {
+            $this->offers->lockEntryContext($a);
             $this->catalogs->lockTerm($a->entryTermId);
             $this->catalogs->lockProgram($a->programId);
             if ($this->access->requirePermission("sis:admissions:manage")->value !== $actor->value) {

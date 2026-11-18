@@ -18,8 +18,15 @@ final readonly class AdmissionOfferGate
         private AdmissionDecisionLedger $ledger,
         private AdmissionsRepository $admissions,
         private Clock $clock,
+        private AdmissionEntryTerms $entryTerms,
         private \Domain\Admissions\Repository\AdmissionWithdrawalRepository $requests,
     ) {
+    }
+    public function lockEntryContext(AdmissionApplication $a): void
+    {
+        if ($this->ledger->entryApproval($a) !== null) {
+            $this->entryTerms->lock($a);
+        }
     }
     public function requestRevision(AdmissionApplication $a): int
     {
@@ -34,7 +41,13 @@ final readonly class AdmissionOfferGate
         }
         $this->policy->lock();
         $policy = $this->policy->offers();
-        $record = $this->ledger->offer($a);
+        $state = $this->ledger->offerState($a);
+        $this->entryTerms->verify($a, $state['entry']);
+        $record = $state['offer'];
+        if ($state['entry'] !== null && $record === null) {
+            throw new ValidationException([['field' => 'offer',
+                'message' => 'Issue a fresh offer for the approved intake before matriculation.']]);
+        }
         $offer = $record['offer'] ?? null;
         $required = $offer['require_acceptance'] ?? $policy['require_acceptance'];
         if ($offer !== null) {

@@ -739,6 +739,9 @@
                     layout: record.form.layout || [], answers: record.answers });
                 title.textContent = record.form.name;
                 content.replaceChildren(
+                    el('p', { class: 'campus-muted' }, record.submitted_term_code
+                        ? `Submitted intake: ${record.submitted_term_code}. Your current planned intake is shown in the application list.`
+                        : 'The original submitted intake was not recorded.'),
                     el('p', { class: 'campus-muted' }, 'These answers use the original form. They cannot be edited here.'), answers,
                 );
                 status.className = 'visually-hidden'; status.textContent = 'Your submitted answers are ready.';

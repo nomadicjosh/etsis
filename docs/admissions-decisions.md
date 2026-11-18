@@ -117,3 +117,31 @@ The application's `withdrawal_revision` is an operational concurrency counter. I
 Every mutation uses an expiring review bound to the current actor, route, owner/staff channel, application, request state and relevant policy. Confirmation rechecks authority under locks and commits the working record, any formal outcome, audit and inbox reference atomically. Repeating a completed confirmation returns its original result, even after later request resolutions or return to review, without applying the old action again. Current authority still applies. A new or changed request requires a new review.
 
 Apply migration `20261117000007_CreateSisAdmissionWithdrawalRequests`. Fictional checks cover both policies and owner/staff boundaries, unchanged person/student facts, cancellation cycles, stale/expired reviews, policy isolation, required-audit rollback, request encryption, existing offer behavior, original retries, and the real private/CSRF HTTP pipeline. Browser regression coverage is prepared separately; it is not run during workstation-safe checks.
+
+
+## Defer an accepted application
+
+Deferment changes the planned intake of an accepted application before matriculation. It keeps the same application under the same person, retains the original submitted intake and answers, and records a reasoned before/after approval. It does not withdraw the applicant from the institution, create another person or student, or assign a cohort early.
+
+Open **Admissions → application → Entry term**:
+
+1. Choose **Choose later intake**, search by term code or name, and select an intake. Choices are paged and must belong to an academic year. The new intake must start later than the earlier approved intake and must not have started.
+2. Enter the reason, choose **Review intake**, check the person and both term/date/year summaries, then **Approve intake**.
+3. Open **Admission offer** and issue a fresh letter. Earlier letters remain in history but cannot authorize the new intake. The new letter uses the institution's existing offer policy: acceptance is required when that policy requires it, and optional otherwise. A fresh letter is required after deferment even where ordinary initial matriculation does not require one.
+4. Matriculate through the usual reviewed workflow. The new entry term determines the academic-year/cohort proposal and the program requirements available at that time. The original submitted intake remains a separate reporting fact.
+
+Staff need both `sis:admissions:manage` and the independent protected `sis:admissions:defer` permission. The migration grants neither regular administrators nor admissions roles this additional authority automatically; a super administrator can assign it deliberately. Resolve a pending applicant withdrawal request before approving deferment. Applicants contact admissions to request a different intake; this stage does not add a second applicant request queue.
+
+If the calendar dates, code, name or academic-year context change after an intake approval, the application shows **Review current intake**. Staff review the changed definition, supply a reason and approve it, then issue a fresh offer. Offer responses and matriculation are paused until this is resolved. Earlier approvals retain their exact term and year context; a current calendar edit never rewrites them.
+
+### Retained facts and confirmation safety
+
+`AdmissionEntryTermWasApproved` appends to the application's existing `admission_decision` stream in the single protected journal. It retains the previous approval reference, application revision, original form reference and both term/year snapshots. Attribution, reason and effective time use the existing protected event context. Deferment keeps the application accepted; it advances the application revision and current offer context instead of adding a misleading second acceptance or a separate deferred status.
+
+The original form's answers and fingerprint remain tied to its submitted intake. Staff and the applicant see that original intake beside retained answers, while their application list shows the planned intake. Reports can select **Submitted intake** separately from the current entry-term relation. Earlier applications without a genuine submission event remain explicitly unknown; the migration does not infer a historical submission from current rows.
+
+Reviews expire after 20 minutes and bind the actor, person, application, selected calendar definitions, original answer artifact and withdrawal-request revision. Confirmation rechecks authority under locks and commits the current projection, event, required audit and private inbox reference together. A completed confirmation returns its original result on retry, including after later deferment or matriculation, without moving the person back to an earlier intake. Current authority is still required. An unconfirmed old review cannot overtake a later action, even after a withdrawal request was created and cancelled.
+
+Apply migration `20261117000008_CreateSisAdmissionDeferral`. It adds nullable original-intake fields to the existing submission index and the independent permission. The bounded existing projection upgrader fills those fields only from authenticated opening submission events, verifies existing indexed facts, and leaves unknown origins blank. It never changes recorded journal events. Fresh installations create the current index shape directly.
+
+Fictional tests cover original answers and intake, new offer/acceptance policy, new matriculation cohort, calendar reapproval, permission and actor boundaries, competing/expired confirmations, withdrawal-request cycles, audit/authority rollback, exact retries after later actions, bounded search, authentic index reconstruction, unknown earlier decisions, and the actual CSRF/private HTTP pipeline. JavaScript checks cover term selection, review/revise, preserved input, retry tokens, pending requests and detached responses. Browser accessibility/layout verification remains a separate acceptance check; no browser is started by the workstation-safe checks.

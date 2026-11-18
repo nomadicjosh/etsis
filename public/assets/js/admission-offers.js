@@ -53,8 +53,9 @@
                 if (data.offer) summary(current, data.offer);
                 else current.append(node('p', {}, data.application_status === 'accepted'
                     ? 'No current offer has been issued.' : 'An offer becomes available after the admissions decision.'));
+                if (data.entry_review_required) current.append(node('p', { class: 'alert alert-info' }, 'Admissions must review the changed intake before this offer can be used. Contact admissions for help.'));
                 if (data.withdrawal_pending) current.append(node('p', { class: 'alert alert-info' }, 'A withdrawal request is awaiting review. Resolve it before issuing or responding to an offer.'));
-                if (data.offer?.status === 'pending' && !data.response_open && !data.withdrawal_pending) current.append(
+                if (data.offer?.status === 'pending' && !data.response_open && !data.withdrawal_pending && !data.entry_review_required) current.append(
                     node('p', { class: 'form-text' }, 'This offer is no longer open for a response. Contact admissions for help.'));
                 const editor = node('div', { class: 'mt-3' }), actions = node('div', { class: 'd-flex flex-wrap gap-2 mt-3' });
                 body.append(actions, editor);

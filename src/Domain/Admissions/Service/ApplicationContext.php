@@ -59,12 +59,57 @@ final readonly class ApplicationContext
         return $source;
     }
 
+    /** Older submissions retain explicit provenance gaps; verify their existing artifact without inventing a birth. */
+    public function verifyRetained(AdmissionApplication $a, #[\SensitiveParameter] array $source, EntityId $term): void
+    {
+        $ref = $source['submission'];
+        $r = $this->submission($a->id);
+        if ($ref === null) {
+            if ($r !== null) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        if (
+            $r === null || $r['id'] !== $ref['id'] || $r['form_id'] !== $ref['form_id']
+            || $r['fingerprint'] !== $ref['fingerprint']
+        ) {
+            throw new CorruptHistoryException();
+        }
+        try {
+            $form = $this->forms->get(new EntityId($ref['form_id']));
+            $answers = json_decode($this->cipher->open($r['encrypted_answers']), true, 32, JSON_THROW_ON_ERROR);
+            if (
+                !is_array($answers) || $form->version !== $ref['form_version'] || $form->name !== $ref['form_name']
+                || ($form->programId !== null && $form->programId->value !== $a->programId->value)
+                || !hash_equals($ref['fingerprint'], SubmissionIntegrity::fingerprint(
+                    $form->id,
+                    $a->personId,
+                    $term,
+                    $answers,
+                    $form->programId === null ? $a->programId : null
+                ))
+            ) {
+                throw new CorruptHistoryException();
+            }
+        } catch (\Throwable) {
+            throw new CorruptHistoryException();
+        }
+    }
     /** @param array<string,mixed> $birth */
     public function verify(
         AdmissionApplication $a,
         #[\SensitiveParameter] array $birth,
         EntityId $actor,
     ): void {
+        foreach (
+            ['id' => $a->id->value, 'person_id' => $a->personId->value,
+            'program_id' => $a->programId->value] as $key => $value
+        ) {
+            if ($birth['application'][$key] !== $value) {
+                throw new CorruptHistoryException();
+            }
+        }
         $ref = $birth["source"]["submission"];
         $r = $this->submission($a->id);
         if ($ref === null) {
@@ -106,7 +151,7 @@ final readonly class ApplicationContext
                     SubmissionIntegrity::fingerprint(
                         $form->id,
                         $a->personId,
-                        $a->entryTermId,
+                        new EntityId($birth["application"]["entry_term_id"]),
                         $answers,
                         $form->programId === null ? $a->programId : null
                     ),

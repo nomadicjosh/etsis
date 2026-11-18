@@ -63,6 +63,38 @@ final class AdmissionDecision extends EventSourcedAggregate
         $this->offer = $p;
         $this->application['version'] = $p['application_version'];
     }
+    /** @var array<string,mixed>|null */
+    private ?array $entryApproval = null;
+    private ?string $initialEntryTerm = null;
+    public function initialEntryTerm(): ?string
+    {
+        return $this->initialEntryTerm;
+    }
+    public function entryApproval(): ?array
+    {
+        return $this->entryApproval;
+    }
+    public function whenAdmissionEntryTermWasApproved(
+        #[\SensitiveParameter] \Domain\Admissions\Event\AdmissionEntryTermWasApproved $event
+    ): void {
+        $p = $event->payload();
+        if (
+            $this->application === null || $this->application['status'] !== 'accepted'
+            || $p['before']['id'] !== $this->application['entry_term_id']
+            || $p['previous_decision_id'] !== $this->decision
+            || $p['application_version'] !== $this->application['version'] + 1
+            || ($this->entryApproval !== null && $p['before'] != $this->entryApproval['after'])
+            || ($p['kind'] === 'reconfirm' && $this->entryApproval === null)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->assertSubmission($p['source']);
+        $this->application['entry_term_id'] = $p['after']['id'];
+        $this->application['version'] = $p['application_version'];
+        $this->decision = $p['decision_id'];
+        $this->source = $p['source'];
+        $this->entryApproval = $p;
+    }
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (array_key_exists('admission_withdrawal', $event->metadata())) {
@@ -89,7 +121,9 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        if ($event instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded) {
+        if ($event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved) {
+            \Domain\Admissions\ValueObject\AdmissionDeferralSchema::validate($event->payload());
+        } elseif ($event instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded) {
             \Domain\Admissions\ValueObject\AdmissionOfferSchema::validate($event->payload());
         } elseif ($event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged) {
             \Domain\Admissions\ValueObject\AdmissionReviewStateSchema::validate($event->payload());
@@ -118,6 +152,7 @@ final class AdmissionDecision extends EventSourcedAggregate
         }
         $this->submission = $p;
         $this->application = $p["application"];
+        $this->initialEntryTerm = $p["application"]["entry_term_id"];
         $this->decision = $p["decision_id"];
     }
     /** @return array<string,mixed>|null */
@@ -132,6 +167,7 @@ final class AdmissionDecision extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $this->application = $p["application"];
+        $this->initialEntryTerm = $p["application"]["entry_term_id"];
         $this->decision = $p["decision_id"];
     }
     public function whenAdmissionWasDecided(AdmissionWasDecided $event): void
@@ -160,6 +196,7 @@ final class AdmissionDecision extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $this->application = $p["application"];
+        $this->initialEntryTerm = $p["application"]["entry_term_id"];
         $this->source = $p["source"];
         $this->decision = $p["decision_id"];
     }

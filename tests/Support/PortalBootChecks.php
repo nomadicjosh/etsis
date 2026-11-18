@@ -6610,3 +6610,5 @@ if (
 }
 $sis->access->actor = $originalSubmissionActor;
 $sis->access->staff = true;
+
+require __DIR__ . "/AdmissionDeferralBootChecks.php";

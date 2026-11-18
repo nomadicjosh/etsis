@@ -1172,6 +1172,31 @@ final class SisFixture
             ),
         );
     }
+    public function entryTerms(): \Domain\Admissions\Service\AdmissionEntryTerms
+    {
+        return new \Domain\Admissions\Service\AdmissionEntryTerms(
+            new \Infrastructure\Persistence\Repository\SqlAcademicCalendarRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql)
+        );
+    }
+    public function deferralService(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\Admissions\Service\AdmissionDeferralService {
+        return new \Domain\Admissions\Service\AdmissionDeferralService(
+            $this->admissions,
+            $this->decisionLedger(),
+            $this->applicationContext(),
+            $this->entryTerms(),
+            $this->withdrawalRepository(),
+            new \Infrastructure\Persistence\Repository\SqlAdmissionUpdatesRepository($this->sql),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock
+        );
+    }
     public function withdrawalRepository(): \Domain\Admissions\Repository\AdmissionWithdrawalRepository
     {
         return new \Infrastructure\Persistence\Repository\SqlAdmissionWithdrawalRepository(
@@ -1226,6 +1251,7 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
+            $this->entryTerms(),
             new \Infrastructure\Persistence\Repository\SqlAdmissionUpdatesRepository($this->sql),
             $this->withdrawalRepository()
         );
@@ -1262,7 +1288,7 @@ final class SisFixture
                 policy: $this->admissionPolicy(),
                 ledger: $this->decisionLedger(),
                 admissions: $repository ?? $this->admissions,
-                clock: $this->clock,
+                clock: $this->clock, entryTerms: $this->entryTerms(),
                 requests: $this->withdrawalRepository()
             ),
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),

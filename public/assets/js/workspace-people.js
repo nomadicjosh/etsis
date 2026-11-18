@@ -369,6 +369,8 @@ window.createWorkspacePeople = function (ui) {
                 actions.append(button('Return to review', () => mayLeave() && reviewState(row, false), 'btn-primary'));
             }
         }
+        if (app.status === 'accepted' && can('sis:admissions:defer'))
+            extra.push(button('Entry term', () => mayLeave() && entryTerm(row)));
         if (app.status === "matriculated")
             extra.push(button("Matriculation history", () => mayLeave() && matriculationHistory(row)));
         actions.append(
@@ -440,6 +442,9 @@ window.createWorkspacePeople = function (ui) {
                     "These answers use the form revision submitted by the applicant. Later form changes do not alter this application.",
                 ),
             );
+            section.append(node('p', { class: 'form-text' }, submission.submitted_term_code
+                ? `Submitted intake: ${submission.submitted_term_code}. The current planned intake is shown above.`
+                : 'The original submitted intake was not recorded.'));
             section.append(window.createApplicationAnswerReview({
                 fields: submission.form.fields,
                 layout: submission.form.layout || [],
@@ -454,6 +459,13 @@ window.createWorkspacePeople = function (ui) {
                     "This application was entered directly. No application-form answers are attached.",
                 ),
             );
+    }
+    function entryTerm(row) {
+        const body = openDrawer('Entry term', 'ADMISSIONS APPROVAL');
+        let editor = null;
+        body.append(button('Back to application', () => (editor?.beforeLeave() ?? true) && application(row)));
+        editor = window.createAdmissionEntry({ node, request, task, notify }).mount(body, row.id,
+            { onComplete: () => application(row) });
     }
     async function decide(row, accept, preset = {}) {
         const title = accept ? "Accept application" : "Reject application";
@@ -775,13 +787,15 @@ window.createWorkspacePeople = function (ui) {
                 const observed = item.kind === "observation";
                 const reviewState = ['withdrawal', 'review_resumed'].includes(item.kind);
                 const offer = item.kind.startsWith('offer_');
+                const entry = item.kind.startsWith('entry_');
                 const section = node(
                     "section",
                     { class: "record-section" },
                     node(
                         "h3",
                         {},
-                        offer ? `Admission offer: ${item.status}` : observed
+                        entry ? (item.kind === 'entry_defer' ? 'Entry deferred' : 'Updated intake approved')
+                        : offer ? `Admission offer: ${item.status}` : observed
                             ? "Observed current application"
                             : reviewState ? (item.kind === 'withdrawal' ? (item.withdrawal_channel === 'applicant' ? 'Applicant withdrew application' : 'Application withdrawn') : 'Returned to review')
                             : item.kind === "correction"
@@ -812,7 +826,10 @@ window.createWorkspacePeople = function (ui) {
                     section.append(node('h4', { class: 'h6 text-break' }, item.offer.title),
                         node('p', { class: 'private-text text-break', style: 'white-space: pre-wrap' }, item.offer.message));
                 }
-                if (!observed && !reviewState && !offer) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
+                if (entry) section.append(node('p', { class: 'text-break' },
+                    `${item.entry.before.code} → ${item.entry.after.code} · ${item.entry.after.year_code}`),
+                    node('p', { class: 'form-text' }, `${item.entry.after.starts_on} through ${item.entry.after.ends_on}`));
+                if (!observed && !reviewState && !offer && !entry) window.createAdmissionDocuments({ node, request, task, notify }).summary(section, item.evidence ?? null);
                 body.append(section);
             }
             body.append(

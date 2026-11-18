@@ -123,6 +123,10 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Registration\SectionPublication::class,
                 "fields" => ["version_id", "previous_version_id", "definition"],
             ],
+            \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class => [
+                'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
+                'fields' => \Domain\Admissions\ValueObject\AdmissionDeferralSchema::FIELDS,
+            ],
             \Domain\Admissions\Event\AdmissionOfferWasRecorded::class => [
                 'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
                 'fields' => \Domain\Admissions\ValueObject\AdmissionOfferSchema::FIELDS,
@@ -555,7 +559,9 @@ final readonly class HistoricalSchemaRegistry
                 $definition["fields"][] = "grade_scale";
             }
             if ($stream->type === "admission_decision") {
-                if ($class === \Domain\Admissions\Event\AdmissionOfferWasRecorded::class) {
+                if ($class === \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class) {
+                    \Domain\Admissions\ValueObject\AdmissionDeferralSchema::validate($payload);
+                } elseif ($class === \Domain\Admissions\Event\AdmissionOfferWasRecorded::class) {
                     \Domain\Admissions\ValueObject\AdmissionOfferSchema::validate($payload);
                 } elseif ($class === \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class) {
                     \Domain\Admissions\ValueObject\AdmissionReviewStateSchema::validate($payload);

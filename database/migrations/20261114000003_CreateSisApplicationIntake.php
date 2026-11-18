@@ -26,6 +26,9 @@ final class CreateSisApplicationIntake extends Migration
                 $table->date('recorded_on')->notNull();
                 $table->string('recorded_at', 27)->notNull();
                 $table->string('channel', 12)->notNull();
+                $table->string('submitted_term_id', 26);
+                $table->string('submitted_term_code', 22);
+                $table->index(['submitted_term_id', 'id'], 'sai_submitted_term');
                 $table->unique('source_event_id', 'sai_event');
                 $table->index(['submitted_on', 'id'], 'sai_submitted');
                 $table->index(['recorded_on', 'id'], 'sai_recorded');

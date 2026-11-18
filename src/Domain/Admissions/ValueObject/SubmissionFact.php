@@ -20,6 +20,8 @@ final readonly class SubmissionFact
         public DateTimeImmutable $submittedAt,
         public DateTimeImmutable $recordedAt,
         public string $channel,
+        public EntityId $entryTerm,
+        public string $entryTermCode,
     ) {
     }
 
@@ -40,6 +42,8 @@ final readonly class SubmissionFact
             $stored->context->effectiveAt,
             $stored->recordedAt,
             $event->payload()['channel'],
+            new EntityId($event->payload()['application']['entry_term_id']),
+            $event->payload()['source']['entry_term_code'],
         );
     }
 }

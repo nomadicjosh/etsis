@@ -28,16 +28,28 @@ final readonly class SqlSubmissionProjection implements SubmissionProjection
             'recorded_on' => $fact->recordedAt->setTimezone($utc)->format('Y-m-d'),
             'recorded_at' => $fact->recordedAt->setTimezone($utc)->format('Y-m-d\TH:i:s.u\Z'),
             'channel' => $fact->channel,
+            'submitted_term_id' => $fact->entryTerm->value,
+            'submitted_term_code' => $fact->entryTermCode,
         ];
         $existing = $this->sql->rows('sis_application_intake', ['id' => $fact->application->value], 1)[0] ?? null;
         if ($existing === null) {
             $this->sql->insert('sis_application_intake', $data);
             return;
         }
+        $fill = [];
         foreach ($data as $key => $value) {
+            if (in_array($key, ['submitted_term_id', 'submitted_term_code'], true) && $existing[$key] === null) {
+                $fill[$key] = $value;
+                continue;
+            }
             if ($existing[$key] !== $value) {
                 throw new CorruptHistoryException();
             }
+        }
+        if ($fill !== []) {
+            // Populate missing index fields only after verifying the actual original submission event and
+            // existing index.
+            $this->sql->update('sis_application_intake', $fill, ['id' => $fact->application->value]);
         }
     }
 }

@@ -44,12 +44,14 @@ final readonly class AdmissionDecisionLedger
         return isset($this->load($application)['evidence_documents'][$document->value]);
     }
     /** Bind a selected answer artifact to the actual submission, not merely its application row. */
-    public function verifySubmission(AdmissionApplication $a, EntityId $submission): void
+    public function verifySubmission(AdmissionApplication $a, EntityId $submission): ?array
     {
         $birth = $this->load($a)["root"]->submission();
         if ($birth !== null && ($birth["source"]["submission"]["id"] ?? null) !== $submission->value) {
             throw new CorruptHistoryException();
         }
+        return $birth === null ? null : ['entry_term_id' => $birth['application']['entry_term_id'],
+            'entry_term_code' => $birth['source']['entry_term_code']];
     }
     /** @return array<string,mixed>|null */
     public function receipt(AdmissionApplication $a, EntityId $operation, EntityId $actor): ?array
@@ -143,6 +145,67 @@ final readonly class AdmissionDecisionLedger
     {
         return $this->load($a)['root']->offer();
     }
+    public function entryApproval(AdmissionApplication $a): ?array
+    {
+        return $this->load($a)['root']->entryApproval();
+    }
+    /** One restoration for offer/entry eligibility on a selected application. */
+    public function offerState(AdmissionApplication $a): array
+    {
+        $root = $this->load($a)['root'];
+        return ['offer' => $root->offer(), 'entry' => $root->entryApproval()];
+    }
+    /** Projection CAS succeeded in the caller's complete transaction. */
+    public function approveEntryTerm(
+        AdmissionApplication $before,
+        AdmissionApplication $after,
+        array $terms,
+        array $source,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason
+    ): array {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException('The intake approval actor changed.');
+        }
+        $root = $this->observe(
+            $before,
+            $operation,
+            $actor,
+            $this->context->source($before),
+            \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class
+        );
+        $p = ['decision_id' => $operation->value, 'previous_decision_id' => $root->decision(),
+            'application_version' => $after->version, 'kind' => $terms['kind'],
+            'before' => $terms['before'], 'after' => $terms['after'], 'source' => $source];
+        $version = $root->playhead();
+        $event = \Domain\Admissions\Event\AdmissionEntryTermWasApproved::occur(
+            new AdmissionDecisionId($before->id->value),
+            $p,
+            ['__aggregate_type' => 'admission_decision']
+        )->withPlayhead($version + 1);
+        $root->acceptHistorical($event);
+        $at = $this->clock->now();
+        $this->history->append(
+            $this->stream($before->id),
+            $operation,
+            $version,
+            new EventContext($actor, $at, $operation, reason: $reason),
+            [$event]
+        );
+        $this->verify($after);
+        return $this->entryResult($before->id, $p, $at->format(DATE_ATOM));
+    }
+    private function entryResult(EntityId $id, array $p, string $at): array
+    {
+        $before = $p['before'];
+        $after = $p['after'];
+        ksort($before);
+        ksort($after);
+        return ['application_id' => $id->value, 'decision_id' => $p['decision_id'], 'kind' => $p['kind'],
+            'status' => 'accepted', 'version' => $p['application_version'], 'before' => $before,
+            'after' => $after, 'effective_at' => $at];
+    }
     public function hasRecordedAcceptance(AdmissionApplication $a): bool
     {
         return $this->load($a)['root']->acceptanceKnown();
@@ -230,13 +293,16 @@ final readonly class AdmissionDecisionLedger
                 0,
                 new EventContext($actor, $at, $operation, reason: $submitted
                     ? 'Submitted application observed before this decision; earlier history is unknown.'
-                    : ($class === \Domain\Admissions\Event\AdmissionOfferWasRecorded::class
+                    : ($class === \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class
+                        ? 'Current admission outcome observed before intake approval; '
+                            . 'earlier decision history is unknown.'
+                        : ($class === \Domain\Admissions\Event\AdmissionOfferWasRecorded::class
                         ? 'Current admissions outcome observed before an offer; earlier decision history is unknown.'
                         : ($class === \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class
                         ? 'Current admissions outcome observed before a review-state change; '
                             . 'earlier decision history is unknown.'
                         : 'Current admissions outcome observed before correction; '
-                            . 'its earlier decision history is unknown.'))),
+                            . 'its earlier decision history is unknown.')))),
                 [$observed]
             );
         }
@@ -379,8 +445,9 @@ final readonly class AdmissionDecisionLedger
             $correction = $e instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected;
             $reviewState = $e instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged;
             $offer = $e instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded;
+            $entry = $e instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved;
             $items[] = [
-                "kind" => $offer ? "offer_" . $p["action"] : ($observed
+                "kind" => $entry ? "entry_" . $p["kind"] : ($offer ? "offer_" . $p["action"] : ($observed
                     ? "observation"
                     : ($initial
                         ? "submission"
@@ -388,8 +455,10 @@ final readonly class AdmissionDecisionLedger
                             ? "correction"
                             : ($reviewState
                                 ? ($p['status'] === 'withdrawn' ? 'withdrawal' : 'review_resumed')
-                                : "decision")))),
-                "status" => $offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]),
+                                : "decision"))))),
+                "status" => $entry ? "accepted"
+                    : ($offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"])),
+                "entry" => $entry ? ["before" => $p["before"], "after" => $p["after"]] : null,
                 "offer" => $offer ? $p["offer"] : null,
                 "previous_status" => $p["previous_status"] ?? null,
                 "withdrawal_channel" => $e->metaParam('admission_withdrawal')['channel'] ?? null,
@@ -419,7 +488,9 @@ final readonly class AdmissionDecisionLedger
         ];
     }
     /**
-     * @return array{root:AdmissionDecision,actor:?string,at:?string,recorded_at:?string,birth_actor:?string,birth_at:?string,birth_recorded_at:?string,submission_fact:?\Domain\Admissions\ValueObject\SubmissionFact,receipt:?array<string,mixed>}
+     * @return array{root:AdmissionDecision,actor:?string,at:?string,recorded_at:?string,
+         birth_actor:?string,birth_at:?string,birth_recorded_at:?string,
+             submission_fact:?\Domain\Admissions\ValueObject\SubmissionFact,receipt:?array<string,mixed>}
      * @throws TypeException
      */
     private function load(
@@ -481,6 +552,7 @@ final readonly class AdmissionDecisionLedger
                     $observedDecision = $stored->event->payload()['decision_id'];
                 }
                 if (
+                    $stored->event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved ||
                     $stored->event instanceof AdmissionWasDecided ||
                     $stored->event instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected ||
                     $stored->event instanceof \Domain\Admissions\Event\AdmissionReviewStateWasChanged
@@ -494,7 +566,13 @@ final readonly class AdmissionDecisionLedger
                                 "This admissions receipt belongs to another actor.",
                             );
                         }
-                        $receipt = $this->result($root, $at ?? throw new CorruptHistoryException());
+                        $receipt = $stored->event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved
+                        ? $this->entryResult(
+                            $a->id,
+                            $stored->event->payload(),
+                            $at ?? throw new CorruptHistoryException()
+                        )
+                        : $this->result($root, $at ?? throw new CorruptHistoryException());
                     }
                 }
             }
@@ -519,6 +597,13 @@ final readonly class AdmissionDecisionLedger
                     $at === null))
             ) {
                 throw new CorruptHistoryException();
+            }
+            if ($birth === null && $root->entryApproval() !== null) {
+                $this->context->verifyRetained(
+                    $a,
+                    $root->source(),
+                    new EntityId($root->initialEntryTerm() ?? throw new CorruptHistoryException())
+                );
             }
             $expected = AdmissionDecisionSchema::facts($a);
             if ($a->status === ApplicationStatus::Matriculated) {

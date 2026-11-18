@@ -457,6 +457,8 @@ final class AcademicReportSchema
             ],
             'fields' => [
                 'application_id' => $field('Application reference', 'string', 'application', 'id'),
+                'submitted_term_code' => $field('Submitted intake', 'string', 'submission', 'submitted_term_code')
+                    + ['description' => 'The recorded intake when submitted; unknown earlier values remain blank.'],
                 'submitted_on' => $field('Submitted on', 'date', 'submission', 'submitted_on'),
                 'submission_timezone' => $field('Submission timezone', 'string', 'submission', 'submission_timezone'),
                 'submission_recorded_on' => $field('Submission recorded on', 'date', 'submission', 'recorded_on'),

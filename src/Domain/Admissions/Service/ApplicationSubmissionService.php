@@ -59,15 +59,17 @@ final readonly class ApplicationSubmissionService
                 $existing = $this->admissions->application($id);
                 if (
                     $existing->personId->value !== $person->value ||
-                    $existing->programId->value !== $program->value ||
-                    $existing->entryTermId->value !== $term->value
+                    $existing->programId->value !== $program->value
                 ) {
                     throw new ConcurrentModificationException(
                         "This application identifier has already been used.",
                     );
                 }
                 $receipt = $this->ledger->submissionReceipt($existing, $id, $actor);
-                if ($receipt === null || $receipt["channel"] !== "direct") {
+                if (
+                    $receipt === null || $receipt["channel"] !== "direct"
+                    || $receipt["application"]["entry_term_id"] !== $term->value
+                ) {
                     throw new ConcurrentModificationException(
                         "This application identifier has already been used.",
                     );
@@ -144,8 +146,7 @@ final readonly class ApplicationSubmissionService
                 $this->recheck($person, $actor);
                 if (
                     $a->personId->value !== $person->value ||
-                    $a->programId->value !== $program->value ||
-                    $a->entryTermId->value !== $term->value
+                    $a->programId->value !== $program->value
                 ) {
                     throw new CorruptHistoryException();
                 }
@@ -226,7 +227,7 @@ final readonly class ApplicationSubmissionService
             if ($r["application_id"] !== $a->id->value) {
                 throw new CorruptHistoryException();
             }
-            $this->ledger->verifySubmission($current, $id);
+            $origin = $this->ledger->verifySubmission($current, $id);
             try {
                 $answers = json_decode(
                     $this->cipher->open($r["encrypted_answers"]),
@@ -244,6 +245,7 @@ final readonly class ApplicationSubmissionService
                 "form" => $this->forms->get(new EntityId($r["form_id"])),
                 "answers" => $answers,
                 "application_id" => $a->id->value,
+                "submitted_term_code" => $origin["entry_term_code"] ?? null,
             ];
         });
     }
