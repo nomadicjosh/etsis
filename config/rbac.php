@@ -34,6 +34,8 @@ return [
             "description" => "Approve reasoned admissions outcome corrections before matriculation.",
         ],
         "sis:gradebook:amend" => ["description" => "Approve reasoned final-grade corrections."],
+        'sis:gradebook:approve' => ['description' => 'Approve or reject another registrar’s requested grade correction.'],
+        'sis:gradebook:policy' => ['description' => 'Configure institutional final-grade correction approval policy.'],
         'sis:academic-work:scope' => ['description' =>
             'Attribute academic work to pursuits and approve or revoke cross-pursuit reuse.'],
         "sis:degree-audit:adjust" => [

@@ -29,6 +29,9 @@ final class AcademicCredit extends EventSourcedAggregate
     private ?string $completedOn = null;
     private ?string $academicOn = null;
     private ?string $originalCourseVersion = null;
+    /** @var array<string, array<string, mixed>> */
+    private array $gradeChanges = [];
+    private ?string $pendingGradeChange = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -37,6 +40,8 @@ final class AcademicCredit extends EventSourcedAggregate
                 [
                     InstitutionalCreditWasEstablished::class,
                     FinalGradeWasDecided::class,
+                    \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+                    \Domain\AcademicRecord\Event\GradeChangeWasResolved::class,
                     InstitutionalCreditWasDropped::class,
                     AcademicCompletionWasRecorded::class,
                     InstitutionalAcademicPeriodWasRecorded::class,
@@ -78,19 +83,87 @@ final class AcademicCredit extends EventSourcedAggregate
     {
         $p = $event->payload();
         $this->assertNext($p);
-        if ($this->credit === null || !in_array($this->credit["status"], ["A", "N"], true)) {
+        if (
+            $this->credit === null ||
+            $this->pendingGradeChange !== null ||
+            !in_array($this->credit["status"], ["A", "N"], true)
+        ) {
             throw new CorruptHistoryException();
         }
-        $g = $p["grade"];
-        $this->grade = $g;
-        $this->credit["grade_id"] = $g["id"];
-        $this->credit["completed_milli"] = $g["passes"] ? $this->credit["attempted_milli"] : 0;
-        $this->credit["grade_points_milli"] = $g["counts_gpa"]
-        ? intdiv($this->credit["attempted_milli"] * $g["points_milli"], 1000)
+        $this->decideGrade($p["grade"], $p["decision_id"]);
+    }
+    private function decideGrade(array $grade, string $decision): void
+    {
+        $this->grade = $grade;
+        $this->credit["grade_id"] = $grade["id"];
+        $this->credit["completed_milli"] = $grade["passes"] ? $this->credit["attempted_milli"] : 0;
+        $this->credit["grade_points_milli"] = $grade["counts_gpa"]
+        ? intdiv($this->credit["attempted_milli"] * $grade["points_milli"], 1000)
         : 0;
         ++$this->credit["version"];
         new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
-        $this->decision = $p["decision_id"];
+        $this->decision = $decision;
+    }
+    public function whenGradeChangeWasRequested(
+        \Domain\AcademicRecord\Event\GradeChangeWasRequested $event,
+    ): void {
+        $p = $event->payload();
+        $this->assertNext($p);
+        if (
+            $this->pendingGradeChange !== null ||
+            isset($this->gradeChanges[$p["decision_id"]]) ||
+            $this->grade === null ||
+            $this->credit === null ||
+            !in_array($this->credit["status"], ["A", "N"], true) ||
+            $p["credit_version"] !== $this->credit["version"] ||
+            $p["before_grade"] != $this->grade
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->pendingGradeChange = $p["decision_id"];
+        $this->gradeChanges[$p["decision_id"]] = [
+            "details" => $p,
+            "status" => "pending",
+            "version" => $event->playhead(),
+        ];
+    }
+    public function whenGradeChangeWasResolved(
+        \Domain\AcademicRecord\Event\GradeChangeWasResolved $event,
+    ): void {
+        $p = $event->payload();
+        $this->assertNext($p);
+        $request = $this->gradeChanges[$p["request_id"]]["details"] ?? null;
+        if (
+            $request === null ||
+            $this->pendingGradeChange !== $p["request_id"] ||
+            ($p["outcome"] === "cancelled") !== ($p["actor_id"] === $request["actor_id"])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if ($p["outcome"] === "approved") {
+            if (
+                $this->credit === null ||
+                !in_array($this->credit["status"], ["A", "N"], true) ||
+                $this->decision !== $request["previous_decision_id"] ||
+                $this->credit["version"] !== $request["credit_version"] ||
+                $p["grade"] != $request["grade"] ||
+                $p["assignment_id"] !== $request["assignment_id"]
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $this->decideGrade($p["grade"], $p["decision_id"]);
+        }
+        $this->gradeChanges[$p["request_id"]]["status"] = $p["outcome"];
+        $this->gradeChanges[$p["request_id"]]["version"] = $event->playhead();
+        $this->pendingGradeChange = null;
+    }
+    public function pendingGradeChange(): ?array
+    {
+        return $this->pendingGradeChange === null ? null : $this->gradeChanges[$this->pendingGradeChange];
+    }
+    public function gradeChange(string $id): ?array
+    {
+        return $this->gradeChanges[$id] ?? null;
     }
     public function whenAcademicCompletionWasRecorded(AcademicCompletionWasRecorded $event): void
     {
@@ -102,7 +175,9 @@ final class AcademicCredit extends EventSourcedAggregate
             $this->grade === null ||
             $this->credit["grade_id"] === null ||
             $p["previous_completed_on"] !== $this->completedOn ||
-            ($p['completed_on'] !== null && $this->academicOn !== null && $p['completed_on'] < $this->academicOn)
+            ($p["completed_on"] !== null &&
+                $this->academicOn !== null &&
+                $p["completed_on"] < $this->academicOn)
         ) {
             throw new CorruptHistoryException();
         }
@@ -111,8 +186,9 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->decision = $p["decision_id"];
         new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
     }
-    public function whenInstitutionalAcademicPeriodWasRecorded(InstitutionalAcademicPeriodWasRecorded $event): void
-    {
+    public function whenInstitutionalAcademicPeriodWasRecorded(
+        InstitutionalAcademicPeriodWasRecorded $event,
+    ): void {
         $p = $event->payload();
         $this->assertNext($p);
         if (
@@ -122,7 +198,9 @@ final class AcademicCredit extends EventSourcedAggregate
             $this->credit["grade_id"] === null ||
             !in_array($this->credit["status"], ["A", "N"], true) ||
             $p["previous_academic_on"] !== $this->academicOn ||
-            ($p["academic_on"] !== null && $this->completedOn !== null && $p["academic_on"] > $this->completedOn)
+            ($p["academic_on"] !== null &&
+                $this->completedOn !== null &&
+                $p["academic_on"] > $this->completedOn)
         ) {
             throw new CorruptHistoryException();
         }
@@ -176,10 +254,10 @@ final class AcademicCredit extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $o = $p["outcome"];
-        $reference = $event->metaParam('drop_policy', null);
+        $reference = $event->metaParam("drop_policy", null);
         if ($reference !== null) {
-            \Domain\Registration\ValueObject\DropPolicyReference::validate($reference, $o['policy_version']);
-            if ($reference['term_id'] !== $this->credit['term_id']) {
+            \Domain\Registration\ValueObject\DropPolicyReference::validate($reference, $o["policy_version"]);
+            if ($reference["term_id"] !== $this->credit["term_id"]) {
                 throw new CorruptHistoryException();
             }
         }

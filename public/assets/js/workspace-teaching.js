@@ -350,11 +350,17 @@ window.createWorkspaceTeaching = function (ui) {
         );
     }
     async function recordFinalGrade(sectionRow, student, back, assignment = null) {
+        const loading = openDrawer("Review final grade", "ACADEMIC RECORD");
+        loading.append(
+            button("Back to record", back, "btn-link"),
+            node("p", { role: "status" }, "Loading grading context…"),
+        );
         const choices = await request(
             `/sis/sections/${sectionRow.id}/students/${student.student_id}/grade-choices/`,
             "POST",
             assignment ? { assignment_id: assignment } : {},
         );
+        if (!loading.isConnected) return;
         if (choices.needs_assignment) {
             const body = openDrawer("Choose grading program", "STUDENT PROGRAM CONTEXT");
             const key = "grade-pursuit-choice";
@@ -444,6 +450,17 @@ window.createWorkspaceTeaching = function (ui) {
             );
             return;
         }
+        if (choices.pending_grade_change) {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    "A grade correction is awaiting review. The posted grade stays in effect until a different authorized registrar approves it.",
+                ),
+                button("Review correction", () => gradeChangeRecord(choices.pending_grade_change.id, back)),
+            );
+            return;
+        }
         const descriptors = [
             [
                 "grade_id",
@@ -473,7 +490,7 @@ window.createWorkspaceTeaching = function (ui) {
         const reviewButton = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
-            "Review final grade",
+            choices.posted && choices.requires_approval ? "Review request" : "Review final grade",
         );
         form.append(reviewButton);
         body.append(
@@ -484,6 +501,7 @@ window.createWorkspaceTeaching = function (ui) {
             ),
             form,
         );
+        let reviewSequence = 0;
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
@@ -494,13 +512,25 @@ window.createWorkspaceTeaching = function (ui) {
                     version: choices.current_version,
                     ...(assignment ? { assignment_id: assignment } : {}),
                 };
+                const sequence = ++reviewSequence;
                 const review = await request(
                     `/sis/sections/${sectionRow.id}/final-grades/review/`,
                     "POST",
                     payload,
                 );
-                const confirmation = openDrawer("Confirm final grade", "REVIEW ACADEMIC DECISION");
+                if (!form.isConnected || sequence !== reviewSequence) return;
+                const confirmation = openDrawer(
+                    review.requires_approval ? "Submit grade correction" : "Confirm final grade",
+                    "REVIEW ACADEMIC DECISION",
+                );
                 confirmation.append(
+                    review.requires_approval
+                        ? node(
+                              "p",
+                              { class: "alert alert-info" },
+                              "This submits a request for another authorized registrar. The original grade remains in effect until approval.",
+                          )
+                        : null,
                     node(
                         "p",
                         {},
@@ -525,7 +555,7 @@ window.createWorkspaceTeaching = function (ui) {
                         restored.append(button("Back to record", back, "btn-link"), form);
                     }),
                     button(
-                        "Confirm final grade",
+                        review.requires_approval ? "Submit request" : "Confirm final grade",
                         async () => {
                             await request(`/sis/sections/${sectionRow.id}/final-grades/commit/`, "POST", {
                                 student_id: student.student_id,
@@ -537,6 +567,157 @@ window.createWorkspaceTeaching = function (ui) {
                     ),
                 );
             }, reviewButton);
+        });
+    }
+    async function gradeChanges() {
+        const body = openDrawer("Grade corrections", "ACADEMIC RECORDS");
+        body.append(button('Refresh', gradeChanges, 'btn-outline-secondary btn-sm'));
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "Pending requests retain the original grade until a different authorized registrar approves. Student and course labels below are current directory labels.",
+            ),
+        );
+        if (ui.can?.("sis:gradebook:policy")) body.append(button("Grade policy", () => gradeChangePolicy()));
+        await pages(
+            body,
+            (after) => request("/sis/grade-changes/", "POST", { after }),
+            (page) =>
+                page.items.length
+                    ? grid(
+                          ["Student ID", "Course", "Requested change", "Action"],
+                          page.items.map((row) => [
+                              row.institutional_id || "Unavailable",
+                              row.course_code || "Unavailable",
+                              `${row.before} → ${row.proposed}`,
+                              button("Review request", () => gradeChangeRecord(row.id, gradeChanges)),
+                          ]),
+                          "Pending grade corrections",
+                      )
+                    : node("p", {}, "No grade corrections are awaiting review."),
+        );
+    }
+    async function gradeChangePolicy() {
+        const body = openDrawer("Grade correction policy", "INSTITUTIONAL POLICY");
+        const policy = await request("/sis/grade-change-policy/");
+        if (!body.isConnected) return;
+        const fields = [
+            [
+                "mode",
+                "Posted-grade corrections",
+                "choice",
+                [
+                    { value: "direct", label: "Direct correction by authorized records staff" },
+                    { value: "approval", label: "Require a different registrar’s approval" },
+                ],
+            ],
+        ];
+        const form = await buildForm(fields, policy);
+        if (!body.isConnected) return;
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save policy");
+        form.append(save);
+        body.append(
+            node(
+                "p",
+                { class: "form-text" },
+                "This applies to corrections of posted grades. Initial grades retain their existing teaching authority. Pending requests still need approval, rejection or cancellation if this policy later changes.",
+            ),
+            form,
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                await request("/sis/grade-change-policy/", "POST", {
+                    ...formData(form, fields),
+                    revision: policy.revision,
+                });
+                if (body.isConnected) await gradeChangePolicy();
+            }, save);
+        });
+    }
+    async function gradeChangeRecord(id, back = gradeChanges) {
+        const body = openDrawer("Grade correction", "REGISTRAR REVIEW");
+        const record = await request(`/sis/grade-changes/${id}/`);
+        if (!body.isConnected) return;
+        const content = node("div");
+        body.append(content);
+        content.append(
+            button("Back", back, "btn-link"),
+            recordSummary([
+                ["Student ID", record.institutional_id || "Unavailable"],
+                ["Course", record.course_code || "Unavailable"],
+                ["Status", record.status],
+                ["Grade before request", record.before.code],
+                ["Proposed grade", record.grade.code],
+                ["Effective date", record.effective_at.slice(0, 10)],
+            ]),
+            node("h3", { class: "h6" }, "Reason for request"),
+            node("p", { class: "text-break" }, record.reason),
+        );
+        if (record.stale)
+            content.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning" },
+                    "The academic record changed after this request. Reject or cancel this request and prepare a fresh correction.",
+                ),
+            );
+        const options = [];
+        if (record.can_approve) options.push({ value: "approved", label: "Approve correction" });
+        if (record.can_reject) options.push({ value: "rejected", label: "Reject request" });
+        if (record.can_cancel) options.push({ value: "cancelled", label: "Cancel my request" });
+        if (!options.length) return;
+        const fields = [
+            ["outcome", "Decision", "choice", options],
+            ["reason", "Reason for decision", "textarea"],
+        ];
+        const form = await buildForm(fields, { outcome: options[0].value });
+        if (!body.isConnected) return;
+        form.elements.reason.maxLength = 1000;
+        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review decision");
+        form.append(review);
+        content.append(form);
+        let reviewSequence = 0;
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const sequence = ++reviewSequence;
+                const result = await request(
+                    `/sis/grade-changes/${id}/review/`,
+                    "POST",
+                    formData(form, fields),
+                );
+                if (!form.isConnected || sequence !== reviewSequence) return;
+                const confirmation = openDrawer("Confirm grade decision", "REGISTRAR REVIEW");
+                confirmation.append(
+                    node("p", {}, `${record.before.code} → ${record.grade.code} · ${result.outcome}`),
+                    node("p", { class: "text-break" }, result.reason),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        result.outcome === "approved"
+                            ? "Approval posts the requested correction and preserves the earlier grade. This review expires after 20 minutes."
+                            : "The original grade remains in effect. This review expires after 20 minutes.",
+                    ),
+                    button("Change review", () => {
+                        const restored = openDrawer("Grade correction", "REGISTRAR REVIEW");
+                        restored.append(content);
+                    }),
+                    button(
+                        "Confirm decision",
+                        async () => {
+                            await request(`/sis/grade-changes/${id}/commit/`, "POST", {
+                                review_token: result.review_token,
+                            });
+                            if (confirmation.isConnected) await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, review);
         });
     }
     async function reviewCoursePublication(sectionRow, student, back) {
@@ -811,6 +992,10 @@ window.createWorkspaceTeaching = function (ui) {
                                       registration: "Registration accepted",
                                       observed_existing: "Existing facts observed",
                                       grade_decided: "Grade decision",
+                                      correction_requested: "Grade correction requested",
+                                      correction_approved: "Grade correction approved",
+                                      correction_rejected: "Grade correction rejected",
+                                      correction_cancelled: "Grade correction cancelled",
                                       completion_recorded: "Actual completion date recorded",
                                       period_recorded: "Source academic period recorded",
                                       course_accepted: "Course publication accepted",
@@ -1025,5 +1210,13 @@ window.createWorkspaceTeaching = function (ui) {
             form.elements.held_on.max = term.ends_on;
         }
     }
-    return { section, recordFinalGrade, gradeHistory, reviewCoursePublication };
+    return {
+        section,
+        recordFinalGrade,
+        gradeHistory,
+        reviewCoursePublication,
+        gradeChanges,
+        gradeChangePolicy,
+        gradeChangeRecord,
+    };
 };

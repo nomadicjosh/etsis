@@ -97,6 +97,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlEnrollmentHistoryRepository::class,
             \Domain\Transfer\Repository\TransferCreditRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlTransferCreditRepository::class,
+            \Domain\AcademicRecord\Repository\GradeChangeRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlGradeChangeRepository::class,
             \Domain\AcademicRecord\Repository\AcademicCreditRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository::class,
             \Domain\AcademicRecord\Repository\WorkPursuitRepository::class =>

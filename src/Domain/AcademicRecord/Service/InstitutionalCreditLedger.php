@@ -51,6 +51,7 @@ final readonly class InstitutionalCreditLedger
         private Clock $clock,
         private \Domain\Registration\Repository\SectionVersionRepository $versions,
         private WorkPursuitLedger $pursuits,
+        private \Domain\AcademicRecord\Repository\GradeChangeRepository $changes,
     ) {
     }
 
@@ -62,7 +63,13 @@ final readonly class InstitutionalCreditLedger
         EntityId $assignment,
         ?EntityId $sectionVersion = null,
     ): void {
-        $this->transactions->run(function () use ($enrollment, $course, $actor, $assignment, $sectionVersion): void {
+        $this->transactions->run(function () use (
+            $enrollment,
+            $course,
+            $actor,
+            $assignment,
+            $sectionVersion,
+        ): void {
             $this->actor($actor);
             $id = EntityId::generate();
             $facts = new CreditSnapshot([
@@ -166,13 +173,27 @@ final readonly class InstitutionalCreditLedger
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
             "can_amend" => $this->canAmend(),
-            "can_accept_course" => $this->canAmend() && $root->canAcceptCourse() &&
-                ($root->playhead() > 0 || $facts['course_version_id'] === null),
-            "course_version_id" => $facts['course_version_id'],
+            "requires_approval" => $this->changes->policy()["mode"] === "approval",
+            "pending_grade_change" =>
+                $root->pendingGradeChange() === null
+                    ? null
+                    : [
+                        "id" => $root->pendingGradeChange()["details"]["decision_id"],
+                        "status" => "pending",
+                    ],
+            "can_accept_course" =>
+                $this->canAmend() &&
+                $root->canAcceptCourse() &&
+                ($root->playhead() > 0 || $facts["course_version_id"] === null),
+            "course_version_id" => $facts["course_version_id"],
             "history_recorded" => $root->playhead() > 0,
             "posted" => new CreditSnapshot($facts)->posted(),
-            'can_record_academic_period' => $this->canAmend() && $root->sectionVersion() === null &&
-                $root->playhead() > 0 && $root->grade() !== null && $facts['grade_id'] !== null,
+            "can_record_academic_period" =>
+                $this->canAmend() &&
+                $root->sectionVersion() === null &&
+                $root->playhead() > 0 &&
+                $root->grade() !== null &&
+                $facts["grade_id"] !== null,
             "current_grade_code" =>
                 $facts["grade_id"] === null
                     ? null
@@ -212,7 +233,13 @@ final readonly class InstitutionalCreditLedger
                 );
             }
             $amend = new CreditSnapshot($facts)->posted();
+            if ($root->pendingGradeChange() !== null) {
+                throw new ConcurrentModificationException(
+                    "Resolve the pending grade correction before requesting another.",
+                );
+            }
             $actor = $this->authority($section, $amend);
+            $policy = $this->changes->policy();
             $reason = trim($reason);
             if ($reason === "" && !$amend) {
                 $reason = "Initial final grade recorded.";
@@ -247,6 +274,8 @@ final readonly class InstitutionalCreditLedger
                 "operation_id" => $op->value,
                 "actor_id" => $actor->value,
                 "amendment" => $amend,
+                "requires_approval" => $amend && $policy["mode"] === "approval",
+                "grade_change_policy" => $policy,
                 "expected_version" => $root->playhead(),
                 "before" => $facts,
                 "baseline" => $baseline,
@@ -319,23 +348,39 @@ final readonly class InstitutionalCreditLedger
                     [$base],
                 );
             }
-            $event = FinalGradeWasDecided::occur(
-                new AcademicCreditId($id->value),
-                [
-                    "decision_id" => $op->value,
-                    "previous_decision_id" => $d["previous_decision_id"],
-                    "grade" => $d["grade"],
-                    "assignment_id" => $d["assignment_id"],
-                ],
-                ["__aggregate_type" => "academic_credit"],
-            )->withPlayhead($d["expected_version"] + ($d["baseline"] ? 2 : 1));
+            $requested = ($d["requires_approval"] ?? false) === true;
+            $class = $requested
+                ? \Domain\AcademicRecord\Event\GradeChangeWasRequested::class
+                : FinalGradeWasDecided::class;
+            $payload = [
+                "decision_id" => $op->value,
+                "previous_decision_id" => $d["previous_decision_id"],
+                "grade" => $d["grade"],
+                "assignment_id" => $d["assignment_id"],
+            ];
+            $metadata = ["__aggregate_type" => "academic_credit"];
+            if ($requested) {
+                $payload += [
+                    "actor_id" => $actor->value,
+                    "before_grade" => $d["observed_grade"],
+                    "reason" => $d["reason"],
+                    "effective_at" => $d["effective_at"],
+                    "policy" => $d["grade_change_policy"],
+                    "credit_version" => $d["before"]["version"],
+                ];
+            } elseif ($d["amendment"] && isset($d["grade_change_policy"])) {
+                $metadata["grade_change_policy"] = $d["grade_change_policy"];
+            }
+            $event = $class
+                ::occur(new AcademicCreditId($id->value), $payload, $metadata)
+                ->withPlayhead($d["expected_version"] + ($d["baseline"] ? 2 : 1));
             $receipt = $this->history->append(
                 $this->stream($id),
                 $op,
                 $event->playhead() - 1,
                 new EventContext(
                     $actor,
-                    new DateTimeImmutable($d["effective_at"]),
+                    new DateTimeImmutable($requested ? $d["observed_at"] : $d["effective_at"]),
                     $op,
                     new EntityId($d["previous_decision_id"]),
                     $d["reason"],
@@ -343,10 +388,25 @@ final readonly class InstitutionalCreditLedger
                 [$event],
             );
             if ($receipt["event_ids"] === [(string) $event->eventId()]) {
+                if ($d["amendment"]) {
+                    if (
+                        !$this->same($d["grade_change_policy"] ?? null, $this->changes->policy(current: true))
+                    ) {
+                        throw new ConcurrentModificationException(
+                            "The grade-change policy changed. Review the correction again.",
+                        );
+                    }
+                }
+                if ($root->pendingGradeChange() !== null) {
+                    throw new ConcurrentModificationException("Another grade correction is awaiting review.");
+                }
                 // Check new-command expiry after the journal recognizes completed original retries.
                 // Older accepted tokens retain their exact event/receipt contract; an unaccepted
                 // review with no expiry must be refreshed. Failure rolls back both baseline and grade.
-                if (!is_int($d["expires_at"] ?? null) || $d["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                if (
+                    !is_int($d["expires_at"] ?? null) ||
+                    $d["expires_at"] <= $this->clock->now()->getTimestamp()
+                ) {
                     throw new ConcurrentModificationException(
                         "This grade review expired. Change the review and review the final grade again.",
                     );
@@ -384,22 +444,425 @@ final readonly class InstitutionalCreditLedger
                     $root->acceptHistorical($base);
                 }
                 $root->acceptHistorical($event);
-                $this->records->project(
-                    $root->credit() ?? throw new CorruptHistoryException(),
-                    $section,
-                    $current["version"],
-                );
+                if ($requested) {
+                    if ($d["baseline"]) {
+                        $this->records->track($root->credit(), $section);
+                    }
+                    $this->projectGradeChange(
+                        $root,
+                        $op,
+                        $student,
+                        $section,
+                        new EntityId($d["enrollment_id"]),
+                        null,
+                    );
+                } else {
+                    $this->records->project(
+                        $root->credit() ?? throw new CorruptHistoryException(),
+                        $section,
+                        $current["version"],
+                    );
+                }
                 $this->audit->record(
                     $actor,
-                    $d["amendment"] ? "academic.grade_amended" : "academic.grade_assigned",
+                    $requested
+                        ? "academic.grade_change_requested"
+                        : ($d["amendment"]
+                            ? "academic.grade_amended"
+                            : "academic.grade_assigned"),
                     $id,
                 );
+                if (
+                    $d["amendment"] &&
+                    !$this->same($d["grade_change_policy"], $this->changes->policy(current: true))
+                ) {
+                    throw new ConcurrentModificationException(
+                        "The grade-change policy changed during confirmation. Review again.",
+                    );
+                }
+                if ($requested) {
+                    $this->verifyGradeChange($root, $this->changes->request($op));
+                    if (!$this->same($root->credit(), $this->records->projection($id))) {
+                        throw new CorruptHistoryException();
+                    }
+                }
             }
             $this->actor($actor);
             $this->authority($section, $d["amendment"]);
             return $receipt;
         });
     }
+    /** @return array<string, mixed> */
+    public function gradeChangePolicy(): array
+    {
+        $this->access->requirePermission("sis:gradebook:policy");
+        return $this->changes->policy();
+    }
+    public function saveGradeChangePolicy(string $mode, int $revision): array
+    {
+        $actor = $this->access->requirePermission("sis:gradebook:policy");
+        return $this->transactions->run(function () use ($mode, $revision, $actor): array {
+            $this->changes->lockPolicy();
+            $this->actor($actor);
+            $this->access->requirePermission("sis:gradebook:policy");
+            $this->changes->savePolicy($mode, $revision);
+            $this->audit->record(
+                $actor,
+                "academic.grade_change_policy_updated",
+                new EntityId(\Domain\AcademicRecord\Repository\GradeChangeRepository::POLICY_ID),
+            );
+            $this->actor($actor);
+            $this->access->requirePermission("sis:gradebook:policy");
+            return $this->changes->policy();
+        });
+    }
+    public function gradeChangePage(?EntityId $after = null): array
+    {
+        $actor = $this->gradeChangeAuthority();
+        $rows = $this->changes->page($after, 51);
+        $more = count($rows) > 50;
+        $rows = array_slice($rows, 0, 50);
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = [
+                "id" => $row["id"],
+                "student_id" => $row["student_id"],
+                "institutional_id" => $row["institutional_id"],
+                "course_code" => $row["course_code"],
+                "course_title" => $row["course_title"],
+                "before" => $row["details"]["before_grade"]["code"],
+                "proposed" => $row["details"]["grade"]["code"],
+            ];
+        }
+        $this->actor($actor);
+        $this->gradeChangeAuthority();
+        return ["items" => $items, "next_after" => $more ? $rows[49]["id"] : null];
+    }
+    public function gradeChangeRequest(EntityId $id): array
+    {
+        $actor = $this->gradeChangeAuthority();
+        [$root, $row] = $this->gradeChangeRecord($id);
+        $request = $row["details"];
+        $stale =
+        $row["status"] === "pending" &&
+        ($root->decision() !== $request["previous_decision_id"] ||
+        $root->credit()["version"] !== $request["credit_version"]);
+        $canReview = false;
+        try {
+            if ($this->access->requirePermission("sis:gradebook:approve")->value !== $actor->value) {
+                throw new AccessDeniedException("The grade-review actor changed.");
+            }
+            $canReview = $request["actor_id"] !== $actor->value;
+        } catch (AccessDeniedException) {
+        }
+        $this->audit->record($actor, "academic.grade_change_viewed", $id);
+        $this->actor($actor);
+        $this->gradeChangeAuthority();
+        return [
+            "id" => $id->value,
+            "student_id" => $row["student_id"],
+            "section_id" => $row["section_id"],
+            "institutional_id" => $row["institutional_id"],
+            "course_code" => $row["course_code"],
+            "course_title" => $row["course_title"],
+            "status" => $row["status"],
+            "before" => $request["before_grade"],
+            "grade" => $request["grade"],
+            "reason" => $request["reason"],
+            "effective_at" => $request["effective_at"],
+            "stale" => $stale,
+            "can_approve" => $row["status"] === "pending" && $canReview && !$stale,
+            "can_reject" => $row["status"] === "pending" && $canReview,
+            "can_cancel" => $row["status"] === "pending" && $request["actor_id"] === $actor->value,
+        ];
+    }
+    public function reviewGradeChange(
+        EntityId $id,
+        string $outcome,
+        #[\SensitiveParameter] string $reason,
+    ): array {
+        $this->gradeChangeAuthority();
+        $initial = $this->changes->request($id);
+        return $this->transactions->run(function () use ($id, $outcome, $reason, $initial): array {
+            $student = new EntityId($initial["student_id"]);
+            $section = new EntityId($initial["section_id"]);
+            $this->records->lockStudent($student);
+            $this->records->lockSection($section);
+            [$root, $row] = $this->gradeChangeRecord($id);
+            $actor = $this->resolutionAuthority($row, $outcome);
+            if ($row["status"] !== "pending") {
+                throw new ConcurrentModificationException("This grade correction has already been resolved.");
+            }
+            $reason = trim($reason);
+            if (
+                $reason === "" ||
+                mb_strlen($reason) > 1000 ||
+                !mb_check_encoding($reason, "UTF-8") ||
+                preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $reason)
+            ) {
+                self::invalid("reason", "Enter a decision reason of at most 1,000 characters.");
+            }
+            $this->assertApprovalReady($root, $row, $outcome);
+            $request = $row["details"];
+            $data = [
+                "kind" => "academic-grade-change-resolution",
+                "request_id" => $id->value,
+                "credit_id" => $row["credit_id"],
+                "student_id" => $row["student_id"],
+                "section_id" => $row["section_id"],
+                "enrollment_id" => $row["enrollment_id"],
+                "operation_id" => EntityId::generate()->value,
+                "actor_id" => $actor->value,
+                "outcome" => $outcome,
+                "reason" => $reason,
+                "expected_version" => $root->playhead(),
+                "request_version" => $row["version"],
+                "previous_decision_id" => $root->decision(),
+                "grade" => $outcome === "approved" ? $request["grade"] : null,
+                "assignment_id" => $outcome === "approved" ? $request["assignment_id"] : null,
+                "effective_at" =>
+                    $outcome === "approved"
+                        ? $request["effective_at"]
+                        : $this->clock->now()->format(DATE_ATOM),
+                "expires_at" => $this->clock->now()->getTimestamp() + 1200,
+            ];
+            $this->actor($actor);
+            $this->resolutionAuthority($row, $outcome);
+            return [
+                "outcome" => $outcome,
+                "reason" => $reason,
+                "before" => $request["before_grade"],
+                "grade" => $request["grade"],
+                "review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR)),
+            ];
+        });
+    }
+    public function resolveGradeChange(EntityId $id, #[\SensitiveParameter] string $token): array
+    {
+        $this->gradeChangeAuthority();
+        try {
+            if (strlen($token) > 65536) {
+                throw new InvalidArgumentException();
+            }
+            $d = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
+            if (
+                !is_array($d) ||
+                ($d["kind"] ?? null) !== "academic-grade-change-resolution" ||
+                ($d["request_id"] ?? null) !== $id->value
+            ) {
+                throw new InvalidArgumentException();
+            }
+        } catch (Throwable) {
+            self::invalid("review_token", "Review this grade correction again.");
+        }
+        return $this->transactions->run(function () use ($id, $d): array {
+            $student = new EntityId($d["student_id"]);
+            $section = new EntityId($d["section_id"]);
+            $this->records->lockStudent($student);
+            $this->records->lockSection($section);
+            [$root, $row] = $this->gradeChangeRecord($id);
+            $actor = $this->resolutionAuthority($row, $d["outcome"]);
+            if (
+                $actor->value !== $d["actor_id"] ||
+                $row["credit_id"] !== $d["credit_id"] ||
+                $row["student_id"] !== $d["student_id"] ||
+                $row["section_id"] !== $d["section_id"] ||
+                $row["enrollment_id"] !== $d["enrollment_id"]
+            ) {
+                throw new AccessDeniedException(
+                    "This review belongs to another academic records officer or record.",
+                );
+            }
+            $event = \Domain\AcademicRecord\Event\GradeChangeWasResolved::occur(
+                new AcademicCreditId($d["credit_id"]),
+                [
+                    "decision_id" => $d["operation_id"],
+                    "previous_decision_id" => $d["previous_decision_id"],
+                    "actor_id" => $actor->value,
+                    "request_id" => $id->value,
+                    "outcome" => $d["outcome"],
+                    "grade" => $d["grade"],
+                    "assignment_id" => $d["assignment_id"],
+                ],
+                ["__aggregate_type" => "academic_credit"],
+            )->withPlayhead($d["expected_version"] + 1);
+            $receipt = $this->history->append(
+                $this->stream(new EntityId($d["credit_id"])),
+                new EntityId($d["operation_id"]),
+                $d["expected_version"],
+                new EventContext(
+                    $actor,
+                    new DateTimeImmutable($d["effective_at"]),
+                    new EntityId($d["operation_id"]),
+                    $id,
+                    $d["reason"],
+                ),
+                [$event],
+            );
+            if ($receipt["event_ids"] === [(string) $event->eventId()]) {
+                if (
+                    !is_int($d["expires_at"] ?? null) ||
+                    $d["expires_at"] <= $this->clock->now()->getTimestamp()
+                ) {
+                    throw new ConcurrentModificationException(
+                        "This review expired. Review the grade correction again.",
+                    );
+                }
+                if ($row["status"] !== "pending" || $row["version"] !== $d["request_version"]) {
+                    throw new ConcurrentModificationException(
+                        "This grade correction changed. Review it again.",
+                    );
+                }
+                $this->assertApprovalReady($root, $row, $d["outcome"]);
+                $before = $root->credit();
+                $root->acceptHistorical($event);
+                if ($d["outcome"] === "approved") {
+                    $this->records->project($root->credit(), $section, $before["version"]);
+                }
+                $this->projectGradeChange(
+                    $root,
+                    $id,
+                    $student,
+                    $section,
+                    new EntityId($row["enrollment_id"]),
+                    $row["version"],
+                );
+                $this->audit->record($actor, "academic.grade_change_" . $d["outcome"], $id);
+                if ($d["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                    throw new ConcurrentModificationException(
+                        "This review expired. Review the grade correction again.",
+                    );
+                }
+                $this->verifyGradeChange($root, $this->changes->request($id));
+                if (
+                    !$this->same($root->credit(), $this->records->projection(new EntityId($d["credit_id"])))
+                ) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            $this->actor($actor);
+            $this->resolutionAuthority($row, $d["outcome"]);
+            return $receipt;
+        });
+    }
+    private function gradeChangeAuthority(): EntityId
+    {
+        $actor = $this->access->requirePermission("sis:gradebook:amend");
+        if ($this->access->requirePermission("sis:student:read")->value !== $actor->value) {
+            throw new AccessDeniedException("The grade-change actor changed.");
+        }
+        return $actor;
+    }
+    private function resolutionAuthority(array $row, string $outcome): EntityId
+    {
+        $actor = $this->gradeChangeAuthority();
+        if (!in_array($outcome, ["approved", "rejected", "cancelled"], true)) {
+            self::invalid("outcome", "Choose approve, reject or cancel.");
+        }
+        if ($outcome === "cancelled") {
+            if ($row["details"]["actor_id"] !== $actor->value) {
+                throw new AccessDeniedException("Only the requesting officer can cancel this request.");
+            }
+        } else {
+            if ($this->access->requirePermission("sis:gradebook:approve")->value !== $actor->value) {
+                throw new AccessDeniedException("The grade-review actor changed.");
+            }
+            if ($row["details"]["actor_id"] === $actor->value) {
+                throw new AccessDeniedException("Another authorized registrar must review your request.");
+            }
+        }
+        return $actor;
+    }
+    private function assertApprovalReady(AcademicCredit $root, array $row, string $outcome): void
+    {
+        if ($outcome !== "approved") {
+            return;
+        }
+        $request = $row["details"];
+        $facts = $root->credit();
+        if (
+            $root->decision() !== $request["previous_decision_id"] ||
+            $facts["version"] !== $request["credit_version"]
+        ) {
+            throw new ConcurrentModificationException(
+                "The academic record changed after this request. Reject or cancel it and request a fresh correction.",
+            );
+        }
+        $student = new EntityId($row["student_id"]);
+        $this->active(
+            new EntityId($row["enrollment_id"]),
+            $student,
+            new EntityId($row["section_id"]),
+            new EntityId($facts["term_id"]),
+        );
+        $available = $this->gradeChoices(
+            $root,
+            $facts,
+            $student,
+            $request["assignment_id"] === null ? null : new EntityId($request["assignment_id"]),
+        );
+        foreach ($available as $grade) {
+            if (
+                $grade["id"] === $request["grade"]["id"] &&
+                $this->same(GradeSnapshot::fromRow($grade)->facts, $request["grade"])
+            ) {
+                return;
+            }
+        }
+        throw new ConcurrentModificationException(
+            "The retained grading context changed. Request a fresh correction.",
+        );
+    }
+    private function gradeChangeRecord(EntityId $id): array
+    {
+        $row = $this->changes->request($id);
+        $root = $this->load(new EntityId($row["credit_id"]));
+        $this->verifyGradeChange($root, $row);
+        return [$root, $row];
+    }
+    private function verifyGradeChange(AcademicCredit $root, array $row): void
+    {
+        $expected = $root->gradeChange($row["id"]);
+        $facts = $root->credit();
+        if (
+            $expected === null ||
+            !$this->same($expected["details"], $row["details"]) ||
+            $expected["status"] !== $row["status"] ||
+            $expected["version"] !== $row["version"] ||
+            $row["credit_id"] !== $facts["id"] ||
+            $row["student_id"] !== $facts["student_id"] ||
+            $row["section_id"] !== $root->section() ||
+            $row["enrollment_id"] !== $facts["source_id"] ||
+            $row["actor_id"] !== $expected["details"]["actor_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
+    private function projectGradeChange(
+        AcademicCredit $root,
+        EntityId $id,
+        EntityId $student,
+        EntityId $section,
+        EntityId $enrollment,
+        ?int $expected,
+    ): void {
+        $request = $root->gradeChange($id->value) ?? throw new CorruptHistoryException();
+        $this->changes->project(
+            [
+                "id" => $id->value,
+                "credit_id" => (string) $root->aggregateId(),
+                "student_id" => $student->value,
+                "section_id" => $section->value,
+                "enrollment_id" => $enrollment->value,
+                "actor_id" => $request["details"]["actor_id"],
+                "status" => $request["status"],
+                "version" => $request["version"],
+                "details" => $request["details"],
+            ],
+            $expected,
+        );
+    }
+
     /** Internal drop command; caller owns registration authorization, effective-date validation and billing.
      * @param array<string,mixed> $outcome
      */
@@ -464,8 +927,8 @@ final readonly class InstitutionalCreditLedger
                 "outcome" => $o,
                 "grade" => $grade,
             ],
-            ["__aggregate_type" => "academic_credit"] + (isset($outcome['policy_reference'])
-                ? ['drop_policy' => $outcome['policy_reference']] : []),
+            ["__aggregate_type" => "academic_credit"] +
+                (isset($outcome["policy_reference"]) ? ["drop_policy" => $outcome["policy_reference"]] : []),
         )->withPlayhead($root->playhead() + 1);
         $this->history->append($this->stream($id), $op, $root->playhead(), $context, [$event]);
         $root->acceptHistorical($event);
@@ -566,24 +1029,37 @@ final readonly class InstitutionalCreditLedger
             $p = $e->payload();
             $items[] = [
                 "version" => $e->playhead(),
-                'action' => match (true) {
-                    $e instanceof InstitutionalCreditWasEstablished => $p['provenance'],
-                    $e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded => 'completion_recorded',
-                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded =>
-                        'period_recorded',
-                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted => 'course_accepted',
-                    $e instanceof FinalGradeWasDecided => 'grade_decided',
-                    $e instanceof InstitutionalCreditWasDropped => 'dropped',
+                "action" => match (true) {
+                    $e instanceof InstitutionalCreditWasEstablished => $p["provenance"],
+                    $e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded
+                        => "completion_recorded",
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded
+                        => "period_recorded",
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted
+                        => "course_accepted",
+                    $e instanceof FinalGradeWasDecided => "grade_decided",
+                    $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasRequested
+                        => "correction_requested",
+                    $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved => "correction_" .
+                        $p["outcome"],
+                    $e instanceof InstitutionalCreditWasDropped => "dropped",
                     default => throw new CorruptHistoryException(),
                 },
-                'academic_on' => $p['academic_on'] ?? null,
-                'previous_academic_on' => $p['previous_academic_on'] ?? null,
-                "course_code" => $p['course_code'] ?? null,
-                "course_title" => $p['course_title'] ?? null,
+                "academic_on" => $p["academic_on"] ?? null,
+                "previous_academic_on" => $p["previous_academic_on"] ?? null,
+                "course_code" => $p["course_code"] ?? null,
+                "course_title" => $p["course_title"] ?? null,
                 "completed_on" => $p["completed_on"] ?? null,
                 "previous_completed_on" => $p["previous_completed_on"] ?? null,
-                "grade_code" => $p["grade"]["code"] ?? ($p["outcome"]["grade_code"] ?? null),
-                "grade_points_milli" => $p["grade"]["points_milli"] ?? null,
+                "grade_code" =>
+                    $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasRequested
+                        ? null
+                        : $p["grade"]["code"] ??
+                            (is_array($p["outcome"] ?? null) ? $p["outcome"]["grade_code"] : null),
+                "grade_points_milli" =>
+                    $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasRequested
+                        ? null
+                        : $p["grade"]["points_milli"] ?? null,
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
                 "effective_at" => $stored->context->describe()["effective_at"],
             ];
@@ -669,6 +1145,14 @@ final readonly class InstitutionalCreditLedger
         $p = $this->records->projection($id);
         if ($c["status"] === "D" ? $p !== null : !$this->same($p, $c)) {
             throw new CorruptHistoryException();
+        }
+        $pending = $this->changes->pending($id);
+        $expected = $root->pendingGradeChange();
+        if (count($pending) !== ($expected === null ? 0 : 1)) {
+            throw new CorruptHistoryException();
+        }
+        if ($expected !== null) {
+            $this->verifyGradeChange($root, $pending[0]);
         }
         return $root;
     }

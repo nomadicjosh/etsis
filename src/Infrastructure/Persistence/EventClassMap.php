@@ -73,6 +73,8 @@ final class EventClassMap
             \Domain\Transfer\Event\TransferCourseWasAccepted::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished::class,
             \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
+            \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+            \Domain\AcademicRecord\Event\GradeChangeWasResolved::class,
             \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class,
             \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded::class,
             \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class,

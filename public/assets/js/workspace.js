@@ -277,7 +277,7 @@
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup() });
     const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
-    const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
+    const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, can, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
             explanation: 'Review this copy of the published invitation and dates before saving. Later event changes are not copied into this message. Saving creates an encrypted draft; choose recipients and confirm delivery in Communications.' }) });
@@ -509,6 +509,10 @@
             type: 'button', class: 'btn btn-outline-primary', 'aria-label': name,
             onclick: event => task(run, event.currentTarget),
         }, icon(iconName), node('span', {}, label));
+        if (section === 'students' && can('sis:gradebook:amend') && can('sis:student:read')) tools.append(
+            tool('Grade corrections', () => teachingStudio.gradeChanges(), 'Review requested grade corrections', 'clipboard-check'));
+        if (section === 'students' && can('sis:gradebook:policy')) tools.append(
+            tool('Grade policy', () => teachingStudio.gradeChangePolicy(), 'Configure grade correction policy', 'sliders'));
         if (section === 'applications') tools.append(tool('Follow-up queue', () => peopleStudio.caseQueue(),
             'Open admissions follow-up queue', 'inboxes'));
         if (section === 'applications') tools.append(tool('Withdrawal requests', () => peopleStudio.withdrawalQueue(),

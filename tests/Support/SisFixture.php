@@ -468,6 +468,7 @@ final class SisFixture
             $this->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
             $this->workPursuitLedger(),
+            new \Infrastructure\Persistence\Repository\SqlGradeChangeRepository($this->sql, $this->dropCipher),
         );
     }
     public function workPursuitLedger(): \Domain\AcademicRecord\Service\WorkPursuitLedger

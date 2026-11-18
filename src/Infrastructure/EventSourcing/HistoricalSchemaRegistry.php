@@ -295,6 +295,14 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
                 "fields" => ["decision_id", "provenance", "credit", "section_id", "policies", "grade"],
             ],
+            \Domain\AcademicRecord\Event\GradeChangeWasRequested::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => \Domain\AcademicRecord\ValueObject\GradeChangeSchema::REQUEST,
+            ],
+            \Domain\AcademicRecord\Event\GradeChangeWasResolved::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => \Domain\AcademicRecord\ValueObject\GradeChangeSchema::RESOLUTION,
+            ],
             \Domain\AcademicRecord\Event\FinalGradeWasDecided::class => [
                 "type" => "academic_credit",
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
@@ -882,7 +890,9 @@ final readonly class HistoricalSchemaRegistry
                         continue;
                     }
                     if (
-                        $class === \Domain\AcademicRecord\Event\FinalGradeWasDecided::class &&
+                        in_array($class, [\Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
+                            \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+                            \Domain\AcademicRecord\Event\GradeChangeWasResolved::class], true) &&
                         $name === "assignment_id" &&
                         $value === null
                     ) {
@@ -912,6 +922,17 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'grade_change_policy') {
+                    if ($class !== \Domain\AcademicRecord\Event\FinalGradeWasDecided::class || !is_array($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\AcademicRecord\ValueObject\GradeChangeSchema::policy($value);
+                    if ($value['mode'] !== 'direct') {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
+
                 if ($name === 'offering_classifications') {
                     if (
                         $class !== \Domain\Registration\Event\SectionDefinitionWasPublished::class || !is_array($value)

@@ -17,9 +17,16 @@ interface AcademicCreditRepository
     public function projection(EntityId $credit): ?array;
     /** @param array<string,mixed> $facts */
     public function project(array $facts, EntityId $section, ?int $expectedVersion): void;
+    /** Establish or verify routing for an actual observation without changing the academic projection.
+     * @param array<string, mixed> $facts */
+    public function track(array $facts, EntityId $section): void;
     /** @return array<string,mixed> */
     public function section(EntityId $section): array;
-    public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void;
+    public function acceptCourse(
+        EntityId $credit,
+        PublishedCourseDefinition $definition,
+        ?EntityId $previous,
+    ): void;
     /** @return array<string,mixed>|null */
     public function enrollment(EntityId $enrollment): ?array;
     public function lockStudent(EntityId $student): void;

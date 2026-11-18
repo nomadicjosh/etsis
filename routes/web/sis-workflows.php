@@ -744,6 +744,13 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/sections/{id}/assignments/", [SisGradebookController::class, "assignment"])
         ->name("sis.gradebook.assignment");
+    $gradeChanges = \Application\Http\Controller\SisGradeChangeController::class;
+    $router->post('/sis/grade-changes/', [$gradeChanges, 'page'])->name('sis.grade-changes.page');
+    $router->get('/sis/grade-changes/{id}/', [$gradeChanges, 'show'])->name('sis.grade-changes.show');
+    $router->post('/sis/grade-changes/{id}/review/', [$gradeChanges, 'review'])->name('sis.grade-changes.review');
+    $router->post('/sis/grade-changes/{id}/commit/', [$gradeChanges, 'commit'])->name('sis.grade-changes.commit');
+    $router->get('/sis/grade-change-policy/', [$gradeChanges, 'policy'])->name('sis.grade-changes.policy');
+    $router->post('/sis/grade-change-policy/', [$gradeChanges, 'savePolicy'])->name('sis.grade-changes.policy.save');
     $router->get('/sis/sections/{id}/gradebook/calculation/', [SisGradebookController::class, 'calculationSetup'])
         ->name('sis.gradebook.calculation');
     $router->post('/sis/sections/{id}/gradebook/calculation/', [SisGradebookController::class, 'saveCalculation'])

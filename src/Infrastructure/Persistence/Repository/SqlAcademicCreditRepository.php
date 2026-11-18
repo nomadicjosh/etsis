@@ -69,18 +69,7 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
     public function project(array $facts, EntityId $section, ?int $expectedVersion): void
     {
         $id = new EntityId($facts["id"]);
-        $mapping = $this->mapping($id);
-        $expected = [
-            "id" => $id->value,
-            "enrollment_id" => $facts["source_id"],
-            "student_id" => $facts["student_id"],
-            "section_id" => $section->value,
-        ];
-        if ($mapping === null) {
-            $this->sql->insert("sis_academic_credit_streams", $expected);
-        } elseif (count($mapping) !== 4 || array_diff_assoc($mapping, $expected) !== []) {
-            throw new CorruptHistoryException();
-        }
+        $this->track($facts, $section);
         $version = $facts["course_version_id"];
         unset($facts["course_version_id"]);
         if ($facts["status"] === "D") {
@@ -125,12 +114,31 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
             }
         }
     }
-    public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void
+    public function track(array $facts, EntityId $section): void
     {
+        $id = new EntityId($facts["id"]);
+        $mapping = $this->mapping($id);
+        $expected = [
+            "id" => $id->value,
+            "enrollment_id" => $facts["source_id"],
+            "student_id" => $facts["student_id"],
+            "section_id" => $section->value,
+        ];
+        if ($mapping === null) {
+            $this->sql->insert("sis_academic_credit_streams", $expected);
+        } elseif (count($mapping) !== 4 || array_diff_assoc($mapping, $expected) !== []) {
+            throw new CorruptHistoryException();
+        }
+    }
+    public function acceptCourse(
+        EntityId $credit,
+        PublishedCourseDefinition $definition,
+        ?EntityId $previous,
+    ): void {
         $facts = $this->projection($credit) ?? throw new CorruptHistoryException();
         if (
             $facts["course_id"] !== $definition->courseId->value ||
-            $facts['course_version_id'] !== $previous?->value
+            $facts["course_version_id"] !== $previous?->value
         ) {
             throw new CorruptHistoryException();
         }
@@ -139,8 +147,10 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
         if ($previous === null) {
             $this->sql->insert("sis_credit_course_versions", ["id" => $credit->value] + $r);
         } elseif (
-            $this->sql->update("sis_credit_course_versions", $r, ["id" => $credit->value,
-            "course_version_id" => $previous->value]) !== 1
+            $this->sql->update("sis_credit_course_versions", $r, [
+                "id" => $credit->value,
+                "course_version_id" => $previous->value,
+            ]) !== 1
         ) {
             throw new ConcurrentModificationException("Review the accepted course publication again.");
         }

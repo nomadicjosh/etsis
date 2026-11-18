@@ -18,6 +18,13 @@ final class AcademicEventSchema
     /** @param array<string,mixed> $payload */
     public static function validate(string $class, array $payload): void
     {
+        if (
+            in_array($class, [\Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+            \Domain\AcademicRecord\Event\GradeChangeWasResolved::class], true)
+        ) {
+            GradeChangeSchema::validate($class, $payload);
+            return;
+        }
         $keys = match ($class) {
             InstitutionalCreditWasEstablished::class => [
                 "decision_id",
