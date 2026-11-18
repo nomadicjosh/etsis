@@ -49,8 +49,12 @@ window.createWorkspaceTeaching = function (ui) {
     let worksheet = null;
     const canLeave = () => worksheet?.canLeave() ?? true;
     const gradeAssignment = (id, row, back) => {
-        worksheet ??= window.createAssignmentWorksheet(ui);
-        return worksheet.open(id, row, back);
+        worksheet ??= window.createTeachingWorksheet(ui);
+        return worksheet.assignment(id, row, back);
+    };
+    const takeAttendance = (row, back) => {
+        worksheet ??= window.createTeachingWorksheet(ui);
+        return worksheet.attendance(row, back);
     };
 
     async function pages(container, fetchPage, render) {
@@ -171,6 +175,13 @@ window.createWorkspaceTeaching = function (ui) {
             return;
         }
         if (!first.can_grade) return;
+        panel.prepend(
+            node(
+                "div",
+                { class: "inline-actions mb-3" },
+                button("Take attendance", () => takeAttendance(row, back), "btn-primary"),
+            ),
+        );
         const assignments = area("Assignments");
         body.append(assignments);
         assignments.append(

@@ -38,6 +38,15 @@ interface GradebookRepository
         ?EntityId $after,
         int $limit,
     ): array;
+    /** @return list<array<string,mixed>> */
+    public function attendanceRoster(
+        EntityId $section,
+        string $on,
+        string $search,
+        string $state,
+        ?EntityId $after,
+        int $limit,
+    ): array;
     /** @return array<string, mixed>|null */
     public function attendanceRecord(EntityId $section, EntityId $student, string $on): ?array;
     /** @return list<array<string, mixed>> */
@@ -48,7 +57,13 @@ interface GradebookRepository
     /** @return array{earned_hundredths:?int,version:int,excused:bool}|null */
     public function scoreRecord(EntityId $assignment, EntityId $student): ?array;
 
-    public function attendance(EntityId $section, EntityId $student, string $on, string $status): void;
+    public function attendance(
+        EntityId $section,
+        EntityId $student,
+        string $on,
+        string $status,
+        int $expectedVersion,
+    ): void;
     /** @return list<array<string, mixed>> */
     public function scores(
         EntityId $student,

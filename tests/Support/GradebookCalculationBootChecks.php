@@ -289,3 +289,92 @@ $sis->access->actor = $sis->admissions->person($other->personId)->ownerUserId;
 if ($read($path)->getStatusCode() !== 403 || $read($portalPath)->getStatusCode() !== 403) {
     throw new RuntimeException("Another person read a private gradebook.");
 }
+
+// The class attendance register shares teaching authority, private responses and CSRF enforcement.
+$sis->access->actor = $section->facultyUserId;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$attendancePath = $base . "/attendance-roster/";
+$attendanceSetup = $teachingPost($attendancePath, []);
+$attendanceSetupBody = json_decode((string) $attendanceSetup->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($attendanceSetup->getStatusCode() !== 200 || ($attendanceSetupBody["items"] ?? null) !== []) {
+    throw new RuntimeException("The attendance register invented a date or class roster.");
+}
+$attendanceData = ["held_on" => "2026-08-11", "state" => "unmarked", "search" => "Alex Example"];
+$attendanceResponse = $teachingPost($attendancePath, $attendanceData);
+$attendancePage = json_decode((string) $attendanceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $attendanceResponse->getStatusCode() !== 200 ||
+    count($attendancePage["items"] ?? []) !== 1 ||
+    ($attendancePage["items"][0]["student_id"] ?? null) !== $student->id->value ||
+    $attendancePage["items"][0]["status"] !== null ||
+    $teachingPost($attendancePath, ["held_on" => "2025-01-01"])->getStatusCode() !== 422 ||
+    $teachingPost($attendancePath, ["held_on" => "2026-02-30"])->getStatusCode() !== 422 ||
+    $teachingPost($attendancePath, ["state" => "invalid"])->getStatusCode() !== 422
+) {
+    throw new RuntimeException("Private dated attendance filtering or validation failed.");
+}
+$attendanceProtected = [
+    $sis->sql->rows("sis_history_events"),
+    $sis->sql->rows("sis_academic_credits"),
+    $sis->sql->rows("sis_scores"),
+    $sis->financialEvents(),
+];
+$attendanceMark = [
+    "student_id" => $student->id->value,
+    "enrollment_id" => $attendancePage["items"][0]["enrollment_id"],
+    "held_on" => "2026-08-11",
+    "status" => "present",
+    "revision" => null,
+];
+$attendanceSave = $teachingPost($base . "/attendance/", $attendanceMark);
+$firstAttendance = json_decode((string) $attendanceSave->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($attendanceSave->getStatusCode() !== 200 || !is_string($firstAttendance["revision"] ?? null)) {
+    throw new RuntimeException("Attendance save did not return its current correction revision.");
+}
+$attendanceMark["revision"] = $firstAttendance["revision"];
+$attendanceMark["status"] = "late";
+$secondAttendance = $teachingPost($base . "/attendance/", $attendanceMark);
+$secondAttendanceBody = json_decode((string) $secondAttendance->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($secondAttendance->getStatusCode() !== 200) {
+    throw new RuntimeException("The attendance correction route failed.");
+}
+$attendanceMark["revision"] = $secondAttendanceBody["revision"];
+$attendanceMark["status"] = "present";
+if ($teachingPost($base . "/attendance/", $attendanceMark)->getStatusCode() !== 200) {
+    throw new RuntimeException("The second attendance correction failed.");
+}
+$attendanceMark["revision"] = $firstAttendance["revision"];
+$attendanceMark["status"] = "absent";
+if (
+    $teachingPost($base . "/attendance/", $attendanceMark)->getStatusCode() !== 409 ||
+    $attendanceProtected !== [
+        $sis->sql->rows("sis_history_events"),
+        $sis->sql->rows("sis_academic_credits"),
+        $sis->sql->rows("sis_scores"),
+        $sis->financialEvents(),
+    ]
+) {
+    throw new RuntimeException(
+        "An old attendance correction overwrote a later mark or academic facts changed.",
+    );
+}
+$sis->access->actor = $sis->admissions->person($student->personId)->ownerUserId;
+if (
+    $teachingPost($attendancePath, $attendanceData)->getStatusCode() !== 403 ||
+    $teachingPost($base . "/attendance/", $attendanceMark)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("A student owner gained class attendance read/write access.");
+}
+$privateAttendance = $teachingPost($base . "/students/" . $student->id->value . "/attendance/", []);
+$privateAttendanceBody = json_decode(
+    (string) $privateAttendance->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    $privateAttendance->getStatusCode() !== 200 ||
+    ($privateAttendanceBody["items"][0]["status"] ?? null) !== "present"
+) {
+    throw new RuntimeException("The student's private attendance feedback lost its confirmed mark.");
+}

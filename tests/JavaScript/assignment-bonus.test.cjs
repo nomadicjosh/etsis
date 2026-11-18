@@ -14,7 +14,7 @@ Element.prototype.querySelector = function (selector) {
 async function fixture(excused = false) {
     const window = {};
     vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
-    vm.runInNewContext(fs.readFileSync("public/assets/js/assignment-worksheet.js", "utf8"), { window });
+    vm.runInNewContext(fs.readFileSync("public/assets/js/teaching-worksheet.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
     let body, pending, lastFlow, delayed, release;
     const score = {
@@ -66,6 +66,13 @@ async function fixture(excused = false) {
             return form;
         },
         request: async (path) => {
+            if (path.endsWith("/attendance-roster/"))
+                return {
+                    term: { starts_on: "2026-08-01", ends_on: "2026-12-31" },
+                    held_on: null,
+                    items: [],
+                    next_after: null,
+                };
             if (path.endsWith("/score-roster/"))
                 return {
                     assignment: {
@@ -166,6 +173,13 @@ test("the assignment list opens the integrated grading worksheet", async () => {
     input.value = "100";
     input.events.input({});
     assert.equal(f.canLeave(), false);
+});
+test("the section roster opens attendance through the shared worksheet", async () => {
+    const f = await fixture();
+    await f.click(f.section, "Take attendance");
+    assert.match(f.body().textContent, /Choose a class date/);
+    assert.ok(walk(f.body()).some((e) => e.tag === "input" && e.id === "worksheet-date"));
+    assert.equal(f.canLeave(), true);
 });
 test("assignment editing preserves the bonus in points and its revision", async () => {
     const f = await fixture();

@@ -1419,6 +1419,32 @@ final class SisFixture
         return $p;
     }
 
+    /** Indexed read fixture only. No earlier enrollment/profile decisions are invented. */
+    public function worksheetStudent(string $name, string $status = "A"): EntityId
+    {
+        $person = $this->sql->rows("sis_persons")[0];
+        $person["id"] = EntityId::generate()->value;
+        $person["owner_user_id"] = null;
+        $person["given_name"] = $name;
+        $person["family_name"] = "Worksheet";
+        $this->sql->insert("sis_persons", $person);
+        $identifier = $this->sql->rows("sis_person_identifiers")[0];
+        $identifier["id"] = EntityId::generate()->value;
+        $identifier["person_id"] = $person["id"];
+        $identifier["institutional_id"] = "TEST-" . $person["id"];
+        $this->sql->insert("sis_person_identifiers", $identifier);
+        $student = $this->sql->rows("sis_students")[0];
+        $student["id"] = EntityId::generate()->value;
+        $student["person_id"] = $person["id"];
+        $this->sql->insert("sis_students", $student);
+        $enrollment = $this->sql->rows("sis_enrollments")[0];
+        $enrollment["id"] = EntityId::generate()->value;
+        $enrollment["student_id"] = $student["id"];
+        $enrollment["status"] = $status;
+        $this->sql->insert("sis_enrollments", $enrollment);
+        return new EntityId($student["id"]);
+    }
+
     public function student(?EntityId $owner = null): Student
     {
         $service = new AdmissionsService(

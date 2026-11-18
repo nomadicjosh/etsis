@@ -13,6 +13,7 @@ class Element {
             element.parent = this; this.children.push(element);
         }
     }
+    prepend(...children) { const previous = this.children; this.children = []; this.append(...children); this.children.push(...previous); }
     replaceChildren(...children) { this.children = []; this.text = ''; this.append(...children); }
     get textContent() { return this.text + this.children.map(child => child.textContent).join(''); }
     set textContent(text) { this.children = []; this.text = String(text); }

@@ -152,35 +152,113 @@ final readonly class SqlGradebookRepository implements GradebookRepository
     ): array {
         $q = $this->sql->quote(...);
         $col = static fn(string $alias, string $field): string => $alias . "." . $q($field);
-        $parameters = [$assignment->id->value, $assignment->sectionId->value];
+        $condition = match ($state) {
+            "all" => "1 = 1",
+            "excused" => $col("m", "excused") . " = 1",
+            "pending" => $col("m", "earned_hundredths") .
+            " IS NULL AND COALESCE(" .
+            $col("m", "excused") .
+            ", 0) = 0",
+            "scored" => $col("m", "earned_hundredths") .
+            " IS NOT NULL AND COALESCE(" .
+            $col("m", "excused") .
+            ", 0) = 0",
+        };
+        $rows = $this->worksheetRoster(
+            $assignment->sectionId,
+            $search,
+            $after,
+            $limit,
+            "sis_scores",
+            "assignment_id",
+            $assignment->id->value,
+            ["earned_hundredths", "excused", "version"],
+            $condition,
+        );
+        foreach ($rows as &$row) {
+            $row["earned_hundredths"] =
+            $row["earned_hundredths"] === null ? null : (int) $row["earned_hundredths"];
+            $row["excused"] = (bool) $row["excused"];
+            $row["version"] = (int) $row["version"];
+        }
+        unset($row);
+        return $rows;
+    }
+
+    public function attendanceRoster(
+        EntityId $section,
+        string $on,
+        string $search,
+        string $state,
+        ?EntityId $after,
+        int $limit,
+    ): array {
+        $q = $this->sql->quote(...);
+        $condition = match ($state) {
+            "all" => "1 = 1",
+            "unmarked" => "m." . $q("status") . " IS NULL",
+            default => "m." . $q("status") . " = ?",
+        };
+        $rows = $this->worksheetRoster(
+            $section,
+            $search,
+            $after,
+            $limit,
+            "sis_attendance",
+            "held_on",
+            $on,
+            ["id", "held_on", "status", "version"],
+            $condition,
+            in_array($state, ["all", "unmarked"], true) ? [] : [$state],
+        );
+        foreach ($rows as &$row) {
+            $row["version"] = $row["version"] === null ? null : (int) $row["version"];
+        }
+        unset($row);
+        return $rows;
+    }
+
+    /** Repository-owned SQL only; both teaching worksheets share the same bounded identity query.
+     * @param list<string> $fields
+     * @param list<string> $filterParameters
+     * @return list<array<string,mixed>>
+     */
+    private function worksheetRoster(
+        EntityId $section,
+        string $search,
+        ?EntityId $after,
+        int $limit,
+        string $table,
+        string $joinField,
+        string $joinValue,
+        array $fields,
+        string $condition,
+        array $filterParameters = [],
+    ): array {
+        $q = $this->sql->quote(...);
+        $col = static fn(string $alias, string $field): string => $alias . "." . $q($field);
+        $parameters = [$joinValue, $section->value];
         $where = [$col("e", "section_id") . " = ?", $col("e", "status") . " IN ('A', 'N')"];
         if ($after !== null) {
             $where[] = $col("e", "id") . " < ?";
             $parameters[] = $after->value;
         }
-        if ($state !== "all") {
-            $where[] = match ($state) {
-                "excused" => $col("m", "excused") . " = 1",
-                "pending" => $col("m", "earned_hundredths") .
-                " IS NULL AND COALESCE(" .
-                $col("m", "excused") .
-                ", 0) = 0",
-                "scored" => $col("m", "earned_hundredths") .
-                " IS NOT NULL AND COALESCE(" .
-                $col("m", "excused") .
-                ", 0) = 0",
-            };
-        }
+        $where[] = $condition;
+        array_push($parameters, ...$filterParameters);
         foreach (preg_split("/\s+/u", mb_strtolower($search), flags: PREG_SPLIT_NO_EMPTY) as $word) {
             $pattern = "%" . strtr($word, ["!" => "!!", "%" => "!%", "_" => "!_"]) . "%";
-            $fields = [$col("p", "given_name"), $col("p", "family_name"), $col("i", "institutional_id")];
+            $searchFields = [
+                $col("p", "given_name"),
+                $col("p", "family_name"),
+                $col("i", "institutional_id"),
+            ];
             $where[] =
             "(" .
             implode(
                 " OR ",
                 array_map(
                     static fn(string $field): string => "LOWER(" . $field . ") LIKE ? ESCAPE '!'",
-                    $fields,
+                    $searchFields,
                 ),
             ) .
             ")";
@@ -200,11 +278,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 ", " .
                 $col("i", "institutional_id") .
                 ", " .
-                $col("m", "earned_hundredths") .
-                ", " .
-                $col("m", "excused") .
-                ", " .
-                $col("m", "version") .
+                implode(", ", array_map(static fn(string $field): string => $col("m", $field), $fields)) .
                 " FROM " .
                 $q("sis_enrollments") .
                 " e JOIN " .
@@ -226,13 +300,16 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 " = " .
                 $col("p", "id") .
                 " LEFT JOIN " .
-                $q("sis_scores") .
+                $q($table) .
                 " m ON " .
                 $col("m", "student_id") .
                 " = " .
                 $col("e", "student_id") .
+                ($table === "sis_attendance"
+                    ? " AND " . $col("m", "section_id") . " = " . $col("e", "section_id")
+                    : "") .
                 " AND " .
-                $col("m", "assignment_id") .
+                $col("m", $joinField) .
                 " = ? WHERE " .
                 implode(" AND ", $where) .
                 " ORDER BY " .
@@ -241,13 +318,6 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             $parameters,
             $limit,
         );
-        foreach ($rows as &$row) {
-            $row["earned_hundredths"] =
-            $row["earned_hundredths"] === null ? null : (int) $row["earned_hundredths"];
-            $row["excused"] = (bool) $row["excused"];
-            $row["version"] = (int) $row["version"];
-        }
-        unset($row);
         return $rows;
     }
 
@@ -274,6 +344,8 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 $q("held_on") .
                 ", " .
                 $q("status") .
+                ", " .
+                $q("version") .
                 " FROM " .
                 $q("sis_attendance") .
                 " WHERE " .
@@ -367,20 +439,31 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         }
     }
 
-    public function attendance(EntityId $section, EntityId $student, string $on, string $status): void
-    {
+    public function attendance(
+        EntityId $section,
+        EntityId $student,
+        string $on,
+        string $status,
+        int $expectedVersion,
+    ): void {
         $criteria = [
             "section_id" => $section->value,
             "student_id" => $student->value,
             "held_on" => $on,
         ];
-        if ($this->sql->rows("sis_attendance", $criteria) === []) {
+        if ($expectedVersion === 0) {
             $this->sql->insert(
                 "sis_attendance",
-                ["id" => EntityId::generate()->value] + $criteria + ["status" => $status],
+                ["id" => EntityId::generate()->value] + $criteria + ["status" => $status, "version" => 1],
             );
-        } else {
-            $this->sql->update("sis_attendance", ["status" => $status], $criteria);
+        } elseif (
+            $this->sql->update(
+                "sis_attendance",
+                ["status" => $status, "version" => $expectedVersion + 1],
+                $criteria + ["version" => $expectedVersion],
+            ) !== 1
+        ) {
+            throw new ConcurrentModificationException("The attendance mark changed.");
         }
     }
 

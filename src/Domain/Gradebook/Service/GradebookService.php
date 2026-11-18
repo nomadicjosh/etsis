@@ -395,31 +395,42 @@ final readonly class GradebookService
         throw new \Domain\Shared\Exception\RecordNotFoundException("Enrollment not found.");
     }
 
+    /** Working attendance only; official academic decisions remain separate.
+     * @return array{status:string,revision:string}
+     */
     public function attendance(
         EntityId $student,
         EntityId $section,
         DateTimeImmutable $on,
         string $status,
         ?string $revision = null,
-    ): void {
+        ?EntityId $enrollmentId = null,
+    ): array {
         $this->access->authenticatedUserId();
         if (!in_array($status, ["present", "absent", "late", "excused"], true)) {
-            throw new DomainException("Invalid attendance status.");
+            throw new ValidationException([
+                ["field" => "status", "message" => "Choose a valid attendance mark."],
+            ]);
         }
         $this->faculty($section);
-        $this->transactions->run(function () use ($student, $section, $on, $status, $revision): void {
+        return $this->transactions->run(function () use (
+            $student,
+            $section,
+            $on,
+            $status,
+            $revision,
+            $enrollmentId,
+        ): array {
             $enrollment = $this->enrolled($student, $section);
-            $term = $this->registration->term($enrollment->termId);
-            if (
-                $on->format("Y-m-d") < $term->dates->start->format("Y-m-d") ||
-                $on->format("Y-m-d") > $term->dates->end?->format("Y-m-d")
-            ) {
-                throw new DomainException("Attendance must fall within the term.");
+            if ($enrollmentId !== null && $enrollmentId->value !== $enrollment->id->value) {
+                throw new ConcurrentModificationException("The registration changed. Refresh the register.");
             }
+            $this->assertAttendanceDate($on, $this->registration->term($enrollment->termId));
             $actor = $this->faculty($section);
             $current = $this->repository->attendanceRecord($section, $student, $on->format("Y-m-d"));
             if ($current !== null && $revision === null && $current["status"] === $status) {
-                return;
+                $this->sameFaculty($section, $actor);
+                return ["status" => "recorded", "revision" => $this->attendanceRevision($current)];
             }
             if (
                 ($current !== null &&
@@ -430,9 +441,88 @@ final readonly class GradebookService
                     "Reload attendance before changing an existing mark.",
                 );
             }
-            $this->repository->attendance($section, $student, $on->format("Y-m-d"), $status);
+            $this->repository->attendance(
+                $section,
+                $student,
+                $on->format("Y-m-d"),
+                $status,
+                (int) ($current["version"] ?? 0),
+            );
             $this->audit->record($actor, "attendance.recorded", $enrollment->id);
+            $this->sameFaculty($section, $actor);
+            return [
+                "status" => "recorded",
+                "revision" => $this->attendanceRevision(
+                    $this->repository->attendanceRecord($section, $student, $on->format("Y-m-d")),
+                ),
+            ];
         });
+    }
+
+    /** One dated, paged class register. No marks or roster are inferred when the date is absent.
+     * @return array<string,mixed>
+     */
+    public function attendanceRoster(
+        EntityId $section,
+        ?DateTimeImmutable $on = null,
+        string $search = "",
+        string $state = "all",
+        ?EntityId $after = null,
+    ): array {
+        $this->access->authenticatedUserId();
+        $actor = $this->faculty($section);
+        if (
+            !mb_check_encoding($search, "UTF-8") ||
+            mb_strlen($search) > 100 ||
+            preg_match('/[\x00-\x1F\x7F]/', $search) ||
+            !in_array($state, ["all", "unmarked", "present", "absent", "late", "excused"], true)
+        ) {
+            throw new ValidationException([
+                ["field" => "search", "message" => "Use a student name or ID and a valid attendance filter."],
+            ]);
+        }
+        $term = $this->registration->term($this->registration->section($section)->termId);
+        if ($on !== null) {
+            $this->assertAttendanceDate($on, $term);
+        }
+        $rows =
+        $on === null
+        ? []
+        : $this->repository->attendanceRoster(
+            $section,
+            $on->format("Y-m-d"),
+            trim($search),
+            $state,
+            $after,
+            51,
+        );
+        $more = count($rows) > 50;
+        $rows = array_slice($rows, 0, 50);
+        foreach ($rows as &$row) {
+            $row["revision"] = $row["id"] === null ? null : $this->attendanceRevision($row);
+            unset($row["id"], $row["held_on"], $row["version"]);
+        }
+        unset($row);
+        $this->sameFaculty($section, $actor);
+        return [
+            "term" => [
+                "starts_on" => $term->dates->start->format("Y-m-d"),
+                "ends_on" => $term->dates->end?->format("Y-m-d"),
+            ],
+            "held_on" => $on?->format("Y-m-d"),
+            "items" => $rows,
+            "next_after" => $more ? $rows[49]["enrollment_id"] : null,
+        ];
+    }
+
+    private function assertAttendanceDate(DateTimeImmutable $on, \Domain\Registration\Term $term): void
+    {
+        $date = $on->format("Y-m-d");
+        if ($date < $term->dates->start->format("Y-m-d") || $date > $term->dates->end?->format("Y-m-d")) {
+            throw new ValidationException([
+                ["field" => "held_on", "message" => "Choose a class date within this section's term."],
+            ]);
+        }
     }
 
     /** @return list<array<string, mixed>> */
@@ -551,7 +641,12 @@ final readonly class GradebookService
         return hash(
             "sha256",
             json_encode(
-                [(string) $row["id"], (string) $row["held_on"], (string) $row["status"]],
+                [
+                    (string) $row["id"],
+                    (string) $row["held_on"],
+                    (string) $row["status"],
+                    (int) $row["version"],
+                ],
                 JSON_THROW_ON_ERROR,
             ),
         );

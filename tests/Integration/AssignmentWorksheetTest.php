@@ -36,39 +36,13 @@ final class AssignmentWorksheetTest extends TestCase
         return [$f, $g, $student, $section, $assignment];
     }
 
-    /** Indexed read fixture only. No earlier enrollment/profile decisions are invented. */
-    private function rosterStudent(SisFixture $f, string $name, string $status = "A"): EntityId
-    {
-        $person = $f->sql->rows("sis_persons")[0];
-        $person["id"] = EntityId::generate()->value;
-        $person["owner_user_id"] = null;
-        $person["given_name"] = $name;
-        $person["family_name"] = "Worksheet";
-        $f->sql->insert("sis_persons", $person);
-        $identifier = $f->sql->rows("sis_person_identifiers")[0];
-        $identifier["id"] = EntityId::generate()->value;
-        $identifier["person_id"] = $person["id"];
-        $identifier["institutional_id"] = "TEST-" . $person["id"];
-        $f->sql->insert("sis_person_identifiers", $identifier);
-        $student = $f->sql->rows("sis_students")[0];
-        $student["id"] = EntityId::generate()->value;
-        $student["person_id"] = $person["id"];
-        $f->sql->insert("sis_students", $student);
-        $enrollment = $f->sql->rows("sis_enrollments")[0];
-        $enrollment["id"] = EntityId::generate()->value;
-        $enrollment["student_id"] = $student["id"];
-        $enrollment["status"] = $status;
-        $f->sql->insert("sis_enrollments", $enrollment);
-        return new EntityId($student["id"]);
-    }
-
     public function testPagedWorksheetIncludesPendingZeroAndExcusedMarksWithoutChangingAnyFacts(): void
     {
         [$f, $g, $student, , $a] = $this->fixture();
-        $zero = $this->rosterStudent($f, "Zero");
-        $excused = $this->rosterStudent($f, "Excused");
-        $pending = $this->rosterStudent($f, "NoMark");
-        $this->rosterStudent($f, "Closed", "W");
+        $zero = $f->worksheetStudent("Zero");
+        $excused = $f->worksheetStudent("Excused");
+        $pending = $f->worksheetStudent("NoMark");
+        $f->worksheetStudent("Closed", "W");
         $g->score($a->id, $student->id, 1150, 0);
         $g->score($a->id, $zero, 0, 0);
         $g->score($a->id, $excused, 400, 0, true);
@@ -121,8 +95,8 @@ final class AssignmentWorksheetTest extends TestCase
     public function testSearchTreatsWildcardsLiterallyAndSupportsNameTokensAndCurrentId(): void
     {
         [$f, $g, , , $a] = $this->fixture();
-        $literal = $this->rosterStudent($f, "Ab%_!");
-        $this->rosterStudent($f, "AbOther");
+        $literal = $f->worksheetStudent("Ab%_!");
+        $f->worksheetStudent("AbOther");
         $match = $g->scoreRoster($a->id, "ab%_! worksheet")["items"];
         self::assertSame([$literal->value], array_column($match, "student_id"));
         self::assertSame($match, $g->scoreRoster($a->id, $match[0]["institutional_id"])["items"]);
@@ -143,7 +117,7 @@ final class AssignmentWorksheetTest extends TestCase
     {
         [$f, $g, $student, , $a] = $this->fixture();
         for ($index = 0; $index < 51; ++$index) {
-            $this->rosterStudent($f, "Paged " . $index);
+            $f->worksheetStudent("Paged " . $index);
         }
         $other = $f->section(faculty: $f->access->actor);
         $f->service->register($student->id, $other->id, true);
