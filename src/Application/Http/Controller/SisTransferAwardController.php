@@ -40,6 +40,7 @@ final readonly class SisTransferAwardController
                 $f->id("operation_id"),
                 $this->change($request),
                 $f->text("revision", 64),
+                $f->optionalText("review_token", 8192),
             ),
         );
     }

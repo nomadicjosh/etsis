@@ -130,6 +130,7 @@ final class TransferAwardFixture
             $this->cipher,
             $f->clock,
             $f->transferCredits(),
+            new \Domain\Shared\Service\ReviewProof($this->cipher, $f->clock),
         );
     }
     public function courses(?AuditTrail $audit = null): TransferCourseService

@@ -77,7 +77,7 @@ final readonly class TransferCreditLedger
                 if ($retained->originalCourseVersion() !== $courseVersion->value) {
                     throw new DomainException(
                         "This award retains a different or unknown course publication. " .
-                        "Review the existing award; a retry cannot replace its history.",
+                            "Review the existing award; a retry cannot replace its history.",
                     );
                 }
                 $credit = $this->records->credit(new EntityId($existing["credit_id"]));
@@ -104,8 +104,12 @@ final readonly class TransferCreditLedger
             $pursuit = $this->students->assignment($assignment);
             $this->statuses->verify($pursuit);
             if ($pursuit->studentId->value !== $student->value || $pursuit->status !== "active") {
-                throw new \Domain\Shared\Exception\ValidationException([["field" => "assignment_id",
-                    "message" => "Choose an active program pursuit belonging to this student."]]);
+                throw new \Domain\Shared\Exception\ValidationException([
+                    [
+                        "field" => "assignment_id",
+                        "message" => "Choose an active program pursuit belonging to this student.",
+                    ],
+                ]);
             }
             $id = EntityId::generate();
             $creditId = EntityId::generate();
@@ -204,9 +208,9 @@ final readonly class TransferCreditLedger
     /** Authorized callers may use the retained source labels, never today's labels as earlier facts.
      * @param array<string,mixed> $record
      * @return array<string,mixed> */
-    public function verified(#[\SensitiveParameter] array $record): array
+    public function verified(#[\SensitiveParameter] array $record, ?HistoryReadBudget $budget = null): array
     {
-        $root = $this->load(new EntityId($record["id"]));
+        $root = $this->load(new EntityId($record["id"]), $budget);
         $known = $root->playhead() > 0;
         if ($known) {
             $s = $root->source() ?? throw new CorruptHistoryException();
@@ -287,8 +291,9 @@ final readonly class TransferCreditLedger
         EntityId $actor,
         EntityId $operation,
         DateTimeImmutable $effective,
+        ?HistoryReadBudget $budget = null,
     ): void {
-        $root = $this->observe($record, $actor, $operation);
+        $root = $this->observe($record, $actor, $operation, $budget);
         $id = new EntityId($record["id"]);
         $before = $this->records->credit(new EntityId($record["credit"]["id"]));
         $event = TransferCreditWasChanged::occur(
@@ -325,11 +330,15 @@ final readonly class TransferCreditLedger
      * @param array<string,mixed> $record
      * @throws TypeException
      */
-    public function observe(#[\SensitiveParameter] array $record, EntityId $actor, EntityId $operation): TransferCredit
-    {
+    public function observe(
+        #[\SensitiveParameter] array $record,
+        EntityId $actor,
+        EntityId $operation,
+        ?HistoryReadBudget $budget = null,
+    ): TransferCredit {
         $this->actor($actor);
         $id = new EntityId($record["id"]);
-        $root = $this->load($id, new HistoryReadBudget());
+        $root = $this->load($id, $budget);
         $before = $this->records->credit(new EntityId($record["credit"]["id"]));
         if ($root->playhead() === 0) {
             $observation = PublishedGradeId::forVersion($operation, "transfer.observation." . $id->value);
@@ -390,7 +399,7 @@ final readonly class TransferCreditLedger
      * @return array<string,array<string,mixed>>
      * @throws TypeException
      */
-    public function details(EntityId $award, array $operations): array
+    public function details(EntityId $award, array $operations, ?HistoryReadBudget $budget = null): array
     {
         if (count($operations) > 50) {
             throw new \InvalidArgumentException("Use a bounded correction history page.");
@@ -398,9 +407,10 @@ final readonly class TransferCreditLedger
         $wanted = array_fill_keys($operations, true);
         $items = [];
         $root = TransferCredit::root(new TransferCreditId($award->value));
+        $budget ??= new HistoryReadBudget();
         $cursor = null;
         do {
-            $page = $this->history->page($this->stream($award), $cursor, 20);
+            $page = $budget->page($this->history, $this->stream($award), $cursor);
             foreach ($page->events as $stored) {
                 $event = $stored->event;
                 $before = $root->credit() === null ? null : $root->display();
@@ -430,13 +440,17 @@ final readonly class TransferCreditLedger
     {
         $row = $this->records->award($award);
         if ($row["student_id"] !== $student->value) {
-            throw new \Domain\Shared\Exception\AccessDeniedException("The transfer award belongs to another student.");
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The transfer award belongs to another student.",
+            );
         }
         $root = $this->load($award, $budget);
         $credit = $root->credit() ?? $this->records->credit(new EntityId($row["credit_id"]));
         if (
-            $credit["student_id"] !== $student->value || $credit["source_id"] !== $award->value ||
-            $credit["id"] !== $row["credit_id"] || $credit["term_id"] !== $row["term_id"]
+            $credit["student_id"] !== $student->value ||
+            $credit["source_id"] !== $award->value ||
+            $credit["id"] !== $row["credit_id"] ||
+            $credit["term_id"] !== $row["term_id"]
         ) {
             throw new CorruptHistoryException();
         }
@@ -448,11 +462,10 @@ final readonly class TransferCreditLedger
     private function load(EntityId $award, ?HistoryReadBudget $budget = null): TransferCredit
     {
         $root = TransferCredit::root(new TransferCreditId($award->value));
+        $budget ??= new HistoryReadBudget();
         $cursor = null;
         do {
-            $page = $budget === null
-            ? $this->history->page($this->stream($award), $cursor, 20)
-            : $budget->page($this->history, $this->stream($award), $cursor);
+            $page = $budget->page($this->history, $this->stream($award), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
             }

@@ -34,7 +34,7 @@ try {
     }
     if (in_array(($argv[1] ?? ''), [
         'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-profile-command', 'check-login-sessions',
-        'check-moodle-resolution', 'check-course-rules', 'check-degree-trials',
+        'check-moodle-resolution', 'check-course-rules', 'check-degree-trials', 'check-transfer-corrections',
     ], true)) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
         $_SERVER['SCRIPT_NAME'] = '/index.php';
@@ -120,6 +120,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/SectionClassificationBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-transfer-corrections') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/TransferCorrectionBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-grade-changes') {
             $kernel->bootstrap();

@@ -128,6 +128,14 @@ final class ConsoleBootstrapTest extends TestCase
         $process->run();
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
+    public function testTransferCorrectionsUseActualProvidersCsrfExpiringReviewsAndPrivateResponses(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-transfer-corrections']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
 
     public function testGradebookCalculationUsesActualProvidersCsrfAndPrivateReads(): void
     {

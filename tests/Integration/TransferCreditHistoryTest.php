@@ -33,10 +33,19 @@ final class TransferCreditHistoryTest extends TestCase
     }
     private function post(TransferAwardFixture $t, AwardChange $change, ?EntityId $operation = null): array
     {
-        $review = $t->service()->preview($t->student, $t->award, $change);
-        $operation ??= EntityId::generate();
+        $review = $t->service()->preview($t->student, $t->award, $change, $operation);
+        $operation ??= new EntityId($review["operation_id"]);
         return [
-            $t->service()->confirm($t->student, $t->award, $operation, $change, $review["revision"]),
+            $t
+                ->service()
+                ->confirm(
+                    $t->student,
+                    $t->award,
+                    $operation,
+                    $change,
+                    $review["revision"],
+                    $review["review_token"],
+                ),
             $review,
             $operation,
         ];
@@ -130,7 +139,16 @@ final class TransferCreditHistoryTest extends TestCase
         $receipts = $f->sql->rows("sis_transfer_award_changes");
         self::assertSame(
             $receipt,
-            $t->service()->confirm($t->student, $t->award, $operation, $change, $review["revision"]),
+            $t
+                ->service()
+                ->confirm(
+                    $t->student,
+                    $t->award,
+                    $operation,
+                    $change,
+                    $review["revision"],
+                    $review["review_token"],
+                ),
         );
         self::assertSame("V", $this->replay($t)->credit()["status"]);
         self::assertSame($events, $f->sql->rows("sis_history_events"));
@@ -152,6 +170,7 @@ final class TransferCreditHistoryTest extends TestCase
             $operation,
             new AwardChange("amend", 4000, "B", $change->reason, effectiveOn: "2026-08-01"),
             $review["revision"],
+            $review["review_token"],
         );
     }
     public function testObservedExistingFactsPreserveEarlierReceiptBytesAndDoNotInventAnAward(): void
@@ -198,7 +217,14 @@ final class TransferCreditHistoryTest extends TestCase
         $review = $t->service()->preview($t->student, $t->award, $new);
         self::assertSame($events, $f->sql->rows("sis_history_events"));
         self::assertTrue($review["record"]["earlier_history_unknown"]);
-        $t->service()->confirm($t->student, $t->award, EntityId::generate(), $new, $review["revision"]);
+        $t->service()->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($review["operation_id"]),
+            $new,
+            $review["revision"],
+            $review["review_token"],
+        );
         self::assertSame($receipt, $t->repository->action($old));
         $root = $this->replay($t);
         self::assertSame("observed_existing", $root->provenance());
@@ -228,9 +254,10 @@ final class TransferCreditHistoryTest extends TestCase
             $t->service($audit)->confirm(
                 $t->student,
                 $t->award,
-                EntityId::generate(),
+                new EntityId($review["operation_id"]),
                 $change,
                 $review["revision"],
+                $review["review_token"],
             );
             self::fail("Partial baseline committed.");
         } catch (RuntimeException $e) {
@@ -335,6 +362,7 @@ final class TransferCreditHistoryTest extends TestCase
             $t->cipher,
             $f->clock,
             $f->transferCredits(),
+            new \Domain\Shared\Service\ReviewProof($t->cipher, $f->clock),
         );
         try {
             $service->preview(
@@ -345,6 +373,57 @@ final class TransferCreditHistoryTest extends TestCase
             self::fail("Revoked authority reviewed a correction.");
         } catch (AccessDeniedException) {
             self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+    }
+
+    public function testSelectedTransferReadsShareTheirExplicitReplayBudget(): void
+    {
+        $t = $this->fixture();
+        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget(1, 20);
+        $ledger = $t->sis->transferCredits();
+        $ledger->verified($t->repository->get($t->student, $t->award), $budget);
+        $this->expectException(\Domain\Shared\EventSourcing\HistoryReadLimitException::class);
+        $ledger->details($t->award, [EntityId::generate()->value], $budget);
+    }
+
+    public function testDefaultTransferReplayAndReceiptHistoryCannotFollowAnUnboundedContinuation(): void
+    {
+        $t = $this->fixture();
+        $f = $t->sis;
+        $history = $this->createStub(\Domain\Shared\EventSourcing\HistoricalEventStore::class);
+        $calls = 0;
+        $history
+            ->method("page")
+            ->willReturnCallback(static function () use (&$calls): \Domain\Shared\EventSourcing\EventPage {
+                ++$calls;
+                return new \Domain\Shared\EventSourcing\EventPage([], "fictional-continuation", 0);
+            });
+        $ledger = new \Domain\Transfer\Service\TransferCreditLedger(
+            new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository($f->sql),
+            $history,
+            $f->gradeCatalog(),
+            $f->access,
+            $f->transactions,
+            $f->clock,
+            new \Domain\Catalog\Service\PublishedCourseReader($history),
+            $f->workPursuitLedger(),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($f->sql),
+            $f->primaryProgramLedger(),
+            $f->admissions,
+            $f->programStatusLedger(),
+        );
+        foreach (["verified", "details"] as $method) {
+            $calls = 0;
+            try {
+                if ($method === "verified") {
+                    $ledger->verified($t->repository->get($t->student, $t->award));
+                } else {
+                    $ledger->details($t->award, [EntityId::generate()->value]);
+                }
+                self::fail("The continuation escaped its request allowance.");
+            } catch (\Domain\Shared\EventSourcing\HistoryReadLimitException) {
+                self::assertSame(400, $calls);
+            }
         }
     }
     public function testAnInitialAwardRollsBackItsJournalProjectionAndRoutingWhenAuditFails(): void
@@ -368,16 +447,17 @@ final class TransferCreditHistoryTest extends TestCase
             $audit,
             $catalog,
             $f->transferCredits(),
+            new \Domain\Shared\Service\ReviewProof($t->cipher, $f->clock),
         );
         $before = [];
         $cases2 = [
-                "sis_academic_credits",
-                "sis_transfer_awards",
-                "sis_transfer_credit_streams",
-                "sis_history_events",
-                "sis_history_operations",
-                "sis_history_streams",
-            ];
+            "sis_academic_credits",
+            "sis_transfer_awards",
+            "sis_transfer_credit_streams",
+            "sis_history_events",
+            "sis_history_operations",
+            "sis_history_streams",
+        ];
         foreach ($cases2 as $table) {
             $before[$table] = $f->sql->rows($table);
         }

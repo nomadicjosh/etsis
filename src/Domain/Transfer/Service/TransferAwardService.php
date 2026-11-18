@@ -14,6 +14,8 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
+use Domain\Shared\Service\ReviewProof;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Repository\TransferAwardRepository;
 use Domain\Transfer\ValueObject\AwardChange;
@@ -30,13 +32,21 @@ final readonly class TransferAwardService
         private MessageCipher $cipher,
         private Clock $clock,
         private TransferCreditLedger $credits,
+        private ReviewProof $reviews,
     ) {
     }
 
     private function authorize(): EntityId
     {
         $actor = $this->access->requirePermission("sis:transfer:manage");
-        $this->access->requirePermission("sis:student:read");
+        if (
+            $this->access->requirePermission("sis:student:read")->value !== $actor->value ||
+            $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The transfer staff account changed. Review again.",
+            );
+        }
         return $actor;
     }
 
@@ -46,14 +56,21 @@ final readonly class TransferAwardService
         $actor = $this->authorize();
         $record = $this->stableRecord($student, $award);
         $this->audit->record($actor, "transfer.award_reviewed", $award);
+        $this->authorizedActor($actor);
         return $record;
     }
 
     /** @return array<string, mixed> */
-    public function preview(EntityId $student, EntityId $award, #[\SensitiveParameter] AwardChange $change): array
-    {
+    public function preview(
+        EntityId $student,
+        EntityId $award,
+        #[\SensitiveParameter] AwardChange $change,
+        ?EntityId $operation = null,
+    ): array {
         $actor = $this->authorize();
-        $initial = $this->stableRecord($student, $award);
+        $budget = new HistoryReadBudget();
+        $initial = $this->stableRecord($student, $award, $budget);
+        $operation ??= EntityId::generate();
         $grade =
         $change->grade === null
         ? null
@@ -71,12 +88,27 @@ final readonly class TransferAwardService
             $actor,
             $initial,
             $grade,
+            $operation,
+            $budget,
         ): array {
             $this->lock($initial, $grade);
             $this->authorizedActor($actor);
-            $plan = $this->plan($this->lockedRecord($student, $award, $initial), $change, $grade);
+            $plan = $this->plan($this->lockedRecord($student, $award, $initial, $budget), $change, $grade);
             $this->audit->record($actor, "transfer.correction_previewed", $award);
-            return $plan + ["revision" => $this->revision($plan)];
+            $this->authorizedActor($actor);
+            $revision = $this->revision($plan);
+            return $plan + [
+                "revision" => $revision,
+                "operation_id" => $operation->value,
+                "review_token" => $this->reviews->issue(
+                    "transfer-correction",
+                    $change->kind,
+                    $award,
+                    $actor,
+                    $operation,
+                    $revision,
+                ),
+            ];
         });
     }
 
@@ -87,9 +119,11 @@ final readonly class TransferAwardService
         EntityId $operation,
         #[\SensitiveParameter] AwardChange $change,
         string $revision,
+        #[\SensitiveParameter] ?string $reviewToken = null,
     ): array {
         $actor = $this->authorize();
-        $initial = $this->stableRecord($student, $award);
+        $budget = new HistoryReadBudget();
+        $initial = $this->stableRecord($student, $award, $budget);
         // Resolve lock identities outside the transaction; lock the complete context before any consistent read.
         $seen = $this->awards->action($operation);
         $grade =
@@ -111,6 +145,8 @@ final readonly class TransferAwardService
             $actor,
             $initial,
             $grade,
+            $reviewToken,
+            $budget,
         ): array {
             $this->lock($initial, $grade);
             $this->authorizedActor($actor);
@@ -133,16 +169,18 @@ final readonly class TransferAwardService
                         "This operation belongs to another transfer correction.",
                     );
                 }
-                $this->verifyReceipt($award, $previous, $payload);
+                $this->verifyReceipt($award, $previous, $payload, $budget);
+                $this->authorizedActor($actor);
                 return $this->receiptRow($previous);
             }
-            $current = $this->lockedRecord($student, $award, $initial);
+            $current = $this->lockedRecord($student, $award, $initial, $budget);
             $plan = $this->plan($current, $change, $grade);
             if (!hash_equals($this->revision($plan), $revision)) {
                 throw new ConcurrentModificationException(
                     "The reviewed transfer award or grade changed. Preview it again.",
                 );
             }
+            $this->reviewProof($reviewToken, $award, $actor, $operation, $change, $revision);
             $this->credits->change(
                 $current,
                 $change,
@@ -150,6 +188,7 @@ final readonly class TransferAwardService
                 $actor,
                 $operation,
                 new \DateTimeImmutable($plan["effective_at"]),
+                $budget,
             );
             $this->awards->record(
                 $operation,
@@ -174,6 +213,8 @@ final readonly class TransferAwardService
                     ->format(DATE_ATOM),
             );
             $this->audit->record($actor, "transfer.award_" . $change->kind, $award);
+            $this->authorizedActor($actor);
+            $this->reviewProof($reviewToken, $award, $actor, $operation, $change, $revision);
             return $this->receiptRow(
                 $this->awards->action($operation) ??
                     throw new RecordNotFoundException("Transfer correction receipt not found."),
@@ -184,14 +225,16 @@ final readonly class TransferAwardService
     /** @return array<string, mixed> */
     public function receipt(EntityId $student, EntityId $award, EntityId $operation): array
     {
-        $this->authorize();
-        return $this->transactions->run(function () use ($student, $award, $operation): array {
-            $this->stableRecord($student, $award);
+        $actor = $this->authorize();
+        return $this->transactions->run(function () use ($student, $award, $operation, $actor): array {
+            $budget = new HistoryReadBudget();
+            $this->stableRecord($student, $award, $budget);
             $row = $this->awards->action($operation);
             if ($row === null || $row["award_id"] !== $award->value) {
                 throw new RecordNotFoundException("Transfer correction not found.");
             }
-            $this->verifyReceipt($award, $row, $this->open($row));
+            $this->verifyReceipt($award, $row, $this->open($row), $budget);
+            $this->authorizedActor($actor);
             return $this->receiptRow($row);
         });
     }
@@ -201,7 +244,8 @@ final readonly class TransferAwardService
     {
         $actor = $this->authorize();
         return $this->transactions->run(function () use ($student, $award, $after, $actor): array {
-            $this->stableRecord($student, $award);
+            $budget = new HistoryReadBudget();
+            $this->stableRecord($student, $award, $budget);
             $rows = $this->awards->history($award, $after);
             $items = [];
             $selected = array_slice($rows, 0, 50);
@@ -213,12 +257,13 @@ final readonly class TransferAwardService
                     $operations[] = $row["id"];
                 }
             }
-            $details = $operations === [] ? [] : $this->credits->details($award, $operations);
+            $details = $operations === [] ? [] : $this->credits->details($award, $operations, $budget);
             foreach ($selected as $row) {
                 $payload = $payloads[$row["id"]];
                 if (($payload["format"] ?? null) === "transfer-receipt.v2") {
                     $detail =
-                    $details[$row["id"]] ?? throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                        $details[$row["id"]] ??
+                        throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
                     if (
                         $detail["after"]["id"] !== $row["credit_id"] ||
                         $detail["after"]["version"] !== (int) $row["version"] ||
@@ -230,38 +275,46 @@ final readonly class TransferAwardService
                     $items[] = $this->receiptRow($row) + $detail;
                 } else {
                     $items[] = $this->receiptRow($row) + [
-                    "reason" => $payload["request"]["reason"],
-                    "before" => $payload["before"],
-                    "after" => $payload["after"],
-                    "history_source" => "legacy_receipt",
-                    "effective_at" => null,
+                        "reason" => $payload["request"]["reason"],
+                        "before" => $payload["before"],
+                        "after" => $payload["after"],
+                        "history_source" => "legacy_receipt",
+                        "effective_at" => null,
                     ];
                 }
             }
             $this->audit->record($actor, "transfer.correction_history_read", $award);
+            $this->authorizedActor($actor);
             return ["items" => $items, "next_after" => count($rows) > 50 ? $rows[49]["id"] : null];
         });
     }
 
     /** Serialize verified reads with this student's award writers; do not compare different committed heads.
      * @return array<string,mixed> */
-    private function stableRecord(EntityId $student, EntityId $award): array
-    {
-        return $this->transactions->run(function () use ($student, $award): array {
+    private function stableRecord(
+        EntityId $student,
+        EntityId $award,
+        ?HistoryReadBudget $budget = null,
+    ): array {
+        return $this->transactions->run(function () use ($student, $award, $budget): array {
             $this->registration->lockStudent($student);
             $record = $this->awards->get($student, $award);
             $this->awards->lock($award, new EntityId($record["credit"]["id"]));
             $this->authorize();
-            return $this->credits->verified($this->awards->get($student, $award));
+            return $this->credits->verified($this->awards->get($student, $award), $budget);
         });
     }
 
     /** @param array<string, mixed> $initial
      * @return array<string, mixed>
      */
-    private function lockedRecord(EntityId $student, EntityId $award, array $initial): array
-    {
-        $current = $this->credits->verified($this->awards->get($student, $award));
+    private function lockedRecord(
+        EntityId $student,
+        EntityId $award,
+        array $initial,
+        HistoryReadBudget $budget,
+    ): array {
+        $current = $this->credits->verified($this->awards->get($student, $award), $budget);
         if (
             $current["credit"]["id"] !== $initial["credit"]["id"] ||
             $current["retained_grade_id"] !== $initial["retained_grade_id"]
@@ -294,8 +347,11 @@ final readonly class TransferAwardService
      * @param array<string, mixed>|null $initialGrade
      * @return array<string, mixed>
      */
-    private function plan(array $record, #[\SensitiveParameter] AwardChange $change, ?array $initialGrade): array
-    {
+    private function plan(
+        array $record,
+        #[\SensitiveParameter] AwardChange $change,
+        ?array $initialGrade,
+    ): array {
         $before = $record["credit"] + [
             "grade_code" => $record["grade_code"],
             "counts_gpa" => $record["counts_gpa"],
@@ -357,13 +413,17 @@ final readonly class TransferAwardService
 
     /** @param array<string,mixed> $row
      * @param array<string,mixed> $payload */
-    private function verifyReceipt(EntityId $award, array $row, array $payload): void
-    {
+    private function verifyReceipt(
+        EntityId $award,
+        array $row,
+        array $payload,
+        HistoryReadBudget $budget,
+    ): void {
         if (($payload["format"] ?? null) !== "transfer-receipt.v2") {
             return;
         }
         $detail =
-        $this->credits->details($award, [$row["id"]])[$row["id"]] ??
+        $this->credits->details($award, [$row["id"]], $budget)[$row["id"]] ??
         throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         if (
             $detail["after"]["id"] !== $row["credit_id"] ||
@@ -379,6 +439,32 @@ final readonly class TransferAwardService
         if ($this->authorize()->value !== $actor->value) {
             throw new \Domain\Shared\Exception\AccessDeniedException("The transfer decision actor changed.");
         }
+    }
+    private function reviewProof(
+        #[\SensitiveParameter] ?string $token,
+        EntityId $award,
+        EntityId $actor,
+        EntityId $operation,
+        AwardChange $change,
+        string $revision,
+    ): void {
+        if ($token === null) {
+            throw new ValidationException([
+                [
+                    "field" => "review_token",
+                    "message" => "Review this transfer correction again before confirming.",
+                ],
+            ]);
+        }
+        $this->reviews->validate(
+            $token,
+            "transfer-correction",
+            $change->kind,
+            $award,
+            $actor,
+            $operation,
+            $revision,
+        );
     }
     private function requestHash(#[\SensitiveParameter] AwardChange $change): string
     {

@@ -30,7 +30,14 @@ final class TransferAcademicPeriodTest extends TestCase
     {
         $change = new AwardChange($kind, $kind === "void" ? null : 3000, $kind === "void" ? null : "B", "Fictional award correction.");
         $review = $t->service()->preview($t->student, $t->award, $change);
-        $t->service()->confirm($t->student, $t->award, EntityId::generate(), $change, $review["revision"]);
+        $t->service()->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($review["operation_id"]),
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
     }
     public function testReviewedSourcePeriodPreservesAwardSourceAndFinancialFactsAndAddsNoParallelHistory(): void
     {

@@ -17,22 +17,270 @@ use PHPUnit\Framework\TestCase;
 
 final class TransferAwardCorrectionTest extends TestCase
 {
-    private function fixture(): TransferAwardFixture
+    private function fixture(bool $legacy = false): TransferAwardFixture
     {
         $h = new HiatusFixture();
-        return new TransferAwardFixture($h->sis, $h->cipher);
+        return new TransferAwardFixture($h->sis, $h->cipher, legacy: $legacy);
     }
     private function post(TransferAwardFixture $t, AwardChange $change): array
     {
         $service = $t->service();
         $review = $service->preview($t->student, $t->award, $change);
-        $op = EntityId::generate();
-        $saved = $service->confirm($t->student, $t->award, $op, $change, $review["revision"]);
+        $op = new EntityId($review["operation_id"]);
+        $saved = $service->confirm(
+            $t->student,
+            $t->award,
+            $op,
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
         self::assertSame(
             $saved,
-            $service->confirm($t->student, $t->award, $op, $change, $review["revision"]),
+            $service->confirm(
+                $t->student,
+                $t->award,
+                $op,
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            ),
         );
         return $saved;
+    }
+
+    private function preserved(TransferAwardFixture $t): array
+    {
+        $tables = [
+            "sis_history_events",
+            "sis_history_streams",
+            "sis_history_operations",
+            "sis_academic_credits",
+            "sis_transfer_awards",
+            "sis_transfer_award_changes",
+            "sis_transfer_credit_streams",
+            "sis_work_pursuit_scopes",
+        ];
+        return [array_map($t->sis->sql->rows(...), $tables), $t->sis->financialEvents()];
+    }
+
+    public static function correctionActions(): array
+    {
+        return ["correction" => ["amend"], "void" => ["void"], "reinstatement" => ["reinstate"]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider("correctionActions")]
+    public function testEveryNewCorrectionRequiresAnUnexpiredReview(string $action): void
+    {
+        $t = $this->fixture();
+        if ($action === "reinstate") {
+            $this->post($t, new AwardChange("void", null, null, "Fictional preparation for reinstatement."));
+        }
+        $change = new AwardChange(
+            $action,
+            $action === "void" ? null : 4000,
+            $action === "void" ? null : "B",
+            "Fictional reviewed transfer correction.",
+        );
+        $service = $t->service();
+        $review = $service->preview($t->student, $t->award, $change);
+        $operation = new EntityId($review["operation_id"]);
+        $before = $this->preserved($t);
+        try {
+            $service->confirm($t->student, $t->award, $operation, $change, $review["revision"]);
+            self::fail("An unconfirmed older hash was accepted as a current review.");
+        } catch (ValidationException) {
+            self::assertSame($before, $this->preserved($t));
+        }
+        $t->sis->clock->time = $t->sis->clock->time->modify("+20 minutes");
+        try {
+            $service->confirm(
+                $t->student,
+                $t->award,
+                $operation,
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
+            self::fail("An expired review changed the award.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->preserved($t));
+        }
+        $fresh = $service->preview($t->student, $t->award, $change);
+        $service->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($fresh["operation_id"]),
+            $change,
+            $fresh["revision"],
+            $fresh["review_token"],
+        );
+        self::assertSame($action, $t->repository->action(new EntityId($fresh["operation_id"]))["kind"]);
+    }
+
+    public function testReviewProofIsBoundToItsActorOperationAndPayload(): void
+    {
+        $t = $this->fixture();
+        $service = $t->service();
+        $change = new AwardChange("amend", 4000, "B", "Fictional actor-bound review.");
+        $review = $service->preview($t->student, $t->award, $change);
+        $actor = $t->sis->access->actor;
+        $t->sis->access->actor = $t->sis->user();
+        $before = $this->preserved($t);
+        try {
+            $service->confirm(
+                $t->student,
+                $t->award,
+                new EntityId($review["operation_id"]),
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
+            self::fail("A different staff member confirmed the review.");
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $this->preserved($t));
+        }
+        $t->sis->access->actor = $actor;
+        try {
+            $service->confirm(
+                $t->student,
+                $t->award,
+                EntityId::generate(),
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
+            self::fail("A different operation reused the review.");
+        } catch (ValidationException) {
+            self::assertSame($before, $this->preserved($t));
+        }
+        $this->expectException(ConcurrentModificationException::class);
+        $service->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($review["operation_id"]),
+            new AwardChange("amend", 4000, "B", "Different request reason."),
+            $review["revision"],
+            $review["review_token"],
+        );
+    }
+
+    public static function lateFailures(): array
+    {
+        return [
+            "tracked expiry" => [false, "expiry"],
+            "older expiry" => [true, "expiry"],
+            "tracked permissions" => [false, "permissions"],
+            "older permissions" => [true, "permissions"],
+            "tracked actor" => [false, "actor"],
+            "older actor" => [true, "actor"],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider("lateFailures")]
+    public function testCompletionTimeChecksRollBackTheEntireCorrection(bool $legacy, string $failure): void
+    {
+        $t = $this->fixture($legacy);
+        $f = $t->sis;
+        $other = $f->user();
+        $f->access->staff = false;
+        $f->access->grants = ["sis:transfer:manage", "sis:student:read"];
+        $change = new AwardChange("amend", 4000, "B", "Fictional completion-time checks.");
+        $review = $t->service()->preview($t->student, $t->award, $change);
+        $before = $this->preserved($t);
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willReturnCallback(function () use ($f, $other, $failure): void {
+            if ($failure === "expiry") {
+                $f->clock->time = $f->clock->time->modify("+20 minutes");
+            } elseif ($failure === "actor") {
+                $f->access->actor = $other;
+            } else {
+                $f->access->grants = [];
+            }
+        });
+        try {
+            $t->service($audit)->confirm(
+                $t->student,
+                $t->award,
+                new EntityId($review["operation_id"]),
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
+            self::fail("The correction committed after its review or authority was lost.");
+        } catch (ConcurrentModificationException | AccessDeniedException $error) {
+            self::assertSame(
+                $failure === "expiry" ? ConcurrentModificationException::class : AccessDeniedException::class,
+                $error::class,
+            );
+            self::assertSame($before, $this->preserved($t));
+        }
+    }
+
+    public function testCompletedRetriesPreserveEarlierReceiptsAfterExpiryAndLaterCorrections(): void
+    {
+        $t = $this->fixture();
+        $service = $t->service();
+        $change = new AwardChange("amend", 4000, "B", "Fictional first accepted correction.");
+        $review = $service->preview($t->student, $t->award, $change);
+        $operation = new EntityId($review["operation_id"]);
+        $receipt = $service->confirm(
+            $t->student,
+            $t->award,
+            $operation,
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
+        $this->post($t, new AwardChange("void", null, null, "Fictional later void."));
+        $before = $this->preserved($t);
+        $t->sis->clock->time = $t->sis->clock->time->modify("+1 hour");
+        self::assertSame(
+            $receipt,
+            $service->confirm(
+                $t->student,
+                $t->award,
+                $operation,
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            ),
+        );
+        self::assertSame(
+            $receipt,
+            $service->confirm($t->student, $t->award, $operation, $change, $review["revision"]),
+        );
+        self::assertSame($before, $this->preserved($t));
+    }
+
+    public function testPrivateAwardReadsAndReviewsRecheckAuthorityAfterRequiredAudit(): void
+    {
+        $t = $this->fixture();
+        $f = $t->sis;
+        $f->access->staff = false;
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willReturnCallback(function () use ($f): void {
+            $f->access->grants = [];
+        });
+        $service = $t->service($audit);
+        $before = $this->preserved($t);
+        foreach (["view", "preview", "history"] as $task) {
+            $f->access->grants = ["sis:transfer:manage", "sis:student:read"];
+            try {
+                if ($task === "preview") {
+                    $service->preview(
+                        $t->student,
+                        $t->award,
+                        new AwardChange("void", null, null, "Fictional private review."),
+                    );
+                } else {
+                    $service->$task($t->student, $t->award);
+                }
+                self::fail("A protected transfer response survived lost authority.");
+            } catch (AccessDeniedException) {
+                self::assertSame($before, $this->preserved($t));
+            }
+        }
     }
     public function testCorrectionRetainsOriginalHistoryAndDoesNotChangeCatalogOrFinancialEvents(): void
     {
@@ -127,7 +375,14 @@ final class TransferAwardCorrectionTest extends TestCase
         $this->post($t, new AwardChange("amend", 5000, "B", "Fictional intervening change"));
         $this->post($t, new AwardChange("amend", 3000, "TR", "Fictional restored values"));
         $this->expectException(ConcurrentModificationException::class);
-        $service->confirm($t->student, $t->award, EntityId::generate(), $change, $review["revision"]);
+        $service->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($review["operation_id"]),
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
     }
     public function testGradeAndIdentityChangesInvalidateTheReviewedProposal(): void
     {
@@ -137,7 +392,14 @@ final class TransferAwardCorrectionTest extends TestCase
         $review = $service->preview($t->student, $t->award, $change);
         $t->sis->sql->update("sis_grades", ["points_milli" => 3500], ["code" => "B"]);
         try {
-            $service->confirm($t->student, $t->award, EntityId::generate(), $change, $review["revision"]);
+            $service->confirm(
+                $t->student,
+                $t->award,
+                new EntityId($review["operation_id"]),
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail("Stale grade accepted.");
         } catch (ConcurrentModificationException) {
             self::assertCount(0, $t->sis->sql->rows("sis_transfer_award_changes"));
@@ -149,7 +411,14 @@ final class TransferAwardCorrectionTest extends TestCase
             ["id" => $review["record"]["person_id"]],
         );
         $this->expectException(ConcurrentModificationException::class);
-        $service->confirm($t->student, $t->award, EntityId::generate(), $change, $review["revision"]);
+        $service->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($review["operation_id"]),
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
     }
     public function testReceiptIsBoundToActorPayloadAndAwardAndStillRequiresCurrentPermissions(): void
     {
@@ -158,17 +427,38 @@ final class TransferAwardCorrectionTest extends TestCase
         $service = $t->service();
         $change = new AwardChange("amend", 4000, "B", "Fictional durable reason");
         $review = $service->preview($t->student, $t->award, $change);
-        $op = EntityId::generate();
-        $saved = $service->confirm($t->student, $t->award, $op, $change, $review["revision"]);
+        $op = new EntityId($review["operation_id"]);
+        $saved = $service->confirm(
+            $t->student,
+            $t->award,
+            $op,
+            $change,
+            $review["revision"],
+            $review["review_token"],
+        );
         $f->sql->update("sis_grades", ["passes" => 0], ["code" => "B"]);
         self::assertSame(
             $saved,
-            $service->confirm($t->student, $t->award, $op, $change, $review["revision"]),
+            $service->confirm(
+                $t->student,
+                $t->award,
+                $op,
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            ),
         );
         self::assertSame($saved, $service->receipt($t->student, $t->award, $op));
         $f->access->actor = $f->user();
         try {
-            $service->confirm($t->student, $t->award, $op, $change, $review["revision"]);
+            $service->confirm(
+                $t->student,
+                $t->award,
+                $op,
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail("Another actor reused receipt.");
         } catch (ConcurrentModificationException) {
             self::assertCount(1, $f->sql->rows("sis_transfer_award_changes"));
@@ -208,11 +498,18 @@ final class TransferAwardCorrectionTest extends TestCase
         $t = $this->fixture();
         $change = new AwardChange("amend", 4000, "B", "Fictional interrupted correction");
         $review = $t->service()->preview($t->student, $t->award, $change);
-        $op = EntityId::generate();
+        $op = new EntityId($review["operation_id"]);
         $audit = $this->createStub(AuditTrail::class);
         $audit->method("record")->willThrowException(new RuntimeException("Fictional audit failure"));
         try {
-            $t->service($audit)->confirm($t->student, $t->award, $op, $change, $review["revision"]);
+            $t->service($audit)->confirm(
+                $t->student,
+                $t->award,
+                $op,
+                $change,
+                $review["revision"],
+                $review["review_token"],
+            );
             self::fail("Partial correction committed.");
         } catch (RuntimeException $e) {
             self::assertSame("Fictional audit failure", $e->getMessage());
@@ -224,12 +521,12 @@ final class TransferAwardCorrectionTest extends TestCase
     {
         $t = $this->fixture();
         $cases1 = [
-                ["void", 3000, null, "Fictional"],
-                ["amend", 0, "TR", "Fictional"],
-                ["amend", 3000, "TR", ""],
-                ["amend", 3000, "F", "Fictional"],
-                ["amend", 3000, "TR", "No change"],
-            ];
+            ["void", 3000, null, "Fictional"],
+            ["amend", 0, "TR", "Fictional"],
+            ["amend", 3000, "TR", ""],
+            ["amend", 3000, "F", "Fictional"],
+            ["amend", 3000, "TR", "No change"],
+        ];
         foreach ($cases1 as $args) {
             try {
                 $t->service()->preview($t->student, $t->award, new AwardChange(...$args));
@@ -272,18 +569,26 @@ final class TransferAwardCorrectionTest extends TestCase
         $documents = $tx->service($renderer);
         $review = $documents->review($request);
         $document = new EntityId($review["operation_id"]);
-        $documents->prepare($request, $document, $review["revision"], true);
+        $documents->prepare($request, $document, $review["revision"], true, $review["review_token"]);
         $original = $documents->pdf($request, $document);
+        $delivery = $documents->reviewDelivery(
+            $request,
+            $document,
+            1,
+            $tx->sis->clock->now(),
+            "Fictional pickup",
+        );
         $this->post($t, new AwardChange("void", null, null, "Fictional void invalidates preparation"));
         self::assertSame($original, $documents->pdf($request, $document));
         $this->expectException(ConcurrentModificationException::class);
         $documents->deliver(
             $request,
             $document,
-            EntityId::generate(),
+            new EntityId($delivery["operation_id"]),
             1,
             $tx->sis->clock->now(),
             "Fictional pickup",
+            $delivery["review_token"],
         );
     }
 }

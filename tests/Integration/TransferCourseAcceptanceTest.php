@@ -52,7 +52,14 @@ final class TransferCourseAcceptanceTest extends TestCase
             "Fictional credit decision.",
         );
         $r = $t->service()->preview($t->student, $t->award, $c);
-        $t->service()->confirm($t->student, $t->award, EntityId::generate(), $c, $r["revision"]);
+        $t->service()->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($r["operation_id"]),
+            $c,
+            $r["revision"],
+            $r["review_token"],
+        );
     }
     public function testAcceptancePreservesOriginalFactsFinancialHistoryAndIndependentAwardedUnits(): void
     {

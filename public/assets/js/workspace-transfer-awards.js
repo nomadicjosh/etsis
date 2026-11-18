@@ -175,7 +175,11 @@ window.createWorkspaceTransferAwards = function (ui) {
             ["effective_on", "Effective date", "date"],
             ["reason", "Reason and acceptance evidence", "textarea"],
         ];
-        const form = await buildForm(fields, { effective_on: value.effective_on_default }, { layout: "transfer_course" });
+        const form = await buildForm(
+            fields,
+            { effective_on: value.effective_on_default },
+            { layout: "transfer_course" },
+        );
         form.elements.effective_on.min = value.completed_on;
         form.elements.effective_on.max = value.effective_on_default;
         form.elements.reason.maxLength = 1000;
@@ -324,7 +328,11 @@ window.createWorkspaceTransferAwards = function (ui) {
             ["academic_on", "Sending institution's period start (blank marks unknown)", "date", "", false],
             ["reason", "Reason and source evidence", "textarea"],
         ];
-        const form = await buildForm(fields, { academic_on: value.academic_on || "" }, { layout: "transfer_period" });
+        const form = await buildForm(
+            fields,
+            { academic_on: value.academic_on || "" },
+            { layout: "transfer_period" },
+        );
         form.elements.academic_on.max =
             value.completed_on < value.effective_on_default ? value.completed_on : value.effective_on_default;
         form.elements.reason.maxLength = 1000;
@@ -460,10 +468,16 @@ window.createWorkspaceTransferAwards = function (ui) {
             awarded_grade: value.grade_code || "",
             effective_on: value.effective_on_default,
         };
-        const form = await buildForm(fields, {
-            ...initial,
-            credits_milli: initial.credits_milli == null ? undefined : Number(initial.credits_milli) / 1000,
-        }, { layout: "transfer_correction" });
+        const form = await buildForm(
+            fields,
+            {
+                ...initial,
+                credits_milli:
+                    initial.credits_milli == null ? undefined : Number(initial.credits_milli) / 1000,
+            },
+            { layout: "transfer_correction" },
+        );
+        if (!body.isConnected) return;
         form.elements.effective_on.min = value.completed_on;
         form.elements.effective_on.max = value.effective_on_default;
         if (action !== "void") {
@@ -484,20 +498,27 @@ window.createWorkspaceTransferAwards = function (ui) {
                 button("Back to award", () => record(student, award)),
             ),
         );
+        let reviewSequence = 0;
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
                 const data = { ...formData(form, fields), action };
+                const sequence = ++reviewSequence;
                 const review = await request(endpoint(student, award) + "preview/", "POST", data);
-                if (form.isConnected) await confirm(student, award, review);
+                if (form.isConnected && sequence === reviewSequence) await confirm(student, award, review);
             }, submit);
         });
         body.append(form);
     }
     async function confirm(student, award, review) {
-        const operation = (await request("/sis/ui/operation-id/")).id;
-        const payload = { ...review.request, revision: review.revision, operation_id: operation };
+        const operation = review.operation_id;
+        const payload = {
+            ...review.request,
+            revision: review.revision,
+            operation_id: operation,
+            review_token: review.review_token,
+        };
         const body = openDrawer("Confirm transfer correction", "REVIEWED ACADEMIC CHANGE");
         body.append(
             identity(review.record),
@@ -505,6 +526,11 @@ window.createWorkspaceTransferAwards = function (ui) {
             node("p", {}, `Effective date: ${review.request.effective_on}`),
             node("h3", {}, "Registrar reason"),
             node("p", { class: "private-text" }, review.request.reason),
+            node(
+                "p",
+                { class: "form-text" },
+                "This review expires after 20 minutes. If it expires, choose Change correction to review again; your entries are preserved.",
+            ),
             node(
                 "p",
                 { class: "form-text" },
