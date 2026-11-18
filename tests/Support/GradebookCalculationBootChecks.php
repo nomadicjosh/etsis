@@ -155,6 +155,46 @@ if (
 ) {
     throw new RuntimeException("Saving the drop rule changed authoritative facts or scores.");
 }
+$protected = [
+    $sis->sql->rows("sis_history_events"),
+    $sis->sql->rows("sis_academic_credits"),
+    $sis->financialEvents(),
+];
+$scorePath = "/sis/assignments/" . $secondId . "/scores/";
+$scoreData = ["student_id" => $student->id->value, "earned_hundredths" => 1100, "version" => 1];
+if (
+    $teachingPost($scorePath, $scoreData + ["excused" => "invalid"])->getStatusCode() !== 422 ||
+    $teachingPost($scorePath, $scoreData + ["excused" => true])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("The actual scoring route failed to validate or save an excusal.");
+}
+$scoreData["version"] = 2;
+if ($teachingPost($scorePath, $scoreData)->getStatusCode() !== 200) {
+    throw new RuntimeException("A mark update could not retain the existing excusal.");
+}
+$excused = json_decode((string) $read($path)->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    ($excused["excused"] ?? null) !== 1 ||
+    ($excused["percent_hundredths"] ?? null) !== 7500 ||
+    $teachingPost($scorePath, $scoreData + ["excused" => false])->getStatusCode() !== 409
+) {
+    throw new RuntimeException("An ordinary or stale update silently cleared an excusal.");
+}
+$scoreData["version"] = 3;
+if ($teachingPost($scorePath, $scoreData + ["excused" => false])->getStatusCode() !== 200) {
+    throw new RuntimeException("Explicit inclusion failed.");
+}
+$scoreData["version"] = 4;
+if (
+    $teachingPost($scorePath, $scoreData + ["excused" => true])->getStatusCode() !== 200 ||
+    $protected !== [
+        $sis->sql->rows("sis_history_events"),
+        $sis->sql->rows("sis_academic_credits"),
+        $sis->financialEvents(),
+    ]
+) {
+    throw new RuntimeException("Working excusals changed authoritative academic or financial facts.");
+}
 if (
     $teachingPost($base . "/gradebook/calculation/", [
         "mode" => "weighted",
@@ -185,13 +225,18 @@ if (
 $portalPath = "/portal/api/students/" . $student->id->value . "/sections/" . $section->id->value . "/scores/";
 $portal = $read($portalPath);
 $body = json_decode((string) $portal->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($teachingPost($scorePath, $scoreData + ["excused" => false])->getStatusCode() !== 403) {
+    throw new RuntimeException("A student altered their own excusal.");
+}
 if (
     $portal->getStatusCode() !== 200 ||
-    ($body["summary"]["percent_hundredths"] ?? null) !== 11000 ||
-    ($body["summary"]["bonus_earned_hundredths"] ?? null) !== 100 ||
-    ($body["summary"]["dropped"] ?? null) !== 1 ||
-    ($body["summary"]["dropped_assignments"][0]["assignment_id"] ?? null) !== $id ||
-    (array_column($body["items"], "dropped", "assignment_id")[$id] ?? null) !== true ||
+    ($body["summary"]["percent_hundredths"] ?? null) !== 7500 ||
+    ($body["summary"]["bonus_earned_hundredths"] ?? null) !== 0 ||
+    ($body["summary"]["dropped"] ?? null) !== 0 ||
+    ($body["summary"]["excused"] ?? null) !== 1 ||
+    ($body["summary"]["excused_assignments"][0]["assignment_id"] ?? null) !== $secondId ||
+    (array_column($body["items"], "excused", "assignment_id")[$secondId] ?? null) !== true ||
+    (array_column($body["items"], "earned_hundredths", "assignment_id")[$secondId] ?? null) !== 1100 ||
     ($body["items"][0]["category_weight_hundredths"] ?? null) !== 10000 ||
     ($body["summary"]["categories"][0]["title"] ?? null) !== "Coursework"
 ) {

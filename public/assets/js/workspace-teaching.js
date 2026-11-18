@@ -1233,6 +1233,7 @@ window.createWorkspaceTeaching = function (ui) {
                                               "",
                                               false,
                                           ],
+                                          ["excused", "Excuse this assignment", "checkbox", "", false],
                                       ],
                                       `/sis/assignments/${item.assignment_id}/scores/`,
                                       (data) => ({
@@ -1243,6 +1244,7 @@ window.createWorkspaceTeaching = function (ui) {
                                       }),
                                       () => studentRecord(sectionRow, student, back),
                                       {
+                                          excused: item.excused === true,
                                           earned_hundredths:
                                               item.earned_hundredths == null
                                                   ? ""
@@ -1254,9 +1256,10 @@ window.createWorkspaceTeaching = function (ui) {
                                   const help = node(
                                       "p",
                                       { class: "form-text", id: "score-point-limit" },
-                                      `Base: ${Number(item.possible_hundredths) / 100} points. Bonus limit: ${Number(item.bonus_hundredths) / 100} points. Maximum earned: ${Number(item.score_limit_hundredths) / 100} points. The base stays in the average’s denominator.`,
+                                      `Base: ${Number(item.possible_hundredths) / 100} points. Bonus limit: ${Number(item.bonus_hundredths) / 100} points. Maximum earned: ${Number(item.score_limit_hundredths) / 100} points. Excused work is omitted from the average without clearing the entered mark. Uncheck to include it again.`,
                                   );
                                   form.elements.earned_hundredths.setAttribute("aria-describedby", help.id);
+                                  form.elements.excused.setAttribute("aria-describedby", help.id);
                                   form.append(help);
                               }),
                           ]),

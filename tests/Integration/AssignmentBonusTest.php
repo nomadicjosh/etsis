@@ -12,7 +12,6 @@ use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
-use Infrastructure\Persistence\Repository\SqlGradebookRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SisFixture;
@@ -21,15 +20,7 @@ final class AssignmentBonusTest extends TestCase
 {
     private function service(SisFixture $f, ?AuditTrail $audit = null): GradebookService
     {
-        return new GradebookService(
-            new SqlGradebookRepository($f->sql),
-            $f->registration,
-            $f->admissions,
-            $f->access,
-            $f->transactions,
-            $audit ?? $f->audit,
-            $f->academicCredits(),
-        );
+        return $f->gradebook($audit);
     }
 
     private function fixture(int $bonus = 2000): array

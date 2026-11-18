@@ -14,6 +14,7 @@ final readonly class AssignmentScore
         public ?int $earnedHundredths,
         public int $possibleHundredths,
         public int $bonusHundredths = 0,
+        public bool $excused = false,
     ) {
         new \Domain\Gradebook\ValueObject\AssignmentPoints(
             $possibleHundredths,
@@ -21,10 +22,10 @@ final readonly class AssignmentScore
         )->assertEarned($earnedHundredths);
     }
 
-    /** Ungraded is distinct from an earned zero. Returns hundredths of a percent. */
+    /** Null feedback for ungraded/excused work; the saved mark is retained. Otherwise hundredths of a percent. */
     public function percentageHundredths(): ?int
     {
-        return $this->earnedHundredths === null
+        return $this->excused || $this->earnedHundredths === null
         ? null
         : intdiv(
             $this->earnedHundredths * 10000 + intdiv($this->possibleHundredths, 2),

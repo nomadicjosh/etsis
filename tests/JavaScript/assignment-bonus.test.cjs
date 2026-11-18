@@ -11,7 +11,7 @@ const originalQuery = Element.prototype.querySelector;
 Element.prototype.querySelector = function (selector) {
     return walk(this).find((e) => e.tag === selector) || originalQuery.call(this, selector);
 };
-async function fixture() {
+async function fixture(excused = false) {
     const window = {};
     vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
@@ -24,16 +24,19 @@ async function fixture() {
         score_limit_hundredths: 12000,
         earned_hundredths: 11500,
         version: 1,
+        excused,
     };
     const summary = {
         mode: "points",
-        percent_hundredths: 11500,
-        coverage_hundredths: 10000,
-        graded: 1,
+        percent_hundredths: excused ? null : 11500,
+        coverage_hundredths: excused ? 0 : 10000,
+        graded: excused ? 0 : 1,
         pending: 0,
         excluded: 0,
-        bonus_enabled: true,
-        bonus_earned_hundredths: 1500,
+        bonus_enabled: !excused,
+        bonus_earned_hundredths: excused ? 0 : 1500,
+        excused: excused ? 1 : 0,
+        excused_assignments: excused ? [score] : [],
     };
     const openDrawer = () => {
         if (body) for (const e of walk(body)) e.isConnected = false;
@@ -156,4 +159,19 @@ test("a late assignment read cannot reopen a closed private drawer", async () =>
     await pending;
     assert.equal(f.body(), other);
     assert.equal(f.flow(), undefined);
+});
+test("the score editor retains an excused mark and submits inclusion as an explicit choice", async () => {
+    const f = await fixture(true);
+    await f.click(f.section, "Grade & attendance");
+    assert.match(f.body().textContent, /Excused ·/);
+    await f.click(f.body(), "Enter score");
+    const flow = f.flow();
+    assert.equal(flow.args[5].excused, true);
+    assert.equal(flow.args[5].earned_hundredths, 115);
+    assert.match(f.body().textContent, /without clearing the entered mark/);
+    assert.equal(flow.form.elements.excused.getAttribute("aria-describedby"), "score-point-limit");
+    const included = flow.args[3]({ earned_hundredths: 11500, excused: false });
+    assert.equal(included.excused, false);
+    assert.equal(included.earned_hundredths, 11500);
+    assert.equal(included.version, 1);
 });

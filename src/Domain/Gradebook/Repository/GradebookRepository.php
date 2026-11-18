@@ -35,6 +35,8 @@ interface GradebookRepository
     /** @return array<string, int> */
     public function attendanceCounts(EntityId $section, EntityId $student): array;
     public function score(AssignmentScore $score, int $expectedVersion): void;
+    /** @return array{earned_hundredths:?int,version:int,excused:bool}|null */
+    public function scoreRecord(EntityId $assignment, EntityId $student): ?array;
 
     public function attendance(EntityId $section, EntityId $student, string $on, string $status): void;
     /** @return list<array<string, mixed>> */

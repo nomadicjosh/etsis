@@ -123,6 +123,7 @@ final readonly class SisGradebookController
             $f->id("student_id"),
             $f->optionalInteger("earned_hundredths"),
             $f->integer("version"),
+            $this->excusal($f),
         );
 
         return new JsonResponse(["status" => "graded"]);
@@ -320,6 +321,19 @@ final readonly class SisGradebookController
                 [
                     "field" => "bonus_hundredths",
                     "message" => "Enter a non-negative bonus limit in hundredths of a point.",
+                ],
+            ]);
+        }
+    }
+    private function excusal(FormInput $input): ?bool
+    {
+        try {
+            return $input->optionalBoolean("excused");
+        } catch (\InvalidArgumentException) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "excused",
+                    "message" => "Choose whether this assignment is excused.",
                 ],
             ]);
         }

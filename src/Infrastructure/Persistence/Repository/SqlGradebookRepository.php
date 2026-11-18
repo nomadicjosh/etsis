@@ -209,6 +209,24 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         return $counts;
     }
 
+    public function scoreRecord(EntityId $assignment, EntityId $student): ?array
+    {
+        $row =
+        $this->sql->rows(
+            "sis_scores",
+            ["assignment_id" => $assignment->value, "student_id" => $student->value],
+            1,
+        )[0] ?? null;
+        return $row === null
+        ? null
+        : [
+                "earned_hundredths" =>
+                    $row["earned_hundredths"] === null ? null : (int) $row["earned_hundredths"],
+                "version" => (int) $row["version"],
+                "excused" => (bool) $row["excused"],
+            ];
+    }
+
     public function score(AssignmentScore $score, int $expectedVersion): void
     {
         $criteria = [
@@ -222,6 +240,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 ["id" => EntityId::generate()->value] +
                     $criteria + [
                         "earned_hundredths" => $score->earnedHundredths,
+                        "excused" => (int) $score->excused,
                         "version" => 1,
                     ],
             );
@@ -230,6 +249,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 "sis_scores",
                 [
                     "earned_hundredths" => $score->earnedHundredths,
+                    "excused" => (int) $score->excused,
                     "version" => $expectedVersion + 1,
                 ],
                 $criteria + ["version" => $expectedVersion],
@@ -279,6 +299,8 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 ", s." .
                 $q("earned_hundredths") .
                 ", s." .
+                $q("excused") .
+                ", s." .
                 $q("version") .
                 " FROM " .
                 $q("sis_assignments") .
@@ -309,6 +331,7 @@ final readonly class SqlGradebookRepository implements GradebookRepository
             $row["earned_hundredths"] =
             $row["earned_hundredths"] === null ? null : (int) $row["earned_hundredths"];
             $row["version"] = (int) ($row["version"] ?? 0);
+            $row["excused"] = (bool) ($row["excused"] ?? false);
         }
         unset($row);
 

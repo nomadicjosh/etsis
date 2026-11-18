@@ -165,6 +165,7 @@ final readonly class GradebookCalculation
                 isset($seen[$id]) ||
                 !is_int($possible) ||
                 !is_int($bonus) ||
+                (array_key_exists("excused", $score) && !is_bool($score["excused"])) ||
                 ($earned !== null && !is_int($earned))
             ) {
                 self::invalid("An assignment score needs review before calculating this gradebook.");
@@ -185,7 +186,7 @@ final readonly class GradebookCalculation
             );
         }
         if ($this->mode === "category") {
-            return $this->categorySummary($seen);
+            return $this->withExcusals($this->categorySummary($seen), $seen);
         }
         $total = 0;
         $graded = 0;
@@ -194,6 +195,7 @@ final readonly class GradebookCalculation
         $included = 0;
         $bonusEarned = 0;
         $bonusEnabled = false;
+        $excused = 0;
         foreach ($scores as $score) {
             $id = (string) $score["assignment_id"];
             $possible = $score["possible_hundredths"];
@@ -203,6 +205,10 @@ final readonly class GradebookCalculation
                 continue;
             }
             ++$included;
+            if ($score["excused"] ?? false) {
+                ++$excused;
+                continue;
+            }
             $bonusEnabled = $bonusEnabled || ($score["bonus_hundredths"] ?? 0) > 0;
             $total += $weight;
             if ($earned === null) {
@@ -214,17 +220,21 @@ final readonly class GradebookCalculation
             $contribution += $weight * ($earned / $possible);
         }
 
-        return [
-            "mode" => $this->mode,
-            // Floating arithmetic is deliberately restricted to rounded, non-authoritative feedback.
-            "percent_hundredths" => $graded === 0 ? null : (int) round(($contribution / $graded) * 10000),
-            "coverage_hundredths" => $total === 0 ? 0 : (int) round(($graded / $total) * 10000),
-            "graded" => $included - $pending,
-            "pending" => $pending,
-            "excluded" => count($scores) - $included,
-            "bonus_earned_hundredths" => $bonusEarned,
-            "bonus_enabled" => $bonusEnabled,
-        ];
+        return $this->withExcusals(
+            [
+                "mode" => $this->mode,
+                // Floating arithmetic is deliberately restricted to rounded, non-authoritative feedback.
+                "percent_hundredths" => $graded === 0 ? null : (int) round(($contribution / $graded) * 10000),
+                "coverage_hundredths" => $total === 0 ? 0 : (int) round(($graded / $total) * 10000),
+                "graded" => $included - $pending - $excused,
+                "pending" => $pending,
+                "excluded" => count($scores) - $included,
+                "excused" => $excused,
+                "bonus_earned_hundredths" => $bonusEarned,
+                "bonus_enabled" => $bonusEnabled,
+            ],
+            $seen,
+        );
     }
 
     /** @param array<string, array<string, mixed>> $scores
@@ -242,6 +252,8 @@ final readonly class GradebookCalculation
         $dropped = [];
         $bonusTotal = 0;
         $bonusEnabled = false;
+        $excusedTotal = 0;
+        $availableWeight = 0;
         foreach ($this->categories as $category) {
             $possible = 0;
             $gradedPossible = 0;
@@ -249,12 +261,17 @@ final readonly class GradebookCalculation
             $graded = 0;
             $bonusEarned = 0;
             $categoryBonus = false;
+            $excused = 0;
             $weight = $category["weight_hundredths"];
             $omitted = $weight === 0 ? [] : $this->dropped($category, $scores);
             $omittedIds = array_fill_keys(array_column($omitted, "assignment_id"), true);
             array_push($dropped, ...$omitted);
             foreach ($category["assignments"] as $id) {
                 $score = $scores[$id];
+                if ($score["excused"] ?? false) {
+                    ++$excused;
+                    continue;
+                }
                 if (isset($omittedIds[$id])) {
                     continue;
                 }
@@ -268,14 +285,20 @@ final readonly class GradebookCalculation
                 }
             }
             if ($weight > 0) {
+                $excusedTotal += $excused;
+                $fullyExcused =
+                $category["assignments"] !== [] && $excused === count($category["assignments"]);
+                if (!$fullyExcused) {
+                    $availableWeight += $weight;
+                }
                 $bonusTotal += $bonusEarned;
                 $bonusEnabled = $bonusEnabled || $categoryBonus;
                 $included += count($category["assignments"]);
-                $pending += count($category["assignments"]) - $graded - count($omitted);
+                $pending += count($category["assignments"]) - $graded - count($omitted) - $excused;
                 if ($gradedPossible > 0) {
                     $activeWeight += $weight;
                     $contribution += $weight * ($earned / $gradedPossible);
-                } else {
+                } elseif (!$fullyExcused) {
                     ++$awaiting;
                 }
                 $coverage += $possible === 0 ? 0 : $weight * ($gradedPossible / $possible);
@@ -289,6 +312,9 @@ final readonly class GradebookCalculation
                     $possible === 0 ? 0 : (int) round(($gradedPossible / $possible) * 10000),
                 "assignments" => count($category["assignments"]),
                 "graded" => $graded + count($omitted),
+                "excused" => $excused,
+                "fully_excused" =>
+                    $category["assignments"] !== [] && $excused === count($category["assignments"]),
                 "dropped" => count($omitted),
                 "drop_lowest" => $category["drop_lowest"] ?? 0,
                 "bonus_earned_hundredths" => $bonusEarned,
@@ -298,10 +324,12 @@ final readonly class GradebookCalculation
             "mode" => "category",
             "percent_hundredths" =>
                 $activeWeight === 0 ? null : (int) round(($contribution / $activeWeight) * 10000),
-            "coverage_hundredths" => (int) round($coverage),
-            "graded" => $included - $pending - count($dropped),
+            "coverage_hundredths" =>
+                $availableWeight === 0 ? 0 : (int) round($coverage * (10000 / $availableWeight)),
+            "graded" => $included - $pending - count($dropped) - $excusedTotal,
             "pending" => $pending,
             "excluded" => count($scores) - $included,
+            "excused" => $excusedTotal,
             "dropped" => count($dropped),
             "dropped_assignments" => $dropped,
             "bonus_earned_hundredths" => $bonusTotal,
@@ -326,13 +354,8 @@ final readonly class GradebookCalculation
         $graded = [];
         foreach ($category["assignments"] as $id) {
             $score = $scores[$id];
-            if ($score["earned_hundredths"] !== null) {
-                $graded[] = [
-                    "assignment_id" => $id,
-                    "title" => is_string($score["title"] ?? null) ? $score["title"] : $id,
-                    "earned_hundredths" => $score["earned_hundredths"],
-                    "possible_hundredths" => $score["possible_hundredths"],
-                ];
+            if ($score["earned_hundredths"] !== null && !($score["excused"] ?? false)) {
+                $graded[] = self::scoreSummary($score, $id);
             }
         }
         usort(
@@ -348,5 +371,35 @@ final readonly class GradebookCalculation
     private static function invalid(string $message, string $field = "weights"): never
     {
         throw new ValidationException([["field" => $field, "message" => $message]]);
+    }
+    /** Excusal is an explicit student status even when the rubric currently excludes that assignment.
+     * @param array<string,mixed> $result
+     * @param array<string,array<string,mixed>> $scores
+     * @return array<string,mixed>
+     */
+    private function withExcusals(array $result, array $scores): array
+    {
+        $items = [];
+        foreach ($scores as $id => $score) {
+            if ($score["excused"] ?? false) {
+                $items[] = self::scoreSummary($score, (string) $id);
+            }
+        }
+        $result["excluded"] -= count($items) - $result["excused"];
+        $result["excused"] = count($items);
+        $result["excused_assignments"] = $items;
+        return $result;
+    }
+    /** @param array<string,mixed> $score
+     * @return array<string,mixed>
+     */
+    private static function scoreSummary(array $score, string $id): array
+    {
+        return [
+            "assignment_id" => $id,
+            "title" => is_string($score["title"] ?? null) ? $score["title"] : $id,
+            "earned_hundredths" => $score["earned_hundredths"],
+            "possible_hundredths" => $score["possible_hundredths"],
+        ];
     }
 }

@@ -470,3 +470,57 @@ test("bonus feedback keeps over-100 averages visible and explains recorded bonus
     assert.match(label, /Bonus limit \+20 points/);
     assert.match(label, /15 bonus points recorded/);
 });
+
+test("shared feedback distinguishes excused work from pending work and retains saved marks as text", () => {
+    const p = presenter();
+    const panel = p.panel({
+        mode: "category",
+        percent_hundredths: 8000,
+        coverage_hundredths: 10000,
+        graded: 1,
+        pending: 0,
+        excluded: 0,
+        excused: 2,
+        awaiting_categories: 0,
+        categories: [
+            {
+                title: "Excused tasks",
+                weight_hundredths: 6000,
+                percent_hundredths: null,
+                coverage_hundredths: 0,
+                assignments: 2,
+                graded: 0,
+                excused: 2,
+                fully_excused: true,
+            },
+            {
+                title: "Remaining",
+                weight_hundredths: 4000,
+                percent_hundredths: 8000,
+                coverage_hundredths: 10000,
+                assignments: 1,
+                graded: 1,
+                excused: 0,
+                fully_excused: false,
+            },
+        ],
+        excused_assignments: [
+            { title: "Quiz <img>", earned_hundredths: 0, possible_hundredths: 1000 },
+            { title: "Other task", earned_hundredths: null, possible_hundredths: 1000 },
+        ],
+    });
+    assert.match(panel.textContent, /0 awaiting scores · 2 excused/);
+    assert.match(panel.textContent, /Excused for this student/);
+    assert.match(panel.textContent, /Saved mark 0\/10/);
+    assert.match(panel.textContent, /No mark recorded/);
+    assert.match(panel.textContent, /remaining weights are normalized/);
+    assert.ok(walk(panel).some((n) => n.tag === "summary" && n.textContent === "View 2 excused assignments"));
+    assert.equal(
+        walk(panel).some((n) => n.tag === "img"),
+        false,
+    );
+    assert.match(
+        p.assignmentLabel({ excused: true, possible_hundredths: 1000, earned_hundredths: 0 }),
+        /^Excused · By points/,
+    );
+});

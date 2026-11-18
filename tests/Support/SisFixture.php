@@ -444,6 +444,20 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
+    public function gradebook(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Gradebook\Service\GradebookService {
+        return new \Domain\Gradebook\Service\GradebookService(
+            new \Infrastructure\Persistence\Repository\SqlGradebookRepository($this->sql),
+            $this->registration,
+            $this->admissions,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->academicCredits(),
+        );
+    }
+
     public function academicCredits(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\AcademicRecord\Service\InstitutionalCreditLedger {

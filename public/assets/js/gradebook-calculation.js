@@ -10,6 +10,7 @@ window.createGradebookCalculation = function (ui) {
         } else if (score.excluded && score.weight_hundredths == null) label = "Excluded";
         else if (score.weight_hundredths === 0) label = "Excluded · 0.00%";
         else label = score.weight_hundredths == null ? "By points" : percent(score.weight_hundredths);
+        if (score.excused) label = `Excused · ${label}`;
         if (score.bonus_hundredths > 0) label += ` · Bonus limit +${score.bonus_hundredths / 100} points`;
         if (score.earned_hundredths > score.possible_hundredths)
             label += ` · ${(score.earned_hundredths - score.possible_hundredths) / 100} bonus points recorded`;
@@ -30,7 +31,7 @@ window.createGradebookCalculation = function (ui) {
             node(
                 "p",
                 { class: "mb-1" },
-                `${{ weighted: "Assignment weights", category: "Category weights", points: "Total points" }[summary.mode]} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excluded ? ` · ${summary.excluded} excluded` : ""}${summary.dropped ? ` · ${summary.dropped} dropped from average` : ""}`,
+                `${{ weighted: "Assignment weights", category: "Category weights", points: "Total points" }[summary.mode]} · ${percent(summary.coverage_hundredths)} graded · ${summary.pending} awaiting scores${summary.excused ? ` · ${summary.excused} excused` : ""}${summary.excluded ? ` · ${summary.excluded} excluded` : ""}${summary.dropped ? ` · ${summary.dropped} dropped from average` : ""}`,
             ),
             summary.bonus_enabled
                 ? node(
@@ -97,6 +98,20 @@ window.createGradebookCalculation = function (ui) {
                                                 `Drop up to ${category.drop_lowest} lowest graded ${category.drop_lowest === 1 ? "score" : "scores"} · ${category.dropped || 0} currently dropped. At least one graded score stays included.`,
                                             )
                                           : null,
+                                      category.excused
+                                          ? node(
+                                                "p",
+                                                { class: "small mb-0 mt-1" },
+                                                `${category.excused} excused · omitted from this average and grading coverage.`,
+                                            )
+                                          : null,
+                                      category.fully_excused
+                                          ? node(
+                                                "span",
+                                                { class: "badge text-bg-light border mt-2" },
+                                                "Excused for this student",
+                                            )
+                                          : null,
                                   ),
                               ),
                           ),
@@ -130,10 +145,32 @@ window.createGradebookCalculation = function (ui) {
                       ),
                   )
                 : null,
+            summary.excused_assignments?.length
+                ? node(
+                      "details",
+                      { class: "mb-3" },
+                      node(
+                          "summary",
+                          { class: "fw-semibold" },
+                          `View ${summary.excused_assignments.length} excused ${summary.excused_assignments.length === 1 ? "assignment" : "assignments"}`,
+                      ),
+                      node(
+                          "ul",
+                          { class: "mb-0 mt-2" },
+                          summary.excused_assignments.map((score) =>
+                              node(
+                                  "li",
+                                  { class: "text-break" },
+                                  `${score.title} · ${score.earned_hundredths == null ? "No mark recorded" : `Saved mark ${score.earned_hundredths / 100}/${score.possible_hundredths / 100}`} · omitted from average`,
+                              ),
+                          ),
+                      ),
+                  )
+                : null,
             node(
                 "p",
                 { class: "small mb-0" },
-                "Ungraded work is excluded from this running average. Recorded zero scores count unless a configured drop rule omits them. This is coursework feedback; your official final grade is recorded separately.",
+                "Excused and ungraded work are omitted from this running average. Excused work is also omitted from grading coverage; remaining weights are normalized. Recorded zero scores count unless excused or dropped by a configured rule. This is coursework feedback; your official final grade is recorded separately.",
             ),
         );
     }

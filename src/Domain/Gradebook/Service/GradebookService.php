@@ -208,8 +208,13 @@ final readonly class GradebookService
         );
     }
 
-    public function score(EntityId $assignmentId, EntityId $student, ?int $earned, int $expectedVersion): void
-    {
+    public function score(
+        EntityId $assignmentId,
+        EntityId $student,
+        ?int $earned,
+        int $expectedVersion,
+        ?bool $excused = null,
+    ): void {
         $this->access->authenticatedUserId();
         $initial = $this->repository->assignment($assignmentId);
         $this->faculty($initial->sectionId);
@@ -219,19 +224,28 @@ final readonly class GradebookService
             $student,
             $earned,
             $expectedVersion,
+            $excused,
         ): void {
             $this->enrolled($student, $initial->sectionId);
             $assignment = $this->repository->assignment($assignmentId);
             $actor = $this->faculty($assignment->sectionId);
+            $current = $this->repository->scoreRecord($assignmentId, $student);
             $score = new AssignmentScore(
                 $assignmentId,
                 $student,
                 $earned,
                 $assignment->possibleHundredths,
                 $assignment->bonusHundredths,
+                $excused ?? ($current["excused"] ?? false),
             );
             $this->repository->score($score, $expectedVersion);
-            $this->audit->record($actor, "assignment.graded", $assignmentId);
+            $action =
+                $score->excused === ($current["excused"] ?? false)
+                    ? "assignment.graded"
+                    : ($score->excused
+                        ? "assignment.excused"
+                        : "assignment.included");
+            $this->audit->record($actor, $action, $assignmentId);
             $this->sameFaculty($assignment->sectionId, $actor);
         });
     }
