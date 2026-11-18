@@ -70,6 +70,7 @@ final class EventClassMap
             \Domain\Transfer\Event\TransferCreditWasEstablished::class,
             \Domain\Transfer\Event\TransferCreditWasChanged::class,
             \Domain\Transfer\Event\TransferAcademicPeriodWasRecorded::class,
+            \Domain\Transfer\Event\TransferAcademicDatesWereRecorded::class,
             \Domain\Transfer\Event\TransferCourseWasAccepted::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished::class,
             \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,

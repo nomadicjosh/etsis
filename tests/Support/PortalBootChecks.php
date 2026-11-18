@@ -2967,9 +2967,14 @@ if (
 }
 $sis->access->staff = true;
 
-// Transfer source-period decisions resolve through real providers and browser privacy guards.
+// Transfer academic dates share real providers and browser privacy guards.
 $periodPath = $correctionPath . "source-period/";
-$periodData = ["academic_on" => $postedTransfer["completed_on"], "version" => 1, "reason" => "Fictional confirmed sending period."];
+$periodData = [
+    "academic_on" => $postedTransfer["completed_on"],
+    "completed_on" => new DateTimeImmutable($postedTransfer["completed_on"])->modify("+1 day")->format("Y-m-d"),
+    "version" => 1,
+    "reason" => "Fictional confirmed sending dates.",
+];
 $periodNoCsrf = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $periodPath . "review/", "POST");
 if ($app->router->match($periodNoCsrf->withParsedBody($periodData))->getStatusCode() !== 403) {
     throw new RuntimeException("Transfer period review bypassed CSRF.");
@@ -2987,8 +2992,9 @@ $periodHistoryResponse = $teachingPost($periodPath . "history/", []);
 $periodHistory = json_decode((string) $periodHistoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if ($periodSaved->getStatusCode() !== 200 || (string) $periodSaved->getBody() !== (string) $periodRetry->getBody() ||
     $periodHistoryResponse->getStatusCode() !== 200 || !str_contains($periodHistoryResponse->getHeaderLine("Cache-Control"), "no-store") ||
-    str_contains((string) $periodHistoryResponse->getBody(), "Fictional confirmed sending period") ||
-    ($periodHistory["items"][array_key_last($periodHistory["items"])]["action"] ?? null) !== "period_recorded") {
+    str_contains((string) $periodHistoryResponse->getBody(), "Fictional confirmed sending dates") ||
+    ($periodHistory["items"][array_key_last($periodHistory["items"])]["action"] ?? null) !== "dates_recorded" ||
+    ($periodHistory["items"][array_key_last($periodHistory["items"])]["completed_on"] ?? null) !== $periodData["completed_on"]) {
     throw new RuntimeException("Source period confirmation, retry or curated history failed.");
 }
 $sis->access->staff = false;

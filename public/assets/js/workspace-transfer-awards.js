@@ -120,8 +120,8 @@ window.createWorkspaceTransferAwards = function (ui) {
         const action = value.credit.status === "V" ? "reinstate" : "amend";
         actions.append(button(title(action), () => edit(student, award, value, action), "btn-primary"));
         actions.append(
-            ...(value.credit.status !== "V" && value.history_recorded
-                ? [button("Review source academic period", () => editPeriod(student, award, value))]
+            ...(value.credit.status !== "V"
+                ? [button("Academic dates", () => editPeriod(student, award, value))]
                 : []),
             ...(value.credit.status !== "V"
                 ? [button("Review accepted course", () => editCourse(student, award, value))]
@@ -130,7 +130,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         const more = [
             button("Correction history", () => history(student, award)),
             button("Course definition history", () => courseHistory(student, award)),
-            button("Source period history", () => periodHistory(student, award)),
+            button("Date history", () => periodHistory(student, award)),
         ];
         if (value.credit.status !== "V")
             more.push(
@@ -259,7 +259,7 @@ window.createWorkspaceTransferAwards = function (ui) {
                         "Confirm course acceptance",
                         async () => {
                             await request(base + "commit/", "POST", { review_token: review.review_token });
-                            await record(student, award);
+                            if (confirm.isConnected) await record(student, award);
                         },
                         "btn-primary",
                     ),
@@ -313,30 +313,55 @@ window.createWorkspaceTransferAwards = function (ui) {
             );
         body.append(actions);
     }
-    async function editPeriod(student, award, value) {
-        const body = openDrawer("Source academic period", "REVIEWED SENDING-INSTITUTION FACT");
+    async function editPeriod(student, award, value, draft = null) {
+        const body = openDrawer("Transfer academic dates", "REVIEWED SENDING-INSTITUTION FACT");
         body.append(
             identity(value),
             node(
                 "p",
                 {},
-                "Enter the sending institution's actual academic-period start for this course. Do not use the local posting term or infer it from completion. Leave blank only to explicitly mark a known date unknown.",
+                "Record the sending institution's actual course completion and optional period start. The period must not start after completion. A blank start explicitly marks it unknown; the local posting term stays unchanged.",
             ),
             button("Back to award", () => record(student, award)),
         );
         const fields = [
-            ["academic_on", "Sending institution's period start (blank marks unknown)", "date", "", false],
+            ["completed_on", "External completion date", "date"],
+            ["academic_on", "Source period start", "date", "", false],
+            ["effective_on", "Effective date", "date"],
             ["reason", "Reason and source evidence", "textarea"],
         ];
         const form = await buildForm(
             fields,
-            { academic_on: value.academic_on || "" },
+            {
+                academic_on: value.academic_on || "",
+                completed_on: value.completed_on,
+                effective_on: value.effective_on_default,
+                ...(draft || {}),
+            },
             { layout: "transfer_period" },
         );
-        form.elements.academic_on.max =
-            value.completed_on < value.effective_on_default ? value.completed_on : value.effective_on_default;
+        if (!body.isConnected) return;
+        form.elements.completed_on.max = value.effective_on_default;
+        form.elements.effective_on.max = value.effective_on_default;
+        const bounds = () => {
+            form.elements.academic_on.max = form.elements.completed_on.value || value.effective_on_default;
+            form.elements.effective_on.min = form.elements.completed_on.value || "";
+        };
+        form.elements.completed_on.addEventListener("input", bounds);
+        bounds();
+        body.append(
+            button(
+                "Refresh dates",
+                async () => {
+                    const fresh = await request(endpoint(student, award));
+                    if (!form.isConnected) return;
+                    await editPeriod(student, award, fresh, formData(form, fields));
+                },
+                "btn-outline-secondary btn-sm",
+            ),
+        );
         form.elements.reason.maxLength = 1000;
-        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review source period");
+        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review dates");
         form.append(submit);
         body.append(form);
         form.addEventListener("submit", (event) => {
@@ -347,35 +372,45 @@ window.createWorkspaceTransferAwards = function (ui) {
                 const base = endpoint(student, award) + "source-period/";
                 const review = await request(base + "review/", "POST", {
                     academic_on: data.academic_on || null,
+                    completed_on: data.completed_on,
+                    effective_on: data.effective_on,
                     reason: data.reason,
                     version: value.credit.version,
                 });
-                const confirm = openDrawer(
-                    "Confirm source academic period",
-                    "PRESERVE EARLIER SOURCE EVIDENCE",
-                );
+                if (!form.isConnected) return;
+                const confirm = openDrawer("Confirm academic dates", "PRESERVE EARLIER SOURCE EVIDENCE");
                 confirm.append(
                     node(
                         "p",
                         {},
-                        `${review.previous_academic_on || "Unknown"} → ${review.academic_on || "Unknown"}`,
+                        `Period start: ${review.previous_academic_on || "Unknown"} → ${review.academic_on || "Unknown"}`,
                     ),
+                    node("p", {}, `Completion: ${review.previous_completed_on} → ${review.completed_on}`),
+                    node("p", {}, `Effective: ${review.effective_at}`),
                     node("p", {}, review.reason),
+                    review.earlier_history_unknown
+                        ? node(
+                              "p",
+                              { class: "alert alert-info" },
+                              "Existing facts will be observed now. Earlier decision times and authors remain unknown.",
+                          )
+                        : null,
                     node(
                         "p",
                         {},
-                        "Awarded credits, grade, completion date and posting term stay as recorded. This source date can change repeat-GPA ordering only when the selected degree policy uses academic periods.",
+                        "Credits, grade, pursuit, posting term and charges stay unchanged. Corrected dates can change repeat-course ordering and require fresh transcript preparation. Check institutional award policy when changing completion.",
                     ),
-                    button("Revise source period", () =>
-                        openDrawer("Source academic period", "REVIEWED SENDING-INSTITUTION FACT").append(
-                            form,
-                        ),
+                    node(
+                        "p",
+                        { class: "text-muted small" },
+                        "This review expires after 20 minutes. An interrupted confirmation retries the same review.",
                     ),
+                    button("Revise dates", () => editPeriod(student, award, value, data)),
                     button(
-                        "Confirm source period",
+                        "Confirm dates",
                         async () => {
                             await request(base + "commit/", "POST", { review_token: review.review_token });
-                            await record(student, award);
+                            if (confirm.isConnected) await record(student, award);
                         },
                         "btn-primary",
                     ),
@@ -385,13 +420,13 @@ window.createWorkspaceTransferAwards = function (ui) {
     }
     async function periodHistory(student, award, cursor = null, stack = []) {
         const data = await request(endpoint(student, award) + "source-period/history/", "POST", { cursor });
-        const body = openDrawer("Source period history", "PRIVATE TRANSFER CHRONOLOGY");
+        const body = openDrawer("Date history", "PRIVATE TRANSFER CHRONOLOGY");
         body.append(
             button("Back to award", () => record(student, award)),
             node(
                 "p",
                 {},
-                "Award and credit decisions are included for context. Only an explicit source-period decision changes this date; other decisions retain its prior value. Protected reasons and actors are omitted.",
+                "Award and credit decisions are included for context. Date decisions retain earlier source dates. Protected reasons and actors are omitted.",
             ),
         );
         if (data.earlier_history_unknown)
@@ -405,24 +440,28 @@ window.createWorkspaceTransferAwards = function (ui) {
         body.append(
             data.items.length
                 ? grid(
-                      ["Decision", "Source period change", "Effective", "Recorded"],
+                      ["Decision", "Period start", "Completion", "Effective", "Recorded"],
                       data.items.map((item) => [
                           {
                               course_accepted: "Accepted course reviewed",
                               period_recorded: "Source period recorded",
+                              dates_recorded: "Academic dates recorded",
                               award: "Award established",
                               observed_existing: "Earlier facts observed",
                               amend: "Award corrected",
                               void: "Award voided",
                               reinstate: "Award reinstated",
                           }[item.action],
-                          item.action === "period_recorded"
+                          ["period_recorded", "dates_recorded"].includes(item.action)
                               ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
                               : "No period change",
+                          item.action === "dates_recorded"
+                              ? `${item.previous_completed_on} → ${item.completed_on}`
+                              : "No completion change",
                           item.effective_at || "Unknown",
                           item.recorded_at,
                       ]),
-                      "Source academic-period decisions",
+                      "Transfer academic-date decisions",
                   )
                 : node("p", {}, "No recorded source decisions on this page."),
         );

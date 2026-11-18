@@ -11,6 +11,7 @@ use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
+use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
 use InvalidArgumentException;
 
 final class TransferEventSchema
@@ -25,6 +26,14 @@ final class TransferEventSchema
                 "previous_decision_id",
                 "previous_academic_on",
                 "academic_on",
+            ],
+            TransferAcademicDatesWereRecorded::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_academic_on",
+                "academic_on",
+                "previous_completed_on",
+                "completed_on",
             ],
             TransferCourseWasAccepted::class => [
                 "decision_id",
@@ -145,6 +154,25 @@ final class TransferEventSchema
                     ) {
                         self::invalid();
                     }
+                }
+                return;
+            }
+            if ($class === TransferAcademicDatesWereRecorded::class) {
+                foreach (["previous_completed_on", "completed_on"] as $key) {
+                    self::date($p[$key]);
+                }
+                foreach (["previous_academic_on", "academic_on"] as $key) {
+                    if ($p[$key] !== null) {
+                        self::date($p[$key]);
+                    }
+                }
+                if (
+                    ($p["academic_on"] !== null && $p["academic_on"] > $p["completed_on"]) ||
+                    ($p["previous_academic_on"] !== null && $p["previous_academic_on"] > $p["previous_completed_on"]) ||
+                    ($p["previous_academic_on"] === $p["academic_on"] &&
+                        $p["previous_completed_on"] === $p["completed_on"])
+                ) {
+                    self::invalid();
                 }
                 return;
             }

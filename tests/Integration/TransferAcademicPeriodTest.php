@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+namespace Tests\Integration;
 
+use HiatusFixture;
+use TransferAwardFixture;
+use RuntimeException;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
@@ -18,17 +21,25 @@ final class TransferAcademicPeriodTest extends TestCase
 {
     private function fixture(bool $legacy = false): TransferAwardFixture
     {
+        require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
         $h = new HiatusFixture();
         return new TransferAwardFixture($h->sis, $h->cipher, legacy: $legacy);
     }
     private function record(TransferAwardFixture $t, ?string $date, int $version): array
     {
-        $r = $t->periods()->review($t->student, $t->award, $date, $version, "Fictional sending-institution evidence.");
+        $r = $t
+            ->periods()
+            ->review($t->student, $t->award, $date, $version, "Fictional sending-institution evidence.");
         return [$r, $t->periods()->commit($t->student, $t->award, $r["review_token"])];
     }
     private function correct(TransferAwardFixture $t, string $kind): void
     {
-        $change = new AwardChange($kind, $kind === "void" ? null : 3000, $kind === "void" ? null : "B", "Fictional award correction.");
+        $change = new AwardChange(
+            $kind,
+            $kind === "void" ? null : 3000,
+            $kind === "void" ? null : "B",
+            "Fictional award correction.",
+        );
         $review = $t->service()->preview($t->student, $t->award, $change);
         $t->service()->confirm(
             $t->student,
@@ -47,11 +58,16 @@ final class TransferAcademicPeriodTest extends TestCase
         $awards = $s->sql->rows("sis_transfer_awards");
         $events = $s->sql->rows("sis_history_events");
         $finance = $s->financialEvents();
-        $review = $t->periods()->review($t->student, $t->award, "2026-01-12", 0, "Fictional source verification.");
+        $review = $t
+            ->periods()
+            ->review($t->student, $t->award, "2026-01-12", 0, "Fictional source verification.");
         self::assertNull($review["previous_academic_on"]);
         self::assertSame($events, $s->sql->rows("sis_history_events"));
         $t->periods()->commit($t->student, $t->award, $review["review_token"]);
-        self::assertEquals(array_replace($credit, ["version" => 1]), $s->sql->one("sis_academic_credits", ["id" => $t->credit->value]));
+        self::assertEquals(
+            array_replace($credit, ["version" => 1]),
+            $s->sql->one("sis_academic_credits", ["id" => $t->credit->value]),
+        );
         self::assertSame($awards, $s->sql->rows("sis_transfer_awards"));
         self::assertSame($finance, $s->financialEvents());
         $facts = $s->transferCredits()->auditFacts($t->credit, $t->student, new HistoryReadBudget());
@@ -62,8 +78,11 @@ final class TransferAcademicPeriodTest extends TestCase
             self::assertSame($event, $s->sql->one("sis_history_events", ["id" => $event["id"]]));
         }
         $history = $t->periods()->history($t->student, $t->award);
-        self::assertSame(["award", "period_recorded"], array_column($history["items"], "action"));
-        self::assertStringNotContainsString("Fictional source verification", json_encode($history, JSON_THROW_ON_ERROR));
+        self::assertSame(["award", "dates_recorded"], array_column($history["items"], "action"));
+        self::assertStringNotContainsString(
+            "Fictional source verification",
+            json_encode($history, JSON_THROW_ON_ERROR),
+        );
         self::assertArrayNotHasKey("actor_id", $history["items"][1]);
     }
     public function testGradeChangesVoidAndReinstatementRetainSourcePeriodAndOldRetryCannotUndoClear(): void
@@ -96,24 +115,29 @@ final class TransferAcademicPeriodTest extends TestCase
             }
         }
     }
-    public function testUntrackedAwardCannotReceiveAnInventedOpeningHistoryOrPeriod(): void
+    public function testUntrackedAwardIsObservedOnlyWhenARealDateDecisionIsConfirmed(): void
     {
         $t = $this->fixture(true);
         $events = $t->sis->sql->rows("sis_history_events");
-        try {
-            $t->periods()->review($t->student, $t->award, "2026-01-12", 0, "Fictional untracked source.");
-            self::fail("Untracked award accepted a period without a retained opening.");
-        } catch (ValidationException) {
-            self::assertSame($events, $t->sis->sql->rows("sis_history_events"));
-        }
+        $review = $t
+            ->periods()
+            ->review($t->student, $t->award, "2026-01-12", 0, "Fictional untracked source.");
+        self::assertTrue($review["earlier_history_unknown"]);
+        self::assertSame($events, $t->sis->sql->rows("sis_history_events"));
+        $t->periods()->commit($t->student, $t->award, $review["review_token"]);
+        self::assertSame("2026-01-12", $t->service()->view($t->student, $t->award)["academic_on"]);
+        self::assertTrue($t->service()->view($t->student, $t->award)["earlier_history_unknown"]);
     }
     public function testExpiredReviewAndCompetingAwardChangeLeaveNoPartialPeriodOrReceipt(): void
     {
         foreach (["expiry", "award"] as $mode) {
             $t = $this->fixture();
             $r = $t->periods()->review($t->student, $t->award, "2026-01-12", 0, "Fictional pending source.");
-            if ($mode === "expiry") $t->sis->clock->time = $t->sis->clock->time->modify("+21 minutes");
-            else $this->correct($t, "amend");
+            if ($mode === "expiry") {
+                $t->sis->clock->time = $t->sis->clock->time->modify("+21 minutes");
+            } else {
+                $this->correct($t, "amend");
+            }
             $events = $t->sis->sql->rows("sis_history_events");
             $receipts = $t->sis->sql->rows("sis_history_operations");
             try {
@@ -136,7 +160,9 @@ final class TransferAcademicPeriodTest extends TestCase
             try {
                 $t->periods()->commit($t->student, $t->award, $r["review_token"]);
                 self::fail("Incomplete registrar authority accepted.");
-            } catch (AccessDeniedException) { self::assertTrue(true); }
+            } catch (AccessDeniedException) {
+                self::assertTrue(true);
+            }
         }
         $t->sis->access->grants = ["sis:transfer:manage", "sis:student:read"];
         $this->expectException(AccessDeniedException::class);
@@ -149,13 +175,24 @@ final class TransferAcademicPeriodTest extends TestCase
         $t->sis->transactions->run(function () use ($t): void {
             $t->sis->registration->lockStudent($t->student);
             try {
-                $t->sis->transferCredits()->decisionRecord($t->student, $t->award, new HistoryReadBudget(maximumEvents: 1));
+                $t->sis
+                    ->transferCredits()
+                    ->decisionRecord($t->student, $t->award, new HistoryReadBudget(maximumEvents: 1));
                 self::fail("A partial transfer stream escaped its replay budget.");
-            } catch (HistoryReadLimitException) { self::assertTrue(true); }
-            [$root] = $t->sis->transferCredits()->decisionRecord($t->student, $t->award, new HistoryReadBudget());
+            } catch (HistoryReadLimitException) {
+                self::assertTrue(true);
+            }
+            [$root] = $t->sis
+                ->transferCredits()
+                ->decisionRecord($t->student, $t->award, new HistoryReadBudget());
             $event = \Domain\Transfer\Event\TransferAcademicPeriodWasRecorded::occur(
                 new \Domain\Transfer\ValueObject\TransferCreditId($t->award->value),
-                ["decision_id" => EntityId::generate()->value, "previous_decision_id" => $root->decision(), "previous_academic_on" => null, "academic_on" => "2026-02-01"],
+                [
+                    "decision_id" => EntityId::generate()->value,
+                    "previous_decision_id" => $root->decision(),
+                    "previous_academic_on" => null,
+                    "academic_on" => "2026-02-01",
+                ],
                 ["__aggregate_type" => "transfer_credit"],
             )->withPlayhead($root->playhead() + 1);
             $this->expectException(CorruptHistoryException::class);
@@ -176,21 +213,31 @@ final class TransferAcademicPeriodTest extends TestCase
         self::assertCount(3, $second["items"]);
         self::assertNull($second["next_cursor"]);
         self::assertSame("2026-01-22", $second["items"][2]["academic_on"]);
-        self::assertStringNotContainsString("Fictional sending-institution evidence", json_encode($second, JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString(
+            "Fictional sending-institution evidence",
+            json_encode($second, JSON_THROW_ON_ERROR),
+        );
     }
     public function testAuditFailureAndRevokedAuthorityRollBackSourceDateEventReceiptAndProjection(): void
     {
         foreach (["audit", "revoke"] as $failure) {
             $t = $this->fixture();
             $audit = new class ($t, $failure) implements \Domain\Audit\Repository\AuditTrail {
-                public function __construct(private TransferAwardFixture $t, private string $failure) {}
+                public function __construct(private TransferAwardFixture $t, private string $failure)
+                {
+                }
                 public function record(EntityId $actor, string $action, EntityId $subject): void
                 {
-                    if ($this->failure === "audit") throw new RuntimeException("Fictional audit failure.");
+                    if ($this->failure === "audit") {
+                        throw new RuntimeException("Fictional audit failure.");
+                    }
                     $this->t->sis->access->staff = false;
                     $this->t->sis->access->grants = [];
                 }
-                public function forSubject(EntityId $subject): array { return []; }
+                public function forSubject(EntityId $subject): array
+                {
+                    return [];
+                }
             };
             $service = $t->periods($audit);
             $review = $service->review($t->student, $t->award, "2026-01-12", 0, "Fictional atomic source.");
@@ -202,7 +249,9 @@ final class TransferAcademicPeriodTest extends TestCase
             } catch (RuntimeException | AccessDeniedException) {
                 self::assertSame($events, $t->sis->sql->rows("sis_history_events"));
                 self::assertSame($receipts, $t->sis->sql->rows("sis_history_operations"));
-                self::assertNull($t->sis->transferCredits()->auditFacts($t->credit, $t->student)["academic_on"]);
+                self::assertNull(
+                    $t->sis->transferCredits()->auditFacts($t->credit, $t->student)["academic_on"],
+                );
             }
         }
     }

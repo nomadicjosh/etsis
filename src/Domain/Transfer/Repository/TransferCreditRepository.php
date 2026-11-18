@@ -15,6 +15,10 @@ interface TransferCreditRepository
         EntityId $equivalency,
         string $completed,
     ): ?array;
+    /** Current corrected completion dates reserve their source identity as well as opening dates.
+     * @return array<string,mixed>|null
+     */
+    public function corrected(EntityId $student, EntityId $equivalency, string $completed): ?array;
     /** @return array<string,mixed> */
     public function award(EntityId $award): array;
     /** @return array<string,mixed>|null */

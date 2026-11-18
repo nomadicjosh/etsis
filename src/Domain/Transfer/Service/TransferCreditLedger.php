@@ -98,6 +98,11 @@ final readonly class TransferCreditLedger
                 }
                 return new EntityId($credit["id"]);
             }
+            if ($this->records->corrected($student, $rule->id, $completed->format("Y-m-d")) !== null) {
+                throw new DomainException(
+                    "An existing transfer award uses this corrected completion date. Review that award.",
+                );
+            }
             // Resolve only genuine new awards; an accepted retry preserves its original pursuit.
             $selection = $this->primary->current($this->admissions->student($student));
             $assignment ??= new EntityId($selection["assignment_id"]);
@@ -227,6 +232,7 @@ final readonly class TransferCreditLedger
                         "external_title",
                         "course_id",
                         "term_code",
+                        "completed_on",
                     ]),
                 ),
             );
@@ -483,7 +489,10 @@ final readonly class TransferCreditLedger
                 throw new CorruptHistoryException();
             }
             $row = $this->records->award($award);
-            if ($this->records->courseVersion(new EntityId($row["credit_id"])) !== null) {
+            if (
+                $this->records->courseVersion(new EntityId($row["credit_id"])) !== null ||
+                $row["corrected_completed_on"] !== null
+            ) {
                 throw new CorruptHistoryException();
             }
             return;
@@ -502,7 +511,8 @@ final readonly class TransferCreditLedger
             $a["student_id"] !== $c["student_id"] ||
             $a["equivalency_id"] !== $s["equivalency_id"] ||
             $a["term_id"] !== $c["term_id"] ||
-            $a["completed_on"] !== $s["completed_on"] ||
+            $a["completed_on"] !== $root->originalCompletedOn() ||
+            ($a["corrected_completed_on"] ?? $a["completed_on"]) !== $s["completed_on"] ||
             !$this->same($this->records->credit(new EntityId($c["id"])), $c)
         ) {
             throw new CorruptHistoryException();

@@ -125,7 +125,7 @@ final readonly class SqlTransferCatalogRepository implements TransferCatalogRepo
                 $q("student_id") .
                 ", r." .
                 $q("credit_id") .
-                ", r." .
+                ", COALESCE(r." . $q("corrected_completed_on") . ", r." . $q("completed_on") . ") AS " .
                 $q("completed_on") .
                 ", p." .
                 $q("given_name") .

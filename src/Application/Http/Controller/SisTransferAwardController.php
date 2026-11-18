@@ -79,6 +79,8 @@ final readonly class SisTransferAwardController
                 $f->optionalText("academic_on", 10),
                 $f->integer("version", 0),
                 $f->bodyText("reason"),
+                $f->text("completed_on", 10),
+                $f->optionalText("effective_on", 10),
             ),
         );
     }

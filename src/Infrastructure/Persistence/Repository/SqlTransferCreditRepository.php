@@ -33,6 +33,18 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
     {
         return $this->sql->one("sis_transfer_awards", ["id" => $award->value]);
     }
+    public function corrected(EntityId $student, EntityId $equivalency, string $completed): ?array
+    {
+        return $this->sql->rows(
+            "sis_transfer_awards",
+            [
+                "student_id" => $student->value,
+                "equivalency_id" => $equivalency->value,
+                "corrected_completed_on" => $completed,
+            ],
+            1,
+        )[0] ?? null;
+    }
     public function mapping(EntityId $award): ?array
     {
         return $this->sql->rows("sis_transfer_credit_streams", ["id" => $award->value], 1)[0] ?? null;
@@ -135,6 +147,14 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
             $this->sql->insert("sis_transfer_credit_streams", $m);
         } elseif (count($old) !== 3 || array_diff_assoc($old, $m) !== []) {
             throw new CorruptHistoryException();
+        }
+        $award = $this->award(new EntityId($source["award_id"]));
+        if (($award["corrected_completed_on"] ?? $award["completed_on"]) !== $source["completed_on"]) {
+            $this->sql->update(
+                "sis_transfer_awards",
+                ["corrected_completed_on" => $source["completed_on"]],
+                ["id" => $source["award_id"]]
+            );
         }
     }
 }

@@ -22,6 +22,7 @@ async function fixture() {
         external_code: "EXT.101",
         term_code: "26/FA",
         completed_on: "2026-05-01",
+        academic_on: null,
         effective_on_default: "2026-08-10",
         grade_code: "TR",
         credit: {
@@ -29,6 +30,7 @@ async function fixture() {
             course_title: "Fictional course",
             completed_milli: 3000,
             status: "A",
+            version: 0,
         },
     };
     const openDrawer = () => {
@@ -69,6 +71,28 @@ async function fixture() {
             ),
         request: async (path, method, data) => {
             sent.push({ path, method, data });
+            if (path.endsWith("/source-period/review/")) {
+                const review = {
+                    ...data,
+                    previous_academic_on: value.academic_on,
+                    previous_completed_on: value.completed_on,
+                    effective_at: data.effective_on,
+                    review_token: "private-date-proof-" + ++reviews,
+                };
+                if (deferred)
+                    return new Promise((resolve) => {
+                        release = () => resolve(review);
+                    });
+                return review;
+            }
+            if (path.endsWith("/source-period/commit/")) {
+                if (failure) {
+                    const error = failure;
+                    failure = null;
+                    throw error;
+                }
+                return { operation_id: "date-operation" };
+            }
             if (path.endsWith("/preview/")) {
                 const review = {
                     request: data,
@@ -123,6 +147,7 @@ async function fixture() {
     return {
         body: () => body,
         sent,
+        value,
         click,
         submit,
         edit,
@@ -209,4 +234,55 @@ test("late review responses cannot reopen a closed private drawer", async () => 
     await pending;
     assert.equal(f.body(), other);
     assert.equal(other.children.length, 0);
+});
+
+test("academic dates share one review, retain edited values and apply completion bounds", async () => {
+    const f = await fixture();
+    await f.click("Academic dates");
+    let form = walk(f.body()).find((e) => e.tag === "form");
+    assert.equal(form.elements.completed_on.value, "2026-05-01");
+    assert.equal(form.elements.academic_on.max, "2026-05-01");
+    form.elements.completed_on.value = "2026-05-12";
+    form.elements.completed_on.events.input();
+    assert.equal(form.elements.academic_on.max, "2026-05-12");
+    assert.equal(form.elements.effective_on.min, "2026-05-12");
+    form.elements.academic_on.value = "2026-01-12";
+    form.elements.reason.value = "Fictional <img> evidence.";
+    await f.submit();
+    assert.match(f.body().textContent, /Completion: 2026-05-01 → 2026-05-12/);
+    assert.equal(
+        walk(f.body()).some((e) => e.tag === "img"),
+        false,
+    );
+    await f.click("Revise dates");
+    form = walk(f.body()).find((e) => e.tag === "form");
+    assert.equal(form.elements.completed_on.value, "2026-05-12");
+    assert.equal(form.elements.reason.value, "Fictional <img> evidence.");
+    f.value.credit.version = 2;
+    await f.click("Refresh dates");
+    assert.equal(walk(f.body()).find((e) => e.tag === "form").elements.completed_on.value, "2026-05-12");
+    await f.submit();
+    assert.equal(f.sent.filter((r) => r.path.endsWith("/source-period/review/")).at(-1).data.version, 2);
+    f.fail(0);
+    await assert.rejects(f.click("Confirm dates"), /Fictional/);
+    await f.click("Confirm dates");
+    const commands = f.sent.filter((r) => r.path.endsWith("/source-period/commit/"));
+    assert.equal(commands.length, 2);
+    assert.deepEqual(commands[0].data, commands[1].data);
+    assert.deepEqual(Object.keys(commands[0].data), ["review_token"]);
+});
+
+test("a closed academic dates editor is not replaced by its late review", async () => {
+    const f = await fixture();
+    await f.click("Academic dates");
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    form.elements.reason.value = "Fictional pending review.";
+    f.defer();
+    const pending = f.submit();
+    await Promise.resolve();
+    const replacement = f.close();
+    f.release();
+    await pending;
+    assert.equal(f.body(), replacement);
+    assert.equal(f.body().textContent, "");
 });

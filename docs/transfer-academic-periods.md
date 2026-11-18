@@ -1,45 +1,49 @@
-# Sending-institution academic periods
+# Transfer academic dates
 
-Open **Transfer workbench → an equivalency → Review award → Review source academic period**. The award is also available from the student's transfer credit record. This action requires both `sis:transfer:manage` and `sis:student:read`.
+Open **Transfers → Equivalencies → Review award → Academic dates**, or open the connected award from the student's academic record. One registrar review covers both the sending institution's actual **External completion date** and optional **Source period start**. It requires both `sis:transfer:manage` and `sis:student:read`.
 
-Enter the sending institution's actual academic-period start for this particular course attempt, together with a reason explaining the source evidence. Review the previous/proposed date and confirm. Leave the date blank only to explicitly change a known start to **Unknown**. An unchanged date, invalid date, future start or start after the external completion date is rejected.
+## Review and confirm
 
-Use evidence from the sending institution. Do not infer this date from the local posting term, equivalency effective dates, a grade-posting timestamp or the completion date itself. A one-day instructional period can legitimately start on the completion date, but only explicit source evidence establishes that fact.
+Enter the dates supported by the sending institution's evidence, an effective date and a reason. The period start must be on or before completion; neither source date can be in the future. Completion is required. A blank period start explicitly marks that fact **Unknown**. The correction's effective date defaults to today and must be between the proposed completion date and today. An unchanged pair of source dates is rejected.
 
-## Three different facts
+**Review dates** shows both earlier and proposed dates, the effective date and reason. **Revise dates** preserves the draft. **Refresh dates** reloads the award's current revision while preserving entered values, so staff can review them against an intervening change. Reviews expire after 20 minutes. A competing award/date/course decision requires a fresh review. An interrupted confirmation retries the same protected proof; a previously accepted confirmation returns its original receipt without reapplying old dates.
 
-| Fact | Meaning |
+Credits, grade, quality points, accepted course publication, program pursuit, local posting term and charges stay unchanged. A corrected source completion date can affect repeat-course comparisons; it does not silently recalculate the original equivalency or re-award credits under today's rules. The registrar must review the institution's award policy when correcting that date. Replacing the receiving course identity or local posting term remains separate, unfinished work.
+
+A voided award must first be reinstated. For an older untracked award, preview changes nothing. Confirmation observes its current facts at the actual confirmation time, then records the real date decision atomically. Earlier decision times, actors and source periods remain unknown; this does not invent an original award event.
+
+## Understand the dates
+
+| Date | Meaning |
 | --- | --- |
-| Source academic-period start | When this course's sending-institution instructional period began. This is the new reviewed fact. |
-| External completion date | The source completion date already retained with the award. This workflow does not change it. |
-| Local posting term | Where the receiving institution posted the accepted credit. Its dates do not establish the sending institution's chronology. |
+| Source period start | When this particular external course attempt's instructional period began. Optional, supported by sending-institution evidence. |
+| External completion | When that external course attempt actually finished. Required; distinct from the local term. |
+| Effective date | When this correction applies under institutional policy. It does not establish when staff first knew the fact. |
+| Recorded time | When etSIS durably recorded the accepted decision. Assigned by the server. |
+| Local posting term | Where the receiving institution posts the credit. This workflow does not change it. |
 
-A source-period review does not change awarded credits, grade, quality points, equivalency or posting term. It expires after 20 minutes. An intervening credit, grade, void/reinstatement or source-period decision requires a new review. **Revise source period** preserves entered fields; a rejected review leaves the form available for correction.
+Do not infer source dates from a posting timestamp, today's local calendar, equivalency dates or another attempt. A one-day source period may start on its completion date, but only explicit evidence establishes that fact.
 
-The action is available for an active award with recorded transfer history. A voided award must first be reinstated through its existing authorized workflow. An older untracked award needs its current facts established through the existing reviewed correction workflow before source-period capture; this feature never fabricates its original award or period. Source history remains inspectable when earlier facts are unknown.
+## Academic calculations and documents
 
-## Repeat-GPA ordering
+The selected degree's **Academic term / instructional period** repeat policy uses the verified source period start for eligible transfer attempts. Institutional attempts use their retained instructional start. **Completion date** ordering uses actual verified completion dates. Neither policy substitutes a local posting term for missing source evidence. Missing required evidence leaves that comparison undetermined.
 
-The selected degree's **Academic term / instructional period** ordering now uses the retained source-period start for GPA-eligible transfer attempts. Institutional attempts continue using the exact section publication's retained instructional start. Transfer completion dates and local posting terms are not substituted for missing period evidence.
+Credit/grade amendments, voids and reinstatements preserve corrected chronology. Voided awards contribute no current earned credit or GPA. Dates alone do not establish GPA eligibility, compatible grading policies or course equivalence. Earned-credit repeat policy remains independent from GPA ordering.
 
-Missing required chronology leaves the latest-attempt comparison undetermined. Recording a supported source period can resolve that comparison; a reasoned correction can change which eligible attempt is latest. Explicitly clearing necessary evidence makes it unknown again. Transfer exclusion, grading-publication compatibility and other retained policies still apply. A source date alone does not make a grade GPA-eligible, establish course equivalence or complete a degree audit.
+Each accepted date decision increments the existing academic credit revision. Earlier transcript preparation reviews must be refreshed; prepared documents require the existing current-record checks before delivery. Previously issued document bytes and earlier returned results are not rewritten.
 
-Completion-date ordering continues using actual completion dates. Grade/credit amendments, voids and reinstatements preserve the source-period fact; voided awards still contribute no GPA or earned credit. Earned-credit repeat policy remains independent from GPA ordering. Refresh a current review to see the corrected facts; an earlier returned result or issued document is not mutated.
+## Date history and storage
 
-The academic-work view displays **Sending period began** when known. Credits & GPA identifies a transfer ordering date as **Retained source period start**, distinct from a retained institutional instructional start.
+**More → Date history** provides bounded, frozen pages of before/after source dates, effective time and recorded time. Other award/credit/course decisions appear for context with no date change. Protected reasons, actor identities, tokens, raw events and academic payloads are omitted. **Correction history** remains the credit/grade/void receipt view; it is not a second event store.
 
-## Source period history
+`TransferAcademicDatesWereRecorded` appends to the existing `transfer_credit` stream in `sis_history_events`. The protected payload retains decision lineage and both earlier/proposed dates; trusted actor, reason and effective date remain in encrypted context. Existing `TransferAcademicPeriodWasRecorded` events replay unchanged. Earlier accepted period proofs can return their verified original receipt; an unaccepted earlier proof must be reviewed through the current editor.
 
-**Source period history** shows bounded, frozen journal pages. Award establishment and credit/grade corrections appear as context with **No period change**. Explicit period decisions show the prior and proposed dates, effective time and recorded time. Other decisions preserve the previously retained period; a contextual row with no period change does not claim the date became unknown.
+Migration `20261118000004` adds nullable `sis_transfer_awards.corrected_completed_on`. The existing `completed_on` column remains the original award request identity. The effective current completion is `COALESCE(corrected_completed_on, completed_on)`, checked against the selected stream. This preserves retries of an original award request after a correction. Another award for the same student/equivalency cannot reuse either an existing original date or its current corrected date, including a voided award. Dates from superseded corrections remain historical facts rather than permanently reserving every past typo.
 
-Earlier observations and untracked sources stay explicitly unknown. Pages omit protected reasons, actor identities, review tokens, raw events and academic payloads. Next/previous navigation reuses a cursor whose captured head excludes later appends. Existing **Correction history** remains the separate view for credit/grade/void decisions and their protected receipts.
+Student/award locks serialize decisions; expected stream/credit versions prevent lost updates. Coupled observations, events, projections, required audit and receipts commit together or roll back. Actor/authority and expiry are checked through confirmation. Selected verification shares the existing 400-page/2,000-event replay allowance; this is not a global inventory/rebuild certification. The existing student/equivalency index narrows duplicate checks without scanning all awards.
 
-## Storage, concurrency and access
+Browser mutations retain CSRF protection, private/no-store responses and debug suppression. Review proofs remain in memory, with no browser storage. Working lists use the current date projection; consequential selected reads verify the stream. No event conversion, historical backfill, new journal or additional source-date stream is introduced.
 
-`TransferAcademicPeriodWasRecorded` appends to the existing `transfer_credit` stream in the single protected journal. It retains decision lineage and prior/proposed nullable period dates. Trusted actor, reason, correlation and effective time remain in the encrypted event context. A dated fact takes effect at the supplied period start in the configured institutional timezone; an explicit clear takes effect at the trusted review time. Journal recording time remains the trusted confirmation time.
+Fictional-data integration tests cover combined corrections, original retries, duplicate prevention, rollback, selected projection drift, curated history, preserved earlier receipts and stale transcript preparation. Migration SQL is compiled for the framework's five supported dialects and exercised on SQLite; compilation alone does not certify every PDO driver. Browser/accessibility review and broader operational rebuild certification remain separate checks.
 
-Student/award locks, expected stream versions and the existing 400-page/2,000-event replay allowance bound each operation. A successful decision increments the existing academic credit revision without changing its values, invalidating stale credit/grade reviews. Event, projection, required audit and operation receipt commit together or roll back. An original retry returns its original receipt after later corrections, voids or clears, including after review expiry; it never reapplies an earlier date.
-
-Browser mutations retain CSRF protection, private/no-store responses and debug suppression. Permission and actor are rechecked after locks and before returning. Forms keep review tokens in memory, with no browser storage. The date comes from the award stream already verified for current academic inputs; it adds no chronology lookup, calendar query or cross-request cache to ordinary work/calculation reads.
-
-No migration, event conversion, historical backfill or parallel event table is needed. Earlier event shapes remain unchanged and earlier source periods remain unknown. The configured application database was unreachable during implementation; no live rows were changed. Isolated fictional-data tests verify replay, ordering, scope, rollback, retries and history privacy. Accepted-course publication/equivalence capture, broader grading compatibility and retained final evaluations remain separate roadmap work.
+The configured DDEV application database was inspected and migration `20261118000004` applied. All 20 existing event rows and the selected academic, profile and permission rows compared unchanged before/after; no existing dates were filled in.

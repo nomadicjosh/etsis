@@ -77,7 +77,7 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             "id" => $r["id"],
             "student_id" => $r["student_id"],
             "equivalency_id" => $r["equivalency_id"],
-            "completed_on" => $r["completed_on"],
+            "completed_on" => $r["corrected_completed_on"] ?? $r["completed_on"],
             "term_id" => $r["term_id"],
             "term_code" => $term["code"],
             "institution_id" => $context["institution_id"],

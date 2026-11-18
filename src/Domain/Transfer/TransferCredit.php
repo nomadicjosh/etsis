@@ -11,6 +11,7 @@ use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
+use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
 use Domain\Transfer\ValueObject\TransferEventSchema;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
 
@@ -28,6 +29,7 @@ final class TransferCredit extends EventSourcedAggregate
     private ?string $academicOn = null;
     private ?string $courseVersion = null;
     private ?string $originalCourseVersion = null;
+    private ?string $originalCompletedOn = null;
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -56,6 +58,7 @@ final class TransferCredit extends EventSourcedAggregate
         $this->originalCourseVersion = $this->courseVersion;
         $this->credit = $p["credit"];
         $this->source = $p["source"];
+        $this->originalCompletedOn = $p["source"]["completed_on"];
         $this->grade = $p["grade"];
         $this->decision = $p["decision_id"];
         $this->provenance = $p["provenance"];
@@ -133,6 +136,30 @@ final class TransferCredit extends EventSourcedAggregate
         ++$this->credit["version"];
         $this->decision = $p["decision_id"];
         new TransferCreditFacts($this->credit);
+    }
+
+    public function whenTransferAcademicDatesWereRecorded(TransferAcademicDatesWereRecorded $event): void
+    {
+        $p = $event->payload();
+        if (
+            $this->credit === null || $this->source === null ||
+            !in_array($this->credit["status"], ["A", "N"], true) ||
+            $p["previous_decision_id"] !== $this->decision ||
+            $p["previous_academic_on"] !== $this->academicOn ||
+            $p["previous_completed_on"] !== $this->source["completed_on"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->academicOn = $p["academic_on"];
+        $this->source["completed_on"] = $p["completed_on"];
+        ++$this->credit["version"];
+        $this->decision = $p["decision_id"];
+        new TransferCreditFacts($this->credit);
+    }
+
+    public function originalCompletedOn(): ?string
+    {
+        return $this->originalCompletedOn;
     }
     /** Original command retries compare the opening fact, never a later correction. */
     public function originalCourseVersion(): ?string

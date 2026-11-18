@@ -21,6 +21,7 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
+use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
 use Domain\Transfer\Repository\TransferAwardRepository;
 use Domain\Transfer\Repository\TransferCreditRepository;
 use Domain\Transfer\ValueObject\TransferCreditId;
@@ -52,6 +53,8 @@ final readonly class TransferPeriodService
         #[\SensitiveParameter] ?string $academicOn,
         int $version,
         #[\SensitiveParameter] string $reason,
+        #[\SensitiveParameter] ?string $completedOn = null,
+        #[\SensitiveParameter] ?string $effectiveOn = null,
     ): array {
         $actor = $this->authorize();
         return $this->transactions->run(function () use (
@@ -61,32 +64,38 @@ final readonly class TransferPeriodService
             $version,
             $reason,
             $actor,
+            $completedOn,
+            $effectiveOn,
         ): array {
             $this->lock($student, $award, $actor);
-            [$root, $facts] = $this->credits->decisionRecord($student, $award, new HistoryReadBudget());
+            $budget = new HistoryReadBudget();
+            [$root, $facts] = $this->credits->decisionRecord($student, $award, $budget);
             if ($facts["version"] !== $version) {
                 throw new ConcurrentModificationException(
-                    "Reload the transfer award before reviewing its source period.",
+                    "Reload the transfer award before reviewing its academic dates.",
                 );
             }
-            if (
-                $root->playhead() < 1 ||
-                $root->source() === null ||
-                !in_array($facts["status"], ["A", "N"], true)
-            ) {
-                self::invalid(
-                    "academic_on",
-                    "A recorded active transfer award is required. " .
-                        "Review untracked award history or reinstate a voided award first.",
-                );
+            if (!in_array($facts["status"], ["A", "N"], true)) {
+                self::invalid("completed_on", "Reinstate the voided award before reviewing academic dates.");
             }
-            $this->date($academicOn, $root->source()["completed_on"]);
-            if ($root->academicOn() === $academicOn) {
-                self::invalid(
-                    "academic_on",
-                    "Choose a different source period start, or explicitly clear a known date.",
-                );
+            $baseline = $root->playhead() === 0;
+            $record = $baseline
+                ? $this->credits->verified($this->awards->get($student, $award), $budget)
+                : null;
+            $previousCompleted = $root->source()["completed_on"] ?? $record["completed_on"];
+            $completedOn ??= $previousCompleted;
+            $today = $this->clock->now()->format("Y-m-d");
+            $effectiveOn ??= $today;
+            $this->date($completedOn, $today, "completed_on");
+            $this->date($academicOn, $completedOn);
+            $this->date($effectiveOn, $today, "effective_on");
+            if ($effectiveOn < $completedOn) {
+                self::invalid("effective_on", "Use an effective date from course completion through today.");
             }
+            if ($root->academicOn() === $academicOn && $completedOn === $previousCompleted) {
+                self::invalid("academic_on", "Change a date, or explicitly clear a known period start.");
+            }
+            $this->availableDate($student, $award, $completedOn);
             $reason = trim($reason);
             if (
                 $reason === "" ||
@@ -98,11 +107,16 @@ final readonly class TransferPeriodService
             }
             $operation = EntityId::generate();
             $now = $this->clock->now();
-            $effective =
-                $academicOn === null ? $now : new DateTimeImmutable($academicOn, $now->getTimezone());
+            $effective = new DateTimeImmutable($effectiveOn, $now->getTimezone());
+            $previousDecision =
+                $root->decision() ??
+                \Domain\Gradebook\ValueObject\PublishedGradeId::forVersion(
+                    $operation,
+                    "transfer.observation." . $award->value,
+                )->value;
             new EventContext($actor, $effective, $operation, reason: $reason);
             $data = [
-                "kind" => "transfer-period-review",
+                "kind" => "transfer-dates-review",
                 "student_id" => $student->value,
                 "award_id" => $award->value,
                 "credit_id" => $facts["id"],
@@ -110,9 +124,15 @@ final readonly class TransferPeriodService
                 "actor_id" => $actor->value,
                 "expected_version" => $root->playhead(),
                 "credit_version" => $version,
-                "previous_decision_id" => $root->decision(),
+                "previous_decision_id" => $previousDecision,
                 "previous_academic_on" => $root->academicOn(),
                 "academic_on" => $academicOn,
+                "previous_completed_on" => $previousCompleted,
+                "completed_on" => $completedOn,
+                "baseline" => $baseline,
+                "record_revision" =>
+                    $record === null ? null : hash("sha256", json_encode($record, JSON_THROW_ON_ERROR)),
+                "earlier_history_unknown" => $baseline || $root->provenance() === "observed_existing",
                 "effective_at" => $effective->format(DATE_ATOM),
                 "reason" => $reason,
                 "expires_at" => $now->getTimestamp() + 1200,
@@ -133,7 +153,7 @@ final readonly class TransferPeriodService
             $d = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
             if (
                 !is_array($d) ||
-                ($d["kind"] ?? null) !== "transfer-period-review" ||
+                !in_array($d["kind"] ?? null, ["transfer-dates-review", "transfer-period-review"], true) ||
                 ($d["student_id"] ?? null) !== $student->value ||
                 ($d["award_id"] ?? null) !== $award->value ||
                 !is_int($d["expires_at"] ?? null) ||
@@ -143,34 +163,54 @@ final readonly class TransferPeriodService
                 throw new \InvalidArgumentException();
             }
         } catch (Throwable) {
-            self::invalid("review_token", "Review the source academic period again.");
+            self::invalid("review_token", "Review the academic dates again.");
         }
         if ($d["actor_id"] !== $actor->value) {
-            throw new AccessDeniedException("This source-period review belongs to another registrar.");
+            throw new AccessDeniedException("This academic-date review belongs to another registrar.");
         }
         return $this->transactions->run(function () use ($student, $award, $actor, $d): array {
             $this->lock($student, $award, $actor);
-            [$root, $facts] = $this->credits->decisionRecord($student, $award, new HistoryReadBudget());
+            $budget = new HistoryReadBudget();
+            [$root, $facts] = $this->credits->decisionRecord($student, $award, $budget);
             if ($facts["id"] !== $d["credit_id"]) {
                 throw new CorruptHistoryException();
             }
+            if ($d["kind"] === "transfer-period-review") {
+                return $this->acceptedPeriodReceipt($award, $actor, $d, $budget);
+            }
             $operation = new EntityId($d["operation_id"]);
-            $event = TransferAcademicPeriodWasRecorded::occur(
+            if ($d["baseline"] && $root->playhead() === 0) {
+                $record = $this->credits->verified($this->awards->get($student, $award), $budget);
+                if (
+                    !hash_equals(
+                        $d["record_revision"],
+                        hash("sha256", json_encode($record, JSON_THROW_ON_ERROR)),
+                    )
+                ) {
+                    throw new ConcurrentModificationException(
+                        "The earlier award facts changed. Review the dates again.",
+                    );
+                }
+                $root = $this->credits->observe($record, $actor, $operation, $budget);
+            }
+            $event = TransferAcademicDatesWereRecorded::occur(
                 new TransferCreditId($award->value),
                 [
                     "decision_id" => $operation->value,
                     "previous_decision_id" => $d["previous_decision_id"],
                     "previous_academic_on" => $d["previous_academic_on"],
                     "academic_on" => $d["academic_on"],
+                    "previous_completed_on" => $d["previous_completed_on"],
+                    "completed_on" => $d["completed_on"],
                 ],
                 ["__aggregate_type" => "transfer_credit"],
-            )->withPlayhead($d["expected_version"] + 1);
+            )->withPlayhead($d["expected_version"] + ($d["baseline"] ? 2 : 1));
             // Original retries are resolved before expiry/current-state checks. A failed new decision
             // rolls its event, receipt and projection back together in this same transaction.
             $receipt = $this->history->append(
                 $this->stream($award),
                 $operation,
-                $d["expected_version"],
+                $event->playhead() - 1,
                 new EventContext(
                     $actor,
                     new DateTimeImmutable($d["effective_at"]),
@@ -186,18 +226,22 @@ final readonly class TransferPeriodService
                     $facts["version"] !== $d["credit_version"]
                 ) {
                     throw new ConcurrentModificationException(
-                        "The transfer award or review changed. Review its source period again.",
+                        "The transfer award or review changed. Review its academic dates again.",
                     );
                 }
-                $this->date(
-                    $d["academic_on"],
-                    ($root->source() ?? throw new CorruptHistoryException())["completed_on"],
-                );
+                $this->date($d["completed_on"], $this->clock->now()->format("Y-m-d"), "completed_on");
+                $this->date($d["academic_on"], $d["completed_on"]);
+                $this->availableDate($student, $award, $d["completed_on"]);
                 $root->acceptHistorical($event);
                 $current = $root->credit() ?? throw new CorruptHistoryException();
                 $this->records->project($current, $facts["version"]);
                 $this->records->track($root->source() ?? throw new CorruptHistoryException(), $current);
-                $this->audit->record($actor, "transfer.source_period_recorded", $award);
+                $this->audit->record($actor, "transfer.academic_dates_recorded", $award);
+                if ($d["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                    throw new ConcurrentModificationException(
+                        "The academic-date review expired during confirmation.",
+                    );
+                }
             }
             $this->actor($actor);
             return $receipt;
@@ -218,11 +262,14 @@ final readonly class TransferPeriodService
             $items = [];
             foreach ($page->events as $stored) {
                 $e = $stored->event;
-                $period = $e instanceof TransferAcademicPeriodWasRecorded;
+                $dates = $e instanceof TransferAcademicDatesWereRecorded;
+                $period = $dates || $e instanceof TransferAcademicPeriodWasRecorded;
                 $p = $e->payload();
                 $items[] = [
                     "action" => $period
-                        ? "period_recorded"
+                        ? ($dates
+                            ? "dates_recorded"
+                            : "period_recorded")
                         : ($e instanceof \Domain\Transfer\Event\TransferCourseWasAccepted
                             ? "course_accepted"
                             : ($e instanceof \Domain\Transfer\Event\TransferCreditWasEstablished
@@ -230,6 +277,8 @@ final readonly class TransferPeriodService
                                 : $p["action"])),
                     "previous_academic_on" => $period ? $p["previous_academic_on"] : null,
                     "academic_on" => $period ? $p["academic_on"] : null,
+                    "previous_completed_on" => $dates ? $p["previous_completed_on"] : null,
+                    "completed_on" => $dates ? $p["completed_on"] : null,
                     "effective_at" => $stored->context->describe()["effective_at"],
                     "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
                 ];
@@ -247,6 +296,7 @@ final readonly class TransferPeriodService
     private function date(
         #[\SensitiveParameter] ?string $date,
         #[\SensitiveParameter] string $completed,
+        string $field = "academic_on",
     ): void {
         if ($date === null) {
             return;
@@ -258,8 +308,75 @@ final readonly class TransferPeriodService
             $date > $completed ||
             $date > $this->clock->now()->format("Y-m-d")
         ) {
-            self::invalid("academic_on", "Use a real source period start no later than completion or today.");
+            self::invalid($field, "Use a real date no later than its related completion date or today.");
         }
+    }
+
+    private function availableDate(EntityId $student, EntityId $award, string $date): void
+    {
+        $row = $this->records->award($award);
+        $equivalency = new EntityId($row["equivalency_id"]);
+        $candidates = [
+            $this->records->existing($student, $equivalency, $date),
+            $this->records->corrected($student, $equivalency, $date),
+        ];
+        foreach ($candidates as $other) {
+            if ($other !== null && $other["id"] !== $award->value) {
+                self::invalid(
+                    "completed_on",
+                    "Another award reserves this completion date for the same equivalency.",
+                );
+            }
+        }
+    }
+
+    /** Earlier proofs can return only a real, already accepted period decision.
+     * @param array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function acceptedPeriodReceipt(
+        EntityId $award,
+        EntityId $actor,
+        #[\SensitiveParameter] array $data,
+        HistoryReadBudget $budget,
+    ): array {
+        $cursor = null;
+        do {
+            $page = $budget->page($this->history, $this->stream($award), $cursor);
+            foreach ($page->events as $stored) {
+                $event = $stored->event;
+                $p = $event->payload();
+                if (
+                    !($event instanceof TransferAcademicPeriodWasRecorded) ||
+                    $p["decision_id"] !== $data["operation_id"]
+                ) {
+                    continue;
+                }
+                if (
+                    $event->playhead() !== $data["expected_version"] + 1 ||
+                    $p["previous_decision_id"] !== $data["previous_decision_id"] ||
+                    $p["previous_academic_on"] !== $data["previous_academic_on"] ||
+                    $p["academic_on"] !== $data["academic_on"] ||
+                    $stored->context->actor?->value !== $actor->value ||
+                    $stored->context->reason !== $data["reason"] ||
+                    $stored->context->effectiveAt?->getTimestamp() !==
+                        new DateTimeImmutable($data["effective_at"])->getTimestamp()
+                ) {
+                    self::invalid("review_token", "Review the academic dates again.");
+                }
+                $receipt = $this->history->append(
+                    $this->stream($award),
+                    new EntityId($data["operation_id"]),
+                    $data["expected_version"],
+                    $stored->context,
+                    [$event],
+                );
+                $this->actor($actor);
+                return $receipt;
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        self::invalid("review_token", "Refresh this earlier academic-date review before confirming.");
     }
 
     private function authorize(): EntityId

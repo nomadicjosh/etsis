@@ -4,7 +4,9 @@ const { recordAction } = require("./support/workspace-actions.cjs");
 const id = (suffix) => `01K000000000000000000000${String(suffix).padStart(2, "0")}`;
 async function fixture(page, options = {}) {
     let release;
-    const pending = new Promise(resolve => { release = resolve; });
+    const pending = new Promise((resolve) => {
+        release = resolve;
+    });
     const calls = [],
         errors = [],
         operations = new Map();
@@ -126,8 +128,7 @@ async function fixture(page, options = {}) {
         else if (path === endpoint) {
             if (options.deferRecord) await pending;
             result = structuredClone(value);
-        }
-        else if (path === endpoint + "source-period/review/") {
+        } else if (path === endpoint + "source-period/review/") {
             if (options.rejectPeriod) {
                 status = 409;
                 result = { error: "The transfer award changed. Reload before reviewing its period." };
@@ -135,6 +136,10 @@ async function fixture(page, options = {}) {
                 periodReview = {
                     previous_academic_on: value.academic_on,
                     academic_on: data.academic_on,
+                    previous_completed_on: value.completed_on,
+                    completed_on: data.completed_on,
+                    effective_at: data.effective_on,
+                    earlier_history_unknown: !!options.untracked,
                     reason: data.reason,
                     review_token: "fictional-source-period-review",
                 };
@@ -229,11 +234,14 @@ async function fixture(page, options = {}) {
                 periodDecisions.push({
                     previous_academic_on: periodReview.previous_academic_on,
                     academic_on: periodReview.academic_on,
-                    action: "period_recorded",
+                    action: "dates_recorded",
+                    previous_completed_on: periodReview.previous_completed_on,
+                    completed_on: periodReview.completed_on,
                     effective_at: periodReview.academic_on || "2026-08-10",
                     recorded_at: "2026-08-10",
                 });
                 value.academic_on = periodReview.academic_on;
+                value.completed_on = periodReview.completed_on;
                 value.credit.version++;
                 periodCommitted = true;
             }
@@ -344,7 +352,9 @@ async function correction(page, action = "Correct credits or grade") {
     await page.getByRole("button", { name: "Review proposed correction", exact: true }).click();
 }
 
-test("posted award tasks support keyboard menus, phone layouts and explicit void review", async ({ page }) => {
+test("posted award tasks support keyboard menus, phone layouts and explicit void review", async ({
+    page,
+}) => {
     const f = await fixture(page);
     const tasks = page.getByRole("group", { name: "Transfer award tasks", exact: true });
     await expect(tasks.getByRole("button", { name: "Correct credits or grade", exact: true })).toBeVisible();
@@ -354,23 +364,33 @@ test("posted award tasks support keyboard menus, phone layouts and explicit void
     await expect(page.getByRole("button", { name: "Correction history", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(menu).toBeFocused();
-    for (const viewport of [{ width: 1440, height: 1000 }, { width: 320, height: 812 }]) {
+    for (const viewport of [
+        { width: 1440, height: 1000 },
+        { width: 320, height: 812 },
+    ]) {
         await page.setViewportSize(viewport);
-        const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+        const scan = await new AxeBuilder({ page })
+            .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+            .analyze();
         expect(scan.violations).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        if (viewport.width === 1440) await page.screenshot({ path: "test-results/workspace-polished-transfer-award.png" });
+        if (viewport.width === 1440)
+            await page.screenshot({ path: "test-results/workspace-polished-transfer-award.png" });
     }
     await page.screenshot({ path: "test-results/workspace-polished-transfer-award-phone.png" });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    const scan = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
     expect(scan.violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await recordAction(page, "Void this award");
     await expect(page.getByRole("button", { name: "Review proposed correction", exact: true })).toBeVisible();
     await expect(page.getByLabel("Registrar reason", { exact: false })).toBeVisible();
-    expect(f.calls.some(call => call.path.endsWith("/preview/") || call.path.endsWith("/confirm/"))).toBe(false);
+    expect(f.calls.some((call) => call.path.endsWith("/preview/") || call.path.endsWith("/confirm/"))).toBe(
+        false,
+    );
     expect(f.errors).toEqual([]);
 });
 
@@ -378,12 +398,14 @@ test("a late posted-award read does not reopen a closed review", async ({ page }
     const f = await fixture(page, { deferRecord: true });
     await page.getByRole("button", { name: "Close record", exact: true }).click();
     await expect(page.locator("#drawer-body")).toBeEmpty();
-    const finished = page.waitForEvent("requestfinished", { predicate: request => new URL(request.url()).pathname === f.endpoint });
+    const finished = page.waitForEvent("requestfinished", {
+        predicate: (request) => new URL(request.url()).pathname === f.endpoint,
+    });
     f.release();
     await finished;
     await page.waitForLoadState("networkidle");
     await expect(page.locator("#drawer-body")).toBeEmpty();
-    expect(f.calls.some(call => call.path.endsWith("/confirm/"))).toBe(false);
+    expect(f.calls.some((call) => call.path.endsWith("/confirm/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });
 
@@ -521,23 +543,23 @@ test("registrar reviews a source period independently from completion, credits a
 }) => {
     const f = await fixture(page);
     await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
-    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
-    const date = page.getByLabel("Sending institution's period start (blank marks unknown)", { exact: true });
+    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    const date = page.getByLabel("Source period start", { exact: true });
     await expect(date).toHaveJSProperty("required", false);
     await expect(date).toHaveAttribute("max", "2026-05-01");
     await date.fill("2026-01-12");
     const reason = page.getByRole("textbox", { name: "Reason and source evidence", exact: true });
     await expect(reason).toHaveJSProperty("required", true);
     await reason.fill("Fictional <b>source</b> transcript verification.");
-    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Unknown → 2026-01-12");
     await expect(page.locator("#drawer-body b")).toHaveCount(0);
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
-    await page.getByRole("button", { name: "Revise source period", exact: true }).click();
+    await page.getByRole("button", { name: "Revise dates", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Reason and source evidence", exact: true })).toHaveValue(
         "Fictional <b>source</b> transcript verification.",
     );
-    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const audit = await new AxeBuilder({ page })
@@ -545,7 +567,7 @@ test("registrar reviews a source period independently from completion, credits a
         .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
         .analyze();
     expect(audit.violations).toEqual([]);
-    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText(
         "Sending institution's period start: 2026-01-12",
     );
@@ -572,18 +594,16 @@ test("clearing source period is explicit and curated history pages preserve the 
     page,
 }) => {
     const f = await fixture(page, { periodKnown: true });
-    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
-    await page
-        .getByLabel("Sending institution's period start (blank marks unknown)", { exact: true })
-        .fill("");
+    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByLabel("Source period start", { exact: true }).fill("");
     await page
         .getByRole("textbox", { name: "Reason and source evidence", exact: true })
         .fill("Fictional source evidence withdrawn.");
-    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
-    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Sending institution's period start: Unknown");
-    await recordAction(page, "Source period history");
+    await recordAction(page, "Date history");
     await expect(page.locator("#drawer-body")).toContainText("Award established");
     await page.getByRole("button", { name: "Next source history page", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2026-01-12 → Unknown");
@@ -601,12 +621,10 @@ test("clearing source period is explicit and curated history pages preserve the 
     expect(f.errors).toEqual([]);
 });
 
-test("untracked source history cannot invent a sending period", async ({ page }) => {
+test("untracked source history stays unknown before a reviewed date decision", async ({ page }) => {
     const f = await fixture(page, { untracked: true });
-    await expect(
-        page.getByRole("button", { name: "Review source academic period", exact: true }),
-    ).toHaveCount(0);
-    await recordAction(page, "Source period history");
+    await expect(page.getByRole("button", { name: "Academic dates", exact: true })).toHaveCount(1);
+    await recordAction(page, "Date history");
     await expect(page.locator("#drawer-body")).toContainText("Earlier source history is unknown");
     await expect(page.locator("#drawer-body")).toContainText("No recorded source decisions on this page");
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
@@ -615,35 +633,29 @@ test("untracked source history cannot invent a sending period", async ({ page })
 
 test("a stale source review keeps entered fields and never confirms the date", async ({ page }) => {
     const f = await fixture(page, { rejectPeriod: true });
-    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
-    await page
-        .getByLabel("Sending institution's period start (blank marks unknown)", { exact: true })
-        .fill("2026-01-12");
+    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByLabel("Source period start", { exact: true }).fill("2026-01-12");
     await page
         .getByRole("textbox", { name: "Reason and source evidence", exact: true })
         .fill("Fictional concurrent source review.");
-    await page.getByRole("button", { name: "Review source period", exact: true }).click();
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
     await expect(page.locator("#drawer-error")).toContainText("The transfer award changed");
-    await expect(
-        page.getByLabel("Sending institution's period start (blank marks unknown)", { exact: true }),
-    ).toHaveValue("2026-01-12");
+    await expect(page.getByLabel("Source period start", { exact: true })).toHaveValue("2026-01-12");
     expect(f.calls.some((c) => c.path.endsWith("source-period/commit/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });
 
 test("an interrupted confirmation reuses the same reviewed source-period command", async ({ page }) => {
     const f = await fixture(page, { interruptPeriod: true });
-    await page.getByRole("button", { name: "Review source academic period", exact: true }).click();
-    await page
-        .getByLabel("Sending institution's period start (blank marks unknown)", { exact: true })
-        .fill("2026-01-12");
+    await page.getByRole("button", { name: "Academic dates", exact: true }).click();
+    await page.getByLabel("Source period start", { exact: true }).fill("2026-01-12");
     await page
         .getByRole("textbox", { name: "Reason and source evidence", exact: true })
         .fill("Fictional reviewed source.");
-    await page.getByRole("button", { name: "Review source period", exact: true }).click();
-    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
     await expect(page.locator("#drawer-error")).toBeVisible();
-    await page.getByRole("button", { name: "Confirm source period", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText(
         "Sending institution's period start: 2026-01-12",
     );
